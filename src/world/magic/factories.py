@@ -25,6 +25,7 @@ from world.magic.models import (
     MotifResonanceAssociation,
     Resonance,
     Restriction,
+    SoulfrayConfig,
     Technique,
     TechniqueCapabilityGrant,
     TechniqueOutcomeModifier,
@@ -34,7 +35,6 @@ from world.magic.models import (
     ThreadResonance,
     ThreadType,
     Tradition,
-    WarpConfig,
 )
 from world.magic.types import (
     ResonanceScope,
@@ -454,17 +454,17 @@ class AudereThresholdFactory(factory.django.DjangoModelFactory):
 
 
 # =============================================================================
-# Scope #3: Warp Progression Factories
+# Scope #3: Soulfray Progression Factories
 # =============================================================================
 
 
-class WarpConfigFactory(factory.django.DjangoModelFactory):
-    """Factory for WarpConfig global configuration."""
+class SoulfrayConfigFactory(factory.django.DjangoModelFactory):
+    """Factory for SoulfrayConfig global configuration."""
 
     class Meta:
-        model = WarpConfig
+        model = SoulfrayConfig
 
-    warp_threshold_ratio = Decimal("0.30")
+    soulfray_threshold_ratio = Decimal("0.30")
     severity_scale = 10
     deficit_scale = 5
     resilience_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")

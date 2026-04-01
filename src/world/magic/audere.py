@@ -9,7 +9,7 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 AUDERE_CONDITION_NAME = "Audere"
-ANIMA_WARP_CONDITION_NAME = "Anima Warp"
+SOULFRAY_CONDITION_NAME = "Soulfray"
 
 
 class AudereThreshold(SharedMemoryModel):
@@ -20,7 +20,7 @@ class AudereThreshold(SharedMemoryModel):
 
     Audere requires a hard triple gate:
     1. Runtime intensity at or above minimum_intensity_tier
-    2. Active Anima Warp condition at or above minimum_warp_stage
+    2. Active Soulfray condition at or above minimum_warp_stage
     3. Active CharacterEngagement (character must be in stakes)
     """
 
@@ -32,7 +32,7 @@ class AudereThreshold(SharedMemoryModel):
     minimum_warp_stage = models.ForeignKey(
         "conditions.ConditionStage",
         on_delete=models.PROTECT,
-        help_text="Anima Warp must be at this stage or higher.",
+        help_text="Soulfray must be at this stage or higher.",
     )
     intensity_bonus = models.IntegerField(
         help_text="Added to engagement.intensity_modifier when Audere activates.",
@@ -40,11 +40,11 @@ class AudereThreshold(SharedMemoryModel):
     anima_pool_bonus = models.PositiveIntegerField(
         help_text="Temporary increase to CharacterAnima.maximum during Audere.",
     )
-    # Deprecated: no longer used by Warp severity calculation (Scope #3).
-    # Audere naturally drives high Warp via intensity boost. Can be removed.
+    # Deprecated: no longer used by Soulfray severity calculation (Scope #3).
+    # Audere naturally drives high Soulfray via intensity boost. Can be removed.
     warp_multiplier = models.PositiveIntegerField(
         default=2,
-        help_text="Warp severity increment multiplier during Audere.",
+        help_text="Soulfray severity increment multiplier during Audere (deprecated field name).",
     )
 
     class Meta:
@@ -82,21 +82,21 @@ def _check_intensity_gate(runtime_intensity: int, minimum_tier_threshold: int) -
     return resolved_tier.threshold >= minimum_tier_threshold
 
 
-def _check_warp_gate(character: ObjectDB, minimum_stage_order: int) -> bool:
-    """Return True if character has Anima Warp at the required stage or higher."""
+def _check_soulfray_gate(character: ObjectDB, minimum_stage_order: int) -> bool:
+    """Return True if character has Soulfray at the required stage or higher."""
     from world.conditions.models import ConditionInstance
 
-    warp_instance = (
+    soulfray_instance = (
         ConditionInstance.objects.filter(
             target=character,
-            condition__name=ANIMA_WARP_CONDITION_NAME,
+            condition__name=SOULFRAY_CONDITION_NAME,
         )
         .select_related("current_stage")
         .first()
     )
-    if warp_instance is None or warp_instance.current_stage is None:
+    if soulfray_instance is None or soulfray_instance.current_stage is None:
         return False
-    return warp_instance.current_stage.stage_order >= minimum_stage_order
+    return soulfray_instance.current_stage.stage_order >= minimum_stage_order
 
 
 def check_audere_eligibility(character: ObjectDB, runtime_intensity: int) -> bool:
@@ -105,7 +105,7 @@ def check_audere_eligibility(character: ObjectDB, runtime_intensity: int) -> boo
     Five gates -- all must be true:
     1. AudereThreshold config exists
     2. Runtime intensity resolves to a tier at or above the threshold's minimum
-    3. Character has an active Anima Warp at the required stage or higher
+    3. Character has an active Soulfray at the required stage or higher
     4. Character has a CharacterEngagement
     5. Character is NOT already in Audere
     """
@@ -124,7 +124,7 @@ def check_audere_eligibility(character: ObjectDB, runtime_intensity: int) -> boo
 
     return (
         _check_intensity_gate(runtime_intensity, threshold.minimum_intensity_tier.threshold)
-        and _check_warp_gate(character, threshold.minimum_warp_stage.stage_order)
+        and _check_soulfray_gate(character, threshold.minimum_warp_stage.stage_order)
         and has_engagement
         and not already_in_audere
     )

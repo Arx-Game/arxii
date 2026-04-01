@@ -10,8 +10,8 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
 )
 from world.magic.audere import (
-    ANIMA_WARP_CONDITION_NAME,
     AUDERE_CONDITION_NAME,
+    SOULFRAY_CONDITION_NAME,
     AudereThreshold,
     check_audere_eligibility,
     end_audere,
@@ -52,25 +52,25 @@ class AudereEligibilityTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        # Anima Warp condition with stages
-        cls.warp_template = ConditionTemplateFactory(
-            name=ANIMA_WARP_CONDITION_NAME, has_progression=True
+        # Soulfray condition with stages
+        cls.soulfray_template = ConditionTemplateFactory(
+            name=SOULFRAY_CONDITION_NAME, has_progression=True
         )
         cls.stage1 = ConditionStageFactory(
-            condition=cls.warp_template, stage_order=1, name="Strain"
+            condition=cls.soulfray_template, stage_order=1, name="Strain"
         )
         cls.stage2 = ConditionStageFactory(
-            condition=cls.warp_template, stage_order=2, name="Fracture"
+            condition=cls.soulfray_template, stage_order=2, name="Fracture"
         )
         cls.stage3 = ConditionStageFactory(
-            condition=cls.warp_template, stage_order=3, name="Collapse"
+            condition=cls.soulfray_template, stage_order=3, name="Collapse"
         )
 
         # Intensity tiers
         cls.minor_tier = IntensityTierFactory(name="Minor", threshold=1, control_modifier=0)
         cls.major_tier = IntensityTierFactory(name="Major", threshold=15, control_modifier=-5)
 
-        # Audere requires Major tier + stage 2+ warp
+        # Audere requires Major tier + stage 2+ soulfray
         cls.threshold = AudereThresholdFactory(
             minimum_intensity_tier=cls.major_tier,
             minimum_warp_stage=cls.stage2,
@@ -97,14 +97,14 @@ class AudereEligibilityTests(TestCase):
         char = self._create_character()
         self._create_engagement(char)
         ConditionInstanceFactory(
-            target=char, condition=self.warp_template, current_stage=self.stage2
+            target=char, condition=self.soulfray_template, current_stage=self.stage2
         )
         assert check_audere_eligibility(char, runtime_intensity=20) is True
 
     def test_no_engagement(self) -> None:
         char = self._create_character()
         ConditionInstanceFactory(
-            target=char, condition=self.warp_template, current_stage=self.stage2
+            target=char, condition=self.soulfray_template, current_stage=self.stage2
         )
         assert check_audere_eligibility(char, runtime_intensity=20) is False
 
@@ -112,19 +112,19 @@ class AudereEligibilityTests(TestCase):
         char = self._create_character()
         self._create_engagement(char)
         ConditionInstanceFactory(
-            target=char, condition=self.warp_template, current_stage=self.stage2
+            target=char, condition=self.soulfray_template, current_stage=self.stage2
         )
         assert check_audere_eligibility(char, runtime_intensity=5) is False
 
-    def test_warp_stage_too_low(self) -> None:
+    def test_soulfray_stage_too_low(self) -> None:
         char = self._create_character()
         self._create_engagement(char)
         ConditionInstanceFactory(
-            target=char, condition=self.warp_template, current_stage=self.stage1
+            target=char, condition=self.soulfray_template, current_stage=self.stage1
         )
         assert check_audere_eligibility(char, runtime_intensity=20) is False
 
-    def test_no_warp_condition(self) -> None:
+    def test_no_soulfray_condition(self) -> None:
         char = self._create_character()
         self._create_engagement(char)
         assert check_audere_eligibility(char, runtime_intensity=20) is False
@@ -133,7 +133,7 @@ class AudereEligibilityTests(TestCase):
         char = self._create_character()
         self._create_engagement(char)
         ConditionInstanceFactory(
-            target=char, condition=self.warp_template, current_stage=self.stage2
+            target=char, condition=self.soulfray_template, current_stage=self.stage2
         )
         AudereThreshold.objects.all().delete()
         assert check_audere_eligibility(char, runtime_intensity=20) is False
@@ -142,7 +142,7 @@ class AudereEligibilityTests(TestCase):
         char = self._create_character()
         self._create_engagement(char)
         ConditionInstanceFactory(
-            target=char, condition=self.warp_template, current_stage=self.stage2
+            target=char, condition=self.soulfray_template, current_stage=self.stage2
         )
         # Already has Audere condition
         audere_template = ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
@@ -157,11 +157,11 @@ class AudereLifecycleTests(TestCase):
     def setUpTestData(cls) -> None:
         cls.audere_template = ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
 
-        cls.warp_template = ConditionTemplateFactory(
-            name=ANIMA_WARP_CONDITION_NAME, has_progression=True
+        cls.soulfray_template = ConditionTemplateFactory(
+            name=SOULFRAY_CONDITION_NAME, has_progression=True
         )
         cls.stage2 = ConditionStageFactory(
-            condition=cls.warp_template, stage_order=2, name="Fracture"
+            condition=cls.soulfray_template, stage_order=2, name="Fracture"
         )
 
         cls.major_tier = IntensityTierFactory(name="Major_lc", threshold=15, control_modifier=-5)

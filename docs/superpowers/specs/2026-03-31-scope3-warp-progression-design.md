@@ -1,23 +1,23 @@
-# Scope #3: Anima Warp Progression & Consequence Streams
+# Scope #3: Soulfray Progression & Consequence Streams
 
 ## Purpose
 
 Complete the technique use consequence model. Scopes #1 and #2 built the
 `use_technique()` pipeline with anima cost, safety checkpoints, runtime
-modifiers, and Audere. Scope #3 makes consequences real: Anima Warp becomes
+modifiers, and Audere. Scope #3 makes consequences real: Soulfray becomes
 a progressive condition with severity stages driven by anima depletion,
 control mishaps become authored pools that fire on imprecision, and high
-Warp stages unlock dangerous consequence pools — including magical
+Soulfray stages unlock dangerous consequence pools — including magical
 alterations — that fire on every subsequent cast.
 
 ## Key Design Principles
 
-- **Warp is the danger axis, not anima.** Low anima is a precursor to
-  danger, not danger itself. Anima depletion drives Warp accumulation;
-  Warp stage drives consequences and warnings. Players are warned because
+- **Soulfray is the danger axis, not anima.** Low anima is a precursor to
+  danger, not danger itself. Anima depletion drives Soulfray accumulation;
+  Soulfray stage drives consequences and warnings. Players are warned because
   their soul is damaged, not because of resource math.
 - **Three distinct consequence streams.** Control mishaps (imprecision),
-  Warp stage consequences (soul damage), and the intended effect are
+  Soulfray stage consequences (soul damage), and the intended effect are
   independent streams with independent authored pools. They don't
   contaminate each other.
 - **Everything is authored data.** Stage count, thresholds, consequence
@@ -25,9 +25,9 @@ alterations — that fire on every subsequent cast.
   Factories create test instances; production will have different values.
   The code provides the mechanics; content provides the feel.
 - **Severity accumulates continuously.** Small overburns add up over time.
-  Big overburns are immediately dangerous. Warp is a runway, not a cliff.
+  Big overburns are immediately dangerous. Soulfray is a runway, not a cliff.
 - **Control mishaps are never lethal.** Sloppy casting causes collateral
-  damage, not character death. Lethality lives exclusively on late Warp
+  damage, not character death. Lethality lives exclusively on late Soulfray
   stages.
 
 ## What This Builds
@@ -40,7 +40,7 @@ No new fields on `ConditionInstance`. The existing `severity` field
 - **For non-accumulating conditions** (poisons, buffs): severity is
   potency, set once at creation, scaled by `stage.severity_multiplier`
   via `effective_severity`. Unchanged behavior.
-- **For accumulating conditions** (Anima Warp): severity is incremented
+- **For accumulating conditions** (Soulfray): severity is incremented
   by `advance_condition_severity()` and drives stage advancement via
   `severity_threshold` on stages.
 
@@ -64,10 +64,10 @@ New field on `ConditionStage`:
 
 This enables two coexisting progression modes on ConditionStage:
 - **Time-based** — existing `rounds_to_next` countdown (poisons, buffs)
-- **Severity-based** — new `severity_threshold` (Anima Warp, future
+- **Severity-based** — new `severity_threshold` (Soulfray, future
   similar conditions)
 
-A stage can use either or both. Anima Warp stages would have
+A stage can use either or both. Soulfray stages would have
 `severity_threshold` set and `rounds_to_next` null.
 
 ### 3. Consequence Pool on ConditionStage
@@ -79,7 +79,7 @@ New field on `ConditionStage`:
   consequence is selected. Null means no per-cast consequences at this
   stage.
 
-**Warp consequences are dramatic from stage 1.** Even the earliest
+**Soulfray consequences are dramatic from stage 1.** Even the earliest
 stages produce visible, frightening effects appropriate to the
 character's magical identity: glowing aura, encroaching darkness,
 crackling energy, resonance-flavored manifestations. Mechanical effects
@@ -98,25 +98,25 @@ harder to resist AND the consequences of failure grow more severe.
 
 The pool fires on **every technique use while at that stage**, not on
 stage entry. This means the danger is ongoing — every cast at a
-dangerous Warp stage is a roll of the dice, and the player's skill
+dangerous Soulfray stage is a roll of the dice, and the player's skill
 determines how well they weather it.
 
 **Consequence selection uses a secondary resilience check.** The
-technique's own check result does not drive Warp consequence selection
+technique's own check result does not drive Soulfray consequence selection
 — that would be semantically wrong (a successful fire spell shouldn't
 determine how badly your soul is damaged). Instead:
 
-1. `WarpConfig.resilience_check_type` and `WarpConfig.base_check_difficulty`
+1. `SoulfrayConfig.resilience_check_type` and `SoulfrayConfig.base_check_difficulty`
    define a resilience check (e.g., a "magical endurance" CheckType
    using relevant magical skills/stats). The check type and base
    difficulty are constant across all stages.
-2. Each Warp stage has authored `ConditionCheckModifier` records
+2. Each Soulfray stage has authored `ConditionCheckModifier` records
    (existing model, attached via stage FK) that apply escalating
    penalties to the resilience CheckType. Stage 1 might have a small
    penalty; late stages have severe penalties. This uses the existing
    condition effect infrastructure — no new fields on ConditionStage.
 3. The technique's check outcome applies an additional modifier to the
-   resilience check: botching the technique penalizes the Warp check,
+   resilience check: botching the technique penalizes the Soulfray check,
    critting gives a bonus. Mapped from technique outcome tier to a
    signed modifier value via `TechniqueOutcomeModifier` (authored data).
 4. The resilience check is performed with both modifiers applied.
@@ -125,27 +125,27 @@ determine how badly your soul is damaged). Instead:
    `select_consequence_from_result()`.
 
 This gives players agency — a character with strong magical discipline
-can resist worse Warp outcomes even at high stages. But the stage
+can resist worse Soulfray outcomes even at high stages. But the stage
 penalties mean even skilled casters eventually struggle, and botching a
-technique while in Warp makes everything worse. Like saving throws
+technique while in Soulfray makes everything worse. Like saving throws
 with escalating DC.
 
-### 4. Warp Severity Accumulation
+### 4. Soulfray Severity Accumulation
 
 #### Anima Ratio Threshold
 
 Single-row global configuration table (SharedMemoryModel), same pattern
 as `AudereThreshold` — queried with `.first()`:
 
-- `warp_threshold_ratio` — `DecimalField`. The anima ratio (current/max)
-  below which technique use starts accumulating Warp severity. Example:
-  0.30 means Warp starts accumulating when anima drops below 30%.
+- `soulfray_threshold_ratio` — `DecimalField`. The anima ratio (current/max)
+  below which technique use starts accumulating Soulfray severity. Example:
+  0.30 means Soulfray starts accumulating when anima drops below 30%.
 - `severity_scale` — `PositiveIntegerField`. Base scaling factor for
   converting depletion into severity.
 - `deficit_scale` — `PositiveIntegerField`. Additional scaling factor
   for the deficit portion (anima spent beyond zero).
 - `resilience_check_type` — FK to `checks.CheckType`. The check used
-  for Warp resilience (e.g., "magical endurance"). Constant across all
+  for Soulfray resilience (e.g., "magical endurance"). Constant across all
   stages.
 - `base_check_difficulty` — `PositiveIntegerField`. Base difficulty for
   the resilience check before stage-specific modifiers.
@@ -153,13 +153,13 @@ as `AudereThreshold` — queried with `.first()`:
 #### Severity Calculation
 
 After anima is deducted (Step 4), the post-deduction anima ratio
-determines Warp severity contribution:
+determines Soulfray severity contribution:
 
 ```
 ratio = current_anima / max_anima  (0.0 when empty, negative not possible)
 ```
 
-- **ratio >= threshold** — no Warp severity. Magic is safe with reserves.
+- **ratio >= threshold** — no Soulfray severity. Magic is safe with reserves.
 - **ratio < threshold** — severity increases as ratio decreases. The
   further below the threshold, the more severity per cast.
 - **Deficit casting** (anima was insufficient, current is now 0) — the
@@ -185,11 +185,11 @@ else:
 Production can tune via the config values. The function signature:
 
 ```python
-def calculate_warp_severity(
+def calculate_soulfray_severity(
     current_anima: int,
     max_anima: int,
     deficit: int,
-    config: WarpConfig,
+    config: SoulfrayConfig,
 ) -> int:
 ```
 
@@ -213,21 +213,21 @@ class SeverityAdvanceResult:
     total_severity: int
 ```
 
-If no Warp condition exists on the character yet, `apply_condition()` is
+If no Soulfray condition exists on the character yet, `apply_condition()` is
 called first to create one, then `severity` is set to the
 calculated amount and stage is resolved.
 
-**Note:** The Anima Warp `ConditionTemplate` must have
+**Note:** The Soulfray `ConditionTemplate` must have
 `is_stackable=False`. The `unique_together` constraint on
-`ConditionInstance` (`target`, `condition`) ensures one Warp instance per
+`ConditionInstance` (`target`, `condition`) ensures one Soulfray instance per
 character. `apply_condition()` will refresh rather than stack on
 subsequent applications.
 
 ### 5. Revised Safety Checkpoint (Step 3)
 
-The safety checkpoint is **driven by Warp stage, not anima deficit.**
+The safety checkpoint is **driven by Soulfray stage, not anima deficit.**
 
-When a character has an active Anima Warp condition, Step 3 checks their
+When a character has an active Soulfray condition, Step 3 checks their
 current stage and presents the stage's authored warning text and severity
 label. The player confirms or cancels.
 
@@ -236,15 +236,15 @@ label. The player confirms or cancels.
   serves a different purpose).
 - Early stages: informational ("You are experiencing magical strain.")
 - Late stages: explicit death risk ("This can result in character death.")
-- No Warp condition: no warning. Even if anima is low, there's no danger
-  *yet* — the danger comes after this cast accumulates Warp.
+- No Soulfray condition: no warning. Even if anima is low, there's no danger
+  *yet* — the danger comes after this cast accumulates Soulfray.
 
-This means the **first time** a character enters Warp is unwarned. They
-cast, Warp accumulates past stage 1's threshold, and the *next* time they
+This means the **first time** a character enters Soulfray is unwarned. They
+cast, Soulfray accumulates past stage 1's threshold, and the *next* time they
 cast they see the warning. A deliberate "oh no" moment.
 
 The existing `confirm_overburn` parameter on `use_technique()` is renamed
-to `confirm_warp_risk` (or similar) to reflect the new semantics.
+to `confirm_soulfray_risk` (or similar) to reflect the new semantics.
 
 ### 6. MishapPoolTier Config Model
 
@@ -267,13 +267,13 @@ minor injuries to the caster. Dramatic but never lethal on their own.
 
 ### 7. Magical Alteration ("Magical Scars") Hook
 
-At high Warp stages, one of the possible consequences in the stage's
+At high Soulfray stages, one of the possible consequences in the stage's
 consequence pool is a "magical alteration occurs" entry. This is a new
 `ConsequenceEffect` type — `MAGICAL_SCARS` — that, when selected,
 calls a dedicated function to determine the specific alteration.
 
 The alteration resolution function takes the character's magical identity
-(resonances, affinity, Warp state, etc.) as inputs and determines what
+(resonances, affinity, Soulfray state, etc.) as inputs and determines what
 happens. **This function is a stub in Scope #3** — it's called, but the
 actual alteration logic (selecting from the vast space of possible
 alterations based on character identity) is a future system. For now, the
@@ -302,8 +302,8 @@ The 8-step pipeline is revised:
 **Step 2: Calculate effective anima cost** — unchanged.
 
 **Step 3: Safety checkpoint** — **rewritten.** Checks character's current
-Warp stage. If they have active Anima Warp, presents the stage's warning.
-Player confirms or cancels. No Warp = no warning.
+Soulfray stage. If they have active Soulfray, presents the stage's warning.
+Player confirms or cancels. No Soulfray = no warning.
 
 **Step 4: Deduct anima** — unchanged mechanically.
 
@@ -311,17 +311,17 @@ Player confirms or cancels. No Warp = no warning.
 
 **Step 6: Resolve intended effect** — unchanged.
 
-**Step 7: Warp accumulation and stage consequences** — **rewritten.**
+**Step 7: Soulfray accumulation and stage consequences** — **rewritten.**
 Three sub-steps:
-- **7a:** Calculate Warp severity from post-deduction anima state
+- **7a:** Calculate Soulfray severity from post-deduction anima state
   (ratio relative to threshold, plus deficit contribution). Zero if above
   threshold.
-- **7b:** If severity > 0, look up the character's existing Warp
+- **7b:** If severity > 0, look up the character's existing Soulfray
   condition. If none exists, call `apply_condition()` to create one,
   then call `advance_condition_severity()` with the calculated amount.
   If one already exists, call `advance_condition_severity()` directly
   on the existing instance. Stage may advance.
-- **7c:** Check current Warp stage's consequence pool. If the stage has
+- **7c:** Check current Soulfray stage's consequence pool. If the stage has
   a pool, perform the resilience check: take the stage's check_type and
   check_difficulty, apply a modifier derived from the technique's check
   outcome (Step 6), perform the check, and select a consequence from
@@ -336,28 +336,28 @@ non-lethal imprecision consequences.
 ## What Gets Removed/Changed
 
 - **`OverburnSeverity` dataclass** — removed. Safety checkpoint is now
-  Warp-stage-driven, not deficit-severity-driven.
-- **`get_overburn_severity()` function** — removed. Replaced by Warp
+  Soulfray-stage-driven, not deficit-severity-driven.
+- **`get_overburn_severity()` function** — removed. Replaced by Soulfray
   stage lookup.
 - **`_DEATH_RISK_THRESHOLD` / `_DANGEROUS_THRESHOLD` constants** — removed
-  (if they exist as constants). Danger is authored on Warp stages.
+  (if they exist as constants). Danger is authored on Soulfray stages.
 - **`warp_multiplier` on AudereThreshold** — field can remain but is no
-  longer used in Warp severity calculation. Audere naturally drives high
+  longer used in Soulfray severity calculation. Audere naturally drives high
   costs because of the massive intensity boost, which increases anima cost,
-  which depletes anima faster, which increases Warp severity through the
+  which depletes anima faster, which increases Soulfray severity through the
   normal formula. No artificial multiplier needed.
 - **`_get_warp_multiplier()` function** — removed.
 - **`TechniqueUseResult.warp_multiplier_applied` field** — removed.
-- **`TechniqueUseResult.overburn_severity` field** — replaced with Warp
+- **`TechniqueUseResult.overburn_severity` field** — replaced with Soulfray
   stage information:
-  - `warp_result: WarpResult | None` — dataclass with
+  - `soulfray_result: SoulfrayResult | None` — dataclass with
     `severity_added: int`, `stage_name: str | None`,
     `stage_advanced: bool`, `resilience_check: CheckResult | None`,
     `stage_consequence: AppliedEffect | None`
 - **`TechniqueUseResult.confirmed` field** — semantics change from
-  "confirmed overburn" to "confirmed despite Warp warning."
-- **`confirm_overburn` parameter** — renamed to `confirm_warp_risk` to
-  reflect Warp-stage semantics.
+  "confirmed overburn" to "confirmed despite Soulfray warning."
+- **`confirm_overburn` parameter** — renamed to `confirm_soulfray_risk` to
+  reflect Soulfray-stage semantics.
 
 ## What This Does NOT Build
 
@@ -372,15 +372,15 @@ non-lethal imprecision consequences.
 - **Resonance/affinity filtering of consequence pools** — future
   refinement where a character's magical identity influences which
   consequences are more likely.
-- **Warp recovery/decay** — how Warp severity decreases over time or
+- **Soulfray recovery/decay** — how Soulfray severity decreases over time or
   through specific actions (rest, anima rituals, healing). Without
-  recovery, Warp is a one-way ratchet. Recovery mechanics likely tie
+  recovery, Soulfray is a one-way ratchet. Recovery mechanics likely tie
   into the anima ritual system or rest/downtime mechanics. For now,
-  Warp persists until explicitly removed (e.g., via admin or future
+  Soulfray persists until explicitly removed (e.g., via admin or future
   recovery system).
 - **Audere pool expansion interaction** — Audere expands the anima pool
   via `anima_pool_bonus`, which temporarily raises the ratio and may
-  delay Warp accumulation for a few casts. This is intentional — the
+  delay Soulfray accumulation for a few casts. This is intentional — the
   expanded pool is temporary fuel that depletes on the same curve.
   No special handling needed.
 
@@ -389,8 +389,8 @@ non-lethal imprecision consequences.
 | Model | App | Purpose |
 |-------|-----|---------|
 | `MishapPoolTier` | `world/magic` | Maps control deficit ranges to consequence pools |
-| `WarpConfig` | `world/magic` | Anima ratio threshold and severity scaling for Warp accumulation |
-| `TechniqueOutcomeModifier` | `world/magic` | Maps technique check outcome tiers to signed modifier values for the Warp resilience check |
+| `SoulfrayConfig` | `world/magic` | Anima ratio threshold and severity scaling for Soulfray accumulation |
+| `TechniqueOutcomeModifier` | `world/magic` | Maps technique check outcome tiers to signed modifier values for the Soulfray resilience check |
 
 ## Modified Models Summary
 
@@ -405,8 +405,8 @@ non-lethal imprecision consequences.
 | Function | Location | Purpose |
 |----------|----------|---------|
 | `advance_condition_severity(instance, amount)` | `conditions/services.py` | Increment severity, advance stage if threshold crossed |
-| `calculate_warp_severity(current, maximum, deficit, config)` | `magic/services.py` | Compute Warp severity from anima state |
-| `get_warp_warning(character)` | `magic/services.py` | Return current Warp stage warning for safety checkpoint |
+| `calculate_soulfray_severity(current, maximum, deficit, config)` | `magic/services.py` | Compute Soulfray severity from anima state |
+| `get_soulfray_warning(character)` | `magic/services.py` | Return current Soulfray stage warning for safety checkpoint |
 
 ## New ConsequenceEffect Type
 
@@ -418,33 +418,33 @@ fills in the real resolution logic.
 
 The pipeline integration tests grow to cover:
 
-- **Warp accumulation from low anima** — technique use below threshold
-  ratio creates/advances Warp condition with correct severity
-- **No Warp above threshold** — technique use with plenty of anima
-  produces no Warp
+- **Soulfray accumulation from low anima** — technique use below threshold
+  ratio creates/advances Soulfray condition with correct severity
+- **No Soulfray above threshold** — technique use with plenty of anima
+  produces no Soulfray
 - **Severity-driven stage advancement** — accumulated severity crossing
   threshold advances stage; large severity can skip stages
-- **Warp resilience check drives consequence selection** — technique use
-  at a Warp stage performs a secondary resilience check, outcome tier
+- **Soulfray resilience check drives consequence selection** — technique use
+  at a Soulfray stage performs a secondary resilience check, outcome tier
   determines which consequence is selected from the stage's pool
 - **Technique outcome modifies resilience check** — botching the
-  technique applies a penalty to the Warp resilience check; strong
+  technique applies a penalty to the Soulfray resilience check; strong
   technique outcome applies a bonus
-- **Warp stage consequence pool — early stage** — consequence pool at
+- **Soulfray stage consequence pool — early stage** — consequence pool at
   stage 1 produces dramatic but non-permanent effects (strain, fatigue,
   visual manifestations)
-- **Safety checkpoint from Warp stage** — character with Warp gets
-  warning on next cast; character without Warp gets no warning
-- **First Warp is unwarned** — character with no Warp casts, accumulates
-  Warp, was not warned before this cast
+- **Safety checkpoint from Soulfray stage** — character with Soulfray gets
+  warning on next cast; character without Soulfray gets no warning
+- **First Soulfray is unwarned** — character with no Soulfray casts, accumulates
+  Soulfray, was not warned before this cast
 - **Control mishap pool selection** — deficit queries MishapPoolTier,
   returns correct pool
 - **Control mishaps are non-lethal** — mishap pool consequences have no
   `character_loss` entries
-- **Control mishap fires independently of Warp** — character with full
-  anima and no Warp but intensity > control gets mishap consequences
+- **Control mishap fires independently of Soulfray** — character with full
+  anima and no Soulfray but intensity > control gets mishap consequences
 - **Full flow** — technique use with low anima and high intensity:
-  Warp warning → confirm → resolve → Warp accumulates → stage consequence
+  Soulfray warning → confirm → resolve → Soulfray accumulates → stage consequence
   fires → control mishap fires. All three streams produce independent
   results.
 
@@ -463,11 +463,11 @@ Scope #2 (unchanged):
 Scope #3 revisions to use_technique():
   Step 3: Safety checkpoint
     Was: check anima deficit, warn on overburn
-    Now: check Warp stage, warn based on stage severity
+    Now: check Soulfray stage, warn based on stage severity
 
-  Step 7: Warp accumulation + resilience check
+  Step 7: Soulfray accumulation + resilience check
     Was: commented-out stub
-    Now: calculate severity from anima ratio → advance Warp →
+    Now: calculate severity from anima ratio → advance Soulfray →
          resilience check (modified by technique outcome) → fire stage pool
 
   Step 8: Control mishap

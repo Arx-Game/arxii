@@ -1162,7 +1162,7 @@ def advance_condition_severity(
 ) -> SeverityAdvanceResult:
     """Increment a condition's severity and advance stage if threshold crossed.
 
-    Used for conditions like Anima Warp where severity accumulates from
+    Used for conditions like Soulfray where severity accumulates from
     external events rather than being set once at creation.
 
     Stages with severity_threshold=None are ignored (time-based only).

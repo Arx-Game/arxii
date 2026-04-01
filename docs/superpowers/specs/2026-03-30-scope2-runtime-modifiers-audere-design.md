@@ -22,7 +22,7 @@ technique runtime stats.
 - **Engagement is observable.** What a character is doing is social information,
   not just mechanical state. Other characters can see that someone is engaged
   in combat, a mission, or a challenge.
-- **Audere is rare and earned.** It requires high intensity, existing Anima Warp,
+- **Audere is rare and earned.** It requires high intensity, existing Soulfray,
   AND active engagement. It's a climactic moment in a dangerous situation, not
   a power-up the player activates at will.
 - **Audere is triggered by events, not technique use.** When conditions are met
@@ -144,10 +144,10 @@ as a table for factory/test flexibility.
 
 **Fields:**
 - `minimum_intensity_tier` — FK to IntensityTier (intensity must reach this tier)
-- `minimum_warp_stage` — FK to ConditionStage (Anima Warp must be at this stage+)
+- `minimum_warp_stage` — FK to ConditionStage (Soulfray must be at this stage+)
 - `intensity_bonus` — IntegerField (added to engagement.intensity_modifier on activation)
 - `anima_pool_bonus` — PositiveIntegerField (temporary max anima increase)
-- `warp_multiplier` — PositiveIntegerField (Warp severity increment multiplier)
+- `warp_multiplier` — PositiveIntegerField (Soulfray severity increment multiplier)
 
 All values are authored and tunable without code changes.
 
@@ -162,11 +162,11 @@ All three must be met simultaneously:
    `AudereThreshold.minimum_intensity_tier` (lookup: find the highest
    IntensityTier whose `threshold` value is <= the character's runtime
    intensity, then compare tier ordering)
-2. Character has an active Anima Warp condition at or above `AudereThreshold.minimum_warp_stage`
+2. Character has an active Soulfray condition at or above `AudereThreshold.minimum_warp_stage`
 3. Character has an active CharacterEngagement
 
 The engagement gate is a narrative guardrail. While it should be nearly
-impossible to accumulate the required intensity and Warp outside of dangerous
+impossible to accumulate the required intensity and Soulfray outside of dangerous
 situations, Audere is explicitly a combat/high-stakes moment. A character
 doesn't go super saiyan during a pub darts tournament.
 
@@ -213,7 +213,7 @@ that re-triggers eligibility.
 
 Audere ends when:
 - Engagement ends (CharacterEngagement deleted → scene/combat over)
-- Anima Warp reaches a critical stage (authored on the condition's final stage)
+- Soulfray reaches a critical stage (authored on the condition's final stage)
 - Character voluntarily releases it (future, low priority)
 
 On end:
@@ -222,19 +222,19 @@ On end:
 - If engagement is being deleted: process modifiers vanish automatically
 - `CharacterAnima.maximum` reverted to `pre_audere_maximum` value, field
   set back to null
-- The Anima Warp condition remains — Audere ending doesn't reset Warp
+- The Soulfray condition remains — Audere ending doesn't reset Soulfray
 
-### 6. Warp Acceleration During Audere
+### 6. Soulfray Acceleration During Audere
 
 Step 7 of `use_technique()` (apply overburn condition) checks for active
-Audere. If present, the Warp severity increment is multiplied by
+Audere. If present, the Soulfray severity increment is multiplied by
 `AudereThreshold.warp_multiplier`. This is a simple multiplication on the
 severity value before passing to `apply_condition()`.
 
-This means a character in Audere accumulates Warp dramatically faster than
-normal. Each technique use during Audere pushes them further up the Warp
+This means a character in Audere accumulates Soulfray dramatically faster than
+normal. Each technique use during Audere pushes them further up the Soulfray
 progression — through penalties, into scarring risk, toward lethal territory.
-The runway is still there (Warp is progressive, not sudden), but Audere
+The runway is still there (Soulfray is progressive, not sudden), but Audere
 compresses it.
 
 ### 7. Changes to `use_technique()`
@@ -245,7 +245,7 @@ The existing 8-step pipeline from Scope #1 changes minimally:
   (CharacterModifier totals + CharacterEngagement fields) instead of returning
   base values. Audere's intensity bonus is already reflected in the engagement
   fields if active.
-- **Step 7** — Warp severity increment scaled by `warp_multiplier` if Audere
+- **Step 7** — Soulfray severity increment scaled by `warp_multiplier` if Audere
   is active.
 
 All other steps are unchanged. Audere logic lives outside `use_technique()`.
@@ -342,7 +342,7 @@ what's missing is the conditional activation layer.
 
 Character death from Audere sacrifice should be deferred to a narratively
 appropriate moment — not mid-action. A character in Audere Majora who pushes
-past lethal Warp stages is choosing sacrifice so others can win. The death
+past lethal Soulfray stages is choosing sacrifice so others can win. The death
 plays out after the decisive moment (winning the boss fight, holding the line,
 etc.), not as an interruption to the action.
 
@@ -351,7 +351,7 @@ chain (entered Audere → kept pushing → kept confirming overburn). The system
 makes space for players to choose sacrifice deliberately, with full
 understanding of what they're giving up and what they're achieving for others.
 
-This is part of Scope #3's Anima Warp progression design, not Scope #2.
+This is part of Scope #3's Soulfray progression design, not Scope #2.
 
 ## Integration Test Expansion
 
@@ -364,21 +364,21 @@ The pipeline integration tests grow to cover:
 - **IntensityTier.control_modifier**: applied based on resulting intensity tier
 - **Two-stream stacking**: CharacterModifier identity bonus + engagement process
   bonus both contribute to runtime stats
-- **Audere eligibility — all gates met**: intensity tier + Warp stage +
+- **Audere eligibility — all gates met**: intensity tier + Soulfray stage +
   engagement → eligible
 - **Audere eligibility — missing one gate**: each gate individually insufficient
-- **Audere eligibility — no engagement**: high intensity + high Warp but not
+- **Audere eligibility — no engagement**: high intensity + high Soulfray but not
   engaged → not eligible
 - **Audere acceptance**: condition applied → engagement.intensity_modifier
   updated → anima pool expanded → runtime stats reflect boost
 - **Audere decline**: no state change, normal technique use continues
-- **Warp acceleration**: overburn during Audere → Warp severity multiplied
+- **Soulfray acceleration**: overburn during Audere → Soulfray severity multiplied
 - **Audere cleanup on condition end**: intensity_modifier reduced, anima pool
-  reverted, Warp remains
+  reverted, Soulfray remains
 - **Audere cleanup on engagement end**: engagement deleted → all process state
   gone → Audere condition removed
 - **Full flow**: engagement → escalation → Audere trigger → accept → technique
-  use with boosted stats → Warp with multiplier → engagement ends → cleanup
+  use with boosted stats → Soulfray with multiplier → engagement ends → cleanup
 
 ## Relationship to Existing Pipeline
 
@@ -408,7 +408,7 @@ Scope #2 additions:
       + IntensityTier.control_modifier
 
   use_technique() Step 7:
-    Warp severity × AudereThreshold.warp_multiplier (if Audere active)
+    Soulfray severity × AudereThreshold.warp_multiplier (if Audere active)
 ```
 
 The technique use flow remains a wrapper around the existing resolution

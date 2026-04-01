@@ -4,13 +4,13 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from world.magic.factories import CharacterAnimaFactory, TechniqueFactory, WarpConfigFactory
+from world.magic.factories import CharacterAnimaFactory, SoulfrayConfigFactory, TechniqueFactory
 from world.magic.services import (
     calculate_effective_anima_cost,
-    calculate_warp_severity,
+    calculate_soulfray_severity,
     deduct_anima,
     get_runtime_technique_stats,
-    get_warp_warning,
+    get_soulfray_warning,
     select_mishap_pool,
 )
 from world.magic.types import RuntimeTechniqueStats
@@ -129,15 +129,15 @@ class DeductAnimaTests(TestCase):
         assert deficit == 0
 
 
-class CalculateWarpSeverityTests(TestCase):
+class CalculateSoulfraySeverityTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
         from world.checks.factories import CheckTypeFactory
 
         cls.check_type = CheckTypeFactory()
-        cls.config = WarpConfigFactory(
-            warp_threshold_ratio=Decimal("0.30"),
+        cls.config = SoulfrayConfigFactory(
+            soulfray_threshold_ratio=Decimal("0.30"),
             severity_scale=10,
             deficit_scale=5,
             resilience_check_type=cls.check_type,
@@ -145,49 +145,49 @@ class CalculateWarpSeverityTests(TestCase):
         )
 
     def test_above_threshold_no_severity(self) -> None:
-        result = calculate_warp_severity(
+        result = calculate_soulfray_severity(
             current_anima=50, max_anima=100, deficit=0, config=self.config
         )
         assert result == 0
 
     def test_at_threshold_no_severity(self) -> None:
-        result = calculate_warp_severity(
+        result = calculate_soulfray_severity(
             current_anima=30, max_anima=100, deficit=0, config=self.config
         )
         assert result == 0
 
     def test_below_threshold_produces_severity(self) -> None:
-        result = calculate_warp_severity(
+        result = calculate_soulfray_severity(
             current_anima=15, max_anima=100, deficit=0, config=self.config
         )
         assert result > 0
 
     def test_empty_anima_max_depletion_severity(self) -> None:
-        result = calculate_warp_severity(
+        result = calculate_soulfray_severity(
             current_anima=0, max_anima=100, deficit=0, config=self.config
         )
         assert result == 10  # ceil(10 * 1.0)
 
     def test_deficit_adds_severity(self) -> None:
-        no_deficit = calculate_warp_severity(
+        no_deficit = calculate_soulfray_severity(
             current_anima=0, max_anima=100, deficit=0, config=self.config
         )
-        with_deficit = calculate_warp_severity(
+        with_deficit = calculate_soulfray_severity(
             current_anima=0, max_anima=100, deficit=10, config=self.config
         )
         assert with_deficit == no_deficit + 50  # ceil(5 * 10)
 
     def test_severity_scales_with_depletion(self) -> None:
-        mild = calculate_warp_severity(
+        mild = calculate_soulfray_severity(
             current_anima=20, max_anima=100, deficit=0, config=self.config
         )
-        severe = calculate_warp_severity(
+        severe = calculate_soulfray_severity(
             current_anima=5, max_anima=100, deficit=0, config=self.config
         )
         assert severe > mild
 
 
-class GetWarpWarningTests(TestCase):
+class GetSoulfrayWarningTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
@@ -196,32 +196,32 @@ class GetWarpWarningTests(TestCase):
             ConditionStageFactory,
             ConditionTemplateFactory,
         )
-        from world.magic.audere import ANIMA_WARP_CONDITION_NAME
+        from world.magic.audere import SOULFRAY_CONDITION_NAME
 
         cls.character = CharacterFactory()
-        cls.warp_template = ConditionTemplateFactory(
-            name=ANIMA_WARP_CONDITION_NAME,
+        cls.soulfray_template = ConditionTemplateFactory(
+            name=SOULFRAY_CONDITION_NAME,
             has_progression=True,
             is_stackable=False,
         )
         cls.stage1 = ConditionStageFactory(
-            condition=cls.warp_template,
+            condition=cls.soulfray_template,
             stage_order=1,
             name="Strain",
             severity_threshold=1,
             consequence_pool=None,
         )
 
-    def test_no_warp_returns_none(self) -> None:
-        assert get_warp_warning(self.character) is None
+    def test_no_soulfray_returns_none(self) -> None:
+        assert get_soulfray_warning(self.character) is None
 
-    def test_warp_present_returns_warning(self) -> None:
+    def test_soulfray_present_returns_warning(self) -> None:
         from world.conditions.services import apply_condition
 
-        result = apply_condition(self.character, self.warp_template)
+        result = apply_condition(self.character, self.soulfray_template)
         result.instance.current_stage = self.stage1
         result.instance.save(update_fields=["current_stage"])
-        warning = get_warp_warning(self.character)
+        warning = get_soulfray_warning(self.character)
         assert warning is not None
         assert warning.stage_name == "Strain"
         assert not warning.has_death_risk

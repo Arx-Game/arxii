@@ -226,7 +226,7 @@ def _apply_magical_scars(
 
     Currently identical to _apply_condition. When the full magical alteration
     system is built, this handler will be replaced to call a resolution function
-    that considers the character's resonances, affinity, and Warp state.
+    that considers the character's resonances, affinity, and Soulfray state.
     """
     target = _resolve_target(effect, context)
     severity = effect.condition_severity or 1

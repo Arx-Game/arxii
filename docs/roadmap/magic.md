@@ -86,8 +86,8 @@ infrastructure. Three scopes identified:
 - Safety checkpoint when anima would go negative (explicit opt-in to life force drain)
 - Anima deduction with select_for_update
 - Capability value enhancement from runtime intensity
-- Anima Warp condition applied on overburn (severity scaled to deficit)
-- Mishap rider consequences when intensity > control (non-lethal with sufficient anima)
+- Soulfray condition applied on overburn (severity scaled to deficit)
+- Mishap rider consequences when intensity > control (non-lethal)
 - `use_technique()` orchestrator wrapping the existing resolution pipeline
 
 **Scope #2 — Runtime Modifiers and Audere (DONE):**
@@ -107,12 +107,12 @@ What was built:
 - **IntensityTier.control_modifier integration** — looked up based on resulting
   runtime intensity after all modifiers.
 - **AudereThreshold config model** — authored gates (minimum intensity tier, minimum
-  Anima Warp stage) and effect values (intensity bonus, anima pool expansion, Warp
-  multiplier). All tunable without code changes.
+  Soulfray stage) and effect values (intensity bonus, anima pool expansion,
+  soulfray multiplier). All tunable without code changes.
 - **Audere condition lifecycle** — triple-gate eligibility check (intensity tier +
-  Warp stage + engagement), offer/accept flow with atomic modifier writes, end/cleanup
+  Soulfray stage + engagement), offer/accept flow with atomic modifier writes, end/cleanup
   with safe reversion. Triggered by intensity-changing events, not during technique use.
-- **Warp acceleration** — overburn Warp severity multiplied by warp_multiplier during
+- **Soulfray acceleration** — overburn Soulfray severity multiplied by warp_multiplier during
   Audere, reported in TechniqueUseResult.
 - **7 integration tests** in RuntimeModifierTests covering the full pipeline.
 
@@ -124,7 +124,7 @@ Documented for future (hook points built, logic not implemented):
 - Escalation tick triggers (owned by future combat/missions/challenges)
 - Contextual modifier evaluation (Trigger-like system for situational bonuses)
 
-**Scope #3 — Warp Progression & Consequence Streams (DONE):**
+**Scope #3 — Soulfray Progression & Consequence Streams (DONE):**
 **Spec:** `docs/superpowers/specs/2026-03-31-scope3-warp-progression-design.md`
 
 What was built:
@@ -132,35 +132,35 @@ What was built:
   conditions that progress by accumulated severity (not just time). New
   `advance_condition_severity()` service function increments severity and advances
   stage when thresholds are crossed, supporting stage-skipping on large jumps.
-- **Warp severity accumulation** — `WarpConfig` model holds anima ratio threshold
-  and severity scaling. `calculate_warp_severity()` converts post-deduction anima
-  state to Warp severity. Below the threshold ratio, severity ramps with depletion;
+- **Soulfray severity accumulation** — `SoulfrayConfig` model holds anima ratio threshold
+  and severity scaling. `calculate_soulfray_severity()` converts post-deduction anima
+  state to Soulfray severity. Below the threshold ratio, severity ramps with depletion;
   deficit casting adds additional severity.
-- **Warp-stage-driven safety checkpoint** — Step 3 of `use_technique()` now warns
-  based on the character's current Warp stage (not anima deficit). First entry into
-  Warp is unwarned — the "oh no" moment comes on the next cast.
+- **Soulfray-stage-driven safety checkpoint** — Step 3 of `use_technique()` now warns
+  based on the character's current Soulfray stage (not anima deficit). First entry into
+  Soulfray is unwarned — the "oh no" moment comes on the next cast.
 - **Stage consequence pools** — `ConditionStage.consequence_pool` FK fires per
   technique use while at that stage. Consequence selection uses a secondary
   resilience check (magical endurance), modified by both stage-specific
   `ConditionCheckModifier` penalties (escalating per stage) and technique check
   outcome via `TechniqueOutcomeModifier`. Players have agency via skill.
 - **Control mishap pools** — `MishapPoolTier` maps control deficit ranges to
-  consequence pools. Non-lethal only — imprecision effects independent of Warp.
+  consequence pools. Non-lethal only — imprecision effects independent of Soulfray.
 - **MAGICAL_SCARS effect type** — stub handler in the consequence effect system.
-  When selected from a Warp stage pool, applies a placeholder condition. Future
+  When selected from a Soulfray stage pool, applies a placeholder condition. Future
   work replaces the stub with full alteration resolution considering resonances
   and affinity.
-- **9 integration tests** in `WarpProgressionTests` covering the full three-stream
-  pipeline: Warp accumulation, stage advancement, resilience checks, safety
+- **9 integration tests** in `SoulfrayProgressionTests` covering the full three-stream
+  pipeline: Soulfray accumulation, stage advancement, resilience checks, safety
   checkpoints, control mishaps, technique outcome modifiers, and the full
   combined flow.
 
 Deferred to future scopes:
 - Abyssal corruption as long-term consequence of abyssal magic overuse
 - Character loss deferral during Audere (needs combat/mission lifecycle)
-- Warp recovery/decay mechanics
+- Soulfray recovery/decay mechanics
 - Magical alteration resolution (the function that determines *what* alteration
-  occurs based on character identity — resonances, affinity, Warp state)
+  occurs based on character identity — resonances, affinity, Soulfray state)
 
 **Key design principles (apply across all scopes):**
 - Anima is a safety margin, not a gate. Magic always works. Deficit costs life force.

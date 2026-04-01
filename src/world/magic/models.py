@@ -1675,18 +1675,18 @@ class Cantrip(SharedMemoryModel):
         return self.name
 
 
-class WarpConfig(SharedMemoryModel):
-    """Global configuration for Warp severity accumulation and resilience checks.
+class SoulfrayConfig(SharedMemoryModel):
+    """Global configuration for Soulfray severity accumulation and resilience checks.
 
     Single-row table (queried with .first()), same pattern as AudereThreshold.
     """
 
-    warp_threshold_ratio = models.DecimalField(
+    soulfray_threshold_ratio = models.DecimalField(
         max_digits=3,
         decimal_places=2,
         help_text=(
             "Anima ratio (current/max) below which technique use "
-            "accumulates Warp severity. E.g., 0.30 = below 30%%."
+            "accumulates Soulfray severity. E.g., 0.30 = below 30%%."
         ),
     )
     severity_scale = models.PositiveIntegerField(
@@ -1698,18 +1698,21 @@ class WarpConfig(SharedMemoryModel):
     resilience_check_type = models.ForeignKey(
         "checks.CheckType",
         on_delete=models.PROTECT,
-        help_text="Check type for Warp resilience (e.g., magical endurance).",
+        help_text="Check type for Soulfray resilience (e.g., magical endurance).",
     )
     base_check_difficulty = models.PositiveIntegerField(
         help_text="Base difficulty for the resilience check before stage modifiers.",
     )
 
     class Meta:
-        verbose_name = "Warp Configuration"
-        verbose_name_plural = "Warp Configurations"
+        verbose_name = "Soulfray Configuration"
+        verbose_name_plural = "Soulfray Configurations"
 
     def __str__(self) -> str:
-        return f"WarpConfig(threshold={self.warp_threshold_ratio}, scale={self.severity_scale})"
+        return (
+            f"SoulfrayConfig(threshold={self.soulfray_threshold_ratio}, "
+            f"scale={self.severity_scale})"
+        )
 
 
 class MishapPoolTier(SharedMemoryModel):
@@ -1759,9 +1762,9 @@ class MishapPoolTier(SharedMemoryModel):
 
 
 class TechniqueOutcomeModifier(SharedMemoryModel):
-    """Maps technique check outcome tiers to signed modifiers for the Warp resilience check.
+    """Maps technique check outcome tiers to signed modifiers for the Soulfray resilience check.
 
-    When a character uses a technique while in Warp, the technique's check outcome
+    When a character uses a technique while in Soulfray, the technique's check outcome
     modifies the subsequent resilience check. Botching penalizes; critting helps.
     """
 
@@ -1772,7 +1775,7 @@ class TechniqueOutcomeModifier(SharedMemoryModel):
         help_text="The technique check outcome tier.",
     )
     modifier_value = models.IntegerField(
-        help_text=("Signed modifier applied to the Warp resilience check. Negative = penalty."),
+        help_text="Signed modifier applied to the Soulfray resilience check. Negative = penalty.",
     )
 
     class Meta:

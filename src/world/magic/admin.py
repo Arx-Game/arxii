@@ -25,6 +25,7 @@ from world.magic.models import (
     Reincarnation,
     Resonance,
     Restriction,
+    SoulfrayConfig,
     Technique,
     TechniqueCapabilityGrant,
     TechniqueOutcomeModifier,
@@ -34,7 +35,6 @@ from world.magic.models import (
     ThreadResonance,
     ThreadType,
     Tradition,
-    WarpConfig,
 )
 
 
@@ -389,10 +389,10 @@ class AudereThresholdAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(WarpConfig)
-class WarpConfigAdmin(admin.ModelAdmin):
+@admin.register(SoulfrayConfig)
+class SoulfrayConfigAdmin(admin.ModelAdmin):
     list_display = [
-        "warp_threshold_ratio",
+        "soulfray_threshold_ratio",
         "severity_scale",
         "deficit_scale",
         "resilience_check_type",

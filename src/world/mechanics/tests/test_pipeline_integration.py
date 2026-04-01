@@ -44,8 +44,8 @@ from world.conditions.factories import (
 )
 from world.conditions.models import ConditionInstance
 from world.magic.audere import (
-    ANIMA_WARP_CONDITION_NAME,
     AUDERE_CONDITION_NAME,
+    SOULFRAY_CONDITION_NAME,
     check_audere_eligibility,
     end_audere,
     offer_audere,
@@ -59,10 +59,10 @@ from world.magic.factories import (
     IntensityTierFactory,
     MishapPoolTierFactory,
     ResonanceFactory,
+    SoulfrayConfigFactory,
     TechniqueCapabilityGrantFactory,
     TechniqueFactory,
     TechniqueOutcomeModifierFactory,
-    WarpConfigFactory,
 )
 from world.magic.services import get_runtime_technique_stats, use_technique
 from world.magic.types import TechniqueUseResult
@@ -946,24 +946,24 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
         assert isinstance(result, TechniqueUseResult)
         assert result.confirmed is True
         assert result.resolution_result is not None
-        assert result.warp_warning is None
+        assert result.soulfray_warning is None
 
         # Anima deducted: base=8, intensity=10, control=7
         # delta = 7 - 10 = -3, effective = max(8 - (-3), 0) = 11
         self.anima.refresh_from_db()
         assert self.anima.current == 20 - 11  # 9
 
-    @patch("world.magic.services.get_warp_warning")
+    @patch("world.magic.services.get_soulfray_warning")
     @patch("world.mechanics.challenge_resolution.perform_check")
-    def test_warp_warning_cancelled_no_resolution(
+    def test_soulfray_warning_cancelled_no_resolution(
         self,
         mock_check: object,
         mock_warning: object,
     ) -> None:
-        """Player cancels at warp warning checkpoint — nothing happens."""
-        from world.magic.types import WarpWarning
+        """Player cancels at soulfray warning checkpoint — nothing happens."""
+        from world.magic.types import SoulfrayWarning
 
-        mock_warning.return_value = WarpWarning(
+        mock_warning.return_value = SoulfrayWarning(
             stage_name="Flickering",
             stage_description="Anima flickers dangerously.",
             has_death_risk=False,
@@ -973,12 +973,12 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
             character=self.character,
             technique=self.flow_technique,
             resolve_fn=self._resolve_challenge,
-            confirm_warp_risk=False,
+            confirm_soulfray_risk=False,
         )
 
         assert result.confirmed is False
         assert result.resolution_result is None
-        assert result.warp_warning is not None
+        assert result.soulfray_warning is not None
         mock_check.assert_not_called()
 
         self.anima.refresh_from_db()
@@ -1000,7 +1000,7 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
             character=self.character,
             technique=self.flow_technique,
             resolve_fn=self._resolve_challenge,
-            confirm_warp_risk=True,
+            confirm_soulfray_risk=True,
         )
 
         assert result.confirmed is True
@@ -1201,30 +1201,30 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
     # --- Test 6: Audere eligibility — all gates ---
 
     def test_audere_eligibility_all_gates(self) -> None:
-        """Audere is eligible when engagement + warp stage + intensity gates all pass."""
-        # Warp condition template with stages
-        warp_template = ConditionTemplateFactory(
-            name=ANIMA_WARP_CONDITION_NAME,
+        """Audere is eligible when engagement + soulfray stage + intensity gates all pass."""
+        # Soulfray condition template with stages
+        soulfray_template = ConditionTemplateFactory(
+            name=SOULFRAY_CONDITION_NAME,
             has_progression=True,
         )
         ConditionStageFactory(
-            condition=warp_template,
+            condition=soulfray_template,
             stage_order=1,
-            name="Mild Warp",
+            name="Mild Soulfray",
         )
-        warp_stage_2 = ConditionStageFactory(
-            condition=warp_template,
+        soulfray_stage_2 = ConditionStageFactory(
+            condition=soulfray_template,
             stage_order=2,
-            name="Severe Warp",
+            name="Severe Soulfray",
         )
 
         # Audere condition template (needed for the "not already in Audere" check)
         ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
 
-        # AudereThreshold requiring major tier and warp stage 2
+        # AudereThreshold requiring major tier and soulfray stage 2
         AudereThresholdFactory(
             minimum_intensity_tier=self.major_tier,
-            minimum_warp_stage=warp_stage_2,
+            minimum_warp_stage=soulfray_stage_2,
             intensity_bonus=20,
             anima_pool_bonus=30,
         )
@@ -1236,11 +1236,11 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
             source_id=self.location.pk,
         )
 
-        # Warp instance at stage 2
+        # Soulfray instance at stage 2
         ConditionInstanceFactory(
             target=self.character,
-            condition=warp_template,
-            current_stage=warp_stage_2,
+            condition=soulfray_template,
+            current_stage=soulfray_stage_2,
         )
 
         # Runtime intensity 20 hits MajorRT tier (threshold 15)
@@ -1250,15 +1250,15 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
 
     def test_audere_full_lifecycle(self) -> None:
         """Engagement -> accept Audere -> boosted stats -> end -> cleanup."""
-        # Setup warp condition with stages
-        warp_template = ConditionTemplateFactory(
-            name=ANIMA_WARP_CONDITION_NAME,
+        # Setup soulfray condition with stages
+        soulfray_template = ConditionTemplateFactory(
+            name=SOULFRAY_CONDITION_NAME,
             has_progression=True,
         )
-        warp_stage = ConditionStageFactory(
-            condition=warp_template,
+        soulfray_stage = ConditionStageFactory(
+            condition=soulfray_template,
             stage_order=1,
-            name="Warp Stage",
+            name="Soulfray Stage",
         )
 
         # Audere condition template
@@ -1267,7 +1267,7 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
         # Threshold config
         threshold = AudereThresholdFactory(
             minimum_intensity_tier=self.minor_tier,
-            minimum_warp_stage=warp_stage,
+            minimum_warp_stage=soulfray_stage,
             intensity_bonus=20,
             anima_pool_bonus=30,
         )
@@ -1286,11 +1286,11 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
             maximum=20,
         )
 
-        # Warp instance
+        # Soulfray instance
         ConditionInstanceFactory(
             target=self.character,
-            condition=warp_template,
-            current_stage=warp_stage,
+            condition=soulfray_template,
+            current_stage=soulfray_stage,
         )
 
         # Baseline stats (engaged, no Audere yet)
@@ -1323,8 +1323,8 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
         assert anima.pre_audere_maximum is None
 
 
-class WarpProgressionTests(PipelineTestMixin, TestCase):
-    """End-to-end tests for the Warp accumulation, stage consequence,
+class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
+    """End-to-end tests for the Soulfray accumulation, stage consequence,
     and control mishap streams in use_technique().
     """
 
@@ -1332,15 +1332,15 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
     def setUpTestData(cls) -> None:
         super().setUpTestData()
 
-        # === 1. Anima Warp condition template with 3 severity-driven stages ===
-        cls.warp_template = ConditionTemplateFactory(
-            name=ANIMA_WARP_CONDITION_NAME,
+        # === 1. Soulfray condition template with 3 severity-driven stages ===
+        cls.soulfray_template = ConditionTemplateFactory(
+            name=SOULFRAY_CONDITION_NAME,
             has_progression=True,
         )
 
         # Stage 1: mild, no consequence pool
-        cls.warp_stage_1 = ConditionStageFactory(
-            condition=cls.warp_template,
+        cls.soulfray_stage_1 = ConditionStageFactory(
+            condition=cls.soulfray_template,
             stage_order=1,
             name="Flickering",
             description="Anima flickers dangerously.",
@@ -1349,25 +1349,25 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
         )
 
         # Stage 2: moderate, has a consequence pool
-        cls.warp_pool_2 = ConsequencePoolFactory(name="Warp Stage 2 Pool")
-        cls.warp_stage_2 = ConditionStageFactory(
-            condition=cls.warp_template,
+        cls.soulfray_pool_2 = ConsequencePoolFactory(name="Soulfray Stage 2 Pool")
+        cls.soulfray_stage_2 = ConditionStageFactory(
+            condition=cls.soulfray_template,
             stage_order=2,
             name="Unstable",
             description="Reality warps around the caster.",
             severity_threshold=10,
-            consequence_pool=cls.warp_pool_2,
+            consequence_pool=cls.soulfray_pool_2,
         )
 
         # Stage 3: severe, consequence pool with character_loss entry
-        cls.warp_pool_3 = ConsequencePoolFactory(name="Warp Stage 3 Pool")
-        cls.warp_stage_3 = ConditionStageFactory(
-            condition=cls.warp_template,
+        cls.soulfray_pool_3 = ConsequencePoolFactory(name="Soulfray Stage 3 Pool")
+        cls.soulfray_stage_3 = ConditionStageFactory(
+            condition=cls.soulfray_template,
             stage_order=3,
             name="Unravelling",
             description="The caster's essence begins to dissolve.",
             severity_threshold=25,
-            consequence_pool=cls.warp_pool_3,
+            consequence_pool=cls.soulfray_pool_3,
         )
 
         # === 2. Resilience check type and outcomes ===
@@ -1390,19 +1390,19 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
         # Use stage-specific modifiers here.
         ConditionCheckModifierFactory(
             condition=None,
-            stage=cls.warp_stage_1,
+            stage=cls.soulfray_stage_1,
             check_type=cls.resilience_check_type,
             modifier_value=-2,
         )
         ConditionCheckModifierFactory(
             condition=None,
-            stage=cls.warp_stage_2,
+            stage=cls.soulfray_stage_2,
             check_type=cls.resilience_check_type,
             modifier_value=-5,
         )
         ConditionCheckModifierFactory(
             condition=None,
-            stage=cls.warp_stage_3,
+            stage=cls.soulfray_stage_3,
             check_type=cls.resilience_check_type,
             modifier_value=-10,
         )
@@ -1410,59 +1410,59 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
         # === 4. Consequence pools for stages ===
 
         # Stage 2: success/failure consequences
-        cls.warp2_success = ConsequenceFactory(
+        cls.soulfray2_success = ConsequenceFactory(
             outcome_tier=cls.resilience_success,
-            label="Warp contained",
+            label="Soulfray contained",
             weight=1,
         )
-        cls.warp2_failure = ConsequenceFactory(
+        cls.soulfray2_failure = ConsequenceFactory(
             outcome_tier=cls.resilience_failure,
-            label="Warp scars form",
+            label="Soulfray scars form",
             weight=1,
         )
         cls.magical_scars_template = ConditionTemplateFactory(
             name="Magical Scars",
         )
         ConsequenceEffectFactory(
-            consequence=cls.warp2_failure,
+            consequence=cls.soulfray2_failure,
             effect_type=EffectType.MAGICAL_SCARS,
             target=EffectTarget.SELF,
             condition_template=cls.magical_scars_template,
             condition_severity=1,
         )
         ConsequencePoolEntryFactory(
-            pool=cls.warp_pool_2,
-            consequence=cls.warp2_success,
+            pool=cls.soulfray_pool_2,
+            consequence=cls.soulfray2_success,
         )
         ConsequencePoolEntryFactory(
-            pool=cls.warp_pool_2,
-            consequence=cls.warp2_failure,
+            pool=cls.soulfray_pool_2,
+            consequence=cls.soulfray2_failure,
         )
 
         # Stage 3: character_loss consequence
-        cls.warp3_success = ConsequenceFactory(
+        cls.soulfray3_success = ConsequenceFactory(
             outcome_tier=cls.resilience_success,
             label="Barely survived",
             weight=1,
         )
-        cls.warp3_death = ConsequenceFactory(
+        cls.soulfray3_death = ConsequenceFactory(
             outcome_tier=cls.resilience_failure,
-            label="Consumed by the Warp",
+            label="Consumed by Soulfray",
             weight=1,
             character_loss=True,
         )
         ConsequencePoolEntryFactory(
-            pool=cls.warp_pool_3,
-            consequence=cls.warp3_success,
+            pool=cls.soulfray_pool_3,
+            consequence=cls.soulfray3_success,
         )
         ConsequencePoolEntryFactory(
-            pool=cls.warp_pool_3,
-            consequence=cls.warp3_death,
+            pool=cls.soulfray_pool_3,
+            consequence=cls.soulfray3_death,
         )
 
-        # === 5. WarpConfig ===
-        cls.warp_config = WarpConfigFactory(
-            warp_threshold_ratio=Decimal("0.30"),
+        # === 5. SoulfrayConfig ===
+        cls.soulfray_config = SoulfrayConfigFactory(
+            soulfray_threshold_ratio=Decimal("0.30"),
             severity_scale=10,
             deficit_scale=5,
             resilience_check_type=cls.resilience_check_type,
@@ -1496,24 +1496,24 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
             modifier_value=2,
         )
 
-        # === 8. Dedicated technique for warp tests ===
+        # === 8. Dedicated technique for soulfray tests ===
         # intensity=10, control=7, anima_cost=2 (same as mixin technique)
-        cls.warp_technique = TechniqueFactory(
-            name="Warp Test Bolt",
+        cls.soulfray_technique = TechniqueFactory(
+            name="Soulfray Test Bolt",
             gift=cls.gift,
             intensity=10,
             control=7,
             anima_cost=2,
         )
         TechniqueCapabilityGrantFactory(
-            technique=cls.warp_technique,
+            technique=cls.soulfray_technique,
             capability=cls.generation_cap,
             base_value=5,
             intensity_multiplier=Decimal("1.0"),
         )
         CharacterTechniqueFactory(
             character=cls.sheet,
-            technique=cls.warp_technique,
+            technique=cls.soulfray_technique,
         )
 
         # High-intensity technique for mishap tests
@@ -1572,29 +1572,29 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
         )
 
     # ------------------------------------------------------------------
-    # Test 1: Full anima — no Warp produced
+    # Test 1: Full anima — no Soulfray produced
     # ------------------------------------------------------------------
 
-    def test_no_warp_above_threshold(self) -> None:
-        """With full anima (ratio=1.0 > 0.30), no Warp is created."""
+    def test_no_soulfray_above_threshold(self) -> None:
+        """With full anima (ratio=1.0 > 0.30), no Soulfray is created."""
         result = use_technique(
             character=self.character,
-            technique=self.warp_technique,
+            technique=self.soulfray_technique,
             resolve_fn=lambda: "ok",
         )
 
-        assert result.warp_result is None
+        assert result.soulfray_result is None
         assert not ConditionInstance.objects.filter(
             target=self.character,
-            condition=self.warp_template,
+            condition=self.soulfray_template,
         ).exists()
 
     # ------------------------------------------------------------------
-    # Test 2: Low anima — Warp accumulates
+    # Test 2: Low anima — Soulfray accumulates
     # ------------------------------------------------------------------
 
-    def test_warp_accumulation_from_low_anima(self) -> None:
-        """Low anima post-deduction triggers Warp condition creation."""
+    def test_soulfray_accumulation_from_low_anima(self) -> None:
+        """Low anima post-deduction triggers Soulfray condition creation."""
         # anima_cost=2, intensity=10, control=7
         # delta = 7-10 = -3, effective = max(2-(-3), 0) = 5
         # After deduction: current = 10 - 5 = 5, ratio = 5/10 = 0.50
@@ -1607,76 +1607,76 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
 
         result = use_technique(
             character=self.character,
-            technique=self.warp_technique,
+            technique=self.soulfray_technique,
             resolve_fn=lambda: "ok",
         )
 
-        assert result.warp_result is not None
-        assert result.warp_result.severity_added > 0
+        assert result.soulfray_result is not None
+        assert result.soulfray_result.severity_added > 0
 
-        warp = ConditionInstance.objects.get(
+        soulfray = ConditionInstance.objects.get(
             target=self.character,
-            condition=self.warp_template,
+            condition=self.soulfray_template,
         )
-        assert warp.severity > 0
+        assert soulfray.severity > 0
 
     # ------------------------------------------------------------------
-    # Test 3: First Warp is unwarned
+    # Test 3: First Soulfray is unwarned
     # ------------------------------------------------------------------
 
-    def test_first_warp_is_unwarned(self) -> None:
-        """No existing Warp => no warning checkpoint, but Warp can still
+    def test_first_soulfray_is_unwarned(self) -> None:
+        """No existing Soulfray => no warning checkpoint, but Soulfray can still
         accumulate from low anima on this cast."""
         self.anima.current = 1
         self.anima.save(update_fields=["current"])
 
         result = use_technique(
             character=self.character,
-            technique=self.warp_technique,
+            technique=self.soulfray_technique,
             resolve_fn=lambda: "ok",
         )
 
-        # No warning was raised (no pre-existing Warp condition)
-        assert result.warp_warning is None
+        # No warning was raised (no pre-existing Soulfray condition)
+        assert result.soulfray_warning is None
         assert result.confirmed is True
-        # But Warp was accumulated
-        assert result.warp_result is not None
-        assert result.warp_result.severity_added > 0
+        # But Soulfray was accumulated
+        assert result.soulfray_result is not None
+        assert result.soulfray_result.severity_added > 0
 
     # ------------------------------------------------------------------
-    # Test 4: Safety checkpoint from existing Warp stage
+    # Test 4: Safety checkpoint from existing Soulfray stage
     # ------------------------------------------------------------------
 
-    def test_safety_checkpoint_from_warp_stage(self) -> None:
-        """Existing Warp at stage 1 triggers the safety checkpoint.
-        When confirm_warp_risk=False, the cast is cancelled."""
+    def test_safety_checkpoint_from_soulfray_stage(self) -> None:
+        """Existing Soulfray at stage 1 triggers the safety checkpoint.
+        When confirm_soulfray_risk=False, the cast is cancelled."""
         ConditionInstance.objects.create(
             target=self.character,
-            condition=self.warp_template,
-            current_stage=self.warp_stage_1,
+            condition=self.soulfray_template,
+            current_stage=self.soulfray_stage_1,
             severity=5,
         )
 
         result = use_technique(
             character=self.character,
-            technique=self.warp_technique,
+            technique=self.soulfray_technique,
             resolve_fn=lambda: "ok",
-            confirm_warp_risk=False,
+            confirm_soulfray_risk=False,
         )
 
         assert result.confirmed is False
-        assert result.warp_warning is not None
-        assert result.warp_warning.stage_name == "Flickering"
+        assert result.soulfray_warning is not None
+        assert result.soulfray_warning.stage_name == "Flickering"
         # Anima should not have been deducted
         self.anima.refresh_from_db()
         assert self.anima.current == 10
 
     # ------------------------------------------------------------------
-    # Test 5: Resilience check drives Warp consequence
+    # Test 5: Resilience check drives Soulfray consequence
     # ------------------------------------------------------------------
 
     @patch("world.checks.services.perform_check")
-    def test_resilience_check_drives_warp_consequence(
+    def test_resilience_check_drives_soulfray_consequence(
         self,
         mock_check: object,
     ) -> None:
@@ -1686,27 +1686,27 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
             self.resilience_failure,
         )
 
-        # Pre-existing Warp at stage 2 (severity just at threshold)
+        # Pre-existing Soulfray at stage 2 (severity just at threshold)
         ConditionInstance.objects.create(
             target=self.character,
-            condition=self.warp_template,
-            current_stage=self.warp_stage_2,
+            condition=self.soulfray_template,
+            current_stage=self.soulfray_stage_2,
             severity=10,
         )
 
-        # Low anima to trigger warp accumulation
+        # Low anima to trigger soulfray accumulation
         self.anima.current = 1
         self.anima.save(update_fields=["current"])
 
         result = use_technique(
             character=self.character,
-            technique=self.warp_technique,
+            technique=self.soulfray_technique,
             resolve_fn=lambda: "ok",
-            confirm_warp_risk=True,
+            confirm_soulfray_risk=True,
         )
 
-        assert result.warp_result is not None
-        assert result.warp_result.resilience_check is not None
+        assert result.soulfray_result is not None
+        assert result.soulfray_result.resilience_check is not None
         mock_check.assert_called_once()
         # The check should have been called with our resilience check type
         call_kwargs = mock_check.call_args
@@ -1717,16 +1717,16 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
     # ------------------------------------------------------------------
 
     def test_severity_advances_stage_through_pipeline(self) -> None:
-        """Warp at severity=9 (stage 1) advances to stage 2 (threshold=10)
-        when enough Warp severity is added by a low-anima cast."""
-        warp_instance = ConditionInstance.objects.create(
+        """Soulfray at severity=9 (stage 1) advances to stage 2 (threshold=10)
+        when enough Soulfray severity is added by a low-anima cast."""
+        soulfray_instance = ConditionInstance.objects.create(
             target=self.character,
-            condition=self.warp_template,
-            current_stage=self.warp_stage_1,
+            condition=self.soulfray_template,
+            current_stage=self.soulfray_stage_1,
             severity=9,
         )
 
-        # Set anima so post-deduction produces warp severity >= 1
+        # Set anima so post-deduction produces soulfray severity >= 1
         # effective_cost=5, current=3 => post-deduction=0, deficit=2
         # depletion=1.0, severity=ceil(10*1)=10, deficit_comp=ceil(5*2)=10
         # total severity added = 20 => 9+20=29 => hits stage 3 (threshold 25)
@@ -1739,16 +1739,16 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
             )
             result = use_technique(
                 character=self.character,
-                technique=self.warp_technique,
+                technique=self.soulfray_technique,
                 resolve_fn=lambda: "ok",
-                confirm_warp_risk=True,
+                confirm_soulfray_risk=True,
             )
 
-        assert result.warp_result is not None
-        assert result.warp_result.stage_advanced is True
+        assert result.soulfray_result is not None
+        assert result.soulfray_result.stage_advanced is True
         # Verify the DB reflects the new stage
-        warp_instance.refresh_from_db()
-        assert warp_instance.severity > 9
+        soulfray_instance.refresh_from_db()
+        assert soulfray_instance.severity > 9
 
     # ------------------------------------------------------------------
     # Test 7: TechniqueOutcomeModifier affects resilience check
@@ -1765,16 +1765,16 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
             self.resilience_failure,
         )
 
-        # Pre-existing Warp at stage 2 with consequence pool
+        # Pre-existing Soulfray at stage 2 with consequence pool
         ConditionInstance.objects.create(
             target=self.character,
-            condition=self.warp_template,
-            current_stage=self.warp_stage_2,
+            condition=self.soulfray_template,
+            current_stage=self.soulfray_stage_2,
             severity=10,
         )
 
         # Set anima so post-deduction stays above stage-3 threshold.
-        # warp_technique: anima_cost=2, intensity=10, control=7
+        # soulfray_technique: anima_cost=2, intensity=10, control=7
         # effective_cost = max(2-(-3), 0) = 5
         # current=7 => post-deduction=2, deficit=0
         # ratio=2/10=0.20, depletion=(0.30-0.20)/0.30=0.333
@@ -1798,30 +1798,30 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
 
         result = use_technique(
             character=self.character,
-            technique=self.warp_technique,
+            technique=self.soulfray_technique,
             resolve_fn=lambda: "ok",
-            confirm_warp_risk=True,
+            confirm_soulfray_risk=True,
             check_result=botch_result,
         )
 
-        assert result.warp_result is not None
-        assert result.warp_result.resilience_check is not None
+        assert result.soulfray_result is not None
+        assert result.soulfray_result.resilience_check is not None
         # Verify the modifier was applied: stage2 penalty (-5) +
         # botch modifier (-5) = -10 total
         call_kwargs = mock_check.call_args[1]
         assert call_kwargs["extra_modifiers"] == -10
 
     # ------------------------------------------------------------------
-    # Test 8: Control mishap fires independently of Warp
+    # Test 8: Control mishap fires independently of Soulfray
     # ------------------------------------------------------------------
 
     def test_control_mishap_fires_independently(self) -> None:
-        """Full anima + no Warp + high intensity technique =>
+        """Full anima + no Soulfray + high intensity technique =>
         mishap fires from control deficit alone."""
         # Wild Surge: intensity=15, control=5, deficit=10
         # Full anima (10/10), effective cost = max(2-(5-15),0) = 12
         # After deduction: current=0, deficit=2
-        # But we want to isolate the mishap — set high anima to avoid warp
+        # But we want to isolate the mishap — set high anima to avoid soulfray
         self.anima.current = 100
         self.anima.maximum = 100
         self.anima.save(update_fields=["current", "maximum"])
@@ -1846,8 +1846,8 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
             check_result=check_result,
         )
 
-        # No Warp (ratio > threshold with high anima)
-        assert result.warp_result is None
+        # No Soulfray (ratio > threshold with high anima)
+        assert result.soulfray_result is None
         # Mishap should fire: intensity 15 > control 5 => deficit 10
         assert result.mishap is not None
         assert result.mishap.consequence_label == "Technique misfires"
@@ -1861,22 +1861,22 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
         self,
         mock_check: object,
     ) -> None:
-        """Existing Warp + low anima + high intensity technique fires
-        all three consequence streams: Warp accumulation, stage
+        """Existing Soulfray + low anima + high intensity technique fires
+        all three consequence streams: Soulfray accumulation, stage
         consequence (resilience check), and control mishap."""
         mock_check.return_value = self._make_resilience_result(
             self.resilience_failure,
         )
 
-        # Pre-existing Warp at stage 2
+        # Pre-existing Soulfray at stage 2
         ConditionInstance.objects.create(
             target=self.character,
-            condition=self.warp_template,
-            current_stage=self.warp_stage_2,
+            condition=self.soulfray_template,
+            current_stage=self.soulfray_stage_2,
             severity=10,
         )
 
-        # Low anima for Warp accumulation
+        # Low anima for Soulfray accumulation
         self.anima.current = 1
         self.anima.save(update_fields=["current"])
 
@@ -1898,16 +1898,16 @@ class WarpProgressionTests(PipelineTestMixin, TestCase):
             character=self.character,
             technique=self.wild_technique,
             resolve_fn=lambda: "ok",
-            confirm_warp_risk=True,
+            confirm_soulfray_risk=True,
             check_result=check_result,
         )
 
-        # Stream 1: Warp accumulation
-        assert result.warp_result is not None
-        assert result.warp_result.severity_added > 0
+        # Stream 1: Soulfray accumulation
+        assert result.soulfray_result is not None
+        assert result.soulfray_result.severity_added > 0
 
         # Stream 2: Stage consequence (resilience check fired)
-        assert result.warp_result.resilience_check is not None
+        assert result.soulfray_result.resilience_check is not None
 
         # Stream 3: Control mishap
         assert result.mishap is not None

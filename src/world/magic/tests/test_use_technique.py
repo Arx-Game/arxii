@@ -63,8 +63,8 @@ class UseTechniqueBasicTests(TestCase):
         assert result.mishap is None
 
 
-class UseTechniqueWarpCheckpointTests(TestCase):
-    """Test the orchestrator's warp warning checkpoint."""
+class UseTechniqueSoulfrayCheckpointTests(TestCase):
+    """Test the orchestrator's soulfray warning checkpoint."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -80,15 +80,15 @@ class UseTechniqueWarpCheckpointTests(TestCase):
         self.character = self.anima.character
         CharacterEngagementFactory(character=self.character)
 
-    @patch("world.magic.services.get_warp_warning")
-    def test_warp_warning_pauses_for_confirmation(
+    @patch("world.magic.services.get_soulfray_warning")
+    def test_soulfray_warning_pauses_for_confirmation(
         self,
         mock_warning: MagicMock,
     ) -> None:
-        """Warp warning pauses for confirmation with stage info."""
-        from world.magic.types import WarpWarning
+        """Soulfray warning pauses for confirmation with stage info."""
+        from world.magic.types import SoulfrayWarning
 
-        mock_warning.return_value = WarpWarning(
+        mock_warning.return_value = SoulfrayWarning(
             stage_name="Flickering",
             stage_description="Anima flickers.",
             has_death_risk=False,
@@ -98,27 +98,27 @@ class UseTechniqueWarpCheckpointTests(TestCase):
             character=self.character,
             technique=self.technique,
             resolve_fn=MagicMock(),
-            confirm_warp_risk=False,  # Player declines
+            confirm_soulfray_risk=False,  # Player declines
         )
 
         assert result.confirmed is False
         assert result.resolution_result is None
-        assert result.warp_warning is not None
-        assert result.warp_warning.stage_name == "Flickering"
+        assert result.soulfray_warning is not None
+        assert result.soulfray_warning.stage_name == "Flickering"
 
         # Anima NOT deducted when cancelled
         self.anima.refresh_from_db()
         assert self.anima.current == 5
 
-    def test_no_warp_warning_proceeds_normally(self) -> None:
-        """Without warp warning, confirm_warp_risk=False has no effect."""
+    def test_no_soulfray_warning_proceeds_normally(self) -> None:
+        """Without soulfray warning, confirm_soulfray_risk=False has no effect."""
         mock_resolve = MagicMock(return_value="resolved")
 
         result = use_technique(
             character=self.character,
             technique=self.technique,
             resolve_fn=mock_resolve,
-            confirm_warp_risk=False,  # No warning exists, so proceeds
+            confirm_soulfray_risk=False,  # No warning exists, so proceeds
         )
 
         assert result.confirmed is True
@@ -126,14 +126,14 @@ class UseTechniqueWarpCheckpointTests(TestCase):
         mock_resolve.assert_called_once()
 
     def test_overburn_confirmed_deducts_and_resolves(self) -> None:
-        """Confirmed overburn deducts anima, resolves, applies warp."""
+        """Confirmed overburn deducts anima, resolves, applies soulfray."""
         mock_resolve = MagicMock(return_value="resolved")
 
         result = use_technique(
             character=self.character,
             technique=self.technique,
             resolve_fn=mock_resolve,
-            confirm_warp_risk=True,
+            confirm_soulfray_risk=True,
         )
 
         assert result.confirmed is True

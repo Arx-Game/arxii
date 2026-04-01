@@ -93,8 +93,8 @@ class AnimaCostResult:
 
 
 @dataclass
-class WarpWarning:
-    """Warning information for the safety checkpoint based on current Warp stage."""
+class SoulfrayWarning:
+    """Warning information for the safety checkpoint based on current Soulfray stage."""
 
     stage_name: str
     stage_description: str
@@ -102,8 +102,8 @@ class WarpWarning:
 
 
 @dataclass
-class WarpResult:
-    """Result of Warp accumulation in Step 7 of use_technique()."""
+class SoulfrayResult:
+    """Result of Soulfray accumulation in Step 7 of use_technique()."""
 
     severity_added: int
     stage_name: str | None
@@ -128,5 +128,5 @@ class TechniqueUseResult:
     confirmed: bool = True  # False if player cancelled at checkpoint
     resolution_result: object | None = None  # ChallengeResolutionResult, etc.
     mishap: MishapResult | None = None
-    warp_result: WarpResult | None = None
-    warp_warning: WarpWarning | None = None
+    soulfray_result: SoulfrayResult | None = None
+    soulfray_warning: SoulfrayWarning | None = None
