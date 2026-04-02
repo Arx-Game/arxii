@@ -241,9 +241,33 @@ targeting and mechanical consequences.
 - **Kudos integration** — reward system for consenting to targeted actions
 - **Entrance pose voting** — facet feedback on entrance poses
 - **Social properties on characters** — full Application matching for social actions
-- **Technique filtering** — available-actions endpoint returns empty technique
-  lists for now; needs TechniqueCapabilityGrant query integration
 - **Social CheckTypes** — need seed data so social action checks produce results
+
+### Phase 5.6b: Technique-Enhanced Social Actions — DONE
+Social actions now integrate the full technique use pipeline, allowing players
+to enhance mundane social actions with magical techniques.
+
+**What was built:**
+- **Full consequence pipeline** — All 6 social actions (intimidate, persuade,
+  deceive, flirt, perform, entrance) use `start_action_resolution()` with
+  consequence pools instead of bare pass/fail. Mundane actions apply any
+  consequence effect type: conditions, properties, codex grants, flows.
+- **ActionEnhancement model** — links a social action to a Technique. When
+  selected, wraps the action in `use_technique()`, deducting anima, evaluating
+  Soulfray severity, and checking for control mishaps before resolution.
+- **Technique effects as distinct results** — ActionResult renders both the
+  social outcome (persuade result, condition applied) and technique effects
+  (anima cost, Soulfray stage change, control mishap conditions) as separate
+  result blocks.
+- **Available-actions enhancement data** — `available_actions` endpoint includes
+  `action_enhancements` per social action with pre-calculated anima costs and
+  current Soulfray stage warning. Players see all techniques available for each
+  action at a glance.
+- **Frontend enhancement selection** — ActionPanel shows technique enhancements
+  with anima cost display and Soulfray warning confirmation dialog before
+  technique use. Results display is layered per effect type.
+- **Integration tests** — Comprehensive coverage of mundane path, enhancement path,
+  validation errors, and available-actions filtering.
 
 **Design spec:** `docs/superpowers/specs/2026-03-22-scene-checks-and-interaction-refactor-design.md`
 
