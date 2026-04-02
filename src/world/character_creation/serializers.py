@@ -4,13 +4,14 @@ Character Creation serializers.
 
 from rest_framework import serializers
 
+from world.character_creation.constants import (
+    STAT_MAX_VALUE,
+    STAT_MIN_VALUE,
+)
 from world.character_creation.models import (
     AGE_MAX,
     AGE_MIN,
     REQUIRED_STATS,
-    STAT_DISPLAY_DIVISOR,
-    STAT_MAX_VALUE,
-    STAT_MIN_VALUE,
     Beginnings,
     CGExplanation,
     CGPointBudget,
@@ -316,8 +317,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     stat_bonuses = serializers.SerializerMethodField()
     stage_completion = serializers.SerializerMethodField()
     stage_errors = serializers.SerializerMethodField()
-    stats_free_points = serializers.SerializerMethodField()
-    stats_max_free_points = serializers.SerializerMethodField()
+    stats_points_remaining = serializers.SerializerMethodField()
+    stats_budget = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterDraft
@@ -351,8 +352,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stat_bonuses",
             "stage_completion",
             "stage_errors",
-            "stats_free_points",
-            "stats_max_free_points",
+            "stats_points_remaining",
+            "stats_budget",
         ]
         read_only_fields = [
             "id",
@@ -362,8 +363,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stat_bonuses",
             "stage_completion",
             "stage_errors",
-            "stats_free_points",
-            "stats_max_free_points",
+            "stats_points_remaining",
+            "stats_budget",
         ]
 
     def get_has_existing_characters(self, obj: CharacterDraft) -> bool:
@@ -392,13 +393,13 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         """Get stat bonuses from all sources (heritage + distinctions)."""
         return obj.get_all_stat_bonuses()
 
-    def get_stats_free_points(self, obj: CharacterDraft) -> int:
-        """Get remaining free stat points (includes distinction bonuses)."""
-        return obj.calculate_stats_free_points()
+    def get_stats_points_remaining(self, obj: CharacterDraft) -> int:
+        """Get remaining stat points to allocate (0 = fully allocated)."""
+        return obj.calculate_points_remaining()
 
-    def get_stats_max_free_points(self, obj: CharacterDraft) -> int:
-        """Get total free stat points available (base 5 + distinction bonuses)."""
-        return obj.get_stats_max_free_points()
+    def get_stats_budget(self, obj: CharacterDraft) -> int:
+        """Get total stat point budget (base + bonuses)."""
+        return obj.calculate_stat_budget()
 
     def validate_selected_area(self, value):
         """Ensure user can access the selected area."""
@@ -499,12 +500,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                     msg = f"{stat_name} must be an integer, got {type(stat_value).__name__}"
                     raise serializers.ValidationError(msg)
 
-                # Check value is multiple of 10
-                if stat_value % STAT_DISPLAY_DIVISOR != 0:
-                    msg = f"{stat_name} must be a multiple of {STAT_DISPLAY_DIVISOR}"
-                    raise serializers.ValidationError(msg)
-
-                # Check value is in valid range
+                # Check value is in valid range (1-5)
                 if not (STAT_MIN_VALUE <= stat_value <= STAT_MAX_VALUE):
                     msg = f"{stat_name} must be between {STAT_MIN_VALUE} and {STAT_MAX_VALUE}"
                     raise serializers.ValidationError(msg)

@@ -264,7 +264,7 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
                 character=character, trait__name=stat_name
             ).first()
             if trait_value:
-                trait_value.value += int(bonus * 10)
+                trait_value.value += int(bonus)
                 trait_value.save()
 
     # Handle roster assignment

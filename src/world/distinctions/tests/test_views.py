@@ -10,13 +10,8 @@ from rest_framework.test import APIClient
 from world.character_creation.factories import CharacterDraftFactory
 from world.distinctions.factories import (
     DistinctionCategoryFactory,
-    DistinctionEffectFactory,
     DistinctionFactory,
     DistinctionTagFactory,
-)
-from world.mechanics.factories import (
-    ModifierCategoryFactory,
-    ModifierTargetFactory,
 )
 
 
@@ -454,7 +449,6 @@ class DraftDistinctionViewSetTests(TestCase):
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.data["distinctions"] == []
-        assert "stat_adjustments" in response.data
 
         # Verify draft was cleared
         self.draft.refresh_from_db()
@@ -620,13 +614,8 @@ class DraftDistinctionViewSetTests(TestCase):
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
-class SyncStatAdjustmentsTests(TestCase):
-    """Test that sync endpoint returns stat_adjustments."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.stat_category = ModifierCategoryFactory(name="stat")
-        cls.strength_type = ModifierTargetFactory(name="strength", category=cls.stat_category)
+class SyncResponseFormatTests(TestCase):
+    """Test that sync endpoint returns correct response format."""
 
     def setUp(self):
         User = get_user_model()
@@ -634,77 +623,6 @@ class SyncStatAdjustmentsTests(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(user=self.user)
         self.draft = CharacterDraftFactory(account=self.user)
-
-    def test_sync_returns_stat_adjustments_on_overcap(self):
-        """Syncing a distinction that causes overcap returns adjustments."""
-        self.draft.draft_data["stats"] = {
-            "strength": 50,
-            "agility": 20,
-            "stamina": 20,
-            "charm": 20,
-            "presence": 20,
-            "perception": 20,
-            "intellect": 20,
-            "wits": 20,
-            "willpower": 20,
-        }
-        self.draft.save(update_fields=["draft_data"])
-
-        distinction = DistinctionFactory()
-        DistinctionEffectFactory(
-            distinction=distinction,
-            target=self.strength_type,
-            value_per_rank=10,
-            description="",
-        )
-
-        url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
-        response = self.client.put(
-            url,
-            {"distinctions": [{"id": distinction.id, "rank": 1}]},
-            format="json",
-        )
-
-        assert response.status_code == 200
-        assert "stat_adjustments" in response.data
-        assert len(response.data["stat_adjustments"]) == 1
-        adj = response.data["stat_adjustments"][0]
-        assert adj["stat"] == "strength"
-        assert adj["old_display"] == 5
-        assert adj["new_display"] == 4
-
-    def test_sync_returns_empty_adjustments_when_no_overcap(self):
-        """Syncing without overcap returns empty adjustments."""
-        self.draft.draft_data["stats"] = {
-            "strength": 30,
-            "agility": 20,
-            "stamina": 20,
-            "charm": 20,
-            "presence": 20,
-            "perception": 20,
-            "intellect": 20,
-            "wits": 20,
-            "willpower": 20,
-        }
-        self.draft.save(update_fields=["draft_data"])
-
-        distinction = DistinctionFactory()
-        DistinctionEffectFactory(
-            distinction=distinction,
-            target=self.strength_type,
-            value_per_rank=10,
-            description="",
-        )
-
-        url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
-        response = self.client.put(
-            url,
-            {"distinctions": [{"id": distinction.id, "rank": 1}]},
-            format="json",
-        )
-
-        assert response.status_code == 200
-        assert response.data["stat_adjustments"] == []
 
     def test_sync_response_includes_distinctions(self):
         """Sync response includes the distinctions list."""

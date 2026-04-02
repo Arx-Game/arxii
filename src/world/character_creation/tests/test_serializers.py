@@ -152,7 +152,7 @@ class CharacterDraftSerializerValidationTests(TestCase):
         data = {
             "draft_data": {
                 "stats": {
-                    "invalid_stat": 20,
+                    "invalid_stat": 2,
                 }
             }
         }
@@ -166,21 +166,7 @@ class CharacterDraftSerializerValidationTests(TestCase):
         data = {
             "draft_data": {
                 "stats": {
-                    "strength": 20.5,
-                }
-            }
-        }
-
-        serializer = CharacterDraftSerializer(instance=self.draft, data=data, partial=True)
-        assert not serializer.is_valid()
-        assert "draft_data" in serializer.errors
-
-    def test_validate_draft_data_not_multiple_of_10(self):
-        """Test validation fails when stat not multiple of 10."""
-        data = {
-            "draft_data": {
-                "stats": {
-                    "strength": 25,
+                    "strength": 2.5,
                 }
             }
         }
@@ -191,11 +177,11 @@ class CharacterDraftSerializerValidationTests(TestCase):
 
     def test_validate_draft_data_out_of_range(self):
         """Test validation fails with out of range values."""
-        # Below minimum
+        # Below minimum (0 < STAT_MIN_VALUE=1)
         data = {
             "draft_data": {
                 "stats": {
-                    "strength": 5,
+                    "strength": 0,
                 }
             }
         }
@@ -204,11 +190,11 @@ class CharacterDraftSerializerValidationTests(TestCase):
         assert not serializer.is_valid()
         assert "draft_data" in serializer.errors
 
-        # Above maximum
+        # Above maximum (6 > STAT_MAX_VALUE=5)
         data = {
             "draft_data": {
                 "stats": {
-                    "strength": 60,
+                    "strength": 6,
                 }
             }
         }
@@ -218,12 +204,12 @@ class CharacterDraftSerializerValidationTests(TestCase):
         assert "draft_data" in serializer.errors
 
     def test_validate_draft_data_valid_stats(self):
-        """Test validation passes with valid stats."""
+        """Test validation passes with valid stats (1-5 scale)."""
         data = {
             "draft_data": {
                 "stats": {
-                    "strength": 30,
-                    "agility": 20,
+                    "strength": 3,
+                    "agility": 2,
                 }
             }
         }

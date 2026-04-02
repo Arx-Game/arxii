@@ -31,17 +31,20 @@ from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
-# Shared stats dict used by all finalization tests
+# Shared stats dict used by all finalization tests (12 stats, 1-5 scale, sum=24)
 DEFAULT_STATS = {
-    "strength": 30,
-    "agility": 30,
-    "stamina": 30,
-    "charm": 20,
-    "presence": 20,
-    "perception": 20,
-    "intellect": 20,
-    "wits": 30,
-    "willpower": 30,
+    "strength": 2,
+    "agility": 2,
+    "stamina": 2,
+    "charm": 2,
+    "presence": 2,
+    "composure": 2,
+    "intellect": 2,
+    "wits": 2,
+    "stability": 2,
+    "luck": 2,
+    "perception": 2,
+    "willpower": 2,
 }
 
 
@@ -189,19 +192,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
 
     def test_finalize_creates_character_trait_values(self):
         """Test that finalization creates CharacterTraitValue records."""
-        draft = self._create_complete_draft(
-            stats={
-                "strength": 30,
-                "agility": 30,
-                "stamina": 30,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 30,
-                "willpower": 30,
-            }
-        )
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
 
         character = finalize_character(draft, add_to_roster=True)
 
@@ -209,46 +200,30 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         assert character is not None
         assert character.db_key == "Test Fatui"
 
-        # Verify trait values were created
+        # Verify trait values were created (12 stats)
         trait_values = CharacterTraitValue.objects.filter(character=character)
-        assert trait_values.count() == 9
+        assert trait_values.count() == 12
 
-        # Verify specific values directly from database
+        # Verify specific values directly from database (1-5 scale)
         strength_value = CharacterTraitValue.objects.get(
             character=character, trait=self.stats["strength"]
         )
-        # Debug: print actual value if assertion fails
-        if strength_value.value != 30:
-            print(f"Expected strength=30, got {strength_value.value}")
-            trait_values = CharacterTraitValue.objects.filter(character=character)
-            all_values = [(v.trait.name, v.value) for v in trait_values]
-            print(f"All values: {all_values}")
-        assert strength_value.value == 30
+        assert strength_value.value == 2
 
         agility_value = CharacterTraitValue.objects.get(
             character=character, trait=self.stats["agility"]
         )
-        assert agility_value.value == 30
+        assert agility_value.value == 2
 
         willpower_value = CharacterTraitValue.objects.get(
             character=character, trait=self.stats["willpower"]
         )
-        assert willpower_value.value == 30
+        assert willpower_value.value == 2
 
     def test_finalize_bulk_creates_trait_values(self):
         """Test that finalization uses bulk operations (no N+1)."""
         draft = self._create_complete_draft(
-            stats={
-                "strength": 30,
-                "agility": 30,
-                "stamina": 30,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 30,
-                "willpower": 30,
-            },
+            stats=DEFAULT_STATS,
             first_name="Bulk Test",
         )
 
@@ -303,17 +278,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
     def test_finalize_creates_character_sheet(self):
         """Test that finalization creates CharacterSheet with stats."""
         draft = self._create_complete_draft(
-            stats={
-                "strength": 30,  # 3 points
-                "agility": 30,  # 3 points
-                "stamina": 30,  # 3 points
-                "charm": 20,  # 2 points
-                "presence": 20,  # 2 points
-                "perception": 20,  # 2 points
-                "intellect": 20,  # 2 points
-                "wits": 30,  # 3 points
-                "willpower": 30,  # 3 points
-            },
+            stats=DEFAULT_STATS,
             first_name="Sheet Test",
         )
 
@@ -323,32 +288,22 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         sheet = CharacterSheet.objects.get(character=character)
         assert sheet is not None
 
-        # Verify stats were created with correct values
+        # Verify stats were created with correct values (1-5 scale)
         strength_value = CharacterTraitValue.objects.get(
             character=character, trait=self.stats["strength"]
         )
-        assert strength_value.value == 30
+        assert strength_value.value == 2
 
         willpower_value = CharacterTraitValue.objects.get(
             character=character, trait=self.stats["willpower"]
         )
-        assert willpower_value.value == 30
+        assert willpower_value.value == 2
 
     def test_finalize_converts_unspent_cg_points_to_xp(self):
         """Test that unspent CG points are converted to locked XP."""
         from world.progression.models import CharacterXP, CharacterXPTransaction
 
-        stats = {
-            "strength": 30,
-            "agility": 30,
-            "stamina": 30,
-            "charm": 20,
-            "presence": 20,
-            "perception": 20,
-            "intellect": 20,
-            "wits": 30,
-            "willpower": 30,
-        }
+        stats = DEFAULT_STATS
         # Set beginnings cost so 10 CG points are spent
         self.beginnings.cg_point_cost = 10
         self.beginnings.save(update_fields=["cg_point_cost"])
@@ -375,17 +330,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         from world.character_creation.models import CGPointBudget
         from world.progression.models import CharacterXP
 
-        stats = {
-            "strength": 30,
-            "agility": 30,
-            "stamina": 30,
-            "charm": 20,
-            "presence": 20,
-            "perception": 20,
-            "intellect": 20,
-            "wits": 30,
-            "willpower": 30,
-        }
+        stats = DEFAULT_STATS
         budget = CGPointBudget.get_active_budget()
         # Spend all points via beginnings cost
         self.beginnings.cg_point_cost = budget
@@ -437,17 +382,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
             draft_data={
                 "first_name": "Physical",
                 "description": "A test character with physical stats",
-                "stats": {
-                    "strength": 30,
-                    "agility": 30,
-                    "stamina": 30,
-                    "charm": 20,
-                    "presence": 20,
-                    "perception": 20,
-                    "intellect": 20,
-                    "wits": 30,
-                    "willpower": 30,
-                },
+                "stats": DEFAULT_STATS,
                 "lineage_is_orphan": True,
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
@@ -479,38 +414,14 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         self.beginnings.heritage = sleeper_heritage
         self.beginnings.save()
 
-        draft = self._create_complete_draft(
-            stats={
-                "strength": 30,
-                "agility": 30,
-                "stamina": 30,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 30,
-                "willpower": 30,
-            }
-        )
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
         character = finalize_character(draft, add_to_roster=True)
         sheet = CharacterSheet.objects.get(character=character)
         assert sheet.heritage == sleeper_heritage
 
     def test_finalize_defaults_to_normal_heritage_when_beginnings_has_none(self):
         """When Beginnings has no heritage FK, fall back to 'Normal'."""
-        draft = self._create_complete_draft(
-            stats={
-                "strength": 30,
-                "agility": 30,
-                "stamina": 30,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 30,
-                "willpower": 30,
-            }
-        )
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
         character = finalize_character(draft, add_to_roster=True)
         sheet = CharacterSheet.objects.get(character=character)
         assert sheet.heritage is not None
@@ -525,19 +436,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         eye_trait = FormTraitFactory(name="eye_color", display_name="Eye Color")
         blue_option = FormTraitOptionFactory(trait=eye_trait, name="blue", display_name="Blue")
 
-        draft = self._create_complete_draft(
-            stats={
-                "strength": 30,
-                "agility": 30,
-                "stamina": 30,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 30,
-                "willpower": 30,
-            }
-        )
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
         draft.draft_data["form_traits"] = {
             "hair_color": black_option.id,
             "eye_color": blue_option.id,
@@ -554,19 +453,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         """No true form created when form_traits is empty or missing."""
         from world.forms.models import CharacterForm
 
-        draft = self._create_complete_draft(
-            stats={
-                "strength": 30,
-                "agility": 30,
-                "stamina": 30,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 30,
-                "willpower": 30,
-            }
-        )
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
         character = finalize_character(draft, add_to_roster=True)
         assert not CharacterForm.objects.filter(character=character).exists()
 
@@ -577,19 +464,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         hair_trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
         black_option = FormTraitOptionFactory(trait=hair_trait, name="black", display_name="Black")
 
-        draft = self._create_complete_draft(
-            stats={
-                "strength": 30,
-                "agility": 30,
-                "stamina": 30,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 30,
-                "willpower": 30,
-            }
-        )
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
         draft.draft_data["form_traits"] = {
             "hair_color": black_option.id,
             "nonexistent_trait": 999,
@@ -611,19 +486,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         eye_trait = FormTraitFactory(name="eye_color", display_name="Eye Color")
         blue_option = FormTraitOptionFactory(trait=eye_trait, name="blue", display_name="Blue")
 
-        draft = self._create_complete_draft(
-            stats={
-                "strength": 30,
-                "agility": 30,
-                "stamina": 30,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 30,
-                "willpower": 30,
-            }
-        )
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
         # hair_color mapped to blue (eye_color option) — mismatched
         # eye_color mapped to blue (correct)
         draft.draft_data["form_traits"] = {
@@ -641,19 +504,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
 
     def test_finalize_saves_quote_from_draft_data(self):
         """Quote from draft_data should be saved to CharacterSheet."""
-        draft = self._create_complete_draft(
-            stats={
-                "strength": 30,
-                "agility": 30,
-                "stamina": 30,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 30,
-                "willpower": 30,
-            }
-        )
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
         draft.draft_data["quote"] = "Steel remembers what flesh forgets."
         draft.save()
 
@@ -663,19 +514,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
 
     def test_finalize_saves_concept_from_draft_data(self):
         """Concept from draft_data should be saved to CharacterSheet."""
-        draft = self._create_complete_draft(
-            stats={
-                "strength": 30,
-                "agility": 30,
-                "stamina": 30,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 30,
-                "willpower": 30,
-            }
-        )
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
         draft.draft_data["concept"] = "Ruthless pragmatist"
         draft.save()
 
