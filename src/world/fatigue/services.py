@@ -217,9 +217,11 @@ def should_check_collapse(
 def attempt_endurance_check(character_sheet: CharacterSheet, category: str) -> bool:
     """Roll endurance stat vs fatigue to stay conscious.
 
-    Difficulty scales with how far past the overexerted threshold the
-    character is. The endurance stat for the category is rolled against
-    a target that increases with fatigue percentage.
+    Formula: d100 + (endurance_stat * 10) vs (fatigue_percentage - 60) * 3
+    Roll of 1 always fails. Roll of 100 always succeeds.
+    High endurance (5-10) makes passing easier at moderate fatigue levels.
+
+    TODO: Migrate to the unified dice roll resolution system when built.
 
     Args:
         character_sheet: The character's sheet.
@@ -232,14 +234,15 @@ def attempt_endurance_check(character_sheet: CharacterSheet, category: str) -> b
     endurance_value = _get_display_stat_value(character_sheet, endurance_stat_name)
 
     percentage = get_fatigue_percentage(character_sheet, category)
-    # Difficulty scales: at 81% (just overexerted) it's easy, at 150%+ it's very hard
-    # Target number = percentage - 60 (so at 81% target is 21, at 100% target is 40)
-    target = int(percentage - 60)
+    target = int((percentage - 60) * 3)
 
-    # Roll: endurance * 10 + d100 vs target * 10
-    # Simplified: roll 1-100 + (endurance * 10) must beat target * 10
-    roll = random.randint(1, 100) + (endurance_value * 10)  # noqa: S311
-    return roll > (target * 10)
+    roll = random.randint(1, 100)  # noqa: S311
+    if roll == 1:
+        return False  # Critical failure — always collapse
+    if roll == 100:  # noqa: PLR2004
+        return True  # Critical success — always stay conscious
+
+    return (roll + endurance_value * 10) > target
 
 
 def attempt_power_through(
@@ -247,6 +250,14 @@ def attempt_power_through(
     category: str,
 ) -> tuple[bool, int]:
     """Willpower check to stay conscious after failing endurance check.
+
+    Formula: d100 + (willpower * 10) vs 50 + (strain_damage * 3)
+    Roll of 1 always fails. Roll of 100 always succeeds.
+    Intensity bonuses (combat/high-stakes) should be added as modifiers
+    when the modifier system integration is built.
+
+    TODO: Migrate to the unified dice roll resolution system when built.
+    TODO: Add intensity bonus from combat/dramatic context.
 
     Args:
         character_sheet: The character's sheet.
@@ -266,10 +277,14 @@ def attempt_power_through(
     over_ratio = max(0, (current - capacity)) / max(1, capacity)
     strain_damage = max(1, int(over_ratio * 10))
 
-    # Willpower check: roll 1-100 + (willpower * 10) must beat 50 + strain * 10
-    roll = random.randint(1, 100) + (willpower_value * 10)  # noqa: S311
-    target = 50 + (strain_damage * 10)
-    succeeded = roll > target
+    roll = random.randint(1, 100)  # noqa: S311
+    if roll == 1:
+        return False, strain_damage  # Critical failure
+    if roll == 100:  # noqa: PLR2004
+        return True, strain_damage  # Critical success
+
+    target = 50 + (strain_damage * 3)
+    succeeded = (roll + willpower_value * 10) > target
 
     return succeeded, strain_damage
 
