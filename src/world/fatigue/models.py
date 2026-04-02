@@ -2,6 +2,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.character_sheets.models import CharacterSheet
+from world.fatigue.constants import FatigueCategory
 
 
 class FatiguePool(SharedMemoryModel):
@@ -25,7 +26,7 @@ class FatiguePool(SharedMemoryModel):
     rested_today = models.BooleanField(default=False, help_text="Rest command used this IC day")
     dawn_deferred = models.BooleanField(default=False, help_text="In scene at dawn, reset pending")
 
-    VALID_CATEGORIES = {"physical", "social", "mental"}
+    VALID_CATEGORIES = {c.value for c in FatigueCategory}
 
     def get_current(self, category: str) -> int:
         """Get current fatigue for a category."""

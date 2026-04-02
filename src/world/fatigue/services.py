@@ -12,6 +12,7 @@ import random
 from django.db import transaction
 
 from world.action_points.models import ActionPointPool
+from world.character_creation.constants import STAT_MAX_VALUE
 from world.character_sheets.models import CharacterSheet
 from world.fatigue.constants import (
     CAPACITY_STAT_MULTIPLIER,
@@ -29,6 +30,7 @@ from world.fatigue.constants import (
 )
 from world.fatigue.models import FatiguePool
 from world.fatigue.types import RestResult
+from world.traits.constants import PrimaryStat
 
 
 def get_or_create_fatigue_pool(character_sheet: CharacterSheet) -> FatiguePool:
@@ -40,11 +42,16 @@ def get_or_create_fatigue_pool(character_sheet: CharacterSheet) -> FatiguePool:
 def _get_display_stat_value(character_sheet: CharacterSheet, stat_name: str) -> int:
     """Get a stat's display value (1-5 scale) from the trait handler.
 
-    The trait handler stores values internally at 10x scale (10-50).
-    This divides by 10 to get the display value used in formulas.
+    Handles both storage conventions:
+    - Legacy characters: values stored as 10-50 (internal scale), divided by 10
+    - CG-simplified characters: values stored as 1-5 (display scale), used directly
+
+    Values > 5 are assumed to be internal scale. Values 1-5 are display scale.
     """
-    internal_value = character_sheet.character.traits.get_trait_value(stat_name)
-    return internal_value // 10
+    raw_value = character_sheet.character.traits.get_trait_value(stat_name)
+    if raw_value > STAT_MAX_VALUE:
+        return raw_value // 10
+    return raw_value
 
 
 def get_fatigue_capacity(character_sheet: CharacterSheet, category: str) -> int:
@@ -62,7 +69,7 @@ def get_fatigue_capacity(character_sheet: CharacterSheet, category: str) -> int:
     """
     endurance_stat_name = FATIGUE_ENDURANCE_STAT[category]
     endurance_value = _get_display_stat_value(character_sheet, endurance_stat_name)
-    willpower_value = _get_display_stat_value(character_sheet, "willpower")
+    willpower_value = _get_display_stat_value(character_sheet, PrimaryStat.WILLPOWER.value)
 
     base_capacity = (
         endurance_value * CAPACITY_STAT_MULTIPLIER + willpower_value * CAPACITY_WILLPOWER_MULTIPLIER
@@ -249,7 +256,7 @@ def attempt_power_through(
         Tuple of (succeeded, strain_damage). Strain damage is applied
         regardless of success and scales with over-capacity ratio.
     """
-    willpower_value = _get_display_stat_value(character_sheet, "willpower")
+    willpower_value = _get_display_stat_value(character_sheet, PrimaryStat.WILLPOWER.value)
 
     capacity = get_fatigue_capacity(character_sheet, category)
     pool = get_or_create_fatigue_pool(character_sheet)
