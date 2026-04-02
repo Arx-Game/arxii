@@ -138,3 +138,86 @@ class TestSceneActionIntegration(TestCase):
         assert result is not None
         assert result.success is False
         assert "No action template" in (result.message or "")
+
+
+class TestTechniqueEnhancementValidation(TestCase):
+    """Validate technique attachment to action requests."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        CheckSystemSetupFactory.create()
+        templates = create_social_action_templates()
+        cls.flirt_template = next(t for t in templates if t.name == "Flirt")
+
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
+
+        cls.initiator_sheet = CharacterSheetFactory(character=cls.initiator.character)
+        cls.technique = TechniqueFactory(name="Mesmerizing Gaze")
+        CharacterTechniqueFactory(
+            character=cls.initiator_sheet,
+            technique=cls.technique,
+        )
+
+    def test_create_request_with_valid_technique(self) -> None:
+        """Technique is stored when ActionEnhancement exists and character knows it."""
+        from actions.models import ActionEnhancement
+
+        ActionEnhancement.objects.create(
+            base_action_key="flirt",
+            variant_name="Enchanted Flirt",
+            source_type="technique",
+            technique=self.technique,
+        )
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="flirt",
+            technique=self.technique,
+        )
+        assert request.technique == self.technique
+
+    def test_create_request_rejects_technique_without_enhancement(self) -> None:
+        """Technique rejected when no ActionEnhancement record exists."""
+        from django.core.exceptions import ValidationError
+
+        from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
+
+        rogue_technique = TechniqueFactory(name="Teleportation")
+        CharacterTechniqueFactory(character=self.initiator_sheet, technique=rogue_technique)
+        with self.assertRaises(ValidationError):
+            create_action_request(
+                scene=self.scene,
+                initiator_persona=self.initiator,
+                target_persona=self.target,
+                action_key="flirt",
+                technique=rogue_technique,
+            )
+
+    def test_create_request_rejects_unknown_technique(self) -> None:
+        """Technique rejected when character doesn't know it."""
+        from django.core.exceptions import ValidationError
+
+        from actions.models import ActionEnhancement
+        from world.magic.factories import TechniqueFactory
+
+        unknown_technique = TechniqueFactory(name="Unknown Spell")
+        ActionEnhancement.objects.create(
+            base_action_key="flirt",
+            variant_name="Unknown Flirt",
+            source_type="technique",
+            technique=unknown_technique,
+        )
+        with self.assertRaises(ValidationError):
+            create_action_request(
+                scene=self.scene,
+                initiator_persona=self.initiator,
+                target_persona=self.target,
+                action_key="flirt",
+                technique=unknown_technique,
+            )
