@@ -61,6 +61,18 @@ class FatiguePoolTests(TestCase):
         pool.set_current("physical", -5)
         assert pool.physical_current == 0
 
+    def test_get_current_invalid_category_raises(self) -> None:
+        """get_current raises ValueError for an invalid category."""
+        pool = FatiguePool.objects.create(character=self.sheet)
+        with self.assertRaises(ValueError):
+            pool.get_current("invalid")
+
+    def test_set_current_invalid_category_raises(self) -> None:
+        """set_current raises ValueError for an invalid category."""
+        pool = FatiguePool.objects.create(character=self.sheet)
+        with self.assertRaises(ValueError):
+            pool.set_current("invalid", 5)
+
     def test_str_representation(self) -> None:
         """__str__ shows character and all pool values."""
         pool = FatiguePool.objects.create(

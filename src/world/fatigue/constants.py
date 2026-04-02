@@ -23,13 +23,13 @@ class EffortLevel(models.TextChoices):
     EXTREME = "extreme", "Extreme Effort"
 
 
-# Zone thresholds (percentage of capacity)
+# Zone thresholds (percentage of capacity). Upper bounds are exclusive: percentage < high.
 ZONE_THRESHOLDS = [
-    (FatigueZone.FRESH, 0, 40),
-    (FatigueZone.STRAINED, 41, 60),
-    (FatigueZone.TIRED, 61, 80),
-    (FatigueZone.OVEREXERTED, 81, 99),
-    (FatigueZone.EXHAUSTED, 100, None),
+    (FatigueZone.FRESH, 0, 41),  # 0% to <41%
+    (FatigueZone.STRAINED, 41, 61),  # 41% to <61%
+    (FatigueZone.TIRED, 61, 81),  # 61% to <81%
+    (FatigueZone.OVEREXERTED, 81, 100),  # 81% to <100%
+    (FatigueZone.EXHAUSTED, 100, None),  # 100%+
 ]
 
 # Check penalties per zone

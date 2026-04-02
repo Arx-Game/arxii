@@ -114,7 +114,7 @@ def _zone_from_percentage(percentage: float) -> str:
     for zone, _low, high in ZONE_THRESHOLDS:
         if high is None:
             return zone
-        if percentage <= high:
+        if percentage < high:
             return zone
 
     return FatigueZone.EXHAUSTED

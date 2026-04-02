@@ -1,5 +1,7 @@
 """Tests for fatigue service functions."""
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from world.action_points.models import ActionPointPool
@@ -17,6 +19,8 @@ from world.fatigue.constants import (
 from world.fatigue.models import FatiguePool
 from world.fatigue.services import (
     apply_fatigue,
+    attempt_endurance_check,
+    attempt_power_through,
     get_fatigue_capacity,
     get_fatigue_penalty,
     get_fatigue_percentage,
@@ -540,3 +544,111 @@ class GetFatiguePercentageTests(TestCase):
 
         pct = get_fatigue_percentage(self.sheet, FatigueCategory.PHYSICAL)
         assert pct == 100.0
+
+
+class AttemptEnduranceCheckTests(TestCase):
+    """Tests for attempt_endurance_check with controlled dice rolls."""
+
+    def setUp(self):
+        FatiguePool.flush_instance_cache()
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+
+    def _setup_character(self, stamina_internal: int, willpower_internal: int, fatigue: int):
+        """Set up character stats and fatigue for endurance tests."""
+        char = self.sheet.character
+        _setup_stat(char, "stamina", stamina_internal, TraitCategory.PHYSICAL)
+        _setup_stat(char, "willpower", willpower_internal, TraitCategory.META)
+        pool = get_or_create_fatigue_pool(self.sheet)
+        pool.set_current("physical", fatigue)
+        pool.save()
+
+    @patch("world.fatigue.services.random")
+    def test_endurance_pass_high_stat(self, mock_random):
+        """roll=50, endurance=3, 81% fatigue -> passes (50+30=80 > 63)."""
+        # Capacity = 3*10 + 2*3 = 36. fatigue=29 -> 29/36*100 = ~80.6%
+        # target = int((80.6 - 60) * 3) = int(61.7) = 61
+        # roll(50) + endurance(3)*10 = 80 > 61 -> pass
+        self._setup_character(stamina_internal=30, willpower_internal=20, fatigue=29)
+        mock_random.randint.return_value = 50
+        result = attempt_endurance_check(self.sheet, FatigueCategory.PHYSICAL)
+        assert result is True
+
+    @patch("world.fatigue.services.random")
+    def test_endurance_fail_low_stat(self, mock_random):
+        """roll=50, endurance=1, 81% fatigue -> fails (50+10=60 < 63)."""
+        # Capacity = 1*10 + 1*3 = 13. fatigue=11 -> 11/13*100 = ~84.6%
+        # target = int((84.6 - 60) * 3) = int(73.8) = 73
+        # roll(50) + endurance(1)*10 = 60 < 73 -> fail
+        self._setup_character(stamina_internal=10, willpower_internal=10, fatigue=11)
+        mock_random.randint.return_value = 50
+        result = attempt_endurance_check(self.sheet, FatigueCategory.PHYSICAL)
+        assert result is False
+
+    @patch("world.fatigue.services.random")
+    def test_roll_1_always_fails(self, mock_random):
+        """Roll of 1 always fails regardless of high stats."""
+        self._setup_character(stamina_internal=50, willpower_internal=50, fatigue=0)
+        mock_random.randint.return_value = 1
+        result = attempt_endurance_check(self.sheet, FatigueCategory.PHYSICAL)
+        assert result is False
+
+    @patch("world.fatigue.services.random")
+    def test_roll_100_always_succeeds(self, mock_random):
+        """Roll of 100 always succeeds regardless of fatigue."""
+        # Capacity = 1*10 + 1*3 = 13. fatigue=26 -> 200%
+        self._setup_character(stamina_internal=10, willpower_internal=10, fatigue=26)
+        mock_random.randint.return_value = 100
+        result = attempt_endurance_check(self.sheet, FatigueCategory.PHYSICAL)
+        assert result is True
+
+
+class AttemptPowerThroughTests(TestCase):
+    """Tests for attempt_power_through with controlled dice rolls."""
+
+    def setUp(self):
+        FatiguePool.flush_instance_cache()
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sheet = CharacterSheetFactory()
+
+    def _setup_character(self, stamina_internal: int, willpower_internal: int, fatigue: int):
+        """Set up character stats and fatigue for power-through tests."""
+        char = self.sheet.character
+        _setup_stat(char, "stamina", stamina_internal, TraitCategory.PHYSICAL)
+        _setup_stat(char, "willpower", willpower_internal, TraitCategory.META)
+        pool = get_or_create_fatigue_pool(self.sheet)
+        pool.set_current("physical", fatigue)
+        pool.save()
+
+    @patch("world.fatigue.services.random")
+    def test_power_through_pass_high_willpower(self, mock_random):
+        """roll=50, willpower=5, strain=1 -> passes (50+50=100 > 53)."""
+        # Capacity = 3*10 + 5*3 = 45. fatigue=46 -> over_ratio = 1/45 = 0.022
+        # strain_damage = max(1, int(0.022*10)) = max(1, 0) = 1
+        # target = 50 + 1*3 = 53. roll(50) + willpower(5)*10 = 100 > 53 -> pass
+        self._setup_character(stamina_internal=30, willpower_internal=50, fatigue=46)
+        mock_random.randint.return_value = 50
+        succeeded, strain_damage = attempt_power_through(self.sheet, FatigueCategory.PHYSICAL)
+        assert succeeded is True
+        assert strain_damage == 1
+
+    @patch("world.fatigue.services.random")
+    def test_power_through_roll_1_always_fails(self, mock_random):
+        """Roll of 1 always fails regardless of stats."""
+        self._setup_character(stamina_internal=50, willpower_internal=50, fatigue=70)
+        mock_random.randint.return_value = 1
+        succeeded, _strain_damage = attempt_power_through(self.sheet, FatigueCategory.PHYSICAL)
+        assert succeeded is False
+
+    @patch("world.fatigue.services.random")
+    def test_power_through_roll_100_always_succeeds(self, mock_random):
+        """Roll of 100 always succeeds regardless of circumstances."""
+        # Low willpower, high fatigue
+        self._setup_character(stamina_internal=10, willpower_internal=10, fatigue=50)
+        mock_random.randint.return_value = 100
+        succeeded, _strain_damage = attempt_power_through(self.sheet, FatigueCategory.PHYSICAL)
+        assert succeeded is True
