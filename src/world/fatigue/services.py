@@ -7,13 +7,13 @@ collapse checks, and rest mechanics.
 
 from __future__ import annotations
 
-import random
-
 from django.db import transaction
 
 from world.action_points.models import ActionPointPool
 from world.character_creation.constants import STAT_MAX_VALUE
 from world.character_sheets.models import CharacterSheet
+from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
+from world.checks.services import perform_check
 from world.fatigue.constants import (
     CAPACITY_STAT_MULTIPLIER,
     CAPACITY_WILLPOWER_MULTIPLIER,
@@ -31,6 +31,7 @@ from world.fatigue.constants import (
 from world.fatigue.models import FatiguePool
 from world.fatigue.types import RestResult
 from world.traits.constants import PrimaryStat
+from world.traits.models import Trait, TraitType
 
 
 def get_or_create_fatigue_pool(character_sheet: CharacterSheet) -> FatiguePool:
@@ -214,14 +215,48 @@ def should_check_collapse(
     return zone_order.index(zone) >= zone_order.index(min_collapse_zone)
 
 
+def _get_endurance_check_type(category: str) -> CheckType:
+    """Get or create the endurance CheckType for a fatigue category."""
+    endurance_stat_name = FATIGUE_ENDURANCE_STAT[category]
+    check_name = f"fatigue_endurance_{category}"
+
+    fatigue_category, _ = CheckCategory.objects.get_or_create(
+        name="Fatigue",
+        defaults={"description": "Fatigue resistance checks", "display_order": 99},
+    )
+    check_type, created = CheckType.objects.get_or_create(
+        name=check_name,
+        category=fatigue_category,
+        defaults={"description": f"Endurance check against {category} fatigue"},
+    )
+    if created:
+        trait = Trait.objects.get(name=endurance_stat_name, trait_type=TraitType.STAT)
+        CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=1.0)
+    return check_type
+
+
+def _get_willpower_check_type() -> CheckType:
+    """Get or create the willpower power-through CheckType."""
+    fatigue_category, _ = CheckCategory.objects.get_or_create(
+        name="Fatigue",
+        defaults={"description": "Fatigue resistance checks", "display_order": 99},
+    )
+    check_type, created = CheckType.objects.get_or_create(
+        name="fatigue_willpower",
+        category=fatigue_category,
+        defaults={"description": "Willpower check to power through fatigue collapse"},
+    )
+    if created:
+        trait = Trait.objects.get(name=PrimaryStat.WILLPOWER.value, trait_type=TraitType.STAT)
+        CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=1.0)
+    return check_type
+
+
 def attempt_endurance_check(character_sheet: CharacterSheet, category: str) -> bool:
-    """Roll endurance stat vs fatigue to stay conscious.
+    """Endurance check against fatigue. Uses the unified check system.
 
-    Formula: d100 + (endurance_stat * 10) vs (fatigue_percentage - 60) * 3
-    Roll of 1 always fails. Roll of 100 always succeeds.
-    High endurance (5-10) makes passing easier at moderate fatigue levels.
-
-    TODO: Migrate to the unified dice roll resolution system when built.
+    Target difficulty scales with fatigue percentage.
+    All modifiers (spells, conditions, relationships) apply automatically.
 
     Args:
         character_sheet: The character's sheet.
@@ -230,34 +265,27 @@ def attempt_endurance_check(character_sheet: CharacterSheet, category: str) -> b
     Returns:
         True if character stays conscious.
     """
-    endurance_stat_name = FATIGUE_ENDURANCE_STAT[category]
-    endurance_value = _get_display_stat_value(character_sheet, endurance_stat_name)
-
+    check_type = _get_endurance_check_type(category)
     percentage = get_fatigue_percentage(character_sheet, category)
-    target = int((percentage - 60) * 3)
 
-    roll = random.randint(1, 100)  # noqa: S311
-    if roll == 1:
-        return False  # Critical failure — always collapse
-    if roll == 100:  # noqa: PLR2004
-        return True  # Critical success — always stay conscious
+    # Scale difficulty: at 81% it's moderate, at 150%+ it's very hard
+    target_difficulty = int((percentage - 60) * 3)
 
-    return (roll + endurance_value * 10) > target
+    result = perform_check(
+        character=character_sheet.character,
+        check_type=check_type,
+        target_difficulty=target_difficulty,
+    )
+    return result.success_level > 0
 
 
 def attempt_power_through(
     character_sheet: CharacterSheet,
     category: str,
 ) -> tuple[bool, int]:
-    """Willpower check to stay conscious after failing endurance check.
+    """Willpower check to power through collapse.
 
-    Formula: d100 + (willpower * 10) vs 50 + (strain_damage * 3)
-    Roll of 1 always fails. Roll of 100 always succeeds.
-    Intensity bonuses (combat/high-stakes) should be added as modifiers
-    when the modifier system integration is built.
-
-    TODO: Migrate to the unified dice roll resolution system when built.
-    TODO: Add intensity bonus from combat/dramatic context.
+    TODO: Add intensity bonus from combat/dramatic context as extra_modifiers.
 
     Args:
         character_sheet: The character's sheet.
@@ -267,7 +295,7 @@ def attempt_power_through(
         Tuple of (succeeded, strain_damage). Strain damage is applied
         regardless of success and scales with over-capacity ratio.
     """
-    willpower_value = _get_display_stat_value(character_sheet, PrimaryStat.WILLPOWER.value)
+    check_type = _get_willpower_check_type()
 
     capacity = get_fatigue_capacity(character_sheet, category)
     pool = get_or_create_fatigue_pool(character_sheet)
@@ -277,16 +305,14 @@ def attempt_power_through(
     over_ratio = max(0, (current - capacity)) / max(1, capacity)
     strain_damage = max(1, int(over_ratio * 10))
 
-    roll = random.randint(1, 100)  # noqa: S311
-    if roll == 1:
-        return False, strain_damage  # Critical failure
-    if roll == 100:  # noqa: PLR2004
-        return True, strain_damage  # Critical success
+    target_difficulty = 50 + (strain_damage * 3)
 
-    target = 50 + (strain_damage * 3)
-    succeeded = (roll + willpower_value * 10) > target
-
-    return succeeded, strain_damage
+    result = perform_check(
+        character=character_sheet.character,
+        check_type=check_type,
+        target_difficulty=target_difficulty,
+    )
+    return result.success_level > 0, strain_damage
 
 
 def reset_fatigue(character_sheet: CharacterSheet) -> None:

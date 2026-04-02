@@ -1,6 +1,6 @@
 """Tests for fatigue service functions."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
@@ -547,7 +547,7 @@ class GetFatiguePercentageTests(TestCase):
 
 
 class AttemptEnduranceCheckTests(TestCase):
-    """Tests for attempt_endurance_check with controlled dice rolls."""
+    """Tests for attempt_endurance_check using the unified check system."""
 
     def setUp(self):
         FatiguePool.flush_instance_cache()
@@ -565,48 +565,45 @@ class AttemptEnduranceCheckTests(TestCase):
         pool.set_current("physical", fatigue)
         pool.save()
 
-    @patch("world.fatigue.services.random")
-    def test_endurance_pass_high_stat(self, mock_random):
-        """roll=50, endurance=3, 81% fatigue -> passes (50+30=80 > 63)."""
-        # Capacity = 3*10 + 2*3 = 36. fatigue=29 -> 29/36*100 = ~80.6%
-        # target = int((80.6 - 60) * 3) = int(61.7) = 61
-        # roll(50) + endurance(3)*10 = 80 > 61 -> pass
+    @patch("world.fatigue.services.perform_check")
+    def test_endurance_pass_when_check_succeeds(self, mock_perform_check):
+        """Endurance check passes when perform_check returns positive success_level."""
         self._setup_character(stamina_internal=30, willpower_internal=20, fatigue=29)
-        mock_random.randint.return_value = 50
+        mock_perform_check.return_value = MagicMock(success_level=1)
         result = attempt_endurance_check(self.sheet, FatigueCategory.PHYSICAL)
         assert result is True
+        mock_perform_check.assert_called_once()
 
-    @patch("world.fatigue.services.random")
-    def test_endurance_fail_low_stat(self, mock_random):
-        """roll=50, endurance=1, 81% fatigue -> fails (50+10=60 < 63)."""
-        # Capacity = 1*10 + 1*3 = 13. fatigue=11 -> 11/13*100 = ~84.6%
-        # target = int((84.6 - 60) * 3) = int(73.8) = 73
-        # roll(50) + endurance(1)*10 = 60 < 73 -> fail
+    @patch("world.fatigue.services.perform_check")
+    def test_endurance_fail_when_check_fails(self, mock_perform_check):
+        """Endurance check fails when perform_check returns zero success_level."""
         self._setup_character(stamina_internal=10, willpower_internal=10, fatigue=11)
-        mock_random.randint.return_value = 50
+        mock_perform_check.return_value = MagicMock(success_level=0)
         result = attempt_endurance_check(self.sheet, FatigueCategory.PHYSICAL)
         assert result is False
 
-    @patch("world.fatigue.services.random")
-    def test_roll_1_always_fails(self, mock_random):
-        """Roll of 1 always fails regardless of high stats."""
+    @patch("world.fatigue.services.perform_check")
+    def test_endurance_fail_when_negative_success(self, mock_perform_check):
+        """Endurance check fails when perform_check returns negative success_level."""
         self._setup_character(stamina_internal=50, willpower_internal=50, fatigue=0)
-        mock_random.randint.return_value = 1
+        mock_perform_check.return_value = MagicMock(success_level=-1)
         result = attempt_endurance_check(self.sheet, FatigueCategory.PHYSICAL)
         assert result is False
 
-    @patch("world.fatigue.services.random")
-    def test_roll_100_always_succeeds(self, mock_random):
-        """Roll of 100 always succeeds regardless of fatigue."""
+    @patch("world.fatigue.services.perform_check")
+    def test_endurance_difficulty_scales_with_fatigue(self, mock_perform_check):
+        """Target difficulty should scale with fatigue percentage."""
         # Capacity = 1*10 + 1*3 = 13. fatigue=26 -> 200%
+        # target = int((200 - 60) * 3) = 420
         self._setup_character(stamina_internal=10, willpower_internal=10, fatigue=26)
-        mock_random.randint.return_value = 100
-        result = attempt_endurance_check(self.sheet, FatigueCategory.PHYSICAL)
-        assert result is True
+        mock_perform_check.return_value = MagicMock(success_level=1)
+        attempt_endurance_check(self.sheet, FatigueCategory.PHYSICAL)
+        call_kwargs = mock_perform_check.call_args[1]
+        assert call_kwargs["target_difficulty"] == 420
 
 
 class AttemptPowerThroughTests(TestCase):
-    """Tests for attempt_power_through with controlled dice rolls."""
+    """Tests for attempt_power_through using the unified check system."""
 
     def setUp(self):
         FatiguePool.flush_instance_cache()
@@ -624,31 +621,39 @@ class AttemptPowerThroughTests(TestCase):
         pool.set_current("physical", fatigue)
         pool.save()
 
-    @patch("world.fatigue.services.random")
-    def test_power_through_pass_high_willpower(self, mock_random):
-        """roll=50, willpower=5, strain=1 -> passes (50+50=100 > 53)."""
+    @patch("world.fatigue.services.perform_check")
+    def test_power_through_pass_when_check_succeeds(self, mock_perform_check):
+        """Power through succeeds when perform_check returns positive success_level."""
         # Capacity = 3*10 + 5*3 = 45. fatigue=46 -> over_ratio = 1/45 = 0.022
         # strain_damage = max(1, int(0.022*10)) = max(1, 0) = 1
-        # target = 50 + 1*3 = 53. roll(50) + willpower(5)*10 = 100 > 53 -> pass
         self._setup_character(stamina_internal=30, willpower_internal=50, fatigue=46)
-        mock_random.randint.return_value = 50
+        mock_perform_check.return_value = MagicMock(success_level=1)
         succeeded, strain_damage = attempt_power_through(self.sheet, FatigueCategory.PHYSICAL)
         assert succeeded is True
         assert strain_damage == 1
 
-    @patch("world.fatigue.services.random")
-    def test_power_through_roll_1_always_fails(self, mock_random):
-        """Roll of 1 always fails regardless of stats."""
+    @patch("world.fatigue.services.perform_check")
+    def test_power_through_fail_when_check_fails(self, mock_perform_check):
+        """Power through fails when perform_check returns zero success_level."""
         self._setup_character(stamina_internal=50, willpower_internal=50, fatigue=70)
-        mock_random.randint.return_value = 1
+        mock_perform_check.return_value = MagicMock(success_level=0)
         succeeded, _strain_damage = attempt_power_through(self.sheet, FatigueCategory.PHYSICAL)
         assert succeeded is False
 
-    @patch("world.fatigue.services.random")
-    def test_power_through_roll_100_always_succeeds(self, mock_random):
-        """Roll of 100 always succeeds regardless of circumstances."""
-        # Low willpower, high fatigue
+    @patch("world.fatigue.services.perform_check")
+    def test_power_through_pass_when_high_success(self, mock_perform_check):
+        """Power through succeeds with high success_level."""
         self._setup_character(stamina_internal=10, willpower_internal=10, fatigue=50)
-        mock_random.randint.return_value = 100
+        mock_perform_check.return_value = MagicMock(success_level=3)
         succeeded, _strain_damage = attempt_power_through(self.sheet, FatigueCategory.PHYSICAL)
         assert succeeded is True
+
+    @patch("world.fatigue.services.perform_check")
+    def test_power_through_strain_scales_with_over_capacity(self, mock_perform_check):
+        """Strain damage increases as fatigue exceeds capacity."""
+        # Capacity = 1*10 + 1*3 = 13. fatigue=26 -> over_ratio = 13/13 = 1.0
+        # strain_damage = max(1, int(1.0 * 10)) = 10
+        self._setup_character(stamina_internal=10, willpower_internal=10, fatigue=26)
+        mock_perform_check.return_value = MagicMock(success_level=1)
+        _succeeded, strain_damage = attempt_power_through(self.sheet, FatigueCategory.PHYSICAL)
+        assert strain_damage == 10
