@@ -25,8 +25,13 @@ class FatiguePool(SharedMemoryModel):
     rested_today = models.BooleanField(default=False, help_text="Rest command used this IC day")
     dawn_deferred = models.BooleanField(default=False, help_text="In scene at dawn, reset pending")
 
+    VALID_CATEGORIES = {"physical", "social", "mental"}
+
     def get_current(self, category: str) -> int:
         """Get current fatigue for a category."""
+        if category not in self.VALID_CATEGORIES:
+            msg = f"Invalid fatigue category: {category!r}"
+            raise ValueError(msg)
         field_map = {
             "physical": self.physical_current,
             "social": self.social_current,
@@ -36,6 +41,9 @@ class FatiguePool(SharedMemoryModel):
 
     def set_current(self, category: str, value: int) -> None:
         """Set current fatigue for a category."""
+        if category not in self.VALID_CATEGORIES:
+            msg = f"Invalid fatigue category: {category!r}"
+            raise ValueError(msg)
         field_name = f"{category}_current"
         setattr(self, field_name, max(0, value))
 

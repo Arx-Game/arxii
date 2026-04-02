@@ -15,16 +15,8 @@ from world.fatigue.constants import (
 )
 from world.fatigue.models import FatiguePool
 from world.fatigue.services import get_or_create_fatigue_pool
-from world.traits.factories import CharacterTraitValueFactory, StatTraitFactory
+from world.fatigue.tests import setup_stat as _setup_stat
 from world.traits.models import TraitCategory
-
-
-def _setup_stat(character, stat_name, internal_value, category=TraitCategory.PHYSICAL):
-    """Helper to create a stat trait and assign a value to a character."""
-    trait = StatTraitFactory(name=stat_name, category=category)
-    CharacterTraitValueFactory(character=character, trait=trait, value=internal_value)
-    if hasattr(character, "traits") and character.traits.initialized:
-        character.traits.clear_cache()
 
 
 class ExecuteActionBasicTests(TestCase):
@@ -155,14 +147,28 @@ class ExecuteActionCollapseTests(TestCase):
         )
         assert result.collapse_triggered is True
 
-    def test_medium_never_triggers_collapse(self):
-        """Medium effort never triggers collapse even when overexerted."""
+    def test_medium_no_collapse_when_overexerted(self):
+        """Medium effort does not trigger collapse when only overexerted (< 100%)."""
         self._set_near_overexerted()
         result = execute_action_with_fatigue(
             self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.MEDIUM
         )
         assert result.collapse_triggered is False
         assert result.collapsed is False
+
+    def test_medium_triggers_collapse_when_exhausted(self):
+        """Medium effort DOES trigger collapse when action pushes into EXHAUSTED zone (100%+)."""
+        # Capacity = 3*10 + 2*3 = 36. Set fatigue to 35 so adding 5 -> 40 (111% = EXHAUSTED)
+        pool = get_or_create_fatigue_pool(self.sheet)
+        pool.set_current("physical", 35)
+        pool.save()
+
+        with patch("world.fatigue.action_pipeline.attempt_endurance_check", return_value=True):
+            result = execute_action_with_fatigue(
+                self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.MEDIUM
+            )
+        assert result.collapse_triggered is True
+        assert result.fatigue_zone == FatigueZone.EXHAUSTED
 
     def test_very_low_never_triggers_collapse(self):
         """Very low effort never triggers collapse even when overexerted."""

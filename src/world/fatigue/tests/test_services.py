@@ -26,24 +26,8 @@ from world.fatigue.services import (
     rest,
     should_check_collapse,
 )
-from world.traits.factories import CharacterTraitValueFactory, StatTraitFactory
+from world.fatigue.tests import setup_stat as _setup_stat
 from world.traits.models import TraitCategory
-
-
-def _setup_stat(character, stat_name, internal_value, category=TraitCategory.PHYSICAL):
-    """Helper to create a stat trait and assign a value to a character.
-
-    Args:
-        character: ObjectDB character instance.
-        stat_name: Name of the stat (e.g. "stamina").
-        internal_value: Internal scale value (e.g. 30 for display value 3).
-        category: TraitCategory for the stat.
-    """
-    trait = StatTraitFactory(name=stat_name, category=category)
-    CharacterTraitValueFactory(character=character, trait=trait, value=internal_value)
-    # Clear trait handler cache so it picks up the new value
-    if hasattr(character, "traits") and character.traits.initialized:
-        character.traits.clear_cache()
 
 
 class GetOrCreateFatiguePoolTests(TestCase):

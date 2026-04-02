@@ -7,8 +7,9 @@ collapse checks, and rest mechanics.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import random
+
+from django.db import transaction
 
 from world.action_points.models import ActionPointPool
 from world.character_sheets.models import CharacterSheet
@@ -23,9 +24,11 @@ from world.fatigue.constants import (
     WELL_RESTED_MULTIPLIER,
     ZONE_PENALTIES,
     ZONE_THRESHOLDS,
+    FatigueCategory,
     FatigueZone,
 )
 from world.fatigue.models import FatiguePool
+from world.fatigue.types import RestResult
 
 
 def get_or_create_fatigue_pool(character_sheet: CharacterSheet) -> FatiguePool:
@@ -92,6 +95,24 @@ def get_fatigue_percentage(character_sheet: CharacterSheet, category: str) -> fl
     return (current / capacity) * 100
 
 
+def _zone_from_percentage(percentage: float) -> str:
+    """Return the FatigueZone for a given fatigue percentage.
+
+    Args:
+        percentage: Fatigue as a percentage of capacity.
+
+    Returns:
+        FatigueZone value string.
+    """
+    for zone, _low, high in ZONE_THRESHOLDS:
+        if high is None:
+            return zone
+        if percentage <= high:
+            return zone
+
+    return FatigueZone.EXHAUSTED
+
+
 def get_fatigue_zone(character_sheet: CharacterSheet, category: str) -> str:
     """Return the FatigueZone based on current fatigue percentage.
 
@@ -103,14 +124,7 @@ def get_fatigue_zone(character_sheet: CharacterSheet, category: str) -> str:
         FatigueZone value string.
     """
     percentage = get_fatigue_percentage(character_sheet, category)
-
-    for zone, _low, high in ZONE_THRESHOLDS:
-        if high is None:
-            return zone
-        if percentage <= high:
-            return zone
-
-    return FatigueZone.EXHAUSTED
+    return _zone_from_percentage(percentage)
 
 
 def get_fatigue_penalty(character_sheet: CharacterSheet, category: str) -> int:
@@ -270,14 +284,7 @@ def reset_fatigue(character_sheet: CharacterSheet) -> None:
     pool.save()
 
 
-@dataclass
-class RestResult:
-    """Result of a rest attempt."""
-
-    success: bool
-    message: str
-
-
+@transaction.atomic
 def rest(character_sheet: CharacterSheet) -> RestResult:
     """Spend AP to rest, gaining well_rested for the next dawn reset.
 
@@ -291,7 +298,8 @@ def rest(character_sheet: CharacterSheet) -> RestResult:
     Returns:
         RestResult with success flag and message.
     """
-    pool = get_or_create_fatigue_pool(character_sheet)
+    # TODO: Add location check — rest should only be available at character's home
+    pool, _ = FatiguePool.objects.select_for_update().get_or_create(character=character_sheet)
 
     if pool.rested_today:
         return RestResult(success=False, message="You have already rested today.")
@@ -311,3 +319,31 @@ def rest(character_sheet: CharacterSheet) -> RestResult:
         success=True,
         message="You rest and feel refreshed. You will have increased stamina tomorrow.",
     )
+
+
+def get_full_status(character_sheet: CharacterSheet) -> dict:
+    """Get fatigue status for all three categories in one pass.
+
+    Args:
+        character_sheet: The character's sheet.
+
+    Returns:
+        Dictionary with per-category status and global flags.
+    """
+    pool = get_or_create_fatigue_pool(character_sheet)
+    status: dict = {}
+    for category in FatigueCategory:
+        cat = category.value
+        capacity = get_fatigue_capacity(character_sheet, cat)
+        current = pool.get_current(cat)
+        pct = (current / capacity * 100) if capacity > 0 else (100.0 if current > 0 else 0.0)
+        zone = _zone_from_percentage(pct)
+        status[cat] = {
+            "current": current,
+            "capacity": capacity,
+            "percentage": round(pct, 1),
+            "zone": zone,
+        }
+    status["well_rested"] = pool.well_rested
+    status["rested_today"] = pool.rested_today
+    return status

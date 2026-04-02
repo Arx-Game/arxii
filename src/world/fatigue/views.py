@@ -9,12 +9,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from world.character_sheets.models import CharacterSheet
-from world.fatigue.constants import FatigueCategory
 from world.fatigue.services import (
-    get_fatigue_capacity,
-    get_fatigue_percentage,
-    get_fatigue_zone,
-    get_or_create_fatigue_pool,
+    get_full_status,
     rest,
 )
 from world.roster.models import RosterEntry
@@ -44,18 +40,7 @@ class FatigueStatusView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        pool = get_or_create_fatigue_pool(sheet)
-        data: dict = {}
-        for category in FatigueCategory:
-            cat = category.value
-            data[cat] = {
-                "current": pool.get_current(cat),
-                "capacity": get_fatigue_capacity(sheet, cat),
-                "percentage": get_fatigue_percentage(sheet, cat),
-                "zone": get_fatigue_zone(sheet, cat),
-            }
-        data["well_rested"] = pool.well_rested
-        data["rested_today"] = pool.rested_today
+        data = get_full_status(sheet)
         return Response(data)
 
 

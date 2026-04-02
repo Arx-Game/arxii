@@ -9,17 +9,9 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.fatigue.constants import REST_AP_COST, FatigueCategory, FatigueZone
 from world.fatigue.models import FatiguePool
 from world.fatigue.services import get_or_create_fatigue_pool
+from world.fatigue.tests import setup_stat as _setup_stat
 from world.roster.factories import RosterTenureFactory
-from world.traits.factories import CharacterTraitValueFactory, StatTraitFactory
 from world.traits.models import TraitCategory
-
-
-def _setup_stat(character, stat_name, internal_value, category=TraitCategory.PHYSICAL):
-    """Helper to create a stat trait and assign a value to a character."""
-    trait = StatTraitFactory(name=stat_name, category=category)
-    CharacterTraitValueFactory(character=character, trait=trait, value=internal_value)
-    if hasattr(character, "traits") and character.traits.initialized:
-        character.traits.clear_cache()
 
 
 class FatigueStatusViewTests(APITestCase):

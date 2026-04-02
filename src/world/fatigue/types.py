@@ -18,3 +18,11 @@ class ActionResult:
     powered_through: bool
     strain_damage: int
     check_result: Any | None
+
+
+@dataclass
+class RestResult:
+    """Result of a rest attempt."""
+
+    success: bool
+    message: str
