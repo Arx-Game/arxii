@@ -15,13 +15,14 @@ from world.character_sheets.models import CharacterSheet
 from world.fatigue.constants import (
     CAPACITY_STAT_MULTIPLIER,
     CAPACITY_WILLPOWER_MULTIPLIER,
+    COLLAPSE_RISK_EFFORT_LEVELS,
     EFFORT_COST_MULTIPLIER,
     FATIGUE_ENDURANCE_STAT,
+    MIN_FATIGUE_COST,
     REST_AP_COST,
     WELL_RESTED_MULTIPLIER,
     ZONE_PENALTIES,
     ZONE_THRESHOLDS,
-    EffortLevel,
     FatigueZone,
 )
 from world.fatigue.models import FatiguePool
@@ -147,7 +148,7 @@ def apply_fatigue(
         The actual fatigue cost applied.
     """
     multiplier = EFFORT_COST_MULTIPLIER[effort_level]
-    actual_cost = int(base_cost * multiplier)
+    actual_cost = max(MIN_FATIGUE_COST, int(base_cost * multiplier))
 
     pool = get_or_create_fatigue_pool(character_sheet)
     current = pool.get_current(category)
@@ -164,8 +165,9 @@ def should_check_collapse(
 ) -> bool:
     """Return True if a collapse check is needed.
 
-    Collapse risk applies only for NORMAL and ALL_OUT effort when
-    in the OVEREXERTED or EXHAUSTED zone.
+    Collapse risk applies only for HIGH and EXTREME effort when
+    in the OVEREXERTED or EXHAUSTED zone. VERY_LOW, LOW, and MEDIUM
+    are always safe from collapse.
 
     Args:
         character_sheet: The character's sheet.
@@ -175,7 +177,7 @@ def should_check_collapse(
     Returns:
         True if collapse check should be made.
     """
-    if effort_level == EffortLevel.HALFHEARTED:
+    if effort_level not in COLLAPSE_RISK_EFFORT_LEVELS:
         return False
 
     zone = get_fatigue_zone(character_sheet, category)

@@ -16,9 +16,11 @@ class FatigueZone(models.TextChoices):
 
 
 class EffortLevel(models.TextChoices):
-    HALFHEARTED = "halfhearted", "Halfhearted"
-    NORMAL = "normal", "Normal"
-    ALL_OUT = "all_out", "All Out"
+    VERY_LOW = "very_low", "Very Low Effort"
+    LOW = "low", "Low Effort"
+    MEDIUM = "medium", "Medium Effort"
+    HIGH = "high", "High Effort"
+    EXTREME = "extreme", "Extreme Effort"
 
 
 # Zone thresholds (percentage of capacity)
@@ -39,18 +41,26 @@ ZONE_PENALTIES = {
     FatigueZone.EXHAUSTED: -4,
 }
 
-# Effort modifiers
+# Effort check modifiers (added to check result)
 EFFORT_CHECK_MODIFIER = {
-    EffortLevel.HALFHEARTED: -2,
-    EffortLevel.NORMAL: 0,
-    EffortLevel.ALL_OUT: 2,
+    EffortLevel.VERY_LOW: -3,
+    EffortLevel.LOW: -1,
+    EffortLevel.MEDIUM: 0,
+    EffortLevel.HIGH: 2,
+    EffortLevel.EXTREME: 4,
 }
 
+# Effort fatigue cost multipliers (applied to base action cost)
 EFFORT_COST_MULTIPLIER = {
-    EffortLevel.HALFHEARTED: 0.3,
-    EffortLevel.NORMAL: 1.0,
-    EffortLevel.ALL_OUT: 2.0,
+    EffortLevel.VERY_LOW: 0.1,  # Virtually free (1 fatigue minimum)
+    EffortLevel.LOW: 0.5,
+    EffortLevel.MEDIUM: 1.0,
+    EffortLevel.HIGH: 2.0,
+    EffortLevel.EXTREME: 3.5,  # Very expensive — can cause quick collapse
 }
+
+# Minimum fatigue cost (even very low effort costs at least 1)
+MIN_FATIGUE_COST = 1
 
 # Capacity formula constants
 CAPACITY_STAT_MULTIPLIER = 10
@@ -66,3 +76,7 @@ FATIGUE_ENDURANCE_STAT = {
     FatigueCategory.SOCIAL: "composure",
     FatigueCategory.MENTAL: "stability",
 }
+
+# Collapse risk: only HIGH and EXTREME effort trigger collapse when overexerted/exhausted
+# VERY_LOW, LOW, and MEDIUM are always safe from collapse
+COLLAPSE_RISK_EFFORT_LEVELS = {EffortLevel.HIGH, EffortLevel.EXTREME}

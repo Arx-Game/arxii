@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-export type EffortLevel = 'halfhearted' | 'normal' | 'all_out';
+export type EffortLevel = 'very_low' | 'low' | 'medium' | 'high' | 'extreme';
 
 interface EffortSelectorProps {
   value: EffortLevel;
@@ -9,10 +9,42 @@ interface EffortSelectorProps {
   disabled?: boolean;
 }
 
-const EFFORT_OPTIONS: { key: EffortLevel; label: string; tooltip: string }[] = [
-  { key: 'halfhearted', label: 'Halfhearted', tooltip: 'Lower fatigue cost, -2 check penalty' },
-  { key: 'normal', label: 'Normal', tooltip: 'Standard fatigue cost and check modifier' },
-  { key: 'all_out', label: 'All Out', tooltip: 'Double fatigue cost, +2 check bonus' },
+const EFFORT_OPTIONS: {
+  key: EffortLevel;
+  label: string;
+  tooltip: string;
+  selectedClass: string;
+}[] = [
+  {
+    key: 'very_low',
+    label: 'Very Low',
+    tooltip: 'Minimal fatigue cost (min 1), -3 check penalty',
+    selectedClass: 'bg-rose-200 hover:bg-rose-300 text-rose-900',
+  },
+  {
+    key: 'low',
+    label: 'Low',
+    tooltip: 'Half fatigue cost, -1 check penalty',
+    selectedClass: 'bg-rose-300 hover:bg-rose-400 text-rose-950',
+  },
+  {
+    key: 'medium',
+    label: 'Medium',
+    tooltip: 'Standard fatigue cost, no check modifier',
+    selectedClass: '',
+  },
+  {
+    key: 'high',
+    label: 'High',
+    tooltip: 'Double fatigue cost, +2 check bonus. Collapse risk when overexerted',
+    selectedClass: 'bg-red-600 hover:bg-red-700',
+  },
+  {
+    key: 'extreme',
+    label: 'Extreme',
+    tooltip: '3.5x fatigue cost, +4 check bonus. Collapse risk when overexerted',
+    selectedClass: 'bg-red-900 hover:bg-red-950',
+  },
 ];
 
 export function EffortSelector({ value, onChange, disabled }: EffortSelectorProps) {
@@ -26,11 +58,7 @@ export function EffortSelector({ value, onChange, disabled }: EffortSelectorProp
             type="button"
             size="sm"
             variant={isSelected ? 'default' : 'outline'}
-            className={cn(
-              'flex-1',
-              isSelected && option.key === 'halfhearted' && 'bg-blue-600 hover:bg-blue-700',
-              isSelected && option.key === 'all_out' && 'bg-orange-600 hover:bg-orange-700'
-            )}
+            className={cn('flex-1', isSelected && option.selectedClass)}
             disabled={disabled}
             title={option.tooltip}
             role="radio"

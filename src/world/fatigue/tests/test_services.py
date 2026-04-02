@@ -7,7 +7,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.fatigue.constants import (
     CAPACITY_STAT_MULTIPLIER,
     CAPACITY_WILLPOWER_MULTIPLIER,
-    EFFORT_COST_MULTIPLIER,
+    MIN_FATIGUE_COST,
     REST_AP_COST,
     WELL_RESTED_MULTIPLIER,
     EffortLevel,
@@ -239,29 +239,45 @@ class ApplyFatigueTests(TestCase):
     def setUpTestData(cls):
         cls.sheet = CharacterSheetFactory()
 
-    def test_normal_effort_full_cost(self):
-        """Normal effort applies base cost * 1.0."""
-        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.NORMAL)
+    def test_medium_effort_full_cost(self):
+        """Medium effort applies base cost * 1.0."""
+        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.MEDIUM)
         assert cost == 10
 
         pool = get_or_create_fatigue_pool(self.sheet)
         assert pool.get_current("physical") == 10
 
-    def test_halfhearted_effort_reduced_cost(self):
-        """Halfhearted effort applies base cost * 0.3."""
-        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.HALFHEARTED)
-        expected = int(10 * EFFORT_COST_MULTIPLIER[EffortLevel.HALFHEARTED])
-        assert cost == expected
+    def test_very_low_effort_reduced_cost(self):
+        """Very low effort applies base cost * 0.1 but at least MIN_FATIGUE_COST."""
+        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.VERY_LOW)
+        # int(10 * 0.1) = 1, which equals MIN_FATIGUE_COST
+        assert cost == MIN_FATIGUE_COST
 
-    def test_all_out_effort_double_cost(self):
-        """All-out effort applies base cost * 2.0."""
-        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.ALL_OUT)
+    def test_low_effort_half_cost(self):
+        """Low effort applies base cost * 0.5."""
+        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.LOW)
+        assert cost == 5
+
+    def test_high_effort_double_cost(self):
+        """High effort applies base cost * 2.0."""
+        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.HIGH)
         assert cost == 20
+
+    def test_extreme_effort_triple_plus_cost(self):
+        """Extreme effort applies base cost * 3.5."""
+        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.EXTREME)
+        assert cost == 35
+
+    def test_min_fatigue_cost_enforced(self):
+        """Even very low effort on a tiny base cost returns at least MIN_FATIGUE_COST."""
+        cost = apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 1, EffortLevel.VERY_LOW)
+        # int(1 * 0.1) = 0, but MIN_FATIGUE_COST = 1
+        assert cost == MIN_FATIGUE_COST
 
     def test_fatigue_accumulates(self):
         """Multiple applications stack."""
-        apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.NORMAL)
-        apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.NORMAL)
+        apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.MEDIUM)
+        apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.MEDIUM)
 
         pool = get_or_create_fatigue_pool(self.sheet)
         assert pool.get_current("physical") == 15
@@ -273,7 +289,7 @@ class ApplyFatigueTests(TestCase):
         _setup_stat(char, "willpower", 10, TraitCategory.META)
         # Capacity = 1*10 + 1*3 = 13
 
-        apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 20, EffortLevel.NORMAL)
+        apply_fatigue(self.sheet, FatigueCategory.PHYSICAL, 20, EffortLevel.MEDIUM)
         pool = get_or_create_fatigue_pool(self.sheet)
         assert pool.get_current("physical") == 20  # Exceeds capacity of 13
 
@@ -297,65 +313,75 @@ class ShouldCheckCollapseTests(TestCase):
         pool.set_current("physical", 33)  # ~92% of 36
         pool.save()
 
-    def test_halfhearted_always_safe(self):
-        """Halfhearted effort never triggers collapse check."""
+    def test_very_low_always_safe(self):
+        """Very low effort never triggers collapse check."""
         self._setup_overexerted()
-        result = should_check_collapse(
-            self.sheet, FatigueCategory.PHYSICAL, EffortLevel.HALFHEARTED
-        )
+        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.VERY_LOW)
         assert result is False
 
-    def test_normal_when_overexerted(self):
-        """Normal effort triggers collapse when overexerted."""
+    def test_low_always_safe(self):
+        """Low effort never triggers collapse check."""
         self._setup_overexerted()
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.NORMAL)
+        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.LOW)
+        assert result is False
+
+    def test_medium_always_safe(self):
+        """Medium effort never triggers collapse check."""
+        self._setup_overexerted()
+        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.MEDIUM)
+        assert result is False
+
+    def test_high_when_overexerted(self):
+        """High effort triggers collapse when overexerted."""
+        self._setup_overexerted()
+        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.HIGH)
         assert result is True
 
-    def test_all_out_when_overexerted(self):
-        """All-out effort triggers collapse when overexerted."""
+    def test_extreme_when_overexerted(self):
+        """Extreme effort triggers collapse when overexerted."""
         self._setup_overexerted()
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.ALL_OUT)
+        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.EXTREME)
         assert result is True
 
-    def test_normal_when_fresh(self):
-        """Normal effort does not trigger collapse when fresh."""
+    def test_high_when_fresh(self):
+        """High effort does not trigger collapse when fresh."""
         char = self.sheet.character
         _setup_stat(char, "stamina", 30, TraitCategory.PHYSICAL)
         _setup_stat(char, "willpower", 20, TraitCategory.META)
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.NORMAL)
+        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.HIGH)
         assert result is False
 
-    def test_normal_when_strained(self):
-        """Normal effort does not trigger collapse when strained."""
+    def test_high_when_strained(self):
+        """High effort does not trigger collapse when strained."""
         char = self.sheet.character
         _setup_stat(char, "stamina", 30, TraitCategory.PHYSICAL)
         _setup_stat(char, "willpower", 20, TraitCategory.META)
         pool = get_or_create_fatigue_pool(self.sheet)
         pool.set_current("physical", 18)  # ~50%
         pool.save()
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.NORMAL)
+        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.HIGH)
         assert result is False
 
-    def test_normal_when_tired(self):
-        """Normal effort does not trigger collapse when tired."""
+    def test_high_when_tired(self):
+        """High effort does not trigger collapse when tired."""
         char = self.sheet.character
         _setup_stat(char, "stamina", 30, TraitCategory.PHYSICAL)
         _setup_stat(char, "willpower", 20, TraitCategory.META)
         pool = get_or_create_fatigue_pool(self.sheet)
         pool.set_current("physical", 26)  # ~72%
         pool.save()
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.NORMAL)
+        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.HIGH)
         assert result is False
 
-    def test_all_out_when_exhausted(self):
-        """All-out effort triggers collapse when exhausted."""
+    def test_extreme_when_exhausted(self):
+        """Extreme effort triggers collapse when exhausted."""
         char = self.sheet.character
         _setup_stat(char, "stamina", 30, TraitCategory.PHYSICAL)
         _setup_stat(char, "willpower", 20, TraitCategory.META)
         pool = get_or_create_fatigue_pool(self.sheet)
         pool.set_current("physical", 40)  # >100%
         pool.save()
-        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.ALL_OUT)
+        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.EXTREME)
         assert result is True
 
 

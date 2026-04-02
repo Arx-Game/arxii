@@ -211,32 +211,50 @@ class PerformCheckEffortFatigueTests(TestCase):
         CharacterTraitValue.flush_instance_cache()
         ResultChart.clear_cache()
 
-    def test_halfhearted_applies_minus_two(self):
-        """Halfhearted effort applies -2 modifier to total points."""
+    def test_very_low_applies_minus_three(self):
+        """Very low effort applies -3 modifier to total points."""
         CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
         result_base = perform_check(self.character, self.check_type, target_difficulty=0)
-        result_half = perform_check(
-            self.character, self.check_type, target_difficulty=0, effort_level="halfhearted"
+        result_very_low = perform_check(
+            self.character, self.check_type, target_difficulty=0, effort_level="very_low"
         )
-        assert result_half.total_points == result_base.total_points - 2
+        assert result_very_low.total_points == result_base.total_points - 3
 
-    def test_all_out_applies_plus_two(self):
-        """All-out effort applies +2 modifier to total points."""
+    def test_low_applies_minus_one(self):
+        """Low effort applies -1 modifier to total points."""
         CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
         result_base = perform_check(self.character, self.check_type, target_difficulty=0)
-        result_all_out = perform_check(
-            self.character, self.check_type, target_difficulty=0, effort_level="all_out"
+        result_low = perform_check(
+            self.character, self.check_type, target_difficulty=0, effort_level="low"
         )
-        assert result_all_out.total_points == result_base.total_points + 2
+        assert result_low.total_points == result_base.total_points - 1
 
-    def test_normal_effort_no_modifier(self):
-        """Normal effort applies 0 modifier to total points."""
+    def test_medium_effort_no_modifier(self):
+        """Medium effort applies 0 modifier to total points."""
         CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
         result_base = perform_check(self.character, self.check_type, target_difficulty=0)
-        result_normal = perform_check(
-            self.character, self.check_type, target_difficulty=0, effort_level="normal"
+        result_medium = perform_check(
+            self.character, self.check_type, target_difficulty=0, effort_level="medium"
         )
-        assert result_normal.total_points == result_base.total_points
+        assert result_medium.total_points == result_base.total_points
+
+    def test_high_applies_plus_two(self):
+        """High effort applies +2 modifier to total points."""
+        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        result_base = perform_check(self.character, self.check_type, target_difficulty=0)
+        result_high = perform_check(
+            self.character, self.check_type, target_difficulty=0, effort_level="high"
+        )
+        assert result_high.total_points == result_base.total_points + 2
+
+    def test_extreme_applies_plus_four(self):
+        """Extreme effort applies +4 modifier to total points."""
+        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        result_base = perform_check(self.character, self.check_type, target_difficulty=0)
+        result_extreme = perform_check(
+            self.character, self.check_type, target_difficulty=0, effort_level="extreme"
+        )
+        assert result_extreme.total_points == result_base.total_points + 4
 
     def test_fatigue_penalty_applied(self):
         """Fatigue penalty is subtracted from total points."""
@@ -255,11 +273,11 @@ class PerformCheckEffortFatigueTests(TestCase):
             self.character,
             self.check_type,
             target_difficulty=0,
-            effort_level="all_out",
+            effort_level="extreme",
             fatigue_penalty=-3,
         )
-        # +2 from all_out, -3 from fatigue = net -1
-        assert result_combined.total_points == result_base.total_points - 1
+        # +4 from extreme, -3 from fatigue = net +1
+        assert result_combined.total_points == result_base.total_points + 1
 
     def test_no_effort_level_preserves_behavior(self):
         """Omitting effort_level preserves existing behavior (no modifier)."""

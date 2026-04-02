@@ -40,34 +40,48 @@ class ExecuteActionBasicTests(TestCase):
         _setup_stat(char, "willpower", 20, TraitCategory.META)
 
     def test_action_applies_fatigue_cost(self):
-        """Normal effort applies full fatigue cost."""
+        """Medium effort applies full fatigue cost."""
         result = execute_action_with_fatigue(
-            self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.NORMAL
+            self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.MEDIUM
         )
         assert result.fatigue_applied == 10
 
         pool = get_or_create_fatigue_pool(self.sheet)
         assert pool.get_current("physical") == 10
 
-    def test_halfhearted_applies_reduced_cost(self):
-        """Halfhearted effort applies 30% fatigue cost."""
+    def test_very_low_applies_reduced_cost(self):
+        """Very low effort applies 10% fatigue cost (min 1)."""
         result = execute_action_with_fatigue(
-            self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.HALFHEARTED
+            self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.VERY_LOW
         )
-        expected = int(10 * EFFORT_COST_MULTIPLIER[EffortLevel.HALFHEARTED])
+        expected = max(1, int(10 * EFFORT_COST_MULTIPLIER[EffortLevel.VERY_LOW]))
         assert result.fatigue_applied == expected
 
-    def test_all_out_applies_double_cost(self):
-        """All-out effort applies 200% fatigue cost."""
+    def test_low_applies_half_cost(self):
+        """Low effort applies 50% fatigue cost."""
         result = execute_action_with_fatigue(
-            self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.ALL_OUT
+            self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.LOW
+        )
+        assert result.fatigue_applied == 5
+
+    def test_high_applies_double_cost(self):
+        """High effort applies 200% fatigue cost."""
+        result = execute_action_with_fatigue(
+            self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.HIGH
         )
         assert result.fatigue_applied == 20
+
+    def test_extreme_applies_triple_plus_cost(self):
+        """Extreme effort applies 350% fatigue cost."""
+        result = execute_action_with_fatigue(
+            self.sheet, FatigueCategory.PHYSICAL, 10, EffortLevel.EXTREME
+        )
+        assert result.fatigue_applied == 35
 
     def test_action_without_check_fn(self):
         """Action without check_fn still applies fatigue and returns None check_result."""
         result = execute_action_with_fatigue(
-            self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.NORMAL
+            self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.MEDIUM
         )
         assert result.check_result is None
         assert result.fatigue_applied == 5
@@ -85,24 +99,24 @@ class ExecuteActionBasicTests(TestCase):
             self.sheet,
             FatigueCategory.PHYSICAL,
             5,
-            EffortLevel.ALL_OUT,
+            EffortLevel.EXTREME,
             check_fn=mock_check,
         )
         assert result.check_result == "check_passed"
-        assert captured_args["effort_mod"] == 2  # ALL_OUT modifier
+        assert captured_args["effort_mod"] == 4  # EXTREME modifier
         assert captured_args["fatigue_pen"] == 0  # FRESH zone, no penalty
 
     def test_result_contains_effort_level(self):
         """ActionResult includes the effort level used."""
         result = execute_action_with_fatigue(
-            self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.HALFHEARTED
+            self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.VERY_LOW
         )
-        assert result.effort_level == EffortLevel.HALFHEARTED
+        assert result.effort_level == EffortLevel.VERY_LOW
 
     def test_result_contains_fatigue_zone(self):
         """ActionResult includes fatigue zone after cost applied."""
         result = execute_action_with_fatigue(
-            self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.NORMAL
+            self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.MEDIUM
         )
         assert result.fatigue_zone == FatigueZone.FRESH
 
@@ -126,20 +140,38 @@ class ExecuteActionCollapseTests(TestCase):
         pool.set_current("physical", 28)
         pool.save()
 
-    def test_collapse_triggers_at_overexerted(self):
-        """Normal effort triggers collapse when action pushes into overexerted zone."""
+    def test_collapse_triggers_at_overexerted_with_high(self):
+        """High effort triggers collapse when action pushes into overexerted zone."""
         self._set_near_overexerted()
-        # Adding 5 -> 33, which is ~92% of 36 capacity = overexerted
+        # Adding 10 (5 * 2.0) -> 38, which is >100% of 36 capacity = exhausted
         result = execute_action_with_fatigue(
-            self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.NORMAL
+            self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.HIGH
         )
         assert result.collapse_triggered is True
 
-    def test_halfhearted_never_triggers_collapse(self):
-        """Halfhearted effort never triggers collapse even when overexerted."""
+    def test_medium_never_triggers_collapse(self):
+        """Medium effort never triggers collapse even when overexerted."""
         self._set_near_overexerted()
         result = execute_action_with_fatigue(
-            self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.HALFHEARTED
+            self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.MEDIUM
+        )
+        assert result.collapse_triggered is False
+        assert result.collapsed is False
+
+    def test_very_low_never_triggers_collapse(self):
+        """Very low effort never triggers collapse even when overexerted."""
+        self._set_near_overexerted()
+        result = execute_action_with_fatigue(
+            self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.VERY_LOW
+        )
+        assert result.collapse_triggered is False
+        assert result.collapsed is False
+
+    def test_low_never_triggers_collapse(self):
+        """Low effort never triggers collapse even when overexerted."""
+        self._set_near_overexerted()
+        result = execute_action_with_fatigue(
+            self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.LOW
         )
         assert result.collapse_triggered is False
         assert result.collapsed is False
@@ -149,7 +181,7 @@ class ExecuteActionCollapseTests(TestCase):
         self._set_near_overexerted()
         with patch("world.fatigue.action_pipeline.attempt_endurance_check", return_value=True):
             result = execute_action_with_fatigue(
-                self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.NORMAL
+                self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.HIGH
             )
         assert result.collapse_triggered is True
         assert result.collapsed is False
@@ -163,7 +195,7 @@ class ExecuteActionCollapseTests(TestCase):
             patch("world.fatigue.action_pipeline.attempt_power_through", return_value=(True, 3)),
         ):
             result = execute_action_with_fatigue(
-                self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.NORMAL
+                self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.HIGH
             )
         assert result.collapse_triggered is True
         assert result.collapsed is False
@@ -178,7 +210,7 @@ class ExecuteActionCollapseTests(TestCase):
             patch("world.fatigue.action_pipeline.attempt_power_through", return_value=(False, 2)),
         ):
             result = execute_action_with_fatigue(
-                self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.NORMAL
+                self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.HIGH
             )
         assert result.collapse_triggered is True
         assert result.collapsed is True
@@ -186,9 +218,9 @@ class ExecuteActionCollapseTests(TestCase):
         assert result.strain_damage == 2
 
     def test_fresh_zone_no_collapse(self):
-        """Actions in fresh zone do not trigger collapse."""
+        """Actions in fresh zone do not trigger collapse even with extreme effort."""
         result = execute_action_with_fatigue(
-            self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.ALL_OUT
+            self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.EXTREME
         )
         assert result.collapse_triggered is False
         assert result.collapsed is False
