@@ -6,7 +6,13 @@ interaction creation, using real factories (no mocks) for the check system.
 
 from django.test import TestCase
 
+from actions.models import ActionEnhancement
 from world.checks.factories import create_social_action_templates
+from world.magic.factories import (
+    CharacterAnimaFactory,
+    CharacterTechniqueFactory,
+    TechniqueFactory,
+)
 from world.scenes.action_constants import (
     ActionRequestStatus,
     ConsentDecision,
@@ -388,3 +394,97 @@ class TestEnhancedActionResolution(TestCase):
         assert request.result_interaction is not None
         assert request.status == ActionRequestStatus.RESOLVED
         assert self.technique.name in request.result_interaction.content
+
+
+class TestAvailableActionsService(TestCase):
+    """Unit tests for get_available_scene_actions service function."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        CheckSystemSetupFactory.create()
+        templates = create_social_action_templates()
+        cls.flirt_template = next(t for t in templates if t.name == "Flirt")
+
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        cls.initiator_sheet = CharacterSheetFactory(character=cls.initiator.character)
+        cls.technique = TechniqueFactory(
+            name="Mesmerizing Gaze",
+            intensity=5,
+            control=8,
+            anima_cost=3,
+        )
+        CharacterTechniqueFactory(
+            character=cls.initiator_sheet,
+            technique=cls.technique,
+        )
+        CharacterAnimaFactory(
+            character=cls.initiator.character,
+            current=20,
+            maximum=30,
+        )
+        ActionEnhancement.objects.create(
+            base_action_key="flirt",
+            variant_name="Enchanted Flirt",
+            source_type="technique",
+            technique=cls.technique,
+        )
+
+    def test_returns_enhancements_for_known_techniques(self) -> None:
+        """Characters with known techniques see enhancement options for matching actions."""
+        from world.scenes.action_availability import get_available_scene_actions
+
+        actions = get_available_scene_actions(character=self.initiator.character)
+        flirt_action = next((a for a in actions if a.action_key == "flirt"), None)
+        assert flirt_action is not None
+        assert len(flirt_action.enhancements) == 1
+        assert flirt_action.enhancements[0].technique == self.technique
+
+    def test_excludes_unknown_techniques(self) -> None:
+        """Techniques the character does not know are excluded from enhancements."""
+        from world.scenes.action_availability import get_available_scene_actions
+
+        unknown = TechniqueFactory(name="Unknown Spell")
+        ActionEnhancement.objects.create(
+            base_action_key="flirt",
+            variant_name="Unknown Flirt",
+            source_type="technique",
+            technique=unknown,
+        )
+        actions = get_available_scene_actions(character=self.initiator.character)
+        flirt_action = next(a for a in actions if a.action_key == "flirt")
+        # Only the known technique's enhancement is present
+        assert len(flirt_action.enhancements) == 1
+        assert flirt_action.enhancements[0].technique == self.technique
+
+    def test_non_magical_character_has_no_enhancements(self) -> None:
+        """Characters with no known techniques have no enhancements on any action."""
+        from world.scenes.action_availability import get_available_scene_actions
+
+        non_magical = PersonaFactory()
+        actions = get_available_scene_actions(character=non_magical.character)
+        for action in actions:
+            assert len(action.enhancements) == 0
+
+    def test_returns_all_social_action_templates(self) -> None:
+        """All social ActionTemplates are returned, even without enhancements."""
+        from actions.models import ActionTemplate
+        from world.scenes.action_availability import get_available_scene_actions
+
+        social_count = ActionTemplate.objects.filter(category="social").count()
+        actions = get_available_scene_actions(character=self.initiator.character)
+        assert len(actions) == social_count
+
+    def test_effective_cost_calculated(self) -> None:
+        """Effective anima cost is pre-calculated for each enhancement."""
+        from world.scenes.action_availability import get_available_scene_actions
+
+        actions = get_available_scene_actions(character=self.initiator.character)
+        flirt_action = next(a for a in actions if a.action_key == "flirt")
+        enhancement = flirt_action.enhancements[0]
+        # Cost is an integer (non-negative)
+        assert isinstance(enhancement.effective_cost, int)
+        assert enhancement.effective_cost >= 0

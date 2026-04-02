@@ -109,3 +109,59 @@ class EnhancedSceneActionResultSerializer(serializers.Serializer):
     action_key = serializers.CharField()
     action_resolution = ActionResolutionSerializer()
     technique_result = TechniqueResultSerializer(allow_null=True)
+
+
+class SoulfrayWarningSerializer(serializers.Serializer):
+    stage_name = serializers.CharField()
+    stage_description = serializers.CharField()
+    has_death_risk = serializers.BooleanField()
+
+
+class AvailableEnhancementSerializer(serializers.Serializer):
+    technique_id = serializers.SerializerMethodField()
+    technique_name = serializers.SerializerMethodField()
+    variant_name = serializers.SerializerMethodField()
+    effective_cost = serializers.IntegerField()
+    soulfray_warning = SoulfrayWarningSerializer(allow_null=True)
+
+    def get_technique_id(self, obj: object) -> int | None:
+        from world.scenes.action_availability import AvailableEnhancement  # noqa: PLC0415
+
+        if not isinstance(obj, AvailableEnhancement):
+            return None
+        return obj.technique.pk
+
+    def get_technique_name(self, obj: object) -> str | None:
+        from world.scenes.action_availability import AvailableEnhancement  # noqa: PLC0415
+
+        if not isinstance(obj, AvailableEnhancement):
+            return None
+        return obj.technique.name
+
+    def get_variant_name(self, obj: object) -> str | None:
+        from world.scenes.action_availability import AvailableEnhancement  # noqa: PLC0415
+
+        if not isinstance(obj, AvailableEnhancement):
+            return None
+        return obj.enhancement.variant_name
+
+
+class AvailableSceneActionSerializer(serializers.Serializer):
+    action_key = serializers.CharField()
+    action_template_name = serializers.SerializerMethodField()
+    icon = serializers.SerializerMethodField()
+    enhancements = AvailableEnhancementSerializer(many=True)
+
+    def get_action_template_name(self, obj: object) -> str | None:
+        from world.scenes.action_availability import AvailableSceneAction  # noqa: PLC0415
+
+        if not isinstance(obj, AvailableSceneAction):
+            return None
+        return obj.action_template.name
+
+    def get_icon(self, obj: object) -> str | None:
+        from world.scenes.action_availability import AvailableSceneAction  # noqa: PLC0415
+
+        if not isinstance(obj, AvailableSceneAction):
+            return None
+        return obj.action_template.icon
