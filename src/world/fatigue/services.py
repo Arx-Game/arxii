@@ -215,8 +215,13 @@ def should_check_collapse(
     return zone_order.index(zone) >= zone_order.index(min_collapse_zone)
 
 
-def _get_endurance_check_type(category: str) -> CheckType:
-    """Get or create the endurance CheckType for a fatigue category."""
+def _ensure_endurance_check_type(category: str) -> CheckType:
+    """Ensure the endurance CheckType exists for a fatigue category, creating if needed.
+
+    Requires Trait fixture data (stamina/composure/stability) to be loaded.
+    Without populated CheckRank/ResultChart data, checks default to
+    success_level=0 (treated as failure).
+    """
     endurance_stat_name = FATIGUE_ENDURANCE_STAT[category]
     check_name = f"fatigue_endurance_{category}"
 
@@ -230,13 +235,19 @@ def _get_endurance_check_type(category: str) -> CheckType:
         defaults={"description": f"Endurance check against {category} fatigue"},
     )
     if created:
+        # Requires trait fixtures loaded (stamina/composure/stability)
         trait = Trait.objects.get(name=endurance_stat_name, trait_type=TraitType.STAT)
         CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=1.0)
     return check_type
 
 
-def _get_willpower_check_type() -> CheckType:
-    """Get or create the willpower power-through CheckType."""
+def _ensure_willpower_check_type() -> CheckType:
+    """Ensure the willpower power-through CheckType exists, creating if needed.
+
+    Requires willpower Trait fixture data to be loaded.
+    Without populated CheckRank/ResultChart data, checks default to
+    success_level=0 (treated as failure).
+    """
     fatigue_category, _ = CheckCategory.objects.get_or_create(
         name="Fatigue",
         defaults={"description": "Fatigue resistance checks", "display_order": 99},
@@ -247,25 +258,26 @@ def _get_willpower_check_type() -> CheckType:
         defaults={"description": "Willpower check to power through fatigue collapse"},
     )
     if created:
+        # Requires willpower trait fixture loaded
         trait = Trait.objects.get(name=PrimaryStat.WILLPOWER.value, trait_type=TraitType.STAT)
         CheckTypeTrait.objects.create(check_type=check_type, trait=trait, weight=1.0)
     return check_type
 
 
 def attempt_endurance_check(character_sheet: CharacterSheet, category: str) -> bool:
-    """Endurance check against fatigue. Uses the unified check system.
+    """Endurance check against fatigue via the unified check system.
 
-    Target difficulty scales with fatigue percentage.
-    All modifiers (spells, conditions, relationships) apply automatically.
+    Target difficulty scales with fatigue percentage: ``(percentage - 60) * 3``.
+    All modifiers (spells, conditions, relationships, GM adjustments) apply
+    automatically through the check pipeline. GMs can also trigger this check
+    directly via the check system.
 
-    Args:
-        character_sheet: The character's sheet.
-        category: FatigueCategory value.
+    Requires populated CheckRank and ResultChart fixture data. Without it,
+    ``success_level`` defaults to 0 and the check always counts as failure.
 
-    Returns:
-        True if character stays conscious.
+    TODO: Migrate difficulty formula to shared check resolution system.
     """
-    check_type = _get_endurance_check_type(category)
+    check_type = _ensure_endurance_check_type(category)
     percentage = get_fatigue_percentage(character_sheet, category)
 
     # Scale difficulty: at 81% it's moderate, at 150%+ it's very hard
@@ -283,19 +295,20 @@ def attempt_power_through(
     character_sheet: CharacterSheet,
     category: str,
 ) -> tuple[bool, int]:
-    """Willpower check to power through collapse.
+    """Willpower check to power through collapse via the unified check system.
+
+    Target difficulty = ``50 + (strain_damage * 3)``. Strain damage scales
+    with over-capacity ratio and is applied regardless of check outcome.
+
+    All modifiers apply automatically. Intensity bonuses from combat or
+    dramatic context should be passed as extra_modifiers when that
+    integration is built.
+
+    Requires populated CheckRank and ResultChart fixture data.
 
     TODO: Add intensity bonus from combat/dramatic context as extra_modifiers.
-
-    Args:
-        character_sheet: The character's sheet.
-        category: FatigueCategory value.
-
-    Returns:
-        Tuple of (succeeded, strain_damage). Strain damage is applied
-        regardless of success and scales with over-capacity ratio.
     """
-    check_type = _get_willpower_check_type()
+    check_type = _ensure_willpower_check_type()
 
     capacity = get_fatigue_capacity(character_sheet, category)
     pool = get_or_create_fatigue_pool(character_sheet)
