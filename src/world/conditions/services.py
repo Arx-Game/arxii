@@ -48,6 +48,7 @@ from world.conditions.types import (
     InteractionResult,
     ResistanceModifierResult,
     RoundTickResult,
+    SeverityAdvanceResult,
 )
 from world.mechanics.models import CharacterModifier
 
@@ -1148,3 +1149,48 @@ def get_condition_penalty_percent_modifier(
         Total percentage modifier (e.g., 100 for Hubris)
     """
     return _get_condition_percent_modifier(target, "condition_penalty_percent", condition_name)
+
+
+# =============================================================================
+# Severity-Driven Advancement
+# =============================================================================
+
+
+def advance_condition_severity(
+    instance: ConditionInstance,
+    amount: int,
+) -> SeverityAdvanceResult:
+    """Increment a condition's severity and advance stage if threshold crossed.
+
+    Used for conditions like Soulfray where severity accumulates from
+    external events rather than being set once at creation.
+
+    Stages with severity_threshold=None are ignored (time-based only).
+    Can skip multiple stages if the severity jump is large enough.
+    """
+    previous_stage = instance.current_stage
+    instance.severity += amount
+
+    # Find the highest severity-threshold stage that's been reached
+    new_stage = (
+        instance.condition.stages.filter(
+            severity_threshold__isnull=False,
+            severity_threshold__lte=instance.severity,
+        )
+        .order_by("-severity_threshold")
+        .first()
+    )
+
+    stage_changed = False
+    if new_stage and new_stage != previous_stage:
+        instance.current_stage = new_stage
+        stage_changed = True
+
+    instance.save(update_fields=["severity", "current_stage"])
+
+    return SeverityAdvanceResult(
+        previous_stage=previous_stage,
+        new_stage=instance.current_stage,
+        stage_changed=stage_changed,
+        total_severity=instance.severity,
+    )

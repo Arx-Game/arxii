@@ -11,14 +11,20 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.models import CharacterAnima, CharacterResonanceTotal, IntensityTier
+from world.magic.models import (
+    CharacterAnima,
+    CharacterResonanceTotal,
+    IntensityTier,
+    SoulfrayConfig,
+)
 from world.magic.types import (
     AffinityType,
     AnimaCostResult,
     AuraPercentages,
     MishapResult,
-    OverburnSeverity,
     RuntimeTechniqueStats,
+    SoulfrayResult,
+    SoulfrayWarning,
     TechniqueUseResult,
 )
 from world.mechanics.constants import (
@@ -267,32 +273,65 @@ def calculate_effective_anima_cost(
     )
 
 
-# Severity thresholds — MVP hardcoded, future: authored lookup table
-_DEATH_RISK_THRESHOLD = 15
-_DANGEROUS_THRESHOLD = 8
+def calculate_soulfray_severity(
+    current_anima: int,
+    max_anima: int,
+    deficit: int,
+    config: SoulfrayConfig,
+) -> int:
+    """Compute Soulfray severity contribution from post-deduction anima state."""
+    from decimal import Decimal  # noqa: PLC0415
+    from math import ceil  # noqa: PLC0415
+
+    if max_anima <= 0:
+        return 0
+
+    ratio = Decimal(current_anima) / Decimal(max_anima)
+    threshold = config.soulfray_threshold_ratio
+
+    if ratio >= threshold:
+        return 0
+
+    depletion = float((threshold - ratio) / threshold)
+    severity = ceil(config.severity_scale * depletion)
+
+    if deficit > 0:
+        severity += ceil(config.deficit_scale * deficit)
+
+    return severity
 
 
-def get_overburn_severity(deficit: int) -> OverburnSeverity | None:
-    """Classify overburn severity from anima deficit.
+def get_soulfray_warning(character: ObjectDB) -> SoulfrayWarning | None:
+    """Return the current Soulfray stage warning for the safety checkpoint."""
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
 
-    Returns None if no overburn (deficit <= 0).
-    """
-    if deficit <= 0:
+    soulfray_instance = (
+        ConditionInstance.objects.filter(
+            target=character,
+            condition__name=SOULFRAY_CONDITION_NAME,
+        )
+        .select_related("current_stage", "current_stage__consequence_pool")
+        .first()
+    )
+
+    if soulfray_instance is None or soulfray_instance.current_stage is None:
         return None
 
-    if deficit >= _DEATH_RISK_THRESHOLD:
-        return OverburnSeverity(
-            label="This can result in character death.",
-            can_cause_death=True,
-        )
-    if deficit >= _DANGEROUS_THRESHOLD:
-        return OverburnSeverity(
-            label="Dangerous — you will sustain serious magical injuries.",
-            can_cause_death=False,
-        )
-    return OverburnSeverity(
-        label="Painful — you will sustain magical injuries.",
-        can_cause_death=False,
+    stage = soulfray_instance.current_stage
+    has_death_risk = False
+    if stage.consequence_pool_id:
+        from world.checks.models import Consequence  # noqa: PLC0415
+
+        has_death_risk = Consequence.objects.filter(
+            pool_entries__pool=stage.consequence_pool,
+            character_loss=True,
+        ).exists()
+
+    return SoulfrayWarning(
+        stage_name=stage.name,
+        stage_description=stage.description,
+        has_death_risk=has_death_risk,
     )
 
 
@@ -314,32 +353,21 @@ def deduct_anima(character: ObjectDB, effective_cost: int) -> int:
     return deficit
 
 
-def _get_warp_multiplier(character: ObjectDB) -> int:
-    """Return the Warp severity multiplier (>1 if Audere is active)."""
-    from world.conditions.models import ConditionInstance  # noqa: PLC0415
-    from world.magic.audere import AUDERE_CONDITION_NAME, AudereThreshold  # noqa: PLC0415
+def select_mishap_pool(control_deficit: int) -> ConsequencePool | None:
+    """Select a control mishap consequence pool based on deficit magnitude."""
+    from django.db import models as db_models  # noqa: PLC0415
 
-    if not ConditionInstance.objects.filter(
-        target=character,
-        condition__name=AUDERE_CONDITION_NAME,
-    ).exists():
-        return 1
+    from world.magic.models import MishapPoolTier  # noqa: PLC0415
 
-    threshold = AudereThreshold.objects.first()
-    if threshold is None:
-        return 1
-    return threshold.warp_multiplier
-
-
-def select_mishap_pool(control_deficit: int) -> ConsequencePool | None:  # noqa: ARG001
-    """Select a mishap consequence pool based on control deficit magnitude.
-
-    Returns None if no mishap pools are authored yet. Future: query
-    global mishap pools tiered by deficit range.
-    """
-    # MVP: no mishap pools authored. Return None to skip.
-    # When pools are created, this will query by deficit range.
-    return None
+    tier = (
+        MishapPoolTier.objects.filter(min_deficit__lte=control_deficit)
+        .filter(
+            db_models.Q(max_deficit__gte=control_deficit) | db_models.Q(max_deficit__isnull=True),
+        )
+        .order_by("-min_deficit")
+        .first()
+    )
+    return tier.consequence_pool if tier else None
 
 
 def use_technique(
@@ -347,33 +375,16 @@ def use_technique(
     character: ObjectDB,
     technique: Technique,
     resolve_fn: Callable[..., Any],
-    confirm_overburn: bool = True,
+    confirm_soulfray_risk: bool = True,
     check_result: CheckResult | None = None,
 ) -> TechniqueUseResult:
-    """Orchestrate technique use: cost -> checkpoint -> resolve -> mishap.
+    """Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap."""
+    from world.magic.models import SoulfrayConfig  # noqa: PLC0415
 
-    Args:
-        character: The character using the technique.
-        technique: The technique being used.
-        resolve_fn: Callable that performs the actual resolution
-            (challenge, scene action, etc). Called with no args.
-        confirm_overburn: Whether the player confirms overburn.
-            In real usage, the pipeline pauses to ask. For the
-            service layer, the caller passes the decision.
-        check_result: If provided, reused for mishap consequence
-            selection. If None, mishap pool selection still happens
-            but consequence selection is skipped.
-
-    Returns:
-        TechniqueUseResult with cost info, resolution, and mishap.
-    """
     # Step 1: Calculate runtime stats
     stats = get_runtime_technique_stats(technique, character)
 
     # Step 2: Calculate effective anima cost
-    # Note: TOCTOU window between this read and deduct_anima's
-    # select_for_update. Acceptable for MVP (low concurrency).
-    # Future: move lock earlier if concurrent technique use matters.
     anima = CharacterAnima.objects.get(character=character)
     cost = calculate_effective_anima_cost(
         base_cost=technique.anima_cost,
@@ -382,29 +393,41 @@ def use_technique(
         current_anima=anima.current,
     )
 
-    # Step 3: Safety checkpoint
-    severity = get_overburn_severity(cost.deficit) if cost.is_overburn else None
+    # Step 3: Safety checkpoint (Soulfray stage-driven)
+    soulfray_warning = get_soulfray_warning(character)
 
-    if cost.is_overburn and not confirm_overburn:
+    if soulfray_warning and not confirm_soulfray_risk:
         return TechniqueUseResult(
             anima_cost=cost,
-            overburn_severity=severity,
+            soulfray_warning=soulfray_warning,
             confirmed=False,
         )
 
     # Step 4: Deduct anima
-    deduct_anima(character, cost.effective_cost)
+    deficit = deduct_anima(character, cost.effective_cost)
 
-    # Step 5 + 6: Resolution (capability value enhancement is the caller's
-    # responsibility — they pass runtime_intensity to calculate_value)
+    # Steps 5 + 6: Resolution
     resolution_result = resolve_fn()
 
-    # Step 7: Apply overburn condition with Warp acceleration
-    warp_multiplier = _get_warp_multiplier(character)
-    # When Anima Warp condition template exists:
-    # if cost.deficit > 0:
-    #     warp_severity = cost.deficit * warp_multiplier
-    #     apply_condition(character, warp_template, severity=warp_severity)
+    # Step 7: Soulfray accumulation and stage consequences
+    soulfray_result = None
+    soulfray_config = SoulfrayConfig.objects.first()
+    if soulfray_config:
+        anima.refresh_from_db()
+        soulfray_severity = calculate_soulfray_severity(
+            current_anima=anima.current,
+            max_anima=anima.maximum,
+            deficit=deficit,
+            config=soulfray_config,
+        )
+
+        if soulfray_severity > 0:
+            soulfray_result = _handle_soulfray_accumulation(
+                character=character,
+                soulfray_severity=soulfray_severity,
+                soulfray_config=soulfray_config,
+                technique_check_result=check_result,
+            )
 
     # Step 8: Mishap rider
     mishap = None
@@ -416,11 +439,130 @@ def use_technique(
 
     return TechniqueUseResult(
         anima_cost=cost,
-        overburn_severity=severity,
+        soulfray_warning=soulfray_warning,
         confirmed=True,
         resolution_result=resolution_result,
+        soulfray_result=soulfray_result,
         mishap=mishap,
-        warp_multiplier_applied=warp_multiplier,
+    )
+
+
+def _handle_soulfray_accumulation(
+    *,
+    character: ObjectDB,
+    soulfray_severity: int,
+    soulfray_config: SoulfrayConfig,
+    technique_check_result: CheckResult | None,
+) -> SoulfrayResult:
+    """Handle Soulfray severity accumulation, stage advancement, and consequence pool."""
+    from world.checks.consequence_resolution import (  # noqa: PLC0415
+        apply_resolution,
+        select_consequence_from_result,
+    )
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.conditions.models import (  # noqa: PLC0415
+        ConditionCheckModifier,
+        ConditionInstance,
+        ConditionTemplate,
+    )
+    from world.conditions.services import (  # noqa: PLC0415
+        advance_condition_severity,
+        apply_condition,
+    )
+    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
+    from world.magic.models import TechniqueOutcomeModifier  # noqa: PLC0415
+
+    # Find or create Soulfray condition
+    soulfray_instance = (
+        ConditionInstance.objects.filter(
+            target=character,
+            condition__name=SOULFRAY_CONDITION_NAME,
+        )
+        .select_related("current_stage")
+        .first()
+    )
+
+    if soulfray_instance is None:
+        soulfray_template = ConditionTemplate.objects.get(
+            name=SOULFRAY_CONDITION_NAME,
+        )
+        result = apply_condition(target=character, condition=soulfray_template)
+        soulfray_instance = result.instance
+        # apply_condition creates with severity=1. Use advance_condition_severity
+        # to set the real severity and resolve the correct stage.
+        advance_condition_severity(soulfray_instance, soulfray_severity - 1)
+        soulfray_instance.refresh_from_db()
+
+        return SoulfrayResult(
+            severity_added=soulfray_severity,
+            stage_name=(
+                soulfray_instance.current_stage.name if soulfray_instance.current_stage else None
+            ),
+            stage_advanced=soulfray_instance.current_stage is not None,
+        )
+
+    # Advance existing condition
+    advance_result = advance_condition_severity(soulfray_instance, soulfray_severity)
+    soulfray_instance.refresh_from_db()
+
+    # Fire stage consequence pool if present
+    resilience_check = None
+    stage_consequence = None
+    current_stage = soulfray_instance.current_stage
+
+    if current_stage and current_stage.consequence_pool_id:
+        from actions.services import get_effective_consequences  # noqa: PLC0415
+
+        consequences = get_effective_consequences(
+            current_stage.consequence_pool,
+        )
+        if consequences:
+            # 1. Stage penalty via ConditionCheckModifier
+            stage_modifier = 0
+            stage_check_mod = ConditionCheckModifier.objects.filter(
+                stage=current_stage,
+                check_type=soulfray_config.resilience_check_type,
+            ).first()
+            if stage_check_mod:
+                stage_modifier = stage_check_mod.modifier_value
+
+            # 2. Technique outcome modifier (botch = penalty, crit = bonus)
+            outcome_modifier = 0
+            if technique_check_result and technique_check_result.outcome:
+                outcome_mod = TechniqueOutcomeModifier.objects.filter(
+                    outcome=technique_check_result.outcome,
+                ).first()
+                if outcome_mod:
+                    outcome_modifier = outcome_mod.modifier_value
+
+            total_modifier = stage_modifier + outcome_modifier
+
+            # Perform resilience check
+            resilience_check = perform_check(
+                character=character,
+                check_type=soulfray_config.resilience_check_type,
+                target_difficulty=soulfray_config.base_check_difficulty,
+                extra_modifiers=total_modifier,
+            )
+
+            # Select and apply consequence
+            pending = select_consequence_from_result(
+                character,
+                resilience_check,
+                consequences,
+            )
+            context = ResolutionContext(character=character)
+            applied = apply_resolution(pending, context)
+            if applied:
+                stage_consequence = applied[0]
+
+    return SoulfrayResult(
+        severity_added=soulfray_severity,
+        stage_name=current_stage.name if current_stage else None,
+        stage_advanced=advance_result.stage_changed,
+        resilience_check=resilience_check,
+        stage_consequence=stage_consequence,
     )
 
 

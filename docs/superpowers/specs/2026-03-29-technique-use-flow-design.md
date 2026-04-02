@@ -140,7 +140,7 @@ existing pipeline — the technique use flow feeds *into* it with enhanced value
 ### Step 7: Apply Overburn Condition
 
 If there was an anima deficit (from Step 3/4), apply a condition:
-- Condition template: "Anima Warp" (working name, to be workshopped)
+- Condition template: "Soulfray" (working name, to be workshopped)
 - Severity: scaled to the deficit amount
 - Applied deterministically — not a random consequence, but a guaranteed result
   of the resource math
@@ -250,14 +250,14 @@ technique or EffectType.
 These decisions were made during brainstorming and should inform future specs.
 They are not implemented in scope #1 but are load-bearing design constraints.
 
-### Anima Warp Progression
+### Soulfray Progression
 
-Anima Warp is **progressive, not sudden**. It builds in severity over rounds of
+Soulfray is **progressive, not sudden**. It builds in severity over rounds of
 deficit casting. A character does not die the first time they overburn — they
-accumulate Warp stages over subsequent rounds of deficit use.
+accumulate Soulfray stages over subsequent rounds of deficit use.
 
 **Stage model:**
-- Anima Warp is a Condition with multiple severity stages
+- Soulfray is a Condition with multiple severity stages
 - Each round of deficit casting increments the stage
 - Early stages: penalties, pain, visible strain (non-lethal, narrative flavor)
 - Middle stages: serious mechanical penalties, magical scarring risk
@@ -266,7 +266,7 @@ accumulate Warp stages over subsequent rounds of deficit use.
   through stages and can make informed choices about whether to keep pushing
 
 This means Step 7 of the technique use flow (apply overburn condition) should
-**increment** an existing Anima Warp condition rather than always creating a
+**increment** an existing Soulfray condition rather than always creating a
 new one. The severity of the increment scales with the deficit amount — a small
 overburn nudges you one stage, a massive one can jump several.
 
@@ -282,12 +282,12 @@ own lifecycle:
 - **Effects when active**: Massive intensity increase, access to higher-tier
   techniques normally beyond the character's level, temporarily expanded anima
   pool (but not nearly enough to cover the new technique costs safely).
-- **Relationship to Anima Warp**: Audere dramatically accelerates Anima Warp
-  accumulation. Without Audere, a character might slowly build Warp over many
+- **Relationship to Soulfray**: Audere dramatically accelerates Soulfray
+  accumulation. Without Audere, a character might slowly build Soulfray over many
   rounds. During Audere, the intensity/control deficit is enormous, so each
-  technique use pushes Warp severity much faster.
+  technique use pushes Soulfray severity much faster.
 - **Lifecycle**: Audere is not permanent. It ends when the scene/combat ends,
-  when the character chooses to release it, or when Anima Warp reaches a
+  when the character chooses to release it, or when Soulfray reaches a
   critical stage.
 
 ### Audere Majora: Sacrifice, Not Failure
@@ -322,12 +322,12 @@ Mishap consequences have two tiers of danger based on anima state:
   effects. The character is strained but safe. These are consequences of
   imprecision, not existential danger.
 - **With anima deficit** (overburning): Lethal consequences enter the mishap pool.
-  Severe magical injuries, magical scarring, and at extreme Warp stages,
+  Severe magical injuries, magical scarring, and at extreme Soulfray stages,
   character death risk. The combination of loss of control AND life force drain
   is what makes magic truly dangerous.
 
 This means the mishap pool selection (`select_mishap_pool`) considers both the
-control deficit AND the current Anima Warp stage to determine which pool to use.
+control deficit AND the current Soulfray stage to determine which pool to use.
 
 ## Integration Test Expansion Points
 

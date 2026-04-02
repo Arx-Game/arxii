@@ -37,13 +37,15 @@ from world.checks.factories import (
 from world.checks.types import CheckResult, ResolutionContext
 from world.conditions.factories import (
     CapabilityTypeFactory,
+    ConditionCheckModifierFactory,
     ConditionInstanceFactory,
     ConditionStageFactory,
     ConditionTemplateFactory,
 )
+from world.conditions.models import ConditionInstance
 from world.magic.audere import (
-    ANIMA_WARP_CONDITION_NAME,
     AUDERE_CONDITION_NAME,
+    SOULFRAY_CONDITION_NAME,
     check_audere_eligibility,
     end_audere,
     offer_audere,
@@ -55,9 +57,12 @@ from world.magic.factories import (
     CharacterTechniqueFactory,
     GiftFactory,
     IntensityTierFactory,
+    MishapPoolTierFactory,
     ResonanceFactory,
+    SoulfrayConfigFactory,
     TechniqueCapabilityGrantFactory,
     TechniqueFactory,
+    TechniqueOutcomeModifierFactory,
 )
 from world.magic.services import get_runtime_technique_stats, use_technique
 from world.magic.types import TechniqueUseResult
@@ -941,36 +946,43 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
         assert isinstance(result, TechniqueUseResult)
         assert result.confirmed is True
         assert result.resolution_result is not None
-        assert result.overburn_severity is None
+        assert result.soulfray_warning is None
 
         # Anima deducted: base=8, intensity=10, control=7
         # delta = 7 - 10 = -3, effective = max(8 - (-3), 0) = 11
         self.anima.refresh_from_db()
         assert self.anima.current == 20 - 11  # 9
 
+    @patch("world.magic.services.get_soulfray_warning")
     @patch("world.mechanics.challenge_resolution.perform_check")
-    def test_overburn_cancelled_no_resolution(
+    def test_soulfray_warning_cancelled_no_resolution(
         self,
         mock_check: object,
+        mock_warning: object,
     ) -> None:
-        """Player cancels at overburn checkpoint — nothing happens."""
-        self.anima.current = 2
-        self.anima.save(update_fields=["current"])
+        """Player cancels at soulfray warning checkpoint — nothing happens."""
+        from world.magic.types import SoulfrayWarning
+
+        mock_warning.return_value = SoulfrayWarning(
+            stage_name="Flickering",
+            stage_description="Anima flickers dangerously.",
+            has_death_risk=False,
+        )
 
         result = use_technique(
             character=self.character,
             technique=self.flow_technique,
             resolve_fn=self._resolve_challenge,
-            confirm_overburn=False,
+            confirm_soulfray_risk=False,
         )
 
         assert result.confirmed is False
         assert result.resolution_result is None
-        assert result.overburn_severity is not None
+        assert result.soulfray_warning is not None
         mock_check.assert_not_called()
 
         self.anima.refresh_from_db()
-        assert self.anima.current == 2
+        assert self.anima.current == 20
 
     @patch("world.mechanics.challenge_resolution.perform_check")
     def test_overburn_confirmed_resolves_and_drains(
@@ -988,7 +1000,7 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
             character=self.character,
             technique=self.flow_technique,
             resolve_fn=self._resolve_challenge,
-            confirm_overburn=True,
+            confirm_soulfray_risk=True,
         )
 
         assert result.confirmed is True
@@ -1189,30 +1201,30 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
     # --- Test 6: Audere eligibility — all gates ---
 
     def test_audere_eligibility_all_gates(self) -> None:
-        """Audere is eligible when engagement + warp stage + intensity gates all pass."""
-        # Warp condition template with stages
-        warp_template = ConditionTemplateFactory(
-            name=ANIMA_WARP_CONDITION_NAME,
+        """Audere is eligible when engagement + soulfray stage + intensity gates all pass."""
+        # Soulfray condition template with stages
+        soulfray_template = ConditionTemplateFactory(
+            name=SOULFRAY_CONDITION_NAME,
             has_progression=True,
         )
         ConditionStageFactory(
-            condition=warp_template,
+            condition=soulfray_template,
             stage_order=1,
-            name="Mild Warp",
+            name="Mild Soulfray",
         )
-        warp_stage_2 = ConditionStageFactory(
-            condition=warp_template,
+        soulfray_stage_2 = ConditionStageFactory(
+            condition=soulfray_template,
             stage_order=2,
-            name="Severe Warp",
+            name="Severe Soulfray",
         )
 
         # Audere condition template (needed for the "not already in Audere" check)
         ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
 
-        # AudereThreshold requiring major tier and warp stage 2
+        # AudereThreshold requiring major tier and soulfray stage 2
         AudereThresholdFactory(
             minimum_intensity_tier=self.major_tier,
-            minimum_warp_stage=warp_stage_2,
+            minimum_warp_stage=soulfray_stage_2,
             intensity_bonus=20,
             anima_pool_bonus=30,
         )
@@ -1224,11 +1236,11 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
             source_id=self.location.pk,
         )
 
-        # Warp instance at stage 2
+        # Soulfray instance at stage 2
         ConditionInstanceFactory(
             target=self.character,
-            condition=warp_template,
-            current_stage=warp_stage_2,
+            condition=soulfray_template,
+            current_stage=soulfray_stage_2,
         )
 
         # Runtime intensity 20 hits MajorRT tier (threshold 15)
@@ -1238,15 +1250,15 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
 
     def test_audere_full_lifecycle(self) -> None:
         """Engagement -> accept Audere -> boosted stats -> end -> cleanup."""
-        # Setup warp condition with stages
-        warp_template = ConditionTemplateFactory(
-            name=ANIMA_WARP_CONDITION_NAME,
+        # Setup soulfray condition with stages
+        soulfray_template = ConditionTemplateFactory(
+            name=SOULFRAY_CONDITION_NAME,
             has_progression=True,
         )
-        warp_stage = ConditionStageFactory(
-            condition=warp_template,
+        soulfray_stage = ConditionStageFactory(
+            condition=soulfray_template,
             stage_order=1,
-            name="Warp Stage",
+            name="Soulfray Stage",
         )
 
         # Audere condition template
@@ -1255,7 +1267,7 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
         # Threshold config
         threshold = AudereThresholdFactory(
             minimum_intensity_tier=self.minor_tier,
-            minimum_warp_stage=warp_stage,
+            minimum_warp_stage=soulfray_stage,
             intensity_bonus=20,
             anima_pool_bonus=30,
         )
@@ -1274,11 +1286,11 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
             maximum=20,
         )
 
-        # Warp instance
+        # Soulfray instance
         ConditionInstanceFactory(
             target=self.character,
-            condition=warp_template,
-            current_stage=warp_stage,
+            condition=soulfray_template,
+            current_stage=soulfray_stage,
         )
 
         # Baseline stats (engaged, no Audere yet)
@@ -1309,3 +1321,593 @@ class RuntimeModifierTests(PipelineTestMixin, TestCase):
         anima.refresh_from_db()
         assert anima.maximum == 20
         assert anima.pre_audere_maximum is None
+
+
+class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
+    """End-to-end tests for the Soulfray accumulation, stage consequence,
+    and control mishap streams in use_technique().
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+
+        # === 1. Soulfray condition template with 3 severity-driven stages ===
+        cls.soulfray_template = ConditionTemplateFactory(
+            name=SOULFRAY_CONDITION_NAME,
+            has_progression=True,
+        )
+
+        # Stage 1: mild, no consequence pool
+        cls.soulfray_stage_1 = ConditionStageFactory(
+            condition=cls.soulfray_template,
+            stage_order=1,
+            name="Flickering",
+            description="Anima flickers dangerously.",
+            severity_threshold=1,
+            consequence_pool=None,
+        )
+
+        # Stage 2: moderate, has a consequence pool
+        cls.soulfray_pool_2 = ConsequencePoolFactory(name="Soulfray Stage 2 Pool")
+        cls.soulfray_stage_2 = ConditionStageFactory(
+            condition=cls.soulfray_template,
+            stage_order=2,
+            name="Unstable",
+            description="Reality warps around the caster.",
+            severity_threshold=10,
+            consequence_pool=cls.soulfray_pool_2,
+        )
+
+        # Stage 3: severe, consequence pool with character_loss entry
+        cls.soulfray_pool_3 = ConsequencePoolFactory(name="Soulfray Stage 3 Pool")
+        cls.soulfray_stage_3 = ConditionStageFactory(
+            condition=cls.soulfray_template,
+            stage_order=3,
+            name="Unravelling",
+            description="The caster's essence begins to dissolve.",
+            severity_threshold=25,
+            consequence_pool=cls.soulfray_pool_3,
+        )
+
+        # === 2. Resilience check type and outcomes ===
+        cls.resilience_check_type = CheckTypeFactory(name="Resilience")
+        cls.resilience_success = CheckOutcomeFactory(
+            name="Resilience Success",
+            success_level=1,
+        )
+        cls.resilience_failure = CheckOutcomeFactory(
+            name="Resilience Failure",
+            success_level=-1,
+        )
+        cls.botch_outcome = CheckOutcomeFactory(
+            name="Botch",
+            success_level=-3,
+        )
+
+        # === 3. ConditionCheckModifiers: escalating penalties ===
+        # Exactly one of condition/stage must be set (DB constraint).
+        # Use stage-specific modifiers here.
+        ConditionCheckModifierFactory(
+            condition=None,
+            stage=cls.soulfray_stage_1,
+            check_type=cls.resilience_check_type,
+            modifier_value=-2,
+        )
+        ConditionCheckModifierFactory(
+            condition=None,
+            stage=cls.soulfray_stage_2,
+            check_type=cls.resilience_check_type,
+            modifier_value=-5,
+        )
+        ConditionCheckModifierFactory(
+            condition=None,
+            stage=cls.soulfray_stage_3,
+            check_type=cls.resilience_check_type,
+            modifier_value=-10,
+        )
+
+        # === 4. Consequence pools for stages ===
+
+        # Stage 2: success/failure consequences
+        cls.soulfray2_success = ConsequenceFactory(
+            outcome_tier=cls.resilience_success,
+            label="Soulfray contained",
+            weight=1,
+        )
+        cls.soulfray2_failure = ConsequenceFactory(
+            outcome_tier=cls.resilience_failure,
+            label="Soulfray scars form",
+            weight=1,
+        )
+        cls.magical_scars_template = ConditionTemplateFactory(
+            name="Magical Scars",
+        )
+        ConsequenceEffectFactory(
+            consequence=cls.soulfray2_failure,
+            effect_type=EffectType.MAGICAL_SCARS,
+            target=EffectTarget.SELF,
+            condition_template=cls.magical_scars_template,
+            condition_severity=1,
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.soulfray_pool_2,
+            consequence=cls.soulfray2_success,
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.soulfray_pool_2,
+            consequence=cls.soulfray2_failure,
+        )
+
+        # Stage 3: character_loss consequence
+        cls.soulfray3_success = ConsequenceFactory(
+            outcome_tier=cls.resilience_success,
+            label="Barely survived",
+            weight=1,
+        )
+        cls.soulfray3_death = ConsequenceFactory(
+            outcome_tier=cls.resilience_failure,
+            label="Consumed by Soulfray",
+            weight=1,
+            character_loss=True,
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.soulfray_pool_3,
+            consequence=cls.soulfray3_success,
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.soulfray_pool_3,
+            consequence=cls.soulfray3_death,
+        )
+
+        # === 5. SoulfrayConfig ===
+        cls.soulfray_config = SoulfrayConfigFactory(
+            soulfray_threshold_ratio=Decimal("0.30"),
+            severity_scale=10,
+            deficit_scale=5,
+            resilience_check_type=cls.resilience_check_type,
+            base_check_difficulty=15,
+        )
+
+        # === 6. MishapPoolTier for control deficit mishaps ===
+        cls.mishap_pool = ConsequencePoolFactory(name="Control Mishap Pool")
+        cls.mishap_consequence = ConsequenceFactory(
+            outcome_tier=cls.resilience_success,
+            label="Technique misfires",
+            weight=1,
+        )
+        ConsequencePoolEntryFactory(
+            pool=cls.mishap_pool,
+            consequence=cls.mishap_consequence,
+        )
+        cls.mishap_tier = MishapPoolTierFactory(
+            min_deficit=1,
+            max_deficit=None,
+            consequence_pool=cls.mishap_pool,
+        )
+
+        # === 7. TechniqueOutcomeModifiers ===
+        TechniqueOutcomeModifierFactory(
+            outcome=cls.botch_outcome,
+            modifier_value=-5,
+        )
+        TechniqueOutcomeModifierFactory(
+            outcome=cls.resilience_success,
+            modifier_value=2,
+        )
+
+        # === 8. Dedicated technique for soulfray tests ===
+        # intensity=10, control=7, anima_cost=2 (same as mixin technique)
+        cls.soulfray_technique = TechniqueFactory(
+            name="Soulfray Test Bolt",
+            gift=cls.gift,
+            intensity=10,
+            control=7,
+            anima_cost=2,
+        )
+        TechniqueCapabilityGrantFactory(
+            technique=cls.soulfray_technique,
+            capability=cls.generation_cap,
+            base_value=5,
+            intensity_multiplier=Decimal("1.0"),
+        )
+        CharacterTechniqueFactory(
+            character=cls.sheet,
+            technique=cls.soulfray_technique,
+        )
+
+        # High-intensity technique for mishap tests
+        # intensity=15, control=5 => deficit=10
+        cls.wild_technique = TechniqueFactory(
+            name="Wild Surge",
+            gift=cls.gift,
+            intensity=15,
+            control=5,
+            anima_cost=2,
+        )
+        TechniqueCapabilityGrantFactory(
+            technique=cls.wild_technique,
+            capability=cls.generation_cap,
+            base_value=5,
+            intensity_multiplier=Decimal("1.0"),
+        )
+        CharacterTechniqueFactory(
+            character=cls.sheet,
+            technique=cls.wild_technique,
+        )
+
+    def setUp(self) -> None:
+        # Fresh anima per test; engaged to remove social safety bonus
+        self.anima = CharacterAnimaFactory(
+            character=self.character,
+            current=10,
+            maximum=10,
+        )
+        self.engagement = CharacterEngagementFactory(
+            character=self.character,
+        )
+
+    def tearDown(self) -> None:
+        """Clean up per-test condition instances and engagement."""
+        ConditionInstance.objects.filter(target=self.character).delete()
+        CharacterEngagement.objects.filter(
+            character=self.character,
+        ).delete()
+
+    def _make_resilience_result(
+        self,
+        outcome: object,
+    ) -> CheckResult:
+        """Build a CheckResult for the resilience check type."""
+        return CheckResult(
+            check_type=self.resilience_check_type,
+            outcome=outcome,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+    # ------------------------------------------------------------------
+    # Test 1: Full anima — no Soulfray produced
+    # ------------------------------------------------------------------
+
+    def test_no_soulfray_above_threshold(self) -> None:
+        """With full anima (ratio=1.0 > 0.30), no Soulfray is created."""
+        result = use_technique(
+            character=self.character,
+            technique=self.soulfray_technique,
+            resolve_fn=lambda: "ok",
+        )
+
+        assert result.soulfray_result is None
+        assert not ConditionInstance.objects.filter(
+            target=self.character,
+            condition=self.soulfray_template,
+        ).exists()
+
+    # ------------------------------------------------------------------
+    # Test 2: Low anima — Soulfray accumulates
+    # ------------------------------------------------------------------
+
+    def test_soulfray_accumulation_from_low_anima(self) -> None:
+        """Low anima post-deduction triggers Soulfray condition creation."""
+        # anima_cost=2, intensity=10, control=7
+        # delta = 7-10 = -3, effective = max(2-(-3), 0) = 5
+        # After deduction: current = 10 - 5 = 5, ratio = 5/10 = 0.50
+        # Still above threshold 0.30 — so set anima lower.
+        # Set current=3: after deduction current=0 (deficit=2),
+        # ratio=0/10=0, depletion=(0.30-0)/0.30=1.0, severity=ceil(10*1)=10
+        # deficit_component=ceil(5*2)=10, total=20
+        self.anima.current = 3
+        self.anima.save(update_fields=["current"])
+
+        result = use_technique(
+            character=self.character,
+            technique=self.soulfray_technique,
+            resolve_fn=lambda: "ok",
+        )
+
+        assert result.soulfray_result is not None
+        assert result.soulfray_result.severity_added > 0
+
+        soulfray = ConditionInstance.objects.get(
+            target=self.character,
+            condition=self.soulfray_template,
+        )
+        assert soulfray.severity > 0
+
+    # ------------------------------------------------------------------
+    # Test 3: First Soulfray is unwarned
+    # ------------------------------------------------------------------
+
+    def test_first_soulfray_is_unwarned(self) -> None:
+        """No existing Soulfray => no warning checkpoint, but Soulfray can still
+        accumulate from low anima on this cast."""
+        self.anima.current = 1
+        self.anima.save(update_fields=["current"])
+
+        result = use_technique(
+            character=self.character,
+            technique=self.soulfray_technique,
+            resolve_fn=lambda: "ok",
+        )
+
+        # No warning was raised (no pre-existing Soulfray condition)
+        assert result.soulfray_warning is None
+        assert result.confirmed is True
+        # But Soulfray was accumulated
+        assert result.soulfray_result is not None
+        assert result.soulfray_result.severity_added > 0
+
+    # ------------------------------------------------------------------
+    # Test 4: Safety checkpoint from existing Soulfray stage
+    # ------------------------------------------------------------------
+
+    def test_safety_checkpoint_from_soulfray_stage(self) -> None:
+        """Existing Soulfray at stage 1 triggers the safety checkpoint.
+        When confirm_soulfray_risk=False, the cast is cancelled."""
+        ConditionInstance.objects.create(
+            target=self.character,
+            condition=self.soulfray_template,
+            current_stage=self.soulfray_stage_1,
+            severity=5,
+        )
+
+        result = use_technique(
+            character=self.character,
+            technique=self.soulfray_technique,
+            resolve_fn=lambda: "ok",
+            confirm_soulfray_risk=False,
+        )
+
+        assert result.confirmed is False
+        assert result.soulfray_warning is not None
+        assert result.soulfray_warning.stage_name == "Flickering"
+        # Anima should not have been deducted
+        self.anima.refresh_from_db()
+        assert self.anima.current == 10
+
+    # ------------------------------------------------------------------
+    # Test 5: Resilience check drives Soulfray consequence
+    # ------------------------------------------------------------------
+
+    @patch("world.checks.services.perform_check")
+    def test_resilience_check_drives_soulfray_consequence(
+        self,
+        mock_check: object,
+    ) -> None:
+        """At stage 2 with a consequence pool, a resilience check fires
+        and selects a consequence from the pool."""
+        mock_check.return_value = self._make_resilience_result(
+            self.resilience_failure,
+        )
+
+        # Pre-existing Soulfray at stage 2 (severity just at threshold)
+        ConditionInstance.objects.create(
+            target=self.character,
+            condition=self.soulfray_template,
+            current_stage=self.soulfray_stage_2,
+            severity=10,
+        )
+
+        # Low anima to trigger soulfray accumulation
+        self.anima.current = 1
+        self.anima.save(update_fields=["current"])
+
+        result = use_technique(
+            character=self.character,
+            technique=self.soulfray_technique,
+            resolve_fn=lambda: "ok",
+            confirm_soulfray_risk=True,
+        )
+
+        assert result.soulfray_result is not None
+        assert result.soulfray_result.resilience_check is not None
+        mock_check.assert_called_once()
+        # The check should have been called with our resilience check type
+        call_kwargs = mock_check.call_args
+        assert call_kwargs[1]["check_type"] == self.resilience_check_type
+
+    # ------------------------------------------------------------------
+    # Test 6: Severity advances stage through pipeline
+    # ------------------------------------------------------------------
+
+    def test_severity_advances_stage_through_pipeline(self) -> None:
+        """Soulfray at severity=9 (stage 1) advances to stage 2 (threshold=10)
+        when enough Soulfray severity is added by a low-anima cast."""
+        soulfray_instance = ConditionInstance.objects.create(
+            target=self.character,
+            condition=self.soulfray_template,
+            current_stage=self.soulfray_stage_1,
+            severity=9,
+        )
+
+        # Set anima so post-deduction produces soulfray severity >= 1
+        # effective_cost=5, current=3 => post-deduction=0, deficit=2
+        # depletion=1.0, severity=ceil(10*1)=10, deficit_comp=ceil(5*2)=10
+        # total severity added = 20 => 9+20=29 => hits stage 3 (threshold 25)
+        self.anima.current = 3
+        self.anima.save(update_fields=["current"])
+
+        with patch("world.checks.services.perform_check") as mock_check:
+            mock_check.return_value = self._make_resilience_result(
+                self.resilience_success,
+            )
+            result = use_technique(
+                character=self.character,
+                technique=self.soulfray_technique,
+                resolve_fn=lambda: "ok",
+                confirm_soulfray_risk=True,
+            )
+
+        assert result.soulfray_result is not None
+        assert result.soulfray_result.stage_advanced is True
+        # Verify the DB reflects the new stage
+        soulfray_instance.refresh_from_db()
+        assert soulfray_instance.severity > 9
+
+    # ------------------------------------------------------------------
+    # Test 7: TechniqueOutcomeModifier affects resilience check
+    # ------------------------------------------------------------------
+
+    @patch("world.checks.services.perform_check")
+    def test_technique_outcome_modifies_resilience_check(
+        self,
+        mock_check: object,
+    ) -> None:
+        """A botch outcome on the main technique check applies a penalty
+        modifier to the resilience check via TechniqueOutcomeModifier."""
+        mock_check.return_value = self._make_resilience_result(
+            self.resilience_failure,
+        )
+
+        # Pre-existing Soulfray at stage 2 with consequence pool
+        ConditionInstance.objects.create(
+            target=self.character,
+            condition=self.soulfray_template,
+            current_stage=self.soulfray_stage_2,
+            severity=10,
+        )
+
+        # Set anima so post-deduction stays above stage-3 threshold.
+        # soulfray_technique: anima_cost=2, intensity=10, control=7
+        # effective_cost = max(2-(-3), 0) = 5
+        # current=7 => post-deduction=2, deficit=0
+        # ratio=2/10=0.20, depletion=(0.30-0.20)/0.30=0.333
+        # severity=ceil(10*0.333)=4, no deficit component
+        # total severity: 10+4=14, stays in stage 2 (threshold 10-24)
+        self.anima.current = 7
+        self.anima.save(update_fields=["current"])
+
+        # Simulate a botch on the main technique check
+        botch_result = CheckResult(
+            check_type=self.check_type,
+            outcome=self.botch_outcome,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        result = use_technique(
+            character=self.character,
+            technique=self.soulfray_technique,
+            resolve_fn=lambda: "ok",
+            confirm_soulfray_risk=True,
+            check_result=botch_result,
+        )
+
+        assert result.soulfray_result is not None
+        assert result.soulfray_result.resilience_check is not None
+        # Verify the modifier was applied: stage2 penalty (-5) +
+        # botch modifier (-5) = -10 total
+        call_kwargs = mock_check.call_args[1]
+        assert call_kwargs["extra_modifiers"] == -10
+
+    # ------------------------------------------------------------------
+    # Test 8: Control mishap fires independently of Soulfray
+    # ------------------------------------------------------------------
+
+    def test_control_mishap_fires_independently(self) -> None:
+        """Full anima + no Soulfray + high intensity technique =>
+        mishap fires from control deficit alone."""
+        # Wild Surge: intensity=15, control=5, deficit=10
+        # Full anima (10/10), effective cost = max(2-(5-15),0) = 12
+        # After deduction: current=0, deficit=2
+        # But we want to isolate the mishap — set high anima to avoid soulfray
+        self.anima.current = 100
+        self.anima.maximum = 100
+        self.anima.save(update_fields=["current", "maximum"])
+
+        # Provide a check_result so _resolve_mishap can select from pool
+        check_result = CheckResult(
+            check_type=self.check_type,
+            outcome=self.resilience_success,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        result = use_technique(
+            character=self.character,
+            technique=self.wild_technique,
+            resolve_fn=lambda: "ok",
+            check_result=check_result,
+        )
+
+        # No Soulfray (ratio > threshold with high anima)
+        assert result.soulfray_result is None
+        # Mishap should fire: intensity 15 > control 5 => deficit 10
+        assert result.mishap is not None
+        assert result.mishap.consequence_label == "Technique misfires"
+
+    # ------------------------------------------------------------------
+    # Test 9: Full flow — all three consequence streams
+    # ------------------------------------------------------------------
+
+    @patch("world.checks.services.perform_check")
+    def test_full_flow_all_three_streams(
+        self,
+        mock_check: object,
+    ) -> None:
+        """Existing Soulfray + low anima + high intensity technique fires
+        all three consequence streams: Soulfray accumulation, stage
+        consequence (resilience check), and control mishap."""
+        mock_check.return_value = self._make_resilience_result(
+            self.resilience_failure,
+        )
+
+        # Pre-existing Soulfray at stage 2
+        ConditionInstance.objects.create(
+            target=self.character,
+            condition=self.soulfray_template,
+            current_stage=self.soulfray_stage_2,
+            severity=10,
+        )
+
+        # Low anima for Soulfray accumulation
+        self.anima.current = 1
+        self.anima.save(update_fields=["current"])
+
+        # Provide check_result so mishap can resolve
+        check_result = CheckResult(
+            check_type=self.check_type,
+            outcome=self.resilience_success,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        # Wild Surge: intensity=15, control=5 => deficit=10
+        result = use_technique(
+            character=self.character,
+            technique=self.wild_technique,
+            resolve_fn=lambda: "ok",
+            confirm_soulfray_risk=True,
+            check_result=check_result,
+        )
+
+        # Stream 1: Soulfray accumulation
+        assert result.soulfray_result is not None
+        assert result.soulfray_result.severity_added > 0
+
+        # Stream 2: Stage consequence (resilience check fired)
+        assert result.soulfray_result.resilience_check is not None
+
+        # Stream 3: Control mishap
+        assert result.mishap is not None

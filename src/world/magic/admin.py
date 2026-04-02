@@ -19,13 +19,16 @@ from world.magic.models import (
     Facet,
     Gift,
     IntensityTier,
+    MishapPoolTier,
     Motif,
     MotifResonance,
     Reincarnation,
     Resonance,
     Restriction,
+    SoulfrayConfig,
     Technique,
     TechniqueCapabilityGrant,
+    TechniqueOutcomeModifier,
     TechniqueStyle,
     Thread,
     ThreadJournal,
@@ -384,3 +387,24 @@ class AudereThresholdAdmin(admin.ModelAdmin):
         "anima_pool_bonus",
         "warp_multiplier",
     )
+
+
+@admin.register(SoulfrayConfig)
+class SoulfrayConfigAdmin(admin.ModelAdmin):
+    list_display = [
+        "soulfray_threshold_ratio",
+        "severity_scale",
+        "deficit_scale",
+        "resilience_check_type",
+        "base_check_difficulty",
+    ]
+
+
+@admin.register(MishapPoolTier)
+class MishapPoolTierAdmin(admin.ModelAdmin):
+    list_display = ["min_deficit", "max_deficit", "consequence_pool"]
+
+
+@admin.register(TechniqueOutcomeModifier)
+class TechniqueOutcomeModifierAdmin(admin.ModelAdmin):
+    list_display = ["outcome", "modifier_value"]

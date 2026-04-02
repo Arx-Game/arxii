@@ -336,6 +336,26 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
         help_text="Multiplier applied to condition effects at this stage",
     )
 
+    # Severity-driven progression (alternative to time-based rounds_to_next)
+    severity_threshold = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When accumulated severity reaches this value, "
+            "condition advances to this stage. Null = time-based only."
+        ),
+    )
+
+    # Per-cast consequence pool (fires on every action while at this stage)
+    consequence_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="condition_stages",
+        help_text="Consequence pool that fires per action while at this stage.",
+    )
+
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:

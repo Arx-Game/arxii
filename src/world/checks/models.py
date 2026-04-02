@@ -242,6 +242,7 @@ class ConsequenceEffect(SharedMemoryModel):
         EffectType.LAUNCH_ATTACK: [("damage_type", "damage_type_id")],
         EffectType.LAUNCH_FLOW: [("flow_definition", "flow_definition_id")],
         EffectType.GRANT_CODEX: [("codex_entry", "codex_entry_id")],
+        EffectType.MAGICAL_SCARS: [("condition_template", "condition_template_id")],
     }
 
     def clean(self) -> None:
