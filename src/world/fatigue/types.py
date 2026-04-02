@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from world.checks.types import CheckResult
 
 
 @dataclass
@@ -17,7 +20,7 @@ class ActionResult:
     collapsed: bool
     powered_through: bool
     strain_damage: int
-    check_result: Any | None
+    check_result: CheckResult | None
 
 
 @dataclass
