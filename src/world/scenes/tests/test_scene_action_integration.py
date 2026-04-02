@@ -259,3 +259,132 @@ class TestMundaneActionConsequences(TestCase):
         assert result is not None
         assert result.action_resolution is not None
         assert result.technique_result is None  # no technique
+
+
+class TestEnhancedActionResolution(TestCase):
+    """Technique-enhanced social actions run use_technique wrapping full pipeline."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        CheckSystemSetupFactory.create()
+        templates = create_social_action_templates()
+        cls.flirt_template = next(t for t in templates if t.name == "Flirt")
+
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+
+        from actions.models import ActionEnhancement
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import (
+            CharacterAnimaFactory,
+            CharacterTechniqueFactory,
+            TechniqueFactory,
+        )
+
+        # intensity=15 overrides the social safety bonus (10) so effective_cost > 0:
+        # runtime_control = control(1) + social_safety(10) = 11
+        # runtime_intensity = 15; control_delta = 11 - 15 = -4
+        # effective_cost = max(anima_cost(5) - (-4), 0) = 9
+        cls.technique = TechniqueFactory(
+            name="Mesmerizing Gaze",
+            intensity=15,
+            control=1,
+            anima_cost=5,
+        )
+
+        initiator_sheet = CharacterSheetFactory(character=cls.initiator.character)
+        CharacterTechniqueFactory(
+            character=initiator_sheet,
+            technique=cls.technique,
+        )
+        CharacterAnimaFactory(
+            character=cls.initiator.character,
+            current=20,
+            maximum=30,
+        )
+
+        ActionEnhancement.objects.create(
+            base_action_key="flirt",
+            variant_name="Enchanted Flirt",
+            source_type="technique",
+            technique=cls.technique,
+        )
+
+        presence_trait = Trait.objects.get(name="presence")
+        CharacterTraitValue.objects.create(
+            character=cls.initiator.character,
+            trait=presence_trait,
+            value=30,
+        )
+
+    def test_enhanced_action_deducts_anima(self) -> None:
+        """Technique-enhanced action deducts anima cost."""
+        from world.magic.models import CharacterAnima
+
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="flirt",
+            technique=self.technique,
+        )
+        request.action_template = self.flirt_template
+        request.save(update_fields=["action_template"])
+
+        result = respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+        )
+
+        assert result is not None
+        assert result.technique_result is not None
+        assert result.technique_result.confirmed is True
+        assert result.technique_result.anima_cost is not None
+
+        anima = CharacterAnima.objects.get(character=self.initiator.character)
+        assert anima.current < 20
+
+    def test_enhanced_action_includes_action_resolution(self) -> None:
+        """Enhanced action also resolves the social action."""
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="flirt",
+            technique=self.technique,
+        )
+        request.action_template = self.flirt_template
+        request.save(update_fields=["action_template"])
+
+        result = respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+        )
+
+        assert result is not None
+        assert result.action_resolution is not None
+        assert result.action_resolution.main_result is not None
+        assert result.action_key == "flirt"
+
+    def test_enhanced_action_creates_interaction_with_technique(self) -> None:
+        """Enhanced action records interaction mentioning technique."""
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="flirt",
+            technique=self.technique,
+        )
+        request.action_template = self.flirt_template
+        request.save(update_fields=["action_template"])
+
+        respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+        )
+
+        request.refresh_from_db()
+        assert request.result_interaction is not None
+        assert request.status == ActionRequestStatus.RESOLVED
+        assert self.technique.name in request.result_interaction.content

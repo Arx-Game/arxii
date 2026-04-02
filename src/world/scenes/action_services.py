@@ -21,6 +21,10 @@ from world.scenes.models import Interaction, Persona, Scene
 from world.scenes.types import EnhancedSceneActionResult
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from actions.models.action_templates import ActionTemplate
+    from actions.types import PendingActionResolution
     from world.magic.models import Technique
 
 
@@ -152,17 +156,26 @@ def respond_to_action_request(
             character = action_request.initiator_persona.character
             context = ResolutionContext(character=character)
 
-            # For now, only mundane path (technique path added in Task 5)
-            action_resolution = start_action_resolution(
-                character=character,
-                template=action_template,
-                target_difficulty=difficulty,
-                context=context,
-            )
-            result = EnhancedSceneActionResult(
-                action_resolution=action_resolution,
-                action_key=action_request.action_key,
-            )
+            if action_request.technique is not None:
+                result = _resolve_enhanced_action(
+                    character=character,
+                    technique=action_request.technique,
+                    action_template=action_template,
+                    action_key=action_request.action_key,
+                    difficulty=difficulty,
+                    context=context,
+                )
+            else:
+                action_resolution = start_action_resolution(
+                    character=character,
+                    template=action_template,
+                    target_difficulty=difficulty,
+                    context=context,
+                )
+                result = EnhancedSceneActionResult(
+                    action_resolution=action_resolution,
+                    action_key=action_request.action_key,
+                )
 
             action_request.status = ActionRequestStatus.RESOLVED
             action_request.resolved_at = timezone.now()
@@ -182,6 +195,54 @@ def respond_to_action_request(
     return None
 
 
+def _resolve_enhanced_action(  # noqa: PLR0913 — keyword-only API, all params are required
+    *,
+    character: ObjectDB,
+    technique: Technique,
+    action_template: ActionTemplate,
+    action_key: str,
+    difficulty: int,
+    context: ResolutionContext,
+) -> EnhancedSceneActionResult:
+    """Resolve a technique-enhanced social action via use_technique().
+
+    Wraps start_action_resolution in use_technique() so that anima deduction,
+    Soulfray accumulation, and control mishap evaluation all run around the
+    standard action pipeline.
+
+    Args:
+        character: The character performing the action.
+        technique: The technique being applied.
+        action_template: The ActionTemplate defining the action steps.
+        action_key: The action key (e.g. "flirt").
+        difficulty: The resolved numeric difficulty.
+        context: Resolution context carrying character data.
+
+    Returns:
+        EnhancedSceneActionResult with both action_resolution and technique_result.
+    """
+    from world.magic.services import use_technique  # noqa: PLC0415
+
+    technique_result = use_technique(
+        character=character,
+        technique=technique,
+        resolve_fn=lambda: start_action_resolution(
+            character=character,
+            template=action_template,
+            target_difficulty=difficulty,
+            context=context,
+        ),
+        confirm_soulfray_risk=True,
+    )
+
+    resolution_result: PendingActionResolution = technique_result.resolution_result  # type: ignore[assignment]
+    return EnhancedSceneActionResult(
+        action_resolution=resolution_result,
+        action_key=action_key,
+        technique_result=technique_result,
+    )
+
+
 def _create_result_interaction(
     *,
     action_request: SceneActionRequest,
@@ -191,12 +252,25 @@ def _create_result_interaction(
     main_result = result.action_resolution.main_result
     check_result = main_result.check_result if main_result is not None else None
     success = (check_result.success_level > 0) if check_result is not None else False
+    status_word = "Success" if success else "Failure"
+    outcome_name = check_result.outcome_name if check_result is not None else "Unknown"
 
-    content = (
-        f"{action_request.initiator_persona.name} attempts to "
-        f"{action_request.action_key} {action_request.target_persona.name}: "
-        f"{'Success' if success else 'Failure'}"
-    )
+    initiator_name = action_request.initiator_persona.name
+    target_name = action_request.target_persona.name
+    action_key = action_request.action_key
+
+    if result.technique_result is not None and action_request.technique is not None:
+        technique_name = action_request.technique.name
+        anima_spent = result.technique_result.anima_cost.effective_cost
+        content = (
+            f"{initiator_name} uses {technique_name} to {action_key} {target_name}: "
+            f"{status_word} ({outcome_name}) [Anima: {anima_spent}]"
+        )
+    else:
+        content = (
+            f"{initiator_name} attempts to {action_key} {target_name}: "
+            f"{status_word} ({outcome_name})"
+        )
 
     return create_interaction(
         persona=action_request.initiator_persona,
