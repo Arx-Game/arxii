@@ -28,7 +28,7 @@ const POOL_LABELS: Record<string, string> = {
 
 function FatigueBar({ label, pool }: { label: string; pool: FatiguePoolStatus }) {
   // Invert percentage: 0% fatigue = full bar (fresh), 100% fatigue = empty bar (exhausted)
-  const remainingPercent = 100 - pool.percentage;
+  const remainingPercent = Math.max(0, 100 - Math.min(100, pool.percentage));
 
   return (
     <div className="space-y-1">

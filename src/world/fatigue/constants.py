@@ -79,7 +79,7 @@ FATIGUE_ENDURANCE_STAT = {
 
 # Collapse risk zones per effort level. Maps effort → minimum zone where collapse triggers.
 # VERY_LOW and LOW never trigger collapse. MEDIUM only at EXHAUSTED. HIGH/EXTREME at OVEREXERTED+.
-COLLAPSE_RISK_ZONES: dict[str, str | None] = {
+COLLAPSE_RISK_ZONES: dict[str, FatigueZone | None] = {
     EffortLevel.VERY_LOW: None,  # Never collapses
     EffortLevel.LOW: None,  # Never collapses
     EffortLevel.MEDIUM: FatigueZone.EXHAUSTED,  # Only when past 100%

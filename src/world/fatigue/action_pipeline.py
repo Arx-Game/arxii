@@ -9,8 +9,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from django.db import transaction
+
 from world.character_sheets.models import CharacterSheet
-from world.fatigue.constants import EFFORT_CHECK_MODIFIER
+from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel
 from world.fatigue.services import (
     apply_fatigue,
     attempt_endurance_check,
@@ -48,7 +50,26 @@ def execute_action_with_fatigue(
 
     Returns:
         ActionResult with fatigue, collapse, and check details.
+
+    Raises:
+        ValueError: If effort_level is not a valid EffortLevel.
     """
+    EffortLevel(effort_level)  # Validates the string is a valid choice
+
+    with transaction.atomic():
+        return _execute_action_with_fatigue(
+            character_sheet, fatigue_category, base_fatigue_cost, effort_level, check_fn
+        )
+
+
+def _execute_action_with_fatigue(
+    character_sheet: CharacterSheet,
+    fatigue_category: str,
+    base_fatigue_cost: int,
+    effort_level: str,
+    check_fn: Callable[[int, int], Any] | None = None,
+) -> ActionResult:
+    """Inner implementation wrapped in a transaction by execute_action_with_fatigue."""
     # 1. Fatigue penalty from current zone (before applying new cost)
     fatigue_penalty = get_fatigue_penalty(character_sheet, fatigue_category)
 

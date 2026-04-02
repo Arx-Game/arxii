@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 from django.test import TestCase
+import pytest
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.fatigue.action_pipeline import execute_action_with_fatigue
@@ -119,6 +120,11 @@ class ExecuteActionBasicTests(TestCase):
             self.sheet, FatigueCategory.PHYSICAL, 5, EffortLevel.MEDIUM
         )
         assert result.fatigue_zone == FatigueZone.FRESH
+
+    def test_invalid_effort_level_raises_value_error(self):
+        """Invalid effort_level string raises ValueError."""
+        with pytest.raises(ValueError):
+            execute_action_with_fatigue(self.sheet, FatigueCategory.PHYSICAL, 5, "invalid_effort")
 
 
 class ExecuteActionCollapseTests(TestCase):

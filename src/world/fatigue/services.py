@@ -83,11 +83,12 @@ def get_fatigue_percentage(character_sheet: CharacterSheet, category: str) -> fl
         Percentage (0.0 to potentially >100.0 if over capacity).
     """
     capacity = get_fatigue_capacity(character_sheet, category)
-    if capacity <= 0:
-        return 0.0
-
     pool = get_or_create_fatigue_pool(character_sheet)
     current = pool.get_current(category)
+
+    if capacity <= 0:
+        return 100.0 if current > 0 else 0.0
+
     return (current / capacity) * 100
 
 
@@ -103,14 +104,13 @@ def get_fatigue_zone(character_sheet: CharacterSheet, category: str) -> str:
     """
     percentage = get_fatigue_percentage(character_sheet, category)
 
-    for zone, low, high in ZONE_THRESHOLDS:
+    for zone, _low, high in ZONE_THRESHOLDS:
         if high is None:
-            if percentage >= low:
-                return zone
-        elif low <= percentage <= high:
+            return zone
+        if percentage <= high:
             return zone
 
-    return FatigueZone.FRESH
+    return FatigueZone.EXHAUSTED
 
 
 def get_fatigue_penalty(character_sheet: CharacterSheet, category: str) -> int:
@@ -297,14 +297,11 @@ def rest(character_sheet: CharacterSheet) -> RestResult:
         return RestResult(success=False, message="You have already rested today.")
 
     ap_pool = ActionPointPool.get_or_create_for_character(character_sheet.character)
-    if not ap_pool.can_afford(REST_AP_COST):
+    if not ap_pool.spend(REST_AP_COST):
         return RestResult(
             success=False,
             message=f"Not enough action points. Resting costs {REST_AP_COST} AP.",
         )
-
-    if not ap_pool.spend(REST_AP_COST):
-        return RestResult(success=False, message="Failed to spend action points.")
 
     pool.well_rested = True
     pool.rested_today = True

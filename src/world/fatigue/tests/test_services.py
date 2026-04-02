@@ -543,7 +543,16 @@ class GetFatiguePercentageTests(TestCase):
         pct = get_fatigue_percentage(self.sheet, FatigueCategory.PHYSICAL)
         assert pct == 200.0
 
-    def test_zero_capacity_returns_zero(self):
-        """Zero capacity (no stats) returns 0% to avoid division by zero."""
+    def test_zero_capacity_no_fatigue_returns_zero(self):
+        """Zero capacity with no fatigue returns 0%."""
         pct = get_fatigue_percentage(self.sheet, FatigueCategory.PHYSICAL)
         assert pct == 0.0
+
+    def test_zero_capacity_with_fatigue_returns_hundred(self):
+        """Zero capacity with accumulated fatigue returns 100%."""
+        pool = get_or_create_fatigue_pool(self.sheet)
+        pool.set_current("physical", 5)
+        pool.save()
+
+        pct = get_fatigue_percentage(self.sheet, FatigueCategory.PHYSICAL)
+        assert pct == 100.0
