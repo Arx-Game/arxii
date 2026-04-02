@@ -4929,10 +4929,10 @@ export interface components {
       readonly stage_errors: {
         [key: string]: string[];
       };
-      /** @description Get remaining free stat points (includes distinction bonuses). */
-      readonly stats_free_points: number;
-      /** @description Get total free stat points available (base 5 + distinction bonuses). */
-      readonly stats_max_free_points: number;
+      /** @description Get remaining stat points (includes distinction bonuses). */
+      readonly stats_points_remaining: number;
+      /** @description Get total stat point budget. */
+      readonly stats_budget: number;
     };
     /** @description Serializer for creating a new draft. */
     CharacterDraftCreate: {
