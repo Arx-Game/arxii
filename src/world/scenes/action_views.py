@@ -141,18 +141,26 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         consent_serializer.is_valid(raise_exception=True)
         decision = consent_serializer.validated_data["decision"]
 
-        result = respond_to_action_request(
-            action_request=action_request,
-            decision=decision,
-        )
+        try:
+            result = respond_to_action_request(
+                action_request=action_request,
+                decision=decision,
+            )
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         action_request.refresh_from_db()
         response_data = SceneActionRequestSerializer(action_request).data
         if result is not None:
+            main_result = result.action_resolution.main_result
+            check_result = main_result.check_result if main_result is not None else None
             response_data["result"] = {
-                "success": result.success,
-                "message": result.message,
-                "difficulty": result.difficulty,
+                "action_key": result.action_key,
+                "phase": result.action_resolution.current_phase,
+                "outcome_name": check_result.outcome_name if check_result is not None else None,
             }
 
         return Response(response_data)

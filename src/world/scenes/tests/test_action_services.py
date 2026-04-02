@@ -4,7 +4,9 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from actions.types import SceneActionResult
+from actions.constants import ResolutionPhase
+from actions.factories import ActionTemplateFactory
+from actions.types import PendingActionResolution, StepResult
 from world.scenes.action_constants import (
     DIFFICULTY_VALUES,
     ActionRequestStatus,
@@ -14,6 +16,27 @@ from world.scenes.action_constants import (
 from world.scenes.action_services import create_action_request, respond_to_action_request
 from world.scenes.factories import PersonaFactory, SceneFactory
 from world.scenes.place_models import InteractionReceiver
+from world.scenes.types import EnhancedSceneActionResult
+
+
+def _make_pending_resolution(success: bool = True) -> PendingActionResolution:
+    """Build a minimal PendingActionResolution for mocking."""
+    check_result = MagicMock()
+    check_result.success_level = 1 if success else -1
+    check_result.outcome_name = "Success" if success else "Failure"
+    main_result = StepResult(
+        step_label="main",
+        check_result=check_result,
+        consequence_id=None,
+    )
+    return PendingActionResolution(
+        template_id=1,
+        character_id=1,
+        target_difficulty=45,
+        resolution_context_data={"character_id": 1, "challenge_instance_id": None},
+        current_phase=ResolutionPhase.COMPLETE,
+        main_result=main_result,
+    )
 
 
 class TestCreateActionRequest(TestCase):
@@ -69,26 +92,28 @@ class TestRespondToActionRequest(TestCase):
         assert request.status == ActionRequestStatus.DENIED
         assert request.resolved_at is not None
 
-    @patch("world.scenes.action_services.resolve_scene_action")
+    @patch("world.scenes.action_services.start_action_resolution")
     def test_accept_resolves_and_creates_interaction(self, mock_resolve: MagicMock) -> None:
-        mock_resolve.return_value = SceneActionResult(
-            success=True,
-            action_key="intimidate",
-            difficulty=45,
-            message="Intimidate: Success",
-        )
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        action_template = ActionTemplateFactory()
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
             target_persona=self.target,
             action_key="intimidate",
         )
+        request.action_template = action_template
+        request.save(update_fields=["action_template"])
+
         result = respond_to_action_request(
             action_request=request,
             decision=ConsentDecision.ACCEPT,
         )
         assert result is not None
-        assert result.success is True
+        assert isinstance(result, EnhancedSceneActionResult)
+        assert result.action_key == "intimidate"
+        assert result.action_resolution is not None
 
         request.refresh_from_db()
         assert request.status == ActionRequestStatus.RESOLVED
@@ -116,14 +141,11 @@ class TestRespondToActionRequest(TestCase):
         )
         assert result is None
 
-    @patch("world.scenes.action_services.resolve_scene_action")
+    @patch("world.scenes.action_services.start_action_resolution")
     def test_accept_with_hard_difficulty(self, mock_resolve: MagicMock) -> None:
-        mock_resolve.return_value = SceneActionResult(
-            success=True,
-            action_key="persuade",
-            difficulty=60,
-            message="Persuade: Success",
-        )
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        action_template = ActionTemplateFactory()
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
@@ -131,6 +153,9 @@ class TestRespondToActionRequest(TestCase):
             action_key="persuade",
             difficulty_choice=DifficultyChoice.HARD,
         )
+        request.action_template = action_template
+        request.save(update_fields=["action_template"])
+
         result = respond_to_action_request(
             action_request=request,
             decision=ConsentDecision.ACCEPT,
@@ -138,3 +163,19 @@ class TestRespondToActionRequest(TestCase):
         assert result is not None
         request.refresh_from_db()
         assert request.resolved_difficulty == DIFFICULTY_VALUES[DifficultyChoice.HARD]
+
+    def test_accept_without_template_raises(self) -> None:
+        """No action_template raises ValueError (not silent failure)."""
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="intimidate",
+        )
+        # action_template is None by default
+
+        with self.assertRaises(ValueError):
+            respond_to_action_request(
+                action_request=request,
+                decision=ConsentDecision.ACCEPT,
+            )

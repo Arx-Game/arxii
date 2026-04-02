@@ -26,7 +26,6 @@ from actions.factories import (
     ConsequencePoolFactory,
 )
 from actions.services import get_effective_consequences, start_action_resolution
-from actions.types import SceneActionResult
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import (
@@ -99,6 +98,7 @@ from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_services import create_action_request, respond_to_action_request
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import PersonaFactory, SceneFactory
+from world.scenes.types import EnhancedSceneActionResult
 from world.traits.factories import CheckOutcomeFactory
 
 
@@ -573,7 +573,7 @@ class ChallengePathTests(PipelineTestMixin, TestCase):
 
 
 class SceneActionPathTests(PipelineTestMixin, TestCase):
-    """Tests for: Technique -> ActionTemplate -> SceneActionRequest -> resolve_scene_action()."""
+    """Tests for: Technique -> ActionTemplate -> SceneActionRequest -> start_action_resolution()."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -649,10 +649,10 @@ class SceneActionPathTests(PipelineTestMixin, TestCase):
             decision=ConsentDecision.ACCEPT,
         )
 
-        assert isinstance(result, SceneActionResult)
-        assert result.success is True
+        assert isinstance(result, EnhancedSceneActionResult)
         assert result.action_key == "intimidate"
-        assert result.check_outcome == "Success"
+        assert result.action_resolution is not None
+        assert result.action_resolution.main_result is not None
         request.refresh_from_db()
         assert request.status == ActionRequestStatus.RESOLVED
 
@@ -707,7 +707,8 @@ class SceneActionPathTests(PipelineTestMixin, TestCase):
             decision=ConsentDecision.ACCEPT,
         )
 
-        assert result.success is False
+        assert result is not None
+        assert result.action_resolution is not None
         request.refresh_from_db()
         assert request.status == ActionRequestStatus.RESOLVED
         assert request.result_interaction is not None

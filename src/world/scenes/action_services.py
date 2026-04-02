@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.utils import timezone
 
-from actions.services import resolve_scene_action
-from actions.types import SceneActionResult
+from actions.services import start_action_resolution
+from world.checks.types import ResolutionContext
 from world.scenes.action_constants import (
     DIFFICULTY_VALUES,
     ActionRequestStatus,
@@ -17,6 +18,7 @@ from world.scenes.action_constants import (
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.interaction_services import create_interaction
 from world.scenes.models import Interaction, Persona, Scene
+from world.scenes.types import EnhancedSceneActionResult
 
 if TYPE_CHECKING:
     from world.magic.models import Technique
@@ -111,18 +113,21 @@ def respond_to_action_request(
     *,
     action_request: SceneActionRequest,
     decision: str,
-) -> SceneActionResult | None:
+) -> EnhancedSceneActionResult | None:
     """Process a consent decision on an action request.
 
-    If accepted, resolves the action and creates a result interaction.
-    If denied, marks the request as denied and returns None.
+    If accepted, resolves the action via the full pipeline and creates a result
+    interaction. If denied, marks the request as denied and returns None.
 
     Args:
         action_request: The pending action request.
         decision: ConsentDecision value (ACCEPT or DENY).
 
     Returns:
-        SceneActionResult if accepted and resolved, None if denied.
+        EnhancedSceneActionResult if accepted and resolved, None if denied.
+
+    Raises:
+        ValueError: If the request has no action_template set.
     """
     if action_request.status != ActionRequestStatus.PENDING:
         return None
@@ -134,43 +139,43 @@ def respond_to_action_request(
         return None
 
     if decision == ConsentDecision.ACCEPT:
-        action_request.status = ActionRequestStatus.ACCEPTED
-        action_request.save(update_fields=["status"])
-
-        # Resolve the action
         difficulty = DIFFICULTY_VALUES.get(
             action_request.difficulty_choice, DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
         )
-        action_request.resolved_difficulty = difficulty
 
-        result = resolve_scene_action(
-            character=action_request.initiator_persona.character,
-            action_template=action_request.action_template,
-            action_key=action_request.action_key,
-            difficulty=difficulty,
-        )
+        with transaction.atomic():
+            action_template = action_request.action_template
+            if action_template is None:
+                msg = f"Cannot resolve action '{action_request.action_key}': no ActionTemplate set."
+                raise ValueError(msg)
 
-        # Create result interaction
-        result_interaction = _create_result_interaction(
-            action_request=action_request,
-            result=result,
-        )
+            character = action_request.initiator_persona.character
+            context = ResolutionContext(character=character)
 
-        action_request.status = ActionRequestStatus.RESOLVED
-        action_request.resolved_at = timezone.now()
-        if result_interaction is not None:
-            action_request.result_interaction = result_interaction
-            result.interaction_id = result_interaction.pk
-        result.action_request_id = action_request.pk
+            # For now, only mundane path (technique path added in Task 5)
+            action_resolution = start_action_resolution(
+                character=character,
+                template=action_template,
+                target_difficulty=difficulty,
+                context=context,
+            )
+            result = EnhancedSceneActionResult(
+                action_resolution=action_resolution,
+                action_key=action_request.action_key,
+            )
 
-        action_request.save(
-            update_fields=[
-                "status",
-                "resolved_at",
-                "resolved_difficulty",
-                "result_interaction",
-            ]
-        )
+            action_request.status = ActionRequestStatus.RESOLVED
+            action_request.resolved_at = timezone.now()
+            action_request.resolved_difficulty = difficulty
+            action_request.save(update_fields=["status", "resolved_at", "resolved_difficulty"])
+
+            result_interaction = _create_result_interaction(
+                action_request=action_request,
+                result=result,
+            )
+            if result_interaction is not None:
+                action_request.result_interaction = result_interaction
+                action_request.save(update_fields=["result_interaction"])
 
         return result
 
@@ -180,13 +185,17 @@ def respond_to_action_request(
 def _create_result_interaction(
     *,
     action_request: SceneActionRequest,
-    result: SceneActionResult,
+    result: EnhancedSceneActionResult,
 ) -> Interaction | None:
     """Create an interaction recording the result of a scene action."""
+    main_result = result.action_resolution.main_result
+    check_result = main_result.check_result if main_result is not None else None
+    success = (check_result.success_level > 0) if check_result is not None else False
+
     content = (
         f"{action_request.initiator_persona.name} attempts to "
         f"{action_request.action_key} {action_request.target_persona.name}: "
-        f"{'Success' if result.success else 'Failure'}"
+        f"{'Success' if success else 'Failure'}"
     )
 
     return create_interaction(

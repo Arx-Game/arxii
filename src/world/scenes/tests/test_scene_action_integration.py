@@ -85,10 +85,10 @@ class TestSceneActionIntegration(TestCase):
 
         assert result is not None
         assert result.action_key == "intimidate"
-        # check_outcome is set (pipeline ran, not a stub)
-        assert result.check_outcome is not None
-        # success is a bool derived from the check outcome
-        assert isinstance(result.success, bool)
+        # full pipeline ran — action_resolution is populated
+        assert result.action_resolution is not None
+        assert result.action_resolution.main_result is not None
+        assert result.technique_result is None  # no technique
 
         # Interaction was created
         request.refresh_from_db()
@@ -120,8 +120,8 @@ class TestSceneActionIntegration(TestCase):
         request.refresh_from_db()
         assert request.resolved_difficulty == 60  # HARD = 60
 
-    def test_request_without_template_fails_gracefully(self) -> None:
-        """Requests with no action_template get a failure result."""
+    def test_request_without_template_raises(self) -> None:
+        """Requests with no action_template raise ValueError."""
         request = create_action_request(
             scene=self.scene,
             initiator_persona=self.initiator,
@@ -130,14 +130,11 @@ class TestSceneActionIntegration(TestCase):
         )
         # action_template is None by default
 
-        result = respond_to_action_request(
-            action_request=request,
-            decision=ConsentDecision.ACCEPT,
-        )
-
-        assert result is not None
-        assert result.success is False
-        assert "No action template" in (result.message or "")
+        with self.assertRaises(ValueError):
+            respond_to_action_request(
+                action_request=request,
+                decision=ConsentDecision.ACCEPT,
+            )
 
 
 class TestTechniqueEnhancementValidation(TestCase):
@@ -221,3 +218,44 @@ class TestTechniqueEnhancementValidation(TestCase):
                 action_key="flirt",
                 technique=unknown_technique,
             )
+
+
+class TestMundaneActionConsequences(TestCase):
+    """Mundane social actions now apply consequences via full pipeline."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        CheckSystemSetupFactory.create()
+        templates = create_social_action_templates()
+        cls.flirt_template = next(t for t in templates if t.name == "Flirt")
+
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+
+        presence_trait = Trait.objects.get(name="presence")
+        CharacterTraitValue.objects.create(
+            character=cls.initiator.character,
+            trait=presence_trait,
+            value=30,
+        )
+
+    def test_mundane_flirt_uses_full_pipeline(self) -> None:
+        """Full pipeline returns EnhancedSceneActionResult."""
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="flirt",
+        )
+        request.action_template = self.flirt_template
+        request.save(update_fields=["action_template"])
+
+        result = respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+        )
+
+        assert result is not None
+        assert result.action_resolution is not None
+        assert result.technique_result is None  # no technique

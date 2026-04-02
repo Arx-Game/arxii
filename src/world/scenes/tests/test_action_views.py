@@ -1,9 +1,13 @@
 """Tests for scene action request and place API endpoints."""
 
+from unittest.mock import MagicMock, patch
+
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from actions.constants import ResolutionPhase
+from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterIdentityFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
@@ -13,6 +17,31 @@ from world.scenes.factories import (
     SceneActionRequestFactory,
     SceneFactory,
 )
+from world.scenes.types import EnhancedSceneActionResult
+
+
+def _make_enhanced_result(action_key: str = "persuade") -> EnhancedSceneActionResult:
+    """Build a minimal EnhancedSceneActionResult for mocking."""
+    check_result = MagicMock()
+    check_result.outcome_name = "Success"
+    check_result.success_level = 1
+    main_result = StepResult(
+        step_label="main",
+        check_result=check_result,
+        consequence_id=None,
+    )
+    action_resolution = PendingActionResolution(
+        template_id=1,
+        character_id=1,
+        target_difficulty=45,
+        resolution_context_data={"character_id": 1, "challenge_instance_id": None},
+        current_phase=ResolutionPhase.COMPLETE,
+        main_result=main_result,
+    )
+    return EnhancedSceneActionResult(
+        action_resolution=action_resolution,
+        action_key=action_key,
+    )
 
 
 class SceneActionRequestViewSetTestCase(APITestCase):
@@ -57,7 +86,9 @@ class SceneActionRequestViewSetTestCase(APITestCase):
         assert response.data["action_key"] == "intimidate"
         assert response.data["status"] == ActionRequestStatus.PENDING
 
-    def test_respond_accept(self) -> None:
+    @patch("world.scenes.action_views.respond_to_action_request")
+    def test_respond_accept(self, mock_respond: MagicMock) -> None:
+        mock_respond.return_value = _make_enhanced_result("persuade")
         request = SceneActionRequestFactory(
             scene=self.scene,
             initiator_persona=self.persona,
@@ -69,8 +100,8 @@ class SceneActionRequestViewSetTestCase(APITestCase):
         url = reverse("sceneactionrequest-respond", kwargs={"pk": request.pk})
         response = self.client.post(url, {"decision": ConsentDecision.ACCEPT}, format="json")
         assert response.status_code == status.HTTP_200_OK
-        assert response.data["status"] == ActionRequestStatus.RESOLVED
         assert "result" in response.data
+        assert response.data["result"]["action_key"] == "persuade"
 
     def test_respond_deny(self) -> None:
         request = SceneActionRequestFactory(
