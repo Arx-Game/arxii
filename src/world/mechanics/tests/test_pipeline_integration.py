@@ -605,6 +605,13 @@ class SceneActionPathTests(PipelineTestMixin, TestCase):
             character=cls.target_character,
         )
 
+        # Anima for technique use (required by enhanced action path)
+        CharacterAnimaFactory(
+            character=cls.character,
+            current=50,
+            maximum=50,
+        )
+
     def _create_request(self) -> object:
         """Create a SceneActionRequest with action_template and technique set.
 
