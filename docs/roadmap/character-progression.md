@@ -67,8 +67,23 @@ The central spine connecting every system in the game. Characters develop throug
   (5+5 XP, first-time bonus +10), one reroll per week, weekly cron generation
 - Scene completion → vote budget: participants get +1 bonus vote when a scene finishes
 
+**Done (fatigue/effort system):**
+- 12 stats in 4 categories: Physical (str/agi/sta), Social (cha/pre/com), Mental (int/wit/stb), Meta (lck/per/wil)
+- Simplified CG stat allocation: budget = 2 * stat_count + bonuses, store 1-5 directly
+- Three independent fatigue pools (physical/social/mental) with capacity from endurance stats + willpower
+- Five fatigue zones (fresh/strained/tired/overexerted/exhausted) with threshold-based check penalties
+- Three effort levels (halfhearted/normal/all out) with cost multiplier and check modifier
+- Two-stage collapse mechanic (endurance check → willpower power-through with strain damage)
+- IC dawn fatigue reset cron with scene deferral
+- Rest command (10 AP, once per IC day, grants Well Rested +50% capacity)
+- Action fatigue pipeline (execute_action_with_fatigue orchestrates full cycle)
+- Frontend: fatigue status display, effort selector, rest button
+
 **Not yet built:**
-- **GM compensation:** Needs GMing system defined first — how stories/scenes are run, what counts as GMing, compensation rates.
+- **GM compensation:** Needs GMing system defined first
+- **Social action conditions:** Map each contested action to its applied condition
+- **Development point hooks:** Trait usage flagging from perform_check → weekly cron
+- **Skill rust mechanics:** Weekly debt accumulation for unused skills
 
 
 ### Future Design: Aspect Focus as Path Evolution Guide
