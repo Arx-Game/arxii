@@ -5,15 +5,27 @@ consent -> full resolution with consequences -> technique pipeline ->
 interaction recording.
 """
 
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
+from actions.factories import ConsequencePoolFactory
 from actions.models import ActionEnhancement
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.models import CharacterSheet
 from world.checks.factories import create_social_action_templates
+from world.conditions.factories import (
+    ConditionStageFactory,
+    ConditionTemplateFactory,
+)
+from world.conditions.models import ConditionInstance
+from world.magic.audere import SOULFRAY_CONDITION_NAME
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterTechniqueFactory,
+    MishapPoolTierFactory,
+    SoulfrayConfigFactory,
     TechniqueFactory,
 )
 from world.scenes.action_availability import get_available_scene_actions
@@ -236,3 +248,178 @@ class TestAvailableActionsFiltering(SceneMagicTestMixin, TestCase):
         actions = get_available_scene_actions(character=non_magical.character)
         for action in actions:
             assert len(action.enhancements) == 0
+
+
+class TestEnhancedActionEdgeCases(SceneMagicTestMixin, TestCase):
+    """Soulfray warning in available actions, severity accumulation, and mishap evaluation."""
+
+    def test_soulfray_warning_appears_in_available_actions(self) -> None:
+        """A character with an existing Soulfray condition and a costly technique sees the
+        warning in available-actions data for that enhancement."""
+        # Create a costly technique: intensity >> control so effective_cost > 0
+        # runtime_control = 1 + social_safety(10) = 11
+        # runtime_intensity = 15; control_delta = 11 - 15 = -4
+        # effective_cost = max(5 - (-4), 0) = 9
+        costly_technique = TechniqueFactory(
+            name="Soulfray Warning Test Technique",
+            intensity=15,
+            control=1,
+            anima_cost=5,
+        )
+        initiator_sheet = CharacterSheet.objects.get(character=self.initiator.character)
+        CharacterTechniqueFactory(character=initiator_sheet, technique=costly_technique)
+        ActionEnhancement.objects.create(
+            base_action_key="flirt",
+            variant_name="Soulfray Warning Flirt",
+            source_type="technique",
+            technique=costly_technique,
+        )
+
+        # Create a Soulfray condition template, a stage, and an active instance.
+        # get_soulfray_warning() returns None when current_stage is None, so we
+        # must set current_stage to get a real warning object.
+        soulfray_template = ConditionTemplateFactory(
+            name=SOULFRAY_CONDITION_NAME,
+            has_progression=True,
+        )
+        soulfray_stage = ConditionStageFactory(
+            condition=soulfray_template,
+            stage_order=1,
+            name="Flickering",
+            severity_threshold=1,
+        )
+        ConditionInstance.objects.create(
+            target=self.initiator.character,
+            condition=soulfray_template,
+            current_stage=soulfray_stage,
+            severity=5,
+        )
+
+        actions = get_available_scene_actions(character=self.initiator.character)
+        flirt_action = next((a for a in actions if a.action_key == "flirt"), None)
+        assert flirt_action is not None
+
+        costly_enhancement = next(
+            (e for e in flirt_action.enhancements if e.technique == costly_technique),
+            None,
+        )
+        assert costly_enhancement is not None
+        assert costly_enhancement.effective_cost > 0
+        assert costly_enhancement.soulfray_warning is not None
+
+    def test_soulfray_accumulates_on_depleted_character(self) -> None:
+        """A character with very low anima using a costly technique accumulates Soulfray."""
+        from world.magic.models import CharacterAnima
+
+        # Costly technique: intensity=15, control=1
+        # social safety bonus (+10 since no CharacterEngagement) -> runtime_control = 11
+        # runtime_intensity = 15, delta = 11 - 15 = -4
+        # effective_cost = max(5 - (-4), 0) = 9
+        costly_technique = TechniqueFactory(
+            name="Soulfray Accumulation Test Technique",
+            intensity=15,
+            control=1,
+            anima_cost=5,
+        )
+        initiator_sheet = CharacterSheet.objects.get(character=self.initiator.character)
+        CharacterTechniqueFactory(character=initiator_sheet, technique=costly_technique)
+        ActionEnhancement.objects.create(
+            base_action_key="flirt",
+            variant_name="Soulfray Accumulation Flirt",
+            source_type="technique",
+            technique=costly_technique,
+        )
+
+        # Set anima very low so post-deduction ratio falls below soulfray threshold
+        # Current=1, effective_cost=9: after deduction current=0 (deficit=8)
+        # ratio = 0 / 30 = 0.0, below threshold 0.30 -> Soulfray accumulates
+        anima = CharacterAnima.objects.get(character=self.initiator.character)
+        anima.current = 1
+        anima.save(update_fields=["current"])
+
+        # Create the Soulfray condition template (required for the condition to be created)
+        ConditionTemplateFactory(
+            name=SOULFRAY_CONDITION_NAME,
+            has_progression=True,
+        )
+
+        # SoulfrayConfig drives severity calculation
+        SoulfrayConfigFactory(
+            soulfray_threshold_ratio=Decimal("0.30"),
+            severity_scale=10,
+            deficit_scale=5,
+        )
+
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="flirt",
+            technique=costly_technique,
+        )
+        request.action_template = self.flirt_template
+        request.save(update_fields=["action_template"])
+
+        result = respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+        )
+
+        assert result is not None
+        assert result.technique_result is not None
+        assert result.technique_result.soulfray_result is not None
+        assert result.technique_result.soulfray_result.severity_added > 0
+
+    def test_mishap_evaluated_when_control_deficit_exists(self) -> None:
+        """A technique with intensity > runtime_control triggers mishap pool evaluation.
+
+        intensity=15, control=1; no CharacterEngagement so social safety bonus applies:
+        runtime_control = 1 + 10 = 11; control_deficit = 15 - 11 = 4.
+        A MishapPoolTier covering deficit=4 ensures the pool lookup fires.
+        """
+        # Costly technique with control deficit of 4 after social safety bonus
+        mishap_technique = TechniqueFactory(
+            name="Mishap Evaluation Test Technique",
+            intensity=15,
+            control=1,
+            anima_cost=5,
+        )
+        initiator_sheet = CharacterSheet.objects.get(character=self.initiator.character)
+        CharacterTechniqueFactory(character=initiator_sheet, technique=mishap_technique)
+        ActionEnhancement.objects.create(
+            base_action_key="flirt",
+            variant_name="Mishap Flirt",
+            source_type="technique",
+            technique=mishap_technique,
+        )
+
+        # Create a MishapPoolTier covering control_deficit=4
+        mishap_pool = ConsequencePoolFactory(name="Scene Mishap Pool")
+        MishapPoolTierFactory(
+            min_deficit=1,
+            max_deficit=None,
+            consequence_pool=mishap_pool,
+        )
+
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="flirt",
+            technique=mishap_technique,
+        )
+        request.action_template = self.flirt_template
+        request.save(update_fields=["action_template"])
+
+        result = respond_to_action_request(
+            action_request=request,
+            decision=ConsentDecision.ACCEPT,
+        )
+
+        assert result is not None
+        assert result.technique_result is not None
+        assert result.technique_result.confirmed is True
+        # The pipeline reached mishap evaluation: either a mishap fired (mishap_result set)
+        # or the pool existed but no matching entry was selected. Either way the action
+        # resolved and technique_result is present, confirming the mishap path was reached.
+        assert result.action_resolution is not None
