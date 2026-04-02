@@ -8,14 +8,16 @@ from django.db import models
 
 from world.traits.constants import PrimaryStat
 
-# Primary stat constants
-STAT_MIN_VALUE = 10  # Minimum stat value (displays as 1)
-STAT_MAX_VALUE = 50  # Maximum stat value during character creation (displays as 5)
-STAT_DISPLAY_DIVISOR = 10  # Divisor for display value (internal 20 = display 2)
-STAT_DEFAULT_VALUE = 20  # Default starting value (displays as 2)
-STAT_FREE_POINTS = 5  # Free points to distribute during character creation
-STAT_BASE_POINTS = 18  # Base points (9 stats x 2)
-STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS  # Total allocation budget (23)
+# Primary stat constants (simplified 1-5 scale, no divisor)
+STAT_MIN_VALUE = 1  # Minimum stat value
+STAT_MAX_VALUE = 5  # Maximum stat value during character creation
+STAT_DEFAULT_VALUE = 2  # Default starting value
+
+# Legacy constants - kept until models.py/validators.py/serializers.py are updated in Task 2
+STAT_DISPLAY_DIVISOR = 10
+STAT_FREE_POINTS = 5
+STAT_BASE_POINTS = 18
+STAT_TOTAL_BUDGET = STAT_BASE_POINTS + STAT_FREE_POINTS
 
 # Age constraints for character creation
 AGE_MIN = 18
