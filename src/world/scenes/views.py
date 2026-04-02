@@ -12,6 +12,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from world.fatigue.tasks import process_deferred_fatigue_resets
 from world.progression.services.scene_rewards import on_scene_finished
 from world.scenes.constants import SceneAction, ScenePrivacyMode
 from world.scenes.filters import (
@@ -182,6 +183,8 @@ class SceneViewSet(viewsets.ModelViewSet):
 
         scene.finish_scene()
         on_scene_finished(scene)
+        participant_account_ids = set(scene.participations.values_list("account_id", flat=True))
+        process_deferred_fatigue_resets(participant_account_ids)
         broadcast_scene_message(scene, SceneAction.END)
         serializer = self.get_serializer(scene)
         return Response(serializer.data)

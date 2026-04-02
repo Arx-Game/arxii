@@ -216,6 +216,17 @@ def register_all_tasks() -> None:
             description="Delete expired time-based conditions.",
         )
     )
+    from world.fatigue.tasks import fatigue_dawn_reset_task
+
+    register_task(
+        CronDefinition(
+            task_key="fatigue.dawn_reset",
+            callable=fatigue_dawn_reset_task,
+            interval=timedelta(hours=8),
+            description="Reset fatigue pools at IC dawn.",
+        )
+    )
+
     from world.progression.services.random_scene import weekly_random_scene_generation_task
     from world.progression.services.vote_processing import weekly_vote_processing_task
 
