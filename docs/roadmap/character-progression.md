@@ -72,16 +72,34 @@ The central spine connecting every system in the game. Characters develop throug
 - Simplified CG stat allocation: budget = 2 * stat_count + bonuses, store 1-5 directly
 - Three independent fatigue pools (physical/social/mental) with capacity from endurance stats + willpower
 - Five fatigue zones (fresh/strained/tired/overexerted/exhausted) with threshold-based check penalties
-- Three effort levels (halfhearted/normal/all out) with cost multiplier and check modifier
-- Two-stage collapse mechanic (endurance check → willpower power-through with strain damage)
-- IC dawn fatigue reset cron with scene deferral
+- Five effort levels (very low/low/medium/high/extreme) with cost multiplier and check modifier
+- Two-stage collapse mechanic via unified check system (endurance check → willpower power-through)
+  - Medium collapses at exhausted only, high/extreme at overexerted+, very low/low never
+- IC dawn fatigue reset cron (~8h real time) with scene deferral
 - Rest command (10 AP, once per IC day, grants Well Rested +50% capacity)
 - Action fatigue pipeline (execute_action_with_fatigue orchestrates full cycle)
-- Frontend: fatigue status display, effort selector, rest button
+- Vote budget scales by active character count (7 per character)
+- Frontend: fatigue status display, effort selector with color gradient, rest button
 
-**Not yet built:**
+**Fatigue — remaining work:**
+- **"At home" location check for rest** — currently rest works anywhere; needs room/residence system
+- **Social action conditions** — map each contested action (intimidate, seduce, persuade, etc.) to
+  its applied condition on success, with target consent and kudos rewards
+- **Aura farming / making an entrance / flourishing** — uncontested actions that affect resonance
+  and use the fatigue pipeline, need action type definitions and resonance integration
+- **Action type definitions** — define base fatigue costs per action, which pool each draws from,
+  and wire into the scene action request system
+- **Development point hooks** — trait usage flagging from perform_check → weekly cron
+- **Integration test for fatigue → check pipeline** — end-to-end test with real CheckRank/ResultChart
+  fixture data (currently mocked)
+- **Unified dice roll system** — fatigue checks use perform_check but the broader game needs a
+  consistent roll resolution mechanic across all systems
+
+**Not yet built (other progression):**
 - **GM compensation:** Needs GMing system defined first
-- **Social action conditions:** Map each contested action to its applied condition
+- **Skill rust mechanics:** Weekly debt accumulation for unused skills
+- **Training system:** Persistent TrainingAllocation with mentor bonuses
+- **Path leveling requirements:** Scaling prerequisites engine
 - **Development point hooks:** Trait usage flagging from perform_check → weekly cron
 - **Skill rust mechanics:** Weekly debt accumulation for unused skills
 
