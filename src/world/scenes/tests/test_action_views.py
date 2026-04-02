@@ -78,6 +78,7 @@ class SceneActionRequestViewSetTestCase(APITestCase):
         url = reverse("sceneactionrequest-list")
         data = {
             "scene": self.scene.pk,
+            "initiator_persona": self.persona.pk,
             "target_persona": self.target_persona.pk,
             "action_key": "intimidate",
         }

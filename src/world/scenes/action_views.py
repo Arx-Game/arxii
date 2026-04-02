@@ -6,6 +6,7 @@ from http import HTTPMethod
 from typing import Any
 
 from django.db.models import QuerySet
+from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -19,6 +20,7 @@ from world.scenes.action_filters import SceneActionRequestFilter
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_serializers import (
     ConsentResponseSerializer,
+    EnhancedSceneActionResultSerializer,
     SceneActionRequestCreateSerializer,
     SceneActionRequestSerializer,
 )
@@ -72,6 +74,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             )
 
         scene_id = serializer.validated_data["scene"]
+        initiator_persona_id = serializer.validated_data["initiator_persona"]
         target_persona_id = serializer.validated_data["target_persona"]
         action_key = serializer.validated_data["action_key"]
         difficulty_choice = serializer.validated_data.get(
@@ -86,21 +89,22 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Use the first persona the user controls
-        initiator_persona = Persona.objects.filter(pk__in=persona_ids).first()
-        if initiator_persona is None:
+        # Caller must explicitly specify which persona initiates the action.
+        if initiator_persona_id not in persona_ids:
             return Response(
-                {"detail": "No persona found."},
+                {"detail": "Initiator persona not found for your account."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        initiator_persona = get_object_or_404(Persona, pk=initiator_persona_id)
 
-        try:
-            target_persona = Persona.objects.get(pk=target_persona_id)
-        except Persona.DoesNotExist:
-            return Response(
-                {"detail": "Target persona not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+        target_persona = get_object_or_404(Persona, pk=target_persona_id)
+
+        technique = None
+        technique_id = serializer.validated_data.get("technique_id")
+        if technique_id is not None:
+            from world.magic.models import Technique  # noqa: PLC0415
+
+            technique = get_object_or_404(Technique, pk=technique_id)
 
         action_request = create_action_request(
             scene=scene,
@@ -108,6 +112,7 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
             target_persona=target_persona,
             action_key=action_key,
             difficulty_choice=difficulty_choice,
+            technique=technique,
         )
 
         return Response(
@@ -155,12 +160,6 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         action_request.refresh_from_db()
         response_data = SceneActionRequestSerializer(action_request).data
         if result is not None:
-            main_result = result.action_resolution.main_result
-            check_result = main_result.check_result if main_result is not None else None
-            response_data["result"] = {
-                "action_key": result.action_key,
-                "phase": result.action_resolution.current_phase,
-                "outcome_name": check_result.outcome_name if check_result is not None else None,
-            }
+            response_data["result"] = EnhancedSceneActionResultSerializer(result).data
 
         return Response(response_data)
