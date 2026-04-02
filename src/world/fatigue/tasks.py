@@ -49,17 +49,17 @@ def fatigue_dawn_reset_task() -> None:
         ).values_list("account_id", flat=True)
     )
 
-    pools = list(FatiguePool.objects.select_related("character__character").all())
+    pools = list(FatiguePool.objects.select_related("character_sheet__character").all())
 
     # Batch lookup: character ObjectDB PK -> account PK
-    character_pks = [pool.character.character_id for pool in pools]
+    character_pks = [pool.character_sheet.character_id for pool in pools]
     char_to_account = _build_character_to_account_map(character_pks)
 
     reset_count = 0
     deferred_count = 0
 
     for pool in pools:
-        character_obj = pool.character.character  # CharacterSheet -> ObjectDB
+        character_obj = pool.character_sheet.character  # CharacterSheet -> ObjectDB
         account_pk = char_to_account.get(character_obj.pk)
 
         if account_pk is not None and account_pk in accounts_in_scenes:
@@ -67,7 +67,7 @@ def fatigue_dawn_reset_task() -> None:
             pool.save(update_fields=["dawn_deferred"])
             deferred_count += 1
         else:
-            reset_fatigue(pool.character)
+            reset_fatigue(pool.character_sheet)
             reset_count += 1
 
     logger.info("Dawn fatigue reset: %d reset, %d deferred", reset_count, deferred_count)
@@ -87,21 +87,21 @@ def process_deferred_fatigue_resets(scene_account_ids: set[int]) -> int:
         Number of deferred resets processed.
     """
     deferred_pools = list(
-        FatiguePool.objects.filter(dawn_deferred=True).select_related("character__character")
+        FatiguePool.objects.filter(dawn_deferred=True).select_related("character_sheet__character")
     )
 
     # Batch lookup: character ObjectDB PK -> account PK
-    character_pks = [pool.character.character_id for pool in deferred_pools]
+    character_pks = [pool.character_sheet.character_id for pool in deferred_pools]
     char_to_account = _build_character_to_account_map(character_pks)
 
     count = 0
 
     for pool in deferred_pools:
-        character_obj = pool.character.character
+        character_obj = pool.character_sheet.character
         account_pk = char_to_account.get(character_obj.pk)
 
         if account_pk is not None and account_pk in scene_account_ids:
-            reset_fatigue(pool.character)
+            reset_fatigue(pool.character_sheet)
             count += 1
 
     if count:

@@ -20,7 +20,7 @@ class FatiguePoolTests(TestCase):
 
     def test_creation_defaults(self) -> None:
         """FatiguePool created with all pools at 0 and flags False."""
-        pool = FatiguePool.objects.create(character=self.sheet)
+        pool = FatiguePool.objects.create(character_sheet=self.sheet)
         assert pool.physical_current == 0
         assert pool.social_current == 0
         assert pool.mental_current == 0
@@ -30,22 +30,22 @@ class FatiguePoolTests(TestCase):
 
     def test_get_current_physical(self) -> None:
         """get_current returns physical fatigue value."""
-        pool = FatiguePool.objects.create(character=self.sheet, physical_current=15)
+        pool = FatiguePool.objects.create(character_sheet=self.sheet, physical_current=15)
         assert pool.get_current("physical") == 15
 
     def test_get_current_social(self) -> None:
         """get_current returns social fatigue value."""
-        pool = FatiguePool.objects.create(character=self.sheet, social_current=8)
+        pool = FatiguePool.objects.create(character_sheet=self.sheet, social_current=8)
         assert pool.get_current("social") == 8
 
     def test_get_current_mental(self) -> None:
         """get_current returns mental fatigue value."""
-        pool = FatiguePool.objects.create(character=self.sheet, mental_current=22)
+        pool = FatiguePool.objects.create(character_sheet=self.sheet, mental_current=22)
         assert pool.get_current("mental") == 22
 
     def test_set_current_updates_field(self) -> None:
         """set_current updates the correct field."""
-        pool = FatiguePool.objects.create(character=self.sheet)
+        pool = FatiguePool.objects.create(character_sheet=self.sheet)
         pool.set_current("physical", 10)
         assert pool.physical_current == 10
 
@@ -57,26 +57,26 @@ class FatiguePoolTests(TestCase):
 
     def test_set_current_clamps_to_zero(self) -> None:
         """set_current clamps negative values to 0."""
-        pool = FatiguePool.objects.create(character=self.sheet)
+        pool = FatiguePool.objects.create(character_sheet=self.sheet)
         pool.set_current("physical", -5)
         assert pool.physical_current == 0
 
     def test_get_current_invalid_category_raises(self) -> None:
         """get_current raises ValueError for an invalid category."""
-        pool = FatiguePool.objects.create(character=self.sheet)
+        pool = FatiguePool.objects.create(character_sheet=self.sheet)
         with self.assertRaises(ValueError):
             pool.get_current("invalid")
 
     def test_set_current_invalid_category_raises(self) -> None:
         """set_current raises ValueError for an invalid category."""
-        pool = FatiguePool.objects.create(character=self.sheet)
+        pool = FatiguePool.objects.create(character_sheet=self.sheet)
         with self.assertRaises(ValueError):
             pool.set_current("invalid", 5)
 
     def test_str_representation(self) -> None:
         """__str__ shows character and all pool values."""
         pool = FatiguePool.objects.create(
-            character=self.sheet,
+            character_sheet=self.sheet,
             physical_current=10,
             social_current=5,
             mental_current=3,

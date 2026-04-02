@@ -6,7 +6,7 @@ from world.fatigue.models import FatiguePool
 @admin.register(FatiguePool)
 class FatiguePoolAdmin(admin.ModelAdmin):
     list_display = [
-        "character",
+        "character_sheet",
         "physical_current",
         "social_current",
         "mental_current",

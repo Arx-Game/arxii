@@ -36,7 +36,7 @@ from world.traits.models import Trait, TraitType
 
 def get_or_create_fatigue_pool(character_sheet: CharacterSheet) -> FatiguePool:
     """Get or create a FatiguePool for a character sheet."""
-    pool, _ = FatiguePool.objects.get_or_create(character=character_sheet)
+    pool, _ = FatiguePool.objects.get_or_create(character_sheet=character_sheet)
     return pool
 
 
@@ -360,7 +360,7 @@ def rest(character_sheet: CharacterSheet) -> RestResult:
         RestResult with success flag and message.
     """
     # TODO: Add location check — rest should only be available at character's home
-    pool, _ = FatiguePool.objects.select_for_update().get_or_create(character=character_sheet)
+    pool, _ = FatiguePool.objects.select_for_update().get_or_create(character_sheet=character_sheet)
 
     if pool.rested_today:
         return RestResult(success=False, message="You have already rested today.")

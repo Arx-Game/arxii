@@ -13,7 +13,7 @@ class FatiguePool(SharedMemoryModel):
     from the character's endurance stats.
     """
 
-    character = models.OneToOneField(
+    character_sheet = models.OneToOneField(
         CharacterSheet,
         on_delete=models.CASCADE,
         primary_key=True,
@@ -50,6 +50,6 @@ class FatiguePool(SharedMemoryModel):
 
     def __str__(self) -> str:
         return (
-            f"Fatigue: {self.character}"
+            f"Fatigue: {self.character_sheet}"
             f" (P:{self.physical_current} S:{self.social_current} M:{self.mental_current})"
         )

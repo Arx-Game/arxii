@@ -54,7 +54,7 @@ class GetOrCreateFatiguePoolTests(TestCase):
 
     def test_returns_existing_pool(self):
         """Should return existing pool without creating a new one."""
-        existing = FatiguePool.objects.create(character=self.sheet, physical_current=5)
+        existing = FatiguePool.objects.create(character_sheet=self.sheet, physical_current=5)
         pool = get_or_create_fatigue_pool(self.sheet)
         assert pool.pk == existing.pk
         assert pool.physical_current == 5
