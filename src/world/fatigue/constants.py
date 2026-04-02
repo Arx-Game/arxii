@@ -77,6 +77,12 @@ FATIGUE_ENDURANCE_STAT = {
     FatigueCategory.MENTAL: "stability",
 }
 
-# Collapse risk: only HIGH and EXTREME effort trigger collapse when overexerted/exhausted
-# VERY_LOW, LOW, and MEDIUM are always safe from collapse
-COLLAPSE_RISK_EFFORT_LEVELS = {EffortLevel.HIGH, EffortLevel.EXTREME}
+# Collapse risk zones per effort level. Maps effort → minimum zone where collapse triggers.
+# VERY_LOW and LOW never trigger collapse. MEDIUM only at EXHAUSTED. HIGH/EXTREME at OVEREXERTED+.
+COLLAPSE_RISK_ZONES: dict[str, str | None] = {
+    EffortLevel.VERY_LOW: None,  # Never collapses
+    EffortLevel.LOW: None,  # Never collapses
+    EffortLevel.MEDIUM: FatigueZone.EXHAUSTED,  # Only when past 100%
+    EffortLevel.HIGH: FatigueZone.OVEREXERTED,  # 81%+
+    EffortLevel.EXTREME: FatigueZone.OVEREXERTED,  # 81%+
+}

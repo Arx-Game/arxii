@@ -15,7 +15,7 @@ from world.character_sheets.models import CharacterSheet
 from world.fatigue.constants import (
     CAPACITY_STAT_MULTIPLIER,
     CAPACITY_WILLPOWER_MULTIPLIER,
-    COLLAPSE_RISK_EFFORT_LEVELS,
+    COLLAPSE_RISK_ZONES,
     EFFORT_COST_MULTIPLIER,
     FATIGUE_ENDURANCE_STAT,
     MIN_FATIGUE_COST,
@@ -165,9 +165,10 @@ def should_check_collapse(
 ) -> bool:
     """Return True if a collapse check is needed.
 
-    Collapse risk applies only for HIGH and EXTREME effort when
-    in the OVEREXERTED or EXHAUSTED zone. VERY_LOW, LOW, and MEDIUM
-    are always safe from collapse.
+    Collapse risk depends on effort level:
+    - VERY_LOW / LOW: never collapses
+    - MEDIUM: collapses only when EXHAUSTED (100%+)
+    - HIGH / EXTREME: collapses when OVEREXERTED (81%+) or EXHAUSTED
 
     Args:
         character_sheet: The character's sheet.
@@ -177,11 +178,19 @@ def should_check_collapse(
     Returns:
         True if collapse check should be made.
     """
-    if effort_level not in COLLAPSE_RISK_EFFORT_LEVELS:
+    min_collapse_zone = COLLAPSE_RISK_ZONES.get(effort_level)
+    if min_collapse_zone is None:
         return False
 
     zone = get_fatigue_zone(character_sheet, category)
-    return zone in (FatigueZone.OVEREXERTED, FatigueZone.EXHAUSTED)
+    zone_order = [
+        FatigueZone.FRESH,
+        FatigueZone.STRAINED,
+        FatigueZone.TIRED,
+        FatigueZone.OVEREXERTED,
+        FatigueZone.EXHAUSTED,
+    ]
+    return zone_order.index(zone) >= zone_order.index(min_collapse_zone)
 
 
 def attempt_endurance_check(character_sheet: CharacterSheet, category: str) -> bool:

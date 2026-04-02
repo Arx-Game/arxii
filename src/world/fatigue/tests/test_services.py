@@ -325,11 +325,24 @@ class ShouldCheckCollapseTests(TestCase):
         result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.LOW)
         assert result is False
 
-    def test_medium_always_safe(self):
-        """Medium effort never triggers collapse check."""
+    def test_medium_safe_when_overexerted(self):
+        """Medium effort does NOT trigger collapse when overexerted."""
         self._setup_overexerted()
         result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.MEDIUM)
         assert result is False
+
+    def test_medium_collapses_when_exhausted(self):
+        """Medium effort DOES trigger collapse when exhausted (100%+)."""
+        char = self.sheet.character
+        _setup_stat(char, "stamina", 30, TraitCategory.PHYSICAL)
+        _setup_stat(char, "willpower", 20, TraitCategory.META)
+        pool = get_or_create_fatigue_pool(self.sheet)
+        # capacity = 30*10 + 20*3 = 360... wait, that's display scale
+        # stamina display=3, so capacity = 3*10 + 2*3 = 36
+        pool.set_current("physical", 40)  # 111% of 36 → exhausted
+        pool.save()
+        result = should_check_collapse(self.sheet, FatigueCategory.PHYSICAL, EffortLevel.MEDIUM)
+        assert result is True
 
     def test_high_when_overexerted(self):
         """High effort triggers collapse when overexerted."""
