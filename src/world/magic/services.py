@@ -409,6 +409,13 @@ def use_technique(
     # Steps 5 + 6: Resolution
     resolution_result = resolve_fn()
 
+    # Extract check_result from resolution if not provided explicitly
+    effective_check_result = check_result
+    if effective_check_result is None and hasattr(resolution_result, "main_result"):
+        main = resolution_result.main_result
+        if main is not None and hasattr(main, "check_result"):
+            effective_check_result = main.check_result
+
     # Step 7: Soulfray accumulation and stage consequences
     soulfray_result = None
     soulfray_config = SoulfrayConfig.objects.first()
@@ -426,7 +433,7 @@ def use_technique(
                 character=character,
                 soulfray_severity=soulfray_severity,
                 soulfray_config=soulfray_config,
-                technique_check_result=check_result,
+                technique_check_result=effective_check_result,
             )
 
     # Step 8: Mishap rider
@@ -434,8 +441,8 @@ def use_technique(
     control_deficit = stats.intensity - stats.control
     if control_deficit > 0:
         pool = select_mishap_pool(control_deficit)
-        if pool is not None and check_result is not None:
-            mishap = _resolve_mishap(character, pool, check_result)
+        if pool is not None and effective_check_result is not None:
+            mishap = _resolve_mishap(character, pool, effective_check_result)
 
     return TechniqueUseResult(
         anima_cost=cost,
