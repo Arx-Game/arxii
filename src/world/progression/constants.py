@@ -38,3 +38,16 @@ DP_COST_MULTIPLIER = 100  # Multiplied by (level - offset) for per-level cost
 
 # Skill rust constants
 RUST_BASE_AMOUNT = 5  # Added to character_level for weekly rust
+
+# Path level divisor for dp multiplier calculation
+PATH_LEVEL_DIVISOR = 2  # dp multiplier = 1 + (path_level // PATH_LEVEL_DIVISOR)
+
+# Base dp earned per qualifying check, keyed by effort level.
+# Imported from world.fatigue.constants.EffortLevel values.
+EFFORT_DEV_BASE: dict[str, int] = {
+    "very_low": 0,
+    "low": 0,
+    "medium": 10,
+    "high": 20,
+    "extreme": 30,
+}

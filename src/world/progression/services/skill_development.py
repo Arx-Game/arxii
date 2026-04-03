@@ -15,14 +15,16 @@ import datetime
 import logging
 from typing import TYPE_CHECKING, cast
 
+from django.db import IntegrityError, models as db_models
 from django.db.models import F
 
 from world.classes.models import CharacterClassLevel
-from world.fatigue.constants import EffortLevel
 from world.progression.constants import (
     DP_BASE_LEVEL,
     DP_COST_MULTIPLIER,
     DP_COST_OFFSET,
+    EFFORT_DEV_BASE,
+    PATH_LEVEL_DIVISOR,
     RUST_BASE_AMOUNT,
 )
 from world.progression.models.rewards import (
@@ -39,15 +41,6 @@ if TYPE_CHECKING:
     from world.checks.models import CheckType
 
 logger = logging.getLogger("world.progression.skill_development")
-
-# Base dp earned per qualifying check, keyed by effort level.
-EFFORT_DEV_BASE: dict[str, int] = {
-    EffortLevel.VERY_LOW: 0,
-    EffortLevel.LOW: 0,
-    EffortLevel.MEDIUM: 10,
-    EffortLevel.HIGH: 20,
-    EffortLevel.EXTREME: 30,
-}
 
 
 def get_character_path_level(character: ObjectDB) -> int:
@@ -76,7 +69,7 @@ def calculate_check_dev_points(effort_level: str, path_level: int) -> int:
     base = EFFORT_DEV_BASE.get(effort_level, 0)
     if base == 0:
         return 0
-    multiplier = 1 + (path_level // 2)
+    multiplier = 1 + (path_level // PATH_LEVEL_DIVISOR)
     return base * multiplier
 
 
@@ -115,16 +108,9 @@ def award_check_development(
         trait = check_trait.trait
 
         # Upsert WeeklySkillUsage with atomic F() increments.
-        # Try to update first; create only if no row exists yet.
-        updated = WeeklySkillUsage.objects.filter(
-            character=character,
-            trait=trait,
-            week_start=week_start,
-        ).update(
-            points_earned=F("points_earned") + dp,
-            check_count=F("check_count") + 1,
-        )
-        if not updated:
+        # Try to create first; if a concurrent insert wins the race, fall
+        # back to an atomic UPDATE with F() expressions.
+        try:
             WeeklySkillUsage.objects.create(
                 character=character,
                 trait=trait,
@@ -132,9 +118,18 @@ def award_check_development(
                 points_earned=dp,
                 check_count=1,
             )
+        except IntegrityError:
+            WeeklySkillUsage.objects.filter(
+                character=character,
+                trait=trait,
+                week_start=week_start,
+            ).update(
+                points_earned=F("points_earned") + dp,
+                check_count=F("check_count") + 1,
+            )
 
-        # Apply dp to the development tracker
-        dev_tracker, _created = DevelopmentPoints.objects.get_or_create(
+        # Apply dp to the development tracker (lock row to prevent concurrent updates)
+        dev_tracker, _created = DevelopmentPoints.objects.select_for_update().get_or_create(
             character=character,
             trait=trait,
         )
@@ -146,7 +141,9 @@ def award_check_development(
 
 
 def _level_cost(level: int) -> int:
-    """Cost to reach the given level from the previous level.
+    """Cost to advance from ``level - 1`` to ``level``.
+
+    Uses the standard formula: ``(level - DP_COST_OFFSET) * DP_COST_MULTIPLIER``.
 
     For level 11: ``(11 - 9) * 100 = 200``.  For levels at or below the
     base CG level (10), cost is 0.
@@ -180,12 +177,113 @@ def apply_skill_rust(
         return 0
 
     rust_amount = character_level + RUST_BASE_AMOUNT
-    level_cap = _level_cost(trait_level)
-    rust_amount = min(rust_amount, level_cap)
+    # Cap rust at the cost that was paid to reach the current level from the
+    # previous one: (trait_level - DP_BASE_LEVEL) * DP_COST_MULTIPLIER.
+    # For level 11 this is 100, for level 15 it is 500.
+    max_rust = (trait_level - DP_BASE_LEVEL) * DP_COST_MULTIPLIER
+    rust_amount = min(rust_amount, max_rust)
 
     dev_points.rust_debt = cast(int, dev_points.rust_debt) + rust_amount
     dev_points.save(update_fields=["rust_debt"])
     return rust_amount
+
+
+def _get_character_levels_batch(character_ids: set[int]) -> dict[int, int]:
+    """Batch-fetch character class levels for a set of character IDs.
+
+    Prefers the primary class level; falls back to the highest level.
+    Returns 1 for characters with no class levels at all.
+    """
+    primary_levels = CharacterClassLevel.objects.filter(
+        character_id__in=character_ids, is_primary=True
+    ).values_list("character_id", "level")
+    char_levels: dict[int, int] = dict(primary_levels)
+
+    missing_ids = character_ids - set(char_levels.keys())
+    if missing_ids:
+        highest = (
+            CharacterClassLevel.objects.filter(character_id__in=missing_ids)
+            .values("character_id")
+            .annotate(max_level=db_models.Max("level"))
+        )
+        for row in highest:
+            char_levels[row["character_id"]] = row["max_level"]
+
+    return char_levels
+
+
+def _apply_weekly_rust(
+    week_start: datetime.date,
+    used_pairs: set[tuple[int, int]],
+) -> int:
+    """Apply rust to unused skills for a given week. Returns the number of rust applications.
+
+    Idempotent: checks for existing RUST transactions referencing *week_start*
+    and skips processing if any are found.
+    """
+    from world.traits.models import CharacterTraitValue
+
+    # Idempotency guard: skip rust if it was already applied for this week.
+    already_rusted = DevelopmentTransaction.objects.filter(
+        source=DevelopmentSource.RUST,
+        description__contains=str(week_start),
+    ).exists()
+    if already_rusted:
+        logger.info(
+            "Weekly skill development: rust already applied for week %s, skipping.",
+            week_start,
+        )
+        return 0
+
+    # Exclude character+trait pairs that were used this week.
+    rust_qs = DevelopmentPoints.objects.select_related("trait").all()
+    if used_pairs:
+        from django.db.models import Q
+
+        exclusions = Q()
+        for char_id, trait_id in used_pairs:
+            exclusions |= Q(character_id=char_id, trait_id=trait_id)
+        rust_qs = rust_qs.exclude(exclusions)
+
+    all_dev_points = list(rust_qs)
+    character_ids = {dp.character_id for dp in all_dev_points}
+    char_levels = _get_character_levels_batch(character_ids)
+
+    # Build a map of (character_id, trait_id) -> current trait level
+    trait_values = CharacterTraitValue.objects.filter(
+        character_id__in=character_ids,
+    ).values_list("character_id", "trait_id", "value")
+    trait_level_map: dict[tuple[int, int], int] = {
+        (char_id, trait_id): value for char_id, trait_id, value in trait_values
+    }
+
+    rust_transactions: list[DevelopmentTransaction] = []
+    for dp in all_dev_points:
+        pair = (dp.character_id, dp.trait_id)
+        trait_level = trait_level_map.get(pair, DP_BASE_LEVEL)
+        if trait_level <= DP_BASE_LEVEL:
+            continue
+
+        char_level = char_levels.get(dp.character_id, 1)
+        rust_applied = apply_skill_rust(dp, char_level, trait_level)
+        if rust_applied > 0:
+            rust_transactions.append(
+                DevelopmentTransaction(
+                    character_id=dp.character_id,
+                    trait_id=dp.trait_id,
+                    source=DevelopmentSource.RUST,
+                    amount=rust_applied,
+                    reason=ProgressionReason.SYSTEM_AWARD,
+                    description=(
+                        f"Skill rust: {rust_applied} dp debt from inactivity (week {week_start})"
+                    ),
+                )
+            )
+
+    if rust_transactions:
+        DevelopmentTransaction.objects.bulk_create(rust_transactions)
+
+    return len(rust_transactions)
 
 
 def process_weekly_skill_development(week_start: datetime.date) -> None:
@@ -201,8 +299,6 @@ def process_weekly_skill_development(week_start: datetime.date) -> None:
     Args:
         week_start: The Monday of the week to process.
     """
-    from world.traits.models import CharacterTraitValue
-
     # --- Step 1: Audit transactions for earned dp ---
     unprocessed = WeeklySkillUsage.objects.filter(
         week_start=week_start, processed=False
@@ -236,57 +332,12 @@ def process_weekly_skill_development(week_start: datetime.date) -> None:
         WeeklySkillUsage.objects.filter(pk__in=usage_pks).update(processed=True)
 
     # --- Step 2: Apply rust to unused skills ---
-    all_dev_points = DevelopmentPoints.objects.select_related("trait").all()
-
-    # Build a map of character -> their primary class level
-    character_ids = {dp.character_id for dp in all_dev_points}
-    char_levels: dict[int, int] = {}
-    for char_id in character_ids:
-        from evennia.objects.models import ObjectDB
-
-        char = ObjectDB.objects.get(pk=char_id)
-        char_levels[char_id] = get_character_path_level(char)
-
-    # Build a map of (character_id, trait_id) -> current trait level
-    trait_values = CharacterTraitValue.objects.filter(
-        character_id__in=character_ids,
-    ).values_list("character_id", "trait_id", "value")
-    trait_level_map: dict[tuple[int, int], int] = {
-        (char_id, trait_id): value for char_id, trait_id, value in trait_values
-    }
-
-    rust_transactions: list[DevelopmentTransaction] = []
-
-    for dp in all_dev_points:
-        pair = (dp.character_id, dp.trait_id)
-        if pair in used_pairs:
-            continue
-
-        trait_level = trait_level_map.get(pair, DP_BASE_LEVEL)
-        if trait_level <= DP_BASE_LEVEL:
-            continue
-
-        char_level = char_levels.get(dp.character_id, 1)
-        rust_applied = apply_skill_rust(dp, char_level, trait_level)
-        if rust_applied > 0:
-            rust_transactions.append(
-                DevelopmentTransaction(
-                    character_id=dp.character_id,
-                    trait_id=dp.trait_id,
-                    source=DevelopmentSource.RUST,
-                    amount=rust_applied,
-                    reason=ProgressionReason.SYSTEM_AWARD,
-                    description=(f"Skill rust: {rust_applied} dp debt from inactivity"),
-                )
-            )
-
-    if rust_transactions:
-        DevelopmentTransaction.objects.bulk_create(rust_transactions)
+    rust_count = _apply_weekly_rust(week_start, used_pairs)
 
     logger.info(
         "Weekly skill development: %d audit records, %d rust applications for week %s",
         len(audit_records),
-        len(rust_transactions),
+        rust_count,
         week_start,
     )
 

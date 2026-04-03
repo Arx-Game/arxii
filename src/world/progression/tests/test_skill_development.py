@@ -369,22 +369,22 @@ class ApplySkillRustTest(TestCase):
             character=self.character, trait=self.trait, total_earned=100, rust_debt=0
         )
         result = apply_skill_rust(dev, character_level=3, trait_level=11)
-        # 3 + 5 = 8, cap = (11 - 9) * 100 = 200, so 8 applies
+        # 3 + 5 = 8, cap = (11 - 10) * 100 = 100, so 8 applies
         assert result == 8
         dev.refresh_from_db()
         assert dev.rust_debt == 8
 
     def test_rust_capped_at_level_cost(self) -> None:
-        """Rust cannot exceed the cost of the current level."""
+        """Rust cannot exceed the cost to reach the current level from the previous one."""
         dev = DevelopmentPoints.objects.create(
             character=self.character, trait=self.trait, total_earned=100, rust_debt=0
         )
-        # trait_level=11, cost = (11-9)*100 = 200
-        # character_level=300, rust = 305, capped at 200
+        # trait_level=11, cap = (11-10)*100 = 100
+        # character_level=300, rust = 305, capped at 100
         result = apply_skill_rust(dev, character_level=300, trait_level=11)
-        assert result == 200
+        assert result == 100
         dev.refresh_from_db()
-        assert dev.rust_debt == 200
+        assert dev.rust_debt == 100
 
     def test_no_rust_below_base_level(self) -> None:
         """Skills at or below level 10 don't get rust."""
@@ -410,7 +410,7 @@ class ApplySkillRustTest(TestCase):
             character=self.character, trait=self.trait, total_earned=100, rust_debt=10
         )
         result = apply_skill_rust(dev, character_level=5, trait_level=12)
-        # 5 + 5 = 10, cap = (12-9)*100 = 300, so 10 applies
+        # 5 + 5 = 10, cap = (12-10)*100 = 200, so 10 applies
         assert result == 10
         dev.refresh_from_db()
         assert dev.rust_debt == 20
@@ -512,7 +512,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
             .values("rust_debt")
             .first()
         )
-        # char_level=5, rust = 5+5 = 10, cap = (12-9)*100 = 300
+        # char_level=5, rust = 5+5 = 10, cap = (12-10)*100 = 200
         assert dev["rust_debt"] == 10
 
     def test_rust_creates_audit_transaction(self) -> None:
@@ -605,3 +605,73 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         # No new transactions should be created
         txns = DevelopmentTransaction.objects.filter(character=self.character)
         assert txns.count() == 0
+
+    def test_rust_idempotent_on_rerun(self) -> None:
+        """Running weekly processing twice for the same week does not double-apply rust."""
+        self._set_class_level(5)
+        week = datetime.date(2026, 3, 16)
+
+        DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait_unused, total_earned=300
+        )
+        CharacterTraitValue.objects.create(
+            character=self.character, trait=self.trait_unused, value=12
+        )
+
+        process_weekly_skill_development(week)
+
+        # First run: rust applied once
+        dev = (
+            DevelopmentPoints.objects.filter(character=self.character, trait=self.trait_unused)
+            .values("rust_debt")
+            .first()
+        )
+        assert dev["rust_debt"] == 10
+
+        # Second run: idempotency guard prevents double-application
+        DevelopmentPoints.flush_instance_cache()
+        process_weekly_skill_development(week)
+
+        dev = (
+            DevelopmentPoints.objects.filter(character=self.character, trait=self.trait_unused)
+            .values("rust_debt")
+            .first()
+        )
+        assert dev["rust_debt"] == 10  # unchanged
+
+        # Only one rust transaction should exist
+        rust_txns = DevelopmentTransaction.objects.filter(
+            character=self.character,
+            source=DevelopmentSource.RUST,
+        )
+        assert rust_txns.count() == 1
+
+
+class RustPayoffLevelThresholdTest(TestCase):
+    """Test that rust payoff + remaining dp can trigger a level-up."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = ObjectDB.objects.create(db_key="RustPayoffThresholdChar")
+        cls.trait = TraitFactory(name="rust_threshold_test")
+
+    def setUp(self) -> None:
+        DevelopmentPoints.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
+        DevelopmentPoints.objects.filter(character=self.character).delete()
+        CharacterTraitValue.objects.filter(character=self.character).delete()
+
+    def test_rust_payoff_crossing_level_threshold(self) -> None:
+        """rust_debt=150, award 250 -> 150 pays debt, 100 remains -> level 10->11."""
+        dev = DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait, total_earned=0, rust_debt=150
+        )
+        level_ups = dev.award_points(250)
+        dev.refresh_from_db()
+        assert dev.rust_debt == 0
+        # 250 - 150 debt = 100 dp toward advancement
+        assert dev.total_earned == 100
+        # 100 dp is the threshold for level 11
+        assert level_ups == [(10, 11)]
+        tv = CharacterTraitValue.objects.get(character=self.character, trait=self.trait)
+        assert tv.value == 11

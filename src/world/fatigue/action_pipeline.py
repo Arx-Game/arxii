@@ -92,7 +92,9 @@ def _execute_action_with_fatigue(
     if check_fn is not None:
         check_result = check_fn(effort_modifier, fatigue_penalty)
 
-    # 4b. Award development points for qualifying checks
+    # 4b. Award development points for qualifying checks.
+    # Only CheckResult instances carry the check_type needed to look up
+    # associated traits; other return types from check_fn are ignored.
     if check_result is not None and effort_level:
         if isinstance(check_result, CheckResultType):
             level_ups = award_check_development(
