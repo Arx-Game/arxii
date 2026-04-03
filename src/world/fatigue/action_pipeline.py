@@ -7,12 +7,11 @@ modifiers for checks, and handle collapse risk.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
 
 from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
-from world.checks.types import CheckResult as CheckResultType
+from world.checks.types import CheckResult
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel
 from world.fatigue.services import (
     apply_fatigue,
@@ -34,7 +33,7 @@ def execute_action_with_fatigue(
     fatigue_category: str,
     base_fatigue_cost: int,
     effort_level: str,
-    check_fn: Callable[[int, int], Any] | None = None,
+    check_fn: Callable[[int, int], CheckResult] | None = None,
 ) -> ActionResult:
     """Execute an action with fatigue costs and effort modifiers.
 
@@ -72,7 +71,7 @@ def _execute_action_with_fatigue(
     fatigue_category: str,
     base_fatigue_cost: int,
     effort_level: str,
-    check_fn: Callable[[int, int], Any] | None = None,
+    check_fn: Callable[[int, int], CheckResult] | None = None,
 ) -> ActionResult:
     """Inner implementation wrapped in a transaction by execute_action_with_fatigue."""
     # 1. Fatigue penalty from current zone (before applying new cost)
@@ -93,16 +92,13 @@ def _execute_action_with_fatigue(
         check_result = check_fn(effort_modifier, fatigue_penalty)
 
     # 4b. Award development points for qualifying checks.
-    # Only CheckResult instances carry the check_type needed to look up
-    # associated traits; other return types from check_fn are ignored.
     if check_result is not None and effort_level:
-        if isinstance(check_result, CheckResultType):
-            level_ups = award_check_development(
-                character=character_sheet.character,
-                check_type=check_result.check_type,
-                effort_level=effort_level,
-                path_level=get_character_path_level(character_sheet.character),
-            )
+        level_ups = award_check_development(
+            character_sheet=character_sheet,
+            check_type=check_result.check_type,
+            effort_level=effort_level,
+            path_level=get_character_path_level(character_sheet.character),
+        )
 
     # 5. Collapse risk (based on zone AFTER fatigue applied)
     fatigue_zone = get_fatigue_zone(character_sheet, fatigue_category)

@@ -62,7 +62,7 @@ def award_scene_development_points(
                         source = DevelopmentSource.SCENE
 
                     transaction = award_development_points(
-                        character=character,
+                        character_sheet=character.sheet_data,
                         trait=trait,
                         source=source,
                         amount=amount,

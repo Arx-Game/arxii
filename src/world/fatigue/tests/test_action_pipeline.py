@@ -1,6 +1,6 @@
 """Tests for action fatigue cost pipeline."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 import pytest
@@ -82,11 +82,14 @@ class ExecuteActionBasicTests(TestCase):
     def test_action_with_check_fn(self):
         """Action with check_fn passes effort modifier and fatigue penalty."""
         captured_args = {}
+        mock_result = MagicMock()
+        mock_result.check_type = MagicMock()
+        mock_result.check_type.traits.select_related.return_value.all.return_value = []
 
         def mock_check(effort_mod, fatigue_pen):
             captured_args["effort_mod"] = effort_mod
             captured_args["fatigue_pen"] = fatigue_pen
-            return "check_passed"
+            return mock_result
 
         result = execute_action_with_fatigue(
             self.sheet,
@@ -95,7 +98,7 @@ class ExecuteActionBasicTests(TestCase):
             EffortLevel.EXTREME,
             check_fn=mock_check,
         )
-        assert result.check_result == "check_passed"
+        assert result.check_result is mock_result
         assert captured_args["effort_mod"] == 4  # EXTREME modifier
         assert captured_args["fatigue_pen"] == 0  # FRESH zone, no penalty
 

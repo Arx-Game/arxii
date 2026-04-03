@@ -37,6 +37,7 @@ from world.progression.types import DevelopmentSource, ProgressionReason
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
 
 logger = logging.getLogger("world.progression.skill_development")
@@ -74,7 +75,7 @@ def calculate_check_dev_points(effort_level: str, path_level: int) -> int:
 
 @transaction.atomic
 def award_check_development(
-    character: ObjectDB,
+    character_sheet: CharacterSheet,
     check_type: CheckType,
     effort_level: str | None,
     path_level: int,
@@ -86,7 +87,7 @@ def award_check_development(
     the :class:`DevelopmentPoints` accumulator (for level-ups).
 
     Args:
-        character: The character who performed the check.
+        character_sheet: The character's sheet.
         check_type: The :class:`CheckType` that was resolved.
         effort_level: The :class:`EffortLevel` value, or ``None`` if no effort.
         path_level: The character's current path/class level.
@@ -112,7 +113,7 @@ def award_check_development(
         # back to an atomic UPDATE with F() expressions.
         try:
             WeeklySkillUsage.objects.create(
-                character=character,
+                character_sheet=character_sheet,
                 trait=trait,
                 week_start=week_start,
                 points_earned=dp,
@@ -120,7 +121,7 @@ def award_check_development(
             )
         except IntegrityError:
             WeeklySkillUsage.objects.filter(
-                character=character,
+                character_sheet=character_sheet,
                 trait=trait,
                 week_start=week_start,
             ).update(
@@ -130,7 +131,7 @@ def award_check_development(
 
         # Apply dp to the development tracker (lock row to prevent concurrent updates)
         dev_tracker, _created = DevelopmentPoints.objects.select_for_update().get_or_create(
-            character=character,
+            character_sheet=character_sheet,
             trait=trait,
         )
         trait_level_ups = dev_tracker.award_points(dp)
@@ -236,15 +237,17 @@ def _apply_weekly_rust(
         from django.db.models import Q
 
         exclusions = Q()
-        for char_id, trait_id in used_pairs:
-            exclusions |= Q(character_id=char_id, trait_id=trait_id)
+        for sheet_id, trait_id in used_pairs:
+            exclusions |= Q(character_sheet_id=sheet_id, trait_id=trait_id)
         rust_qs = rust_qs.exclude(exclusions)
 
     all_dev_points = list(rust_qs)
-    character_ids = {dp.character_id for dp in all_dev_points}
+    # CharacterSheet PK == ObjectDB PK, so these IDs work for both models
+    character_ids = {dp.character_sheet_id for dp in all_dev_points}
     char_levels = _get_character_levels_batch(character_ids)
 
-    # Build a map of (character_id, trait_id) -> current trait level
+    # Build a map of (character_sheet_id, trait_id) -> current trait level
+    # CharacterTraitValue uses ObjectDB FK but the PK values are identical
     trait_values = CharacterTraitValue.objects.filter(
         character_id__in=character_ids,
     ).values_list("character_id", "trait_id", "value")
@@ -254,17 +257,17 @@ def _apply_weekly_rust(
 
     rust_transactions: list[DevelopmentTransaction] = []
     for dp in all_dev_points:
-        pair = (dp.character_id, dp.trait_id)
+        pair = (dp.character_sheet_id, dp.trait_id)
         trait_level = trait_level_map.get(pair, DP_BASE_LEVEL)
         if trait_level <= DP_BASE_LEVEL:
             continue
 
-        char_level = char_levels.get(dp.character_id, 1)
+        char_level = char_levels.get(dp.character_sheet_id, 1)
         rust_applied = apply_skill_rust(dp, char_level, trait_level)
         if rust_applied > 0:
             rust_transactions.append(
                 DevelopmentTransaction(
-                    character_id=dp.character_id,
+                    character_sheet_id=dp.character_sheet_id,
                     trait_id=dp.trait_id,
                     source=DevelopmentSource.RUST,
                     amount=rust_applied,
@@ -305,11 +308,11 @@ def process_weekly_skill_development(week_start: datetime.date) -> None:
     usage_pks: list[int] = []
 
     for usage in unprocessed:
-        used_pairs.add((usage.character_id, usage.trait_id))
+        used_pairs.add((usage.character_sheet_id, usage.trait_id))
         usage_pks.append(usage.pk)
         audit_records.append(
             DevelopmentTransaction(
-                character_id=usage.character_id,
+                character_sheet_id=usage.character_sheet_id,
                 trait_id=usage.trait_id,
                 source=DevelopmentSource.SCENE,
                 amount=usage.points_earned,

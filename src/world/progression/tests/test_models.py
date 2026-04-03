@@ -8,6 +8,7 @@ from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 import pytest
 
+from world.character_sheets.models import CharacterSheet
 from world.progression.factories import (
     DevelopmentPointsFactory,
     ExperiencePointsDataFactory,
@@ -101,6 +102,7 @@ class DevelopmentPointsModelTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
 
     def test_development_points_creation(self):
         """Test creating development point tracker."""
@@ -108,11 +110,11 @@ class DevelopmentPointsModelTest(TestCase):
 
         trait = TraitFactory(name="strength")
         dev_points = DevelopmentPoints.objects.create(
-            character=self.character,
+            character_sheet=self.sheet,
             trait=trait,
             total_earned=20,
         )
-        assert dev_points.character == self.character
+        assert dev_points.character_sheet == self.sheet
         assert dev_points.trait == trait
         assert dev_points.total_earned == 20
 
@@ -126,7 +128,7 @@ class DevelopmentPointsModelTest(TestCase):
         trait = TraitFactory(name="strength")
 
         DevelopmentPointsFactory(
-            character=self.character,
+            character_sheet=self.sheet,
             trait=trait,
         )
 
@@ -134,7 +136,7 @@ class DevelopmentPointsModelTest(TestCase):
 
         with pytest.raises(IntegrityError):
             DevelopmentPointsFactory(
-                character=self.character,
+                character_sheet=self.sheet,
                 trait=trait,
             )
 
@@ -145,7 +147,7 @@ class DevelopmentPointsModelTest(TestCase):
         trait = TraitFactory(name="swords")
 
         dev_points = DevelopmentPointsFactory(
-            character=self.character,
+            character_sheet=self.sheet,
             trait=trait,
             total_earned=30,
         )
@@ -162,6 +164,7 @@ class CharacterUnlockModelTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         # Create a class unlock for testing instead
         from world.classes.factories import CharacterClassFactory
         from world.progression.models import ClassLevelUnlock

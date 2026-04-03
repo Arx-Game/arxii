@@ -154,8 +154,8 @@ class XPTransaction(SharedMemoryModel):
 class DevelopmentPoints(SharedMemoryModel):
     """Development points earned by characters through activity."""
 
-    character = models.ForeignKey(
-        "objects.ObjectDB",
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="development_points",
     )
@@ -201,8 +201,9 @@ class DevelopmentPoints(SharedMemoryModel):
         self.total_earned += amount
         self.save()
 
+        # CharacterTraitValue uses ObjectDB FK; CharacterSheet PK == ObjectDB PK
         trait_value, _created = CharacterTraitValue.objects.get_or_create(
-            character=self.character,
+            character=self.character_sheet.character,
             trait=self.trait,
             defaults={"value": 10},
         )
@@ -226,19 +227,19 @@ class DevelopmentPoints(SharedMemoryModel):
         return level_ups
 
     class Meta:
-        unique_together: ClassVar[list[str]] = ["character", "trait"]
-        ordering: ClassVar[list[str]] = ["character", "trait"]
-        indexes: ClassVar[list[models.Index]] = [models.Index(fields=["character", "trait"])]
+        unique_together: ClassVar[list[str]] = ["character_sheet", "trait"]
+        ordering: ClassVar[list[str]] = ["character_sheet", "trait"]
+        indexes: ClassVar[list[models.Index]] = [models.Index(fields=["character_sheet", "trait"])]
 
     def __str__(self) -> str:
-        return f"{self.character.key}: {self.total_earned} development points for {self.trait.name}"
+        return f"{self.character_sheet}: {self.total_earned} dp for {self.trait.name}"
 
 
 class DevelopmentTransaction(SharedMemoryModel):
     """Audit trail for all development point awards."""
 
-    character = models.ForeignKey(
-        "objects.ObjectDB",
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="development_transactions",
     )
@@ -271,13 +272,13 @@ class DevelopmentTransaction(SharedMemoryModel):
     class Meta:
         ordering: ClassVar[list[str]] = ["-transaction_date"]
         indexes: ClassVar[list[models.Index]] = [
-            models.Index(fields=["character", "-transaction_date"]),
+            models.Index(fields=["character_sheet", "-transaction_date"]),
             models.Index(fields=["trait", "-transaction_date"]),
             models.Index(fields=["scene", "-transaction_date"]),
         ]
 
     def __str__(self) -> str:
-        return f"{self.character.key}: +{self.amount} points for {self.trait.name}"
+        return f"{self.character_sheet}: +{self.amount} dp for {self.trait.name}"
 
 
 class WeeklySkillUsage(SharedMemoryModel):
@@ -290,8 +291,8 @@ class WeeklySkillUsage(SharedMemoryModel):
     * Weekly summary data source
     """
 
-    character = models.ForeignKey(
-        "objects.ObjectDB",
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="weekly_skill_usage",
     )
@@ -308,7 +309,7 @@ class WeeklySkillUsage(SharedMemoryModel):
     class Meta:
         constraints: ClassVar[list[models.BaseConstraint]] = [
             models.UniqueConstraint(
-                fields=["character", "trait", "week_start"],
+                fields=["character_sheet", "trait", "week_start"],
                 name="unique_skill_usage_per_week",
             ),
         ]

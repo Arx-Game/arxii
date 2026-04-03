@@ -59,7 +59,7 @@ class DevelopmentPointsFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = DevelopmentPoints
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     trait = factory.SubFactory("world.traits.factories.TraitFactory")
     total_earned = factory.Faker("random_int", min=0, max=100)
 
@@ -70,7 +70,7 @@ class DevelopmentTransactionFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = DevelopmentTransaction
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     trait = factory.SubFactory("world.traits.factories.TraitFactory")
     source = factory.Faker(
         "random_element",

@@ -2,6 +2,8 @@
 Constants for the progression system.
 """
 
+import types
+
 from django.db import models
 
 from world.fatigue.constants import EffortLevel
@@ -45,10 +47,13 @@ RUST_BASE_AMOUNT = 5  # Added to character_level for weekly rust
 PATH_LEVEL_DIVISOR = 2  # dp multiplier = 1 + (path_level // PATH_LEVEL_DIVISOR)
 
 # Base dp earned per qualifying check, keyed by EffortLevel enum values.
-EFFORT_DEV_BASE: dict[str, int] = {
-    EffortLevel.VERY_LOW: 0,
-    EffortLevel.LOW: 0,
-    EffortLevel.MEDIUM: 10,
-    EffortLevel.HIGH: 20,
-    EffortLevel.EXTREME: 30,
-}
+# Immutable to prevent accidental mutation of game constants.
+EFFORT_DEV_BASE: types.MappingProxyType[str, int] = types.MappingProxyType(
+    {
+        EffortLevel.VERY_LOW: 0,
+        EffortLevel.LOW: 0,
+        EffortLevel.MEDIUM: 10,
+        EffortLevel.HIGH: 20,
+        EffortLevel.EXTREME: 30,
+    }
+)

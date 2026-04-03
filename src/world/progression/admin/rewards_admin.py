@@ -41,9 +41,9 @@ class XPTransactionAdmin(admin.ModelAdmin):
 class DevelopmentPointsAdmin(admin.ModelAdmin):
     """Admin interface for DevelopmentPoints."""
 
-    list_display = ["character", "trait", "total_earned"]
+    list_display = ["character_sheet", "trait", "total_earned"]
     list_filter = ["trait__trait_type", "updated_date"]
-    search_fields = ["character__db_key", "trait__name"]
+    search_fields = ["character_sheet__character__db_key", "trait__name"]
     readonly_fields = ["created_date", "updated_date"]
 
 
@@ -52,7 +52,7 @@ class DevelopmentTransactionAdmin(admin.ModelAdmin):
     """Admin interface for DevelopmentTransaction."""
 
     list_display = [
-        "character",
+        "character_sheet",
         "trait",
         "source",
         "amount",
@@ -60,5 +60,5 @@ class DevelopmentTransactionAdmin(admin.ModelAdmin):
         "transaction_date",
     ]
     list_filter = ["source", "reason", "transaction_date"]
-    search_fields = ["character__db_key", "trait__name", "description"]
+    search_fields = ["character_sheet__character__db_key", "trait__name", "description"]
     readonly_fields = ["transaction_date"]

@@ -5,6 +5,7 @@ import datetime
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from world.character_sheets.models import CharacterSheet
 from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
 from world.classes.factories import CharacterClassFactory
 from world.fatigue.constants import EffortLevel
@@ -92,6 +93,7 @@ class DevelopmentPointsAwardTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.character = ObjectDB.objects.create(db_key="DevTestChar")
+        cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.trait = TraitFactory(name="swords_dev_test")
 
     def setUp(self) -> None:
@@ -101,7 +103,7 @@ class DevelopmentPointsAwardTest(TestCase):
     def test_award_no_level_up(self) -> None:
         """Awarding < 100 dp to a level-10 trait triggers no level-up."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=0
+            character_sheet=self.sheet, trait=self.trait, total_earned=0
         )
         level_ups = dev.award_points(50)
         assert level_ups == []
@@ -113,7 +115,7 @@ class DevelopmentPointsAwardTest(TestCase):
     def test_award_single_level_up(self) -> None:
         """Awarding exactly 100 dp triggers 10->11."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=0
+            character_sheet=self.sheet, trait=self.trait, total_earned=0
         )
         level_ups = dev.award_points(100)
         assert level_ups == [(10, 11)]
@@ -123,7 +125,7 @@ class DevelopmentPointsAwardTest(TestCase):
     def test_award_multiple_level_ups(self) -> None:
         """Awarding 300 dp triggers 10->11 and 11->12 (thresholds: 100, 300)."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=0
+            character_sheet=self.sheet, trait=self.trait, total_earned=0
         )
         level_ups = dev.award_points(300)
         assert level_ups == [(10, 11), (11, 12)]
@@ -133,7 +135,7 @@ class DevelopmentPointsAwardTest(TestCase):
     def test_cumulative_award_across_calls(self) -> None:
         """Multiple small awards that cumulatively cross a threshold trigger level-up."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=0
+            character_sheet=self.sheet, trait=self.trait, total_earned=0
         )
         # First award: 60 dp, no level-up
         level_ups = dev.award_points(60)
@@ -150,7 +152,7 @@ class DevelopmentPointsAwardTest(TestCase):
         """If trait is already at level 12, need cumulative dp >= 600 for level 13."""
         CharacterTraitValue.objects.create(character=self.character, trait=self.trait, value=12)
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=300
+            character_sheet=self.sheet, trait=self.trait, total_earned=300
         )
         # At level 12, need 600 cumulative for 13. Have 300, award 250 -> 550, not enough.
         level_ups = dev.award_points(250)
@@ -169,6 +171,7 @@ class AwardCheckDevelopmentTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.character = ObjectDB.objects.create(db_key="CheckDevChar")
+        cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.trait1 = TraitFactory(name="stealth_check_dev")
         cls.trait2 = TraitFactory(name="agility_check_dev")
         cls.category = CheckCategory.objects.create(name="test_dev_category")
@@ -184,13 +187,13 @@ class AwardCheckDevelopmentTest(TestCase):
         WeeklySkillUsage.flush_instance_cache()
         CharacterTraitValue.flush_instance_cache()
         # Clean up per-test data
-        DevelopmentPoints.objects.filter(character=self.character).delete()
-        WeeklySkillUsage.objects.filter(character=self.character).delete()
+        DevelopmentPoints.objects.filter(character_sheet=self.sheet).delete()
+        WeeklySkillUsage.objects.filter(character_sheet=self.sheet).delete()
         CharacterTraitValue.objects.filter(character=self.character).delete()
 
     def test_none_effort_returns_empty(self) -> None:
         result = award_check_development(
-            character=self.character,
+            character_sheet=self.sheet,
             check_type=self.check_type,
             effort_level=None,
             path_level=1,
@@ -199,7 +202,7 @@ class AwardCheckDevelopmentTest(TestCase):
 
     def test_low_effort_returns_empty(self) -> None:
         result = award_check_development(
-            character=self.character,
+            character_sheet=self.sheet,
             check_type=self.check_type,
             effort_level=EffortLevel.LOW,
             path_level=1,
@@ -209,7 +212,7 @@ class AwardCheckDevelopmentTest(TestCase):
     def test_medium_effort_awards_dp(self) -> None:
         """Medium effort at path level 1 awards 10 dp to each trait."""
         result = award_check_development(
-            character=self.character,
+            character_sheet=self.sheet,
             check_type=self.check_type,
             effort_level=EffortLevel.MEDIUM,
             path_level=1,
@@ -218,20 +221,20 @@ class AwardCheckDevelopmentTest(TestCase):
         assert result == []
 
         # Check DevelopmentPoints were created
-        dp1 = DevelopmentPoints.objects.get(character=self.character, trait=self.trait1)
+        dp1 = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.trait1)
         assert dp1.total_earned == 10
-        dp2 = DevelopmentPoints.objects.get(character=self.character, trait=self.trait2)
+        dp2 = DevelopmentPoints.objects.get(character_sheet=self.sheet, trait=self.trait2)
         assert dp2.total_earned == 10
 
     def test_weekly_skill_usage_created(self) -> None:
         """WeeklySkillUsage rows are created/updated for each trait."""
         award_check_development(
-            character=self.character,
+            character_sheet=self.sheet,
             check_type=self.check_type,
             effort_level=EffortLevel.MEDIUM,
             path_level=1,
         )
-        usages = WeeklySkillUsage.objects.filter(character=self.character)
+        usages = WeeklySkillUsage.objects.filter(character_sheet=self.sheet)
         assert usages.count() == 2
         # Bypass SharedMemoryModel cache by using values()
         for row in usages.values("check_count", "points_earned"):
@@ -242,14 +245,14 @@ class AwardCheckDevelopmentTest(TestCase):
         """Multiple checks accumulate in the same WeeklySkillUsage row."""
         for _ in range(3):
             award_check_development(
-                character=self.character,
+                character_sheet=self.sheet,
                 check_type=self.check_type,
                 effort_level=EffortLevel.MEDIUM,
                 path_level=1,
             )
         # Bypass SharedMemoryModel cache by using values() directly
         usage_data = (
-            WeeklySkillUsage.objects.filter(character=self.character, trait=self.trait1)
+            WeeklySkillUsage.objects.filter(character_sheet=self.sheet, trait=self.trait1)
             .values("check_count", "points_earned")
             .first()
         )
@@ -261,14 +264,14 @@ class AwardCheckDevelopmentTest(TestCase):
         """When enough dp are accumulated, level-ups are returned."""
         # Pre-load 90 dp
         DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait1, total_earned=90
+            character_sheet=self.sheet, trait=self.trait1, total_earned=90
         )
         DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait2, total_earned=90
+            character_sheet=self.sheet, trait=self.trait2, total_earned=90
         )
         # Medium effort + path level 1 = 10 dp -> total 100 -> level 11
         result = award_check_development(
-            character=self.character,
+            character_sheet=self.sheet,
             check_type=self.check_type,
             effort_level=EffortLevel.MEDIUM,
             path_level=1,
@@ -288,14 +291,14 @@ class AwardCheckDevelopmentTest(TestCase):
         week_start = get_current_week_start()
         # Pre-create usage rows so the create path hits IntegrityError
         WeeklySkillUsage.objects.create(
-            character=self.character,
+            character_sheet=self.sheet,
             trait=self.trait1,
             week_start=week_start,
             points_earned=5,
             check_count=1,
         )
         WeeklySkillUsage.objects.create(
-            character=self.character,
+            character_sheet=self.sheet,
             trait=self.trait2,
             week_start=week_start,
             points_earned=5,
@@ -303,7 +306,7 @@ class AwardCheckDevelopmentTest(TestCase):
         )
 
         award_check_development(
-            character=self.character,
+            character_sheet=self.sheet,
             check_type=self.check_type,
             effort_level=EffortLevel.MEDIUM,
             path_level=1,
@@ -312,7 +315,7 @@ class AwardCheckDevelopmentTest(TestCase):
         # Verify the update path incremented both fields (bypass SharedMemoryModel cache)
         usage1 = (
             WeeklySkillUsage.objects.filter(
-                character=self.character, trait=self.trait1, week_start=week_start
+                character_sheet=self.sheet, trait=self.trait1, week_start=week_start
             )
             .values("check_count", "points_earned")
             .first()
@@ -323,7 +326,7 @@ class AwardCheckDevelopmentTest(TestCase):
 
         usage2 = (
             WeeklySkillUsage.objects.filter(
-                character=self.character, trait=self.trait2, week_start=week_start
+                character_sheet=self.sheet, trait=self.trait2, week_start=week_start
             )
             .values("check_count", "points_earned")
             .first()
@@ -339,18 +342,19 @@ class RustDebtPayoffTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.character = ObjectDB.objects.create(db_key="RustDebtChar")
+        cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.trait = TraitFactory(name="rust_debt_test")
 
     def setUp(self) -> None:
         DevelopmentPoints.flush_instance_cache()
         CharacterTraitValue.flush_instance_cache()
-        DevelopmentPoints.objects.filter(character=self.character).delete()
+        DevelopmentPoints.objects.filter(character_sheet=self.sheet).delete()
         CharacterTraitValue.objects.filter(character=self.character).delete()
 
     def test_full_payoff_remainder_counts(self) -> None:
         """If rust_debt=30 and we award 50, 30 pays debt and 20 goes to total_earned."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=0, rust_debt=30
+            character_sheet=self.sheet, trait=self.trait, total_earned=0, rust_debt=30
         )
         dev.award_points(50)
         dev.refresh_from_db()
@@ -360,7 +364,7 @@ class RustDebtPayoffTest(TestCase):
     def test_partial_payoff(self) -> None:
         """If rust_debt=50 and we award 30, debt drops to 20 and no dp toward advancement."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=0, rust_debt=50
+            character_sheet=self.sheet, trait=self.trait, total_earned=0, rust_debt=50
         )
         dev.award_points(30)
         dev.refresh_from_db()
@@ -370,7 +374,7 @@ class RustDebtPayoffTest(TestCase):
     def test_exact_payoff(self) -> None:
         """If rust_debt equals the award, debt goes to 0, no dp toward advancement."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=0, rust_debt=40
+            character_sheet=self.sheet, trait=self.trait, total_earned=0, rust_debt=40
         )
         dev.award_points(40)
         dev.refresh_from_db()
@@ -380,7 +384,7 @@ class RustDebtPayoffTest(TestCase):
     def test_no_level_up_while_paying_debt(self) -> None:
         """A character with rust_debt doesn't level up even if award is large enough."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=90, rust_debt=50
+            character_sheet=self.sheet, trait=self.trait, total_earned=90, rust_debt=50
         )
         # Need 100 total_earned for level 11. Have 90 + award 50.
         # But 50 of the award pays debt, so total_earned stays at 90.
@@ -393,7 +397,7 @@ class RustDebtPayoffTest(TestCase):
     def test_no_debt_works_normally(self) -> None:
         """When rust_debt is 0, award_points behaves as before."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=0, rust_debt=0
+            character_sheet=self.sheet, trait=self.trait, total_earned=0, rust_debt=0
         )
         level_ups = dev.award_points(100)
         assert level_ups == [(10, 11)]
@@ -408,16 +412,17 @@ class ApplySkillRustTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.character = ObjectDB.objects.create(db_key="RustChar")
+        cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.trait = TraitFactory(name="rust_apply_test")
 
     def setUp(self) -> None:
         DevelopmentPoints.flush_instance_cache()
-        DevelopmentPoints.objects.filter(character=self.character).delete()
+        DevelopmentPoints.objects.filter(character_sheet=self.sheet).delete()
 
     def test_basic_rust_amount(self) -> None:
         """Rust = character_level + 5."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=100, rust_debt=0
+            character_sheet=self.sheet, trait=self.trait, total_earned=100, rust_debt=0
         )
         result = apply_skill_rust(dev, character_level=3, trait_level=11)
         # 3 + 5 = 8, cap = (11 - 10) * 100 = 100, so 8 applies
@@ -428,7 +433,7 @@ class ApplySkillRustTest(TestCase):
     def test_rust_capped_at_level_cost(self) -> None:
         """Rust cannot exceed the cost to reach the current level from the previous one."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=100, rust_debt=0
+            character_sheet=self.sheet, trait=self.trait, total_earned=100, rust_debt=0
         )
         # trait_level=11, cap = (11-10)*100 = 100
         # character_level=300, rust = 305, capped at 100
@@ -440,7 +445,7 @@ class ApplySkillRustTest(TestCase):
     def test_no_rust_below_base_level(self) -> None:
         """Skills at or below level 10 don't get rust."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=0, rust_debt=0
+            character_sheet=self.sheet, trait=self.trait, total_earned=0, rust_debt=0
         )
         result = apply_skill_rust(dev, character_level=5, trait_level=10)
         assert result == 0
@@ -450,7 +455,7 @@ class ApplySkillRustTest(TestCase):
     def test_no_rust_at_level_5(self) -> None:
         """Skills below the base level don't get rust."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=0, rust_debt=0
+            character_sheet=self.sheet, trait=self.trait, total_earned=0, rust_debt=0
         )
         result = apply_skill_rust(dev, character_level=10, trait_level=5)
         assert result == 0
@@ -458,7 +463,7 @@ class ApplySkillRustTest(TestCase):
     def test_rust_accumulates(self) -> None:
         """Repeated rust calls accumulate debt."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=100, rust_debt=10
+            character_sheet=self.sheet, trait=self.trait, total_earned=100, rust_debt=10
         )
         result = apply_skill_rust(dev, character_level=5, trait_level=12)
         # 5 + 5 = 10, cap = (12-10)*100 = 200, so 10 applies
@@ -473,6 +478,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.character = ObjectDB.objects.create(db_key="WeeklyProcessChar")
+        cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.trait_used = TraitFactory(name="weekly_used_trait")
         cls.trait_unused = TraitFactory(name="weekly_unused_trait")
         cls.char_class = CharacterClassFactory(name="weekly_test_class")
@@ -482,10 +488,10 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         WeeklySkillUsage.flush_instance_cache()
         CharacterTraitValue.flush_instance_cache()
         DevelopmentTransaction.flush_instance_cache()
-        DevelopmentPoints.objects.filter(character=self.character).delete()
-        WeeklySkillUsage.objects.filter(character=self.character).delete()
+        DevelopmentPoints.objects.filter(character_sheet=self.sheet).delete()
+        WeeklySkillUsage.objects.filter(character_sheet=self.sheet).delete()
         CharacterTraitValue.objects.filter(character=self.character).delete()
-        DevelopmentTransaction.objects.filter(character=self.character).delete()
+        DevelopmentTransaction.objects.filter(character_sheet=self.sheet).delete()
 
     def _set_class_level(self, level: int) -> None:
         """Set the character's primary class level."""
@@ -501,7 +507,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         """Processed WeeklySkillUsage rows produce DevelopmentTransaction audit records."""
         week = datetime.date(2026, 3, 16)  # a Monday
         WeeklySkillUsage.objects.create(
-            character=self.character,
+            character_sheet=self.sheet,
             trait=self.trait_used,
             week_start=week,
             points_earned=50,
@@ -511,7 +517,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         process_weekly_skill_development(week)
 
         txns = DevelopmentTransaction.objects.filter(
-            character=self.character, trait=self.trait_used
+            character_sheet=self.sheet, trait=self.trait_used
         )
         assert txns.count() == 1
         txn = txns.first()
@@ -523,7 +529,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
     def test_marks_usage_as_processed(self) -> None:
         week = datetime.date(2026, 3, 16)
         WeeklySkillUsage.objects.create(
-            character=self.character,
+            character_sheet=self.sheet,
             trait=self.trait_used,
             week_start=week,
             points_earned=20,
@@ -535,7 +541,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         # Bypass SharedMemoryModel cache
         usage_data = (
             WeeklySkillUsage.objects.filter(
-                character=self.character, trait=self.trait_used, week_start=week
+                character_sheet=self.sheet, trait=self.trait_used, week_start=week
             )
             .values("processed")
             .first()
@@ -550,7 +556,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
 
         # Unused skill at level 12
         DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait_unused, total_earned=300
+            character_sheet=self.sheet, trait=self.trait_unused, total_earned=300
         )
         CharacterTraitValue.objects.create(
             character=self.character, trait=self.trait_unused, value=12
@@ -559,7 +565,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         process_weekly_skill_development(week)
 
         dev = (
-            DevelopmentPoints.objects.filter(character=self.character, trait=self.trait_unused)
+            DevelopmentPoints.objects.filter(character_sheet=self.sheet, trait=self.trait_unused)
             .values("rust_debt")
             .first()
         )
@@ -572,7 +578,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         week = datetime.date(2026, 3, 16)
 
         DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait_unused, total_earned=300
+            character_sheet=self.sheet, trait=self.trait_unused, total_earned=300
         )
         CharacterTraitValue.objects.create(
             character=self.character, trait=self.trait_unused, value=12
@@ -581,7 +587,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         process_weekly_skill_development(week)
 
         txns = DevelopmentTransaction.objects.filter(
-            character=self.character,
+            character_sheet=self.sheet,
             trait=self.trait_unused,
             source=DevelopmentSource.RUST,
         )
@@ -596,13 +602,13 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         week = datetime.date(2026, 3, 16)
 
         DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait_used, total_earned=300
+            character_sheet=self.sheet, trait=self.trait_used, total_earned=300
         )
         CharacterTraitValue.objects.create(
             character=self.character, trait=self.trait_used, value=12
         )
         WeeklySkillUsage.objects.create(
-            character=self.character,
+            character_sheet=self.sheet,
             trait=self.trait_used,
             week_start=week,
             points_earned=10,
@@ -612,7 +618,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         process_weekly_skill_development(week)
 
         dev = (
-            DevelopmentPoints.objects.filter(character=self.character, trait=self.trait_used)
+            DevelopmentPoints.objects.filter(character_sheet=self.sheet, trait=self.trait_used)
             .values("rust_debt")
             .first()
         )
@@ -624,7 +630,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         week = datetime.date(2026, 3, 16)
 
         DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait_unused, total_earned=50
+            character_sheet=self.sheet, trait=self.trait_unused, total_earned=50
         )
         CharacterTraitValue.objects.create(
             character=self.character, trait=self.trait_unused, value=10
@@ -633,7 +639,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         process_weekly_skill_development(week)
 
         dev = (
-            DevelopmentPoints.objects.filter(character=self.character, trait=self.trait_unused)
+            DevelopmentPoints.objects.filter(character_sheet=self.sheet, trait=self.trait_unused)
             .values("rust_debt")
             .first()
         )
@@ -643,7 +649,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         """Usage rows already marked processed are skipped."""
         week = datetime.date(2026, 3, 16)
         WeeklySkillUsage.objects.create(
-            character=self.character,
+            character_sheet=self.sheet,
             trait=self.trait_used,
             week_start=week,
             points_earned=50,
@@ -654,7 +660,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         process_weekly_skill_development(week)
 
         # No new transactions should be created
-        txns = DevelopmentTransaction.objects.filter(character=self.character)
+        txns = DevelopmentTransaction.objects.filter(character_sheet=self.sheet)
         assert txns.count() == 0
 
     def test_rust_idempotent_on_rerun(self) -> None:
@@ -663,7 +669,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         week = datetime.date(2026, 3, 16)
 
         DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait_unused, total_earned=300
+            character_sheet=self.sheet, trait=self.trait_unused, total_earned=300
         )
         CharacterTraitValue.objects.create(
             character=self.character, trait=self.trait_unused, value=12
@@ -673,7 +679,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
 
         # First run: rust applied once
         dev = (
-            DevelopmentPoints.objects.filter(character=self.character, trait=self.trait_unused)
+            DevelopmentPoints.objects.filter(character_sheet=self.sheet, trait=self.trait_unused)
             .values("rust_debt")
             .first()
         )
@@ -684,7 +690,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         process_weekly_skill_development(week)
 
         dev = (
-            DevelopmentPoints.objects.filter(character=self.character, trait=self.trait_unused)
+            DevelopmentPoints.objects.filter(character_sheet=self.sheet, trait=self.trait_unused)
             .values("rust_debt")
             .first()
         )
@@ -692,7 +698,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
 
         # Only one rust transaction should exist
         rust_txns = DevelopmentTransaction.objects.filter(
-            character=self.character,
+            character_sheet=self.sheet,
             source=DevelopmentSource.RUST,
         )
         assert rust_txns.count() == 1
@@ -704,18 +710,19 @@ class RustPayoffLevelThresholdTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.character = ObjectDB.objects.create(db_key="RustPayoffThresholdChar")
+        cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.trait = TraitFactory(name="rust_threshold_test")
 
     def setUp(self) -> None:
         DevelopmentPoints.flush_instance_cache()
         CharacterTraitValue.flush_instance_cache()
-        DevelopmentPoints.objects.filter(character=self.character).delete()
+        DevelopmentPoints.objects.filter(character_sheet=self.sheet).delete()
         CharacterTraitValue.objects.filter(character=self.character).delete()
 
     def test_rust_payoff_crossing_level_threshold(self) -> None:
         """rust_debt=150, award 250 -> 150 pays debt, 100 remains -> level 10->11."""
         dev = DevelopmentPoints.objects.create(
-            character=self.character, trait=self.trait, total_earned=0, rust_debt=150
+            character_sheet=self.sheet, trait=self.trait, total_earned=0, rust_debt=150
         )
         level_ups = dev.award_points(250)
         dev.refresh_from_db()
