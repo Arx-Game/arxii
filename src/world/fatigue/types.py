@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -21,6 +21,7 @@ class ActionResult:
     powered_through: bool
     strain_damage: int
     check_result: CheckResult | None
+    level_ups: list[tuple[str, int, int]] = field(default_factory=list)
 
 
 @dataclass

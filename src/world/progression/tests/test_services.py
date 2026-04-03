@@ -7,6 +7,7 @@ from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 import pytest
 
+from world.character_sheets.models import CharacterSheet
 from world.classes.factories import CharacterClassLevelFactory
 from world.progression.factories import ExperiencePointsDataFactory
 from world.progression.models import (
@@ -198,6 +199,7 @@ class DevelopmentServiceTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
 
     def test_award_development_points(self):
         """Test awarding development points."""
@@ -207,7 +209,7 @@ class DevelopmentServiceTest(TestCase):
         trait = TraitFactory(name="swords")
 
         transaction = award_development_points(
-            character=self.character,
+            character_sheet=self.sheet,
             trait=trait,
             source=DevelopmentSource.SCENE,
             amount=10,
@@ -220,7 +222,7 @@ class DevelopmentServiceTest(TestCase):
         assert transaction.trait == trait
 
         # Check development tracker was created and updated
-        dev_tracker = self.character.development_points.get(trait=trait)
+        dev_tracker = self.sheet.development_points.get(trait=trait)
         assert dev_tracker.total_earned == 10
 
 
@@ -239,6 +241,7 @@ class DevelopmentRateModifierTest(TestCase):
         from world.traits.models import TraitCategory, TraitType
 
         cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
 
         cls.physical_trait = TraitFactory(
             name="melee",
@@ -256,7 +259,7 @@ class DevelopmentRateModifierTest(TestCase):
     def test_development_unmodified_with_stub(self):
         """Development awards give full points since modifier stub returns 0."""
         transaction = award_development_points(
-            character=self.character,
+            character_sheet=self.sheet,
             trait=self.physical_trait,
             source=DevelopmentSource.COMBAT,
             amount=10,
@@ -264,70 +267,64 @@ class DevelopmentRateModifierTest(TestCase):
         )
 
         assert transaction.amount == 10
-        dev_tracker = self.character.development_points.get(trait=self.physical_trait)
+        dev_tracker = self.sheet.development_points.get(trait=self.physical_trait)
         assert dev_tracker.total_earned == 10
 
     def test_automatic_development_point_application(self):
-        """Test automatic development point application."""
-        # Create trait
+        """Test that dp accumulate and level up when threshold is crossed."""
         from world.traits.factories import TraitFactory
 
         trait = TraitFactory(name="swords")
 
-        # Create trait value for character
+        # Create trait value at level 10 (CG starting point)
         from world.traits.factories import CharacterTraitValueFactory
 
         trait_value = CharacterTraitValueFactory(
             character=self.character,
             trait=trait,
-            value=15,  # 1.5
+            value=10,
         )
 
-        # Award development points (should automatically apply)
+        # Award 100 dp — exactly enough to go 10 -> 11
         award_development_points(
-            character=self.character,
+            character_sheet=self.sheet,
             trait=trait,
             source=DevelopmentSource.COMBAT,
-            amount=5,
+            amount=100,
             description="Combat training",
         )
 
-        # Check trait was automatically updated
         trait_value.refresh_from_db()
-        assert trait_value.value == 20  # 15 + 5 = 20
+        assert trait_value.value == 11  # Crossed threshold: 100 dp needed for level 11
 
-        # Check development tracker was updated
-        dev_tracker = self.character.development_points.get(trait=trait)
-        assert dev_tracker.total_earned == 5
+        dev_tracker = self.sheet.development_points.get(trait=trait)
+        assert dev_tracker.total_earned == 100
 
     def test_development_point_threshold_blocking(self):
-        """Test that development points auto-apply with simplified system."""
-        # Create trait
+        """Test that dp below threshold do not trigger a level-up."""
         from world.traits.factories import TraitFactory
 
         trait = TraitFactory(name="charm")
 
-        # Create trait value just below a threshold
         from world.traits.factories import CharacterTraitValueFactory
 
         trait_value = CharacterTraitValueFactory(
             character=self.character,
             trait=trait,
-            value=19,  # 1.9, just below 2.0 threshold
+            value=10,
         )
 
-        # Award development points
+        # Award 50 dp — not enough for level 11 (needs 100)
         award_development_points(
-            character=self.character,
+            character_sheet=self.sheet,
             trait=trait,
             source=DevelopmentSource.SOCIAL,
-            amount=5,
+            amount=50,
             description="Social training",
         )
 
-        # With simplified system, trait ratings auto-apply through development points
         trait_value.refresh_from_db()
-        assert trait_value.value == 24  # Should be 19 + 5 = 24
+        assert trait_value.value == 10  # Not enough dp to level up yet
 
 
 class LevelUpRequirementsTest(TestCase):
@@ -336,6 +333,7 @@ class LevelUpRequirementsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.character = ObjectDB.objects.create(db_key="TestChar")
+        cls.sheet, _ = CharacterSheet.objects.get_or_create(character=cls.character)
         cls.class_level = CharacterClassLevelFactory(
             character=cls.character,
             level=2,

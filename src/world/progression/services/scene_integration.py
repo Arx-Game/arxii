@@ -61,8 +61,11 @@ def award_scene_development_points(
                     else:
                         source = DevelopmentSource.SCENE
 
+                    from world.character_sheets.models import CharacterSheet
+
+                    sheet, _ = CharacterSheet.objects.get_or_create(character=character)
                     transaction = award_development_points(
-                        character=character,
+                        character_sheet=sheet,
                         trait=trait,
                         source=source,
                         amount=amount,

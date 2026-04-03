@@ -492,9 +492,12 @@ def process_weekly_training() -> dict[int, set[int]]:
         else:
             continue  # pragma: no cover — XOR constraint prevents this
 
-        # Record audit trail.
+        # Record audit trail. DevelopmentTransaction uses CharacterSheet FK.
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+        sheet, _ = CharacterSheet.objects.get_or_create(character=character)
         DevelopmentTransaction.objects.create(
-            character=character,
+            character_sheet=sheet,
             trait=trait,
             source=DevelopmentSource.TRAINING,
             amount=dev_points,

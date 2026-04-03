@@ -138,6 +138,10 @@ class CalculateTrainingDevelopmentTests(TestCase):
         super().setUpTestData()
         cls.student_identity = CharacterIdentityFactory()
         cls.student = cls.student_identity.character
+        # Ensure CharacterSheet exists (DevelopmentTransaction uses CharacterSheet FK)
+        from world.character_sheets.models import CharacterSheet
+
+        CharacterSheet.objects.get_or_create(character=cls.student)
         cls.skill = SkillFactory()
 
         # Student has skill value 40
@@ -582,7 +586,7 @@ class ProcessWeeklyTrainingTests(TestCase):
             ap_amount=10,
         )
         process_weekly_training()
-        txn = DevelopmentTransaction.objects.get(character=self.student)
+        txn = DevelopmentTransaction.objects.get(character_sheet_id=self.student.pk)
         self.assertEqual(txn.trait, self.skill.trait)
         self.assertEqual(txn.source, DevelopmentSource.TRAINING)
         self.assertEqual(txn.amount, 50)  # 5 * 10 * 1
@@ -625,7 +629,7 @@ class ProcessWeeklyTrainingTests(TestCase):
             ap_amount=10,
         )
         process_weekly_training()
-        txn = DevelopmentTransaction.objects.get(character=self.student)
+        txn = DevelopmentTransaction.objects.get(character_sheet_id=self.student.pk)
         self.assertEqual(txn.trait, self.skill.trait)
         self.assertEqual(txn.source, DevelopmentSource.TRAINING)
 

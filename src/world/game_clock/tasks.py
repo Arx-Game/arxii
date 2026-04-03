@@ -228,6 +228,7 @@ def register_all_tasks() -> None:
     )
 
     from world.progression.services.random_scene import weekly_random_scene_generation_task
+    from world.progression.services.skill_development import weekly_skill_development_task
     from world.progression.services.vote_processing import weekly_vote_processing_task
 
     register_task(
@@ -244,5 +245,13 @@ def register_all_tasks() -> None:
             callable=weekly_random_scene_generation_task,
             interval=timedelta(days=7),
             description="Generate random scene targets for all active players.",
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="weekly_skill_development",
+            callable=weekly_skill_development_task,
+            interval=timedelta(days=7),
+            description="Process weekly skill development audit and apply rust to unused skills.",
         )
     )
