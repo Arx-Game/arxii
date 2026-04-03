@@ -1,6 +1,7 @@
 import { apiFetch } from '@/evennia_replacements/api';
 import type {
   AvailableActionsResponse,
+  AvailableSceneAction,
   ActionRequest,
   ActionRequestResponse,
   Place,
@@ -15,22 +16,35 @@ export async function fetchAvailableActions(_sceneId: string): Promise<Available
   return { self_actions: [], targeted_actions: [], technique_actions: [] };
 }
 
+export async function fetchSceneActions(_sceneId: string): Promise<AvailableSceneAction[]> {
+  const res = await apiFetch('/api/action-requests/available/');
+  if (!res.ok) throw new Error('Failed to load available actions');
+  return res.json() as Promise<AvailableSceneAction[]>;
+}
+
 export async function createActionRequest(
   sceneId: string,
   body: {
     action_key: string;
     target_persona_id?: number;
     technique_id?: number;
+    initiator_persona?: number;
   }
 ): Promise<ActionRequestResponse> {
   // Backend SceneActionRequestCreateSerializer expects:
-  //   scene (int), target_persona (int), action_key (str), difficulty_choice? (str)
+  //   scene (int), target_persona (int), action_key (str), technique_id? (int)
   const requestBody: Record<string, unknown> = {
     scene: Number(sceneId),
     action_key: body.action_key,
   };
   if (body.target_persona_id !== undefined) {
     requestBody.target_persona = body.target_persona_id;
+  }
+  if (body.technique_id !== undefined) {
+    requestBody.technique_id = body.technique_id;
+  }
+  if (body.initiator_persona !== undefined) {
+    requestBody.initiator_persona = body.initiator_persona;
   }
   const res = await apiFetch('/api/action-requests/', {
     method: 'POST',

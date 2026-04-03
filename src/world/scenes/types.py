@@ -1,6 +1,12 @@
 """TypedDict definitions for scene interaction payloads."""
 
+from __future__ import annotations
+
+from dataclasses import dataclass
 from typing import TypedDict
+
+from actions.types import PendingActionResolution
+from world.magic.types import TechniqueUseResult
 
 
 class PersonaPayload(TypedDict):
@@ -32,3 +38,12 @@ class ReactionAggregation(TypedDict):
     emoji: str
     count: int
     reacted: bool
+
+
+@dataclass
+class EnhancedSceneActionResult:
+    """Combined result of a social action, optionally technique-enhanced."""
+
+    action_resolution: PendingActionResolution
+    action_key: str
+    technique_result: TechniqueUseResult | None = None

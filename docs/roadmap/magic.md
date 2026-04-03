@@ -79,7 +79,7 @@ See `docs/plans/2026-03-01-magic-revamp-design.md` for the original revamp desig
 **Spec:** `docs/superpowers/specs/2026-03-29-technique-use-flow-design.md`
 
 The core "I use Flame Lance" pipeline, connecting magic to the existing resolution
-infrastructure. Three scopes identified:
+infrastructure. Four scopes planned:
 
 **Scope #1 — Technique Use Flow (DONE):**
 - Anima cost calculation: `effective_cost = max(base_cost - (control - intensity), 0)`
@@ -154,6 +154,16 @@ What was built:
   pipeline: Soulfray accumulation, stage advancement, resilience checks, safety
   checkpoints, control mishaps, technique outcome modifiers, and the full
   combined flow.
+
+**Scope #4 — Technique-Enhanced Social Actions (DONE):**
+
+What was built:
+- **Full consequence pipeline for social actions** — All 6 social actions (intimidate, persuade, deceive, flirt, perform, entrance) now use `start_action_resolution()` with consequence pools instead of bare pass/fail checks. Mundane actions can now apply conditions (any effect type available to challenges: conditions, properties, codex grants, etc.)
+- **Technique enhancement system** — Players can attach a technique to a social action via `ActionEnhancement` records. The technique wraps the action in `use_technique()`, deducting anima, evaluating Soulfray, and checking for control mishaps. Technique effects (conditions, properties) are rendered as distinct results from social outcomes
+- **Available-actions endpoint** — `GET /api/action-requests/available/` returns social actions with pre-calculated technique enhancement options, anima costs, and Soulfray stage warnings for informed player decisions
+- **Frontend enhancement selection** — ActionPanel displays technique enhancements per action with cost display and Soulfray warning confirmation flow before technique use
+- **Layered result display** — ActionResult shows both social outcome and technique effects as distinct results, making the layered action pipeline transparent to players
+- **Integration tests** — Comprehensive tests covering mundane consequences, enhanced pipeline, validation, and available-actions filtering
 
 Deferred to future scopes:
 - Abyssal corruption as long-term consequence of abyssal magic overuse
