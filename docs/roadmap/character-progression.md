@@ -89,7 +89,8 @@ The central spine connecting every system in the game. Characters develop throug
   and use the fatigue pipeline, need action type definitions and resonance integration
 - **Action type definitions** — define base fatigue costs per action, which pool each draws from,
   and wire into the scene action request system
-- **Development point hooks** — trait usage flagging from perform_check → weekly cron
+- ~~**Development point hooks**~~ — DONE: dp awarded per check via action pipeline,
+  threshold-based level-ups, WeeklySkillUsage accumulator, weekly rust + audit cron
 - **Integration test for fatigue → check pipeline** — end-to-end test with real CheckRank/ResultChart
   fixture data (currently mocked)
 - **Unified dice roll system** — fatigue checks use perform_check but the broader game needs a
