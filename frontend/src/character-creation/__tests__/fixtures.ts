@@ -237,8 +237,8 @@ export const mockEmptyDraft: CharacterDraft = {
   } as Record<Stage, boolean>,
   has_existing_characters: false,
   stage_errors: {},
-  stats_free_points: 5,
-  stats_max_free_points: 5,
+  stats_points_remaining: 5,
+  stats_budget: 5,
 };
 
 export const mockDraftWithArea: CharacterDraft = {

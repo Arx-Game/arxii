@@ -401,8 +401,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             self._clear_tradition_if_required_distinction_removed(draft, set())
             draft.draft_data["distinctions"] = []
             draft.save(update_fields=["draft_data", "updated_at"])
-            stat_adjustments = draft.enforce_stat_caps()
-            return Response({"distinctions": [], "stat_adjustments": stat_adjustments})
+            return Response({"distinctions": []})
 
         # Build lookup of requested ranks
         requested_ranks = {entry["id"]: entry["rank"] for entry in distinction_entries}
@@ -463,9 +462,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         new_distinction_ids = {d.id for d in distinctions}
         self._clear_tradition_if_required_distinction_removed(draft, new_distinction_ids)
 
-        stat_adjustments = draft.enforce_stat_caps()
-
-        return Response({"distinctions": new_distinctions, "stat_adjustments": stat_adjustments})
+        return Response({"distinctions": new_distinctions})
 
     def _clear_tradition_if_required_distinction_removed(
         self, draft: CharacterDraft, new_distinction_ids: set[int]

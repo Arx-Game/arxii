@@ -25,12 +25,8 @@ from world.character_creation.constants import (
     AGE_MAX,
     AGE_MIN,
     REQUIRED_STATS,
-    STAT_BASE_POINTS,
     STAT_DEFAULT_VALUE,
     STAT_DISPLAY_DIVISOR,
-    STAT_FREE_POINTS,
-    STAT_MAX_VALUE,
-    STAT_MIN_VALUE,
     ApplicationStatus,
     CommentType,
     Stage,
@@ -39,7 +35,6 @@ from world.character_creation.constants import (
 from world.character_creation.types import (
     CGPointBreakdownEntry,
     StageValidationErrors,
-    StatAdjustment,
 )
 from world.classes.models import PathStage
 
@@ -687,35 +682,21 @@ class CharacterDraft(SharedMemoryModel):
 
         return sum(effect.get_value_at_rank(entries[effect.distinction_id]) for effect in effects)
 
-    def get_stats_max_free_points(self) -> int:
-        """Return the total number of free stat points available (base + distinction bonus)."""
-        bonus = self._get_distinction_bonus("attribute_free_points", "stat")
-        return STAT_FREE_POINTS + bonus
+    def calculate_stat_budget(self) -> int:
+        """Total stat points = default * stat_count + net bonuses."""
+        bonuses = self.get_all_stat_bonuses()
+        base = STAT_DEFAULT_VALUE * len(REQUIRED_STATS)
+        net_bonus = sum(bonuses.values())
+        return base + net_bonus
 
-    def calculate_stats_free_points(self) -> int:
-        """
-        Calculate remaining free points from stat allocations.
-
-        Starting budget:
-        - Base: 9 stats × 2 = 18 points
-        - Free: 5 points + distinction bonuses
-        - Total: base + free + bonuses
-
-        Current spend: sum(stats.values()) / 10
-        Remaining: total_budget - spent
-
-        Returns:
-            Number of free points remaining (can be negative if over budget)
-        """
-        max_free = self.get_stats_max_free_points()
-        total_budget = STAT_BASE_POINTS + max_free
-
+    def calculate_points_remaining(self) -> int:
+        """Budget minus allocated points. 0 = fully allocated."""
+        budget = self.calculate_stat_budget()
         stats = self.draft_data.get("stats", {})
         if not stats:
-            return max_free
-
-        spent = sum(stats.values()) / STAT_DISPLAY_DIVISOR
-        return int(total_budget - spent)
+            return budget - (STAT_DEFAULT_VALUE * len(REQUIRED_STATS))
+        spent = sum(stats.values())
+        return budget - spent
 
     def calculate_cg_points_breakdown(self) -> list[CGPointBreakdownEntry]:
         """
@@ -834,63 +815,10 @@ class CharacterDraft(SharedMemoryModel):
             combined[stat] = heritage.get(stat, 0) + distinctions.get(stat, 0)
         return combined
 
-    def enforce_stat_caps(self) -> list[StatAdjustment]:
-        """Enforce stat caps after distinction changes.
-
-        If any allocated stat + bonuses > STAT_MAX_VALUE, reduces
-        the allocation and returns a list of adjustments made.
-        """
-        stats = self.draft_data.get("stats", {})
-        if not stats:
-            return []
-
-        bonuses = self.get_all_stat_bonuses()
-        adjustments: list[StatAdjustment] = []
-
-        for stat_name, allocated in stats.items():
-            bonus_display = bonuses.get(stat_name, 0)
-            bonus_internal = bonus_display * STAT_DISPLAY_DIVISOR
-            if allocated + bonus_internal > STAT_MAX_VALUE:
-                old_display = allocated // STAT_DISPLAY_DIVISOR
-                new_allocated = STAT_MAX_VALUE - bonus_internal
-                new_allocated = max(new_allocated, STAT_MIN_VALUE)
-                new_display = new_allocated // STAT_DISPLAY_DIVISOR
-                stats[stat_name] = new_allocated
-                adjustments.append(
-                    StatAdjustment(
-                        stat=stat_name,
-                        old_display=old_display,
-                        new_display=new_display,
-                        reason=f"Bonuses provide +{bonus_display}",
-                    )
-                )
-
-        if adjustments:
-            self.draft_data["stats"] = stats
-            self.save(update_fields=["draft_data", "updated_at"])
-
-        return adjustments
-
     def calculate_final_stats(self) -> dict[str, int]:
-        """
-        Calculate final stat values including all bonuses.
-
-        Final stats = allocated points + all bonuses (converted to
-        internal scale). Includes heritage and distinction bonuses.
-
-        Returns:
-            Dict mapping stat names to final internal values (10-50+)
-        """
-        allocated = self.draft_data.get("stats", {})
-        bonuses = self.get_all_stat_bonuses()
-
-        final_stats = {}
-        for stat_name in REQUIRED_STATS:
-            base = allocated.get(stat_name, STAT_DEFAULT_VALUE)
-            bonus = bonuses.get(stat_name, 0) * 10  # Convert to internal scale
-            final_stats[stat_name] = base + bonus
-
-        return final_stats
+        """Return allocated stats (already in 1-5 scale). No bonuses applied on top."""
+        stats = self.draft_data.get("stats", {})
+        return {name: stats.get(name, STAT_DEFAULT_VALUE) for name in REQUIRED_STATS}
 
     def _is_attributes_complete(self) -> bool:
         """Check if attributes stage is complete."""

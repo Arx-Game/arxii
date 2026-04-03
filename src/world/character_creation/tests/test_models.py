@@ -6,13 +6,16 @@ from django.test import TestCase
 from evennia.accounts.models import AccountDB
 
 from evennia_extensions.factories import AccountFactory
+from world.character_creation.constants import (
+    REQUIRED_STATS,
+    STAT_DEFAULT_VALUE,
+)
 from world.character_creation.factories import (
     BeginningsFactory,
     CharacterDraftFactory,
     StartingAreaFactory,
 )
 from world.character_creation.models import (
-    STAT_FREE_POINTS,
     CharacterDraft,
     StartingArea,
 )
@@ -106,7 +109,7 @@ class AppearanceStageCompletionTest(TestCase):
 
 
 class CharacterDraftStatsValidationTests(TestCase):
-    """Test stat validation in CharacterDraft model."""
+    """Test stat allocation with simplified 1-5 scale and budget system."""
 
     def setUp(self):
         """Set up test data."""
@@ -129,19 +132,8 @@ class CharacterDraftStatsValidationTests(TestCase):
             selected_area=self.area,
         )
 
-        # Get or create the 9 primary stats (may already exist from migration)
-        stat_names = [
-            "strength",
-            "agility",
-            "stamina",
-            "charm",
-            "presence",
-            "perception",
-            "intellect",
-            "wits",
-            "willpower",
-        ]
-        for name in stat_names:
+        # Ensure all 12 primary stats exist
+        for name in REQUIRED_STATS:
             Trait.objects.get_or_create(
                 name=name,
                 defaults={
@@ -150,223 +142,148 @@ class CharacterDraftStatsValidationTests(TestCase):
                 },
             )
 
-    def testcalculate_stats_free_points_no_stats(self):
-        """Test free points calculation with no stats set."""
-        free_points = self.draft.calculate_stats_free_points()
-        assert free_points == STAT_FREE_POINTS
+    def _all_stats_at(self, value: int) -> dict[str, int]:
+        """Helper: return all 12 stats set to the given value."""
+        return dict.fromkeys(REQUIRED_STATS, value)
 
-    def testcalculate_stats_free_points_default_stats(self):
-        """Test free points with all stats at default value (20)."""
-        self.draft.draft_data = {
-            "stats": {
-                "strength": 20,
-                "agility": 20,
-                "stamina": 20,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 20,
-                "willpower": 20,
-            }
-        }
+    def _budget_balanced_stats(self) -> dict[str, int]:
+        """Helper: return stats that sum to the base budget (24)."""
+        # All at 2 = 12 * 2 = 24
+        return self._all_stats_at(STAT_DEFAULT_VALUE)
+
+    # --- calculate_stat_budget ---
+
+    def test_calculate_stat_budget_no_bonuses(self):
+        """Budget is 12 * 2 = 24 with no bonuses."""
+        assert self.draft.calculate_stat_budget() == STAT_DEFAULT_VALUE * len(REQUIRED_STATS)
+
+    # --- calculate_points_remaining ---
+
+    def test_calculate_points_remaining_no_stats(self):
+        """No stats allocated returns 0 remaining (base budget - default allocation)."""
+        remaining = self.draft.calculate_points_remaining()
+        assert remaining == 0
+
+    def test_calculate_points_remaining_all_at_default(self):
+        """All stats at default value means 0 remaining."""
+        self.draft.draft_data = {"stats": self._budget_balanced_stats()}
         self.draft.save()
+        assert self.draft.calculate_points_remaining() == 0
 
-        free_points = self.draft.calculate_stats_free_points()
-        # 9 stats * 2 = 18 points spent, 23 - 18 = 5 free
-        assert free_points == STAT_FREE_POINTS
-
-    def testcalculate_stats_free_points_all_spent(self):
-        """Test free points when all points are spent."""
-        self.draft.draft_data = {
-            "stats": {
-                "strength": 30,  # 3 points
-                "agility": 30,  # 3 points
-                "stamina": 30,  # 3 points
-                "charm": 20,  # 2 points
-                "presence": 20,  # 2 points
-                "perception": 20,  # 2 points
-                "intellect": 20,  # 2 points
-                "wits": 30,  # 3 points
-                "willpower": 30,  # 3 points
-            }
-        }
+    def test_calculate_points_remaining_redistributed(self):
+        """Redistributed stats still sum to budget = 0 remaining."""
+        stats = self._all_stats_at(STAT_DEFAULT_VALUE)
+        # Move 1 point from first stat to second
+        stat_names = list(stats.keys())
+        stats[stat_names[0]] = 1
+        stats[stat_names[1]] = 3
+        self.draft.draft_data = {"stats": stats}
         self.draft.save()
+        assert self.draft.calculate_points_remaining() == 0
 
-        free_points = self.draft.calculate_stats_free_points()
-        # 23 points spent (3+3+3+2+2+2+2+3+3), 23 - 23 = 0
-        assert free_points == 0
-
-    def testcalculate_stats_free_points_over_budget(self):
-        """Test free points when over budget (negative)."""
-        self.draft.draft_data = {
-            "stats": {
-                "strength": 50,  # 5 points
-                "agility": 50,  # 5 points
-                "stamina": 40,  # 4 points
-                "charm": 20,  # 2 points
-                "presence": 20,  # 2 points
-                "perception": 20,  # 2 points
-                "intellect": 20,  # 2 points
-                "wits": 20,  # 2 points
-                "willpower": 20,  # 2 points
-            }
-        }
+    def test_calculate_points_remaining_under_allocated(self):
+        """Under-allocated stats return positive remaining."""
+        stats = self._all_stats_at(1)  # 12 * 1 = 12, budget = 24, remaining = 12
+        self.draft.draft_data = {"stats": stats}
         self.draft.save()
+        assert self.draft.calculate_points_remaining() == 12
 
-        free_points = self.draft.calculate_stats_free_points()
-        # 26 points spent (5+5+4+2+2+2+2+2+2), 23 - 26 = -3
-        assert free_points == -3
-
-    def test_is_attributes_complete_missing_stats(self):
-        """Test validation fails with missing stats."""
-        self.draft.draft_data = {
-            "stats": {
-                "strength": 20,
-                "agility": 20,
-                # Missing 6 stats
-            }
-        }
+    def test_calculate_points_remaining_over_allocated(self):
+        """Over-allocated stats return negative remaining."""
+        stats = self._all_stats_at(3)  # 12 * 3 = 36, budget = 24, remaining = -12
+        self.draft.draft_data = {"stats": stats}
         self.draft.save()
+        assert self.draft.calculate_points_remaining() == -12
 
+    # --- Validation via _is_attributes_complete ---
+
+    def test_validation_missing_stats(self):
+        """Validation fails with missing stats."""
+        self.draft.draft_data = {"stats": {"strength": 2, "agility": 2}}
+        self.draft.save()
         assert not self.draft._is_attributes_complete()
 
-    def test_is_attributes_complete_non_integer_value(self):
-        """Test validation fails with non-integer values."""
-        self.draft.draft_data = {
-            "stats": {
-                "strength": 20.5,  # Float instead of int
-                "agility": 20,
-                "stamina": 20,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 20,
-                "willpower": 20,
-            }
-        }
+    def test_validation_stat_below_min(self):
+        """Validation fails with stat below minimum (1)."""
+        stats = self._budget_balanced_stats()
+        stat_names = list(stats.keys())
+        stats[stat_names[0]] = 0  # Below STAT_MIN_VALUE
+        self.draft.draft_data = {"stats": stats}
         self.draft.save()
-
         assert not self.draft._is_attributes_complete()
 
-    def test_is_attributes_complete_not_multiple_of_10(self):
-        """Test validation fails with values not multiple of 10."""
-        self.draft.draft_data = {
-            "stats": {
-                "strength": 25,  # Not a multiple of 10
-                "agility": 20,
-                "stamina": 20,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 20,
-                "willpower": 20,
-            }
-        }
+    def test_validation_stat_above_max(self):
+        """Validation fails with stat above maximum (5)."""
+        stats = self._budget_balanced_stats()
+        stat_names = list(stats.keys())
+        stats[stat_names[0]] = 6  # Above STAT_MAX_VALUE
+        self.draft.draft_data = {"stats": stats}
         self.draft.save()
-
         assert not self.draft._is_attributes_complete()
 
-    def test_is_attributes_complete_out_of_range(self):
-        """Test validation fails with values out of range."""
-        # Test below minimum
-        self.draft.draft_data = {
-            "stats": {
-                "strength": 5,  # Below minimum (10)
-                "agility": 20,
-                "stamina": 20,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 20,
-                "willpower": 20,
-            }
-        }
+    def test_validation_non_integer_value(self):
+        """Validation fails with non-integer values."""
+        stats = self._budget_balanced_stats()
+        stat_names = list(stats.keys())
+        stats[stat_names[0]] = 2.5
+        self.draft.draft_data = {"stats": stats}
         self.draft.save()
-
         assert not self.draft._is_attributes_complete()
 
-        # Test above maximum
-        self.draft.draft_data = {
-            "stats": {
-                "strength": 60,  # Above maximum (50)
-                "agility": 20,
-                "stamina": 20,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 20,
-                "willpower": 20,
-            }
-        }
+    def test_validation_points_remaining_positive(self):
+        """Validation fails when points remaining > 0."""
+        stats = self._all_stats_at(1)  # Under budget
+        self.draft.draft_data = {"stats": stats}
         self.draft.save()
-
         assert not self.draft._is_attributes_complete()
 
-    def test_is_attributes_complete_free_points_not_zero(self):
-        """Test validation fails when free points != 0."""
-        self.draft.draft_data = {
-            "stats": {
-                "strength": 20,
-                "agility": 20,
-                "stamina": 20,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 20,
-                "willpower": 20,
-            }
-        }
+    def test_validation_over_budget(self):
+        """Validation fails when over budget."""
+        stats = self._all_stats_at(3)  # Over budget
+        self.draft.draft_data = {"stats": stats}
         self.draft.save()
-
-        # With all stats at 20, free points = 5 (not 0)
         assert not self.draft._is_attributes_complete()
 
-    def test_is_attributes_complete_valid(self):
-        """Test validation passes with valid stats."""
-        self.draft.draft_data = {
-            "stats": {
-                "strength": 30,
-                "agility": 30,
-                "stamina": 30,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 30,
-                "willpower": 30,
-            }
-        }
+    def test_validation_all_valid(self):
+        """Validation passes: all 12 stats present, each 1-5, sum == budget."""
+        stats = self._budget_balanced_stats()
+        self.draft.draft_data = {"stats": stats}
         self.draft.save()
-
-        # 23 points spent exactly, all valid
         assert self.draft._is_attributes_complete()
 
     def test_stage_completion_includes_attributes(self):
-        """Test that stage_completion includes attributes stage."""
-        self.draft.draft_data = {
-            "stats": {
-                "strength": 30,
-                "agility": 30,
-                "stamina": 30,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 30,
-                "willpower": 30,
-            }
-        }
+        """Stage completion dict includes attributes stage."""
+        stats = self._budget_balanced_stats()
+        self.draft.draft_data = {"stats": stats}
         self.draft.save()
-
         stage_completion = self.draft.get_stage_completion()
         assert CharacterDraft.Stage.ATTRIBUTES in stage_completion
         assert stage_completion[CharacterDraft.Stage.ATTRIBUTES] is True
+
+    # --- calculate_final_stats ---
+
+    def test_calculate_final_stats_returns_allocated_values(self):
+        """calculate_final_stats returns stats as stored (1-5 scale), no bonuses on top."""
+        stats = self._budget_balanced_stats()
+        stat_names = list(stats.keys())
+        stats[stat_names[0]] = 1
+        stats[stat_names[1]] = 3
+        self.draft.draft_data = {"stats": stats}
+        self.draft.save()
+        final = self.draft.calculate_final_stats()
+        assert final[stat_names[0]] == 1
+        assert final[stat_names[1]] == 3
+        # Unset stats should get default value
+        for name in REQUIRED_STATS:
+            assert name in final
+
+    def test_calculate_final_stats_defaults_for_missing(self):
+        """Missing stats default to STAT_DEFAULT_VALUE."""
+        self.draft.draft_data = {"stats": {}}
+        self.draft.save()
+        final = self.draft.calculate_final_stats()
+        for name in REQUIRED_STATS:
+            assert final[name] == STAT_DEFAULT_VALUE
 
 
 class BeginningsModelTests(TestCase):
@@ -517,8 +434,8 @@ class PathSkillsStageCompletionTest(TestCase):
         self.assertTrue(completion[CharacterDraft.Stage.PATH_SKILLS])
 
 
-class StatCapEnforcementTests(TestCase):
-    """Test stat cap enforcement when distinctions provide stat bonuses."""
+class DistinctionStatBonusTests(TestCase):
+    """Test distinction stat bonuses affect budget, not individual stat caps."""
 
     @classmethod
     def setUpTestData(cls):
@@ -526,14 +443,7 @@ class StatCapEnforcementTests(TestCase):
         cls.strength_type = ModifierTargetFactory(name="strength", category=cls.stat_category)
         cls.agility_type = ModifierTargetFactory(name="agility", category=cls.stat_category)
 
-    def _create_draft_with_stats(self, stats):
-        """Create a draft with the given stat allocation."""
-        draft = CharacterDraftFactory()
-        draft.draft_data["stats"] = stats
-        draft.save(update_fields=["draft_data"])
-        return draft
-
-    def _add_distinction_to_draft(self, draft, distinction):
+    def _add_distinction_to_draft(self, draft: CharacterDraft, distinction: object) -> None:
         """Add a distinction to draft's JSON data."""
         distinctions = draft.draft_data.get("distinctions", [])
         distinctions.append(
@@ -570,9 +480,7 @@ class StatCapEnforcementTests(TestCase):
         bonuses = draft.get_stat_bonuses_from_distinctions()
         assert bonuses == {"strength": 1}
 
-    def test_get_all_stat_bonuses_combines_heritage_and_distinctions(
-        self,
-    ):
+    def test_get_all_stat_bonuses_combines_heritage_and_distinctions(self):
         """All bonuses aggregated from both species and distinctions."""
         distinction = DistinctionFactory()
         DistinctionEffectFactory(
@@ -586,8 +494,8 @@ class StatCapEnforcementTests(TestCase):
         bonuses = draft.get_all_stat_bonuses()
         assert bonuses["strength"] == 1
 
-    def test_enforce_stat_caps_reduces_overcap(self):
-        """Stat at 5 with +1 bonus should be reduced to 4."""
+    def test_budget_increases_with_positive_distinction_bonus(self):
+        """Budget = 24 + 1 = 25 with a +1 distinction bonus."""
         distinction = DistinctionFactory()
         DistinctionEffectFactory(
             distinction=distinction,
@@ -595,67 +503,13 @@ class StatCapEnforcementTests(TestCase):
             value_per_rank=10,
             description="",
         )
-        draft = self._create_draft_with_stats(
-            {
-                "strength": 50,
-                "agility": 20,
-                "stamina": 20,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 20,
-                "willpower": 20,
-            }
-        )
-        self._add_distinction_to_draft(draft, distinction)
-
-        adjustments = draft.enforce_stat_caps()
-
-        draft.refresh_from_db()
-        assert draft.draft_data["stats"]["strength"] == 40
-        assert len(adjustments) == 1
-        assert adjustments[0]["stat"] == "strength"
-        assert adjustments[0]["old_display"] == 5
-        assert adjustments[0]["new_display"] == 4
-
-    def test_enforce_stat_caps_no_change_when_under_cap(self):
-        """Stats under cap should not be modified."""
-        distinction = DistinctionFactory()
-        DistinctionEffectFactory(
-            distinction=distinction,
-            target=self.strength_type,
-            value_per_rank=10,
-            description="",
-        )
-        draft = self._create_draft_with_stats(
-            {
-                "strength": 30,
-                "agility": 20,
-                "stamina": 20,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 20,
-                "willpower": 20,
-            }
-        )
-        self._add_distinction_to_draft(draft, distinction)
-
-        adjustments = draft.enforce_stat_caps()
-        assert adjustments == []
-        draft.refresh_from_db()
-        assert draft.draft_data["stats"]["strength"] == 30
-
-    def test_enforce_stat_caps_no_stats_set(self):
-        """No stats allocated yet means nothing to enforce."""
         draft = CharacterDraftFactory()
-        adjustments = draft.enforce_stat_caps()
-        assert adjustments == []
+        self._add_distinction_to_draft(draft, distinction)
+        base = STAT_DEFAULT_VALUE * len(REQUIRED_STATS)
+        assert draft.calculate_stat_budget() == base + 1
 
-    def test_enforce_stat_caps_negative_bonus_no_enforcement(self):
-        """Negative bonuses don't trigger cap enforcement."""
+    def test_budget_decreases_with_negative_distinction_bonus(self):
+        """Budget = 24 - 1 = 23 with a -1 distinction penalty."""
         distinction = DistinctionFactory()
         DistinctionEffectFactory(
             distinction=distinction,
@@ -663,28 +517,13 @@ class StatCapEnforcementTests(TestCase):
             value_per_rank=-10,
             description="",
         )
-        draft = self._create_draft_with_stats(
-            {
-                "strength": 50,
-                "agility": 20,
-                "stamina": 20,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 20,
-                "willpower": 20,
-            }
-        )
+        draft = CharacterDraftFactory()
         self._add_distinction_to_draft(draft, distinction)
+        base = STAT_DEFAULT_VALUE * len(REQUIRED_STATS)
+        assert draft.calculate_stat_budget() == base - 1
 
-        adjustments = draft.enforce_stat_caps()
-        assert adjustments == []
-        draft.refresh_from_db()
-        assert draft.draft_data["stats"]["strength"] == 50
-
-    def test_enforce_stat_caps_stacking_bonuses(self):
-        """Multiple bonuses to same stat should stack."""
+    def test_stacking_bonuses_increase_budget(self):
+        """Multiple distinction bonuses stack and increase budget."""
         d1 = DistinctionFactory()
         DistinctionEffectFactory(
             distinction=d1,
@@ -695,70 +534,15 @@ class StatCapEnforcementTests(TestCase):
         d2 = DistinctionFactory()
         DistinctionEffectFactory(
             distinction=d2,
-            target=self.strength_type,
+            target=self.agility_type,
             value_per_rank=10,
             description="",
         )
-        draft = self._create_draft_with_stats(
-            {
-                "strength": 50,
-                "agility": 20,
-                "stamina": 20,
-                "charm": 20,
-                "presence": 20,
-                "perception": 20,
-                "intellect": 20,
-                "wits": 20,
-                "willpower": 20,
-            }
-        )
+        draft = CharacterDraftFactory()
         self._add_distinction_to_draft(draft, d1)
         self._add_distinction_to_draft(draft, d2)
-
-        adjustments = draft.enforce_stat_caps()
-
-        draft.refresh_from_db()
-        # +2 bonus means max allocated is 3 (display), so 30 internal
-        assert draft.draft_data["stats"]["strength"] == 30
-        assert len(adjustments) == 1
-        assert adjustments[0]["old_display"] == 5
-        assert adjustments[0]["new_display"] == 3
-
-
-class AttributeFreePointsFromDistinctionsTest(TestCase):
-    """Test that distinction effects add bonus attribute free points."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.account = AccountFactory()
-        cls.stat_category = ModifierCategoryFactory(name="stat")
-        cls.attr_fp_type = ModifierTargetFactory(
-            name="attribute_free_points",
-            category=cls.stat_category,
-        )
-        cls.gen_talent = DistinctionFactory(
-            name="Generational Talent",
-            slug="generational-talent-test",
-        )
-        DistinctionEffectFactory(
-            distinction=cls.gen_talent,
-            target=cls.attr_fp_type,
-            value_per_rank=5,
-        )
-
-    def test_free_points_without_distinction(self):
-        """Base free points are STAT_FREE_POINTS (5) with no distinctions."""
-        draft = CharacterDraftFactory(account=self.account)
-        self.assertEqual(draft.calculate_stats_free_points(), STAT_FREE_POINTS)
-
-    def test_free_points_with_generational_talent(self):
-        """Generational Talent adds 5 bonus free points."""
-        draft = CharacterDraftFactory(account=self.account)
-        draft.draft_data["distinctions"] = [
-            {"distinction_id": self.gen_talent.id, "rank": 1},
-        ]
-        draft.save()
-        self.assertEqual(draft.calculate_stats_free_points(), STAT_FREE_POINTS + 5)
+        base = STAT_DEFAULT_VALUE * len(REQUIRED_STATS)
+        assert draft.calculate_stat_budget() == base + 2
 
 
 class CGPointsCalculationTests(TestCase):

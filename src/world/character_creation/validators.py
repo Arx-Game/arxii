@@ -12,7 +12,6 @@ from rest_framework import serializers
 
 from world.character_creation.constants import (
     REQUIRED_STATS,
-    STAT_DISPLAY_DIVISOR,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
     Stage,
@@ -135,7 +134,7 @@ def get_attributes_errors(draft: CharacterDraft) -> list[str]:
     errors: list[str] = []
     stats = draft.draft_data.get("stats", {})
 
-    # All 9 stats must exist
+    # All 12 stats must exist
     missing = [s for s in REQUIRED_STATS if s not in stats]
     if missing:
         errors.append(f"Missing stats: {', '.join(missing)}")
@@ -143,23 +142,18 @@ def get_attributes_errors(draft: CharacterDraft) -> list[str]:
 
     # Validate each stat value
     for stat_name, value in stats.items():
+        if stat_name not in REQUIRED_STATS:
+            continue
         if not isinstance(value, int):
-            errors.append(f"{stat_name} has invalid value (not an integer)")
-        elif value % STAT_DISPLAY_DIVISOR != 0:
-            errors.append(
-                f"{stat_name} has invalid value (not a multiple of {STAT_DISPLAY_DIVISOR})"
-            )
+            errors.append(f"{stat_name} has invalid value")
         elif not (STAT_MIN_VALUE <= value <= STAT_MAX_VALUE):
-            errors.append(
-                f"{stat_name} is out of range (must be {STAT_MIN_VALUE}-{STAT_MAX_VALUE})"
-            )
+            errors.append(f"{stat_name} must be between {STAT_MIN_VALUE} and {STAT_MAX_VALUE}")
 
-    # Free points must be exactly 0
-    free_points = draft.calculate_stats_free_points()
-    if free_points > 0:
-        errors.append(f"{free_points} free point(s) remaining")
-    elif free_points < 0:
-        errors.append(f"{abs(free_points)} point(s) over budget")
+    remaining = draft.calculate_points_remaining()
+    if remaining > 0:
+        errors.append(f"{remaining} point(s) remaining to allocate")
+    elif remaining < 0:
+        errors.append(f"{abs(remaining)} point(s) over budget")
 
     return errors
 

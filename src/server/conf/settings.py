@@ -80,6 +80,7 @@ INSTALLED_APPS += [
     "world.game_clock.apps.GameClockConfig",
     "world.items.apps.ItemsConfig",
     "world.events.apps.EventsConfig",
+    "world.fatigue.apps.FatigueConfig",
     "behaviors.apps.BehaviorsConfig",
     "drf_spectacular",
     "cloudinary",

@@ -371,7 +371,7 @@ class StatHandlerTests(TestCase):
             db_typeclass_path="typeclasses.characters.Character",
         )
 
-        # Get or create the 8 primary stats (may already exist from migration)
+        # Get or create all 12 primary stats (may already exist from migration)
         self.stats = {}
         stat_data = [
             ("strength", TraitCategory.PHYSICAL, "Physical power and muscle"),
@@ -379,9 +379,13 @@ class StatHandlerTests(TestCase):
             ("stamina", TraitCategory.PHYSICAL, "Endurance and resistance to harm"),
             ("charm", TraitCategory.SOCIAL, "Likability and social magnetism"),
             ("presence", TraitCategory.SOCIAL, "Force of personality and leadership"),
+            ("composure", TraitCategory.SOCIAL, "Social endurance and poise"),
             ("intellect", TraitCategory.MENTAL, "Reasoning and learned knowledge"),
             ("wits", TraitCategory.MENTAL, "Quick thinking and situational awareness"),
-            ("willpower", TraitCategory.MENTAL, "Mental fortitude and determination"),
+            ("stability", TraitCategory.MENTAL, "Sustained focus and mental endurance"),
+            ("luck", TraitCategory.META, "Fortune and happenstance"),
+            ("perception", TraitCategory.META, "Awareness and reading of situations"),
+            ("willpower", TraitCategory.META, "Mental fortitude and determination"),
         ]
 
         for name, category, description in stat_data:
@@ -397,19 +401,22 @@ class StatHandlerTests(TestCase):
 
         self.stat_handler = self.character.stats
 
-    def test_get_all_stats_returns_9_stats(self):
-        """Test that get_all_stats returns all 9 primary stats."""
+    def test_get_all_stats_returns_12_stats(self):
+        """Test that get_all_stats returns all 12 primary stats."""
         all_stats = self.stat_handler.get_all_stats()
 
-        assert len(all_stats) == 9
+        assert len(all_stats) == 12
         assert "strength" in all_stats
         assert "agility" in all_stats
         assert "stamina" in all_stats
         assert "charm" in all_stats
         assert "presence" in all_stats
-        assert "perception" in all_stats
+        assert "composure" in all_stats
         assert "intellect" in all_stats
         assert "wits" in all_stats
+        assert "stability" in all_stats
+        assert "luck" in all_stats
+        assert "perception" in all_stats
         assert "willpower" in all_stats
 
         # All stats should default to 0 if not set
@@ -474,7 +481,7 @@ class StatHandlerTests(TestCase):
 
         all_stats_display = self.stat_handler.get_all_stats_display()
 
-        assert len(all_stats_display) == 9
+        assert len(all_stats_display) == 12
 
         # Check strength
         assert all_stats_display["strength"].value == 20
@@ -500,18 +507,21 @@ class StatHandlerTests(TestCase):
         assert value == 30
 
     def test_stat_names_constant(self):
-        """Test that STAT_NAMES contains all 9 primary stats."""
+        """Test that STAT_NAMES contains all 12 primary stats."""
         from world.traits.stat_handler import StatHandler
 
-        assert len(StatHandler.STAT_NAMES) == 9
+        assert len(StatHandler.STAT_NAMES) == 12
         assert "strength" in StatHandler.STAT_NAMES
         assert "agility" in StatHandler.STAT_NAMES
         assert "stamina" in StatHandler.STAT_NAMES
         assert "charm" in StatHandler.STAT_NAMES
         assert "presence" in StatHandler.STAT_NAMES
-        assert "perception" in StatHandler.STAT_NAMES
+        assert "composure" in StatHandler.STAT_NAMES
         assert "intellect" in StatHandler.STAT_NAMES
         assert "wits" in StatHandler.STAT_NAMES
+        assert "stability" in StatHandler.STAT_NAMES
+        assert "luck" in StatHandler.STAT_NAMES
+        assert "perception" in StatHandler.STAT_NAMES
         assert "willpower" in StatHandler.STAT_NAMES
 
 
@@ -537,9 +547,9 @@ class PrimaryStatTests(TestCase):
             cls.stats.append(stat)
 
     def test_primary_stats_exist(self):
-        """Test that all 9 primary stats exist."""
+        """Test that all 12 primary stats exist."""
         stats = Trait.objects.filter(trait_type=TraitType.STAT)
-        assert stats.count() >= 9
+        assert stats.count() >= 12
 
         expected_stats = [
             "strength",
@@ -547,9 +557,12 @@ class PrimaryStatTests(TestCase):
             "stamina",
             "charm",
             "presence",
-            "perception",
+            "composure",
             "intellect",
             "wits",
+            "stability",
+            "luck",
+            "perception",
             "willpower",
         ]
 
@@ -565,15 +578,20 @@ class PrimaryStatTests(TestCase):
             stat = Trait.objects.get(name=stat_name, trait_type=TraitType.STAT)
             assert stat.category == TraitCategory.PHYSICAL, f"{stat_name} should be PHYSICAL"
 
-        social_stats = ["charm", "presence", "perception"]
+        social_stats = ["charm", "presence", "composure"]
         for stat_name in social_stats:
             stat = Trait.objects.get(name=stat_name, trait_type=TraitType.STAT)
             assert stat.category == TraitCategory.SOCIAL, f"{stat_name} should be SOCIAL"
 
-        mental_stats = ["intellect", "wits", "willpower"]
+        mental_stats = ["intellect", "wits", "stability"]
         for stat_name in mental_stats:
             stat = Trait.objects.get(name=stat_name, trait_type=TraitType.STAT)
             assert stat.category == TraitCategory.MENTAL, f"{stat_name} should be MENTAL"
+
+        meta_stats = ["luck", "perception", "willpower"]
+        for stat_name in meta_stats:
+            stat = Trait.objects.get(name=stat_name, trait_type=TraitType.STAT)
+            assert stat.category == TraitCategory.META, f"{stat_name} should be META"
 
     def test_primary_stats_have_descriptions(self):
         """Test that primary stats have descriptions."""
@@ -583,9 +601,12 @@ class PrimaryStatTests(TestCase):
             "stamina",
             "charm",
             "presence",
-            "perception",
+            "composure",
             "intellect",
             "wits",
+            "stability",
+            "luck",
+            "perception",
             "willpower",
         ]
 

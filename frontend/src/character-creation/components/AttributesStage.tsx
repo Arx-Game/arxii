@@ -1,8 +1,8 @@
 /**
  * Stage 6: Attributes Allocation
  *
- * Primary statistics allocation with point management.
- * Players start with 2 in each stat (18 points) plus 5 free points to distribute.
+ * 12 primary statistics in 4 categories, allocated with a point budget.
+ * Values are 1-5 directly (no internal scaling).
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,17 +20,12 @@ interface AttributesStageProps {
   draft: CharacterDraft;
 }
 
-/** All stats in display order — columns are Physical / Social / Mental */
-const STAT_ORDER: (keyof Stats)[] = [
-  'strength',
-  'charm',
-  'intellect',
-  'agility',
-  'presence',
-  'wits',
-  'stamina',
-  'perception',
-  'willpower',
+/** Stat categories with display labels and member stats. */
+const STAT_CATEGORIES: { label: string; stats: (keyof Stats)[] }[] = [
+  { label: 'Physical', stats: ['strength', 'agility', 'stamina'] },
+  { label: 'Social', stats: ['charm', 'presence', 'composure'] },
+  { label: 'Mental', stats: ['intellect', 'wits', 'stability'] },
+  { label: 'Meta', stats: ['luck', 'perception', 'willpower'] },
 ];
 
 export function AttributesStage({ draft }: AttributesStageProps) {
@@ -38,8 +33,8 @@ export function AttributesStage({ draft }: AttributesStageProps) {
   const { data: copy } = useCGExplanations();
   const { data: statDefinitions, isLoading: statsLoading } = useStatDefinitions();
   const stats: Stats = draft.draft_data.stats ?? getDefaultStats();
-  const freePoints = draft.stats_free_points;
-  const maxFreePoints = draft.stats_max_free_points;
+  const pointsRemaining = draft.stats_points_remaining;
+  const budget = draft.stats_budget;
   const statBonuses = draft.stat_bonuses ?? {};
 
   // State for hover (desktop) and tap (mobile) interactions
@@ -60,7 +55,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
           ...draft.draft_data,
           stats: {
             ...stats,
-            [statName]: newValue * 10, // Convert display (1-5) to internal (10-50)
+            [statName]: newValue,
           },
         },
       },
@@ -92,35 +87,43 @@ export function AttributesStage({ draft }: AttributesStageProps) {
             <p className="mt-2 text-muted-foreground">{copy?.attributes_intro ?? ''}</p>
           </div>
 
-          {/* 3x3 stat grid */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3">
-            {STAT_ORDER.map((stat) => {
-              const allocated = Math.floor(stats[stat] / 10);
-              const bonus = statBonuses[stat] || 0;
-              const maxAllocatable = Math.min(5, Math.max(1, 5 - bonus));
-              return (
-                <StatCard
-                  key={stat}
-                  name={stat}
-                  value={allocated}
-                  bonus={bonus !== 0 ? bonus : undefined}
-                  onChange={(val) => handleStatChange(stat, val)}
-                  onHover={setHoveredStat}
-                  onTap={() => setSelectedStat(stat)}
-                  canDecrease={allocated > 1}
-                  canIncrease={allocated < maxAllocatable && freePoints > 0}
-                />
-              );
-            })}
+          {/* Stats grouped by category */}
+          <div className="space-y-6">
+            {STAT_CATEGORIES.map((category) => (
+              <div key={category.label}>
+                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  {category.label}
+                </h3>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  {category.stats.map((stat) => {
+                    const allocated = stats[stat];
+                    const bonus = statBonuses[stat] || 0;
+                    return (
+                      <StatCard
+                        key={stat}
+                        name={stat}
+                        value={allocated}
+                        bonus={bonus !== 0 ? bonus : undefined}
+                        onChange={(val) => handleStatChange(stat, val)}
+                        onHover={setHoveredStat}
+                        onTap={() => setSelectedStat(stat)}
+                        canDecrease={allocated > 1}
+                        canIncrease={allocated < 5 && pointsRemaining > 0}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Points warning (if over/under) */}
-          {freePoints !== 0 && (
+          {pointsRemaining !== 0 && (
             <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-4">
               <p className="text-sm text-amber-600 dark:text-amber-400">
-                {freePoints > 0
-                  ? `You have ${freePoints} unspent points. Continue or spend them here.`
-                  : `You are ${Math.abs(freePoints)} points over budget. Lower some stats.`}
+                {pointsRemaining > 0
+                  ? `You have ${pointsRemaining} unspent points. Continue or spend them here.`
+                  : `You are ${Math.abs(pointsRemaining)} points over budget. Lower some stats.`}
               </p>
             </div>
           )}
@@ -129,7 +132,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
         {/* Sidebar - desktop only */}
         <div className="hidden lg:block">
           <div className="sticky top-4 space-y-4">
-            <FreePointsWidget freePoints={freePoints} maxPoints={maxFreePoints} />
+            <FreePointsWidget pointsRemaining={pointsRemaining} budget={budget} />
             {hoveredStat && (
               <Card>
                 <CardHeader>

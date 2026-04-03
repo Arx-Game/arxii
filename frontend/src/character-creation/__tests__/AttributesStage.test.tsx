@@ -2,10 +2,10 @@
  * AttributesStage Component Tests
  *
  * Tests for the attributes allocation stage, including:
- * - Stat rendering
- * - Free points display
+ * - Stat rendering (12 stats in 4 categories)
+ * - Points budget display
  * - Validation
- * - Value changes
+ * - Value changes (1-5 scale, no internal conversion)
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
@@ -39,15 +39,38 @@ vi.mock('../queries', () => ({
       { id: 3, name: 'stamina', description: 'Endurance and resistance to harm.' },
       { id: 4, name: 'charm', description: 'Likability and social magnetism.' },
       { id: 5, name: 'presence', description: 'Force of personality and leadership.' },
-      { id: 6, name: 'perception', description: 'Awareness and reading of people and situations.' },
+      { id: 6, name: 'composure', description: 'Grace under pressure and emotional control.' },
       { id: 7, name: 'intellect', description: 'Reasoning and learned knowledge.' },
       { id: 8, name: 'wits', description: 'Quick thinking and situational awareness.' },
-      { id: 9, name: 'willpower', description: 'Mental fortitude and determination.' },
+      { id: 9, name: 'stability', description: 'Mental resilience and groundedness.' },
+      { id: 10, name: 'luck', description: 'Fortune and serendipity.' },
+      {
+        id: 11,
+        name: 'perception',
+        description: 'Awareness and reading of people and situations.',
+      },
+      { id: 12, name: 'willpower', description: 'Mental fortitude and determination.' },
     ],
     isLoading: false,
   }),
   useCGExplanations: () => ({ data: undefined, isLoading: false }),
 }));
+
+/** Helper: default stats object with all 12 stats at value 2. */
+const defaultStats = () => ({
+  strength: 2,
+  agility: 2,
+  stamina: 2,
+  charm: 2,
+  presence: 2,
+  composure: 2,
+  intellect: 2,
+  wits: 2,
+  stability: 2,
+  luck: 2,
+  perception: 2,
+  willpower: 2,
+});
 
 describe('AttributesStage', () => {
   afterEach(() => {
@@ -64,22 +87,10 @@ describe('AttributesStage', () => {
   };
 
   describe('Initial Render', () => {
-    it('renders all 9 primary stats', () => {
+    it('renders all 12 primary stats', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        draft_data: {
-          stats: {
-            strength: 20,
-            agility: 20,
-            stamina: 20,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
-          },
-        },
+        draft_data: { stats: defaultStats() },
       };
 
       renderAttributesStage(draft);
@@ -89,10 +100,27 @@ describe('AttributesStage', () => {
       expect(screen.getByText('stamina')).toBeInTheDocument();
       expect(screen.getByText('charm')).toBeInTheDocument();
       expect(screen.getByText('presence')).toBeInTheDocument();
-      expect(screen.getByText('perception')).toBeInTheDocument();
+      expect(screen.getByText('composure')).toBeInTheDocument();
       expect(screen.getByText('intellect')).toBeInTheDocument();
       expect(screen.getByText('wits')).toBeInTheDocument();
+      expect(screen.getByText('stability')).toBeInTheDocument();
+      expect(screen.getByText('luck')).toBeInTheDocument();
+      expect(screen.getByText('perception')).toBeInTheDocument();
       expect(screen.getByText('willpower')).toBeInTheDocument();
+    });
+
+    it('renders category headers', () => {
+      const draft: CharacterDraft = {
+        ...mockEmptyDraft,
+        draft_data: { stats: defaultStats() },
+      };
+
+      renderAttributesStage(draft);
+
+      expect(screen.getByText('Physical')).toBeInTheDocument();
+      expect(screen.getByText('Social')).toBeInTheDocument();
+      expect(screen.getByText('Mental')).toBeInTheDocument();
+      expect(screen.getByText('Meta')).toBeInTheDocument();
     });
 
     it('displays stats with default values (2) when no stats set', () => {
@@ -103,59 +131,33 @@ describe('AttributesStage', () => {
 
       renderAttributesStage(draft);
 
-      // All stats should display as 2 (default value 20 / 10)
+      // All stats should display as 2
       const statValues = screen.getAllByText('2');
-      expect(statValues.length).toBeGreaterThanOrEqual(9);
+      expect(statValues.length).toBeGreaterThanOrEqual(12);
     });
 
-    it('displays correct free points with default stats', () => {
+    it('displays correct points remaining with default stats', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        stats_free_points: 5,
-        stats_max_free_points: 5,
-        draft_data: {
-          stats: {
-            strength: 20,
-            agility: 20,
-            stamina: 20,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
-          },
-        },
+        stats_points_remaining: 5,
+        stats_budget: 29,
+        draft_data: { stats: defaultStats() },
       };
 
       renderAttributesStage(draft);
 
-      // FreePointsWidget shows number with aria-label
-      expect(screen.getByLabelText('5 free points remaining')).toBeInTheDocument();
+      expect(screen.getByLabelText('5 points remaining')).toBeInTheDocument();
     });
 
     it('displays stat descriptions on hover', async () => {
       const user = userEvent.setup();
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        draft_data: {
-          stats: {
-            strength: 20,
-            agility: 20,
-            stamina: 20,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
-          },
-        },
+        draft_data: { stats: defaultStats() },
       };
 
       renderAttributesStage(draft);
 
-      // Descriptions are shown in sidebar on hover (desktop)
       // Hover over strength stat card
       const strengthCard = screen.getByText('strength').closest('[class*="cursor-pointer"]');
       if (strengthCard) {
@@ -167,125 +169,90 @@ describe('AttributesStage', () => {
     });
   });
 
-  describe('Free Points Calculation', () => {
-    it('shows 0 free points when all points spent', () => {
+  describe('Points Budget', () => {
+    it('shows 0 remaining when all points spent', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        stats_free_points: 0,
-        stats_max_free_points: 5,
+        stats_points_remaining: 0,
+        stats_budget: 29,
         draft_data: {
           stats: {
-            strength: 30,
-            agility: 30,
-            stamina: 30,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 30,
-            willpower: 30,
+            ...defaultStats(),
+            strength: 3,
+            agility: 3,
+            wits: 3,
+            willpower: 3,
+            luck: 3,
           },
         },
       };
 
       renderAttributesStage(draft);
 
-      expect(screen.getByLabelText('0 free points remaining')).toBeInTheDocument();
+      expect(screen.getByLabelText('0 points remaining')).toBeInTheDocument();
     });
 
-    it('shows negative free points when over budget', () => {
+    it('shows negative remaining when over budget', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        stats_free_points: -3,
-        stats_max_free_points: 5,
+        stats_points_remaining: -3,
+        stats_budget: 29,
         draft_data: {
           stats: {
-            strength: 50,
-            agility: 50,
-            stamina: 40,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
+            ...defaultStats(),
+            strength: 5,
+            agility: 5,
+            stamina: 4,
           },
         },
       };
 
       renderAttributesStage(draft);
 
-      expect(screen.getByLabelText('-3 free points remaining')).toBeInTheDocument();
+      expect(screen.getByLabelText('-3 points remaining')).toBeInTheDocument();
     });
 
-    it('shows positive free points when under budget', () => {
+    it('shows positive remaining when under budget', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        stats_free_points: 4,
-        stats_max_free_points: 5,
+        stats_points_remaining: 4,
+        stats_budget: 29,
         draft_data: {
           stats: {
-            strength: 30,
-            agility: 20,
-            stamina: 20,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
+            ...defaultStats(),
+            strength: 3,
           },
         },
       };
 
       renderAttributesStage(draft);
 
-      expect(screen.getByLabelText('4 free points remaining')).toBeInTheDocument();
+      expect(screen.getByLabelText('4 points remaining')).toBeInTheDocument();
     });
   });
 
-  describe('Display Value Conversion', () => {
-    it('displays internal value 20 as 2', () => {
+  describe('Display Values', () => {
+    it('displays value 2 directly (no division)', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        draft_data: {
-          stats: {
-            strength: 20,
-            agility: 20,
-            stamina: 20,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
-          },
-        },
+        draft_data: { stats: defaultStats() },
       };
 
       renderAttributesStage(draft);
 
-      // All values should be 2
       const statValues = screen.getAllByText('2');
-      expect(statValues.length).toBeGreaterThanOrEqual(9);
+      expect(statValues.length).toBeGreaterThanOrEqual(12);
     });
 
-    it('displays internal value 50 as 5', () => {
+    it('displays value 5 directly', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        stats_free_points: 2,
-        stats_max_free_points: 5,
+        stats_points_remaining: 2,
+        stats_budget: 29,
         draft_data: {
           stats: {
-            strength: 50,
-            agility: 20,
-            stamina: 20,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
+            ...defaultStats(),
+            strength: 5,
           },
         },
       };
@@ -295,22 +262,15 @@ describe('AttributesStage', () => {
       expect(screen.getByText('5')).toBeInTheDocument();
     });
 
-    it('displays internal value 10 as 1', () => {
+    it('displays value 1 directly', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        stats_free_points: 6,
-        stats_max_free_points: 5,
+        stats_points_remaining: 6,
+        stats_budget: 29,
         draft_data: {
           stats: {
-            strength: 10,
-            agility: 20,
-            stamina: 20,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
+            ...defaultStats(),
+            strength: 1,
           },
         },
       };
@@ -322,23 +282,11 @@ describe('AttributesStage', () => {
   });
 
   describe('Stat Modification', () => {
-    it('calls updateDraft when increasing stat', async () => {
+    it('calls updateDraft with direct value when increasing stat', async () => {
       const user = userEvent.setup();
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        draft_data: {
-          stats: {
-            strength: 20,
-            agility: 20,
-            stamina: 20,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
-          },
-        },
+        draft_data: { stats: defaultStats() },
       };
 
       renderAttributesStage(draft);
@@ -357,7 +305,7 @@ describe('AttributesStage', () => {
               data: expect.objectContaining({
                 draft_data: expect.objectContaining({
                   stats: expect.objectContaining({
-                    strength: 30, // Increased from 20 to 30
+                    strength: 3, // Increased from 2 to 3 (no * 10)
                   }),
                 }),
               }),
@@ -367,23 +315,16 @@ describe('AttributesStage', () => {
       }
     });
 
-    it('calls updateDraft when decreasing stat', async () => {
+    it('calls updateDraft with direct value when decreasing stat', async () => {
       const user = userEvent.setup();
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        stats_free_points: 4,
-        stats_max_free_points: 5,
+        stats_points_remaining: 4,
+        stats_budget: 29,
         draft_data: {
           stats: {
-            strength: 30,
-            agility: 20,
-            stamina: 20,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
+            ...defaultStats(),
+            strength: 3,
           },
         },
       };
@@ -404,7 +345,7 @@ describe('AttributesStage', () => {
               data: expect.objectContaining({
                 draft_data: expect.objectContaining({
                   stats: expect.objectContaining({
-                    strength: 20, // Decreased from 30 to 20
+                    strength: 2, // Decreased from 3 to 2 (no * 10)
                   }),
                 }),
               }),
@@ -416,77 +357,55 @@ describe('AttributesStage', () => {
   });
 
   describe('Validation Feedback', () => {
-    it('shows complete state when free points = 0', () => {
+    it('shows complete state when points remaining = 0', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        stats_free_points: 0,
-        stats_max_free_points: 5,
+        stats_points_remaining: 0,
+        stats_budget: 29,
         draft_data: {
           stats: {
-            strength: 30,
-            agility: 30,
-            stamina: 30,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 30,
-            willpower: 30,
+            ...defaultStats(),
+            strength: 3,
+            agility: 3,
+            wits: 3,
+            willpower: 3,
+            luck: 3,
           },
         },
       };
 
       renderAttributesStage(draft);
 
-      // Check that free points displays as 0
-      expect(screen.getByLabelText('0 free points remaining')).toBeInTheDocument();
+      expect(screen.getByLabelText('0 points remaining')).toBeInTheDocument();
     });
 
-    it('shows over budget state when free points < 0', () => {
+    it('shows over budget state when points remaining < 0', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        stats_free_points: -3,
-        stats_max_free_points: 5,
+        stats_points_remaining: -3,
+        stats_budget: 29,
         draft_data: {
           stats: {
-            strength: 50,
-            agility: 50,
-            stamina: 40,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
+            ...defaultStats(),
+            strength: 5,
+            agility: 5,
+            stamina: 4,
           },
         },
       };
 
       renderAttributesStage(draft);
 
-      // Check that free points displays as negative with over budget message
-      expect(screen.getByLabelText('-3 free points remaining')).toBeInTheDocument();
+      expect(screen.getByLabelText('-3 points remaining')).toBeInTheDocument();
       expect(screen.getByText(/Over budget by 3/i)).toBeInTheDocument();
     });
 
     it('shows warning message when points unspent', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        stats_free_points: 5,
-        stats_max_free_points: 5,
-        draft_data: {
-          stats: {
-            strength: 20,
-            agility: 20,
-            stamina: 20,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
-          },
-        },
+        stats_points_remaining: 5,
+        stats_budget: 29,
+        draft_data: { stats: defaultStats() },
       };
 
       renderAttributesStage(draft);
@@ -497,19 +416,14 @@ describe('AttributesStage', () => {
     it('shows warning message when over budget', () => {
       const draft: CharacterDraft = {
         ...mockEmptyDraft,
-        stats_free_points: -3,
-        stats_max_free_points: 5,
+        stats_points_remaining: -3,
+        stats_budget: 29,
         draft_data: {
           stats: {
-            strength: 50,
-            agility: 50,
-            stamina: 40,
-            charm: 20,
-            presence: 20,
-            perception: 20,
-            intellect: 20,
-            wits: 20,
-            willpower: 20,
+            ...defaultStats(),
+            strength: 5,
+            agility: 5,
+            stamina: 4,
           },
         },
       };

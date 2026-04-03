@@ -304,19 +304,26 @@ export interface CharacterDraft {
   stage_completion: Record<Stage, boolean>;
   stage_errors: Partial<Record<Stage, string[]>>;
   has_existing_characters: boolean;
-  stats_free_points: number;
-  stats_max_free_points: number;
+  stats_points_remaining: number;
+  stats_budget: number;
 }
 
 export interface Stats {
+  // Physical
   strength: number;
   agility: number;
   stamina: number;
+  // Social
   charm: number;
   presence: number;
-  perception: number;
+  composure: number;
+  // Mental
   intellect: number;
   wits: number;
+  stability: number;
+  // Meta
+  luck: number;
+  perception: number;
   willpower: number;
 }
 
@@ -663,19 +670,22 @@ export interface CharacterDraftUpdate {
 
 /**
  * Get default stat values for character creation.
- * All stats start at 2 (20 internal) during character creation.
+ * All stats start at 2 during character creation.
  */
 export function getDefaultStats(): Stats {
   return {
-    strength: 20,
-    agility: 20,
-    stamina: 20,
-    charm: 20,
-    presence: 20,
-    perception: 20,
-    intellect: 20,
-    wits: 20,
-    willpower: 20,
+    strength: 2,
+    agility: 2,
+    stamina: 2,
+    charm: 2,
+    presence: 2,
+    composure: 2,
+    intellect: 2,
+    wits: 2,
+    stability: 2,
+    luck: 2,
+    perception: 2,
+    willpower: 2,
   };
 }
 

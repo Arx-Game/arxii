@@ -7,6 +7,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from world.checks.types import CheckResult
 from world.classes.models import CharacterClassLevel, PathAspect
+from world.fatigue.constants import EFFORT_CHECK_MODIFIER
 from world.progression.models import CharacterPathHistory
 from world.traits.models import (
     CheckOutcome,
@@ -24,30 +25,42 @@ if TYPE_CHECKING:
     from world.traits.handlers import TraitHandler
 
 
-def perform_check(
+def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend existing signature
     character: "ObjectDB",
     check_type: "CheckType",
     target_difficulty: int = 0,
     extra_modifiers: int = 0,
+    effort_level: str | None = None,
+    fatigue_penalty: int = 0,
 ) -> CheckResult:
     """
     Main check resolution function.
 
     1. Calculate weighted trait points using TraitHandler
     2. Calculate aspect bonus from path
-    3. Sum: trait_points + aspect_bonus + extra_modifiers = total_points
+    3. Sum: trait_points + aspect_bonus + extra_modifiers + effort_modifier + fatigue_penalty
     4. total_points -> CheckRank -> ResultChart (existing pipeline)
     5. Roll 1-100
     6. Apply rollmod: effective = max(1, min(100, roll + rollmod))
     7. Look up outcome on chart using effective roll
     8. Return CheckResult
+
+    Args:
+        character: The character performing the check.
+        check_type: The type of check being performed.
+        target_difficulty: Target difficulty in points.
+        extra_modifiers: Additional modifiers from caller (goals, magic, etc.).
+        effort_level: Optional EffortLevel value. Applies effort check modifier.
+        fatigue_penalty: Penalty from fatigue zone (caller-computed, typically negative).
     """
     handler: TraitHandler = character.traits  # type: ignore[attr-defined] — ObjectDB typeclass extension
     level = _get_character_level(character)
 
+    effort_modifier = EFFORT_CHECK_MODIFIER.get(effort_level, 0) if effort_level else 0
+
     trait_points = _calculate_trait_points(handler, check_type)
     aspect_bonus = _calculate_aspect_bonus(character, check_type, level)
-    total_points = trait_points + aspect_bonus + extra_modifiers
+    total_points = trait_points + aspect_bonus + extra_modifiers + effort_modifier + fatigue_penalty
 
     roller_rank = CheckRank.get_rank_for_points(total_points)
     target_rank = CheckRank.get_rank_for_points(target_difficulty)

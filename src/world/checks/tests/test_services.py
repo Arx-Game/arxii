@@ -168,6 +168,127 @@ class PerformCheckTests(TestCase):
         assert result_boosted.total_points > result_base.total_points
 
 
+class PerformCheckEffortFatigueTests(TestCase):
+    """Test effort level and fatigue penalty integration with perform_check."""
+
+    @classmethod
+    def setUpTestData(cls):
+        Trait.flush_instance_cache()
+        CheckSystemSetupFactory.create()
+        PointConversionRange.objects.get_or_create(
+            trait_type=TraitType.STAT,
+            min_value=1,
+            defaults={"max_value": 100, "points_per_level": 1},
+        )
+        for rank_val, min_pts, name in [
+            (0, 0, "EffortNone"),
+            (1, 10, "EffortNovice"),
+            (2, 25, "EffortCompetent"),
+            (3, 50, "EffortExpert"),
+        ]:
+            CheckRank.objects.get_or_create(
+                rank=rank_val,
+                defaults={"min_points": min_pts, "name": name},
+            )
+        cls.character = CharacterFactory()
+        cls.strength, _ = Trait.objects.get_or_create(
+            name="effort_test_strength",
+            defaults={
+                "trait_type": TraitType.STAT,
+                "category": TraitCategory.PHYSICAL,
+            },
+        )
+        cls.category = CheckCategoryFactory(name="effort_test_combat")
+        cls.check_type = CheckTypeFactory(name="effort_test_strike", category=cls.category)
+        CheckTypeTraitFactory(
+            check_type=cls.check_type,
+            trait=cls.strength,
+            weight=Decimal("1.0"),
+        )
+
+    def setUp(self):
+        Trait.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
+        ResultChart.clear_cache()
+
+    def test_very_low_applies_minus_three(self):
+        """Very low effort applies -3 modifier to total points."""
+        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        result_base = perform_check(self.character, self.check_type, target_difficulty=0)
+        result_very_low = perform_check(
+            self.character, self.check_type, target_difficulty=0, effort_level="very_low"
+        )
+        assert result_very_low.total_points == result_base.total_points - 3
+
+    def test_low_applies_minus_one(self):
+        """Low effort applies -1 modifier to total points."""
+        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        result_base = perform_check(self.character, self.check_type, target_difficulty=0)
+        result_low = perform_check(
+            self.character, self.check_type, target_difficulty=0, effort_level="low"
+        )
+        assert result_low.total_points == result_base.total_points - 1
+
+    def test_medium_effort_no_modifier(self):
+        """Medium effort applies 0 modifier to total points."""
+        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        result_base = perform_check(self.character, self.check_type, target_difficulty=0)
+        result_medium = perform_check(
+            self.character, self.check_type, target_difficulty=0, effort_level="medium"
+        )
+        assert result_medium.total_points == result_base.total_points
+
+    def test_high_applies_plus_two(self):
+        """High effort applies +2 modifier to total points."""
+        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        result_base = perform_check(self.character, self.check_type, target_difficulty=0)
+        result_high = perform_check(
+            self.character, self.check_type, target_difficulty=0, effort_level="high"
+        )
+        assert result_high.total_points == result_base.total_points + 2
+
+    def test_extreme_applies_plus_four(self):
+        """Extreme effort applies +4 modifier to total points."""
+        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        result_base = perform_check(self.character, self.check_type, target_difficulty=0)
+        result_extreme = perform_check(
+            self.character, self.check_type, target_difficulty=0, effort_level="extreme"
+        )
+        assert result_extreme.total_points == result_base.total_points + 4
+
+    def test_fatigue_penalty_applied(self):
+        """Fatigue penalty is subtracted from total points."""
+        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        result_base = perform_check(self.character, self.check_type, target_difficulty=0)
+        result_fatigued = perform_check(
+            self.character, self.check_type, target_difficulty=0, fatigue_penalty=-3
+        )
+        assert result_fatigued.total_points == result_base.total_points - 3
+
+    def test_effort_and_fatigue_combined(self):
+        """Both effort modifier and fatigue penalty apply together."""
+        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        result_base = perform_check(self.character, self.check_type, target_difficulty=0)
+        result_combined = perform_check(
+            self.character,
+            self.check_type,
+            target_difficulty=0,
+            effort_level="extreme",
+            fatigue_penalty=-3,
+        )
+        # +4 from extreme, -3 from fatigue = net +1
+        assert result_combined.total_points == result_base.total_points + 1
+
+    def test_no_effort_level_preserves_behavior(self):
+        """Omitting effort_level preserves existing behavior (no modifier)."""
+        CharacterTraitValue.objects.create(character=self.character, trait=self.strength, value=30)
+        result_default = perform_check(self.character, self.check_type, target_difficulty=0)
+        result_none = perform_check(
+            self.character, self.check_type, target_difficulty=0, effort_level=None
+        )
+        assert result_none.total_points == result_default.total_points
+
+
 class PreviewCheckDifficultyTests(TestCase):
     """Test preview_check_difficulty returns rank difference without rolling."""
 

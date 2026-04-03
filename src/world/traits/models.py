@@ -54,6 +54,7 @@ class TraitCategory(models.TextChoices):
     PHYSICAL = "physical", "Physical"
     SOCIAL = "social", "Social"
     MENTAL = "mental", "Mental"
+    META = "meta", "Meta"
     MAGIC = "magic", "Magic"
 
     # Skill categories
