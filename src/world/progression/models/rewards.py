@@ -18,7 +18,6 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.progression.constants import (
     DP_BASE_LEVEL,
     DP_COST_MULTIPLIER,
-    DP_COST_OFFSET,
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.traits.models import CharacterTraitValue
@@ -36,7 +35,9 @@ def cumulative_dp_for_level(level: int) -> int:
     """
     if level <= DP_BASE_LEVEL:
         return 0
-    return sum((n - DP_COST_OFFSET) * DP_COST_MULTIPLIER for n in range(DP_BASE_LEVEL, level))
+    # Closed-form arithmetic series: sum of (1+2+...+steps) * DP_COST_MULTIPLIER
+    steps = level - DP_BASE_LEVEL
+    return (DP_COST_MULTIPLIER * steps * (steps + 1)) // 2
 
 
 class ExperiencePointsData(SharedMemoryModel):

@@ -211,9 +211,13 @@ def _apply_weekly_rust(
     from world.traits.models import CharacterTraitValue
 
     # Idempotency guard: skip rust if it was already applied for this week.
+    # Uses structured description suffix "(week YYYY-MM-DD)" to identify which week
+    # the rust was applied for, since transaction_date reflects when the cron ran
+    # (current week), not the week being processed (previous week).
+    week_marker = f"(week {week_start})"
     already_rusted = DevelopmentTransaction.objects.filter(
         source=DevelopmentSource.RUST,
-        description__contains=str(week_start),
+        description__endswith=week_marker,
     ).exists()
     if already_rusted:
         logger.info(
@@ -223,6 +227,10 @@ def _apply_weekly_rust(
         return 0
 
     # Exclude character+trait pairs that were used this week.
+    # NOTE: This builds an OR-chain of Q objects, which scales linearly with the
+    # number of used pairs. For large player bases (1000+ active skill usages per
+    # week), consider replacing with a subquery or raw SQL NOT IN clause. For MVP
+    # scale this is acceptable.
     rust_qs = DevelopmentPoints.objects.select_related("trait").all()
     if used_pairs:
         from django.db.models import Q
