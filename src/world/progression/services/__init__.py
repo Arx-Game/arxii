@@ -32,6 +32,10 @@ from world.progression.services.scene_integration import (
     calculate_automatic_scene_awards,
 )
 from world.progression.services.scene_rewards import on_scene_finished
+from world.progression.services.skill_development import (
+    award_check_development,
+    calculate_check_dev_points,
+)
 from world.progression.services.spends import (
     calculate_level_up_requirements,
     check_requirements_for_unlock,
@@ -56,6 +60,7 @@ __all__ = [
     "InsufficientKudosError",
     "KudosXPResult",
     "award_cg_conversion_xp",
+    "award_check_development",
     "award_combat_development",
     "award_crafting_development",
     "award_development_points",
@@ -64,6 +69,7 @@ __all__ = [
     "award_social_development",
     "award_xp",
     "calculate_automatic_scene_awards",
+    "calculate_check_dev_points",
     "calculate_level_up_requirements",
     "cast_vote",
     "check_requirements_for_unlock",

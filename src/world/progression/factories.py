@@ -19,6 +19,7 @@ from world.progression.models import (
     KudosPointsData,
     KudosSourceCategory,
     KudosTransaction,
+    WeeklySkillUsage,
     XPTransaction,
 )
 from world.progression.types import DevelopmentSource, ProgressionReason
@@ -186,3 +187,17 @@ class CharacterXPTransactionFactory(factory_django.DjangoModelFactory):
     reason = ProgressionReason.SYSTEM_AWARD
     description = factory.Faker("sentence")
     transferable = True
+
+
+class WeeklySkillUsageFactory(factory_django.DjangoModelFactory):
+    """Factory for WeeklySkillUsage."""
+
+    class Meta:
+        model = WeeklySkillUsage
+
+    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    trait = factory.SubFactory("world.traits.factories.TraitFactory")
+    week_start = factory.LazyFunction(lambda: __import__("datetime").date.today())
+    points_earned = 0
+    check_count = 0
+    processed = False

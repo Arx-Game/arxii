@@ -268,66 +268,60 @@ class DevelopmentRateModifierTest(TestCase):
         assert dev_tracker.total_earned == 10
 
     def test_automatic_development_point_application(self):
-        """Test automatic development point application."""
-        # Create trait
+        """Test that dp accumulate and level up when threshold is crossed."""
         from world.traits.factories import TraitFactory
 
         trait = TraitFactory(name="swords")
 
-        # Create trait value for character
+        # Create trait value at level 10 (CG starting point)
         from world.traits.factories import CharacterTraitValueFactory
 
         trait_value = CharacterTraitValueFactory(
             character=self.character,
             trait=trait,
-            value=15,  # 1.5
+            value=10,
         )
 
-        # Award development points (should automatically apply)
+        # Award 100 dp — exactly enough to go 10 -> 11
         award_development_points(
             character=self.character,
             trait=trait,
             source=DevelopmentSource.COMBAT,
-            amount=5,
+            amount=100,
             description="Combat training",
         )
 
-        # Check trait was automatically updated
         trait_value.refresh_from_db()
-        assert trait_value.value == 20  # 15 + 5 = 20
+        assert trait_value.value == 11  # Crossed threshold: 100 dp needed for level 11
 
-        # Check development tracker was updated
         dev_tracker = self.character.development_points.get(trait=trait)
-        assert dev_tracker.total_earned == 5
+        assert dev_tracker.total_earned == 100
 
     def test_development_point_threshold_blocking(self):
-        """Test that development points auto-apply with simplified system."""
-        # Create trait
+        """Test that dp below threshold do not trigger a level-up."""
         from world.traits.factories import TraitFactory
 
         trait = TraitFactory(name="charm")
 
-        # Create trait value just below a threshold
         from world.traits.factories import CharacterTraitValueFactory
 
         trait_value = CharacterTraitValueFactory(
             character=self.character,
             trait=trait,
-            value=19,  # 1.9, just below 2.0 threshold
+            value=10,
         )
 
-        # Award development points
+        # Award 50 dp — not enough for level 11 (needs 100)
         award_development_points(
             character=self.character,
             trait=trait,
             source=DevelopmentSource.SOCIAL,
-            amount=5,
+            amount=50,
             description="Social training",
         )
 
-        # With simplified system, trait ratings auto-apply through development points
         trait_value.refresh_from_db()
-        assert trait_value.value == 24  # Should be 19 + 5 = 24
+        assert trait_value.value == 10  # Not enough dp to level up yet
 
 
 class LevelUpRequirementsTest(TestCase):

@@ -29,3 +29,9 @@ RS_PARTNER_XP = 5
 # First impression XP
 FIRST_IMPRESSION_AUTHOR_XP = 3
 FIRST_IMPRESSION_TARGET_XP = 5
+
+# Development point level-up formula constants
+# Cost from level N to N+1 = (N - DP_COST_OFFSET) * DP_COST_MULTIPLIER
+DP_BASE_LEVEL = 10  # CG starting level; no dp needed at or below this level
+DP_COST_OFFSET = 9  # Subtracted from level in cost formula
+DP_COST_MULTIPLIER = 100  # Multiplied by (level - offset) for per-level cost

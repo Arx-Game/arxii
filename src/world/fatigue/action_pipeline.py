@@ -12,6 +12,7 @@ from typing import Any
 from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
+from world.checks.types import CheckResult as CheckResultType
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel
 from world.fatigue.services import (
     apply_fatigue,
@@ -22,6 +23,10 @@ from world.fatigue.services import (
     should_check_collapse,
 )
 from world.fatigue.types import ActionResult
+from world.progression.services.skill_development import (
+    award_check_development,
+    get_character_path_level,
+)
 
 
 def execute_action_with_fatigue(
@@ -83,8 +88,19 @@ def _execute_action_with_fatigue(
 
     # 4. Execute check if provided
     check_result = None
+    level_ups: list[tuple[str, int, int]] = []
     if check_fn is not None:
         check_result = check_fn(effort_modifier, fatigue_penalty)
+
+    # 4b. Award development points for qualifying checks
+    if check_result is not None and effort_level:
+        if isinstance(check_result, CheckResultType):
+            level_ups = award_check_development(
+                character=character_sheet.character,
+                check_type=check_result.check_type,
+                effort_level=effort_level,
+                path_level=get_character_path_level(character_sheet.character),
+            )
 
     # 5. Collapse risk (based on zone AFTER fatigue applied)
     fatigue_zone = get_fatigue_zone(character_sheet, fatigue_category)
@@ -113,4 +129,5 @@ def _execute_action_with_fatigue(
         powered_through=powered_through,
         strain_damage=strain_damage,
         check_result=check_result,
+        level_ups=level_ups,
     )

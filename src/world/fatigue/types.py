@@ -21,6 +21,11 @@ class ActionResult:
     powered_through: bool
     strain_damage: int
     check_result: CheckResult | None
+    level_ups: list[tuple[str, int, int]] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.level_ups is None:
+            self.level_ups = []
 
 
 @dataclass

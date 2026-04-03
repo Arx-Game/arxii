@@ -15,8 +15,28 @@ from django.db import models
 from evennia.accounts.models import AccountDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.progression.constants import (
+    DP_BASE_LEVEL,
+    DP_COST_MULTIPLIER,
+    DP_COST_OFFSET,
+)
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.traits.models import CharacterTraitValue
+
+
+def cumulative_dp_for_level(level: int) -> int:
+    """Total dp needed to reach *level* from the base level of 10.
+
+    Going from level N to N+1 costs ``(N - 9) * 100`` dp, so:
+
+    * Level 10: 0 dp (CG starting point)
+    * Level 11: 100 dp
+    * Level 12: 300 dp  (100 + 200)
+    * Level 13: 600 dp  (100 + 200 + 300)
+    """
+    if level <= DP_BASE_LEVEL:
+        return 0
+    return sum((n - DP_COST_OFFSET) * DP_COST_MULTIPLIER for n in range(DP_BASE_LEVEL, level))
 
 
 class ExperiencePointsData(SharedMemoryModel):
@@ -150,32 +170,45 @@ class DevelopmentPoints(SharedMemoryModel):
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
-    def award_points(self, amount: int) -> None:
-        """Award development points and automatically apply them to the trait."""
+    def award_points(self, amount: int) -> list[tuple[int, int]]:
+        """Award development points and level up the trait when thresholds are crossed.
+
+        Development points accumulate in ``total_earned``. When enough dp have been
+        banked to cross the cumulative threshold for the next skill level, the
+        corresponding :class:`CharacterTraitValue` is incremented.
+
+        Args:
+            amount: Development points to award.
+
+        Returns:
+            List of ``(old_level, new_level)`` tuples for each level-up that occurred.
+        """
         self.total_earned += amount
         self.save()
 
         trait_value, _created = CharacterTraitValue.objects.get_or_create(
             character=self.character,
             trait=self.trait,
-            defaults={"value": 0},
+            defaults={"value": 10},
         )
 
-        new_value = trait_value.value + amount
-        # Check if crossing a major threshold that requires unlock
-        if new_value // 10 > trait_value.value // 10:
-            threshold = (new_value // 10) * 10
-            if not self._has_rating_unlock(threshold):
-                new_value = threshold - 1  # Cap just below threshold
+        level_ups: list[tuple[int, int]] = []
+        current_level: int = trait_value.value
 
-        trait_value.value = new_value
-        trait_value.save()
+        while True:
+            next_level = current_level + 1
+            dp_needed = cumulative_dp_for_level(next_level)
+            if self.total_earned >= dp_needed:
+                level_ups.append((current_level, next_level))
+                current_level = next_level
+            else:
+                break
 
-    def _has_rating_unlock(self, rating: int) -> bool:  # noqa: ARG002
-        """Check if character has unlocked the given rating for this trait."""
-        # With the new unlock system, trait ratings don't require separate unlocks
-        # They auto-apply through development points. Only class levels require unlocks.
-        return True
+        if level_ups:
+            trait_value.value = current_level
+            trait_value.save()
+
+        return level_ups
 
     class Meta:
         unique_together: ClassVar[list[str]] = ["character", "trait"]
@@ -230,3 +263,43 @@ class DevelopmentTransaction(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.character.key}: +{self.amount} points for {self.trait.name}"
+
+
+class WeeklySkillUsage(SharedMemoryModel):
+    """Tracks development points earned per trait per week via skill checks.
+
+    Upserted with ``F()`` expressions on each qualifying check. Serves as:
+
+    * Silent dp accumulator (no per-check audit spam)
+    * Rust prevention flag (any row = trait was used)
+    * Weekly summary data source
+    """
+
+    character = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="weekly_skill_usage",
+    )
+    trait = models.ForeignKey(
+        "traits.Trait",
+        on_delete=models.CASCADE,
+        related_name="weekly_skill_usage",
+    )
+    week_start = models.DateField()
+    points_earned = models.PositiveIntegerField(default=0)
+    check_count = models.PositiveIntegerField(default=0)
+    processed = models.BooleanField(default=False)
+
+    class Meta:
+        constraints: ClassVar[list[models.BaseConstraint]] = [
+            models.UniqueConstraint(
+                fields=["character", "trait", "week_start"],
+                name="unique_skill_usage_per_week",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"{self.character.key}: {self.points_earned} dp for "
+            f"{self.trait.name} (week {self.week_start})"
+        )
