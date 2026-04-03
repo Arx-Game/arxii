@@ -143,3 +143,75 @@ class ScheduledTaskRecord(SharedMemoryModel):
     def __str__(self) -> str:
         status = "enabled" if self.enabled else "disabled"
         return f"{self.task_key} ({status})"
+
+
+class GameSeason(SharedMemoryModel):
+    """A meta-game season (narrative arc).
+
+    Stub model for future expansion. Seasons group game weeks into
+    larger narrative units (like TV seasons). Week numbers reset to 1
+    at the start of each season.
+    """
+
+    number = models.PositiveIntegerField(unique=True)
+    name = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        ordering = ["number"]
+
+    def __str__(self) -> str:
+        return self.name or f"Season {self.number}"
+
+
+class GameWeek(SharedMemoryModel):
+    """A tracked game week.
+
+    Created by the weekly rollover cron. Week numbers increment within
+    a season. ``started_at`` and ``ended_at`` record the real-world time
+    range this week covered — gaps in real time (downtime) simply don't
+    map to any game week.
+
+    All weekly systems (votes, random scenes, skill development, etc.)
+    FK to this model instead of storing raw dates.
+    """
+
+    number = models.PositiveIntegerField(
+        help_text="Week number within its season (resets on new season)",
+    )
+    season = models.ForeignKey(
+        GameSeason,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="weeks",
+    )
+    started_at = models.DateTimeField(
+        help_text="Real-world time when this week began (cron creation time)",
+    )
+    ended_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Real-world time when this week ended (next cron run)",
+    )
+    is_current = models.BooleanField(
+        default=False,
+        db_index=True,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["season", "number"],
+                name="unique_week_per_season",
+            ),
+        ]
+        ordering = ["-started_at"]
+
+    def __str__(self) -> str:
+        season_label = f"S{self.season.number}" if self.season else "S?"
+        return f"{season_label} Week {self.number}"
+
+    @classmethod
+    def get_current(cls) -> "GameWeek | None":
+        """Return the current game week, or None if none exists."""
+        return cls.objects.filter(is_current=True).first()

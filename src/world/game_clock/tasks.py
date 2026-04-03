@@ -13,6 +13,75 @@ from world.game_clock.task_registry import (
 logger = logging.getLogger("world.game_clock.tasks")
 
 
+def weekly_rollover_task() -> None:
+    """Unified weekly rollover: advance GameWeek then run all weekly processors.
+
+    This is the single orchestrator for all weekly systems. It:
+    1. Advances the GameWeek (closes current, creates next)
+    2. Processes votes → XP for the closed week
+    3. Generates new random scene targets
+    4. Processes skill development audit + rust
+    5. Resets journal weekly XP trackers
+    6. Resets relationship weekly counters
+    7. Applies weekly AP regeneration
+
+    Individual weekly tasks are kept registered as fallbacks but this
+    orchestrator is the primary entry point.
+    """
+    from world.game_clock.week_services import advance_game_week
+
+    closed_week = None
+    try:
+        new_week = advance_game_week()
+        # The closed week is the one before the new one
+        from world.game_clock.models import GameWeek
+
+        closed_week = GameWeek.objects.filter(
+            season=new_week.season, number=new_week.number - 1
+        ).first()
+    except Exception:
+        logger.exception("Failed to advance game week")
+        return
+
+    logger.info("Weekly rollover: processing closed week %s", closed_week)
+
+    # Process each weekly system, catching errors individually so one
+    # failure doesn't block the others.
+    processors = [
+        ("vote XP", _run_vote_processing),
+        ("random scene generation", _run_random_scene_generation),
+        ("skill development", _run_skill_development),
+        ("journal weekly reset", batch_journal_weekly_reset),
+        ("relationship weekly reset", batch_relationship_weekly_reset),
+        ("AP weekly regen", batch_ap_weekly_regen),
+    ]
+
+    for name, processor in processors:
+        try:
+            processor()
+            logger.info("Weekly rollover: %s complete", name)
+        except Exception:
+            logger.exception("Weekly rollover: %s failed", name)
+
+
+def _run_vote_processing() -> None:
+    from world.progression.services.vote_processing import weekly_vote_processing_task
+
+    weekly_vote_processing_task()
+
+
+def _run_random_scene_generation() -> None:
+    from world.progression.services.random_scene import weekly_random_scene_generation_task
+
+    weekly_random_scene_generation_task()
+
+
+def _run_skill_development() -> None:
+    from world.progression.services.skill_development import weekly_skill_development_task
+
+    weekly_skill_development_task()
+
+
 def _fetch_ap_modifier_map(
     target_names: list[str],
 ) -> tuple[dict[int, dict[int, int]], dict[str, int]]:
@@ -227,31 +296,14 @@ def register_all_tasks() -> None:
         )
     )
 
-    from world.progression.services.random_scene import weekly_random_scene_generation_task
-    from world.progression.services.skill_development import weekly_skill_development_task
-    from world.progression.services.vote_processing import weekly_vote_processing_task
-
+    # Unified weekly rollover — orchestrates all weekly systems in sequence.
+    # Advances the GameWeek, then processes votes, random scenes, skills,
+    # journals, relationships, and AP regen.
     register_task(
         CronDefinition(
-            task_key="weekly_vote_xp_processing",
-            callable=weekly_vote_processing_task,
+            task_key="weekly_rollover",
+            callable=weekly_rollover_task,
             interval=timedelta(days=7),
-            description="Process weekly votes into XP awards and memorable poses.",
-        )
-    )
-    register_task(
-        CronDefinition(
-            task_key="weekly_random_scene_generation",
-            callable=weekly_random_scene_generation_task,
-            interval=timedelta(days=7),
-            description="Generate random scene targets for all active players.",
-        )
-    )
-    register_task(
-        CronDefinition(
-            task_key="weekly_skill_development",
-            callable=weekly_skill_development_task,
-            interval=timedelta(days=7),
-            description="Process weekly skill development audit and apply rust to unused skills.",
+            description="Weekly rollover: advance GameWeek and process all weekly systems.",
         )
     )
