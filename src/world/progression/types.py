@@ -38,6 +38,7 @@ class DevelopmentSource(models.TextChoices):
     CRAFTING = "crafting", "Crafting Activity"
     COMBAT = "combat", "Combat Encounter"
     SOCIAL = "social", "Social Activity"
+    RUST = "rust", "Skill Rust"
     OTHER = "other", "Other Activity"
 
 

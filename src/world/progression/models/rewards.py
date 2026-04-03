@@ -167,15 +167,19 @@ class DevelopmentPoints(SharedMemoryModel):
         default=0,
         help_text="Total development points earned",
     )
+    rust_debt = models.PositiveIntegerField(
+        default=0,
+        help_text="Rust debt that must be paid off before dp counts toward advancement",
+    )
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
     def award_points(self, amount: int) -> list[tuple[int, int]]:
         """Award development points and level up the trait when thresholds are crossed.
 
-        Development points accumulate in ``total_earned``. When enough dp have been
-        banked to cross the cumulative threshold for the next skill level, the
-        corresponding :class:`CharacterTraitValue` is incremented.
+        If there is outstanding ``rust_debt``, incoming dp pays off the debt first.
+        Only the remainder counts toward the ``total_earned`` accumulator and
+        potential level-ups.
 
         Args:
             amount: Development points to award.
@@ -183,6 +187,11 @@ class DevelopmentPoints(SharedMemoryModel):
         Returns:
             List of ``(old_level, new_level)`` tuples for each level-up that occurred.
         """
+        if self.rust_debt > 0:
+            payoff = min(amount, self.rust_debt)
+            self.rust_debt -= payoff
+            amount -= payoff
+
         self.total_earned += amount
         self.save()
 

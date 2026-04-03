@@ -35,3 +35,6 @@ FIRST_IMPRESSION_TARGET_XP = 5
 DP_BASE_LEVEL = 10  # CG starting level; no dp needed at or below this level
 DP_COST_OFFSET = 9  # Subtracted from level in cost formula
 DP_COST_MULTIPLIER = 100  # Multiplied by (level - offset) for per-level cost
+
+# Skill rust constants
+RUST_BASE_AMOUNT = 5  # Added to character_level for weekly rust

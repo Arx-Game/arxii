@@ -1,16 +1,26 @@
 """Tests for the skill development system (check-based dp awards and level-ups)."""
 
+import datetime
+
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
+from world.classes.factories import CharacterClassFactory
 from world.fatigue.constants import EffortLevel
-from world.progression.models import WeeklySkillUsage, cumulative_dp_for_level
+from world.progression.models import (
+    DevelopmentTransaction,
+    WeeklySkillUsage,
+    cumulative_dp_for_level,
+)
 from world.progression.models.rewards import DevelopmentPoints
 from world.progression.services.skill_development import (
+    apply_skill_rust,
     award_check_development,
     calculate_check_dev_points,
+    process_weekly_skill_development,
 )
+from world.progression.types import DevelopmentSource
 from world.traits.factories import TraitFactory
 from world.traits.models import CharacterTraitValue
 
@@ -270,3 +280,328 @@ class AwardCheckDevelopmentTest(TestCase):
         for _trait_name, old_lvl, new_lvl in result:
             assert old_lvl == 10
             assert new_lvl == 11
+
+
+class RustDebtPayoffTest(TestCase):
+    """Test that award_points pays off rust_debt before counting toward advancement."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = ObjectDB.objects.create(db_key="RustDebtChar")
+        cls.trait = TraitFactory(name="rust_debt_test")
+
+    def setUp(self) -> None:
+        DevelopmentPoints.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
+        DevelopmentPoints.objects.filter(character=self.character).delete()
+        CharacterTraitValue.objects.filter(character=self.character).delete()
+
+    def test_full_payoff_remainder_counts(self) -> None:
+        """If rust_debt=30 and we award 50, 30 pays debt and 20 goes to total_earned."""
+        dev = DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait, total_earned=0, rust_debt=30
+        )
+        dev.award_points(50)
+        dev.refresh_from_db()
+        assert dev.rust_debt == 0
+        assert dev.total_earned == 20
+
+    def test_partial_payoff(self) -> None:
+        """If rust_debt=50 and we award 30, debt drops to 20 and no dp toward advancement."""
+        dev = DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait, total_earned=0, rust_debt=50
+        )
+        dev.award_points(30)
+        dev.refresh_from_db()
+        assert dev.rust_debt == 20
+        assert dev.total_earned == 0
+
+    def test_exact_payoff(self) -> None:
+        """If rust_debt equals the award, debt goes to 0, no dp toward advancement."""
+        dev = DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait, total_earned=0, rust_debt=40
+        )
+        dev.award_points(40)
+        dev.refresh_from_db()
+        assert dev.rust_debt == 0
+        assert dev.total_earned == 0
+
+    def test_no_level_up_while_paying_debt(self) -> None:
+        """A character with rust_debt doesn't level up even if award is large enough."""
+        dev = DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait, total_earned=90, rust_debt=50
+        )
+        # Need 100 total_earned for level 11. Have 90 + award 50.
+        # But 50 of the award pays debt, so total_earned stays at 90.
+        level_ups = dev.award_points(50)
+        assert level_ups == []
+        dev.refresh_from_db()
+        assert dev.rust_debt == 0
+        assert dev.total_earned == 90
+
+    def test_no_debt_works_normally(self) -> None:
+        """When rust_debt is 0, award_points behaves as before."""
+        dev = DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait, total_earned=0, rust_debt=0
+        )
+        level_ups = dev.award_points(100)
+        assert level_ups == [(10, 11)]
+        dev.refresh_from_db()
+        assert dev.rust_debt == 0
+        assert dev.total_earned == 100
+
+
+class ApplySkillRustTest(TestCase):
+    """Test the apply_skill_rust function."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = ObjectDB.objects.create(db_key="RustChar")
+        cls.trait = TraitFactory(name="rust_apply_test")
+
+    def setUp(self) -> None:
+        DevelopmentPoints.flush_instance_cache()
+        DevelopmentPoints.objects.filter(character=self.character).delete()
+
+    def test_basic_rust_amount(self) -> None:
+        """Rust = character_level + 5."""
+        dev = DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait, total_earned=100, rust_debt=0
+        )
+        result = apply_skill_rust(dev, character_level=3, trait_level=11)
+        # 3 + 5 = 8, cap = (11 - 9) * 100 = 200, so 8 applies
+        assert result == 8
+        dev.refresh_from_db()
+        assert dev.rust_debt == 8
+
+    def test_rust_capped_at_level_cost(self) -> None:
+        """Rust cannot exceed the cost of the current level."""
+        dev = DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait, total_earned=100, rust_debt=0
+        )
+        # trait_level=11, cost = (11-9)*100 = 200
+        # character_level=300, rust = 305, capped at 200
+        result = apply_skill_rust(dev, character_level=300, trait_level=11)
+        assert result == 200
+        dev.refresh_from_db()
+        assert dev.rust_debt == 200
+
+    def test_no_rust_below_base_level(self) -> None:
+        """Skills at or below level 10 don't get rust."""
+        dev = DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait, total_earned=0, rust_debt=0
+        )
+        result = apply_skill_rust(dev, character_level=5, trait_level=10)
+        assert result == 0
+        dev.refresh_from_db()
+        assert dev.rust_debt == 0
+
+    def test_no_rust_at_level_5(self) -> None:
+        """Skills below the base level don't get rust."""
+        dev = DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait, total_earned=0, rust_debt=0
+        )
+        result = apply_skill_rust(dev, character_level=10, trait_level=5)
+        assert result == 0
+
+    def test_rust_accumulates(self) -> None:
+        """Repeated rust calls accumulate debt."""
+        dev = DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait, total_earned=100, rust_debt=10
+        )
+        result = apply_skill_rust(dev, character_level=5, trait_level=12)
+        # 5 + 5 = 10, cap = (12-9)*100 = 300, so 10 applies
+        assert result == 10
+        dev.refresh_from_db()
+        assert dev.rust_debt == 20
+
+
+class ProcessWeeklySkillDevelopmentTest(TestCase):
+    """Test the weekly processing function."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = ObjectDB.objects.create(db_key="WeeklyProcessChar")
+        cls.trait_used = TraitFactory(name="weekly_used_trait")
+        cls.trait_unused = TraitFactory(name="weekly_unused_trait")
+        cls.char_class = CharacterClassFactory(name="weekly_test_class")
+
+    def setUp(self) -> None:
+        DevelopmentPoints.flush_instance_cache()
+        WeeklySkillUsage.flush_instance_cache()
+        CharacterTraitValue.flush_instance_cache()
+        DevelopmentTransaction.flush_instance_cache()
+        DevelopmentPoints.objects.filter(character=self.character).delete()
+        WeeklySkillUsage.objects.filter(character=self.character).delete()
+        CharacterTraitValue.objects.filter(character=self.character).delete()
+        DevelopmentTransaction.objects.filter(character=self.character).delete()
+
+    def _set_class_level(self, level: int) -> None:
+        """Set the character's primary class level."""
+        from world.classes.models import CharacterClassLevel
+
+        CharacterClassLevel.objects.update_or_create(
+            character=self.character,
+            character_class=self.char_class,
+            defaults={"level": level, "is_primary": True},
+        )
+
+    def test_creates_audit_transactions_for_used_skills(self) -> None:
+        """Processed WeeklySkillUsage rows produce DevelopmentTransaction audit records."""
+        week = datetime.date(2026, 3, 16)  # a Monday
+        WeeklySkillUsage.objects.create(
+            character=self.character,
+            trait=self.trait_used,
+            week_start=week,
+            points_earned=50,
+            check_count=5,
+        )
+
+        process_weekly_skill_development(week)
+
+        txns = DevelopmentTransaction.objects.filter(
+            character=self.character, trait=self.trait_used
+        )
+        assert txns.count() == 1
+        txn = txns.first()
+        assert txn.amount == 50
+        assert txn.source == DevelopmentSource.SCENE
+        assert "50 dp" in txn.description
+        assert "5 skill checks" in txn.description
+
+    def test_marks_usage_as_processed(self) -> None:
+        week = datetime.date(2026, 3, 16)
+        WeeklySkillUsage.objects.create(
+            character=self.character,
+            trait=self.trait_used,
+            week_start=week,
+            points_earned=20,
+            check_count=2,
+        )
+
+        process_weekly_skill_development(week)
+
+        # Bypass SharedMemoryModel cache
+        usage_data = (
+            WeeklySkillUsage.objects.filter(
+                character=self.character, trait=self.trait_used, week_start=week
+            )
+            .values("processed")
+            .first()
+        )
+        assert usage_data is not None
+        assert usage_data["processed"] is True
+
+    def test_applies_rust_to_unused_skills(self) -> None:
+        """Skills with DevelopmentPoints but no WeeklySkillUsage get rust."""
+        self._set_class_level(5)
+        week = datetime.date(2026, 3, 16)
+
+        # Unused skill at level 12
+        DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait_unused, total_earned=300
+        )
+        CharacterTraitValue.objects.create(
+            character=self.character, trait=self.trait_unused, value=12
+        )
+
+        process_weekly_skill_development(week)
+
+        dev = (
+            DevelopmentPoints.objects.filter(character=self.character, trait=self.trait_unused)
+            .values("rust_debt")
+            .first()
+        )
+        # char_level=5, rust = 5+5 = 10, cap = (12-9)*100 = 300
+        assert dev["rust_debt"] == 10
+
+    def test_rust_creates_audit_transaction(self) -> None:
+        """Rust application creates a DevelopmentTransaction with source=RUST."""
+        self._set_class_level(5)
+        week = datetime.date(2026, 3, 16)
+
+        DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait_unused, total_earned=300
+        )
+        CharacterTraitValue.objects.create(
+            character=self.character, trait=self.trait_unused, value=12
+        )
+
+        process_weekly_skill_development(week)
+
+        txns = DevelopmentTransaction.objects.filter(
+            character=self.character,
+            trait=self.trait_unused,
+            source=DevelopmentSource.RUST,
+        )
+        assert txns.count() == 1
+        txn = txns.first()
+        assert txn.amount == 10
+        assert "rust" in txn.description.lower()
+
+    def test_used_skills_dont_get_rust(self) -> None:
+        """Skills with WeeklySkillUsage rows are protected from rust."""
+        self._set_class_level(5)
+        week = datetime.date(2026, 3, 16)
+
+        DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait_used, total_earned=300
+        )
+        CharacterTraitValue.objects.create(
+            character=self.character, trait=self.trait_used, value=12
+        )
+        WeeklySkillUsage.objects.create(
+            character=self.character,
+            trait=self.trait_used,
+            week_start=week,
+            points_earned=10,
+            check_count=1,
+        )
+
+        process_weekly_skill_development(week)
+
+        dev = (
+            DevelopmentPoints.objects.filter(character=self.character, trait=self.trait_used)
+            .values("rust_debt")
+            .first()
+        )
+        assert dev["rust_debt"] == 0
+
+    def test_no_rust_for_low_level_skills(self) -> None:
+        """Skills at or below level 10 don't get rust even if unused."""
+        self._set_class_level(5)
+        week = datetime.date(2026, 3, 16)
+
+        DevelopmentPoints.objects.create(
+            character=self.character, trait=self.trait_unused, total_earned=50
+        )
+        CharacterTraitValue.objects.create(
+            character=self.character, trait=self.trait_unused, value=10
+        )
+
+        process_weekly_skill_development(week)
+
+        dev = (
+            DevelopmentPoints.objects.filter(character=self.character, trait=self.trait_unused)
+            .values("rust_debt")
+            .first()
+        )
+        assert dev["rust_debt"] == 0
+
+    def test_already_processed_not_reprocessed(self) -> None:
+        """Usage rows already marked processed are skipped."""
+        week = datetime.date(2026, 3, 16)
+        WeeklySkillUsage.objects.create(
+            character=self.character,
+            trait=self.trait_used,
+            week_start=week,
+            points_earned=50,
+            check_count=5,
+            processed=True,
+        )
+
+        process_weekly_skill_development(week)
+
+        # No new transactions should be created
+        txns = DevelopmentTransaction.objects.filter(character=self.character)
+        assert txns.count() == 0
