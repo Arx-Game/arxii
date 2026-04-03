@@ -4,6 +4,8 @@ Constants for the progression system.
 
 from django.db import models
 
+from world.fatigue.constants import EffortLevel
+
 
 class VoteTargetType(models.TextChoices):
     """Types of content that can receive weekly votes."""
@@ -42,12 +44,11 @@ RUST_BASE_AMOUNT = 5  # Added to character_level for weekly rust
 # Path level divisor for dp multiplier calculation
 PATH_LEVEL_DIVISOR = 2  # dp multiplier = 1 + (path_level // PATH_LEVEL_DIVISOR)
 
-# Base dp earned per qualifying check, keyed by effort level.
-# Imported from world.fatigue.constants.EffortLevel values.
+# Base dp earned per qualifying check, keyed by EffortLevel enum values.
 EFFORT_DEV_BASE: dict[str, int] = {
-    "very_low": 0,
-    "low": 0,
-    "medium": 10,
-    "high": 20,
-    "extreme": 30,
+    EffortLevel.VERY_LOW: 0,
+    EffortLevel.LOW: 0,
+    EffortLevel.MEDIUM: 10,
+    EffortLevel.HIGH: 20,
+    EffortLevel.EXTREME: 30,
 }

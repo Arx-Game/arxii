@@ -181,6 +181,11 @@ class DevelopmentPoints(SharedMemoryModel):
         Only the remainder counts toward the ``total_earned`` accumulator and
         potential level-ups.
 
+        Assumes trait values are on the 1-100 internal scale where DP_BASE_LEVEL (10)
+        represents the minimum progression level. Values below 10 will be implicitly
+        advanced to 10 on first dp award (cumulative_dp_for_level returns 0 for
+        levels <= 10).
+
         Args:
             amount: Development points to award.
 

@@ -281,6 +281,57 @@ class AwardCheckDevelopmentTest(TestCase):
             assert old_lvl == 10
             assert new_lvl == 11
 
+    def test_existing_weekly_usage_triggers_update_path(self) -> None:
+        """Pre-existing WeeklySkillUsage row triggers the IntegrityError fallback (update path)."""
+        from world.progression.services.voting import get_current_week_start
+
+        week_start = get_current_week_start()
+        # Pre-create usage rows so the create path hits IntegrityError
+        WeeklySkillUsage.objects.create(
+            character=self.character,
+            trait=self.trait1,
+            week_start=week_start,
+            points_earned=5,
+            check_count=1,
+        )
+        WeeklySkillUsage.objects.create(
+            character=self.character,
+            trait=self.trait2,
+            week_start=week_start,
+            points_earned=5,
+            check_count=1,
+        )
+
+        award_check_development(
+            character=self.character,
+            check_type=self.check_type,
+            effort_level=EffortLevel.MEDIUM,
+            path_level=1,
+        )
+
+        # Verify the update path incremented both fields (bypass SharedMemoryModel cache)
+        usage1 = (
+            WeeklySkillUsage.objects.filter(
+                character=self.character, trait=self.trait1, week_start=week_start
+            )
+            .values("check_count", "points_earned")
+            .first()
+        )
+        assert usage1 is not None
+        assert usage1["check_count"] == 2  # 1 original + 1 from award
+        assert usage1["points_earned"] == 15  # 5 original + 10 from medium effort
+
+        usage2 = (
+            WeeklySkillUsage.objects.filter(
+                character=self.character, trait=self.trait2, week_start=week_start
+            )
+            .values("check_count", "points_earned")
+            .first()
+        )
+        assert usage2 is not None
+        assert usage2["check_count"] == 2
+        assert usage2["points_earned"] == 15
+
 
 class RustDebtPayoffTest(TestCase):
     """Test that award_points pays off rust_debt before counting toward advancement."""

@@ -153,8 +153,8 @@ def award_development_points(  # noqa: PLR0913 - Service signature exposes optio
     modified_amount = _apply_rate_modifier(amount, rate_modifier)
 
     with transaction.atomic():
-        # Get or create development tracker
-        dev_tracker, _created = DevelopmentPoints.objects.get_or_create(
+        # Get or create development tracker (lock row to prevent concurrent updates)
+        dev_tracker, _created = DevelopmentPoints.objects.select_for_update().get_or_create(
             character=character,
             trait=trait,
             defaults={"total_earned": 0},

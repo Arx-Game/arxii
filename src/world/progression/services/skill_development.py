@@ -15,14 +15,13 @@ import datetime
 import logging
 from typing import TYPE_CHECKING, cast
 
-from django.db import IntegrityError, models as db_models
+from django.db import IntegrityError, models as db_models, transaction
 from django.db.models import F
 
 from world.classes.models import CharacterClassLevel
 from world.progression.constants import (
     DP_BASE_LEVEL,
     DP_COST_MULTIPLIER,
-    DP_COST_OFFSET,
     EFFORT_DEV_BASE,
     PATH_LEVEL_DIVISOR,
     RUST_BASE_AMOUNT,
@@ -73,6 +72,7 @@ def calculate_check_dev_points(effort_level: str, path_level: int) -> int:
     return base * multiplier
 
 
+@transaction.atomic
 def award_check_development(
     character: ObjectDB,
     check_type: CheckType,
@@ -138,19 +138,6 @@ def award_check_development(
             level_ups.append((trait.name, old_lvl, new_lvl))
 
     return level_ups
-
-
-def _level_cost(level: int) -> int:
-    """Cost to advance from ``level - 1`` to ``level``.
-
-    Uses the standard formula: ``(level - DP_COST_OFFSET) * DP_COST_MULTIPLIER``.
-
-    For level 11: ``(11 - 9) * 100 = 200``.  For levels at or below the
-    base CG level (10), cost is 0.
-    """
-    if level <= DP_BASE_LEVEL:
-        return 0
-    return (level - DP_COST_OFFSET) * DP_COST_MULTIPLIER
 
 
 def apply_skill_rust(
