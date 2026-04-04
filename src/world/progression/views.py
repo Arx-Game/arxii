@@ -21,6 +21,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from world.game_clock.week_services import get_current_game_week
 from world.journals.models import JournalEntry
 from world.progression.constants import VoteTargetType
 from world.progression.models import (
@@ -48,7 +49,6 @@ from world.progression.services.random_scene import (
 )
 from world.progression.services.voting import (
     cast_vote,
-    get_current_week_start,
     get_or_create_vote_budget,
     get_votes_by_voter,
     remove_vote,
@@ -317,11 +317,11 @@ class RandomSceneViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     def get_queryset(self) -> Any:
         """Return current week's random scene targets for the requesting user."""
         account = cast(AccountDB, self.request.user)
-        week_start = get_current_week_start()
+        game_week = get_current_game_week()
         return (
             RandomSceneTarget.objects.filter(
                 account=account,
-                week_start=week_start,
+                game_week=game_week,
             )
             .select_related("target_persona")
             .order_by("slot_number")
@@ -346,13 +346,13 @@ class RandomSceneViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     def reroll(self, request: Request, pk: Any = None) -> Response:
         """Reroll a random scene target slot."""
         account = cast(AccountDB, request.user)
-        week_start = get_current_week_start()
+        game_week = get_current_game_week()
 
         # Look up the target to get the slot_number
         target = RandomSceneTarget.objects.filter(
             pk=pk,
             account=account,
-            week_start=week_start,
+            game_week=game_week,
         ).first()
         if target is None:
             return Response(
@@ -364,7 +364,7 @@ class RandomSceneViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
             updated_target = reroll_random_scene_target(
                 account=account,
                 slot_number=target.slot_number,
-                week_start=week_start,
+                game_week=game_week,
             )
         except ProgressionError as exc:
             return Response(

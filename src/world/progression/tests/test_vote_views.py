@@ -8,9 +8,10 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
+from world.game_clock.week_services import get_current_game_week
 from world.progression.constants import VoteTargetType
 from world.progression.models import WeeklyVote, WeeklyVoteBudget
-from world.progression.services.voting import cast_vote, get_current_week_start
+from world.progression.services.voting import cast_vote
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 
@@ -92,10 +93,10 @@ class CastVoteViewTests(VoteViewTestCase):
 
     def test_cast_vote_over_budget_returns_400(self) -> None:
         """Casting when budget is exhausted returns 400."""
-        week_start = get_current_week_start()
+        game_week = get_current_game_week()
         WeeklyVoteBudget.objects.create(
             account=self.voter,
-            week_start=week_start,
+            game_week=game_week,
             votes_spent=7,
         )
         _flush_caches()

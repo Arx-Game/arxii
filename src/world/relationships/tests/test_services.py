@@ -1,10 +1,7 @@
 """Tests for relationships service functions."""
 
-from datetime import timedelta
-
 from django.core.exceptions import ValidationError
 from django.test import TestCase
-from django.utils import timezone
 
 from world.achievements.factories import StatDefinitionFactory
 from world.achievements.models import StatTracker
@@ -354,17 +351,22 @@ class CreateDevelopmentTest(TestCase):
                 visibility=UpdateVisibility.SHARED,
             )
 
-    def test_weekly_limit_resets_after_seven_days(self):
-        """Weekly counter resets when week_reset_at is older than 7 days."""
-        rel = CharacterRelationshipFactory(source=self.sheet)
+    def test_weekly_limit_resets_on_new_game_week(self):
+        """Weekly counter resets when the game week changes."""
+        from world.game_clock.week_services import advance_game_week, get_current_game_week
+
+        old_week = get_current_game_week()
+        rel = CharacterRelationshipFactory(source=self.sheet, game_week=old_week)
         RelationshipTrackProgressFactory(
             relationship=rel, track=self.track, capacity=1000, developed_points=0
         )
 
         # Simulate having hit the limit last week
         rel.developments_this_week = MAX_DEVELOPMENTS_PER_WEEK
-        rel.week_reset_at = timezone.now() - timedelta(days=8)
-        rel.save(update_fields=["developments_this_week", "week_reset_at"])
+        rel.save(update_fields=["developments_this_week"])
+
+        # Advance to a new game week
+        advance_game_week()
 
         # Should succeed because the week has rolled over
         dev = create_development(

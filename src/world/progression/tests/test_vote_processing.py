@@ -4,11 +4,11 @@ Tests for weekly vote processing service.
 
 from __future__ import annotations
 
-import datetime
-
 from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory
+from world.game_clock.models import GameWeek
+from world.game_clock.week_services import advance_game_week, get_current_game_week
 from world.progression.constants import VoteTargetType
 from world.progression.models import WeeklyVote, WeeklyVoteBudget, XPTransaction
 from world.progression.services.vote_processing import (
@@ -84,7 +84,7 @@ class ProcessWeeklyVotesTest(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.week_start = datetime.date(2026, 3, 23)  # A Monday
+        cls.game_week = get_current_game_week()
 
     def test_awards_xp_based_on_distinct_voters(self) -> None:
         """Each author gets XP based on how many unique voters they received."""
@@ -97,13 +97,13 @@ class ProcessWeeklyVotesTest(TestCase):
         for voter in [voter1, voter2]:
             WeeklyVote.objects.create(
                 voter=voter,
-                week_start=self.week_start,
+                game_week=self.game_week,
                 target_type=VoteTargetType.INTERACTION,
                 target_id=interaction.pk,
                 author_account=author_account,
             )
 
-        process_weekly_votes(self.week_start)
+        process_weekly_votes(self.game_week)
 
         expected_xp = calculate_vote_xp(2)
         txn = XPTransaction.objects.filter(
@@ -119,32 +119,32 @@ class ProcessWeeklyVotesTest(TestCase):
 
         WeeklyVote.objects.create(
             voter=voter,
-            week_start=self.week_start,
+            game_week=self.game_week,
             target_type=VoteTargetType.INTERACTION,
             target_id=1,
             author_account=author_account,
         )
 
-        process_weekly_votes(self.week_start)
+        process_weekly_votes(self.game_week)
 
         WeeklyVote.flush_instance_cache()
-        assert WeeklyVote.objects.filter(week_start=self.week_start, processed=False).count() == 0
-        assert WeeklyVote.objects.filter(week_start=self.week_start, processed=True).count() == 1
+        assert WeeklyVote.objects.filter(game_week=self.game_week, processed=False).count() == 0
+        assert WeeklyVote.objects.filter(game_week=self.game_week, processed=True).count() == 1
 
     def test_resets_budgets(self) -> None:
         account = AccountFactory()
         WeeklyVoteBudget.objects.create(
             account=account,
-            week_start=self.week_start,
+            game_week=self.game_week,
             base_votes=7,
             scene_bonus_votes=3,
             votes_spent=5,
         )
 
-        process_weekly_votes(self.week_start)
+        process_weekly_votes(self.game_week)
 
         WeeklyVoteBudget.flush_instance_cache()
-        budget = WeeklyVoteBudget.objects.get(account=account, week_start=self.week_start)
+        budget = WeeklyVoteBudget.objects.get(account=account, game_week=self.game_week)
         assert budget.base_votes == 7
         assert budget.scene_bonus_votes == 0
         assert budget.votes_spent == 0
@@ -155,14 +155,14 @@ class ProcessWeeklyVotesTest(TestCase):
 
         WeeklyVote.objects.create(
             voter=voter,
-            week_start=self.week_start,
+            game_week=self.game_week,
             target_type=VoteTargetType.INTERACTION,
             target_id=1,
             author_account=author_account,
             processed=True,
         )
 
-        process_weekly_votes(self.week_start)
+        process_weekly_votes(self.game_week)
 
         assert not XPTransaction.objects.filter(
             account=author_account,
@@ -180,13 +180,13 @@ class ProcessWeeklyVotesTest(TestCase):
         for interaction in [interaction1, interaction2]:
             WeeklyVote.objects.create(
                 voter=voter,
-                week_start=self.week_start,
+                game_week=self.game_week,
                 target_type=VoteTargetType.INTERACTION,
                 target_id=interaction.pk,
                 author_account=author_account,
             )
 
-        process_weekly_votes(self.week_start)
+        process_weekly_votes(self.game_week)
 
         expected_xp = calculate_vote_xp(1)
         txn = XPTransaction.objects.get(
@@ -201,7 +201,7 @@ class ProcessMemorablePosesTest(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.week_start = datetime.date(2026, 3, 23)
+        cls.game_week = get_current_game_week()
 
     def test_awards_3_2_1_to_top_interactions(self) -> None:
         scene = SceneFactory()
@@ -215,7 +215,7 @@ class ProcessMemorablePosesTest(TestCase):
                 vote_count=10 - i,  # 10, 9, 8
             )
 
-        process_memorable_poses(self.week_start)
+        process_memorable_poses(self.game_week)
 
         for account, expected_xp in zip(accounts, [3, 2, 1], strict=True):
             txn = XPTransaction.objects.filter(
@@ -236,7 +236,7 @@ class ProcessMemorablePosesTest(TestCase):
         InteractionFactory(persona=persona1, scene=scene, vote_count=10)
         InteractionFactory(persona=persona2, scene=scene, vote_count=10)
 
-        process_memorable_poses(self.week_start)
+        process_memorable_poses(self.game_week)
 
         for account in [account1, account2]:
             txn = XPTransaction.objects.filter(
@@ -253,13 +253,13 @@ class ProcessMemorablePosesTest(TestCase):
         voter = AccountFactory()
         WeeklyVote.objects.create(
             voter=voter,
-            week_start=self.week_start,
+            game_week=self.game_week,
             target_type=VoteTargetType.INTERACTION,
             target_id=interaction.pk,
             author_account=AccountFactory(),
         )
 
-        process_memorable_poses(self.week_start)
+        process_memorable_poses(self.game_week)
 
         Interaction.flush_instance_cache()
         interaction.refresh_from_db()
@@ -270,7 +270,7 @@ class ProcessMemorablePosesTest(TestCase):
         account, persona = _make_character_with_account()
         InteractionFactory(persona=persona, scene=None, vote_count=10)
 
-        process_memorable_poses(self.week_start)
+        process_memorable_poses(self.game_week)
 
         assert not XPTransaction.objects.filter(
             account=account,
@@ -284,13 +284,13 @@ class ProcessMemorablePosesTest(TestCase):
         voter = AccountFactory()
         WeeklyVote.objects.create(
             voter=voter,
-            week_start=self.week_start,
+            game_week=self.game_week,
             target_type=VoteTargetType.INTERACTION,
             target_id=interaction.pk,
             author_account=AccountFactory(),
         )
 
-        process_memorable_poses(self.week_start)
+        process_memorable_poses(self.game_week)
 
         Interaction.flush_instance_cache()
         interaction.refresh_from_db()
@@ -307,7 +307,7 @@ class ProcessMemorablePosesTest(TestCase):
         InteractionFactory(persona=persona1, scene=scene1, vote_count=10)
         InteractionFactory(persona=persona2, scene=scene2, vote_count=10)
 
-        process_memorable_poses(self.week_start)
+        process_memorable_poses(self.game_week)
 
         for account in [account1, account2]:
             txn = XPTransaction.objects.filter(
@@ -323,29 +323,29 @@ class ProcessWeeklyVotesIdempotencyTest(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.week_start = datetime.date(2026, 3, 23)
+        cls.game_week = get_current_game_week()
 
     def test_second_run_does_not_award_additional_xp(self) -> None:
-        """Running process_weekly_votes twice with same week_start awards XP only once."""
+        """Running process_weekly_votes twice with same game_week awards XP only once."""
         author_account, author_persona = _make_character_with_account()
         voter = AccountFactory()
         interaction = InteractionFactory(persona=author_persona)
 
         WeeklyVote.objects.create(
             voter=voter,
-            week_start=self.week_start,
+            game_week=self.game_week,
             target_type=VoteTargetType.INTERACTION,
             target_id=interaction.pk,
             author_account=author_account,
         )
 
-        process_weekly_votes(self.week_start)
+        process_weekly_votes(self.game_week)
         first_run_xp = XPTransaction.objects.filter(
             account=author_account,
             reason=ProgressionReason.VOTE_REWARD,
         ).count()
 
-        process_weekly_votes(self.week_start)
+        process_weekly_votes(self.game_week)
         second_run_xp = XPTransaction.objects.filter(
             account=author_account,
             reason=ProgressionReason.VOTE_REWARD,
@@ -360,11 +360,8 @@ class WeeklyVoteProcessingTaskTest(TestCase):
 
     def test_processes_previous_week_not_current(self) -> None:
         """weekly_vote_processing_task processes the prior week's votes."""
-
-        from world.progression.services.voting import get_current_week_start
-
-        current_week = get_current_week_start()
-        previous_week = current_week - datetime.timedelta(days=7)
+        # Get the current week and create votes for it, then advance
+        previous_week = get_current_game_week()
 
         author_account, author_persona = _make_character_with_account()
         voter = AccountFactory()
@@ -373,16 +370,20 @@ class WeeklyVoteProcessingTaskTest(TestCase):
         # Create a vote for the previous week (should be processed)
         WeeklyVote.objects.create(
             voter=voter,
-            week_start=previous_week,
+            game_week=previous_week,
             target_type=VoteTargetType.INTERACTION,
             target_id=interaction.pk,
             author_account=author_account,
         )
 
+        # Advance to a new week
+        current_week = advance_game_week()
+        GameWeek.flush_instance_cache()
+
         # Create a vote for the current week (should NOT be processed)
         WeeklyVote.objects.create(
             voter=voter,
-            week_start=current_week,
+            game_week=current_week,
             target_type=VoteTargetType.INTERACTION,
             target_id=interaction.pk,
             author_account=author_account,
@@ -392,9 +393,9 @@ class WeeklyVoteProcessingTaskTest(TestCase):
 
         # Previous week's vote should be processed
         WeeklyVote.flush_instance_cache()
-        prev_vote = WeeklyVote.objects.get(week_start=previous_week)
+        prev_vote = WeeklyVote.objects.get(game_week=previous_week)
         assert prev_vote.processed is True, "Previous week's vote should be processed"
 
         # Current week's vote should remain unprocessed
-        curr_vote = WeeklyVote.objects.get(week_start=current_week)
+        curr_vote = WeeklyVote.objects.get(game_week=current_week)
         assert curr_vote.processed is False, "Current week's vote should not be processed"

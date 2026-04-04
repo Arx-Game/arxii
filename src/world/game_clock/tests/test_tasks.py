@@ -16,31 +16,35 @@ from world.game_clock.tasks import (
 
 
 class BatchJournalWeeklyResetTests(TestCase):
-    def test_resets_stale_trackers(self) -> None:
+    def test_resets_trackers_from_old_week(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory
+        from world.game_clock.week_services import advance_game_week, get_current_game_week
         from world.journals.models import WeeklyJournalXP
 
+        old_week = get_current_game_week()
         sheet = CharacterSheetFactory()
         tracker = WeeklyJournalXP.objects.create(
-            character_sheet=sheet, posts_this_week=3, praised_this_week=True
+            character_sheet=sheet, posts_this_week=3, praised_this_week=True, game_week=old_week
         )
-        tracker.week_reset_at = timezone.now() - timedelta(days=8)
-        tracker.save(update_fields=["week_reset_at"])
 
+        advance_game_week()
         batch_journal_weekly_reset()
 
-        # Flush identity mapper cache so refresh_from_db picks up .update() changes
         WeeklyJournalXP.flush_instance_cache()
         tracker.refresh_from_db()
         self.assertEqual(tracker.posts_this_week, 0)
         self.assertFalse(tracker.praised_this_week)
 
-    def test_skips_fresh_trackers(self) -> None:
+    def test_skips_current_week_trackers(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory
+        from world.game_clock.week_services import get_current_game_week
         from world.journals.models import WeeklyJournalXP
 
+        current_week = get_current_game_week()
         sheet = CharacterSheetFactory()
-        WeeklyJournalXP.objects.create(character_sheet=sheet, posts_this_week=2)
+        WeeklyJournalXP.objects.create(
+            character_sheet=sheet, posts_this_week=2, game_week=current_week
+        )
 
         batch_journal_weekly_reset()
 
@@ -172,32 +176,35 @@ class BatchApWeeklyRegenTests(TestCase):
 class BatchRelationshipWeeklyResetTests(TestCase):
     """Tests for batch relationship weekly reset."""
 
-    def test_resets_stale_relationships(self) -> None:
-        """Stale relationship counters are reset."""
+    def test_resets_old_week_relationships(self) -> None:
+        """Relationship counters from a previous game week are reset."""
+        from world.game_clock.week_services import advance_game_week, get_current_game_week
         from world.relationships.factories import CharacterRelationshipFactory
-
-        rel = CharacterRelationshipFactory(developments_this_week=3, changes_this_week=2)
-        rel.week_reset_at = timezone.now() - timedelta(days=8)
-        rel.save(update_fields=["week_reset_at"])
-
-        batch_relationship_weekly_reset()
-
-        # Flush identity mapper cache so refresh_from_db picks up .update() changes
         from world.relationships.models import CharacterRelationship
+
+        old_week = get_current_game_week()
+        rel = CharacterRelationshipFactory(
+            developments_this_week=3, changes_this_week=2, game_week=old_week
+        )
+
+        advance_game_week()
+        batch_relationship_weekly_reset()
 
         CharacterRelationship.flush_instance_cache()
         rel.refresh_from_db()
         self.assertEqual(rel.developments_this_week, 0)
         self.assertEqual(rel.changes_this_week, 0)
 
-    def test_skips_recently_reset_relationships(self) -> None:
-        """Relationships reset within the last week are not touched."""
+    def test_skips_current_week_relationships(self) -> None:
+        """Relationships in the current game week are not touched."""
+        from world.game_clock.week_services import get_current_game_week
         from world.relationships.factories import CharacterRelationshipFactory
 
+        current_week = get_current_game_week()
         rel = CharacterRelationshipFactory(
             developments_this_week=3,
             changes_this_week=2,
-            week_reset_at=timezone.now(),
+            game_week=current_week,
         )
 
         batch_relationship_weekly_reset()

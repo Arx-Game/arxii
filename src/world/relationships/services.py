@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.utils import timezone
 
 from world.achievements.models import StatDefinition
 from world.achievements.services import increment_stat
@@ -198,13 +196,14 @@ def create_development(  # noqa: PLR0913
     character has used all 7 weekly development updates.
     """
     with transaction.atomic():
-        # Enforce weekly limit
-        now = timezone.now()
-        week_ago = now - timedelta(days=7)
-        if relationship.week_reset_at is None or relationship.week_reset_at < week_ago:
+        # Enforce weekly limit — reset counters if game week has changed
+        from world.game_clock.week_services import get_current_game_week
+
+        current_week = get_current_game_week()
+        if relationship.game_week_id != current_week.pk:
             relationship.developments_this_week = 0
-            relationship.week_reset_at = now
-            relationship.save(update_fields=["developments_this_week", "week_reset_at"])
+            relationship.game_week = current_week
+            relationship.save(update_fields=["developments_this_week", "game_week"])
 
         if relationship.developments_this_week >= MAX_DEVELOPMENTS_PER_WEEK:
             msg = f"Weekly development limit reached ({MAX_DEVELOPMENTS_PER_WEEK} per week)."

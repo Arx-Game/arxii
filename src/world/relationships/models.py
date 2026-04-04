@@ -294,6 +294,14 @@ class CharacterRelationship(SharedMemoryModel):
     )
 
     # Weekly rate limiting
+    game_week = models.ForeignKey(
+        "game_clock.GameWeek",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="relationships",
+        help_text="GameWeek these weekly counters belong to",
+    )
     developments_this_week = models.PositiveIntegerField(
         default=0,
         help_text="Number of development updates submitted this week (max 7)",
@@ -301,11 +309,6 @@ class CharacterRelationship(SharedMemoryModel):
     changes_this_week = models.PositiveIntegerField(
         default=0,
         help_text="Number of relationship changes submitted this week",
-    )
-    week_reset_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When the weekly update/change counters were last reset",
     )
 
     created_at = models.DateTimeField(

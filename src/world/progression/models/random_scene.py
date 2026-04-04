@@ -33,8 +33,10 @@ class RandomSceneTarget(SharedMemoryModel):
         related_name="targeted_for_random_scene",
         help_text="The persona (IC identity) to RP with",
     )
-    week_start = models.DateField(
-        help_text="Monday of the RS week (ISO week start)",
+    game_week = models.ForeignKey(
+        "game_clock.GameWeek",
+        on_delete=models.CASCADE,
+        related_name="random_scene_targets",
     )
     slot_number = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(5)],
@@ -50,7 +52,7 @@ class RandomSceneTarget(SharedMemoryModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["account", "week_start", "slot_number"],
+                fields=["account", "game_week", "slot_number"],
                 name="unique_rs_target_per_slot",
             ),
         ]
@@ -58,7 +60,7 @@ class RandomSceneTarget(SharedMemoryModel):
     def __str__(self) -> str:
         return (
             f"RS target: {self.account} → {self.target_persona}"
-            f" (week {self.week_start}, slot {self.slot_number})"
+            f" ({self.game_week}, slot {self.slot_number})"
         )
 
 

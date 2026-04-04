@@ -1,10 +1,7 @@
 """Tests for journal models."""
 
-from datetime import timedelta
-
 from django.db import IntegrityError
 from django.test import TestCase
-from django.utils import timezone
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.journals.constants import ResponseType
@@ -141,31 +138,42 @@ class WeeklyJournalXPTests(TestCase):
         self.assertFalse(tracker.retorted_this_week)
         self.assertFalse(tracker.was_retorted_this_week)
 
-    def test_needs_reset_after_a_week(self) -> None:
-        tracker = WeeklyJournalXP.objects.create(character_sheet=self.sheet)
-        tracker.week_reset_at = timezone.now() - timedelta(days=8)
-        tracker.save()
-        self.assertTrue(tracker.needs_reset())
+    def test_needs_reset_for_different_week(self) -> None:
+        from world.game_clock.week_services import advance_game_week, get_current_game_week
 
-    def test_no_reset_needed_within_week(self) -> None:
-        tracker = WeeklyJournalXP.objects.create(character_sheet=self.sheet)
-        self.assertFalse(tracker.needs_reset())
+        old_week = get_current_game_week()
+        tracker = WeeklyJournalXP.objects.create(character_sheet=self.sheet, game_week=old_week)
+        new_week = advance_game_week()
+        self.assertTrue(tracker.needs_reset(new_week))
+
+    def test_no_reset_needed_same_week(self) -> None:
+        from world.game_clock.week_services import get_current_game_week
+
+        current_week = get_current_game_week()
+        tracker = WeeklyJournalXP.objects.create(character_sheet=self.sheet, game_week=current_week)
+        self.assertFalse(tracker.needs_reset(current_week))
 
     def test_reset_clears_counters(self) -> None:
+        from world.game_clock.week_services import advance_game_week, get_current_game_week
+
+        old_week = get_current_game_week()
         tracker = WeeklyJournalXP.objects.create(
             character_sheet=self.sheet,
+            game_week=old_week,
             posts_this_week=3,
             praised_this_week=True,
             was_praised_this_week=True,
             retorted_this_week=True,
             was_retorted_this_week=True,
         )
-        tracker.reset_week()
+        new_week = advance_game_week()
+        tracker.reset_week(new_week)
         self.assertEqual(tracker.posts_this_week, 0)
         self.assertFalse(tracker.praised_this_week)
         self.assertFalse(tracker.was_praised_this_week)
         self.assertFalse(tracker.retorted_this_week)
         self.assertFalse(tracker.was_retorted_this_week)
+        self.assertEqual(tracker.game_week, new_week)
 
     def test_unique_per_character(self) -> None:
         WeeklyJournalXP.objects.create(character_sheet=self.sheet)

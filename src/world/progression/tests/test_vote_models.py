@@ -2,13 +2,12 @@
 Tests for vote system models.
 """
 
-import datetime
-
 from django.db import IntegrityError
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
 import pytest
 
+from world.game_clock.week_services import get_current_game_week
 from world.progression.constants import VoteTargetType
 from world.progression.models import WeeklyVote, WeeklyVoteBudget
 
@@ -22,7 +21,7 @@ class WeeklyVoteBudgetModelTest(TestCase):
             username="voter1",
             email="voter1@test.com",
         )
-        cls.week_start = datetime.date(2026, 3, 23)  # A Monday
+        cls.game_week = get_current_game_week()
 
     def setUp(self) -> None:
         WeeklyVoteBudget.flush_instance_cache()
@@ -31,7 +30,7 @@ class WeeklyVoteBudgetModelTest(TestCase):
         """Budget created with correct defaults."""
         budget = WeeklyVoteBudget.objects.create(
             account=self.account,
-            week_start=self.week_start,
+            game_week=self.game_week,
         )
         assert budget.base_votes == 7
         assert budget.scene_bonus_votes == 0
@@ -41,7 +40,7 @@ class WeeklyVoteBudgetModelTest(TestCase):
         """Remaining equals base when no bonus and nothing spent."""
         budget = WeeklyVoteBudget.objects.create(
             account=self.account,
-            week_start=self.week_start,
+            game_week=self.game_week,
         )
         assert budget.votes_remaining == 7
 
@@ -49,7 +48,7 @@ class WeeklyVoteBudgetModelTest(TestCase):
         """Bonus votes add to remaining."""
         budget = WeeklyVoteBudget.objects.create(
             account=self.account,
-            week_start=self.week_start,
+            game_week=self.game_week,
             scene_bonus_votes=3,
         )
         assert budget.votes_remaining == 10
@@ -58,7 +57,7 @@ class WeeklyVoteBudgetModelTest(TestCase):
         """Spending reduces remaining correctly."""
         budget = WeeklyVoteBudget.objects.create(
             account=self.account,
-            week_start=self.week_start,
+            game_week=self.game_week,
             scene_bonus_votes=2,
             votes_spent=5,
         )
@@ -69,31 +68,33 @@ class WeeklyVoteBudgetModelTest(TestCase):
         """Cannot create two budgets for same account + week."""
         WeeklyVoteBudget.objects.create(
             account=self.account,
-            week_start=self.week_start,
+            game_week=self.game_week,
         )
         with pytest.raises(IntegrityError):
             WeeklyVoteBudget.objects.create(
                 account=self.account,
-                week_start=self.week_start,
+                game_week=self.game_week,
             )
 
     def test_different_weeks_allowed(self) -> None:
         """Same account can have budgets for different weeks."""
+        from world.game_clock.week_services import advance_game_week
+
         WeeklyVoteBudget.objects.create(
             account=self.account,
-            week_start=self.week_start,
+            game_week=self.game_week,
         )
-        next_week = self.week_start + datetime.timedelta(weeks=1)
+        next_week = advance_game_week()
         budget2 = WeeklyVoteBudget.objects.create(
             account=self.account,
-            week_start=next_week,
+            game_week=next_week,
         )
         assert budget2.pk is not None
 
     def test_str(self) -> None:
         budget = WeeklyVoteBudget.objects.create(
             account=self.account,
-            week_start=self.week_start,
+            game_week=self.game_week,
             votes_spent=2,
         )
         result = str(budget)
@@ -114,7 +115,7 @@ class WeeklyVoteModelTest(TestCase):
             username="author1",
             email="author1@test.com",
         )
-        cls.week_start = datetime.date(2026, 3, 23)
+        cls.game_week = get_current_game_week()
 
     def setUp(self) -> None:
         WeeklyVote.flush_instance_cache()
@@ -123,7 +124,7 @@ class WeeklyVoteModelTest(TestCase):
         """Vote can be created with all required fields."""
         vote = WeeklyVote.objects.create(
             voter=self.voter,
-            week_start=self.week_start,
+            game_week=self.game_week,
             target_type=VoteTargetType.INTERACTION,
             target_id=42,
             author_account=self.author,
@@ -139,7 +140,7 @@ class WeeklyVoteModelTest(TestCase):
         """Cannot vote on the same target twice in one week."""
         WeeklyVote.objects.create(
             voter=self.voter,
-            week_start=self.week_start,
+            game_week=self.game_week,
             target_type=VoteTargetType.INTERACTION,
             target_id=42,
             author_account=self.author,
@@ -147,7 +148,7 @@ class WeeklyVoteModelTest(TestCase):
         with pytest.raises(IntegrityError):
             WeeklyVote.objects.create(
                 voter=self.voter,
-                week_start=self.week_start,
+                game_week=self.game_week,
                 target_type=VoteTargetType.INTERACTION,
                 target_id=42,
                 author_account=self.author,
@@ -157,14 +158,14 @@ class WeeklyVoteModelTest(TestCase):
         """Same voter can vote on different targets in the same week."""
         WeeklyVote.objects.create(
             voter=self.voter,
-            week_start=self.week_start,
+            game_week=self.game_week,
             target_type=VoteTargetType.INTERACTION,
             target_id=42,
             author_account=self.author,
         )
         vote2 = WeeklyVote.objects.create(
             voter=self.voter,
-            week_start=self.week_start,
+            game_week=self.game_week,
             target_type=VoteTargetType.INTERACTION,
             target_id=43,
             author_account=self.author,
@@ -175,14 +176,14 @@ class WeeklyVoteModelTest(TestCase):
         """Same target_id with different target_type is a distinct vote."""
         WeeklyVote.objects.create(
             voter=self.voter,
-            week_start=self.week_start,
+            game_week=self.game_week,
             target_type=VoteTargetType.INTERACTION,
             target_id=42,
             author_account=self.author,
         )
         vote2 = WeeklyVote.objects.create(
             voter=self.voter,
-            week_start=self.week_start,
+            game_week=self.game_week,
             target_type=VoteTargetType.SCENE_PARTICIPATION,
             target_id=42,
             author_account=self.author,
@@ -192,7 +193,7 @@ class WeeklyVoteModelTest(TestCase):
     def test_str(self) -> None:
         vote = WeeklyVote.objects.create(
             voter=self.voter,
-            week_start=self.week_start,
+            game_week=self.game_week,
             target_type=VoteTargetType.INTERACTION,
             target_id=42,
             author_account=self.author,

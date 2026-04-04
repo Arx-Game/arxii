@@ -2,13 +2,12 @@
 Tests for Random Scene service functions.
 """
 
-import datetime
-
 from django.test import TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
+from world.game_clock.week_services import get_current_game_week
 from world.progression.models import RandomSceneCompletion, RandomSceneTarget
 from world.progression.services.random_scene import (
     claim_random_scene,
@@ -47,7 +46,7 @@ class GenerateRandomSceneTargetsTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory(username="rs_gen_player")
-        cls.week_start = datetime.date(2026, 3, 23)
+        cls.game_week = get_current_game_week()
 
     def setUp(self) -> None:
         RandomSceneTarget.flush_instance_cache()
@@ -62,12 +61,12 @@ class GenerateRandomSceneTargetsTest(TestCase):
         for _ in range(6):
             _make_active_character()
 
-        targets = generate_random_scene_targets(self.account, self.week_start)
+        targets = generate_random_scene_targets(self.account, self.game_week)
         assert len(targets) == 5
         for i, target in enumerate(targets, start=1):
             assert target.slot_number == i
             assert target.account == self.account
-            assert target.week_start == self.week_start
+            assert target.game_week == self.game_week
             assert target.claimed is False
 
     def test_slots_1_3_prefer_strangers(self) -> None:
@@ -89,7 +88,7 @@ class GenerateRandomSceneTargetsTest(TestCase):
         for _ in range(3):
             _make_active_character()
 
-        targets = generate_random_scene_targets(self.account, self.week_start)
+        targets = generate_random_scene_targets(self.account, self.game_week)
         slots_1_3_ids = {t.target_persona_id for t in targets[:3]}
 
         # Slots 1-3 should NOT contain any known personas (they prefer strangers)
@@ -118,7 +117,7 @@ class GenerateRandomSceneTargetsTest(TestCase):
         for _ in range(5):
             _make_active_character()
 
-        targets = generate_random_scene_targets(self.account, self.week_start)
+        targets = generate_random_scene_targets(self.account, self.game_week)
         rel_ids = {p.pk for p in rel_personas}
         slots_4_5_ids = {t.target_persona_id for t in targets[3:5]}
 
@@ -140,7 +139,7 @@ class GenerateRandomSceneTargetsTest(TestCase):
                 target_persona=persona,
             )
 
-        targets = generate_random_scene_targets(self.account, self.week_start)
+        targets = generate_random_scene_targets(self.account, self.game_week)
         assert len(targets) == 5
 
     def test_fills_from_general_pool_when_no_relationships(self) -> None:
@@ -151,7 +150,7 @@ class GenerateRandomSceneTargetsTest(TestCase):
         for _ in range(5):
             _make_active_character()
 
-        targets = generate_random_scene_targets(self.account, self.week_start)
+        targets = generate_random_scene_targets(self.account, self.game_week)
         assert len(targets) == 5
 
 
@@ -160,7 +159,7 @@ class ValidateRandomSceneClaimTest(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.week_start = datetime.date(2026, 3, 23)
+        cls.game_week = get_current_game_week()
         cls.account = AccountFactory(username="rs_claimer")
         cls.target_persona, cls.target_entry, cls.target_tenure = _make_active_character()
         cls.target_account = cls.target_tenure.player_data.account
@@ -168,7 +167,8 @@ class ValidateRandomSceneClaimTest(TestCase):
     def test_returns_true_with_shared_scene(self) -> None:
         """Returns True when both accounts are in the same scene this week."""
         scene = SceneFactory()
-        joined = datetime.datetime(2026, 3, 24, 12, 0, tzinfo=datetime.UTC)
+        # Use a timestamp between started_at and now (not in the future)
+        joined = self.game_week.started_at
         p1 = SceneParticipation.objects.create(
             scene=scene,
             account=self.account,
@@ -181,12 +181,12 @@ class ValidateRandomSceneClaimTest(TestCase):
         SceneParticipation.objects.filter(pk=p1.pk).update(joined_at=joined)
         SceneParticipation.objects.filter(pk=p2.pk).update(joined_at=joined)
 
-        result = validate_random_scene_claim(self.account, self.target_persona, self.week_start)
+        result = validate_random_scene_claim(self.account, self.target_persona, self.game_week)
         assert result is True
 
     def test_returns_true_with_shared_interactions_in_same_scene(self) -> None:
         """Returns True when both characters have interactions in the same scene."""
-        ts = datetime.datetime(2026, 3, 25, 10, 0, tzinfo=datetime.UTC)
+        ts = self.game_week.started_at
         shared_scene = SceneFactory()
 
         own_persona, _own_entry, _ = _make_active_character(self.account)
@@ -196,12 +196,12 @@ class ValidateRandomSceneClaimTest(TestCase):
         target_interaction = InteractionFactory(persona=self.target_persona, scene=shared_scene)
         Interaction.objects.filter(pk=target_interaction.pk).update(timestamp=ts)
 
-        result = validate_random_scene_claim(self.account, self.target_persona, self.week_start)
+        result = validate_random_scene_claim(self.account, self.target_persona, self.game_week)
         assert result is True
 
     def test_returns_false_with_no_evidence(self) -> None:
         """Returns False when no shared scene or interactions."""
-        result = validate_random_scene_claim(self.account, self.target_persona, self.week_start)
+        result = validate_random_scene_claim(self.account, self.target_persona, self.game_week)
         assert result is False
 
 
@@ -210,7 +210,7 @@ class ClaimRandomSceneTest(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.week_start = datetime.date(2026, 3, 23)
+        cls.game_week = get_current_game_week()
         cls.account = AccountFactory(username="rs_claim_acct")
         cls.own_persona, cls.own_entry, _ = _make_active_character(cls.account)
         cls.target_persona, cls.target_entry, cls.target_tenure = _make_active_character()
@@ -223,7 +223,7 @@ class ClaimRandomSceneTest(TestCase):
     def _create_shared_scene(self) -> None:
         """Helper to create a shared scene for validation."""
         scene = SceneFactory()
-        joined = datetime.datetime(2026, 3, 24, 12, 0, tzinfo=datetime.UTC)
+        joined = self.game_week.started_at
         p1 = SceneParticipation.objects.create(
             scene=scene,
             account=self.account,
@@ -242,7 +242,7 @@ class ClaimRandomSceneTest(TestCase):
         target = RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=self.target_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=1,
             first_time=False,
         )
@@ -267,7 +267,7 @@ class ClaimRandomSceneTest(TestCase):
         target = RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=self.target_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=1,
             first_time=True,
         )
@@ -290,7 +290,7 @@ class ClaimRandomSceneTest(TestCase):
         target = RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=self.target_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=1,
         )
         self._create_shared_scene()
@@ -307,7 +307,7 @@ class ClaimRandomSceneTest(TestCase):
         target = RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=self.target_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=1,
             claimed=True,
             claimed_at=timezone.now(),
@@ -322,7 +322,7 @@ class ClaimRandomSceneTest(TestCase):
         target = RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=self.target_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=1,
         )
 
@@ -335,7 +335,7 @@ class RerollRandomSceneTargetTest(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.week_start = datetime.date(2026, 3, 23)
+        cls.game_week = get_current_game_week()
         cls.account = AccountFactory(username="rs_reroll_acct")
         cls.own_persona, cls.own_entry, _ = _make_active_character(cls.account)
 
@@ -350,11 +350,11 @@ class RerollRandomSceneTargetTest(TestCase):
         RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=original_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=1,
         )
 
-        updated = reroll_random_scene_target(self.account, 1, self.week_start)
+        updated = reroll_random_scene_target(self.account, 1, self.game_week)
         assert updated.rerolled is True
         # Target should have changed (or stayed if only one candidate, but we have two)
         assert updated.target_persona_id != original_persona.pk or updated.rerolled
@@ -368,16 +368,16 @@ class RerollRandomSceneTargetTest(TestCase):
         RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=persona1,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=1,
             rerolled=True,  # Already rerolled
         )
         RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=persona2,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=2,
         )
 
         with self.assertRaises(ProgressionError, msg="Already used reroll"):
-            reroll_random_scene_target(self.account, 2, self.week_start)
+            reroll_random_scene_target(self.account, 2, self.game_week)

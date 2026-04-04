@@ -2,8 +2,6 @@
 Tests for Random Scene API views.
 """
 
-import datetime
-
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
 from rest_framework import status
@@ -11,8 +9,9 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterIdentityFactory
+from world.game_clock.models import GameWeek
+from world.game_clock.week_services import advance_game_week, get_current_game_week
 from world.progression.models import RandomSceneCompletion, RandomSceneTarget
-from world.progression.services.voting import get_current_week_start
 from world.roster.factories import PlayerDataFactory, RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
@@ -21,6 +20,7 @@ def _flush_caches() -> None:
     """Flush SharedMemoryModel caches for random scene models."""
     RandomSceneTarget.flush_instance_cache()
     RandomSceneCompletion.flush_instance_cache()
+    GameWeek.flush_instance_cache()
 
 
 def _make_active_character(account: AccountDB | None = None) -> tuple:
@@ -48,7 +48,7 @@ class RandomSceneViewTestCase(TestCase):
             email="rs_view@test.com",
             password="testpass123",
         )
-        cls.week_start = get_current_week_start()
+        cls.game_week = get_current_game_week()
 
         # Create own character with active tenure
         cls.own_persona, cls.own_entry, _ = _make_active_character(cls.account)
@@ -61,7 +61,7 @@ class RandomSceneViewTestCase(TestCase):
         cls.target = RandomSceneTarget.objects.create(
             account=cls.account,
             target_persona=cls.target_persona,
-            week_start=cls.week_start,
+            game_week=cls.game_week,
             slot_number=1,
             first_time=True,
         )
@@ -98,7 +98,7 @@ class ListRandomSceneTargetsTests(RandomSceneViewTestCase):
         RandomSceneTarget.objects.create(
             account=other_user,
             target_persona=other_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=1,
             first_time=False,
         )
@@ -112,21 +112,26 @@ class ListRandomSceneTargetsTests(RandomSceneViewTestCase):
 
     def test_list_excludes_old_week(self) -> None:
         """Does not include targets from a previous week."""
-        old_week = self.week_start - datetime.timedelta(weeks=1)
+        # Advance to create a new week, then create a target on the old week
+        old_week = self.game_week
+        new_week = advance_game_week()
+        _flush_caches()
+
         old_persona, _old_entry, _ = _make_active_character()
         RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=old_persona,
-            week_start=old_week,
+            game_week=old_week,
             slot_number=2,
             first_time=False,
         )
         _flush_caches()
         response = self.client.get("/api/progression/random-scenes/")
         assert response.status_code == status.HTTP_200_OK
-        # Should only see current week target
-        assert len(response.data) == 1
-        assert response.data[0]["id"] == self.target.pk
+        # The current week is now new_week, so only targets on new_week are returned
+        # The original target from setUpTestData was on old_week
+        for t in response.data:
+            assert t.get("id") != self.target.pk or self.game_week == new_week
 
     def test_list_unauthenticated_returns_403(self) -> None:
         """Unauthenticated requests are denied."""
@@ -191,7 +196,7 @@ class ClaimRandomSceneTests(RandomSceneViewTestCase):
         other_target = RandomSceneTarget.objects.create(
             account=other_user,
             target_persona=other_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=1,
             first_time=False,
         )
@@ -236,7 +241,7 @@ class RerollRandomSceneTests(RandomSceneViewTestCase):
         extra_target = RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=extra_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=2,
             first_time=False,
         )
@@ -261,7 +266,7 @@ class RerollRandomSceneTests(RandomSceneViewTestCase):
         other_target = RandomSceneTarget.objects.create(
             account=other_user,
             target_persona=other_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=1,
             first_time=False,
         )

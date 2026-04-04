@@ -11,7 +11,6 @@ earned dp and rust application for unused skills.
 
 from __future__ import annotations
 
-import datetime
 import logging
 from typing import TYPE_CHECKING, cast
 
@@ -19,6 +18,8 @@ from django.db import IntegrityError, models as db_models, transaction
 from django.db.models import F
 
 from world.classes.models import CharacterClassLevel
+from world.game_clock.models import GameWeek
+from world.game_clock.week_services import get_current_game_week
 from world.progression.constants import (
     DP_BASE_LEVEL,
     DP_COST_MULTIPLIER,
@@ -31,7 +32,6 @@ from world.progression.models.rewards import (
     DevelopmentTransaction,
     WeeklySkillUsage,
 )
-from world.progression.services.voting import get_current_week_start
 from world.progression.types import DevelopmentSource, ProgressionReason
 
 if TYPE_CHECKING:
@@ -102,7 +102,7 @@ def award_check_development(
     if dp == 0:
         return []
 
-    week_start = get_current_week_start()
+    game_week = get_current_game_week()
     level_ups: list[tuple[str, int, int]] = []
 
     for check_trait in check_type.traits.select_related("trait").all():
@@ -115,7 +115,7 @@ def award_check_development(
             WeeklySkillUsage.objects.create(
                 character_sheet=character_sheet,
                 trait=trait,
-                week_start=week_start,
+                game_week=game_week,
                 points_earned=dp,
                 check_count=1,
             )
@@ -123,7 +123,7 @@ def award_check_development(
             WeeklySkillUsage.objects.filter(
                 character_sheet=character_sheet,
                 trait=trait,
-                week_start=week_start,
+                game_week=game_week,
             ).update(
                 points_earned=F("points_earned") + dp,
                 check_count=F("check_count") + 1,
@@ -201,29 +201,25 @@ def _get_character_levels_batch(character_ids: set[int]) -> dict[int, int]:
 
 
 def _apply_weekly_rust(
-    week_start: datetime.date,
+    game_week: GameWeek,
     used_pairs: set[tuple[int, int]],
 ) -> int:
     """Apply rust to unused skills for a given week. Returns the number of rust applications.
 
-    Idempotent: checks for existing RUST transactions referencing *week_start*
+    Idempotent: checks for existing RUST transactions referencing the game week
     and skips processing if any are found.
     """
     from world.traits.models import CharacterTraitValue
 
     # Idempotency guard: skip rust if it was already applied for this week.
-    # Uses structured description suffix "(week YYYY-MM-DD)" to identify which week
-    # the rust was applied for, since transaction_date reflects when the cron ran
-    # (current week), not the week being processed (previous week).
-    week_marker = f"(week {week_start})"
     already_rusted = DevelopmentTransaction.objects.filter(
         source=DevelopmentSource.RUST,
-        description__endswith=week_marker,
+        game_week=game_week,
     ).exists()
     if already_rusted:
         logger.info(
-            "Weekly skill development: rust already applied for week %s, skipping.",
-            week_start,
+            "Weekly skill development: rust already applied for %s, skipping.",
+            game_week,
         )
         return 0
 
@@ -272,9 +268,8 @@ def _apply_weekly_rust(
                     source=DevelopmentSource.RUST,
                     amount=rust_applied,
                     reason=ProgressionReason.SYSTEM_AWARD,
-                    description=(
-                        f"Skill rust: {rust_applied} dp debt from inactivity (week {week_start})"
-                    ),
+                    game_week=game_week,
+                    description=f"Skill rust: {rust_applied} dp debt from inactivity",
                 )
             )
 
@@ -284,10 +279,10 @@ def _apply_weekly_rust(
     return len(rust_transactions)
 
 
-def process_weekly_skill_development(week_start: datetime.date) -> None:
+def process_weekly_skill_development(game_week: GameWeek) -> None:
     """Process all skill development for a completed week.
 
-    1. For every :class:`WeeklySkillUsage` row for *week_start*, create a
+    1. For every :class:`WeeklySkillUsage` row for *game_week*, create a
        single :class:`DevelopmentTransaction` audit record per character+trait
        and mark the usage row as processed.
     2. For every :class:`DevelopmentPoints` row whose character+trait does
@@ -295,11 +290,11 @@ def process_weekly_skill_development(week_start: datetime.date) -> None:
        the CG base), apply rust debt.
 
     Args:
-        week_start: The Monday of the week to process.
+        game_week: The GameWeek to process.
     """
     # --- Step 1: Audit transactions for earned dp ---
     unprocessed = WeeklySkillUsage.objects.filter(
-        week_start=week_start, processed=False
+        game_week=game_week, processed=False
     ).select_related("trait")
 
     # Collect character+trait pairs that were used this week
@@ -330,18 +325,29 @@ def process_weekly_skill_development(week_start: datetime.date) -> None:
         WeeklySkillUsage.objects.filter(pk__in=usage_pks).update(processed=True)
 
     # --- Step 2: Apply rust to unused skills ---
-    rust_count = _apply_weekly_rust(week_start, used_pairs)
+    rust_count = _apply_weekly_rust(game_week, used_pairs)
 
     logger.info(
-        "Weekly skill development: %d audit records, %d rust applications for week %s",
+        "Weekly skill development: %d audit records, %d rust applications for %s",
         len(audit_records),
         rust_count,
-        week_start,
+        game_week,
     )
 
 
 def weekly_skill_development_task() -> None:
-    """Cron wrapper: process skill development for the previous week."""
-    today = datetime.datetime.now(tz=datetime.UTC).date()
-    previous_week_start = today - datetime.timedelta(days=today.weekday() + 7)
-    process_weekly_skill_development(previous_week_start)
+    """Cron wrapper: process skill development for the previous week.
+
+    Looks for the most recent non-current GameWeek (i.e. the one that just ended).
+    """
+    current = get_current_game_week()
+    previous = (
+        GameWeek.objects.filter(ended_at__isnull=False)
+        .exclude(pk=current.pk)
+        .order_by("-started_at")
+        .first()
+    )
+    if previous is None:
+        logger.info("No previous game week found; skipping skill development processing.")
+        return
+    process_weekly_skill_development(previous)

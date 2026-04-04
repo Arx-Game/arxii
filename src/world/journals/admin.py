@@ -27,6 +27,6 @@ class WeeklyJournalXPAdmin(admin.ModelAdmin):
         "posts_this_week",
         "praised_this_week",
         "retorted_this_week",
-        "week_reset_at",
+        "game_week",
     ]
     search_fields = ["character_sheet__character__db_key"]
