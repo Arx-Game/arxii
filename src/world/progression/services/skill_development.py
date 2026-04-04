@@ -212,11 +212,9 @@ def _apply_weekly_rust(
     from world.traits.models import CharacterTraitValue
 
     # Idempotency guard: skip rust if it was already applied for this week.
-    # Uses PK-based marker (not __str__) so it's stable across name changes.
-    week_marker = f"(game_week_id={game_week.pk})"
     already_rusted = DevelopmentTransaction.objects.filter(
         source=DevelopmentSource.RUST,
-        description__contains=week_marker,
+        game_week=game_week,
     ).exists()
     if already_rusted:
         logger.info(
@@ -270,10 +268,8 @@ def _apply_weekly_rust(
                     source=DevelopmentSource.RUST,
                     amount=rust_applied,
                     reason=ProgressionReason.SYSTEM_AWARD,
-                    description=(
-                        f"Skill rust: {rust_applied} dp debt from inactivity "
-                        f"(game_week_id={game_week.pk})"
-                    ),
+                    game_week=game_week,
+                    description=f"Skill rust: {rust_applied} dp debt from inactivity",
                 )
             )
 

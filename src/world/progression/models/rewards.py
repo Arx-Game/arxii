@@ -267,6 +267,14 @@ class DevelopmentTransaction(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="development_transactions_created",
     )
+    game_week = models.ForeignKey(
+        "game_clock.GameWeek",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="development_transactions",
+        help_text="GameWeek this transaction was created during (for idempotency checks)",
+    )
     transaction_date = models.DateTimeField(auto_now_add=True)
 
     class Meta:
