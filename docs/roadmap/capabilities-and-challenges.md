@@ -331,6 +331,27 @@ to support intervention between selection and application.
 - **Frontend: GM Situation builder** — compose Challenges into Situations, assign Properties, set severity and consequences. This is the primary content creation tool for GMs
 
 ### Phase 7: Seed Data & Content Authoring
+
+**Pass 1 — Social Action Content: COMPLETE** (PR #???; branch `feature/phase7-social-integration-tests`)
+
+Built a content authoring layer that makes all 6 social actions fully playable with real consequences:
+
+- **`src/integration_tests/game_content/`** — centralized content builder package:
+  - `checks.py` — `CheckContent`: thin wrapper around existing social check type / action template factories
+  - `conditions.py` — `ConditionContent`: 6 named social conditions (Shaken, Charmed, Deceived, Smitten, Captivated, Enthralled)
+  - `social.py` — `SocialContent.create_all()`: wires consequence pools to action templates; ConsequenceEffects apply conditions to `EffectTarget.TARGET` on success
+  - `characters.py` — `CharacterContent.create_base_social_character()`: character with social traits + PRIMARY persona
+- **`src/integration_tests/pipeline/test_social_pipeline.py`** — 10 end-to-end tests across 3 classes: availability, consent flow, consequence application
+- **`EffectTarget.TARGET`** added to `world/checks/constants.py` + migration + `_resolve_target` dispatch + `ResolutionContext.target` field
+
+**Pass 2 — Magic / Technique Content** (not yet started)
+- TechniqueCapabilityGrants and ActionEnhancement records for each social action
+- `integration_tests/game_content/magic.py` with `MagicContent`
+
+**Pass 3 — Capability / Challenge Content** (not yet started)
+- Core Properties, CapabilityTypes, Applications, starter Challenges
+- TraitCapabilityDerivations, technique assignments
+
 The system needs actual game content to be playable. Seed data should be created via **FactoryBoy factories** (not Django fixtures or management commands) — the same factory compositions used in the pipeline integration tests serve as seed data patterns for both automated tests and manual testing.
 
 - **Core Properties** — elemental (flammable, frozen, electrified), physical (locked, breakable, heavy, armored), environmental (dark, underwater, elevated), creature (abyssal, celestial, undead)
