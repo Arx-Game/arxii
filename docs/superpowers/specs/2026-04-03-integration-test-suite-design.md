@@ -28,9 +28,9 @@ manual testing.
 src/integration_tests/
   game_content/
     __init__.py
-    checks.py        # CheckContent — categories, check types, trait wiring, outcomes, result charts
+    checks.py        # CheckContent — wraps existing checks.factories helpers; future combat/exploration types
     conditions.py    # ConditionContent — condition categories and named condition templates
-    social.py        # SocialContent — action templates, consequence pools, social conditions
+    social.py        # SocialContent — consequence pools wired to social action templates
     magic.py         # MagicContent — resonances, gifts, techniques, capability grants, enhancements
     capabilities.py  # CapabilityContent — properties, capability types, applications, derivations
     characters.py    # CharacterContent — full character assembly (sheet, traits, anima, techniques)
@@ -46,43 +46,64 @@ src/integration_tests/
 
 `world/mechanics/tests/test_pipeline_integration.py` stays in place for this PR. When
 `test_technique_pipeline.py` is created, the mechanics file can be moved or consolidated.
-The user is indifferent to the timing — don't block Phase 7 on it.
+Don't block Phase 7 on it.
+
+## Existing Factory Helpers
+
+`world/checks/factories.py` already contains two module-level functions that create the social
+action infrastructure with `get_or_create` semantics and correct canonical stat names:
+
+- **`create_social_check_types()`** — creates the Social `CheckCategory`, 6 `CheckType` records,
+  and `CheckTypeTrait` wiring using real stat names (presence, strength, charm, intellect, wits,
+  willpower). Returns `dict[str, CheckType]` keyed by check type name.
+- **`create_social_action_templates()`** — calls the above, then creates 6 `ActionTemplate`
+  records with `category="social"` and `consequence_pool=None`. Returns `list[ActionTemplate]`.
+
+The canonical social action data defined there:
+
+| Template name | Check type  | Action key (name.lower()) | Target type |
+|---------------|-------------|---------------------------|-------------|
+| Intimidate    | Intimidation| intimidate                | single      |
+| Persuade      | Persuasion  | persuade                  | single      |
+| Deceive       | Deception   | deceive                   | single      |
+| Flirt         | Seduction   | flirt                     | single      |
+| Perform       | Performance | perform                   | area        |
+| Entrance      | Presence    | entrance                  | area        |
+
+**The `game_content/` builders do not reimplement this.** They call these functions directly.
+`SocialContent.create_all()` calls `create_social_action_templates()` to obtain the 6 templates,
+then adds consequence pools to them.
 
 ## Content Builder Design
 
 Each module in `game_content/` is a class with `@classmethod` methods. They import from
 app-level `factories.py` files and call them with realistic names and values. They compose:
-`SocialContent.create_all()` calls `CheckContent` and `ConditionContent` internally.
+`SocialContent.create_all()` calls `ConditionContent` internally and wraps
+`create_social_action_templates()` from `checks.factories`.
+
 Methods return model instances directly — no intermediate dataclasses.
 
 ### `checks.py` — CheckContent
 
-Foundation for everything else. All other content builders depend on it.
+Thin wrapper around the existing `checks.factories` helpers. Exists as the home for future
+check type builders (combat, exploration) as those systems come online.
 
 ```python
+from world.checks.factories import create_social_action_templates, create_social_check_types
+
 class CheckContent:
     @classmethod
-    def create_social_category(cls) -> CheckCategory:
-        return CheckCategoryFactory(name="Social", display_order=10)
+    def create_social_check_types(cls) -> dict[str, CheckType]:
+        """Delegate to checks.factories.create_social_check_types()."""
+        return create_social_check_types()
 
     @classmethod
-    def create_social_check_types(cls, category: CheckCategory) -> dict[str, CheckType]:
-        """Create one CheckType per social action, wired to appropriate traits.
-
-        Returns dict keyed by action name:
-          "intimidate" -> CheckType(name="Intimidation") wired to Presence + Cunning
-          "persuade"   -> CheckType(name="Persuasion") wired to Charm + Cunning
-          "deceive"    -> CheckType(name="Deception") wired to Cunning + Wits
-          "flirt"      -> CheckType(name="Flirtation") wired to Charm + Presence
-          "perform"    -> CheckType(name="Performance") wired to Charm + Presence
-          "entrance"   -> CheckType(name="Entrance") wired to Presence + Charm
-        Each uses CheckTypeTrait to wire traits with appropriate weights.
+    def create_social_action_templates(cls) -> list[ActionTemplate]:
+        """Delegate to checks.factories.create_social_action_templates().
+        Templates are created with consequence_pool=None; SocialContent adds pools.
         """
+        return create_social_action_templates()
 ```
-
-The `create_social_check_types` method creates the traits it needs (Presence, Charm, Cunning,
-Wits) via `get_or_create` semantics using `django_get_or_create` on the TraitFactory — these
-are canonical stat names that should not be duplicated.
 
 ### `conditions.py` — ConditionContent
 
@@ -98,13 +119,13 @@ class ConditionContent:
     def create_social_conditions(cls, category: ConditionCategory) -> dict[str, ConditionTemplate]:
         """Create the 6 social outcome conditions.
 
-        Returns dict:
-          "smitten"     -> target is romantically affected (flirt success)
-          "shaken"      -> target's confidence is broken (intimidate success)
-          "charmed"     -> target is socially disarmed (persuade/entrance success)
-          "deceived"    -> target believes a falsehood (deceive success)
-          "captivated"  -> target is absorbed in performance (perform success)
-          "enthralled"  -> target is overwhelmed by presence (entrance critical)
+        Returns dict keyed by primary action name:
+          "intimidate" -> Shaken   (confidence broken)
+          "persuade"   -> Charmed  (socially disarmed)
+          "deceive"    -> Deceived (believes a falsehood)
+          "flirt"      -> Smitten  (romantically affected)
+          "perform"    -> Captivated (absorbed in performance)
+          "entrance"   -> Enthralled (overwhelmed by presence)
 
         All use DurationType.ROUNDS, default_duration_value=3, can_be_dispelled=True.
         """
@@ -112,7 +133,7 @@ class ConditionContent:
 
 ### `social.py` — SocialContent
 
-Orchestrates the full social action stack.
+Orchestrates consequence pools and wires them onto the existing action templates.
 
 ```python
 class SocialContent:
@@ -122,38 +143,72 @@ class SocialContent:
     def create_consequence_pool(
         cls,
         action_key: str,
-        conditions: dict[str, ConditionTemplate],
+        condition: ConditionTemplate,
         outcomes: dict[str, CheckOutcome],
     ) -> ConsequencePool:
         """Build a pool with success/failure/partial consequences.
 
-        Success consequence: APPLY_CONDITION effect using the primary condition.
-        Failure consequence: no effect (narrative only), weight=1.
-        Partial consequence: no condition, narrative only.
+        Success consequence (weight=2):  APPLY_CONDITION effect → condition.
+        Partial consequence (weight=1):  no effect, narrative only.
+        Failure consequence (weight=1):  no effect, narrative only.
         Character loss is False for all social consequences.
+
+        Uses CheckOutcome instances from the traits app check system
+        (success_level >= 1 = success, 0 = partial, < 0 = failure).
         """
 
     @classmethod
     def create_all(cls) -> dict[str, ActionTemplate]:
-        """Orchestrate: check category → check types → condition category →
-        conditions → check outcomes → consequence pools → action templates.
+        """Create all social action infrastructure and return templates keyed by action key.
 
-        Returns dict keyed by action_key:
+        Calls checks.factories.create_social_action_templates() to create the 6 templates
+        (with consequence_pool=None), then creates conditions and consequence pools, and
+        updates each template's consequence_pool FK.
+
+        The dict key is template.name.lower() — matching how get_available_scene_actions()
+        derives action keys at runtime.
+
+        Returns:
           {"intimidate": <ActionTemplate>, "persuade": <ActionTemplate>, ...}
-
-        Each ActionTemplate has:
-          name = action_key.capitalize()   (so name.lower() == action_key)
-          category = "social"
-          check_type = matching CheckType
-          consequence_pool = matching ConsequencePool
-          pipeline = Pipeline.SINGLE
-          target_type = ActionTargetType.SINGLE
         """
 ```
 
+### `characters.py` — CharacterContent
+
+Full character assembly. Composes all other builders.
+
+```python
+class CharacterContent:
+    @classmethod
+    def create_base_social_character(cls) -> tuple[ObjectDB, Persona]:
+        """Sheet + trait values for social stats:
+          presence=70, charm=60, intellect=50, wits=40, strength=30, willpower=30
+          (internal 1-100 scale; display scale is /10)
+        No magic. Suitable for testing mundane social action path.
+
+        Also creates a Persona (PRIMARY type) for use in consent flow tests.
+        Returns (character ObjectDB, Persona).
+        """
+
+    @classmethod
+    def create_social_mage(cls) -> tuple[ObjectDB, Persona]:
+        """Extends base_social_character with:
+        - CharacterAnima (current=50, maximum=50)
+        - Fire technique (via MagicContent.create_fire_technique)
+        - ActionEnhancement for intimidate and persuade
+        Suitable for testing enhanced social action path.
+        Returns (character ObjectDB, Persona).
+        """
+```
+
+`create_base_social_character()` returns a `Persona` alongside the `ObjectDB` because the
+consent flow API (`create_action_request`) requires `Persona` instances, and `PersonaFactory`
+must be called with the correct `character_identity__character` linkage. Bundling this avoids
+each test class independently re-creating the Persona relationship.
+
 ### `magic.py` — MagicContent
 
-Technique enhancements for social actions. Pass 2 deliverable.
+Technique enhancements for social actions. Pass 2 deliverable — not built in this PR.
 
 ```python
 class MagicContent:
@@ -180,57 +235,53 @@ class MagicContent:
         """
 ```
 
-### `characters.py` — CharacterContent
-
-Full character assembly. Composes all other builders.
-
-```python
-class CharacterContent:
-    @classmethod
-    def create_base_social_character(cls) -> ObjectDB:
-        """Sheet + trait values for social stats (Presence 7, Charm 6, Cunning 5, Wits 4).
-        No magic. Suitable for testing mundane social action path.
-        Returns the character ObjectDB.
-        """
-
-    @classmethod
-    def create_social_mage(cls) -> ObjectDB:
-        """Extends base_social_character with:
-        - CharacterAnima (current=50, maximum=50)
-        - Fire technique (via MagicContent.create_fire_technique)
-        - ActionEnhancement for intimidate and persuade
-        Suitable for testing enhanced social action path.
-        Returns the character ObjectDB.
-        """
-```
-
 ## Integration Test Structure
 
 ### `test_social_pipeline.py` (Phase 7 Pass 1)
 
+All test classes use `setUpTestData`. Check outcomes are made deterministic by mocking
+`actions.services.perform_check` (same pattern as `SceneActionPathTests` in
+`world/mechanics/tests/test_pipeline_integration.py`).
+
 ```
 SocialActionAvailabilityTests
-  setUpTestData: SocialContent.create_all() + CharacterContent.create_base_social_character()
-  - all 6 action templates returned by get_available_scene_actions()
-  - templates have correct check_types and consequence_pools
-  - character with no techniques sees no enhancements
+  setUpTestData:
+    cls.templates = SocialContent.create_all()
+    cls.character, cls.persona = CharacterContent.create_base_social_character()
+  - get_available_scene_actions(character=cls.character) returns 6 actions
+  - each AvailableSceneAction has a non-null action_template with a consequence_pool
+  - character with no techniques has empty enhancements list on each action
 
 SocialActionConsentFlowTests
-  setUpTestData: SocialContent.create_all() + two characters (initiator, target) + scene
-  - create_action_request → PENDING status
-  - deny → ActionRequestStatus.DENIED, no check, no condition applied
-  - accept → ActionRequestStatus.RESOLVED, check performed
+  setUpTestData:
+    cls.templates = SocialContent.create_all()
+    cls.initiator, cls.initiator_persona = CharacterContent.create_base_social_character()
+    cls.target, cls.target_persona = CharacterContent.create_base_social_character()
+    cls.scene = SceneFactory()
+  - create_action_request → PENDING status, action_template populated from cls.templates["intimidate"]
+  - deny → ActionRequestStatus.DENIED, no condition applied to target
+  - accept (with mocked perform_check) → ActionRequestStatus.RESOLVED, check performed
+
+  Note: SceneActionRequest.action_template must be set explicitly after create_action_request()
+  — the service does not auto-populate it. Tests should set request.action_template and call
+  request.save(update_fields=["action_template"]) before calling respond_to_action_request().
 
 SocialActionConsequenceTests
-  setUpTestData: SocialContent.create_all() + characters + scene
-  One test class per action, or parameterized:
-  - intimidate success → Shaken condition applied to target
-  - intimidate failure → no condition on target
-  - flirt success → Smitten condition applied
-  - persuade success → Charmed condition applied
-  (Covers each of the 6 social conditions)
+  setUpTestData:
+    cls.templates = SocialContent.create_all()
+    cls.initiator, cls.initiator_persona = CharacterContent.create_base_social_character()
+    cls.target, cls.target_persona = CharacterContent.create_base_social_character()
+    cls.scene = SceneFactory()
+  Check outcomes controlled via @patch("actions.services.perform_check"):
+  - intimidate: mocked success → Shaken condition applied to target
+  - intimidate: mocked failure → no condition on target
+  - flirt: mocked success → Smitten applied
+  - persuade: mocked success → Charmed applied
+  - deceive: mocked success → Deceived applied
+  - perform: mocked success → Captivated applied
+  - entrance: mocked success → Enthralled applied
 
-SocialActionEnhancementTests (Pass 2, same file)
+SocialActionEnhancementTests (Pass 2, same file — not built in this PR)
   setUpTestData: above + CharacterContent.create_social_mage()
   - enhanced intimidate → anima deducted + Shaken applied
   - enhanced persuade → soulfray warning surfaced when applicable
@@ -248,7 +299,7 @@ SocialActionEnhancementTests (Pass 2, same file)
 ```
 CapabilityAvailabilityTests
   - fire technique → fire_generation capability → flammable challenge approachable
-  - high Strength trait → force capability via TraitCapabilityDerivation → breakable challenge
+  - high strength trait → force capability via TraitCapabilityDerivation → breakable challenge
 
 TraitCapabilityDerivationTests
   - base_value + (multiplier * trait_value) math
@@ -264,10 +315,10 @@ separate PRs.
 
 | Component | Detail |
 |-----------|--------|
-| `game_content/checks.py` | Social check category, 6 check types, trait wiring |
-| `game_content/conditions.py` | Social condition category, 6 conditions |
-| `game_content/social.py` | 6 consequence pools, 6 ActionTemplates |
-| `game_content/characters.py` | `create_base_social_character()` only |
+| `game_content/checks.py` | `CheckContent` — thin wrapper around existing `checks.factories` helpers |
+| `game_content/conditions.py` | `ConditionContent` — Social category + 6 named conditions |
+| `game_content/social.py` | `SocialContent` — 6 consequence pools, wires pools onto templates |
+| `game_content/characters.py` | `CharacterContent.create_base_social_character()` returns `(ObjectDB, Persona)` |
 | `integration_tests/pipeline/test_social_pipeline.py` | Availability + consent flow + consequence tests |
 
 **Not in this PR:**
@@ -278,10 +329,13 @@ separate PRs.
 ## Key Constraints
 
 - **No fixtures, no management commands** — all data via FactoryBoy
-- **`django_get_or_create` on canonical names** — Trait names (Presence, Charm, etc.) and
-  CheckCategory names must not be duplicated across test classes; factories use
-  `django_get_or_create = ("name",)` which is already in place for most lookup tables
+- **`django_get_or_create` on canonical names** — `CheckCategoryFactory` and
+  `ConditionTemplateFactory` use `("name",)`; `CheckTypeFactory` uses `("name", "category")`;
+  `StatTraitFactory` uses `("name",)`. All are safe to call from multiple test classes in the
+  same run without creating duplicates
 - **`setUpTestData` always** — never `setUp` for data that doesn't mutate
-- **No cross-test contamination** — each test class creates its own data; no module-level
-  globals or `get_or_create` outside of factory `django_get_or_create`
+- **No cross-test contamination** — no module-level creates, no `get_or_create` outside factory
+  `django_get_or_create`; each test class creates its own data via `setUpTestData`
 - **Realistic names throughout** — "Intimidation" not "CheckType0", "Smitten" not "Condition1"
+- **Deterministic checks** — mock `actions.services.perform_check` for tests that assert
+  specific consequence outcomes; do not rely on random roll results in integration tests
