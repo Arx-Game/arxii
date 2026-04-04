@@ -344,9 +344,16 @@ Built a content authoring layer that makes all 6 social actions fully playable w
 - **`src/integration_tests/pipeline/test_social_pipeline.py`** — 10 end-to-end tests across 3 classes: availability, consent flow, consequence application
 - **`EffectTarget.TARGET`** added to `world/checks/constants.py` + migration + `_resolve_target` dispatch + `ResolutionContext.target` field
 
-**Pass 2 — Magic / Technique Content** (not yet started)
-- TechniqueCapabilityGrants and ActionEnhancement records for each social action
-- `integration_tests/game_content/magic.py` with `MagicContent`
+**Pass 2 — Magic / Technique Content: COMPLETE**
+
+Built technique-enhanced social actions with full anima deduction and condition consequences:
+
+- **`src/integration_tests/game_content/magic.py`** — `MagicContent.create_all()`: 6 Techniques (intensity=2, control=2, anima_cost=12) + 6 `ActionEnhancement` records linking each technique to its social action; `grant_techniques_to_character()` creates `CharacterTechnique` records
+- **`src/actions/factories.py`** — `ActionEnhancementFactory` added
+- **`src/integration_tests/pipeline/test_social_magic_pipeline.py`** — 6 end-to-end tests across 2 classes:
+  - `SocialMagicAvailabilityTests`: known techniques appear in `get_available_scene_actions`; correct technique linked per action; no-technique characters have no enhancements
+  - `SocialMagicConsequenceTests`: enhanced intimidate applies Shaken to target (not initiator); anima deducted from initiator (effective_cost=2 after social_safety=10 bonus); `technique_result` present on result
+- **Note on social safety bonus**: `_get_social_safety_bonus()` returns +10 control for unengaged characters; `anima_cost=12` was chosen so `effective_cost = max(12 - 10, 0) = 2` — predictable non-zero deduction for tests
 
 **Pass 3 — Capability / Challenge Content** (not yet started)
 - Core Properties, CapabilityTypes, Applications, starter Challenges

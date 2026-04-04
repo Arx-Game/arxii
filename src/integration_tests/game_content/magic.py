@@ -37,8 +37,9 @@ class MagicContent:
     def create_all() -> MagicContentResult:
         """Create 6 techniques and 6 ActionEnhancement records (one per social action).
 
-        Techniques use intensity=2, control=2, anima_cost=2 — no control deficit,
-        predictable anima deduction of 2 per use.
+        Techniques use intensity=2, control=2, anima_cost=12.
+        The social safety bonus adds +10 control for unengaged characters, giving
+        control_delta=10 and effective_cost = max(12 - 10, 0) = 2 per use.
 
         Safe to call from setUpTestData across multiple test classes.
 
@@ -59,7 +60,7 @@ class MagicContent:
                 gift=gift,
                 intensity=2,
                 control=2,
-                anima_cost=2,
+                anima_cost=12,
             )
             techniques[action_key] = technique
 
