@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import timedelta
 import logging
 
+from django.db import models
+
 from world.game_clock.task_registry import (
     CronDefinition,
     register_task,
@@ -165,40 +167,48 @@ def batch_ap_weekly_regen() -> None:
 
 
 def batch_journal_weekly_reset() -> None:
-    """Reset stale weekly journal XP trackers."""
-    from django.utils import timezone
-
+    """Reset stale weekly journal XP trackers for non-current game weeks."""
+    from world.game_clock.week_services import get_current_game_week
     from world.journals.models import WeeklyJournalXP
 
-    now = timezone.now()
-    week_ago = now - timedelta(days=7)
-    count = WeeklyJournalXP.objects.filter(week_reset_at__lt=week_ago).update(
-        posts_this_week=0,
-        praised_this_week=False,
-        was_praised_this_week=False,
-        retorted_this_week=False,
-        was_retorted_this_week=False,
-        week_reset_at=now,
+    current_week = get_current_game_week()
+    count = (
+        WeeklyJournalXP.objects.exclude(game_week=current_week)
+        .filter(
+            models.Q(posts_this_week__gt=0)
+            | models.Q(praised_this_week=True)
+            | models.Q(was_praised_this_week=True)
+            | models.Q(retorted_this_week=True)
+            | models.Q(was_retorted_this_week=True),
+        )
+        .update(
+            posts_this_week=0,
+            praised_this_week=False,
+            was_praised_this_week=False,
+            retorted_this_week=False,
+            was_retorted_this_week=False,
+            game_week=current_week,
+        )
     )
     logger.info("Journal weekly reset: %d trackers reset", count)
 
 
 def batch_relationship_weekly_reset() -> None:
-    """Reset stale weekly relationship counters."""
-    from django.db.models import Q
-    from django.utils import timezone
-
+    """Reset stale weekly relationship counters for non-current game weeks."""
+    from world.game_clock.week_services import get_current_game_week
     from world.relationships.models import CharacterRelationship
 
-    now = timezone.now()
-    week_ago = now - timedelta(days=7)
-    count = CharacterRelationship.objects.filter(
-        Q(week_reset_at__lt=week_ago) | Q(week_reset_at__isnull=True),
-        Q(developments_this_week__gt=0) | Q(changes_this_week__gt=0),
-    ).update(
-        developments_this_week=0,
-        changes_this_week=0,
-        week_reset_at=now,
+    current_week = get_current_game_week()
+    count = (
+        CharacterRelationship.objects.exclude(game_week=current_week)
+        .filter(
+            models.Q(developments_this_week__gt=0) | models.Q(changes_this_week__gt=0),
+        )
+        .update(
+            developments_this_week=0,
+            changes_this_week=0,
+            game_week=current_week,
+        )
     )
     logger.info("Relationship weekly reset: %d relationships reset", count)
 

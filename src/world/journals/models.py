@@ -1,14 +1,18 @@
 """Journal system models."""
 
-from datetime import timedelta
+from __future__ import annotations
+
 from functools import cached_property
+from typing import TYPE_CHECKING
 
 from django.db import models
-from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.character_sheets.models import CharacterSheet
 from world.journals.constants import ResponseType
+
+if TYPE_CHECKING:
+    from world.game_clock.models import GameWeek
 
 
 class JournalEntry(SharedMemoryModel):
@@ -112,25 +116,32 @@ class WeeklyJournalXP(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="weekly_journal_xp",
     )
+    game_week = models.ForeignKey(
+        "game_clock.GameWeek",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="journal_xp_trackers",
+        help_text="GameWeek these counters belong to",
+    )
     posts_this_week = models.PositiveSmallIntegerField(default=0)
     praised_this_week = models.BooleanField(default=False)
     was_praised_this_week = models.BooleanField(default=False)
     retorted_this_week = models.BooleanField(default=False)
     was_retorted_this_week = models.BooleanField(default=False)
-    week_reset_at = models.DateTimeField(auto_now_add=True)
 
-    def needs_reset(self) -> bool:
-        """Check if a week has passed since last reset."""
-        return timezone.now() - self.week_reset_at >= timedelta(days=7)
+    def needs_reset(self, current_week: GameWeek) -> bool:
+        """Check if this tracker is for a different game week."""
+        return self.game_week_id != current_week.pk
 
-    def reset_week(self) -> None:
-        """Reset all weekly counters and update timestamp."""
+    def reset_week(self, current_week: GameWeek) -> None:
+        """Reset all weekly counters and set to current game week."""
         self.posts_this_week = 0
         self.praised_this_week = False
         self.was_praised_this_week = False
         self.retorted_this_week = False
         self.was_retorted_this_week = False
-        self.week_reset_at = timezone.now()
+        self.game_week = current_week
         self.save(
             update_fields=[
                 "posts_this_week",
@@ -138,7 +149,7 @@ class WeeklyJournalXP(SharedMemoryModel):
                 "was_praised_this_week",
                 "retorted_this_week",
                 "was_retorted_this_week",
-                "week_reset_at",
+                "game_week",
             ]
         )
 

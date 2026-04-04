@@ -29,12 +29,16 @@ if TYPE_CHECKING:
 def _get_or_reset_weekly_tracker(
     character_sheet: CharacterSheet,
 ) -> WeeklyJournalXP:
-    """Get weekly XP tracker, resetting if a week has passed."""
-    tracker, _created = WeeklyJournalXP.objects.select_for_update().get_or_create(
+    """Get weekly XP tracker, resetting if the game week has changed."""
+    from world.game_clock.week_services import get_current_game_week
+
+    current_week = get_current_game_week()
+    tracker, created = WeeklyJournalXP.objects.select_for_update().get_or_create(
         character_sheet=character_sheet,
+        defaults={"game_week": current_week},
     )
-    if tracker.needs_reset():
-        tracker.reset_week()
+    if not created and tracker.needs_reset(current_week):
+        tracker.reset_week(current_week)
     return tracker
 
 

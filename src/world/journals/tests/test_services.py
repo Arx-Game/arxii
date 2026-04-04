@@ -28,6 +28,9 @@ from world.journals.types import JournalError
 class CreateJournalEntryTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
+        from world.game_clock.week_services import get_current_game_week
+
+        cls.current_week = get_current_game_week()
         cls.account = AccountFactory()
         cls.author = CharacterSheetFactory()
         cls.author.character.db_account = cls.account
@@ -71,9 +74,12 @@ class CreateJournalEntryTest(TestCase):
         mock_award,
         mock_stat,  # noqa: ARG002
     ) -> None:
-        tracker, _ = WeeklyJournalXP.objects.get_or_create(character_sheet=self.author)
+        tracker, _ = WeeklyJournalXP.objects.get_or_create(
+            character_sheet=self.author, defaults={"game_week": self.current_week}
+        )
         tracker.posts_this_week = 1
-        tracker.save()
+        tracker.game_week = self.current_week
+        tracker.save(update_fields=["posts_this_week", "game_week"])
 
         create_journal_entry(
             author=self.author,
@@ -92,9 +98,12 @@ class CreateJournalEntryTest(TestCase):
         mock_award,
         mock_stat,  # noqa: ARG002
     ) -> None:
-        tracker, _ = WeeklyJournalXP.objects.get_or_create(character_sheet=self.author)
+        tracker, _ = WeeklyJournalXP.objects.get_or_create(
+            character_sheet=self.author, defaults={"game_week": self.current_week}
+        )
         tracker.posts_this_week = 2
-        tracker.save()
+        tracker.game_week = self.current_week
+        tracker.save(update_fields=["posts_this_week", "game_week"])
 
         create_journal_entry(
             author=self.author,
@@ -113,9 +122,12 @@ class CreateJournalEntryTest(TestCase):
         mock_award,
         mock_stat,  # noqa: ARG002
     ) -> None:
-        tracker, _ = WeeklyJournalXP.objects.get_or_create(character_sheet=self.author)
+        tracker, _ = WeeklyJournalXP.objects.get_or_create(
+            character_sheet=self.author, defaults={"game_week": self.current_week}
+        )
         tracker.posts_this_week = 3
-        tracker.save()
+        tracker.game_week = self.current_week
+        tracker.save(update_fields=["posts_this_week", "game_week"])
 
         create_journal_entry(
             author=self.author,
@@ -193,6 +205,9 @@ class CreateJournalEntryTest(TestCase):
 class CreateJournalResponseTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
+        from world.game_clock.week_services import get_current_game_week
+
+        cls.current_week = get_current_game_week()
         cls.author_account = AccountFactory(username="journal_author")
         cls.responder_account = AccountFactory(username="journal_responder")
         cls.author = CharacterSheetFactory()
@@ -258,9 +273,12 @@ class CreateJournalResponseTest(TestCase):
         mock_stat,  # noqa: ARG002
     ) -> None:
         parent = self._make_public_entry()
-        tracker, _ = WeeklyJournalXP.objects.get_or_create(character_sheet=self.responder)
+        tracker, _ = WeeklyJournalXP.objects.get_or_create(
+            character_sheet=self.responder, defaults={"game_week": self.current_week}
+        )
         tracker.praised_this_week = True
-        tracker.save()
+        tracker.game_week = self.current_week
+        tracker.save(update_fields=["praised_this_week", "game_week"])
 
         create_journal_response(
             author=self.responder,
@@ -279,9 +297,12 @@ class CreateJournalResponseTest(TestCase):
         mock_stat,  # noqa: ARG002
     ) -> None:
         parent = self._make_public_entry()
-        tracker, _ = WeeklyJournalXP.objects.get_or_create(character_sheet=self.responder)
+        tracker, _ = WeeklyJournalXP.objects.get_or_create(
+            character_sheet=self.responder, defaults={"game_week": self.current_week}
+        )
         tracker.retorted_this_week = True
-        tracker.save()
+        tracker.game_week = self.current_week
+        tracker.save(update_fields=["retorted_this_week", "game_week"])
 
         create_journal_response(
             author=self.responder,

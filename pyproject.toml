@@ -359,6 +359,14 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
     "PLC0415", # lazy imports - only called at server start time
 ]
 
+"src/world/journals/services.py" = [
+    "PLC0415", # lazy import of game_clock to avoid circular dependencies
+]
+
+"src/world/relationships/services.py" = [
+    "PLC0415", # lazy import of game_clock to avoid circular dependencies
+]
+
 # Game mechanics - dice and random systems
 "src/world/traits/resolvers.py" = [
     "S311",    # pseudo-random generators - game dice are not cryptographic
