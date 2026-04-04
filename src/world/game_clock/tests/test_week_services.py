@@ -104,12 +104,6 @@ class GameWeekStrTest(TestCase):
         )
         self.assertEqual(str(week), "S1 Week 3")
 
-    def test_str_without_season(self) -> None:
-        week = GameWeek.objects.create(
-            number=1, season=None, started_at=timezone.now(), is_current=True
-        )
-        self.assertEqual(str(week), "S? Week 1")
-
     def test_season_str(self) -> None:
         season = GameSeason.objects.create(number=2, name="The Reckoning")
         self.assertEqual(str(season), "The Reckoning")

@@ -16,7 +16,7 @@ from evennia.accounts.models import AccountDB
 
 from world.game_clock.models import GameWeek
 from world.game_clock.week_services import get_current_game_week
-from world.progression.constants import MEMORABLE_POSE_XP, VOTE_XP_CAP
+from world.progression.constants import MEMORABLE_POSE_XP, VOTE_XP_CAP, VoteTargetType
 from world.progression.models import WeeklyVote, WeeklyVoteBudget
 from world.progression.services.awards import award_xp
 from world.progression.types import ProgressionReason
@@ -104,7 +104,7 @@ def process_memorable_poses(game_week: GameWeek) -> None:
     # Reset vote counts only for interactions that were voted on in the processed week
     voted_interaction_ids = WeeklyVote.objects.filter(
         game_week=game_week,
-        target_type="interaction",
+        target_type=VoteTargetType.INTERACTION,
     ).values_list("target_id", flat=True)
     Interaction.objects.filter(pk__in=voted_interaction_ids, vote_count__gt=0).update(vote_count=0)
 

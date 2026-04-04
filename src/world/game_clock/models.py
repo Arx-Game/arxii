@@ -157,7 +157,7 @@ class GameSeason(SharedMemoryModel):
     name = models.CharField(max_length=100, blank=True)
 
     class Meta:
-        ordering = ["number"]
+        pass
 
     def __str__(self) -> str:
         return self.name or f"Season {self.number}"
@@ -180,9 +180,7 @@ class GameWeek(SharedMemoryModel):
     )
     season = models.ForeignKey(
         GameSeason,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         related_name="weeks",
     )
     started_at = models.DateTimeField(
@@ -204,12 +202,15 @@ class GameWeek(SharedMemoryModel):
                 fields=["season", "number"],
                 name="unique_week_per_season",
             ),
+            models.UniqueConstraint(
+                fields=["is_current"],
+                condition=models.Q(is_current=True),
+                name="unique_current_game_week",
+            ),
         ]
-        ordering = ["-started_at"]
 
     def __str__(self) -> str:
-        season_label = f"S{self.season.number}" if self.season else "S?"
-        return f"{season_label} Week {self.number}"
+        return f"S{self.season.number} Week {self.number}"
 
     @classmethod
     def get_current(cls) -> "GameWeek | None":

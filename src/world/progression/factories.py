@@ -195,7 +195,7 @@ class WeeklySkillUsageFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = WeeklySkillUsage
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     trait = factory.SubFactory("world.traits.factories.TraitFactory")
     game_week = factory.LazyFunction(
         lambda: __import__(

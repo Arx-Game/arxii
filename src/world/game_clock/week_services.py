@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -13,25 +13,33 @@ from world.game_clock.models import GameSeason, GameWeek
 logger = logging.getLogger("world.game_clock.weeks")
 
 
+@transaction.atomic
 def get_current_game_week() -> GameWeek:
     """Return the current GameWeek, creating one if none exists.
 
     If no GameWeek exists at all (fresh install), creates Season 1 and
-    Week 1 starting now.
+    Week 1 starting now. Uses transaction.atomic to prevent duplicate
+    bootstrap from concurrent requests.
     """
     current = GameWeek.get_current()
     if current is not None:
         return current
 
     # Bootstrap: create Season 1, Week 1
+    # The unique_current_game_week constraint ensures only one concurrent
+    # request can succeed; the loser gets IntegrityError and retries.
     logger.info("No current GameWeek found. Bootstrapping Season 1, Week 1.")
     season, _ = GameSeason.objects.get_or_create(number=1, defaults={"name": "Season 1"})
-    return GameWeek.objects.create(
-        number=1,
-        season=season,
-        started_at=timezone.now(),
-        is_current=True,
-    )
+    try:
+        return GameWeek.objects.create(
+            number=1,
+            season=season,
+            started_at=timezone.now(),
+            is_current=True,
+        )
+    except IntegrityError:
+        # Another request bootstrapped first — return the one they created.
+        return GameWeek.objects.get(is_current=True)
 
 
 @transaction.atomic
@@ -45,7 +53,12 @@ def advance_game_week() -> GameWeek:
     Returns the newly created GameWeek.
     """
     now = timezone.now()
-    current = get_current_game_week()
+    # Lock the current week row to prevent concurrent advances.
+    current = GameWeek.objects.select_for_update().filter(is_current=True).first()
+    if current is None:
+        current = get_current_game_week()
+        # Re-fetch with lock after bootstrap.
+        current = GameWeek.objects.select_for_update().get(pk=current.pk)
 
     # Close current week
     current.ended_at = now
@@ -91,6 +104,7 @@ def get_game_week_for_date(dt: timezone.datetime) -> GameWeek | None:
             # Either ended_at is after dt, or it's the current week (no end yet)
             models_q_ended_after_or_current(dt),
         )
+        .order_by("-started_at")
         .first()
     )
 
@@ -103,8 +117,9 @@ def models_q_ended_after_or_current(dt: timezone.datetime) -> Q:
 def start_new_season(name: str = "") -> GameSeason:
     """Start a new season. The next advance_game_week will reset to Week 1.
 
-    Creates the season and updates the current week's season FK so that
-    advance_game_week picks up the new season for the next week.
+    Creates the new GameSeason. On next advance, ``advance_game_week``
+    detects that the latest season differs from the current week's season
+    and resets the week number to 1.
     """
     last_season = GameSeason.objects.order_by("-number").first()
     next_number = (last_season.number + 1) if last_season else 1

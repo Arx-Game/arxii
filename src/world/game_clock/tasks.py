@@ -30,20 +30,13 @@ def weekly_rollover_task() -> None:
     """
     from world.game_clock.week_services import advance_game_week
 
-    closed_week = None
     try:
         new_week = advance_game_week()
-        # The closed week is the one before the new one
-        from world.game_clock.models import GameWeek
-
-        closed_week = GameWeek.objects.filter(
-            season=new_week.season, number=new_week.number - 1
-        ).first()
     except Exception:
         logger.exception("Failed to advance game week")
         return
 
-    logger.info("Weekly rollover: processing closed week %s", closed_week)
+    logger.info("Weekly rollover: advanced to %s", new_week)
 
     # Process each weekly system, catching errors individually so one
     # failure doesn't block the others.
