@@ -154,7 +154,8 @@ def respond_to_action_request(
                 raise ValueError(msg)
 
             character = action_request.initiator_persona.character
-            context = ResolutionContext(character=character)
+            target_character = action_request.target_persona.character
+            context = ResolutionContext(character=character, target=target_character)
 
             if action_request.technique is not None:
                 result = _resolve_enhanced_action(

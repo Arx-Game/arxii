@@ -53,6 +53,8 @@ def _resolve_target(
     context: "ResolutionContext",
 ) -> "ObjectDB":
     """Resolve the target ObjectDB for an effect based on EffectTarget."""
+    if effect.target == EffectTarget.TARGET:
+        return context.target if context.target is not None else context.character
     if effect.target == EffectTarget.LOCATION:
         return context.location
     return context.character
