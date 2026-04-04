@@ -26,6 +26,9 @@ LOGGING["loggers"]["django.request"]["level"] = "ERROR"
 # Disable debug mode for tests to avoid debug toolbar overhead
 DEBUG = False
 
+# Register integration test package so pipeline tests run with `arx test`
+INSTALLED_APPS += ["integration_tests"]  # type: ignore[name-defined]
+
 # Disable email sending during tests
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
