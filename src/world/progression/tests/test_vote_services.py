@@ -2,17 +2,15 @@
 Tests for vote service functions.
 """
 
-import datetime
-from unittest.mock import patch
-
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
 
+from world.game_clock.models import GameWeek
+from world.game_clock.week_services import advance_game_week, get_current_game_week
 from world.progression.constants import VoteTargetType
 from world.progression.models import WeeklyVote, WeeklyVoteBudget
 from world.progression.services.voting import (
     cast_vote,
-    get_current_week_start,
     get_or_create_vote_budget,
     get_vote_state,
     get_votes_by_voter,
@@ -28,31 +26,6 @@ def _fresh_budget(account: AccountDB) -> WeeklyVoteBudget:
     """Flush cache and return a fresh budget from the DB."""
     WeeklyVoteBudget.flush_instance_cache()
     return WeeklyVoteBudget.objects.get(account=account)
-
-
-class GetCurrentWeekStartTest(TestCase):
-    """Test get_current_week_start utility."""
-
-    def test_returns_a_monday(self) -> None:
-        """Week start is always a Monday (weekday 0)."""
-        result = get_current_week_start()
-        assert result.weekday() == 0
-
-    def test_returns_monday_on_a_wednesday(self) -> None:
-        """When today is Wednesday, returns the preceding Monday."""
-        wednesday = datetime.datetime(2026, 3, 25, tzinfo=datetime.UTC)
-        with patch("world.progression.services.voting.datetime.datetime") as mock_dt:
-            mock_dt.now.return_value = wednesday
-            result = get_current_week_start()
-        assert result == datetime.date(2026, 3, 23)
-
-    def test_returns_same_day_on_monday(self) -> None:
-        """When today is Monday, returns today."""
-        monday = datetime.datetime(2026, 3, 23, tzinfo=datetime.UTC)
-        with patch("world.progression.services.voting.datetime.datetime") as mock_dt:
-            mock_dt.now.return_value = monday
-            result = get_current_week_start()
-        assert result == datetime.date(2026, 3, 23)
 
 
 class GetOrCreateVoteBudgetTest(TestCase):
@@ -182,10 +155,10 @@ class CastVoteTest(TestCase):
 
     def test_cast_vote_over_budget_raises(self) -> None:
         """Raises ValueError when no votes remain."""
-        week_start = get_current_week_start()
+        game_week = get_current_game_week()
         WeeklyVoteBudget.objects.create(
             account=self.voter,
-            week_start=week_start,
+            game_week=game_week,
             votes_spent=7,  # All base votes used
         )
         with self.assertRaises(ProgressionError, msg="No votes remaining"):
@@ -406,14 +379,17 @@ class GetVotesByVoterTest(TestCase):
     def test_excludes_other_weeks(self) -> None:
         """Votes from other weeks are excluded."""
         cast_vote(self.voter, VoteTargetType.JOURNAL, 4, self.author)
-        # Manually create a vote for last week
-        last_week = get_current_week_start() - datetime.timedelta(weeks=1)
+        # Manually create a vote for a different week
+        other_week = advance_game_week()
+        GameWeek.flush_instance_cache()
         WeeklyVote.objects.create(
             voter=self.voter,
-            week_start=last_week,
+            game_week=other_week,
             target_type=VoteTargetType.JOURNAL,
             target_id=5,
             author_account=self.author,
         )
         votes = get_votes_by_voter(self.voter)
+        # get_votes_by_voter uses get_current_game_week which now returns other_week
+        # So it should see the vote we just created, not the one from the original week
         assert votes.count() == 1

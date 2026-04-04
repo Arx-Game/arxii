@@ -7,13 +7,14 @@ awarding XP, and rerolling targets.
 
 from __future__ import annotations
 
-import datetime
 import secrets
 
 from django.db import transaction
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
+from world.game_clock.models import GameWeek
+from world.game_clock.week_services import get_current_game_week
 from world.progression.constants import RS_BASE_XP, RS_FIRST_TIME_BONUS, RS_PARTNER_XP
 from world.progression.models import RandomSceneCompletion, RandomSceneTarget
 from world.progression.services.awards import award_xp
@@ -86,7 +87,7 @@ def _get_relationship_persona_ids(own_persona_ids: list[int]) -> list[int]:
     """Return PRIMARY Persona PKs that have a CharacterRelationship with own personas' characters.
 
     CharacterRelationship uses CharacterSheet FKs (source/target), which have
-    character_id as PK pointing to ObjectDB. We map from Persona → character_id
+    character_id as PK pointing to ObjectDB. We map from Persona -> character_id
     for the query, then back to Persona PKs.
     """
     own_character_ids = list(
@@ -121,7 +122,7 @@ def _pick_random_from_pool(
 
 def generate_random_scene_targets(
     account: AccountDB,
-    week_start: datetime.date,
+    game_week: GameWeek,
 ) -> list[RandomSceneTarget]:
     """Generate 5 weekly random scene targets for an account.
 
@@ -131,7 +132,7 @@ def generate_random_scene_targets(
 
     Args:
         account: The account to generate targets for.
-        week_start: Monday of the RS week.
+        game_week: The GameWeek to generate targets for.
 
     Returns:
         List of 5 RandomSceneTarget instances.
@@ -190,7 +191,7 @@ def generate_random_scene_targets(
             RandomSceneTarget(
                 account=account,
                 target_persona=personas_by_id[persona_id],
-                week_start=week_start,
+                game_week=game_week,
                 slot_number=slot_num,
                 first_time=persona_id not in completed_ids,
             )
@@ -204,20 +205,20 @@ def generate_random_scene_targets(
 def validate_random_scene_claim(
     account: AccountDB,
     target_persona: Persona,
-    week_start: datetime.date,
+    game_week: GameWeek,
 ) -> bool:
     """Check if account and target's account shared a scene or interaction this week.
 
     Args:
         account: The claimer's account.
         target_persona: The target Persona instance.
-        week_start: Monday of the RS week.
+        game_week: The GameWeek to validate against.
 
     Returns:
         True if shared scene or interaction evidence found this week.
     """
-    week_start_dt = datetime.datetime.combine(week_start, datetime.time.min, tzinfo=datetime.UTC)
-    week_end_dt = week_start_dt + datetime.timedelta(days=7)
+    week_start_dt = game_week.started_at
+    week_end_dt = game_week.ended_at or timezone.now()
 
     # Get target character's account via roster
     target_account = get_account_for_character(target_persona.character)
@@ -310,7 +311,7 @@ def claim_random_scene(
         if target.claimed:
             raise ProgressionError(ProgressionError.RS_ALREADY_CLAIMED)
 
-        if not validate_random_scene_claim(account, target.target_persona, target.week_start):
+        if not validate_random_scene_claim(account, target.target_persona, target.game_week):
             raise ProgressionError(ProgressionError.RS_NO_EVIDENCE)
 
         # Resolve claimer entry if not provided
@@ -360,7 +361,7 @@ def claim_random_scene(
 def reroll_random_scene_target(
     account: AccountDB,
     slot_number: int,
-    week_start: datetime.date,
+    game_week: GameWeek,
 ) -> RandomSceneTarget:
     """Reroll a single random scene target slot (one reroll per week).
 
@@ -370,7 +371,7 @@ def reroll_random_scene_target(
         try:
             target = RandomSceneTarget.objects.select_for_update().get(
                 account=account,
-                week_start=week_start,
+                game_week=game_week,
                 slot_number=slot_number,
             )
         except RandomSceneTarget.DoesNotExist as exc:
@@ -382,7 +383,7 @@ def reroll_random_scene_target(
         # Check if any target this week has already been rerolled
         already_rerolled = RandomSceneTarget.objects.filter(
             account=account,
-            week_start=week_start,
+            game_week=game_week,
             rerolled=True,
         ).exists()
 
@@ -396,7 +397,7 @@ def reroll_random_scene_target(
         current_target_ids = set(
             RandomSceneTarget.objects.filter(
                 account=account,
-                week_start=week_start,
+                game_week=game_week,
             ).values_list("target_persona_id", flat=True)
         )
 
@@ -419,15 +420,14 @@ def reroll_random_scene_target(
 
 def weekly_random_scene_generation_task() -> None:
     """Cron wrapper: generate random scene targets for all active players."""
-    today = timezone.now().date()
-    week_start = today - datetime.timedelta(days=today.weekday())
+    game_week = get_current_game_week()
 
     active_accounts = AccountDB.objects.filter(
         player_data__tenures__end_date__isnull=True,
     ).distinct()
 
     already_generated = set(
-        RandomSceneTarget.objects.filter(week_start=week_start)
+        RandomSceneTarget.objects.filter(game_week=game_week)
         .values_list("account_id", flat=True)
         .distinct()
     )
@@ -435,4 +435,4 @@ def weekly_random_scene_generation_task() -> None:
     for account in active_accounts:
         if account.pk in already_generated:
             continue
-        generate_random_scene_targets(account, week_start)
+        generate_random_scene_targets(account, game_week)

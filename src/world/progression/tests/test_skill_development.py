@@ -1,7 +1,5 @@
 """Tests for the skill development system (check-based dp awards and level-ups)."""
 
-import datetime
-
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
@@ -9,6 +7,7 @@ from world.character_sheets.models import CharacterSheet
 from world.checks.models import CheckCategory, CheckType, CheckTypeTrait
 from world.classes.factories import CharacterClassFactory
 from world.fatigue.constants import EffortLevel
+from world.game_clock.week_services import get_current_game_week
 from world.progression.models import (
     DevelopmentTransaction,
     WeeklySkillUsage,
@@ -286,21 +285,19 @@ class AwardCheckDevelopmentTest(TestCase):
 
     def test_existing_weekly_usage_triggers_update_path(self) -> None:
         """Pre-existing WeeklySkillUsage row triggers the IntegrityError fallback (update path)."""
-        from world.progression.services.voting import get_current_week_start
-
-        week_start = get_current_week_start()
+        game_week = get_current_game_week()
         # Pre-create usage rows so the create path hits IntegrityError
         WeeklySkillUsage.objects.create(
             character_sheet=self.sheet,
             trait=self.trait1,
-            week_start=week_start,
+            game_week=game_week,
             points_earned=5,
             check_count=1,
         )
         WeeklySkillUsage.objects.create(
             character_sheet=self.sheet,
             trait=self.trait2,
-            week_start=week_start,
+            game_week=game_week,
             points_earned=5,
             check_count=1,
         )
@@ -315,7 +312,7 @@ class AwardCheckDevelopmentTest(TestCase):
         # Verify the update path incremented both fields (bypass SharedMemoryModel cache)
         usage1 = (
             WeeklySkillUsage.objects.filter(
-                character_sheet=self.sheet, trait=self.trait1, week_start=week_start
+                character_sheet=self.sheet, trait=self.trait1, game_week=game_week
             )
             .values("check_count", "points_earned")
             .first()
@@ -326,7 +323,7 @@ class AwardCheckDevelopmentTest(TestCase):
 
         usage2 = (
             WeeklySkillUsage.objects.filter(
-                character_sheet=self.sheet, trait=self.trait2, week_start=week_start
+                character_sheet=self.sheet, trait=self.trait2, game_week=game_week
             )
             .values("check_count", "points_earned")
             .first()
@@ -482,6 +479,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         cls.trait_used = TraitFactory(name="weekly_used_trait")
         cls.trait_unused = TraitFactory(name="weekly_unused_trait")
         cls.char_class = CharacterClassFactory(name="weekly_test_class")
+        cls.game_week = get_current_game_week()
 
     def setUp(self) -> None:
         DevelopmentPoints.flush_instance_cache()
@@ -505,16 +503,15 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
 
     def test_creates_audit_transactions_for_used_skills(self) -> None:
         """Processed WeeklySkillUsage rows produce DevelopmentTransaction audit records."""
-        week = datetime.date(2026, 3, 16)  # a Monday
         WeeklySkillUsage.objects.create(
             character_sheet=self.sheet,
             trait=self.trait_used,
-            week_start=week,
+            game_week=self.game_week,
             points_earned=50,
             check_count=5,
         )
 
-        process_weekly_skill_development(week)
+        process_weekly_skill_development(self.game_week)
 
         txns = DevelopmentTransaction.objects.filter(
             character_sheet=self.sheet, trait=self.trait_used
@@ -527,21 +524,20 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         assert "5 skill checks" in txn.description
 
     def test_marks_usage_as_processed(self) -> None:
-        week = datetime.date(2026, 3, 16)
         WeeklySkillUsage.objects.create(
             character_sheet=self.sheet,
             trait=self.trait_used,
-            week_start=week,
+            game_week=self.game_week,
             points_earned=20,
             check_count=2,
         )
 
-        process_weekly_skill_development(week)
+        process_weekly_skill_development(self.game_week)
 
         # Bypass SharedMemoryModel cache
         usage_data = (
             WeeklySkillUsage.objects.filter(
-                character_sheet=self.sheet, trait=self.trait_used, week_start=week
+                character_sheet=self.sheet, trait=self.trait_used, game_week=self.game_week
             )
             .values("processed")
             .first()
@@ -552,7 +548,6 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
     def test_applies_rust_to_unused_skills(self) -> None:
         """Skills with DevelopmentPoints but no WeeklySkillUsage get rust."""
         self._set_class_level(5)
-        week = datetime.date(2026, 3, 16)
 
         # Unused skill at level 12
         DevelopmentPoints.objects.create(
@@ -562,7 +557,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
             character=self.character, trait=self.trait_unused, value=12
         )
 
-        process_weekly_skill_development(week)
+        process_weekly_skill_development(self.game_week)
 
         dev = (
             DevelopmentPoints.objects.filter(character_sheet=self.sheet, trait=self.trait_unused)
@@ -575,7 +570,6 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
     def test_rust_creates_audit_transaction(self) -> None:
         """Rust application creates a DevelopmentTransaction with source=RUST."""
         self._set_class_level(5)
-        week = datetime.date(2026, 3, 16)
 
         DevelopmentPoints.objects.create(
             character_sheet=self.sheet, trait=self.trait_unused, total_earned=300
@@ -584,7 +578,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
             character=self.character, trait=self.trait_unused, value=12
         )
 
-        process_weekly_skill_development(week)
+        process_weekly_skill_development(self.game_week)
 
         txns = DevelopmentTransaction.objects.filter(
             character_sheet=self.sheet,
@@ -599,7 +593,6 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
     def test_used_skills_dont_get_rust(self) -> None:
         """Skills with WeeklySkillUsage rows are protected from rust."""
         self._set_class_level(5)
-        week = datetime.date(2026, 3, 16)
 
         DevelopmentPoints.objects.create(
             character_sheet=self.sheet, trait=self.trait_used, total_earned=300
@@ -610,12 +603,12 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
         WeeklySkillUsage.objects.create(
             character_sheet=self.sheet,
             trait=self.trait_used,
-            week_start=week,
+            game_week=self.game_week,
             points_earned=10,
             check_count=1,
         )
 
-        process_weekly_skill_development(week)
+        process_weekly_skill_development(self.game_week)
 
         dev = (
             DevelopmentPoints.objects.filter(character_sheet=self.sheet, trait=self.trait_used)
@@ -627,7 +620,6 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
     def test_no_rust_for_low_level_skills(self) -> None:
         """Skills at or below level 10 don't get rust even if unused."""
         self._set_class_level(5)
-        week = datetime.date(2026, 3, 16)
 
         DevelopmentPoints.objects.create(
             character_sheet=self.sheet, trait=self.trait_unused, total_earned=50
@@ -636,7 +628,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
             character=self.character, trait=self.trait_unused, value=10
         )
 
-        process_weekly_skill_development(week)
+        process_weekly_skill_development(self.game_week)
 
         dev = (
             DevelopmentPoints.objects.filter(character_sheet=self.sheet, trait=self.trait_unused)
@@ -647,17 +639,16 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
 
     def test_already_processed_not_reprocessed(self) -> None:
         """Usage rows already marked processed are skipped."""
-        week = datetime.date(2026, 3, 16)
         WeeklySkillUsage.objects.create(
             character_sheet=self.sheet,
             trait=self.trait_used,
-            week_start=week,
+            game_week=self.game_week,
             points_earned=50,
             check_count=5,
             processed=True,
         )
 
-        process_weekly_skill_development(week)
+        process_weekly_skill_development(self.game_week)
 
         # No new transactions should be created
         txns = DevelopmentTransaction.objects.filter(character_sheet=self.sheet)
@@ -666,7 +657,6 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
     def test_rust_idempotent_on_rerun(self) -> None:
         """Running weekly processing twice for the same week does not double-apply rust."""
         self._set_class_level(5)
-        week = datetime.date(2026, 3, 16)
 
         DevelopmentPoints.objects.create(
             character_sheet=self.sheet, trait=self.trait_unused, total_earned=300
@@ -675,7 +665,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
             character=self.character, trait=self.trait_unused, value=12
         )
 
-        process_weekly_skill_development(week)
+        process_weekly_skill_development(self.game_week)
 
         # First run: rust applied once
         dev = (
@@ -687,7 +677,7 @@ class ProcessWeeklySkillDevelopmentTest(TestCase):
 
         # Second run: idempotency guard prevents double-application
         DevelopmentPoints.flush_instance_cache()
-        process_weekly_skill_development(week)
+        process_weekly_skill_development(self.game_week)
 
         dev = (
             DevelopmentPoints.objects.filter(character_sheet=self.sheet, trait=self.trait_unused)

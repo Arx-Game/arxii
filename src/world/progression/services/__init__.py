@@ -44,7 +44,6 @@ from world.progression.services.spends import (
 )
 from world.progression.services.voting import (
     cast_vote,
-    get_current_week_start,
     get_or_create_vote_budget,
     get_vote_state,
     get_votes_by_voter,
@@ -76,7 +75,6 @@ __all__ = [
     "claim_kudos",
     "claim_kudos_for_xp",
     "get_available_unlocks_for_character",
-    "get_current_week_start",
     "get_development_suggestions_for_character",
     "get_or_create_vote_budget",
     "get_or_create_xp_tracker",

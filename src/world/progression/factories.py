@@ -197,7 +197,11 @@ class WeeklySkillUsageFactory(factory_django.DjangoModelFactory):
 
     character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
     trait = factory.SubFactory("world.traits.factories.TraitFactory")
-    week_start = factory.LazyFunction(lambda: __import__("datetime").date.today())
+    game_week = factory.LazyFunction(
+        lambda: __import__(
+            "world.game_clock.week_services", fromlist=["get_current_game_week"]
+        ).get_current_game_week()
+    )
     points_earned = 0
     check_count = 0
     processed = False

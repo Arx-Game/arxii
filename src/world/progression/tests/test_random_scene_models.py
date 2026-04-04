@@ -2,14 +2,13 @@
 Tests for Random Scene models.
 """
 
-import datetime
-
 from django.db import IntegrityError
 from django.test import TestCase
 import pytest
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterIdentityFactory
+from world.game_clock.week_services import get_current_game_week
 from world.progression.models import RandomSceneCompletion, RandomSceneTarget
 from world.roster.factories import RosterEntryFactory
 
@@ -22,7 +21,7 @@ class RandomSceneTargetModelTest(TestCase):
         cls.account = AccountFactory(username="rs_player")
         identity = CharacterIdentityFactory()
         cls.target_persona = identity.active_persona
-        cls.week_start = datetime.date(2026, 3, 23)  # A Monday
+        cls.game_week = get_current_game_week()
 
     def setUp(self) -> None:
         RandomSceneTarget.flush_instance_cache()
@@ -32,7 +31,7 @@ class RandomSceneTargetModelTest(TestCase):
         target = RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=self.target_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=1,
             claimed=True,
             first_time=True,
@@ -41,7 +40,7 @@ class RandomSceneTargetModelTest(TestCase):
         assert target.pk is not None
         assert target.account == self.account
         assert target.target_persona == self.target_persona
-        assert target.week_start == self.week_start
+        assert target.game_week == self.game_week
         assert target.slot_number == 1
         assert target.claimed is True
         assert target.first_time is True
@@ -52,7 +51,7 @@ class RandomSceneTargetModelTest(TestCase):
         target = RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=self.target_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=1,
         )
         assert target.claimed is False
@@ -65,7 +64,7 @@ class RandomSceneTargetModelTest(TestCase):
         RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=self.target_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=1,
         )
         other_identity = CharacterIdentityFactory()
@@ -73,7 +72,7 @@ class RandomSceneTargetModelTest(TestCase):
             RandomSceneTarget.objects.create(
                 account=self.account,
                 target_persona=other_identity.active_persona,
-                week_start=self.week_start,
+                game_week=self.game_week,
                 slot_number=1,
             )
 
@@ -82,14 +81,14 @@ class RandomSceneTargetModelTest(TestCase):
         RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=self.target_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=1,
         )
         other_identity = CharacterIdentityFactory()
         target2 = RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=other_identity.active_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=2,
         )
         assert target2.pk is not None
@@ -98,7 +97,7 @@ class RandomSceneTargetModelTest(TestCase):
         target = RandomSceneTarget.objects.create(
             account=self.account,
             target_persona=self.target_persona,
-            week_start=self.week_start,
+            game_week=self.game_week,
             slot_number=3,
         )
         result = str(target)

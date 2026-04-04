@@ -301,7 +301,11 @@ class WeeklySkillUsage(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="weekly_skill_usage",
     )
-    week_start = models.DateField()
+    game_week = models.ForeignKey(
+        "game_clock.GameWeek",
+        on_delete=models.CASCADE,
+        related_name="skill_usages",
+    )
     points_earned = models.PositiveIntegerField(default=0)
     check_count = models.PositiveIntegerField(default=0)
     processed = models.BooleanField(default=False)
@@ -309,13 +313,13 @@ class WeeklySkillUsage(SharedMemoryModel):
     class Meta:
         constraints: ClassVar[list[models.BaseConstraint]] = [
             models.UniqueConstraint(
-                fields=["character_sheet", "trait", "week_start"],
+                fields=["character_sheet", "trait", "game_week"],
                 name="unique_skill_usage_per_week",
             ),
         ]
 
     def __str__(self) -> str:
         return (
-            f"{self.character.key}: {self.points_earned} dp for "
-            f"{self.trait.name} (week {self.week_start})"
+            f"{self.character_sheet}: {self.points_earned} dp for "
+            f"{self.trait.name} ({self.game_week})"
         )

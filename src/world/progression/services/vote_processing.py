@@ -7,7 +7,6 @@ recognize memorable poses (top-voted interactions per scene).
 
 from __future__ import annotations
 
-import datetime
 import logging
 from math import log2
 
@@ -15,10 +14,11 @@ from django.db import transaction
 from django.db.models import Count
 from evennia.accounts.models import AccountDB
 
+from world.game_clock.models import GameWeek
+from world.game_clock.week_services import get_current_game_week
 from world.progression.constants import MEMORABLE_POSE_XP, VOTE_XP_CAP
 from world.progression.models import WeeklyVote, WeeklyVoteBudget
 from world.progression.services.awards import award_xp
-from world.progression.services.voting import get_current_week_start
 from world.progression.types import ProgressionReason
 from world.roster.selectors import get_account_for_character
 from world.scenes.models import Interaction
@@ -38,13 +38,13 @@ def calculate_vote_xp(unique_voter_count: int) -> int:
     return min(VOTE_XP_CAP, int(raw))
 
 
-def process_memorable_poses(week_start: datetime.date) -> None:
+def process_memorable_poses(game_week: GameWeek) -> None:
     """Award bonus XP to the top 3 most-voted interactions per scene.
 
     Ties receive the higher tier (e.g. two tied for 1st both get 3 XP).
     After processing, ALL Interaction.vote_count values are reset to 0.
     """
-    logger.info("Processing memorable poses for week %s", week_start)
+    logger.info("Processing memorable poses for %s", game_week)
     interactions = (
         Interaction.objects.filter(
             vote_count__gt=0,
@@ -103,13 +103,13 @@ def process_memorable_poses(week_start: datetime.date) -> None:
 
     # Reset vote counts only for interactions that were voted on in the processed week
     voted_interaction_ids = WeeklyVote.objects.filter(
-        week_start=week_start,
+        game_week=game_week,
         target_type="interaction",
     ).values_list("target_id", flat=True)
     Interaction.objects.filter(pk__in=voted_interaction_ids, vote_count__gt=0).update(vote_count=0)
 
 
-def process_weekly_votes(week_start: datetime.date) -> None:
+def process_weekly_votes(game_week: GameWeek) -> None:
     """Process all unprocessed votes for the given week into XP awards.
 
     Steps 1-3 (vote XP + mark processed) are atomic so a crash doesn't
@@ -119,7 +119,7 @@ def process_weekly_votes(week_start: datetime.date) -> None:
     # Step 1-3: Award vote XP and mark processed (atomic)
     with transaction.atomic():
         unprocessed = WeeklyVote.objects.filter(
-            week_start=week_start,
+            game_week=game_week,
             processed=False,
         )
 
@@ -151,11 +151,11 @@ def process_weekly_votes(week_start: datetime.date) -> None:
         unprocessed.update(processed=True)
 
     # Step 4: Process memorable poses (independent)
-    process_memorable_poses(week_start)
+    process_memorable_poses(game_week)
 
     # Step 5: Reset bonus/spent on processed week's budgets (base_votes varies per
     # account based on character count, so we leave it as-is for historical accuracy)
-    WeeklyVoteBudget.objects.filter(week_start=week_start).update(
+    WeeklyVoteBudget.objects.filter(game_week=game_week).update(
         scene_bonus_votes=0,
         votes_spent=0,
     )
@@ -164,9 +164,18 @@ def process_weekly_votes(week_start: datetime.date) -> None:
 def weekly_vote_processing_task() -> None:
     """Cron task wrapper: process votes for the previous week.
 
-    Runs on the new week's Monday to process the completed prior week.
+    Looks for the most recent non-current GameWeek (i.e. the one that just ended).
     """
-    previous_week = get_current_week_start() - datetime.timedelta(days=7)
-    logger.info("Starting weekly vote processing for week %s", previous_week)
-    process_weekly_votes(previous_week)
-    logger.info("Completed weekly vote processing for week %s", previous_week)
+    current = get_current_game_week()
+    previous = (
+        GameWeek.objects.filter(ended_at__isnull=False)
+        .exclude(pk=current.pk)
+        .order_by("-started_at")
+        .first()
+    )
+    if previous is None:
+        logger.info("No previous game week found; skipping vote processing.")
+        return
+    logger.info("Starting weekly vote processing for %s", previous)
+    process_weekly_votes(previous)
+    logger.info("Completed weekly vote processing for %s", previous)

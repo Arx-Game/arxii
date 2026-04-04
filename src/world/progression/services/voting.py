@@ -6,23 +6,17 @@ attended. Votes are toggleable (cast/uncast) and feed into XP calculations
 via a weekly cron.
 """
 
-import datetime
-
 from django.db import transaction
 from django.db.models import F, QuerySet
 from django.db.models.functions import Greatest
 from evennia.accounts.models import AccountDB
 
+from world.game_clock.models import GameWeek
+from world.game_clock.week_services import get_current_game_week
 from world.progression.constants import DEFAULT_BASE_VOTES, MAX_SCENE_BONUS_VOTES, VoteTargetType
 from world.progression.models import WeeklyVote, WeeklyVoteBudget
 from world.progression.types import ProgressionError
 from world.roster.models import RosterEntry
-
-
-def get_current_week_start() -> datetime.date:
-    """Return the Monday of the current ISO week."""
-    today = datetime.datetime.now(tz=datetime.UTC).date()
-    return today - datetime.timedelta(days=today.weekday())
 
 
 def _get_active_character_count(account: AccountDB) -> int:
@@ -30,19 +24,23 @@ def _get_active_character_count(account: AccountDB) -> int:
     return RosterEntry.objects.for_account(account).count()
 
 
-def get_or_create_vote_budget(account: AccountDB) -> WeeklyVoteBudget:
+def get_or_create_vote_budget(
+    account: AccountDB,
+    game_week: GameWeek | None = None,
+) -> WeeklyVoteBudget:
     """Return the vote budget for the current week, creating with defaults if needed.
 
     Base votes scale with active character count at budget creation time:
     7 per character (minimum 7). Adding/removing characters mid-week does
     not change the budget until the following week.
     """
-    week_start = get_current_week_start()
+    if game_week is None:
+        game_week = get_current_game_week()
     character_count = max(1, _get_active_character_count(account))
     base = DEFAULT_BASE_VOTES * character_count
     budget, _ = WeeklyVoteBudget.objects.get_or_create(
         account=account,
-        week_start=week_start,
+        game_week=game_week,
         defaults={"base_votes": base},
     )
     return budget
@@ -75,10 +73,10 @@ def cast_vote(
     Raises:
         ProgressionError: If self-vote, budget exceeded, or vote already exists.
     """
-    week_start = get_current_week_start()
+    game_week = get_current_game_week()
     budget, _ = WeeklyVoteBudget.objects.select_for_update().get_or_create(
         account=voter_account,
-        week_start=week_start,
+        game_week=game_week,
     )
 
     if voter_account == author_account:
@@ -89,7 +87,7 @@ def cast_vote(
 
     already_exists = WeeklyVote.objects.filter(
         voter=voter_account,
-        week_start=week_start,
+        game_week=game_week,
         target_type=target_type,
         target_id=target_id,
     ).exists()
@@ -98,7 +96,7 @@ def cast_vote(
 
     vote = WeeklyVote.objects.create(
         voter=voter_account,
-        week_start=week_start,
+        game_week=game_week,
         target_type=target_type,
         target_id=target_id,
         author_account=author_account,
@@ -130,12 +128,12 @@ def remove_vote(
     Raises:
         ProgressionError: If vote not found or already processed.
     """
-    week_start = get_current_week_start()
+    game_week = get_current_game_week()
 
     try:
         vote = WeeklyVote.objects.select_for_update().get(
             voter=voter_account,
-            week_start=week_start,
+            game_week=game_week,
             target_type=target_type,
             target_id=target_id,
         )
@@ -149,7 +147,7 @@ def remove_vote(
 
     WeeklyVoteBudget.objects.filter(
         account=voter_account,
-        week_start=week_start,
+        game_week=game_week,
     ).update(votes_spent=Greatest(F("votes_spent") - 1, 0))
 
     if target_type == VoteTargetType.INTERACTION:
@@ -166,10 +164,10 @@ def get_vote_state(
     target_id: int,
 ) -> bool:
     """Return whether the voter has an unprocessed vote for this target this week."""
-    week_start = get_current_week_start()
+    game_week = get_current_game_week()
     return WeeklyVote.objects.filter(
         voter=voter_account,
-        week_start=week_start,
+        game_week=game_week,
         target_type=target_type,
         target_id=target_id,
         processed=False,
@@ -178,9 +176,9 @@ def get_vote_state(
 
 def get_votes_by_voter(voter_account: AccountDB) -> QuerySet[WeeklyVote]:
     """Return all unprocessed votes for the current week."""
-    week_start = get_current_week_start()
+    game_week = get_current_game_week()
     return WeeklyVote.objects.filter(
         voter=voter_account,
-        week_start=week_start,
+        game_week=game_week,
         processed=False,
     )

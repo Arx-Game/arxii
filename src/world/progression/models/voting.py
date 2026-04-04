@@ -26,8 +26,10 @@ class WeeklyVoteBudget(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="weekly_vote_budgets",
     )
-    week_start = models.DateField(
-        help_text="Monday of the voting week (ISO week start)",
+    game_week = models.ForeignKey(
+        "game_clock.GameWeek",
+        on_delete=models.CASCADE,
+        related_name="vote_budgets",
     )
     base_votes = models.PositiveIntegerField(default=DEFAULT_BASE_VOTES)
     scene_bonus_votes = models.PositiveIntegerField(default=0)
@@ -36,13 +38,13 @@ class WeeklyVoteBudget(SharedMemoryModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["account", "week_start"],
+                fields=["account", "game_week"],
                 name="unique_account_week_budget",
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.account} week {self.week_start}: {self.votes_remaining} remaining"
+        return f"{self.account} {self.game_week}: {self.votes_remaining} remaining"
 
     @property
     def votes_remaining(self) -> int:
@@ -62,8 +64,10 @@ class WeeklyVote(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="weekly_votes",
     )
-    week_start = models.DateField(
-        help_text="Monday of the voting week (ISO week start)",
+    game_week = models.ForeignKey(
+        "game_clock.GameWeek",
+        on_delete=models.CASCADE,
+        related_name="votes",
     )
     target_type = models.CharField(
         max_length=25,
@@ -88,10 +92,10 @@ class WeeklyVote(SharedMemoryModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["voter", "target_type", "target_id", "week_start"],
+                fields=["voter", "target_type", "target_id", "game_week"],
                 name="unique_vote_per_target_per_week",
             ),
         ]
 
     def __str__(self) -> str:
-        return f"{self.voter} -> {self.target_type}:{self.target_id} (week {self.week_start})"
+        return f"{self.voter} -> {self.target_type}:{self.target_id} ({self.game_week})"
