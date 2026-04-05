@@ -58,6 +58,7 @@ class ResolutionContext:
     character: ObjectDB
     challenge_instance: ChallengeInstance | None = None
     action_context: ActionContext | None = None
+    target: ObjectDB | None = None
 
     @property
     def location(self) -> ObjectDB:

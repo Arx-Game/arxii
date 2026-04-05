@@ -89,6 +89,7 @@ class CheckOutcomeFactory(factory_django.DjangoModelFactory):
 
     class Meta:
         model = CheckOutcome
+        django_get_or_create = ("name",)
 
     name = factory.Sequence(lambda n: f"Outcome_{n}")
     description = factory.Faker("sentence")

@@ -331,6 +331,34 @@ to support intervention between selection and application.
 - **Frontend: GM Situation builder** — compose Challenges into Situations, assign Properties, set severity and consequences. This is the primary content creation tool for GMs
 
 ### Phase 7: Seed Data & Content Authoring
+
+**Pass 1 — Social Action Content: COMPLETE** (PR #???; branch `feature/phase7-social-integration-tests`)
+
+Built a content authoring layer that makes all 6 social actions fully playable with real consequences:
+
+- **`src/integration_tests/game_content/`** — centralized content builder package:
+  - `checks.py` — `CheckContent`: thin wrapper around existing social check type / action template factories
+  - `conditions.py` — `ConditionContent`: 6 named social conditions (Shaken, Charmed, Deceived, Smitten, Captivated, Enthralled)
+  - `social.py` — `SocialContent.create_all()`: wires consequence pools to action templates; ConsequenceEffects apply conditions to `EffectTarget.TARGET` on success
+  - `characters.py` — `CharacterContent.create_base_social_character()`: character with social traits + PRIMARY persona
+- **`src/integration_tests/pipeline/test_social_pipeline.py`** — 10 end-to-end tests across 3 classes: availability, consent flow, consequence application
+- **`EffectTarget.TARGET`** added to `world/checks/constants.py` + migration + `_resolve_target` dispatch + `ResolutionContext.target` field
+
+**Pass 2 — Magic / Technique Content: COMPLETE**
+
+Built technique-enhanced social actions with full anima deduction and condition consequences:
+
+- **`src/integration_tests/game_content/magic.py`** — `MagicContent.create_all()`: 6 Techniques (intensity=2, control=2, anima_cost=12) + 6 `ActionEnhancement` records linking each technique to its social action; `grant_techniques_to_character()` creates `CharacterTechnique` records
+- **`src/actions/factories.py`** — `ActionEnhancementFactory` added
+- **`src/integration_tests/pipeline/test_social_magic_pipeline.py`** — 6 end-to-end tests across 2 classes:
+  - `SocialMagicAvailabilityTests`: known techniques appear in `get_available_scene_actions`; correct technique linked per action; no-technique characters have no enhancements
+  - `SocialMagicConsequenceTests`: enhanced intimidate applies Shaken to target (not initiator); anima deducted from initiator (effective_cost=2 after social_safety=10 bonus); `technique_result` present on result
+- **Note on social safety bonus**: `_get_social_safety_bonus()` returns +10 control for unengaged characters; `anima_cost=12` was chosen so `effective_cost = max(12 - 10, 0) = 2` — predictable non-zero deduction for tests
+
+**Pass 3 — Capability / Challenge Content** (not yet started)
+- Core Properties, CapabilityTypes, Applications, starter Challenges
+- TraitCapabilityDerivations, technique assignments
+
 The system needs actual game content to be playable. Seed data should be created via **FactoryBoy factories** (not Django fixtures or management commands) — the same factory compositions used in the pipeline integration tests serve as seed data patterns for both automated tests and manual testing.
 
 - **Core Properties** — elemental (flammable, frozen, electrified), physical (locked, breakable, heavy, armored), environmental (dark, underwater, elevated), creature (abyssal, celestial, undead)

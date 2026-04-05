@@ -21,4 +21,5 @@ class EffectTarget(models.TextChoices):
     """What the effect targets."""
 
     SELF = "self", "Self (acting character)"
+    TARGET = "target", "Target (recipient of social or targeted action)"
     LOCATION = "location", "Location (challenge's room)"

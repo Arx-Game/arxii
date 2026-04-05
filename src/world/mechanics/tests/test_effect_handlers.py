@@ -1,15 +1,39 @@
 """Tests for effect handlers in the mechanics app."""
 
+from unittest.mock import MagicMock
+
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
-from world.checks.constants import EffectType
+from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import ResolutionContext
 from world.conditions.constants import DurationType
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
-from world.mechanics.effect_handlers import apply_effect
+from world.mechanics.effect_handlers import _resolve_target, apply_effect
+
+
+class ResolveTargetTests(TestCase):
+    """Tests for _resolve_target covering SELF, TARGET, and LOCATION."""
+
+    def test_self_returns_context_character(self) -> None:
+        effect = MagicMock(target=EffectTarget.SELF)
+        character = MagicMock()
+        context = MagicMock(character=character)
+        assert _resolve_target(effect, context) is character
+
+    def test_target_returns_context_target(self) -> None:
+        effect = MagicMock(target=EffectTarget.TARGET)
+        target_char = MagicMock()
+        context = MagicMock(target=target_char)
+        assert _resolve_target(effect, context) is target_char
+
+    def test_target_falls_back_to_character_when_target_is_none(self) -> None:
+        effect = MagicMock(target=EffectTarget.TARGET)
+        character = MagicMock()
+        context = MagicMock(target=None, character=character)
+        assert _resolve_target(effect, context) is character
 
 
 class MagicalScarsHandlerTests(TestCase):
