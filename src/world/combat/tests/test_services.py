@@ -7,7 +7,6 @@ from world.combat.constants import (
     EncounterStatus,
     OpponentStatus,
     OpponentTier,
-    ParticipantStatus,
     TargetingMode,
     TargetSelection,
 )
@@ -26,6 +25,7 @@ from world.combat.services import (
     select_npc_actions,
 )
 from world.covenants.factories import CovenantRoleFactory
+from world.vitals.constants import CharacterStatus
 
 
 class AddParticipantTest(BaseEvenniaTest):
@@ -40,7 +40,7 @@ class AddParticipantTest(BaseEvenniaTest):
         participant = add_participant(self.encounter, self.sheet, max_health=120)
         self.assertEqual(participant.health, 120)
         self.assertEqual(participant.max_health, 120)
-        self.assertEqual(participant.status, ParticipantStatus.ACTIVE)
+        self.assertEqual(participant.status, CharacterStatus.ALIVE)
 
     def test_adds_participant_with_covenant_role(self) -> None:
         role = CovenantRoleFactory(name="Vanguard", slug="vanguard", speed_rank=1)

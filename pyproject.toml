@@ -404,6 +404,7 @@ include = [
     "src/world/character_sheets",      # Character demographics and identity system
     "src/world/progression",           # Character advancement and rewards system
     "src/world/character_creation",    # Character creation flow and draft logic
+    "src/world/vitals",               # Character life states and health
     "src/world/combat",               # Party combat system
     "src/world/covenants",             # Covenant roles and speed ranks
 ]

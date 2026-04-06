@@ -5,20 +5,19 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.combat.constants import (
     NO_ROLE_SPEED_RANK,
-    WOUND_DESCRIPTIONS,
     ActionCategory,
     ComboLearningMethod,
     EncounterStatus,
     EncounterType,
     OpponentStatus,
     OpponentTier,
-    ParticipantStatus,
     RiskLevel,
     StakesLevel,
     TargetingMode,
     TargetSelection,
 )
 from world.fatigue.constants import EffortLevel
+from world.vitals.constants import WOUND_DESCRIPTIONS, CharacterStatus
 
 
 class CombatEncounter(SharedMemoryModel):
@@ -333,8 +332,8 @@ class CombatParticipant(SharedMemoryModel):
     )
     status = models.CharField(
         max_length=20,
-        choices=ParticipantStatus.choices,
-        default=ParticipantStatus.ACTIVE,
+        choices=CharacterStatus.choices,
+        default=CharacterStatus.ALIVE,
     )
     dying_final_round = models.BooleanField(default=False)
 

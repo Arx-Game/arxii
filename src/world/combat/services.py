@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     PerformCheckFn = Callable[..., CheckResult]
 
 from world.combat.constants import (
-    DEATH_HEALTH_THRESHOLD,
     DEFENSE_CRITICAL_MULTIPLIER,
     DEFENSE_FULL_MULTIPLIER,
     DEFENSE_NO_DAMAGE_THRESHOLD,
@@ -29,13 +28,10 @@ from world.combat.constants import (
     DEFENSE_REDUCED_THRESHOLD,
     ENTITY_TYPE_NPC,
     ENTITY_TYPE_PC,
-    KNOCKOUT_HEALTH_THRESHOLD,
     NPC_SPEED_RANK,
-    PERMANENT_WOUND_THRESHOLD,
     EncounterStatus,
     OpponentStatus,
     OpponentTier,
-    ParticipantStatus,
     TargetingMode,
     TargetSelection,
 )
@@ -60,6 +56,12 @@ from world.combat.types import (
     OpponentDamageResult,
     ParticipantDamageResult,
     RoundResolutionResult,
+)
+from world.vitals.constants import (
+    DEATH_HEALTH_THRESHOLD,
+    KNOCKOUT_HEALTH_THRESHOLD,
+    PERMANENT_WOUND_THRESHOLD,
+    CharacterStatus,
 )
 
 logger = logging.getLogger(__name__)
@@ -291,7 +293,7 @@ def select_npc_actions(
     active_participants = list(
         CombatParticipant.objects.filter(
             encounter=encounter,
-            status=ParticipantStatus.ACTIVE,
+            status=CharacterStatus.ALIVE,
         )
     )
 
@@ -381,7 +383,7 @@ def apply_damage_to_participant(
     permanent_wound_eligible = damage > (participant.max_health * PERMANENT_WOUND_THRESHOLD)
 
     if force_death:
-        participant.status = ParticipantStatus.DYING
+        participant.status = CharacterStatus.DYING
         participant.dying_final_round = True
 
     participant.save(update_fields=["health", "status", "dying_final_round"])
@@ -420,8 +422,8 @@ def get_resolution_order(
     ranked: list[tuple[int, str, CombatParticipant | CombatOpponent]] = [
         (p.effective_speed_rank, ENTITY_TYPE_PC, p)
         for p in participants
-        if p.status == ParticipantStatus.ACTIVE
-        or (p.status == ParticipantStatus.DYING and p.dying_final_round)
+        if p.status == CharacterStatus.ALIVE
+        or (p.status == CharacterStatus.DYING and p.dying_final_round)
     ]
 
     opponents: list[CombatOpponent] = list(
@@ -828,7 +830,7 @@ def _resolve_npc_action(
         targets = list(npc_action.targets.all())
     for target_participant in targets:
         target_participant.refresh_from_db()
-        if target_participant.status != ParticipantStatus.ACTIVE:
+        if target_participant.status != CharacterStatus.ALIVE:
             continue
 
         if defense_check_type is not None:
@@ -905,7 +907,7 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
     ).exists()
     all_pcs_down = not CombatParticipant.objects.filter(
         encounter=encounter,
-        status=ParticipantStatus.ACTIVE,
+        status=CharacterStatus.ALIVE,
     ).exists()
     return all_opponents_down or all_pcs_down
 

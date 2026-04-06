@@ -2,13 +2,14 @@
 
 from django.test import TestCase
 
-from world.combat.constants import OpponentStatus, ParticipantStatus
+from world.combat.constants import OpponentStatus
 from world.combat.factories import (
     BossOpponentFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
 )
 from world.combat.services import apply_damage_to_opponent, apply_damage_to_participant
+from world.vitals.constants import CharacterStatus
 
 
 class ApplyDamageToOpponentTest(TestCase):
@@ -139,6 +140,6 @@ class ApplyDamageToParticipantTest(TestCase):
         result = apply_damage_to_participant(participant, 10, force_death=True)
 
         participant.refresh_from_db()
-        self.assertEqual(participant.status, ParticipantStatus.DYING)
+        self.assertEqual(participant.status, CharacterStatus.DYING)
         self.assertTrue(participant.dying_final_round)
         self.assertEqual(result.health_after, 40)

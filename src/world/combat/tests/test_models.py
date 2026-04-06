@@ -10,7 +10,6 @@ from world.combat.constants import (
     EncounterType,
     OpponentStatus,
     OpponentTier,
-    ParticipantStatus,
     RiskLevel,
     StakesLevel,
 )
@@ -23,6 +22,7 @@ from world.combat.models import (
     ThreatPoolEntry,
 )
 from world.covenants.factories import CovenantRoleFactory
+from world.vitals.constants import CharacterStatus
 
 
 class CombatEncounterTests(TestCase):
@@ -134,7 +134,7 @@ class CombatParticipantTests(TestCase):
 
     def test_create_defaults(self) -> None:
         p = self._make_participant()
-        self.assertEqual(p.status, ParticipantStatus.ACTIVE)
+        self.assertEqual(p.status, CharacterStatus.ALIVE)
         self.assertIsNone(p.covenant_role_id)
         self.assertEqual(p.speed_modifier, 0)
         self.assertFalse(p.dying_final_round)

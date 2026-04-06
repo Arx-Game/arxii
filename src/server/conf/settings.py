@@ -82,6 +82,7 @@ INSTALLED_APPS += [
     "world.events.apps.EventsConfig",
     "world.fatigue.apps.FatigueConfig",
     "world.covenants.apps.CovenantsConfig",
+    "world.vitals.apps.VitalsConfig",
     "world.combat.apps.CombatConfig",
     "behaviors.apps.BehaviorsConfig",
     "drf_spectacular",

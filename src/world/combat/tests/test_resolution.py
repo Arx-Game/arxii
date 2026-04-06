@@ -6,7 +6,6 @@ from world.combat.constants import (
     ENTITY_TYPE_NPC,
     ENTITY_TYPE_PC,
     OpponentStatus,
-    ParticipantStatus,
 )
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -14,6 +13,7 @@ from world.combat.factories import (
     CombatParticipantFactory,
 )
 from world.combat.services import get_resolution_order
+from world.vitals.constants import CharacterStatus
 
 
 class GetResolutionOrderTest(BaseEvenniaTest):
@@ -72,7 +72,7 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         """Unconscious PC not in resolution order."""
         CombatParticipantFactory(
             encounter=self.encounter,
-            status=ParticipantStatus.UNCONSCIOUS,
+            status=CharacterStatus.UNCONSCIOUS,
         )
         npc = CombatOpponentFactory(encounter=self.encounter)
 
@@ -85,7 +85,7 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         """Dead PC not in resolution order."""
         CombatParticipantFactory(
             encounter=self.encounter,
-            status=ParticipantStatus.DEAD,
+            status=CharacterStatus.DEAD,
         )
         npc = CombatOpponentFactory(encounter=self.encounter)
 
@@ -99,7 +99,7 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         dying_pc = CombatParticipantFactory(
             encounter=self.encounter,
             base_speed_rank=1,
-            status=ParticipantStatus.DYING,
+            status=CharacterStatus.DYING,
             dying_final_round=True,
         )
 
@@ -112,7 +112,7 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         """Dying PC with dying_final_round=False NOT included."""
         CombatParticipantFactory(
             encounter=self.encounter,
-            status=ParticipantStatus.DYING,
+            status=CharacterStatus.DYING,
             dying_final_round=False,
         )
 
