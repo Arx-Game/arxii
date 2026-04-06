@@ -22,6 +22,7 @@ from world.combat.models import (
     ThreatPool,
     ThreatPoolEntry,
 )
+from world.covenants.factories import CovenantRoleFactory
 
 
 class CombatEncounterTests(TestCase):
@@ -134,13 +135,14 @@ class CombatParticipantTests(TestCase):
     def test_create_defaults(self) -> None:
         p = self._make_participant()
         self.assertEqual(p.status, ParticipantStatus.ACTIVE)
-        self.assertIsNone(p.covenant_role)
+        self.assertIsNone(p.covenant_role_id)
         self.assertEqual(p.speed_modifier, 0)
         self.assertFalse(p.dying_final_round)
 
     def test_str_with_role(self) -> None:
-        p = self._make_participant(covenant_role="vanguard")
-        self.assertIn("vanguard", str(p))
+        role = CovenantRoleFactory(name="Vanguard", slug="vanguard-str-test")
+        p = self._make_participant(covenant_role=role)
+        self.assertIn("Vanguard", str(p))
 
     def test_str_without_role(self) -> None:
         p = self._make_participant()

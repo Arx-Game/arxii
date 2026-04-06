@@ -118,9 +118,9 @@ class TargetSelection(models.TextChoices):
 # ---------------------------------------------------------------------------
 # Speed ranks — lower means faster.
 #
-# Covenant roles (and their speed mappings) will live in the future covenants
-# app. Combat only needs a numeric base_speed_rank per participant; these
-# constants provide the fallback defaults.
+# Covenant roles and their speed mappings live in world.covenants.
+# Combat stores a denormalized base_speed_rank per participant; these
+# constants provide the fallback defaults for PCs without a role.
 # ---------------------------------------------------------------------------
 
 NO_ROLE_SPEED_RANK: int = 20

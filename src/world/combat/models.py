@@ -212,18 +212,21 @@ class CombatParticipant(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="combat_participations",
     )
-    covenant_role = models.CharField(
-        max_length=40,
+    covenant_role = models.ForeignKey(
+        "covenants.CovenantRole",
+        on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        help_text="Display label set by the covenant system. No choices constraint — "
-        "role definitions live in the covenants app.",
+        related_name="combat_participations",
+        help_text="The covenant role this PC holds. Speed rank is denormalized "
+        "into base_speed_rank at participant creation time.",
     )
     health = models.IntegerField()
     max_health = models.PositiveIntegerField()
     base_speed_rank = models.PositiveIntegerField(
         default=NO_ROLE_SPEED_RANK,
-        help_text="Base resolution rank set by the covenant system. Lower is faster.",
+        help_text="Combat resolution rank derived from covenant_role.speed_rank. "
+        "Lower is faster. Denormalized so resolution doesn't require joins.",
     )
     speed_modifier = models.IntegerField(
         default=0,
@@ -263,8 +266,8 @@ class CombatParticipant(SharedMemoryModel):
         return WOUND_DESCRIPTIONS[-1][1]
 
     def __str__(self) -> str:
-        if self.covenant_role:
-            return f"{self.character_sheet} ({self.covenant_role})"
+        if self.covenant_role_id:
+            return f"{self.character_sheet} ({self.covenant_role.name})"
         return f"{self.character_sheet}"
 
 

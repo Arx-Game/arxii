@@ -23,6 +23,7 @@ class CombatOpponentInline(admin.TabularInline):
 class CombatParticipantInline(admin.TabularInline):
     model = CombatParticipant
     extra = 0
+    raw_id_fields = ["covenant_role"]
     fields = [
         "character_sheet",
         "covenant_role",
@@ -86,6 +87,7 @@ class CombatParticipantAdmin(admin.ModelAdmin):
         "status",
     ]
     list_filter = ["status"]
+    autocomplete_fields = ["covenant_role"]
 
 
 class ThreatPoolEntryInline(admin.TabularInline):

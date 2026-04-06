@@ -25,6 +25,7 @@ from world.combat.services import (
     begin_declaration_phase,
     select_npc_actions,
 )
+from world.covenants.factories import CovenantRoleFactory
 
 
 class AddParticipantTest(BaseEvenniaTest):
@@ -42,14 +43,14 @@ class AddParticipantTest(BaseEvenniaTest):
         self.assertEqual(participant.status, ParticipantStatus.ACTIVE)
 
     def test_adds_participant_with_covenant_role(self) -> None:
+        role = CovenantRoleFactory(name="Vanguard", slug="vanguard", speed_rank=1)
         participant = add_participant(
             self.encounter,
             self.sheet,
             max_health=100,
-            covenant_role="vanguard",
-            base_speed_rank=1,
+            covenant_role=role,
         )
-        self.assertEqual(participant.covenant_role, "vanguard")
+        self.assertEqual(participant.covenant_role, role)
         self.assertEqual(participant.base_speed_rank, 1)
 
 

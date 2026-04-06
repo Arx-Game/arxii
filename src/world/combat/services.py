@@ -11,6 +11,7 @@ from django.db.models import Q
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.covenants.models import CovenantRole
 
 from world.combat.constants import (
     DEATH_HEALTH_THRESHOLD,
@@ -39,20 +40,20 @@ def add_participant(
     character_sheet: CharacterSheet,
     *,
     max_health: int,
-    covenant_role: str | None = None,
-    base_speed_rank: int | None = None,
+    covenant_role: CovenantRole | None = None,
 ) -> CombatParticipant:
     """Create a CombatParticipant with health equal to max_health.
+
+    If a ``covenant_role`` is provided, ``base_speed_rank`` is automatically
+    derived from the role's ``speed_rank``. Otherwise it defaults to
+    ``NO_ROLE_SPEED_RANK`` (20).
 
     Args:
         encounter: The combat encounter.
         character_sheet: The PC's character sheet.
         max_health: Starting (and max) health.
-        covenant_role: Display label from the covenant system.
-        base_speed_rank: Resolution rank from the covenant system.
-            Defaults to NO_ROLE_SPEED_RANK (20) if not provided.
+        covenant_role: The CovenantRole instance this PC holds (optional).
     """
-
     kwargs: dict[str, object] = {
         "encounter": encounter,
         "character_sheet": character_sheet,
@@ -60,8 +61,8 @@ def add_participant(
         "max_health": max_health,
         "covenant_role": covenant_role,
     }
-    if base_speed_rank is not None:
-        kwargs["base_speed_rank"] = base_speed_rank
+    if covenant_role is not None:
+        kwargs["base_speed_rank"] = covenant_role.speed_rank
     return CombatParticipant.objects.create(**kwargs)
 
 
