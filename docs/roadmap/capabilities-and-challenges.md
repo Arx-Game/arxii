@@ -355,18 +355,33 @@ Built technique-enhanced social actions with full anima deduction and condition 
   - `SocialMagicConsequenceTests`: enhanced intimidate applies Shaken to target (not initiator); anima deducted from initiator (effective_cost=2 after social_safety=10 bonus); `technique_result` present on result
 - **Note on social safety bonus**: `_get_social_safety_bonus()` returns +10 control for unengaged characters; `anima_cost=12` was chosen so `effective_cost = max(12 - 10, 0) = 2` — predictable non-zero deduction for tests
 
-**Pass 3 — Capability / Challenge Content** (not yet started)
-- Core Properties, CapabilityTypes, Applications, starter Challenges
-- TraitCapabilityDerivations, technique assignments
+**Pass 3 — Capability / Challenge Content: COMPLETE**
 
-The system needs actual game content to be playable. Seed data should be created via **FactoryBoy factories** (not Django fixtures or management commands) — the same factory compositions used in the pipeline integration tests serve as seed data patterns for both automated tests and manual testing.
+Built capability and challenge content layer exercising the full pipeline end-to-end:
 
-- **Core Properties** — elemental (flammable, frozen, electrified), physical (locked, breakable, heavy, armored), environmental (dark, underwater, elevated), creature (abyssal, celestial, undead)
-- **Core CapabilityTypes** — ~20-30 capabilities covering the main action space (fire_generation, lockpicking, force, flight, healing, stealth, etc.)
-- **Core Applications** — the eligibility matrix connecting capabilities to properties
-- **Starter Challenges** — templates for common obstacles: locked doors, hostile creatures, environmental hazards, social barriers
-- **TraitCapabilityDerivations** — which stats feed which capabilities (Strength → force, Dexterity → lockpicking, etc.)
-- **Technique assignments** — TechniqueCapabilityGrants for existing Technique/Cantrip data
+- **`src/integration_tests/game_content/challenges.py`** — `ChallengeContent.create_all()`:
+  19 CapabilityTypes (12 physical/magical + 5 social + 2 mental), 5 PropertyCategories
+  with 27 Properties, 44 Applications (capability + property eligibility pairs),
+  5 ChallengeCategories, 6 starter ChallengeTemplates with approaches and consequence
+  pools, 5 non-social CheckTypes, 11 TraitCapabilityDerivations (placeholder values)
+- **`src/integration_tests/game_content/magic.py`** — extended MagicContent with
+  `create_elemental_techniques()` (4 techniques: Flame Lance, Shadow Step, Stone Ward,
+  Gale Burst with TechniqueCapabilityGrants) and `wire_social_technique_capabilities()`
+  (grants on all 6 social techniques)
+- **`src/integration_tests/game_content/characters.py`** — added
+  `create_base_challenge_character()` for physical/mental stat testing
+- **`src/integration_tests/pipeline/test_challenge_pipeline.py`** — 14 end-to-end tests
+  across 3 classes: ChallengeAvailabilityTests (trait-derived capability matching),
+  TechniqueChallengePipelineTests (full technique → capability → application → approach),
+  ChallengeResolutionTests (consequence application and record creation)
+- **Key design decisions**: Capabilities are atomic single-verb primitives (no compound
+  names like fire_generation). Social capabilities (5) are distinct from physical (12)
+  and mental (2) — different end states justify separate primitives. Mental stats do NOT
+  derive social capabilities (balance). TraitCapabilityDerivation values are placeholders.
+- **Pipeline finding**: `get_available_actions` requires the Application's target_property
+  to appear on the challenge's Properties. ChallengeApproaches whose Application references
+  a property not on the challenge (e.g., Solve/analysis+mechanical on a door with locked/solid/breakable)
+  are correctly filtered out. Approaches must be designed with property overlap in mind.
 
 ## Cross-System Integration
 
