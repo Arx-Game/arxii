@@ -2,7 +2,12 @@
 
 from evennia.utils.test_resources import BaseEvenniaTest
 
-from world.combat.constants import OpponentStatus, ParticipantStatus
+from world.combat.constants import (
+    ENTITY_TYPE_NPC,
+    ENTITY_TYPE_PC,
+    OpponentStatus,
+    ParticipantStatus,
+)
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -29,8 +34,8 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         order = get_resolution_order(self.encounter)
 
         self.assertEqual(len(order), 2)
-        self.assertEqual(order[0], ("pc", pc))
-        self.assertEqual(order[1], ("npc", npc))
+        self.assertEqual(order[0], (ENTITY_TYPE_PC, pc))
+        self.assertEqual(order[1], (ENTITY_TYPE_NPC, npc))
 
     def test_no_role_resolves_after_npcs(self) -> None:
         """No-role PC (rank 20) appears after NPC (rank 15)."""
@@ -42,8 +47,8 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         order = get_resolution_order(self.encounter)
 
         self.assertEqual(len(order), 2)
-        self.assertEqual(order[0], ("npc", npc))
-        self.assertEqual(order[1], ("pc", pc))
+        self.assertEqual(order[0], (ENTITY_TYPE_NPC, npc))
+        self.assertEqual(order[1], (ENTITY_TYPE_PC, pc))
 
     def test_speed_modifier_adjusts_rank(self) -> None:
         """Base rank 4 with speed_modifier=-3 (rank 1) before normal rank 4."""
@@ -60,8 +65,8 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         order = get_resolution_order(self.encounter)
 
         self.assertEqual(len(order), 2)
-        self.assertEqual(order[0], ("pc", fast_pc))
-        self.assertEqual(order[1], ("pc", normal_pc))
+        self.assertEqual(order[0], (ENTITY_TYPE_PC, fast_pc))
+        self.assertEqual(order[1], (ENTITY_TYPE_PC, normal_pc))
 
     def test_unconscious_pcs_excluded(self) -> None:
         """Unconscious PC not in resolution order."""
@@ -74,7 +79,7 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         order = get_resolution_order(self.encounter)
 
         self.assertEqual(len(order), 1)
-        self.assertEqual(order[0], ("npc", npc))
+        self.assertEqual(order[0], (ENTITY_TYPE_NPC, npc))
 
     def test_dead_pcs_excluded(self) -> None:
         """Dead PC not in resolution order."""
@@ -87,7 +92,7 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         order = get_resolution_order(self.encounter)
 
         self.assertEqual(len(order), 1)
-        self.assertEqual(order[0], ("npc", npc))
+        self.assertEqual(order[0], (ENTITY_TYPE_NPC, npc))
 
     def test_dying_pc_with_final_round_included(self) -> None:
         """Dying PC with dying_final_round=True IS included."""
@@ -101,7 +106,7 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         order = get_resolution_order(self.encounter)
 
         self.assertEqual(len(order), 1)
-        self.assertEqual(order[0], ("pc", dying_pc))
+        self.assertEqual(order[0], (ENTITY_TYPE_PC, dying_pc))
 
     def test_dying_pc_without_final_round_excluded(self) -> None:
         """Dying PC with dying_final_round=False NOT included."""
@@ -129,7 +134,7 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         order = get_resolution_order(self.encounter)
 
         self.assertEqual(len(order), 1)
-        self.assertEqual(order[0], ("pc", pc))
+        self.assertEqual(order[0], (ENTITY_TYPE_PC, pc))
 
     def test_multiple_roles_sort_correctly(self) -> None:
         """Rank 1, 6, 10 — verify resolution order."""
@@ -149,9 +154,9 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         order = get_resolution_order(self.encounter)
 
         self.assertEqual(len(order), 3)
-        self.assertEqual(order[0], ("pc", fastest))
-        self.assertEqual(order[1], ("pc", middle))
-        self.assertEqual(order[2], ("pc", slowest))
+        self.assertEqual(order[0], (ENTITY_TYPE_PC, fastest))
+        self.assertEqual(order[1], (ENTITY_TYPE_PC, middle))
+        self.assertEqual(order[2], (ENTITY_TYPE_PC, slowest))
 
     def test_empty_encounter(self) -> None:
         """No participants or opponents returns empty list."""

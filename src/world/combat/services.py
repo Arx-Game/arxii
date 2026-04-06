@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable
 import logging
 import math
 import random
@@ -16,6 +17,8 @@ if TYPE_CHECKING:
     from world.checks.models import CheckType
     from world.checks.types import CheckResult
     from world.covenants.models import CovenantRole
+
+    PerformCheckFn = Callable[..., CheckResult]
 
 from world.combat.constants import (
     DEATH_HEALTH_THRESHOLD,
@@ -415,7 +418,7 @@ def get_resolution_order(
         CombatParticipant.objects.filter(encounter=encounter)
     )
     ranked: list[tuple[int, str, CombatParticipant | CombatOpponent]] = [
-        (p.effective_speed_rank, "pc", p)
+        (p.effective_speed_rank, ENTITY_TYPE_PC, p)
         for p in participants
         if p.status == ParticipantStatus.ACTIVE
         or (p.status == ParticipantStatus.DYING and p.dying_final_round)
@@ -427,7 +430,7 @@ def get_resolution_order(
             status=OpponentStatus.ACTIVE,
         )
     )
-    ranked.extend((NPC_SPEED_RANK, "npc", o) for o in opponents)
+    ranked.extend((NPC_SPEED_RANK, ENTITY_TYPE_NPC, o) for o in opponents)
 
     ranked.sort(key=lambda item: (item[0], item[2].pk))
 
@@ -442,24 +445,26 @@ def get_resolution_order(
 def _action_matches_slot(
     action: CombatRoundAction,
     slot: ComboSlot,
+    gift_resonance_ids: dict[int, set[int]],
 ) -> bool:
     """Check whether a PC's declared action satisfies a combo slot.
 
     A slot matches when:
     1. The technique's effect_type matches the slot's required_action_type.
     2. If the slot has a resonance_requirement, the technique's gift must
-       have a matching resonance (via ``gift.resonance_id``).
+       have a matching resonance (via the gift's M2M resonances).
 
     Args:
         action: The PC's declared round action.
         slot: The combo slot to test against.
+        gift_resonance_ids: Pre-fetched mapping of gift_id -> set of resonance IDs.
     """
     technique = action.focused_action
     if technique.effect_type_id != slot.required_action_type_id:
         return False
     if slot.resonance_requirement_id is not None:
-        gift = technique.gift
-        if gift.resonance_id != slot.resonance_requirement_id:
+        resonance_ids = gift_resonance_ids.get(technique.gift_id, set())
+        if slot.resonance_requirement_id not in resonance_ids:
             return False
     return True
 
@@ -467,34 +472,43 @@ def _action_matches_slot(
 def _try_match_all_slots(
     slots: list[ComboSlot],
     actions: list[CombatRoundAction],
+    gift_resonance_ids: dict[int, set[int]],
 ) -> list[ComboSlotMatch] | None:
-    """Try to match every slot to a distinct action.
+    """Try to assign one action per slot using backtracking.
 
     Returns a list of ``ComboSlotMatch`` if all slots match, or ``None``.
+    Backtracking ensures order-independent matching for combos with 2-5 slots.
     """
+    assignment: dict[int, CombatRoundAction] = {}
     used_action_ids: set[int] = set()
-    slot_matches: list[ComboSlotMatch] = []
 
-    for slot in slots:
-        matched = False
+    def backtrack(slot_idx: int) -> bool:
+        if slot_idx >= len(slots):
+            return True
+        slot = slots[slot_idx]
         for action in actions:
             if action.pk in used_action_ids:
                 continue
-            if _action_matches_slot(action, slot):
-                slot_matches.append(
-                    ComboSlotMatch(
-                        slot_number=slot.slot_number,
-                        participant=action.participant,
-                        action=action,
-                    )
-                )
+            if _action_matches_slot(action, slot, gift_resonance_ids):
+                assignment[slot.pk] = action
                 used_action_ids.add(action.pk)
-                matched = True
-                break
-        if not matched:
-            return None
+                if backtrack(slot_idx + 1):
+                    return True
+                del assignment[slot.pk]
+                used_action_ids.discard(action.pk)
+        return False
 
-    return slot_matches
+    if not backtrack(0):
+        return None
+
+    return [
+        ComboSlotMatch(
+            slot_number=slot.slot_number,
+            participant=assignment[slot.pk].participant,
+            action=assignment[slot.pk],
+        )
+        for slot in slots
+    ]
 
 
 def detect_available_combos(
@@ -532,9 +546,24 @@ def detect_available_combos(
     if not actions:
         return []
 
-    # Pre-fetch all combo definitions with their slots
+    # Pre-fetch gift -> resonance_ids mapping to avoid N+1 in slot matching
+    from world.magic.models import Gift  # noqa: PLC0415
+
+    gift_ids = {a.focused_action.gift_id for a in actions}
+    gift_resonance_ids: dict[int, set[int]] = defaultdict(set)
+    for gift_id, res_id in Gift.resonances.through.objects.filter(gift_id__in=gift_ids).values_list(
+        "gift_id", "resonance_id"
+    ):
+        gift_resonance_ids[gift_id].add(res_id)
+
+    # Pre-filter combos to only those whose slots reference declared effect types
+    effect_type_ids = {a.focused_action.effect_type_id for a in actions}
     combos = list(
-        ComboDefinition.objects.prefetch_related(
+        ComboDefinition.objects.filter(
+            slots__required_action_type_id__in=effect_type_ids,
+        )
+        .distinct()
+        .prefetch_related(
             Prefetch(
                 "slots",
                 queryset=ComboSlot.objects.select_related(
@@ -579,8 +608,8 @@ def detect_available_combos(
         if not known_by_any and not combo.discoverable_via_combat:
             continue
 
-        # Greedy slot matching: each slot must be filled by a distinct action
-        slot_matches = _try_match_all_slots(slots, actions)
+        # Backtracking slot matching: each slot must be filled by a distinct action
+        slot_matches = _try_match_all_slots(slots, actions, gift_resonance_ids)
         if slot_matches is None:
             continue
 
@@ -647,7 +676,7 @@ def resolve_npc_attack(
     participant: CombatParticipant,
     check_type: CheckType,
     *,
-    perform_check_fn: object | None = None,
+    perform_check_fn: PerformCheckFn | None = None,
 ) -> DefenseResult:
     """Resolve one NPC attack against one PC via a defensive check.
 
@@ -788,7 +817,7 @@ def _resolve_npc_action(
     opponent: CombatOpponent,
     npc_action: CombatOpponentAction,
     defense_check_type: CheckType | None,
-    defense_check_fn: object | None,
+    defense_check_fn: PerformCheckFn | None,
 ) -> ActionOutcome:
     """Resolve a single NPC's action against targeted PCs."""
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_NPC, entity_label=str(opponent))
@@ -825,7 +854,7 @@ def _resolve_actions(
     pc_actions: dict[int, CombatRoundAction],
     npc_actions: dict[int, CombatOpponentAction],
     defense_check_type: CheckType | None,
-    defense_check_fn: object | None,
+    defense_check_fn: PerformCheckFn | None,
 ) -> list[ActionOutcome]:
     """Iterate resolution order and resolve each entity's action."""
     outcomes: list[ActionOutcome] = []
@@ -885,7 +914,7 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
 def resolve_round(
     encounter: CombatEncounter,
     *,
-    defense_check_fn: object | None = None,
+    defense_check_fn: PerformCheckFn | None = None,
     defense_check_type: CheckType | None = None,
 ) -> RoundResolutionResult:
     """Orchestrate a full combat round: detect combos → resolve → consequences.
@@ -933,7 +962,13 @@ def resolve_round(
     for action in CombatRoundAction.objects.filter(
         participant__encounter=encounter,
         round_number=round_number,
-    ).select_related("participant", "focused_action", "combo_upgrade"):
+    ).select_related(
+        "participant",
+        "focused_action",
+        "focused_action__effect_type",
+        "focused_target",
+        "combo_upgrade",
+    ):
         pc_actions[action.participant_id] = action
 
     npc_actions: dict[int, CombatOpponentAction] = {}
@@ -971,6 +1006,9 @@ def resolve_round(
         enc.status = EncounterStatus.COMPLETED
         result.encounter_completed = True
     else:
+        # Note: round_number is NOT advanced here. begin_declaration_phase
+        # handles incrementing round_number when transitioning from
+        # BETWEEN_ROUNDS to DECLARING for the next round.
         enc.status = EncounterStatus.BETWEEN_ROUNDS
 
     enc.save(update_fields=["status"])

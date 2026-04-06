@@ -24,7 +24,7 @@ from world.combat.services import (
     revert_combo_upgrade,
     upgrade_action_to_combo,
 )
-from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
+from world.magic.factories import EffectTypeFactory, GiftFactory, ResonanceFactory, TechniqueFactory
 
 
 class ComboDefinitionModelTests(TestCase):
@@ -404,3 +404,153 @@ class ComboFactoryTests(TestCase):
         self.assertIsNotNone(learning.combo)
         self.assertIsNotNone(learning.character_sheet)
         self.assertEqual(learning.learned_via, ComboLearningMethod.TRAINING)
+
+
+class ResonanceMatchingTests(TestCase):
+    """Tests for combo slot resonance requirement matching."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.effect_attack = EffectTypeFactory(name="ResonanceAttack", base_power=20)
+        cls.fire_resonance = ResonanceFactory(name="Fire")
+        cls.water_resonance = ResonanceFactory(name="Water")
+
+    def _create_encounter_with_resonance_action(
+        self,
+        *,
+        gift_resonance: object,
+    ) -> tuple[object, list[object]]:
+        """Create an encounter with a single PC whose gift has the given resonance."""
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        gift = GiftFactory(name=f"Gift-{gift_resonance}")
+        gift.resonances.add(gift_resonance)
+        technique = TechniqueFactory(
+            gift=gift,
+            effect_type=self.effect_attack,
+        )
+        sheet = CharacterSheetFactory()
+        participant = CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=sheet,
+            health=100,
+            max_health=100,
+        )
+        action = CombatRoundAction.objects.create(
+            participant=participant,
+            round_number=1,
+            focused_category="physical",
+            focused_action=technique,
+        )
+        return encounter, [action]
+
+    def test_combo_with_resonance_requirement_matches(self) -> None:
+        """Slot with resonance requirement matches when gift has that resonance."""
+        encounter, _actions = self._create_encounter_with_resonance_action(
+            gift_resonance=self.fire_resonance,
+        )
+        combo = ComboDefinitionFactory(discoverable_via_combat=True)
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=1,
+            required_action_type=self.effect_attack,
+            resonance_requirement=self.fire_resonance,
+        )
+
+        available = detect_available_combos(encounter, 1)
+        self.assertEqual(len(available), 1)
+        self.assertEqual(available[0].combo, combo)
+
+    def test_combo_with_resonance_requirement_no_match(self) -> None:
+        """Slot with resonance requirement does NOT match when gift has wrong resonance."""
+        encounter, _actions = self._create_encounter_with_resonance_action(
+            gift_resonance=self.water_resonance,
+        )
+        combo = ComboDefinitionFactory(discoverable_via_combat=True)
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=1,
+            required_action_type=self.effect_attack,
+            resonance_requirement=self.fire_resonance,
+        )
+
+        available = detect_available_combos(encounter, 1)
+        self.assertEqual(len(available), 0)
+
+    def test_combo_slot_matching_uses_backtracking(self) -> None:
+        """Backtracking finds valid assignment when greedy would fail.
+
+        Slot 1: Attack (any resonance)
+        Slot 2: Attack (Fire resonance required)
+        Actions: [PC-A: Attack+Fire, PC-B: Attack+Water]
+        Greedy assigns PC-A to Slot 1 (any matches), then Slot 2 needs Fire
+        but only PC-B (Water) remains. Backtracking assigns PC-B->Slot1,
+        PC-A->Slot2.
+        """
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+
+        # PC-A has a Fire gift
+        fire_gift = GiftFactory(name="FireGift-BT")
+        fire_gift.resonances.add(self.fire_resonance)
+        fire_technique = TechniqueFactory(
+            gift=fire_gift,
+            effect_type=self.effect_attack,
+        )
+        sheet_a = CharacterSheetFactory()
+        participant_a = CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=sheet_a,
+            health=100,
+            max_health=100,
+        )
+        CombatRoundAction.objects.create(
+            participant=participant_a,
+            round_number=1,
+            focused_category="physical",
+            focused_action=fire_technique,
+        )
+
+        # PC-B has a Water gift
+        water_gift = GiftFactory(name="WaterGift-BT")
+        water_gift.resonances.add(self.water_resonance)
+        water_technique = TechniqueFactory(
+            gift=water_gift,
+            effect_type=self.effect_attack,
+        )
+        sheet_b = CharacterSheetFactory()
+        participant_b = CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=sheet_b,
+            health=100,
+            max_health=100,
+        )
+        CombatRoundAction.objects.create(
+            participant=participant_b,
+            round_number=1,
+            focused_category="physical",
+            focused_action=water_technique,
+        )
+
+        # Combo: Slot 1 = Attack (any), Slot 2 = Attack (Fire required)
+        combo = ComboDefinitionFactory(discoverable_via_combat=True)
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=1,
+            required_action_type=self.effect_attack,
+            resonance_requirement=None,
+        )
+        ComboSlotFactory(
+            combo=combo,
+            slot_number=2,
+            required_action_type=self.effect_attack,
+            resonance_requirement=self.fire_resonance,
+        )
+
+        available = detect_available_combos(encounter, 1)
+        self.assertEqual(len(available), 1)
+        self.assertEqual(available[0].combo, combo)

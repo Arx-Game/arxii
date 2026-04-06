@@ -184,7 +184,7 @@ class BossPhase(SharedMemoryModel):
         related_name="boss_phases",
     )
     soak_value = models.PositiveIntegerField(default=0)
-    probing_threshold = models.PositiveIntegerField(default=50)
+    probing_threshold = models.PositiveIntegerField(null=True, blank=True)
     health_trigger_percentage = models.FloatField(null=True, blank=True)
     description = models.TextField(blank=True)
 
