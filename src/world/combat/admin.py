@@ -9,6 +9,9 @@ from world.combat.models import (
     CombatOpponentAction,
     CombatParticipant,
     CombatRoundAction,
+    ComboDefinition,
+    ComboLearning,
+    ComboSlot,
     ThreatPool,
     ThreatPoolEntry,
 )
@@ -147,3 +150,37 @@ class CombatRoundActionAdmin(admin.ModelAdmin):
 @admin.register(CombatOpponentAction)
 class CombatOpponentActionAdmin(admin.ModelAdmin):
     list_display = ["opponent", "round_number", "threat_entry"]
+
+
+class ComboSlotInline(admin.TabularInline):
+    model = ComboSlot
+    extra = 0
+    fields = ["slot_number", "required_action_type", "resonance_requirement"]
+
+
+@admin.register(ComboDefinition)
+class ComboDefinitionAdmin(admin.ModelAdmin):
+    list_display = [
+        "name",
+        "slug",
+        "hidden",
+        "bypass_soak",
+        "bonus_damage",
+        "minimum_probing",
+    ]
+    list_filter = ["hidden", "bypass_soak"]
+    search_fields = ["name", "slug"]
+    prepopulated_fields = {"slug": ("name",)}
+    inlines = [ComboSlotInline]
+
+
+@admin.register(ComboSlot)
+class ComboSlotAdmin(admin.ModelAdmin):
+    list_display = ["combo", "slot_number", "required_action_type", "resonance_requirement"]
+    list_filter = ["required_action_type"]
+
+
+@admin.register(ComboLearning)
+class ComboLearningAdmin(admin.ModelAdmin):
+    list_display = ["character_sheet", "combo", "learned_via", "learned_at"]
+    list_filter = ["learned_via"]

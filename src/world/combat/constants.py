@@ -116,6 +116,13 @@ class TargetSelection(models.TextChoices):
 
 
 # ---------------------------------------------------------------------------
+# Entity type identifiers for resolution order
+# ---------------------------------------------------------------------------
+
+ENTITY_TYPE_PC: str = "pc"
+ENTITY_TYPE_NPC: str = "npc"
+
+# ---------------------------------------------------------------------------
 # Speed ranks — lower means faster.
 #
 # Covenant roles and their speed mappings live in world.covenants.
@@ -125,6 +132,35 @@ class TargetSelection(models.TextChoices):
 
 NO_ROLE_SPEED_RANK: int = 20
 NPC_SPEED_RANK: int = 15
+
+# ---------------------------------------------------------------------------
+# Combo learning methods
+# ---------------------------------------------------------------------------
+
+
+class ComboLearningMethod(models.TextChoices):
+    """How a character learned a combo."""
+
+    TRAINING = "training", "Training"
+    COMBAT = "combat", "Combat"
+    RESEARCH = "research", "Research"
+
+
+# ---------------------------------------------------------------------------
+# Defensive check damage multipliers
+#
+# Maps success_level from perform_check to a damage multiplier.
+# success_level >= 2: no damage (great success)
+# success_level == 1: reduced damage (partial success)
+# success_level == 0: full damage (failure)
+# success_level <= -1: extra damage (critical failure)
+# ---------------------------------------------------------------------------
+
+DEFENSE_NO_DAMAGE_THRESHOLD: int = 2
+DEFENSE_REDUCED_THRESHOLD: int = 1
+DEFENSE_REDUCED_MULTIPLIER: float = 0.5
+DEFENSE_FULL_MULTIPLIER: float = 1.0
+DEFENSE_CRITICAL_MULTIPLIER: float = 1.5
 
 # ---------------------------------------------------------------------------
 # Health thresholds

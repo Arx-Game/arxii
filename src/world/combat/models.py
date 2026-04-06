@@ -7,6 +7,7 @@ from world.combat.constants import (
     NO_ROLE_SPEED_RANK,
     WOUND_DESCRIPTIONS,
     ActionCategory,
+    ComboLearningMethod,
     EncounterStatus,
     EncounterType,
     OpponentStatus,
@@ -199,6 +200,104 @@ class BossPhase(SharedMemoryModel):
         return f"{self.opponent.name} Phase {self.phase_number}"
 
 
+class ComboDefinition(SharedMemoryModel):
+    """Staff-authored combo that multiple PCs can trigger together."""
+
+    name = models.CharField(max_length=200)
+    slug = models.SlugField(max_length=200, unique=True)
+    description = models.TextField(blank=True)
+    hidden = models.BooleanField(
+        default=True,
+        help_text="Hidden until learned by at least one PC.",
+    )
+    discoverable_via_training = models.BooleanField(default=True)
+    discoverable_via_combat = models.BooleanField(default=True)
+    discoverable_via_research = models.BooleanField(default=False)
+    minimum_probing = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Probing counter required on target before this combo is available.",
+    )
+    bypass_soak = models.BooleanField(
+        default=True,
+        help_text="Whether combo damage bypasses the target's soak value.",
+    )
+    bonus_damage = models.PositiveIntegerField(
+        default=0,
+        help_text="Flat bonus damage added when the combo fires.",
+    )
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ComboSlot(SharedMemoryModel):
+    """One required participant slot in a combo definition."""
+
+    combo = models.ForeignKey(
+        ComboDefinition,
+        on_delete=models.CASCADE,
+        related_name="slots",
+    )
+    slot_number = models.PositiveIntegerField()
+    required_action_type = models.ForeignKey(
+        "magic.EffectType",
+        on_delete=models.PROTECT,
+        related_name="combo_slots",
+        help_text="The EffectType the PC's focused action must match.",
+    )
+    resonance_requirement = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="combo_slots",
+        help_text="Required resonance on the technique's gift. Null means any.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["combo", "slot_number"],
+                name="unique_slot_per_combo",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.combo.name} Slot {self.slot_number}"
+
+
+class ComboLearning(SharedMemoryModel):
+    """Record that a PC knows a particular combo."""
+
+    combo = models.ForeignKey(
+        ComboDefinition,
+        on_delete=models.CASCADE,
+        related_name="learnings",
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="combo_learnings",
+    )
+    learned_via = models.CharField(
+        max_length=20,
+        choices=ComboLearningMethod.choices,
+    )
+    learned_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["combo", "character_sheet"],
+                name="unique_combo_per_character",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.character_sheet} knows {self.combo.name}"
+
+
 class CombatParticipant(SharedMemoryModel):
     """A PC in a combat encounter."""
 
@@ -321,6 +420,14 @@ class CombatRoundAction(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="+",
+    )
+    combo_upgrade = models.ForeignKey(
+        ComboDefinition,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="round_actions",
+        help_text="If this action was upgraded to a combo, which combo.",
     )
 
     class Meta:

@@ -5,6 +5,7 @@ from factory import django as factory_django
 
 from world.combat.constants import (
     ActionCategory,
+    ComboLearningMethod,
     EncounterType,
     OpponentTier,
     TargetingMode,
@@ -15,6 +16,9 @@ from world.combat.models import (
     CombatEncounter,
     CombatOpponent,
     CombatParticipant,
+    ComboDefinition,
+    ComboLearning,
+    ComboSlot,
     ThreatPool,
     ThreatPoolEntry,
 )
@@ -98,3 +102,38 @@ class CombatParticipantFactory(factory_django.DjangoModelFactory):
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     health = 100
     max_health = 100
+
+
+class ComboDefinitionFactory(factory_django.DjangoModelFactory):
+    """Factory for ComboDefinition."""
+
+    class Meta:
+        model = ComboDefinition
+
+    name = factory.Sequence(lambda n: f"Combo {n}")
+    slug = factory.Sequence(lambda n: f"combo-{n}")
+    description = "A powerful combo attack."
+    bypass_soak = True
+    bonus_damage = 50
+
+
+class ComboSlotFactory(factory_django.DjangoModelFactory):
+    """Factory for ComboSlot."""
+
+    class Meta:
+        model = ComboSlot
+
+    combo = factory.SubFactory(ComboDefinitionFactory)
+    slot_number = factory.Sequence(lambda n: n + 1)
+    required_action_type = factory.SubFactory("world.magic.factories.EffectTypeFactory")
+
+
+class ComboLearningFactory(factory_django.DjangoModelFactory):
+    """Factory for ComboLearning."""
+
+    class Meta:
+        model = ComboLearning
+
+    combo = factory.SubFactory(ComboDefinitionFactory)
+    character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    learned_via = ComboLearningMethod.TRAINING

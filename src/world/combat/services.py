@@ -3,36 +3,63 @@
 from __future__ import annotations
 
 from collections import defaultdict
+import logging
+import math
 import random
 from typing import TYPE_CHECKING
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.checks.models import CheckType
+    from world.checks.types import CheckResult
     from world.covenants.models import CovenantRole
 
 from world.combat.constants import (
     DEATH_HEALTH_THRESHOLD,
+    DEFENSE_CRITICAL_MULTIPLIER,
+    DEFENSE_FULL_MULTIPLIER,
+    DEFENSE_NO_DAMAGE_THRESHOLD,
+    DEFENSE_REDUCED_MULTIPLIER,
+    DEFENSE_REDUCED_THRESHOLD,
+    ENTITY_TYPE_NPC,
+    ENTITY_TYPE_PC,
     KNOCKOUT_HEALTH_THRESHOLD,
     NPC_SPEED_RANK,
     PERMANENT_WOUND_THRESHOLD,
     EncounterStatus,
     OpponentStatus,
+    OpponentTier,
     ParticipantStatus,
     TargetingMode,
     TargetSelection,
 )
 from world.combat.models import (
+    BossPhase,
     CombatEncounter,
     CombatOpponent,
     CombatOpponentAction,
     CombatParticipant,
+    CombatRoundAction,
+    ComboDefinition,
+    ComboLearning,
+    ComboSlot,
     ThreatPool,
     ThreatPoolEntry,
 )
-from world.combat.types import OpponentDamageResult, ParticipantDamageResult
+from world.combat.types import (
+    ActionOutcome,
+    AvailableCombo,
+    ComboSlotMatch,
+    DefenseResult,
+    OpponentDamageResult,
+    ParticipantDamageResult,
+    RoundResolutionResult,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def add_participant(
@@ -405,3 +432,548 @@ def get_resolution_order(
     ranked.sort(key=lambda item: (item[0], item[2].pk))
 
     return [(entity_type, entity) for _, entity_type, entity in ranked]
+
+
+# ---------------------------------------------------------------------------
+# Combo detection
+# ---------------------------------------------------------------------------
+
+
+def _action_matches_slot(
+    action: CombatRoundAction,
+    slot: ComboSlot,
+) -> bool:
+    """Check whether a PC's declared action satisfies a combo slot.
+
+    A slot matches when:
+    1. The technique's effect_type matches the slot's required_action_type.
+    2. If the slot has a resonance_requirement, the technique's gift must
+       have a matching resonance (via ``gift.resonance_id``).
+
+    Args:
+        action: The PC's declared round action.
+        slot: The combo slot to test against.
+    """
+    technique = action.focused_action
+    if technique.effect_type_id != slot.required_action_type_id:
+        return False
+    if slot.resonance_requirement_id is not None:
+        gift = technique.gift
+        if gift.resonance_id != slot.resonance_requirement_id:
+            return False
+    return True
+
+
+def _try_match_all_slots(
+    slots: list[ComboSlot],
+    actions: list[CombatRoundAction],
+) -> list[ComboSlotMatch] | None:
+    """Try to match every slot to a distinct action.
+
+    Returns a list of ``ComboSlotMatch`` if all slots match, or ``None``.
+    """
+    used_action_ids: set[int] = set()
+    slot_matches: list[ComboSlotMatch] = []
+
+    for slot in slots:
+        matched = False
+        for action in actions:
+            if action.pk in used_action_ids:
+                continue
+            if _action_matches_slot(action, slot):
+                slot_matches.append(
+                    ComboSlotMatch(
+                        slot_number=slot.slot_number,
+                        participant=action.participant,
+                        action=action,
+                    )
+                )
+                used_action_ids.add(action.pk)
+                matched = True
+                break
+        if not matched:
+            return None
+
+    return slot_matches
+
+
+def detect_available_combos(
+    encounter: CombatEncounter,
+    round_number: int,
+) -> list[AvailableCombo]:
+    """Scan declared actions to find combos whose slots are all satisfied.
+
+    A combo is available when:
+    - Every slot is matched by a distinct participant's focused action.
+    - The combo's ``minimum_probing`` (if set) is met by at least one active
+      opponent in the encounter.
+    - At least one participating PC knows the combo (``ComboLearning``) **or**
+      the combo is ``discoverable_via_combat``.
+
+    Args:
+        encounter: The combat encounter.
+        round_number: The round whose actions to scan.
+
+    Returns:
+        List of ``AvailableCombo`` instances with slot→participant mappings.
+    """
+    actions = list(
+        CombatRoundAction.objects.filter(
+            participant__encounter=encounter,
+            round_number=round_number,
+        ).select_related(
+            "participant",
+            "participant__character_sheet",
+            "focused_action",
+            "focused_action__effect_type",
+            "focused_action__gift",
+        )
+    )
+    if not actions:
+        return []
+
+    # Pre-fetch all combo definitions with their slots
+    combos = list(
+        ComboDefinition.objects.prefetch_related(
+            Prefetch(
+                "slots",
+                queryset=ComboSlot.objects.select_related(
+                    "required_action_type",
+                ).order_by("slot_number"),
+                to_attr="cached_slots",
+            ),
+        )
+    )
+
+    # Pre-fetch which characters know which combos (one query)
+    participant_sheet_ids = {a.participant.character_sheet_id for a in actions}
+    known_combos_qs = ComboLearning.objects.filter(
+        character_sheet_id__in=participant_sheet_ids,
+    ).values_list("combo_id", "character_sheet_id")
+    known_map: dict[int, set[int]] = defaultdict(set)
+    for combo_id, sheet_id in known_combos_qs:
+        known_map[combo_id].add(sheet_id)
+
+    # Max probing across active opponents for minimum_probing check
+    max_probing = 0
+    active_opponents = CombatOpponent.objects.filter(
+        encounter=encounter,
+        status=OpponentStatus.ACTIVE,
+    )
+    for opp in active_opponents:
+        max_probing = max(max_probing, opp.probing_current)
+    available: list[AvailableCombo] = []
+
+    for combo in combos:
+        slots: list[ComboSlot] = combo.cached_slots
+        if not slots:
+            continue
+
+        # Check minimum probing requirement
+        if combo.minimum_probing is not None and max_probing < combo.minimum_probing:
+            continue
+
+        # Determine if any participant knows the combo
+        knowers = known_map.get(combo.pk, set())
+        known_by_any = bool(knowers & participant_sheet_ids)
+        if not known_by_any and not combo.discoverable_via_combat:
+            continue
+
+        # Greedy slot matching: each slot must be filled by a distinct action
+        slot_matches = _try_match_all_slots(slots, actions)
+        if slot_matches is None:
+            continue
+
+        available.append(
+            AvailableCombo(
+                combo=combo,
+                slot_matches=slot_matches,
+                known_by_participant=known_by_any,
+            )
+        )
+
+    return available
+
+
+def upgrade_action_to_combo(
+    action: CombatRoundAction,
+    combo: ComboDefinition,
+) -> None:
+    """Mark a PC's round action as upgraded to a combo.
+
+    Args:
+        action: The CombatRoundAction to upgrade.
+        combo: The ComboDefinition being activated.
+    """
+    action.combo_upgrade = combo
+    action.save(update_fields=["combo_upgrade_id"])
+
+
+def revert_combo_upgrade(action: CombatRoundAction) -> None:
+    """Remove a combo upgrade from a round action, reverting to normal.
+
+    Args:
+        action: The CombatRoundAction to revert.
+    """
+    action.combo_upgrade = None
+    action.save(update_fields=["combo_upgrade_id"])
+
+
+# ---------------------------------------------------------------------------
+# Defensive check integration
+# ---------------------------------------------------------------------------
+
+
+def _damage_multiplier_for_success(success_level: int) -> float:
+    """Map a check success_level to a damage multiplier.
+
+    Args:
+        success_level: The ``CheckResult.success_level`` value.
+
+    Returns:
+        Float multiplier applied to NPC base damage.
+    """
+    if success_level >= DEFENSE_NO_DAMAGE_THRESHOLD:
+        return 0.0
+    if success_level >= DEFENSE_REDUCED_THRESHOLD:
+        return DEFENSE_REDUCED_MULTIPLIER
+    if success_level <= -1:
+        return DEFENSE_CRITICAL_MULTIPLIER
+    return DEFENSE_FULL_MULTIPLIER
+
+
+def resolve_npc_attack(
+    opponent_action: CombatOpponentAction,
+    participant: CombatParticipant,
+    check_type: CheckType,
+    *,
+    perform_check_fn: object | None = None,
+) -> DefenseResult:
+    """Resolve one NPC attack against one PC via a defensive check.
+
+    The PC rolls ``perform_check`` against the NPC's attack. The success
+    level determines a damage multiplier applied to the threat entry's
+    ``base_damage``.
+
+    Args:
+        opponent_action: The NPC's chosen action for the round.
+        participant: The targeted PC.
+        check_type: The CheckType matching the attack's category.
+        perform_check_fn: Optional callable override for testing. Defaults
+            to ``world.checks.services.perform_check``.
+
+    Returns:
+        A ``DefenseResult`` containing the check outcome and damage applied.
+    """
+    if perform_check_fn is None:
+        from world.checks.services import perform_check as perform_check_fn  # noqa: PLC0415
+
+    character = participant.character_sheet.character
+    result: CheckResult = perform_check_fn(character, check_type)
+
+    multiplier = _damage_multiplier_for_success(result.success_level)
+    base_damage = opponent_action.threat_entry.base_damage
+    final_damage = math.floor(base_damage * multiplier)
+
+    damage_result = apply_damage_to_participant(participant, final_damage)
+
+    return DefenseResult(
+        success_level=result.success_level,
+        damage_multiplier=multiplier,
+        final_damage=final_damage,
+        damage_result=damage_result,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Boss phase transitions
+# ---------------------------------------------------------------------------
+
+
+def check_and_advance_boss_phase(
+    opponent: CombatOpponent,
+) -> BossPhase | None:
+    """Check whether a boss should advance to the next phase and apply it.
+
+    Transition happens when the boss's health drops to or below a phase's
+    ``health_trigger_percentage``. The next phase (by ``phase_number``) whose
+    trigger is satisfied and whose ``phase_number`` is greater than the
+    opponent's ``current_phase`` is activated.
+
+    On transition:
+    - ``opponent.current_phase`` advances.
+    - ``threat_pool``, ``soak_value`` are swapped from the new phase.
+    - ``probing_current`` is reset to zero.
+    - If the new phase has a ``probing_threshold``, it overwrites the
+      opponent's ``probing_threshold``.
+
+    Args:
+        opponent: The boss opponent to check.
+
+    Returns:
+        The ``BossPhase`` that was activated, or ``None`` if no transition.
+    """
+    phases = list(
+        BossPhase.objects.filter(
+            opponent=opponent,
+            phase_number__gt=opponent.current_phase,
+        ).order_by("phase_number")
+    )
+
+    health_pct = opponent.health_percentage
+
+    for phase in phases:
+        if phase.health_trigger_percentage is None:
+            continue
+        if health_pct <= phase.health_trigger_percentage:
+            opponent.current_phase = phase.phase_number
+            if phase.threat_pool_id:
+                opponent.threat_pool = phase.threat_pool
+            opponent.soak_value = phase.soak_value
+            opponent.probing_current = 0
+            if phase.probing_threshold is not None:
+                opponent.probing_threshold = phase.probing_threshold
+            opponent.save(
+                update_fields=[
+                    "current_phase",
+                    "threat_pool_id",
+                    "soak_value",
+                    "probing_current",
+                    "probing_threshold",
+                ],
+            )
+            return phase
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Round resolution orchestrator
+# ---------------------------------------------------------------------------
+
+
+def _resolve_pc_action(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+) -> ActionOutcome:
+    """Resolve a single PC's focused action during round resolution."""
+    outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
+
+    target = action.focused_target
+    if target is None:
+        return outcome
+
+    target.refresh_from_db()
+    if target.status == OpponentStatus.DEFEATED:
+        return outcome
+
+    if action.combo_upgrade:
+        combo = action.combo_upgrade
+        dmg_result = apply_damage_to_opponent(
+            target,
+            combo.bonus_damage,
+            bypass_soak=combo.bypass_soak,
+        )
+        outcome.combo_used = combo
+    else:
+        technique = action.focused_action
+        raw = technique.effect_type.base_power or 10
+        dmg_result = apply_damage_to_opponent(target, raw)
+
+    outcome.damage_results.append(dmg_result)
+    return outcome
+
+
+def _resolve_npc_action(
+    opponent: CombatOpponent,
+    npc_action: CombatOpponentAction,
+    defense_check_type: CheckType | None,
+    defense_check_fn: object | None,
+) -> ActionOutcome:
+    """Resolve a single NPC's action against targeted PCs."""
+    outcome = ActionOutcome(entity_type=ENTITY_TYPE_NPC, entity_label=str(opponent))
+
+    try:
+        targets: list[CombatParticipant] = npc_action.cached_targets
+    except AttributeError:
+        targets = list(npc_action.targets.all())
+    for target_participant in targets:
+        target_participant.refresh_from_db()
+        if target_participant.status != ParticipantStatus.ACTIVE:
+            continue
+
+        if defense_check_type is not None:
+            defense = resolve_npc_attack(
+                npc_action,
+                target_participant,
+                defense_check_type,
+                perform_check_fn=defense_check_fn,
+            )
+            outcome.damage_results.append(defense.damage_result)
+        else:
+            dmg = apply_damage_to_participant(
+                target_participant,
+                npc_action.threat_entry.base_damage,
+            )
+            outcome.damage_results.append(dmg)
+
+    return outcome
+
+
+def _resolve_actions(
+    resolution_order: list[tuple[str, CombatParticipant | CombatOpponent]],
+    pc_actions: dict[int, CombatRoundAction],
+    npc_actions: dict[int, CombatOpponentAction],
+    defense_check_type: CheckType | None,
+    defense_check_fn: object | None,
+) -> list[ActionOutcome]:
+    """Iterate resolution order and resolve each entity's action."""
+    outcomes: list[ActionOutcome] = []
+    for entity_type, entity in resolution_order:
+        if entity_type == ENTITY_TYPE_PC:
+            if not isinstance(entity, CombatParticipant):
+                continue
+            action = pc_actions.get(entity.pk)
+            if action is not None:
+                outcomes.append(_resolve_pc_action(entity, action))
+
+        elif entity_type == ENTITY_TYPE_NPC:
+            if not isinstance(entity, CombatOpponent):
+                continue
+            npc_action = npc_actions.get(entity.pk)
+            if npc_action is not None:
+                outcomes.append(
+                    _resolve_npc_action(entity, npc_action, defense_check_type, defense_check_fn),
+                )
+    return outcomes
+
+
+def _check_boss_transitions(
+    encounter: CombatEncounter,
+) -> list[tuple[CombatOpponent, int]]:
+    """Check all active bosses for phase transitions, return transitions."""
+    transitions: list[tuple[CombatOpponent, int]] = []
+    boss_opponents = list(
+        CombatOpponent.objects.filter(
+            encounter=encounter,
+            status=OpponentStatus.ACTIVE,
+            tier=OpponentTier.BOSS,
+        )
+    )
+    for boss in boss_opponents:
+        boss.refresh_from_db()
+        new_phase = check_and_advance_boss_phase(boss)
+        if new_phase is not None:
+            transitions.append((boss, new_phase.phase_number))
+    return transitions
+
+
+def _check_encounter_completion(encounter: CombatEncounter) -> bool:
+    """Return True if the encounter should be marked complete."""
+    all_opponents_down = not CombatOpponent.objects.filter(
+        encounter=encounter,
+        status=OpponentStatus.ACTIVE,
+    ).exists()
+    all_pcs_down = not CombatParticipant.objects.filter(
+        encounter=encounter,
+        status=ParticipantStatus.ACTIVE,
+    ).exists()
+    return all_opponents_down or all_pcs_down
+
+
+@transaction.atomic
+def resolve_round(
+    encounter: CombatEncounter,
+    *,
+    defense_check_fn: object | None = None,
+    defense_check_type: CheckType | None = None,
+) -> RoundResolutionResult:
+    """Orchestrate a full combat round: detect combos → resolve → consequences.
+
+    High-level flow:
+    1. Validate encounter is in ``DECLARING`` status, transition to ``RESOLVING``.
+    2. Detect available combos from declared actions.
+    3. Iterate resolution order (speed-rank sorted PCs and NPCs).
+       - For each **PC**: resolve focused action against target opponent.
+         If the action has a ``combo_upgrade``, apply bonus damage with soak
+         bypass. Otherwise apply normal damage through soak/probing.
+       - For each **NPC**: resolve each targeted PC's defensive check.
+    4. After all actions: check boss phase transitions for boss-tier opponents.
+    5. Check encounter completion (all opponents defeated or all PCs down).
+    6. Transition encounter to ``BETWEEN_ROUNDS`` or ``COMPLETED``.
+
+    Args:
+        encounter: The combat encounter to resolve.
+        defense_check_fn: Optional ``perform_check`` override for PC defense.
+        defense_check_type: The CheckType used for defensive rolls. Required
+            when NPCs are present with targets.
+
+    Returns:
+        ``RoundResolutionResult`` with outcomes and phase transitions.
+    """
+    enc = CombatEncounter.objects.select_for_update().get(pk=encounter.pk)
+    if enc.status != EncounterStatus.DECLARING:
+        msg = (
+            f"Cannot resolve round: encounter status is "
+            f"'{enc.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    enc.status = EncounterStatus.RESOLVING
+    enc.save(update_fields=["status"])
+
+    round_number = enc.round_number
+    result = RoundResolutionResult(round_number=round_number)
+
+    # --- Combo detection ---
+    result.available_combos = detect_available_combos(encounter, round_number)
+
+    # --- Build action lookups ---
+    pc_actions: dict[int, CombatRoundAction] = {}
+    for action in CombatRoundAction.objects.filter(
+        participant__encounter=encounter,
+        round_number=round_number,
+    ).select_related("participant", "focused_action", "combo_upgrade"):
+        pc_actions[action.participant_id] = action
+
+    npc_actions: dict[int, CombatOpponentAction] = {}
+    for npc_action in (
+        CombatOpponentAction.objects.filter(
+            opponent__encounter=encounter,
+            round_number=round_number,
+        )
+        .select_related("opponent", "threat_entry")
+        .prefetch_related(
+            Prefetch(
+                "targets",
+                queryset=CombatParticipant.objects.all(),
+                to_attr="cached_targets",
+            ),
+        )
+    ):
+        npc_actions[npc_action.opponent_id] = npc_action
+
+    # --- Resolve in speed-rank order ---
+    resolution_order = get_resolution_order(encounter)
+    result.action_outcomes = _resolve_actions(
+        resolution_order,
+        pc_actions,
+        npc_actions,
+        defense_check_type,
+        defense_check_fn,
+    )
+
+    # --- Boss phase transitions ---
+    result.phase_transitions = _check_boss_transitions(encounter)
+
+    # --- Check encounter completion ---
+    if _check_encounter_completion(encounter):
+        enc.status = EncounterStatus.COMPLETED
+        result.encounter_completed = True
+    else:
+        enc.status = EncounterStatus.BETWEEN_ROUNDS
+
+    enc.save(update_fields=["status"])
+    encounter.refresh_from_db()
+
+    return result
