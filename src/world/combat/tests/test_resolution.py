@@ -2,7 +2,7 @@
 
 from evennia.utils.test_resources import BaseEvenniaTest
 
-from world.combat.constants import CovenantRole, OpponentStatus, ParticipantStatus
+from world.combat.constants import OpponentStatus, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -19,10 +19,10 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         self.encounter = CombatEncounterFactory()
 
     def test_covenant_roles_resolve_before_npcs(self) -> None:
-        """Vanguard (rank 1) appears before NPC (rank 15)."""
+        """PC with rank 1 appears before NPC (rank 15)."""
         pc = CombatParticipantFactory(
             encounter=self.encounter,
-            covenant_role=CovenantRole.VANGUARD,
+            base_speed_rank=1,
         )
         npc = CombatOpponentFactory(encounter=self.encounter)
 
@@ -37,7 +37,6 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         npc = CombatOpponentFactory(encounter=self.encounter)
         pc = CombatParticipantFactory(
             encounter=self.encounter,
-            covenant_role=None,
         )
 
         order = get_resolution_order(self.encounter)
@@ -47,22 +46,22 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         self.assertEqual(order[1], ("pc", pc))
 
     def test_speed_modifier_adjusts_rank(self) -> None:
-        """Sentinel with speed_modifier=-3 (rank 4-3=1) before normal Sentinel (rank 4)."""
-        fast_sentinel = CombatParticipantFactory(
+        """Base rank 4 with speed_modifier=-3 (rank 1) before normal rank 4."""
+        fast_pc = CombatParticipantFactory(
             encounter=self.encounter,
-            covenant_role=CovenantRole.SENTINEL,
+            base_speed_rank=4,
             speed_modifier=-3,
         )
-        normal_sentinel = CombatParticipantFactory(
+        normal_pc = CombatParticipantFactory(
             encounter=self.encounter,
-            covenant_role=CovenantRole.SENTINEL,
+            base_speed_rank=4,
         )
 
         order = get_resolution_order(self.encounter)
 
         self.assertEqual(len(order), 2)
-        self.assertEqual(order[0], ("pc", fast_sentinel))
-        self.assertEqual(order[1], ("pc", normal_sentinel))
+        self.assertEqual(order[0], ("pc", fast_pc))
+        self.assertEqual(order[1], ("pc", normal_pc))
 
     def test_unconscious_pcs_excluded(self) -> None:
         """Unconscious PC not in resolution order."""
@@ -94,7 +93,7 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         """Dying PC with dying_final_round=True IS included."""
         dying_pc = CombatParticipantFactory(
             encounter=self.encounter,
-            covenant_role=CovenantRole.VANGUARD,
+            base_speed_rank=1,
             status=ParticipantStatus.DYING,
             dying_final_round=True,
         )
@@ -124,7 +123,7 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         )
         pc = CombatParticipantFactory(
             encounter=self.encounter,
-            covenant_role=CovenantRole.VANGUARD,
+            base_speed_rank=1,
         )
 
         order = get_resolution_order(self.encounter)
@@ -133,26 +132,26 @@ class GetResolutionOrderTest(BaseEvenniaTest):
         self.assertEqual(order[0], ("pc", pc))
 
     def test_multiple_roles_sort_correctly(self) -> None:
-        """Vanguard (1), Weaver (6), Invoker (10) — verify order."""
-        invoker = CombatParticipantFactory(
+        """Rank 1, 6, 10 — verify resolution order."""
+        slowest = CombatParticipantFactory(
             encounter=self.encounter,
-            covenant_role=CovenantRole.INVOKER,
+            base_speed_rank=10,
         )
-        vanguard = CombatParticipantFactory(
+        fastest = CombatParticipantFactory(
             encounter=self.encounter,
-            covenant_role=CovenantRole.VANGUARD,
+            base_speed_rank=1,
         )
-        weaver = CombatParticipantFactory(
+        middle = CombatParticipantFactory(
             encounter=self.encounter,
-            covenant_role=CovenantRole.WEAVER,
+            base_speed_rank=6,
         )
 
         order = get_resolution_order(self.encounter)
 
         self.assertEqual(len(order), 3)
-        self.assertEqual(order[0], ("pc", vanguard))
-        self.assertEqual(order[1], ("pc", weaver))
-        self.assertEqual(order[2], ("pc", invoker))
+        self.assertEqual(order[0], ("pc", fastest))
+        self.assertEqual(order[1], ("pc", middle))
+        self.assertEqual(order[2], ("pc", slowest))
 
     def test_empty_encounter(self) -> None:
         """No participants or opponents returns empty list."""

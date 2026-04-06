@@ -57,12 +57,17 @@ class ApplyDamageToOpponentTest(TestCase):
 
     def test_combo_damage_bypasses_soak(self) -> None:
         opponent = BossOpponentFactory(health=500, max_health=500, soak_value=80)
+        probing_before = opponent.probing_current
         result = apply_damage_to_opponent(opponent, 50, bypass_soak=True)
 
         opponent.refresh_from_db()
         self.assertEqual(opponent.health, 450)
         self.assertEqual(result.damage_dealt, 50)
         self.assertTrue(result.health_damaged)
+        # Combo damage should not probe — probing_current unchanged
+        self.assertEqual(opponent.probing_current, probing_before)
+        self.assertFalse(result.probed)
+        self.assertEqual(result.probing_increment, 0)
 
     def test_probing_increment_equals_raw_damage(self) -> None:
         opponent = BossOpponentFactory(health=500, max_health=500, soak_value=80)

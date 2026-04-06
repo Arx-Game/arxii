@@ -116,33 +116,12 @@ class TargetSelection(models.TextChoices):
 
 
 # ---------------------------------------------------------------------------
-# Covenant role enums (stub — exact names TBD)
+# Speed ranks — lower means faster.
+#
+# Covenant roles (and their speed mappings) will live in the future covenants
+# app. Combat only needs a numeric base_speed_rank per participant; these
+# constants provide the fallback defaults.
 # ---------------------------------------------------------------------------
-
-
-class CovenantRole(models.TextChoices):
-    """Party role a character fills in a covenant (party) formation."""
-
-    VANGUARD = "vanguard", "Vanguard"
-    STRIKER = "striker", "Striker"
-    SENTINEL = "sentinel", "Sentinel"
-    WEAVER = "weaver", "Weaver"
-    WARDEN = "warden", "Warden"
-    INVOKER = "invoker", "Invoker"
-
-
-# ---------------------------------------------------------------------------
-# Speed ranks — lower means faster
-# ---------------------------------------------------------------------------
-
-COVENANT_ROLE_SPEED_RANK: dict[str, int] = {
-    CovenantRole.VANGUARD: 1,
-    CovenantRole.STRIKER: 2,
-    CovenantRole.SENTINEL: 4,
-    CovenantRole.WEAVER: 6,
-    CovenantRole.WARDEN: 8,
-    CovenantRole.INVOKER: 10,
-}
 
 NO_ROLE_SPEED_RANK: int = 20
 NPC_SPEED_RANK: int = 15
@@ -160,7 +139,7 @@ DEATH_HEALTH_THRESHOLD: int = 0
 # ---------------------------------------------------------------------------
 
 WOUND_DESCRIPTIONS: list[tuple[float, str]] = [
-    (0.9, "barely scratched"),
+    (0.9, "healthy appearance"),
     (0.8, "lightly wounded"),
     (0.7, "wounded"),
     (0.6, "moderately wounded"),

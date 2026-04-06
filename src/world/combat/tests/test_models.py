@@ -5,9 +5,7 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
-    COVENANT_ROLE_SPEED_RANK,
     NO_ROLE_SPEED_RANK,
-    CovenantRole,
     EncounterStatus,
     EncounterType,
     OpponentStatus,
@@ -124,9 +122,9 @@ class CombatParticipantTests(TestCase):
         cls.sheet = CharacterSheetFactory()
 
     def _make_participant(self, **kwargs: object) -> CombatParticipant:
-        defaults = {
-            "encounter": self.encounter,
-            "character_sheet": self.sheet,
+        defaults: dict[str, object] = {
+            "encounter": CombatEncounter.objects.create(),
+            "character_sheet": CharacterSheetFactory(),
             "health": 100,
             "max_health": 100,
         }
@@ -141,40 +139,35 @@ class CombatParticipantTests(TestCase):
         self.assertFalse(p.dying_final_round)
 
     def test_str_with_role(self) -> None:
-        p = self._make_participant(covenant_role=CovenantRole.VANGUARD)
-        self.assertIn("Vanguard", str(p))
+        p = self._make_participant(covenant_role="vanguard")
+        self.assertIn("vanguard", str(p))
 
     def test_str_without_role(self) -> None:
         p = self._make_participant()
-        self.assertEqual(str(p), str(self.sheet))
+        self.assertEqual(str(p), str(p.character_sheet))
 
     def test_effective_speed_rank_no_role(self) -> None:
         p = self._make_participant()
         self.assertEqual(p.effective_speed_rank, NO_ROLE_SPEED_RANK)
 
-    def test_effective_speed_rank_with_role(self) -> None:
-        for role, expected_rank in COVENANT_ROLE_SPEED_RANK.items():
-            p = self._make_participant(covenant_role=role)
-            self.assertEqual(
-                p.effective_speed_rank,
-                expected_rank,
-                msg=f"Role {role} should have speed rank {expected_rank}",
-            )
+    def test_effective_speed_rank_with_base(self) -> None:
+        p = self._make_participant(base_speed_rank=4)
+        self.assertEqual(p.effective_speed_rank, 4)
 
     def test_effective_speed_rank_with_modifier(self) -> None:
         p = self._make_participant(
-            covenant_role=CovenantRole.VANGUARD,
+            base_speed_rank=1,
             speed_modifier=-2,
         )
-        # Vanguard base is 1, minus 2 = -1, clamped to 1
+        # Base 1 minus 2 = -1, clamped to 1
         self.assertEqual(p.effective_speed_rank, 1)
 
     def test_effective_speed_rank_positive_modifier(self) -> None:
         p = self._make_participant(
-            covenant_role=CovenantRole.VANGUARD,
+            base_speed_rank=1,
             speed_modifier=3,
         )
-        # Vanguard base is 1, plus 3 = 4
+        # Base 1 plus 3 = 4
         self.assertEqual(p.effective_speed_rank, 4)
 
     def test_health_percentage_normal(self) -> None:
@@ -191,7 +184,7 @@ class CombatParticipantTests(TestCase):
 
     def test_wound_description_full_health(self) -> None:
         p = self._make_participant(health=100, max_health=100)
-        self.assertEqual(p.wound_description, "barely scratched")
+        self.assertEqual(p.wound_description, "healthy appearance")
 
     def test_wound_description_half_health(self) -> None:
         p = self._make_participant(health=50, max_health=100)

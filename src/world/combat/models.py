@@ -4,11 +4,9 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.combat.constants import (
-    COVENANT_ROLE_SPEED_RANK,
     NO_ROLE_SPEED_RANK,
     WOUND_DESCRIPTIONS,
     ActionCategory,
-    CovenantRole,
     EncounterStatus,
     EncounterType,
     OpponentStatus,
@@ -215,13 +213,18 @@ class CombatParticipant(SharedMemoryModel):
         related_name="combat_participations",
     )
     covenant_role = models.CharField(
-        max_length=20,
-        choices=CovenantRole.choices,
+        max_length=40,
         null=True,
         blank=True,
+        help_text="Display label set by the covenant system. No choices constraint — "
+        "role definitions live in the covenants app.",
     )
     health = models.IntegerField()
     max_health = models.PositiveIntegerField()
+    base_speed_rank = models.PositiveIntegerField(
+        default=NO_ROLE_SPEED_RANK,
+        help_text="Base resolution rank set by the covenant system. Lower is faster.",
+    )
     speed_modifier = models.IntegerField(
         default=0,
         help_text="Added to base speed rank",
@@ -233,10 +236,17 @@ class CombatParticipant(SharedMemoryModel):
     )
     dying_final_round = models.BooleanField(default=False)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["encounter", "character_sheet"],
+                name="unique_participant_per_encounter",
+            ),
+        ]
+
     @property
     def effective_speed_rank(self) -> int:
-        base = COVENANT_ROLE_SPEED_RANK.get(self.covenant_role, NO_ROLE_SPEED_RANK)
-        return max(1, base + self.speed_modifier)
+        return max(1, self.base_speed_rank + self.speed_modifier)
 
     @property
     def health_percentage(self) -> float:
@@ -254,7 +264,7 @@ class CombatParticipant(SharedMemoryModel):
 
     def __str__(self) -> str:
         if self.covenant_role:
-            return f"{self.character_sheet} ({self.get_covenant_role_display()})"
+            return f"{self.character_sheet} ({self.covenant_role})"
         return f"{self.character_sheet}"
 
 

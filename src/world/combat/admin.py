@@ -26,6 +26,7 @@ class CombatParticipantInline(admin.TabularInline):
     fields = [
         "character_sheet",
         "covenant_role",
+        "base_speed_rank",
         "health",
         "max_health",
         "status",
@@ -79,11 +80,12 @@ class CombatParticipantAdmin(admin.ModelAdmin):
         "character_sheet",
         "encounter",
         "covenant_role",
+        "base_speed_rank",
         "health",
         "max_health",
         "status",
     ]
-    list_filter = ["covenant_role", "status"]
+    list_filter = ["status"]
 
 
 class ThreatPoolEntryInline(admin.TabularInline):

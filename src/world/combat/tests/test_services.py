@@ -4,7 +4,6 @@ from evennia.utils.test_resources import BaseEvenniaTest
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
-    CovenantRole,
     EncounterStatus,
     OpponentStatus,
     OpponentTier,
@@ -19,6 +18,7 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
+from world.combat.models import CombatOpponentAction
 from world.combat.services import (
     add_opponent,
     add_participant,
@@ -46,9 +46,11 @@ class AddParticipantTest(BaseEvenniaTest):
             self.encounter,
             self.sheet,
             max_health=100,
-            covenant_role=CovenantRole.VANGUARD,
+            covenant_role="vanguard",
+            base_speed_rank=1,
         )
-        self.assertEqual(participant.covenant_role, CovenantRole.VANGUARD)
+        self.assertEqual(participant.covenant_role, "vanguard")
+        self.assertEqual(participant.base_speed_rank, 1)
 
 
 class AddOpponentTest(BaseEvenniaTest):
@@ -110,13 +112,23 @@ class BeginDeclarationPhaseTest(BaseEvenniaTest):
         self.assertEqual(encounter.round_number, 2)
         self.assertEqual(encounter.status, EncounterStatus.DECLARING)
 
+    def test_rejects_non_between_rounds_status(self) -> None:
+        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING)
+        with self.assertRaises(ValueError, msg="expected 'Between Rounds'"):
+            begin_declaration_phase(encounter)
+
+    def test_rejects_completed_status(self) -> None:
+        encounter = CombatEncounterFactory(status=EncounterStatus.COMPLETED)
+        with self.assertRaises(ValueError):
+            begin_declaration_phase(encounter)
+
 
 class SelectNpcActionsTest(BaseEvenniaTest):
     """Tests for select_npc_actions service function."""
 
     def setUp(self) -> None:
         super().setUp()
-        self.encounter = CombatEncounterFactory(round_number=1)
+        self.encounter = CombatEncounterFactory(round_number=1, status=EncounterStatus.DECLARING)
         self.pool = ThreatPoolFactory()
         self.entry = ThreatPoolEntryFactory(
             pool=self.pool,
@@ -149,3 +161,39 @@ class SelectNpcActionsTest(BaseEvenniaTest):
         self.assertEqual(len(actions), 1)
         targets = list(actions[0].targets.all())
         self.assertIn(self.participant, targets)
+
+    def test_rejects_non_declaring_status(self) -> None:
+        self.encounter.status = EncounterStatus.BETWEEN_ROUNDS
+        self.encounter.save(update_fields=["status"])
+        with self.assertRaises(ValueError, msg="expected 'Declaring'"):
+            select_npc_actions(self.encounter)
+
+    def test_rejects_resolving_status(self) -> None:
+        self.encounter.status = EncounterStatus.RESOLVING
+        self.encounter.save(update_fields=["status"])
+        with self.assertRaises(ValueError):
+            select_npc_actions(self.encounter)
+
+    def test_cooldown_excludes_recently_used_entry(self) -> None:
+        """An entry on cooldown should not be selected."""
+        # Use round 3 so cooldown math is clear: cooldown=2 means
+        # earliest_allowed = max(1, 3-2+1) = 2, and we used it at round 2.
+        encounter = CombatEncounterFactory(round_number=3, status=EncounterStatus.DECLARING)
+        pool = ThreatPoolFactory()
+        normal_entry = ThreatPoolEntryFactory(pool=pool, weight=1)
+        cooldown_entry = ThreatPoolEntryFactory(
+            pool=pool,
+            cooldown_rounds=2,
+            weight=1000,  # Would always be picked if eligible
+        )
+        CombatParticipantFactory(encounter=encounter)
+        opponent = CombatOpponentFactory(encounter=encounter, threat_pool=pool)
+        CombatOpponentAction.objects.create(
+            opponent=opponent,
+            round_number=2,
+            threat_entry=cooldown_entry,
+        )
+        actions = select_npc_actions(encounter)
+        self.assertEqual(len(actions), 1)
+        # Should have picked normal_entry, not cooldown_entry
+        self.assertEqual(actions[0].threat_entry, normal_entry)
