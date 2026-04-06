@@ -1,6 +1,6 @@
 """Tests for the resolution order service."""
 
-from evennia.utils.test_resources import BaseEvenniaTest
+from django.test import TestCase
 
 from world.combat.constants import (
     ENTITY_TYPE_NPC,
@@ -16,7 +16,7 @@ from world.combat.services import get_resolution_order
 from world.vitals.constants import CharacterStatus
 
 
-class GetResolutionOrderTest(BaseEvenniaTest):
+class GetResolutionOrderTest(TestCase):
     """Tests for get_resolution_order."""
 
     def setUp(self) -> None:

@@ -1,6 +1,6 @@
 """Tests for combat encounter lifecycle service functions."""
 
-from evennia.utils.test_resources import BaseEvenniaTest
+from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
@@ -28,7 +28,7 @@ from world.covenants.factories import CovenantRoleFactory
 from world.vitals.constants import CharacterStatus
 
 
-class AddParticipantTest(BaseEvenniaTest):
+class AddParticipantTest(TestCase):
     """Tests for add_participant service function."""
 
     def setUp(self) -> None:
@@ -54,7 +54,7 @@ class AddParticipantTest(BaseEvenniaTest):
         self.assertEqual(participant.base_speed_rank, 1)
 
 
-class AddOpponentTest(BaseEvenniaTest):
+class AddOpponentTest(TestCase):
     """Tests for add_opponent service function."""
 
     def setUp(self) -> None:
@@ -88,7 +88,7 @@ class AddOpponentTest(BaseEvenniaTest):
         self.assertEqual(opponent.probing_threshold, 50)
 
 
-class BeginDeclarationPhaseTest(BaseEvenniaTest):
+class BeginDeclarationPhaseTest(TestCase):
     """Tests for begin_declaration_phase service function."""
 
     def test_advances_round_and_sets_status(self) -> None:
@@ -124,7 +124,7 @@ class BeginDeclarationPhaseTest(BaseEvenniaTest):
             begin_declaration_phase(encounter)
 
 
-class SelectNpcActionsTest(BaseEvenniaTest):
+class SelectNpcActionsTest(TestCase):
     """Tests for select_npc_actions service function."""
 
     def setUp(self) -> None:
