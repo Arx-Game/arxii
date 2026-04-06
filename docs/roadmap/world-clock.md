@@ -23,9 +23,13 @@ The central time engine that drives the living world. An anchor-based game clock
 - **Calendar:** 12 months, 4 seasons, mapped real-world structure. Numbered months now, lore names added via config later.
 
 ## What Exists
-- **AP regen methods:** `apply_daily_regen()`, `apply_weekly_regen()` fully implemented and tested. No scheduler calls them.
-- **Journal weekly reset:** `WeeklyJournalXP.needs_reset()` / `reset_week()` with timestamp-based logic. Currently inline on access.
-- **Relationship weekly reset:** `week_reset_at`, `developments_this_week` / `changes_this_week` counters with reset logic.
+- **GameWeek model:** Formal game week tracking with `GameWeek` and `GameSeason` models. All weekly systems FK to `GameWeek` instead of storing raw dates. Unified `weekly_rollover` cron orchestrator advances the week then runs all weekly processors in sequence.
+- **AP regen:** `apply_daily_regen()`, `apply_weekly_regen()` batch jobs wired to scheduler.
+- **Journal weekly reset:** `WeeklyJournalXP` uses `game_week` FK. `needs_reset()` / `reset_week()` compare FKs. Batch sweep resets all non-current-week trackers.
+- **Relationship weekly reset:** `CharacterRelationship` uses `game_week` FK for `developments_this_week` / `changes_this_week` counters.
+- **Vote processing:** `WeeklyVoteBudget`, `WeeklyVote` use `game_week` FK. Processed during weekly rollover.
+- **Skill development:** `WeeklySkillUsage` uses `game_week` FK. Check-based DP accumulation + weekly rust processing.
+- **Random scenes:** `RandomSceneTarget` uses `game_week` FK. Generated during weekly rollover.
 - **Form expiration:** `TemporaryFormChange` with `expires_at` for real-time duration. `GAME_TIME` duration type placeholder exists.
 - **Condition expiration:** `ActiveCondition` with `expires_at`, `suppressed_until` fields. Indexed for efficient queries.
 - **Relationship decay:** `current_temporary_value()` calculated on read via linear decay. No cleanup needed.
@@ -66,7 +70,6 @@ The central time engine that drives the living world. An anchor-based game clock
 - Celery migration (if scale demands it)
 - Game-time form expiry (`DurationType.GAME_TIME`)
 - Research project rolls (codex system)
-- Skill rust (progression system)
 - Anima fade out of combat (magic system)
 
 ## Design Document
