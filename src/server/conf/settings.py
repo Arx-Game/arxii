@@ -81,6 +81,7 @@ INSTALLED_APPS += [
     "world.items.apps.ItemsConfig",
     "world.events.apps.EventsConfig",
     "world.fatigue.apps.FatigueConfig",
+    "world.combat.apps.CombatConfig",
     "behaviors.apps.BehaviorsConfig",
     "drf_spectacular",
     "cloudinary",
