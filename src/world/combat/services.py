@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 from world.combat.constants import (
     DEATH_HEALTH_THRESHOLD,
     KNOCKOUT_HEALTH_THRESHOLD,
+    NPC_SPEED_RANK,
     PERMANENT_WOUND_THRESHOLD,
     EncounterStatus,
     OpponentStatus,
@@ -270,3 +271,45 @@ def apply_damage_to_participant(
         death_eligible=death_eligible,
         permanent_wound_eligible=permanent_wound_eligible,
     )
+
+
+def get_resolution_order(
+    encounter: CombatEncounter,
+) -> list[tuple[str, CombatParticipant | CombatOpponent]]:
+    """Build the resolution order for a combat round.
+
+    Returns a sorted list of (entity_type, entity) tuples where entity_type
+    is "pc" or "npc". Sorted by speed rank ascending (lower = faster).
+
+    Includes:
+    - ACTIVE PCs (sorted by effective_speed_rank)
+    - DYING PCs with dying_final_round=True (their last action)
+    - ACTIVE NPCs (all at NPC_SPEED_RANK)
+
+    Excludes:
+    - UNCONSCIOUS PCs
+    - DEAD PCs
+    - DYING PCs without dying_final_round
+    - DEFEATED/FLED NPCs
+    """
+    participants: list[CombatParticipant] = list(
+        CombatParticipant.objects.filter(encounter=encounter)
+    )
+    ranked: list[tuple[int, str, CombatParticipant | CombatOpponent]] = [
+        (p.effective_speed_rank, "pc", p)
+        for p in participants
+        if p.status == ParticipantStatus.ACTIVE
+        or (p.status == ParticipantStatus.DYING and p.dying_final_round)
+    ]
+
+    opponents: list[CombatOpponent] = list(
+        CombatOpponent.objects.filter(
+            encounter=encounter,
+            status=OpponentStatus.ACTIVE,
+        )
+    )
+    ranked.extend((NPC_SPEED_RANK, "npc", o) for o in opponents)
+
+    ranked.sort(key=lambda item: item[0])
+
+    return [(entity_type, entity) for _, entity_type, entity in ranked]
