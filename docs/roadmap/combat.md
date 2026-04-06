@@ -139,20 +139,28 @@ to defend better but drain your pools faster). Focus stays on PCs as active agen
 
 ## What's Needed for MVP
 
-### Party Combat (first priority) — designed, not yet built
+### Party Combat (first priority) — Phase 1 complete (foundation)
 Full design: `docs/plans/2026-04-05-party-combat-design.md`
 
-- CombatEncounter, CombatOpponent, CombatParticipant models
-- Round lifecycle (declaration → combo detection → resolution by covenant rank)
-- Three-category action system (focused + passives)
-- Health pool system (separate from fatigue, with wound ladder and threshold effects)
-- NPC tier system (Swarm, Mook, Elite, Boss, Hero Killer)
-- Threat pool NPC behavior (weighted selection, targeting modes)
-- Boss phase system (soak → probing → combo → phase transition)
-- Combo system (staff-authored, action type + resonance slots, ComboLearning)
-- Knockout/death mechanics (unconscious round skip, dying final round, permanent death)
+**Phase 1 (complete):** Foundation models and core services
+- CombatEncounter, CombatOpponent, CombatParticipant, BossPhase models
+- ThreatPool/ThreatPoolEntry NPC behavior models
+- CombatRoundAction, CombatOpponentAction per-round tracking
+- Encounter lifecycle services (add_participant, add_opponent, begin_declaration_phase)
+- NPC action selection from weighted threat pools with targeting
+- Damage resolution with soak, probing, and bypass mechanics
+- PC damage with health thresholds (knockout, death, permanent wound eligibility)
+- Resolution order service (covenant rank sorting with speed modifiers)
+- FactoryBoy factories and 66+ tests
+- Django admin with inlines
+
+**Phase 2 (not yet built):** Combo system and round orchestration
+- ComboDefinition, ComboSlot, ComboLearning models
+- Combo detection and upgrade flow during declaration
+- Full round resolution orchestrator (declaration → detection → resolution → consequences)
+- Defensive check integration (PC defense rolls against NPC attacks via perform_check)
+- Boss phase transitions on triggers
 - DEAL_DAMAGE effect handler implementation (currently stubbed)
-- Covenant role enum stubs with speed rankings
 
 ### Open Encounters (future — builds on Party Combat)
 - Spontaneous combat for any number of participants, drop-in/drop-out
