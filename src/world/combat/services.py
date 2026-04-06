@@ -11,6 +11,9 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
 
 from world.combat.constants import (
+    DEATH_HEALTH_THRESHOLD,
+    KNOCKOUT_HEALTH_THRESHOLD,
+    PERMANENT_WOUND_THRESHOLD,
     EncounterStatus,
     OpponentStatus,
     ParticipantStatus,
@@ -25,6 +28,7 @@ from world.combat.models import (
     ThreatPool,
     ThreatPoolEntry,
 )
+from world.combat.types import OpponentDamageResult, ParticipantDamageResult
 
 
 def add_participant(
@@ -193,3 +197,76 @@ def select_npc_actions(
         actions.append(action)
 
     return actions
+
+
+def apply_damage_to_opponent(
+    opponent: CombatOpponent,
+    raw_damage: int,
+    *,
+    bypass_soak: bool = False,
+) -> OpponentDamageResult:
+    """Apply damage to an NPC opponent, accounting for soak and probing.
+
+    All raw damage (even fully soaked) contributes to probing. Only damage
+    that exceeds soak actually reduces health.
+    """
+    effective_soak = 0 if bypass_soak else opponent.soak_value
+    damage_through = max(0, raw_damage - effective_soak)
+    probing_increment = max(0, raw_damage)
+
+    opponent.health -= damage_through
+    opponent.probing_current += probing_increment
+
+    defeated = opponent.health <= 0
+    if defeated:
+        opponent.status = OpponentStatus.DEFEATED
+
+    opponent.save(update_fields=["health", "probing_current", "status"])
+
+    return OpponentDamageResult(
+        damage_dealt=damage_through,
+        health_damaged=damage_through > 0,
+        probed=probing_increment > 0,
+        probing_increment=probing_increment,
+        defeated=defeated,
+    )
+
+
+def apply_damage_to_participant(
+    participant: CombatParticipant,
+    damage: int,
+    *,
+    force_death: bool = False,
+) -> ParticipantDamageResult:
+    """Apply damage to a PC participant and report threshold crossings.
+
+    Does NOT roll for knockout/death/wounds — only reports eligibility.
+    The caller is responsible for acting on the result.
+    """
+    participant.health -= damage
+    health_after = participant.health
+
+    if participant.max_health > 0:
+        health_pct = max(0.0, health_after / participant.max_health)
+    else:
+        health_pct = 0.0
+
+    knockout_eligible = (
+        health_pct <= KNOCKOUT_HEALTH_THRESHOLD and health_after > DEATH_HEALTH_THRESHOLD
+    )
+    death_eligible = health_after <= DEATH_HEALTH_THRESHOLD
+    permanent_wound_eligible = damage > (participant.max_health * PERMANENT_WOUND_THRESHOLD)
+
+    if force_death:
+        participant.status = ParticipantStatus.DYING
+        participant.dying_final_round = True
+
+    participant.save(update_fields=["health", "status", "dying_final_round"])
+
+    return ParticipantDamageResult(
+        damage_dealt=damage,
+        health_after=health_after,
+        knockout_eligible=knockout_eligible,
+        death_eligible=death_eligible,
+        permanent_wound_eligible=permanent_wound_eligible,
+    )
