@@ -2,14 +2,26 @@
 
 from django.test import TestCase
 
-from world.combat.constants import OpponentStatus
+from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.constants import EncounterStatus, OpponentStatus, OpponentTier
 from world.combat.factories import (
     BossOpponentFactory,
+    CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    ThreatPoolEntryFactory,
+    ThreatPoolFactory,
 )
-from world.combat.services import apply_damage_to_opponent, apply_damage_to_participant
+from world.combat.models import CombatOpponentAction, CombatRoundAction
+from world.combat.services import (
+    apply_damage_to_opponent,
+    apply_damage_to_participant,
+    resolve_round,
+    sync_vitals_from_combat,
+)
+from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
 from world.vitals.constants import CharacterStatus
+from world.vitals.models import CharacterVitals
 
 
 class ApplyDamageToOpponentTest(TestCase):
@@ -143,3 +155,123 @@ class ApplyDamageToParticipantTest(TestCase):
         self.assertEqual(participant.status, CharacterStatus.DYING)
         self.assertTrue(participant.dying_final_round)
         self.assertEqual(result.health_after, 40)
+
+
+class KnockoutDeathProcessingTest(TestCase):
+    """Tests for knockout/death processing during NPC action resolution."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.effect_attack = EffectTypeFactory(name="Attack", base_power=20)
+        cls.gift = GiftFactory()
+
+    def _setup_encounter(
+        self,
+        *,
+        pc_health: int = 100,
+        npc_damage: int = 30,
+    ) -> tuple:
+        """Create encounter with 1 PC, 1 NPC, NPC targeting PC."""
+        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        pool = ThreatPoolFactory()
+        entry = ThreatPoolEntryFactory(pool=pool, base_damage=npc_damage)
+        opponent = CombatOpponentFactory(
+            encounter=encounter,
+            tier=OpponentTier.MOOK,
+            health=500,
+            max_health=500,
+            threat_pool=pool,
+        )
+        sheet = CharacterSheetFactory()
+        participant = CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=sheet,
+            health=pc_health,
+            max_health=100,
+        )
+        technique = TechniqueFactory(gift=self.gift, effect_type=self.effect_attack)
+        CombatRoundAction.objects.create(
+            participant=participant,
+            round_number=1,
+            focused_category="physical",
+            focused_action=technique,
+            focused_target=opponent,
+        )
+        npc_action = CombatOpponentAction.objects.create(
+            opponent=opponent,
+            round_number=1,
+            threat_entry=entry,
+        )
+        npc_action.targets.add(participant)
+        return encounter, participant, opponent
+
+    def test_knockout_at_low_health(self) -> None:
+        """Participant at low health after NPC damage becomes UNCONSCIOUS."""
+        # PC has 15 health, NPC deals 5 damage -> 10/100 = 10% < 20%
+        encounter, participant, _ = self._setup_encounter(pc_health=15, npc_damage=5)
+        resolve_round(encounter)
+
+        participant.refresh_from_db()
+        self.assertEqual(participant.status, CharacterStatus.UNCONSCIOUS)
+
+    def test_death_at_zero_health(self) -> None:
+        """Participant at 0 health becomes DYING."""
+        # PC has 10 health, NPC deals 20 damage -> -10 <= 0
+        encounter, participant, _ = self._setup_encounter(pc_health=10, npc_damage=20)
+        resolve_round(encounter)
+
+        participant.refresh_from_db()
+        # Should be DEAD because dying_final_round is consumed in same round
+        self.assertEqual(participant.status, CharacterStatus.DEAD)
+
+    def test_dying_consumed_after_round(self) -> None:
+        """DYING participant with dying_final_round becomes DEAD after resolve."""
+        encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        pool = ThreatPoolFactory()
+        ThreatPoolEntryFactory(pool=pool, base_damage=10)
+        CombatOpponentFactory(
+            encounter=encounter,
+            tier=OpponentTier.MOOK,
+            health=500,
+            max_health=500,
+            threat_pool=pool,
+        )
+        sheet = CharacterSheetFactory()
+        dying_pc = CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=sheet,
+            health=50,
+            max_health=100,
+            status=CharacterStatus.DYING,
+            dying_final_round=True,
+            base_speed_rank=1,
+        )
+        technique = TechniqueFactory(gift=self.gift, effect_type=self.effect_attack)
+        CombatRoundAction.objects.create(
+            participant=dying_pc,
+            round_number=1,
+            focused_category="physical",
+            focused_action=technique,
+            focused_target=encounter.opponents.first(),
+        )
+
+        resolve_round(encounter)
+
+        dying_pc.refresh_from_db()
+        self.assertEqual(dying_pc.status, CharacterStatus.DEAD)
+        self.assertFalse(dying_pc.dying_final_round)
+
+    def test_vitals_synced_on_death(self) -> None:
+        """CharacterVitals status updated when participant dies."""
+        sheet = CharacterSheetFactory()
+        participant = CombatParticipantFactory(
+            character_sheet=sheet,
+            health=0,
+            max_health=100,
+            status=CharacterStatus.DEAD,
+        )
+        sync_vitals_from_combat(participant)
+
+        vitals = CharacterVitals.objects.get(character_sheet=sheet)
+        self.assertEqual(vitals.status, CharacterStatus.DEAD)
+        self.assertIsNotNone(vitals.died_at)

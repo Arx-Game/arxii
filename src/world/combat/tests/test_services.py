@@ -4,6 +4,7 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
+    ActionCategory,
     EncounterStatus,
     OpponentStatus,
     OpponentTier,
@@ -22,9 +23,12 @@ from world.combat.services import (
     add_opponent,
     add_participant,
     begin_declaration_phase,
+    declare_action,
     select_npc_actions,
 )
 from world.covenants.factories import CovenantRoleFactory
+from world.fatigue.constants import EffortLevel
+from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
 from world.vitals.constants import CharacterStatus
 
 
@@ -198,3 +202,69 @@ class SelectNpcActionsTest(TestCase):
         self.assertEqual(len(actions), 1)
         # Should have picked normal_entry, not cooldown_entry
         self.assertEqual(actions[0].threat_entry, normal_entry)
+
+
+class DeclareActionTest(TestCase):
+    """Tests for declare_action service function."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.effect_type = EffectTypeFactory(name="Attack", base_power=20)
+        cls.gift = GiftFactory()
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
+        self.participant = CombatParticipantFactory(encounter=self.encounter)
+        self.technique = TechniqueFactory(gift=self.gift, effect_type=self.effect_type)
+        self.opponent = CombatOpponentFactory(encounter=self.encounter)
+
+    def test_declare_action_valid(self) -> None:
+        """A valid action declaration creates a CombatRoundAction."""
+        action = declare_action(
+            self.participant,
+            focused_action=self.technique,
+            focused_category=ActionCategory.PHYSICAL,
+            effort_level=EffortLevel.MEDIUM,
+            focused_target=self.opponent,
+        )
+        self.assertEqual(action.participant, self.participant)
+        self.assertEqual(action.round_number, 1)
+        self.assertEqual(action.focused_action, self.technique)
+        self.assertEqual(action.focused_category, ActionCategory.PHYSICAL)
+
+    def test_declare_action_wrong_status(self) -> None:
+        """Raises ValueError if encounter is not DECLARING."""
+        self.encounter.status = EncounterStatus.BETWEEN_ROUNDS
+        self.encounter.save(update_fields=["status"])
+        with self.assertRaises(ValueError, msg="expected 'Declaring'"):
+            declare_action(
+                self.participant,
+                focused_action=self.technique,
+                focused_category=ActionCategory.PHYSICAL,
+                effort_level=EffortLevel.MEDIUM,
+            )
+
+    def test_declare_action_unconscious_participant(self) -> None:
+        """Raises ValueError if participant is UNCONSCIOUS."""
+        self.participant.status = CharacterStatus.UNCONSCIOUS
+        self.participant.save(update_fields=["status"])
+        with self.assertRaises(ValueError, msg="participant status"):
+            declare_action(
+                self.participant,
+                focused_action=self.technique,
+                focused_category=ActionCategory.PHYSICAL,
+                effort_level=EffortLevel.MEDIUM,
+            )
+
+    def test_declare_action_passive_matches_focus_rejected(self) -> None:
+        """Raises ValueError if physical passive provided when focused on physical."""
+        other_technique = TechniqueFactory(gift=self.gift, effect_type=self.effect_type)
+        with self.assertRaises(ValueError, msg="passive must be None"):
+            declare_action(
+                self.participant,
+                focused_action=self.technique,
+                focused_category=ActionCategory.PHYSICAL,
+                effort_level=EffortLevel.MEDIUM,
+                physical_passive=other_technique,
+            )

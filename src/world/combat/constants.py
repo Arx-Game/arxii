@@ -147,3 +147,15 @@ DEFENSE_REDUCED_THRESHOLD: int = 1
 DEFENSE_REDUCED_MULTIPLIER: float = 0.5
 DEFENSE_FULL_MULTIPLIER: float = 1.0
 DEFENSE_CRITICAL_MULTIPLIER: float = 1.5
+
+# ---------------------------------------------------------------------------
+# Offensive check damage scaling
+#
+# Maps success_level from perform_check to damage outcome for PC attacks.
+# success_level >= OFFENSE_FULL_THRESHOLD: full base_power
+# success_level >= OFFENSE_HALF_THRESHOLD: half base_power
+# success_level < OFFENSE_HALF_THRESHOLD: miss (0 damage)
+# ---------------------------------------------------------------------------
+
+OFFENSE_FULL_THRESHOLD: int = 2
+OFFENSE_HALF_THRESHOLD: int = 1

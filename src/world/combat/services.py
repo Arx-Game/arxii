@@ -11,12 +11,14 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.db.models import Prefetch, Q
+from django.utils import timezone
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.checks.types import CheckResult
     from world.covenants.models import CovenantRole
+    from world.magic.models import Technique
 
     PerformCheckFn = Callable[..., CheckResult]
 
@@ -29,6 +31,9 @@ from world.combat.constants import (
     ENTITY_TYPE_NPC,
     ENTITY_TYPE_PC,
     NPC_SPEED_RANK,
+    OFFENSE_FULL_THRESHOLD,
+    OFFENSE_HALF_THRESHOLD,
+    ActionCategory,
     EncounterStatus,
     OpponentStatus,
     OpponentTier,
@@ -57,6 +62,8 @@ from world.combat.types import (
     ParticipantDamageResult,
     RoundResolutionResult,
 )
+from world.fatigue.constants import EFFORT_CHECK_MODIFIER, FatigueCategory
+from world.fatigue.services import apply_fatigue, get_fatigue_penalty
 from world.vitals.constants import (
     DEATH_HEALTH_THRESHOLD,
     KNOCKOUT_HEALTH_THRESHOLD,
@@ -65,6 +72,16 @@ from world.vitals.constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# ActionCategory -> FatigueCategory mapping (same values)
+# ---------------------------------------------------------------------------
+
+_ACTION_TO_FATIGUE_CATEGORY: dict[str, str] = {
+    ActionCategory.PHYSICAL: FatigueCategory.PHYSICAL,
+    ActionCategory.SOCIAL: FatigueCategory.SOCIAL,
+    ActionCategory.MENTAL: FatigueCategory.MENTAL,
+}
 
 
 def add_participant(
@@ -123,6 +140,30 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     )
 
 
+def sync_vitals_from_combat(participant: CombatParticipant) -> None:
+    """Update persistent CharacterVitals when a participant's combat status changes.
+
+    Should be called when a participant transitions to UNCONSCIOUS, DYING, or DEAD.
+    """
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    vitals, _ = CharacterVitals.objects.get_or_create(
+        character_sheet=participant.character_sheet,
+    )
+    status = participant.status
+    if status == CharacterStatus.DEAD:
+        vitals.status = CharacterStatus.DEAD
+        vitals.died_at = timezone.now()
+    elif status == CharacterStatus.UNCONSCIOUS:
+        vitals.status = CharacterStatus.UNCONSCIOUS
+        vitals.unconscious_at = timezone.now()
+    elif status == CharacterStatus.DYING:
+        vitals.status = CharacterStatus.DYING
+    else:
+        return
+    vitals.save(update_fields=["status", "died_at", "unconscious_at"])
+
+
 @transaction.atomic
 def begin_declaration_phase(encounter: CombatEncounter) -> None:
     """Advance round_number by 1 and set status to DECLARING.
@@ -142,6 +183,72 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     enc.save(update_fields=["round_number", "status"])
     # Refresh the caller's instance so it reflects the new state.
     encounter.refresh_from_db()
+
+
+def declare_action(  # noqa: PLR0913 - action declaration requires all slot fields
+    participant: CombatParticipant,
+    *,
+    focused_action: Technique,
+    focused_category: str,
+    effort_level: str,
+    focused_target: CombatOpponent | None = None,
+    physical_passive: Technique | None = None,
+    social_passive: Technique | None = None,
+    mental_passive: Technique | None = None,
+) -> CombatRoundAction:
+    """Declare a PC's action for the current round.
+
+    Validations:
+    - Participant must be ALIVE (or DYING with dying_final_round=True).
+    - Encounter must be in DECLARING status.
+    - Round number must match encounter's current round.
+    - The passive slot matching the focused_category must be None.
+
+    Raises ValueError with clear messages for validation failures.
+    """
+
+    encounter = participant.encounter
+
+    # Status check
+    is_alive = participant.status == CharacterStatus.ALIVE
+    is_dying_final = participant.status == CharacterStatus.DYING and participant.dying_final_round
+    if not (is_alive or is_dying_final):
+        msg = f"Cannot declare action: participant status is '{participant.get_status_display()}'."
+        raise ValueError(msg)
+
+    # Encounter status check
+    if encounter.status != EncounterStatus.DECLARING:
+        msg = (
+            f"Cannot declare action: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    # Passive slot validation
+    passive_map = {
+        ActionCategory.PHYSICAL: physical_passive,
+        ActionCategory.SOCIAL: social_passive,
+        ActionCategory.MENTAL: mental_passive,
+    }
+    conflicting_passive = passive_map.get(focused_category)
+    if conflicting_passive is not None:
+        msg = (
+            f"Cannot declare action: {focused_category} passive must be "
+            f"None when focused_category is {focused_category}."
+        )
+        raise ValueError(msg)
+
+    return CombatRoundAction.objects.create(
+        participant=participant,
+        round_number=encounter.round_number,
+        focused_category=focused_category,
+        effort_level=effort_level,
+        focused_action=focused_action,
+        focused_target=focused_target,
+        physical_passive=physical_passive,
+        social_passive=social_passive,
+        mental_passive=mental_passive,
+    )
 
 
 def _get_eligible_entries(
@@ -626,6 +733,21 @@ def detect_available_combos(
     return available
 
 
+def run_combo_detection(
+    encounter: CombatEncounter,
+    round_number: int,
+) -> list[AvailableCombo]:
+    """Public entry point for combo detection during the DECLARING phase.
+
+    Call this between action declaration and resolution to detect available
+    combos and allow players to upgrade actions. ``resolve_round`` also
+    calls ``detect_available_combos`` internally for informational reporting,
+    but combo upgrades via ``upgrade_action_to_combo`` should happen during
+    DECLARING — before resolution begins.
+    """
+    return detect_available_combos(encounter, round_number)
+
+
 def upgrade_action_to_combo(
     action: CombatRoundAction,
     combo: ComboDefinition,
@@ -786,32 +908,78 @@ def check_and_advance_boss_phase(
 def _resolve_pc_action(
     participant: CombatParticipant,
     action: CombatRoundAction,
+    offense_check_fn: PerformCheckFn | None = None,
+    offense_check_type: CheckType | None = None,
 ) -> ActionOutcome:
-    """Resolve a single PC's focused action during round resolution."""
+    """Resolve a single PC's focused action during round resolution.
+
+    For non-combo actions, uses perform_check if an offense_check_type is
+    provided. The check result's success_level scales damage:
+    - success_level >= 2: full base_power
+    - success_level == 1: half base_power
+    - success_level <= 0: zero (miss)
+
+    Fatigue is applied after the action resolves (both combo and non-combo).
+    """
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
     target = action.focused_target
-    if target is None:
-        return outcome
+    technique = action.focused_action
+    fatigue_category = _ACTION_TO_FATIGUE_CATEGORY.get(
+        action.focused_category, FatigueCategory.PHYSICAL
+    )
 
-    target.refresh_from_db()
-    if target.status == OpponentStatus.DEFEATED:
-        return outcome
+    if target is not None:
+        target.refresh_from_db()
+        if target.status != OpponentStatus.DEFEATED:
+            if action.combo_upgrade:
+                combo = action.combo_upgrade
+                dmg_result = apply_damage_to_opponent(
+                    target,
+                    combo.bonus_damage,
+                    bypass_soak=combo.bypass_soak,
+                )
+                outcome.combo_used = combo
+                outcome.damage_results.append(dmg_result)
+            else:
+                base_power = technique.effect_type.base_power
+                if base_power is not None:
+                    raw = base_power or 10
+                    if offense_check_type is not None:
+                        check_fn = offense_check_fn
+                        if check_fn is None:
+                            from world.checks.services import (  # noqa: PLC0415
+                                perform_check as check_fn,
+                            )
+                        penalty = get_fatigue_penalty(participant.character_sheet, fatigue_category)
+                        effort_mod = EFFORT_CHECK_MODIFIER.get(action.effort_level, 0)
+                        character = participant.character_sheet.character
+                        result = check_fn(
+                            character,
+                            offense_check_type,
+                            extra_modifiers=effort_mod,
+                            fatigue_penalty=penalty,
+                        )
+                        if result.success_level >= OFFENSE_FULL_THRESHOLD:
+                            scaled = raw
+                        elif result.success_level >= OFFENSE_HALF_THRESHOLD:
+                            scaled = raw // 2
+                        else:
+                            scaled = 0
+                    else:
+                        scaled = raw
+                    if scaled > 0:
+                        dmg_result = apply_damage_to_opponent(target, scaled)
+                        outcome.damage_results.append(dmg_result)
 
-    if action.combo_upgrade:
-        combo = action.combo_upgrade
-        dmg_result = apply_damage_to_opponent(
-            target,
-            combo.bonus_damage,
-            bypass_soak=combo.bypass_soak,
-        )
-        outcome.combo_used = combo
-    else:
-        technique = action.focused_action
-        raw = technique.effect_type.base_power or 10
-        dmg_result = apply_damage_to_opponent(target, raw)
+    # Apply fatigue after action resolves
+    apply_fatigue(
+        participant.character_sheet,
+        fatigue_category,
+        technique.anima_cost,
+        action.effort_level,
+    )
 
-    outcome.damage_results.append(dmg_result)
     return outcome
 
 
@@ -821,13 +989,24 @@ def _resolve_npc_action(
     defense_check_type: CheckType | None,
     defense_check_fn: PerformCheckFn | None,
 ) -> ActionOutcome:
-    """Resolve a single NPC's action against targeted PCs."""
+    """Resolve a single NPC's action against targeted PCs.
+
+    After applying damage, processes knockout/death transitions and
+    applies any conditions from the threat entry to damaged targets.
+    """
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_NPC, entity_label=str(opponent))
 
     try:
         targets: list[CombatParticipant] = npc_action.cached_targets
     except AttributeError:
         targets = list(npc_action.targets.all())
+
+    # Pre-fetch conditions from the threat entry
+    try:
+        conditions = npc_action.threat_entry.cached_conditions
+    except AttributeError:
+        conditions = list(npc_action.threat_entry.conditions_applied.all())
+
     for target_participant in targets:
         target_participant.refresh_from_db()
         if target_participant.status != CharacterStatus.ALIVE:
@@ -840,23 +1019,46 @@ def _resolve_npc_action(
                 defense_check_type,
                 perform_check_fn=defense_check_fn,
             )
-            outcome.damage_results.append(defense.damage_result)
+            dmg_result = defense.damage_result
         else:
-            dmg = apply_damage_to_participant(
+            dmg_result = apply_damage_to_participant(
                 target_participant,
                 npc_action.threat_entry.base_damage,
             )
-            outcome.damage_results.append(dmg)
+        outcome.damage_results.append(dmg_result)
+
+        # Knockout/death processing
+        if dmg_result.death_eligible:
+            target_participant.status = CharacterStatus.DYING
+            target_participant.dying_final_round = True
+            target_participant.save(update_fields=["status", "dying_final_round"])
+            sync_vitals_from_combat(target_participant)
+        elif dmg_result.knockout_eligible and target_participant.status == CharacterStatus.ALIVE:
+            target_participant.status = CharacterStatus.UNCONSCIOUS
+            target_participant.save(update_fields=["status"])
+            sync_vitals_from_combat(target_participant)
+
+        # Condition application from NPC attacks (only if damage dealt)
+        if dmg_result.damage_dealt > 0 and conditions:
+            from world.conditions.services import (  # noqa: PLC0415
+                apply_condition,
+            )
+
+            target_obj = target_participant.character_sheet.character
+            for condition_template in conditions:
+                apply_condition(target_obj, condition_template)
 
     return outcome
 
 
-def _resolve_actions(
+def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
     resolution_order: list[tuple[str, CombatParticipant | CombatOpponent]],
     pc_actions: dict[int, CombatRoundAction],
     npc_actions: dict[int, CombatOpponentAction],
     defense_check_type: CheckType | None,
     defense_check_fn: PerformCheckFn | None,
+    offense_check_fn: PerformCheckFn | None,
+    offense_check_type: CheckType | None,
 ) -> list[ActionOutcome]:
     """Iterate resolution order and resolve each entity's action."""
     outcomes: list[ActionOutcome] = []
@@ -866,7 +1068,9 @@ def _resolve_actions(
                 continue
             action = pc_actions.get(entity.pk)
             if action is not None:
-                outcomes.append(_resolve_pc_action(entity, action))
+                outcomes.append(
+                    _resolve_pc_action(entity, action, offense_check_fn, offense_check_type)
+                )
 
         elif entity_type == ENTITY_TYPE_NPC:
             if not isinstance(entity, CombatOpponent):
@@ -918,26 +1122,35 @@ def resolve_round(
     *,
     defense_check_fn: PerformCheckFn | None = None,
     defense_check_type: CheckType | None = None,
+    offense_check_fn: PerformCheckFn | None = None,
+    offense_check_type: CheckType | None = None,
 ) -> RoundResolutionResult:
-    """Orchestrate a full combat round: detect combos → resolve → consequences.
+    """Orchestrate a full combat round: detect combos -> resolve -> consequences.
 
     High-level flow:
     1. Validate encounter is in ``DECLARING`` status, transition to ``RESOLVING``.
-    2. Detect available combos from declared actions.
+    2. Detect available combos from declared actions. Note: combo upgrades must
+       happen during DECLARING phase via ``upgrade_action_to_combo``. The
+       detection here is informational — it reports what combos were available
+       and which actions were upgraded (``combo_upgrade != null``).
     3. Iterate resolution order (speed-rank sorted PCs and NPCs).
        - For each **PC**: resolve focused action against target opponent.
          If the action has a ``combo_upgrade``, apply bonus damage with soak
-         bypass. Otherwise apply normal damage through soak/probing.
+         bypass. Otherwise use perform_check (if offense_check_type provided)
+         to scale damage by success level. Apply fatigue after each action.
        - For each **NPC**: resolve each targeted PC's defensive check.
-    4. After all actions: check boss phase transitions for boss-tier opponents.
-    5. Check encounter completion (all opponents defeated or all PCs down).
-    6. Transition encounter to ``BETWEEN_ROUNDS`` or ``COMPLETED``.
+         Process knockout/death transitions and apply conditions.
+    4. Consume dying final rounds: DYING PCs with dying_final_round become DEAD.
+    5. After all actions: check boss phase transitions for boss-tier opponents.
+    6. Check encounter completion (all opponents defeated or all PCs down).
+    7. Transition encounter to ``BETWEEN_ROUNDS`` or ``COMPLETED``.
 
     Args:
         encounter: The combat encounter to resolve.
         defense_check_fn: Optional ``perform_check`` override for PC defense.
-        defense_check_type: The CheckType used for defensive rolls. Required
-            when NPCs are present with targets.
+        defense_check_type: The CheckType used for defensive rolls.
+        offense_check_fn: Optional ``perform_check`` override for PC offense.
+        offense_check_type: The CheckType used for offensive rolls.
 
     Returns:
         ``RoundResolutionResult`` with outcomes and phase transitions.
@@ -956,7 +1169,7 @@ def resolve_round(
     round_number = enc.round_number
     result = RoundResolutionResult(round_number=round_number)
 
-    # --- Combo detection ---
+    # --- Combo detection (informational — upgrades happen in DECLARING) ---
     result.available_combos = detect_available_combos(encounter, round_number)
 
     # --- Build action lookups ---
@@ -966,6 +1179,7 @@ def resolve_round(
         round_number=round_number,
     ).select_related(
         "participant",
+        "participant__character_sheet",
         "focused_action",
         "focused_action__effect_type",
         "focused_target",
@@ -983,8 +1197,14 @@ def resolve_round(
         .prefetch_related(
             Prefetch(
                 "targets",
-                queryset=CombatParticipant.objects.all(),
+                queryset=CombatParticipant.objects.select_related(
+                    "character_sheet",
+                ),
                 to_attr="cached_targets",
+            ),
+            Prefetch(
+                "threat_entry__conditions_applied",
+                to_attr="cached_conditions",
             ),
         )
     ):
@@ -998,7 +1218,21 @@ def resolve_round(
         npc_actions,
         defense_check_type,
         defense_check_fn,
+        offense_check_fn,
+        offense_check_type,
     )
+
+    # --- Dying final round consumption ---
+    dying_participants = CombatParticipant.objects.filter(
+        encounter=encounter,
+        status=CharacterStatus.DYING,
+        dying_final_round=True,
+    ).select_related("character_sheet")
+    for dying_p in dying_participants:
+        dying_p.dying_final_round = False
+        dying_p.status = CharacterStatus.DEAD
+        dying_p.save(update_fields=["status", "dying_final_round"])
+        sync_vitals_from_combat(dying_p)
 
     # --- Boss phase transitions ---
     result.phase_transitions = _check_boss_transitions(encounter)

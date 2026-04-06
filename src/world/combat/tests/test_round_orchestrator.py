@@ -26,6 +26,7 @@ from world.combat.models import (
     CombatRoundAction,
 )
 from world.combat.services import resolve_round, upgrade_action_to_combo
+from world.fatigue.models import FatiguePool
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
 
 
@@ -359,3 +360,85 @@ class ResolveRoundBossPhaseTests(TestCase):
         self.assertEqual(boss.threat_pool, pool_p2)
         self.assertEqual(boss.soak_value, 50)
         self.assertEqual(len(result.phase_transitions), 1)
+
+
+class ResolveRoundOffenseCheckTests(TestCase):
+    """Tests for PC offensive checks and fatigue during round resolution."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.effect_attack = EffectTypeFactory(name="Attack", base_power=20)
+        cls.gift = GiftFactory()
+
+    def _setup_encounter(self) -> tuple:
+        """Create encounter: 1 PC, 1 mook, PC action declared."""
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        pool = ThreatPoolFactory()
+        opponent = CombatOpponentFactory(
+            encounter=encounter,
+            tier=OpponentTier.MOOK,
+            health=500,
+            max_health=500,
+            threat_pool=pool,
+        )
+        sheet = CharacterSheetFactory()
+        participant = CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=sheet,
+            health=100,
+            max_health=100,
+            base_speed_rank=1,
+        )
+        technique = TechniqueFactory(
+            gift=self.gift,
+            effect_type=self.effect_attack,
+            anima_cost=5,
+        )
+        CombatRoundAction.objects.create(
+            participant=participant,
+            round_number=1,
+            focused_category="physical",
+            effort_level="medium",
+            focused_action=technique,
+            focused_target=opponent,
+        )
+        return encounter, participant, opponent
+
+    def test_pc_miss_deals_no_damage(self) -> None:
+        """PC check with success_level=0 deals no damage."""
+        encounter, _participant, opponent = self._setup_encounter()
+
+        mock_check = MagicMock()
+        mock_result = MagicMock()
+        mock_result.success_level = 0
+        mock_check.return_value = mock_result
+        mock_check_type = MagicMock()
+
+        resolve_round(
+            encounter,
+            offense_check_fn=mock_check,
+            offense_check_type=mock_check_type,
+        )
+
+        opponent.refresh_from_db()
+        # Miss: no damage dealt, health unchanged
+        self.assertEqual(opponent.health, 500)
+
+    def test_fatigue_applied_after_action(self) -> None:
+        """Fatigue pool increases after PC action resolves."""
+        encounter, participant, _opponent = self._setup_encounter()
+
+        # Ensure fatigue pool starts at 0
+        pool, _ = FatiguePool.objects.get_or_create(
+            character_sheet=participant.character_sheet,
+        )
+        self.assertEqual(pool.physical_current, 0)
+
+        resolve_round(encounter)
+
+        pool.refresh_from_db()
+        # anima_cost=5, medium effort multiplier=1.0 -> cost=5
+        self.assertGreater(pool.physical_current, 0)
