@@ -1,6 +1,6 @@
 # Combat
 
-**Status:** not-started
+**Status:** in-progress
 **Depends on:** Traits, Skills, Magic, Conditions, Mechanics, Relationships (for combo attacks)
 
 ## Overview
@@ -132,10 +132,13 @@ to defend better but drain your pools faster). Focus stays on PCs as active agen
 - **Fatigue integration:** Combat actions drain fatigue pools by category, creating attrition pressure that builds toward collapse/Audere moments
 
 ## What Exists
-- **Models:** Conditions app has combat-relevant fields (affects_turn_order, draws_aggro, turn_order_modifier, aggro_priority). Mechanics app has modifier collection/stacking, plus the new Challenge/Situation system (ChallengeTemplate, ChallengeInstance, ChallengeApproach) and action generation pipeline. Checks app has the roll resolution engine
-- **Capability/Application system:** Properties on enemies/environments, Applications matching character Capabilities to available combat actions, ChallengeApproach with required_effect_property for fine-grained constraints (e.g., fire resistance requires fire-generating capability). Action generation auto-surfaces what each character can do in a given combat situation
-- **Supporting systems:** Check pipeline (trait-to-rank conversion, result charts). Conditions with stage progression, DoT, and Properties M2M. TechniqueCapabilityGrant connects magic techniques to capabilities. TraitCapabilityDerivation connects stats to capabilities
-- **No dedicated combat models** — no encounters, initiative tracking, targeting, damage resolution, or party management
+- **Combat models:** CombatEncounter, CombatOpponent, CombatParticipant, BossPhase, ThreatPool/ThreatPoolEntry, CombatRoundAction, CombatOpponentAction, ComboDefinition, ComboSlot, ComboLearning — full foundation for party combat encounters
+- **Combat services:** Encounter lifecycle (add_participant, add_opponent, begin_declaration_phase), NPC action selection from weighted threat pools, damage resolution with soak/probing/bypass, PC damage with health thresholds, resolution order by covenant rank, combo detection/upgrade/revert, round orchestrator (resolve_round), defensive check integration (resolve_npc_attack), boss phase transitions (check_and_advance_boss_phase)
+- **Supporting systems:** Conditions app has combat-relevant fields (affects_turn_order, draws_aggro, turn_order_modifier, aggro_priority). Mechanics app has modifier collection/stacking, plus the Challenge/Situation system and action generation pipeline. Checks app has the roll resolution engine (perform_check)
+- **Capability/Application system:** Properties on enemies/environments, Applications matching character Capabilities to available combat actions, ChallengeApproach with required_effect_property for fine-grained constraints. Action generation auto-surfaces what each character can do in a given combat situation
+- **Magic integration:** TechniqueCapabilityGrant connects magic techniques to capabilities. TraitCapabilityDerivation connects stats to capabilities. Combos link to EffectType and Resonance from magic app
+- **Tests:** 115 combat tests covering models, services, combos, defense, boss phases, and round orchestration
+- **Admin:** Full Django admin with inlines for all combat models
 
 ## What's Needed for MVP
 
@@ -154,13 +157,16 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - FactoryBoy factories and 66+ tests
 - Django admin with inlines
 
-**Phase 2 (not yet built):** Combo system and round orchestration
-- ComboDefinition, ComboSlot, ComboLearning models
-- Combo detection and upgrade flow during declaration
-- Full round resolution orchestrator (declaration → detection → resolution → consequences)
-- Defensive check integration (PC defense rolls against NPC attacks via perform_check)
-- Boss phase transitions on triggers
-- DEAL_DAMAGE effect handler implementation (currently stubbed)
+**Phase 2 (complete):** Combo system and round orchestration
+- ComboDefinition, ComboSlot, ComboLearning models with admin and factories
+- Combo detection (detect_available_combos) matching declared actions by effect type + resonance
+- Combo upgrade/revert lifecycle (upgrade_action_to_combo, revert_combo_upgrade)
+- Full round resolution orchestrator (resolve_round: declaration → detection → resolution → consequences, atomic transaction)
+- Defensive check integration (resolve_npc_attack using perform_check with success-level damage multipliers)
+- Boss phase transitions on health percentage triggers (check_and_advance_boss_phase)
+- Speed-rank-based resolution order (PCs by covenant rank + modifier, NPCs at rank 15, no-role at rank 20)
+- 44 new tests across 4 test files (combos, defense, boss phases, round orchestrator), 115 total combat tests
+- Note: DEAL_DAMAGE effect handler still stubbed — to be connected when magic effect pipeline is ready
 
 ### Open Encounters (future — builds on Party Combat)
 - Spontaneous combat for any number of participants, drop-in/drop-out
