@@ -134,11 +134,13 @@ to defend better but drain your pools faster). Focus stays on PCs as active agen
 ## What Exists
 - **Combat models:** CombatEncounter, CombatOpponent, CombatParticipant, BossPhase, ThreatPool/ThreatPoolEntry, CombatRoundAction, CombatOpponentAction, ComboDefinition, ComboSlot, ComboLearning — full foundation for party combat encounters
 - **Combat services:** Encounter lifecycle (add_participant, add_opponent, begin_declaration_phase), NPC action selection from weighted threat pools, damage resolution with soak/probing/bypass, PC damage with health thresholds, resolution order by covenant rank, combo detection/upgrade/revert, round orchestrator (resolve_round), defensive check integration (resolve_npc_attack), boss phase transitions (check_and_advance_boss_phase)
+- **Vitals system (world.vitals):** CharacterStatus enum (ALIVE/UNCONSCIOUS/DYING/DEAD) and CharacterVitals model for persistent life state tracking. Health thresholds and wound descriptions live here — combat reads from vitals, doesn't own life-state concepts
+- **Covenants system (world.covenants):** CovenantRole lookup table with speed_rank, CovenantType (DURANCE/BATTLE), RoleArchetype (SWORD/SHIELD/CROWN). Combat reads covenant roles for resolution order
 - **Supporting systems:** Conditions app has combat-relevant fields (affects_turn_order, draws_aggro, turn_order_modifier, aggro_priority). Mechanics app has modifier collection/stacking, plus the Challenge/Situation system and action generation pipeline. Checks app has the roll resolution engine (perform_check)
 - **Capability/Application system:** Properties on enemies/environments, Applications matching character Capabilities to available combat actions, ChallengeApproach with required_effect_property for fine-grained constraints. Action generation auto-surfaces what each character can do in a given combat situation
 - **Magic integration:** TechniqueCapabilityGrant connects magic techniques to capabilities. TraitCapabilityDerivation connects stats to capabilities. Combos link to EffectType and Resonance from magic app
-- **Tests:** 115 combat tests covering models, services, combos, defense, boss phases, and round orchestration
-- **Admin:** Full Django admin with inlines for all combat models
+- **Tests:** 131 tests across combat, vitals, and covenants
+- **Admin:** Full Django admin with inlines for all combat, vitals, and covenant models
 
 ## What's Needed for MVP
 
@@ -165,7 +167,9 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - Defensive check integration (resolve_npc_attack using perform_check with success-level damage multipliers)
 - Boss phase transitions on health percentage triggers (check_and_advance_boss_phase)
 - Speed-rank-based resolution order (PCs by covenant rank + modifier, NPCs at rank 15, no-role at rank 20)
-- 44 new tests across 4 test files (combos, defense, boss phases, round orchestrator), 115 total combat tests
+- Vitals extraction: CharacterStatus enum and health thresholds moved to world.vitals
+- BaseEvenniaTest replaced with TestCase in all combat tests
+- 131 total tests across combat, vitals, and covenants
 - Note: DEAL_DAMAGE effect handler still stubbed — to be connected when magic effect pipeline is ready
 
 ### Open Encounters (future — builds on Party Combat)
@@ -182,13 +186,21 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - Normally non-lethal PC vs PC sparring with pose integration
 - Special variant: lethal 1v1 PC vs significant NPC (only symmetrical combat mode)
 
-### Shared Future Work
-- Encounter scaling / GM tooling — difficulty from story context + party composition
-- Relationship modifier integration in combat (romance bonuses, rivalry intensity)
-- Audere Majora trigger conditions from health thresholds
-- Combat UI — web-first interface for all combat modes
-- Specific covenant role definitions (enum stubs now, content later)
-- Combo content authoring
+### Shared Future Work (combat-adjacent)
+- **Combat REST API** — endpoints for encounter lifecycle, action declaration, combo upgrade, round resolution
+- **Combat UI** — web-first interface for all combat modes (declaration panel, resolution display, combo prompts)
+- **Encounter scaling / GM tooling** — difficulty from story context + party composition, encounter builder
+- **Relationship modifier integration** — romance bonuses, rivalry intensity, party bond effects
+- **Audere Majora trigger conditions** — health thresholds feeding into Audere system
+- **DEAL_DAMAGE effect handler** — connect stubbed handler to combat health system
+- **Combo content authoring** — staff tools for creating/testing combo definitions
+- **Knockout/death roll services** — actual rolls using eligibility flags from damage resolution
+- **Permanent wound application** — connect permanent_wound_eligible to ConditionTemplate instances
+
+### Cross-System Dependencies (not owned by combat)
+- **Covenants (world.covenants)** — needs: full covenant/party model (formation, ritual, membership), covenant passive bonuses, covenant armor/thread integration, API + frontend for covenant management
+- **Vitals (world.vitals)** — needs: integration with non-combat damage sources (poison, spells, exhaustion), vitals display on character sheet frontend, death/unconscious state transitions from non-combat contexts (e.g., dream-walking, traps), API endpoints for vitals status
+- **Conditions** — permanent wounds/scars as ConditionTemplates with authored content
 
 ## Design Document
 
