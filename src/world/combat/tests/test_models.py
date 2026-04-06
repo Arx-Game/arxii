@@ -258,3 +258,44 @@ class BossPhaseTests(TestCase):
                 opponent=self.opponent,
                 phase_number=1,
             )
+
+
+class FactorySmokeTest(TestCase):
+    """Smoke tests verifying all combat factories create valid instances."""
+
+    def test_encounter_factory(self) -> None:
+        from world.combat.factories import CombatEncounterFactory
+
+        encounter = CombatEncounterFactory()
+        self.assertIsNotNone(encounter.pk)
+
+    def test_opponent_factory(self) -> None:
+        from world.combat.factories import CombatOpponentFactory
+
+        opponent = CombatOpponentFactory()
+        self.assertEqual(opponent.tier, OpponentTier.MOOK)
+
+    def test_boss_factory(self) -> None:
+        from world.combat.factories import BossOpponentFactory
+
+        boss = BossOpponentFactory()
+        self.assertEqual(boss.tier, OpponentTier.BOSS)
+        self.assertEqual(boss.soak_value, 80)
+
+    def test_participant_factory(self) -> None:
+        from world.combat.factories import CombatParticipantFactory
+
+        participant = CombatParticipantFactory()
+        self.assertIsNotNone(participant.character_sheet)
+
+    def test_threat_pool_entry_factory(self) -> None:
+        from world.combat.factories import ThreatPoolEntryFactory
+
+        entry = ThreatPoolEntryFactory()
+        self.assertEqual(entry.base_damage, 10)
+
+    def test_boss_phase_factory(self) -> None:
+        from world.combat.factories import BossPhaseFactory
+
+        phase = BossPhaseFactory()
+        self.assertIsNotNone(phase.opponent)
