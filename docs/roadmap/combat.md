@@ -132,14 +132,14 @@ to defend better but drain your pools faster). Focus stays on PCs as active agen
 - **Fatigue integration:** Combat actions drain fatigue pools by category, creating attrition pressure that builds toward collapse/Audere moments
 
 ## What Exists
-- **Combat models:** CombatEncounter, CombatOpponent, CombatParticipant, BossPhase, ThreatPool/ThreatPoolEntry, CombatRoundAction, CombatOpponentAction, ComboDefinition, ComboSlot, ComboLearning — full foundation for party combat encounters
-- **Combat services:** Encounter lifecycle (add_participant, add_opponent, begin_declaration_phase), NPC action selection from weighted threat pools, damage resolution with soak/probing/bypass, PC damage with health thresholds, resolution order by covenant rank, combo detection/upgrade/revert, round orchestrator (resolve_round), defensive check integration (resolve_npc_attack), boss phase transitions (check_and_advance_boss_phase)
-- **Vitals system (world.vitals):** CharacterStatus enum (ALIVE/UNCONSCIOUS/DYING/DEAD) and CharacterVitals model for persistent life state tracking. Health thresholds and wound descriptions live here — combat reads from vitals, doesn't own life-state concepts
-- **Covenants system (world.covenants):** CovenantRole lookup table with speed_rank, CovenantType (DURANCE/BATTLE), RoleArchetype (SWORD/SHIELD/CROWN). Combat reads covenant roles for resolution order
+- **Combat models:** CombatEncounter (scene + risk/stakes), CombatOpponent (with optional Persona FK for story NPCs), CombatParticipant (lightweight join table: encounter + character_sheet + covenant_role), BossPhase, ThreatPool/ThreatPoolEntry, CombatRoundAction, CombatOpponentAction, ComboDefinition, ComboSlot, ComboLearning
+- **Combat services:** Encounter lifecycle (add_participant, add_opponent, begin_declaration_phase), NPC action selection from weighted threat pools, damage resolution with soak/probing/bypass, PC damage writing directly to CharacterVitals, resolution order by covenant role speed_rank, combo detection/upgrade/revert, round orchestrator (resolve_round), defensive check integration (resolve_npc_attack), boss phase transitions (check_and_advance_boss_phase)
+- **Vitals system (world.vitals):** CharacterVitals is the single source of truth for character health (health, max_health), life state (CharacterStatus: ALIVE/UNCONSCIOUS/DYING/DEAD), and dying_final_round. Health thresholds, wound descriptions, health_percentage, and wound_description properties all live here. Combat reads/writes vitals directly — no syncing or denormalization
+- **Covenants system (world.covenants):** CovenantRole lookup table with speed_rank, CovenantType (DURANCE/BATTLE), RoleArchetype (SWORD/SHIELD/CROWN). Combat reads covenant roles for resolution order — speed is never denormalized onto participants
 - **Supporting systems:** Conditions app has combat-relevant fields (affects_turn_order, draws_aggro, turn_order_modifier, aggro_priority). Mechanics app has modifier collection/stacking, plus the Challenge/Situation system and action generation pipeline. Checks app has the roll resolution engine (perform_check)
 - **Capability/Application system:** Properties on enemies/environments, Applications matching character Capabilities to available combat actions, ChallengeApproach with required_effect_property for fine-grained constraints. Action generation auto-surfaces what each character can do in a given combat situation
 - **Magic integration:** TechniqueCapabilityGrant connects magic techniques to capabilities. TraitCapabilityDerivation connects stats to capabilities. Combos link to EffectType and Resonance from magic app
-- **Tests:** 131 tests across combat, vitals, and covenants
+- **Tests:** 133 tests across combat, vitals, and covenants
 - **Admin:** Full Django admin with inlines for all combat, vitals, and covenant models
 
 ## What's Needed for MVP
@@ -166,10 +166,12 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - Full round resolution orchestrator (resolve_round: declaration → detection → resolution → consequences, atomic transaction)
 - Defensive check integration (resolve_npc_attack using perform_check with success-level damage multipliers)
 - Boss phase transitions on health percentage triggers (check_and_advance_boss_phase)
-- Speed-rank-based resolution order (PCs by covenant rank + modifier, NPCs at rank 15, no-role at rank 20)
+- Speed-rank-based resolution order (PCs by covenant role speed_rank, NPCs at rank 15, no-role at rank 20)
 - Vitals extraction: CharacterStatus enum and health thresholds moved to world.vitals
 - BaseEvenniaTest replaced with TestCase in all combat tests
-- 131 total tests across combat, vitals, and covenants
+- Denormalization cleanup: CombatParticipant stripped to join table (health/status/speed removed), CombatEncounter dropped story/episode FKs (derivable from scene), CombatOpponent gained optional Persona FK for story NPCs
+- CharacterVitals is the health authority: combat reads/writes health directly, no sync step
+- 133 total tests across combat, vitals, and covenants
 - Note: DEAL_DAMAGE effect handler still stubbed — to be connected when magic effect pipeline is ready
 
 ### Open Encounters (future — builds on Party Combat)

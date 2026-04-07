@@ -111,9 +111,8 @@ ENTITY_TYPE_NPC: str = "npc"
 # ---------------------------------------------------------------------------
 # Speed ranks — lower means faster.
 #
-# Covenant roles and their speed mappings live in world.covenants.
-# Combat stores a denormalized base_speed_rank per participant; these
-# constants provide the fallback defaults for PCs without a role.
+# Covenant roles define speed_rank (world.covenants). PCs without a role
+# resolve at NO_ROLE_SPEED_RANK. NPCs resolve at NPC_SPEED_RANK.
 # ---------------------------------------------------------------------------
 
 NO_ROLE_SPEED_RANK: int = 20
