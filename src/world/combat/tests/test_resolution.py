@@ -13,7 +13,9 @@ from world.combat.factories import (
     CombatParticipantFactory,
 )
 from world.combat.services import get_resolution_order
+from world.covenants.factories import CovenantRoleFactory
 from world.vitals.constants import CharacterStatus
+from world.vitals.models import CharacterVitals
 
 
 class GetResolutionOrderTest(TestCase):
@@ -27,7 +29,13 @@ class GetResolutionOrderTest(TestCase):
         """PC with rank 1 appears before NPC (rank 15)."""
         pc = CombatParticipantFactory(
             encounter=self.encounter,
-            base_speed_rank=1,
+            covenant_role=CovenantRoleFactory(speed_rank=1),
+        )
+        CharacterVitals.objects.create(
+            character_sheet=pc.character_sheet,
+            health=100,
+            max_health=100,
+            status=CharacterStatus.ALIVE,
         )
         npc = CombatOpponentFactory(encounter=self.encounter)
 
@@ -43,6 +51,12 @@ class GetResolutionOrderTest(TestCase):
         pc = CombatParticipantFactory(
             encounter=self.encounter,
         )
+        CharacterVitals.objects.create(
+            character_sheet=pc.character_sheet,
+            health=100,
+            max_health=100,
+            status=CharacterStatus.ALIVE,
+        )
 
         order = get_resolution_order(self.encounter)
 
@@ -50,28 +64,15 @@ class GetResolutionOrderTest(TestCase):
         self.assertEqual(order[0], (ENTITY_TYPE_NPC, npc))
         self.assertEqual(order[1], (ENTITY_TYPE_PC, pc))
 
-    def test_speed_modifier_adjusts_rank(self) -> None:
-        """Base rank 4 with speed_modifier=-3 (rank 1) before normal rank 4."""
-        fast_pc = CombatParticipantFactory(
-            encounter=self.encounter,
-            base_speed_rank=4,
-            speed_modifier=-3,
-        )
-        normal_pc = CombatParticipantFactory(
-            encounter=self.encounter,
-            base_speed_rank=4,
-        )
-
-        order = get_resolution_order(self.encounter)
-
-        self.assertEqual(len(order), 2)
-        self.assertEqual(order[0], (ENTITY_TYPE_PC, fast_pc))
-        self.assertEqual(order[1], (ENTITY_TYPE_PC, normal_pc))
-
     def test_unconscious_pcs_excluded(self) -> None:
         """Unconscious PC not in resolution order."""
-        CombatParticipantFactory(
+        pc = CombatParticipantFactory(
             encounter=self.encounter,
+        )
+        CharacterVitals.objects.create(
+            character_sheet=pc.character_sheet,
+            health=100,
+            max_health=100,
             status=CharacterStatus.UNCONSCIOUS,
         )
         npc = CombatOpponentFactory(encounter=self.encounter)
@@ -83,8 +84,13 @@ class GetResolutionOrderTest(TestCase):
 
     def test_dead_pcs_excluded(self) -> None:
         """Dead PC not in resolution order."""
-        CombatParticipantFactory(
+        pc = CombatParticipantFactory(
             encounter=self.encounter,
+        )
+        CharacterVitals.objects.create(
+            character_sheet=pc.character_sheet,
+            health=0,
+            max_health=100,
             status=CharacterStatus.DEAD,
         )
         npc = CombatOpponentFactory(encounter=self.encounter)
@@ -98,7 +104,12 @@ class GetResolutionOrderTest(TestCase):
         """Dying PC with dying_final_round=True IS included."""
         dying_pc = CombatParticipantFactory(
             encounter=self.encounter,
-            base_speed_rank=1,
+            covenant_role=CovenantRoleFactory(speed_rank=1),
+        )
+        CharacterVitals.objects.create(
+            character_sheet=dying_pc.character_sheet,
+            health=10,
+            max_health=100,
             status=CharacterStatus.DYING,
             dying_final_round=True,
         )
@@ -110,8 +121,13 @@ class GetResolutionOrderTest(TestCase):
 
     def test_dying_pc_without_final_round_excluded(self) -> None:
         """Dying PC with dying_final_round=False NOT included."""
-        CombatParticipantFactory(
+        pc = CombatParticipantFactory(
             encounter=self.encounter,
+        )
+        CharacterVitals.objects.create(
+            character_sheet=pc.character_sheet,
+            health=10,
+            max_health=100,
             status=CharacterStatus.DYING,
             dying_final_round=False,
         )
@@ -128,7 +144,13 @@ class GetResolutionOrderTest(TestCase):
         )
         pc = CombatParticipantFactory(
             encounter=self.encounter,
-            base_speed_rank=1,
+            covenant_role=CovenantRoleFactory(speed_rank=1),
+        )
+        CharacterVitals.objects.create(
+            character_sheet=pc.character_sheet,
+            health=100,
+            max_health=100,
+            status=CharacterStatus.ALIVE,
         )
 
         order = get_resolution_order(self.encounter)
@@ -140,15 +162,33 @@ class GetResolutionOrderTest(TestCase):
         """Rank 1, 6, 10 — verify resolution order."""
         slowest = CombatParticipantFactory(
             encounter=self.encounter,
-            base_speed_rank=10,
+            covenant_role=CovenantRoleFactory(speed_rank=10),
+        )
+        CharacterVitals.objects.create(
+            character_sheet=slowest.character_sheet,
+            health=100,
+            max_health=100,
+            status=CharacterStatus.ALIVE,
         )
         fastest = CombatParticipantFactory(
             encounter=self.encounter,
-            base_speed_rank=1,
+            covenant_role=CovenantRoleFactory(speed_rank=1),
+        )
+        CharacterVitals.objects.create(
+            character_sheet=fastest.character_sheet,
+            health=100,
+            max_health=100,
+            status=CharacterStatus.ALIVE,
         )
         middle = CombatParticipantFactory(
             encounter=self.encounter,
-            base_speed_rank=6,
+            covenant_role=CovenantRoleFactory(speed_rank=6),
+        )
+        CharacterVitals.objects.create(
+            character_sheet=middle.character_sheet,
+            health=100,
+            max_health=100,
+            status=CharacterStatus.ALIVE,
         )
 
         order = get_resolution_order(self.encounter)

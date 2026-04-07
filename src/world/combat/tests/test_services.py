@@ -30,32 +30,29 @@ from world.covenants.factories import CovenantRoleFactory
 from world.fatigue.constants import EffortLevel
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
 from world.vitals.constants import CharacterStatus
+from world.vitals.models import CharacterVitals
 
 
 class AddParticipantTest(TestCase):
     """Tests for add_participant service function."""
 
-    def setUp(self) -> None:
-        super().setUp()
-        self.encounter = CombatEncounterFactory()
-        self.sheet = CharacterSheetFactory()
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.role = CovenantRoleFactory(speed_rank=3)
 
-    def test_adds_participant_with_health(self) -> None:
-        participant = add_participant(self.encounter, self.sheet, max_health=120)
-        self.assertEqual(participant.health, 120)
-        self.assertEqual(participant.max_health, 120)
-        self.assertEqual(participant.status, CharacterStatus.ALIVE)
+    def test_adds_participant(self) -> None:
+        encounter = CombatEncounterFactory()
+        sheet = CharacterSheetFactory()
+        p = add_participant(encounter, sheet)
+        assert p.encounter == encounter
+        assert p.character_sheet == sheet
+        assert p.covenant_role is None
 
     def test_adds_participant_with_covenant_role(self) -> None:
-        role = CovenantRoleFactory(name="Vanguard", slug="vanguard", speed_rank=1)
-        participant = add_participant(
-            self.encounter,
-            self.sheet,
-            max_health=100,
-            covenant_role=role,
-        )
-        self.assertEqual(participant.covenant_role, role)
-        self.assertEqual(participant.base_speed_rank, 1)
+        encounter = CombatEncounterFactory()
+        sheet = CharacterSheetFactory()
+        p = add_participant(encounter, sheet, covenant_role=self.role)
+        assert p.covenant_role == self.role
 
 
 class AddOpponentTest(TestCase):
@@ -143,6 +140,12 @@ class SelectNpcActionsTest(TestCase):
         self.participant = CombatParticipantFactory(
             encounter=self.encounter,
         )
+        CharacterVitals.objects.create(
+            character_sheet=self.participant.character_sheet,
+            health=100,
+            max_health=100,
+            status=CharacterStatus.ALIVE,
+        )
 
     def test_selects_action_for_each_opponent(self) -> None:
         opponent = CombatOpponentFactory(encounter=self.encounter, threat_pool=self.pool)
@@ -191,7 +194,13 @@ class SelectNpcActionsTest(TestCase):
             cooldown_rounds=2,
             weight=1000,  # Would always be picked if eligible
         )
-        CombatParticipantFactory(encounter=encounter)
+        cooldown_participant = CombatParticipantFactory(encounter=encounter)
+        CharacterVitals.objects.create(
+            character_sheet=cooldown_participant.character_sheet,
+            health=100,
+            max_health=100,
+            status=CharacterStatus.ALIVE,
+        )
         opponent = CombatOpponentFactory(encounter=encounter, threat_pool=pool)
         CombatOpponentAction.objects.create(
             opponent=opponent,
@@ -216,6 +225,12 @@ class DeclareActionTest(TestCase):
         super().setUp()
         self.encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
         self.participant = CombatParticipantFactory(encounter=self.encounter)
+        CharacterVitals.objects.create(
+            character_sheet=self.participant.character_sheet,
+            health=100,
+            max_health=100,
+            status=CharacterStatus.ALIVE,
+        )
         self.technique = TechniqueFactory(gift=self.gift, effect_type=self.effect_type)
         self.opponent = CombatOpponentFactory(encounter=self.encounter)
 
@@ -247,9 +262,10 @@ class DeclareActionTest(TestCase):
 
     def test_declare_action_unconscious_participant(self) -> None:
         """Raises ValueError if participant is UNCONSCIOUS."""
-        self.participant.status = CharacterStatus.UNCONSCIOUS
-        self.participant.save(update_fields=["status"])
-        with self.assertRaises(ValueError, msg="participant status"):
+        vitals = CharacterVitals.objects.get(character_sheet=self.participant.character_sheet)
+        vitals.status = CharacterStatus.UNCONSCIOUS
+        vitals.save(update_fields=["status"])
+        with self.assertRaises(ValueError, msg="character status"):
             declare_action(
                 self.participant,
                 focused_action=self.technique,

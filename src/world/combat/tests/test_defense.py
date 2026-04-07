@@ -23,6 +23,8 @@ from world.combat.services import (
     _damage_multiplier_for_success,
     resolve_npc_attack,
 )
+from world.vitals.constants import CharacterStatus
+from world.vitals.models import CharacterVitals
 
 
 class DamageMultiplierTests(TestCase):
@@ -74,8 +76,12 @@ class ResolveNpcAttackTests(TestCase):
         cls.participant = CombatParticipantFactory(
             encounter=cls.encounter,
             character_sheet=cls.sheet,
+        )
+        CharacterVitals.objects.create(
+            character_sheet=cls.sheet,
             health=200,
             max_health=200,
+            status=CharacterStatus.ALIVE,
         )
         cls.npc_action = CombatOpponentAction.objects.create(
             opponent=cls.opponent,
@@ -84,6 +90,14 @@ class ResolveNpcAttackTests(TestCase):
         )
         cls.npc_action.targets.add(cls.participant)
         cls.mock_check_type = MagicMock()
+
+    def setUp(self) -> None:
+        # Reset vitals health before each test since apply_damage modifies it
+        vitals = CharacterVitals.objects.get(character_sheet=self.sheet)
+        vitals.health = 200
+        vitals.max_health = 200
+        vitals.status = CharacterStatus.ALIVE
+        vitals.save()
 
     def _make_mock_check(self, success_level: int) -> MagicMock:
         mock_fn = MagicMock()
@@ -143,5 +157,5 @@ class ResolveNpcAttackTests(TestCase):
             self.mock_check_type,
             perform_check_fn=mock_fn,
         )
-        self.participant.refresh_from_db()
-        self.assertEqual(self.participant.health, 200 - result.final_damage)
+        vitals = CharacterVitals.objects.get(character_sheet=self.sheet)
+        self.assertEqual(vitals.health, 200 - result.final_damage)

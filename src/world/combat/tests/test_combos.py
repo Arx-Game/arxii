@@ -141,8 +141,6 @@ class DetectAvailableCombosTests(TestCase):
             p = CombatParticipantFactory(
                 encounter=encounter,
                 character_sheet=sheet,
-                health=100,
-                max_health=100,
             )
             participants.append(p)
 
@@ -435,8 +433,6 @@ class ResonanceMatchingTests(TestCase):
         participant = CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet,
-            health=100,
-            max_health=100,
         )
         action = CombatRoundAction.objects.create(
             participant=participant,
@@ -505,8 +501,6 @@ class ResonanceMatchingTests(TestCase):
         participant_a = CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet_a,
-            health=100,
-            max_health=100,
         )
         CombatRoundAction.objects.create(
             participant=participant_a,
@@ -526,8 +520,6 @@ class ResonanceMatchingTests(TestCase):
         participant_b = CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet_b,
-            health=100,
-            max_health=100,
         )
         CombatRoundAction.objects.create(
             participant=participant_b,

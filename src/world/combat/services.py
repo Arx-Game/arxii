@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.db.models import Prefetch, Q
-from django.utils import timezone
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -30,6 +29,7 @@ from world.combat.constants import (
     DEFENSE_REDUCED_THRESHOLD,
     ENTITY_TYPE_NPC,
     ENTITY_TYPE_PC,
+    NO_ROLE_SPEED_RANK,
     NPC_SPEED_RANK,
     OFFENSE_FULL_THRESHOLD,
     OFFENSE_HALF_THRESHOLD,
@@ -88,31 +88,14 @@ def add_participant(
     encounter: CombatEncounter,
     character_sheet: CharacterSheet,
     *,
-    max_health: int,
     covenant_role: CovenantRole | None = None,
 ) -> CombatParticipant:
-    """Create a CombatParticipant with health equal to max_health.
-
-    If a ``covenant_role`` is provided, ``base_speed_rank`` is automatically
-    derived from the role's ``speed_rank``. Otherwise it defaults to
-    ``NO_ROLE_SPEED_RANK`` (20).
-
-    Args:
-        encounter: The combat encounter.
-        character_sheet: The PC's character sheet.
-        max_health: Starting (and max) health.
-        covenant_role: The CovenantRole instance this PC holds (optional).
-    """
-    kwargs: dict[str, object] = {
-        "encounter": encounter,
-        "character_sheet": character_sheet,
-        "health": max_health,
-        "max_health": max_health,
-        "covenant_role": covenant_role,
-    }
-    if covenant_role is not None:
-        kwargs["base_speed_rank"] = covenant_role.speed_rank
-    return CombatParticipant.objects.create(**kwargs)
+    """Create a CombatParticipant linking a PC to an encounter."""
+    return CombatParticipant.objects.create(
+        encounter=encounter,
+        character_sheet=character_sheet,
+        covenant_role=covenant_role,
+    )
 
 
 def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
@@ -138,33 +121,6 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
         soak_value=soak_value,
         probing_threshold=probing_threshold,
     )
-
-
-def sync_vitals_from_combat(participant: CombatParticipant) -> None:
-    """Update persistent CharacterVitals when a participant's combat status changes.
-
-    Should be called when a participant transitions to UNCONSCIOUS, DYING, or DEAD.
-    """
-    from world.vitals.models import CharacterVitals  # noqa: PLC0415
-
-    vitals, _ = CharacterVitals.objects.get_or_create(
-        character_sheet=participant.character_sheet,
-    )
-    status = participant.status
-    update_fields: list[str] = ["status"]
-    if status == CharacterStatus.DEAD:
-        vitals.status = CharacterStatus.DEAD
-        vitals.died_at = timezone.now()
-        update_fields.append("died_at")
-    elif status == CharacterStatus.UNCONSCIOUS:
-        vitals.status = CharacterStatus.UNCONSCIOUS
-        vitals.unconscious_at = timezone.now()
-        update_fields.append("unconscious_at")
-    elif status == CharacterStatus.DYING:
-        vitals.status = CharacterStatus.DYING
-    else:
-        return
-    vitals.save(update_fields=update_fields)
 
 
 @transaction.atomic
@@ -210,13 +166,16 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     Raises ValueError with clear messages for validation failures.
     """
 
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
     encounter = participant.encounter
 
     # Status check
-    is_alive = participant.status == CharacterStatus.ALIVE
-    is_dying_final = participant.status == CharacterStatus.DYING and participant.dying_final_round
+    vitals = CharacterVitals.objects.get(character_sheet=participant.character_sheet)
+    is_alive = vitals.status == CharacterStatus.ALIVE
+    is_dying_final = vitals.status == CharacterStatus.DYING and vitals.dying_final_round
     if not (is_alive or is_dying_final):
-        msg = f"Cannot declare action: participant status is '{participant.get_status_display()}'."
+        msg = f"Cannot declare action: character status is '{vitals.get_status_display()}'."
         raise ValueError(msg)
 
     # Encounter status check
@@ -303,7 +262,18 @@ def _select_targets(
     count = min(count, len(active_participants))
 
     if selection == TargetSelection.LOWEST_HEALTH:
-        sorted_by_health = sorted(active_participants, key=lambda p: p.health)
+        from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+        sheet_ids = [p.character_sheet_id for p in active_participants]
+        health_map = dict(
+            CharacterVitals.objects.filter(
+                character_sheet_id__in=sheet_ids,
+            ).values_list("character_sheet_id", "health")
+        )
+        sorted_by_health = sorted(
+            active_participants,
+            key=lambda p: health_map.get(p.character_sheet_id, 0),
+        )
         return sorted_by_health[:count]
 
     if selection == TargetSelection.RANDOM:
@@ -404,10 +374,18 @@ def select_npc_actions(
 
     # Design: only ALIVE PCs are targetable. DYING PCs (on their final round)
     # get one free offensive action without being targeted — "going out swinging."
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    alive_sheet_ids = set(
+        CharacterVitals.objects.filter(
+            status=CharacterStatus.ALIVE,
+            character_sheet__combat_participations__encounter=encounter,
+        ).values_list("character_sheet_id", flat=True)
+    )
     active_participants = list(
         CombatParticipant.objects.filter(
             encounter=encounter,
-            status=CharacterStatus.ALIVE,
+            character_sheet_id__in=alive_sheet_ids,
         )
     )
 
@@ -477,16 +455,22 @@ def apply_damage_to_participant(
     *,
     force_death: bool = False,
 ) -> ParticipantDamageResult:
-    """Apply damage to a PC participant and report threshold crossings.
+    """Apply damage to a PC via their CharacterVitals.
 
     Does NOT roll for knockout/death/wounds — only reports eligibility.
     The caller is responsible for acting on the result.
     """
-    participant.health -= damage
-    health_after = participant.health
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
 
-    if participant.max_health > 0:
-        health_pct = max(0.0, health_after / participant.max_health)
+    vitals, _ = CharacterVitals.objects.get_or_create(
+        character_sheet=participant.character_sheet,
+    )
+
+    vitals.health -= damage
+    health_after = vitals.health
+
+    if vitals.max_health > 0:
+        health_pct = max(0.0, health_after / vitals.max_health)
     else:
         health_pct = 0.0
 
@@ -494,13 +478,15 @@ def apply_damage_to_participant(
         health_pct <= KNOCKOUT_HEALTH_THRESHOLD and health_after > DEATH_HEALTH_THRESHOLD
     )
     death_eligible = health_after <= DEATH_HEALTH_THRESHOLD
-    permanent_wound_eligible = damage > (participant.max_health * PERMANENT_WOUND_THRESHOLD)
+    permanent_wound_eligible = damage > (vitals.max_health * PERMANENT_WOUND_THRESHOLD)
 
+    update_fields = ["health"]
     if force_death:
-        participant.status = CharacterStatus.DYING
-        participant.dying_final_round = True
+        vitals.status = CharacterStatus.DYING
+        vitals.dying_final_round = True
+        update_fields.extend(["status", "dying_final_round"])
 
-    participant.save(update_fields=["health", "status", "dying_final_round"])
+    vitals.save(update_fields=update_fields)
 
     return ParticipantDamageResult(
         damage_dealt=damage,
@@ -520,7 +506,7 @@ def get_resolution_order(
     is "pc" or "npc". Sorted by speed rank ascending (lower = faster).
 
     Includes:
-    - ACTIVE PCs (sorted by effective_speed_rank)
+    - ALIVE PCs (speed from covenant_role or NO_ROLE_SPEED_RANK)
     - DYING PCs with dying_final_round=True (their last action)
     - ACTIVE NPCs (all at NPC_SPEED_RANK)
 
@@ -530,17 +516,33 @@ def get_resolution_order(
     - DYING PCs without dying_final_round
     - DEFEATED/FLED NPCs
     """
-    participants: list[CombatParticipant] = list(
-        CombatParticipant.objects.filter(encounter=encounter)
-    )
-    ranked: list[tuple[int, str, CombatParticipant | CombatOpponent]] = [
-        (p.effective_speed_rank, ENTITY_TYPE_PC, p)
-        for p in participants
-        if p.status == CharacterStatus.ALIVE
-        or (p.status == CharacterStatus.DYING and p.dying_final_round)
-    ]
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
 
-    opponents: list[CombatOpponent] = list(
+    participants = list(
+        CombatParticipant.objects.filter(
+            encounter=encounter,
+        ).select_related("covenant_role", "character_sheet")
+    )
+
+    sheet_ids = [p.character_sheet_id for p in participants]
+    vitals_map: dict[int, CharacterVitals] = {
+        v.character_sheet_id: v
+        for v in CharacterVitals.objects.filter(character_sheet_id__in=sheet_ids)
+    }
+
+    ranked: list[tuple[int, str, CombatParticipant | CombatOpponent]] = []
+    for p in participants:
+        vitals = vitals_map.get(p.character_sheet_id)
+        if vitals is None:
+            continue
+        status = vitals.status
+        if status == CharacterStatus.ALIVE or (
+            status == CharacterStatus.DYING and vitals.dying_final_round
+        ):
+            speed = p.covenant_role.speed_rank if p.covenant_role_id else NO_ROLE_SPEED_RANK
+            ranked.append((speed, ENTITY_TYPE_PC, p))
+
+    opponents = list(
         CombatOpponent.objects.filter(
             encounter=encounter,
             status=OpponentStatus.ACTIVE,
@@ -1014,9 +1016,13 @@ def _resolve_npc_action(
     except AttributeError:
         conditions = list(npc_action.threat_entry.conditions_applied.all())
 
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
     for target_participant in targets:
-        target_participant.refresh_from_db()
-        if target_participant.status != CharacterStatus.ALIVE:
+        vitals_obj = CharacterVitals.objects.get(
+            character_sheet=target_participant.character_sheet,
+        )
+        if vitals_obj.status != CharacterStatus.ALIVE:
             continue
 
         if defense_check_type is not None:
@@ -1035,15 +1041,14 @@ def _resolve_npc_action(
         outcome.damage_results.append(dmg_result)
 
         # Knockout/death processing — only transition from ALIVE
-        if dmg_result.death_eligible and target_participant.status == CharacterStatus.ALIVE:
-            target_participant.status = CharacterStatus.DYING
-            target_participant.dying_final_round = True
-            target_participant.save(update_fields=["status", "dying_final_round"])
-            sync_vitals_from_combat(target_participant)
-        elif dmg_result.knockout_eligible and target_participant.status == CharacterStatus.ALIVE:
-            target_participant.status = CharacterStatus.UNCONSCIOUS
-            target_participant.save(update_fields=["status"])
-            sync_vitals_from_combat(target_participant)
+        vitals_obj.refresh_from_db()
+        if dmg_result.death_eligible and vitals_obj.status == CharacterStatus.ALIVE:
+            vitals_obj.status = CharacterStatus.DYING
+            vitals_obj.dying_final_round = True
+            vitals_obj.save(update_fields=["status", "dying_final_round"])
+        elif dmg_result.knockout_eligible and vitals_obj.status == CharacterStatus.ALIVE:
+            vitals_obj.status = CharacterStatus.UNCONSCIOUS
+            vitals_obj.save(update_fields=["status"])
 
         # Condition application from NPC attacks (only if damage dealt)
         if dmg_result.damage_dealt > 0 and conditions:
@@ -1112,14 +1117,22 @@ def _check_boss_transitions(
 
 def _check_encounter_completion(encounter: CombatEncounter) -> bool:
     """Return True if the encounter should be marked complete."""
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
     all_opponents_down = not CombatOpponent.objects.filter(
         encounter=encounter,
         status=OpponentStatus.ACTIVE,
     ).exists()
-    all_pcs_down = not CombatParticipant.objects.filter(
+
+    participant_sheet_ids = CombatParticipant.objects.filter(
         encounter=encounter,
+    ).values_list("character_sheet_id", flat=True)
+
+    all_pcs_down = not CharacterVitals.objects.filter(
+        character_sheet_id__in=participant_sheet_ids,
         status=CharacterStatus.ALIVE,
     ).exists()
+
     return all_opponents_down or all_pcs_down
 
 
@@ -1230,16 +1243,21 @@ def resolve_round(
     )
 
     # --- Dying final round consumption ---
-    dying_participants = CombatParticipant.objects.filter(
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    participant_sheet_ids = CombatParticipant.objects.filter(
         encounter=encounter,
+    ).values_list("character_sheet_id", flat=True)
+
+    dying_vitals = CharacterVitals.objects.filter(
+        character_sheet_id__in=participant_sheet_ids,
         status=CharacterStatus.DYING,
         dying_final_round=True,
-    ).select_related("character_sheet")
-    for dying_p in dying_participants:
-        dying_p.dying_final_round = False
-        dying_p.status = CharacterStatus.DEAD
-        dying_p.save(update_fields=["status", "dying_final_round"])
-        sync_vitals_from_combat(dying_p)
+    )
+    for vitals in dying_vitals:
+        vitals.dying_final_round = False
+        vitals.status = CharacterStatus.DEAD
+        vitals.save(update_fields=["status", "dying_final_round"])
 
     # --- Boss phase transitions ---
     result.phase_transitions = _check_boss_transitions(encounter)

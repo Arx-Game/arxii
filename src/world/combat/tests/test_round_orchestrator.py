@@ -26,8 +26,11 @@ from world.combat.models import (
     CombatRoundAction,
 )
 from world.combat.services import resolve_round, upgrade_action_to_combo
+from world.covenants.factories import CovenantRoleFactory
 from world.fatigue.models import FatiguePool
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
+from world.vitals.constants import CharacterStatus
+from world.vitals.models import CharacterVitals
 
 
 class ResolveRoundBasicTests(TestCase):
@@ -57,8 +60,12 @@ class ResolveRoundBasicTests(TestCase):
         participant = CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet,
+        )
+        CharacterVitals.objects.create(
+            character_sheet=sheet,
             health=100,
             max_health=100,
+            status=CharacterStatus.ALIVE,
         )
         technique = TechniqueFactory(
             gift=self.gift,
@@ -112,9 +119,9 @@ class ResolveRoundBasicTests(TestCase):
 
         resolve_round(encounter)
 
-        participant.refresh_from_db()
+        vitals = CharacterVitals.objects.get(character_sheet=participant.character_sheet)
         # NPC base_damage is 30, applied directly (no defense check)
-        self.assertEqual(participant.health, 70)  # 100 - 30
+        self.assertEqual(vitals.health, 70)  # 100 - 30
 
     def test_wrong_status_raises(self) -> None:
         """Resolving a non-DECLARING encounter raises ValueError."""
@@ -143,8 +150,12 @@ class ResolveRoundBasicTests(TestCase):
         participant = CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet,
+        )
+        CharacterVitals.objects.create(
+            character_sheet=sheet,
             health=100,
             max_health=100,
+            status=CharacterStatus.ALIVE,
         )
         # Attack with base_power 20 > opponent health 10
         technique = TechniqueFactory(
@@ -196,9 +207,13 @@ class ResolveRoundComboTests(TestCase):
         participant = CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet,
+            covenant_role=CovenantRoleFactory(speed_rank=5),
+        )
+        CharacterVitals.objects.create(
+            character_sheet=sheet,
             health=100,
             max_health=100,
-            base_speed_rank=5,
+            status=CharacterStatus.ALIVE,
         )
         technique = TechniqueFactory(
             gift=self.gift,
@@ -257,8 +272,12 @@ class ResolveRoundDefenseCheckTests(TestCase):
         participant = CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet,
+        )
+        CharacterVitals.objects.create(
+            character_sheet=sheet,
             health=200,
             max_health=200,
+            status=CharacterStatus.ALIVE,
         )
         technique = TechniqueFactory(
             gift=self.gift,
@@ -291,12 +310,11 @@ class ResolveRoundDefenseCheckTests(TestCase):
             defense_check_fn=mock_check,
         )
 
-        participant.refresh_from_db()
+        vitals = CharacterVitals.objects.get(character_sheet=sheet)
         # base_damage 100, partial success → 50 damage
-        # PC also took the attack, but PC attacked the mook first (rank 20 vs 15)
-        # Actually, PC has default rank 20 and NPC has rank 15, so NPC resolves first.
+        # PC has default rank 20 and NPC has rank 15, so NPC resolves first.
         # NPC deals 50 to PC, then PC deals 20 to mook.
-        self.assertEqual(participant.health, 150)  # 200 - 50
+        self.assertEqual(vitals.health, 150)  # 200 - 50
 
 
 class ResolveRoundBossPhaseTests(TestCase):
@@ -336,9 +354,13 @@ class ResolveRoundBossPhaseTests(TestCase):
         participant = CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet,
+            covenant_role=CovenantRoleFactory(speed_rank=1),
+        )
+        CharacterVitals.objects.create(
+            character_sheet=sheet,
             health=500,
             max_health=500,
-            base_speed_rank=1,
+            status=CharacterStatus.ALIVE,
         )
         technique = TechniqueFactory(
             gift=self.gift,
@@ -388,9 +410,13 @@ class ResolveRoundOffenseCheckTests(TestCase):
         participant = CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet,
+            covenant_role=CovenantRoleFactory(speed_rank=1),
+        )
+        CharacterVitals.objects.create(
+            character_sheet=sheet,
             health=100,
             max_health=100,
-            base_speed_rank=1,
+            status=CharacterStatus.ALIVE,
         )
         technique = TechniqueFactory(
             gift=self.gift,

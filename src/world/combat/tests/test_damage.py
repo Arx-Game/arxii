@@ -17,7 +17,6 @@ from world.combat.services import (
     apply_damage_to_opponent,
     apply_damage_to_participant,
     resolve_round,
-    sync_vitals_from_combat,
 )
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
 from world.vitals.constants import CharacterStatus
@@ -96,65 +95,56 @@ class ApplyDamageToOpponentTest(TestCase):
 class ApplyDamageToParticipantTest(TestCase):
     """Tests for apply_damage_to_participant."""
 
-    def test_damage_reduces_health(self) -> None:
-        participant = CombatParticipantFactory(health=100, max_health=100)
-        result = apply_damage_to_participant(participant, 30)
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.participant = CombatParticipantFactory()
 
-        participant.refresh_from_db()
-        self.assertEqual(participant.health, 70)
-        self.assertEqual(result.health_after, 70)
-        self.assertEqual(result.damage_dealt, 30)
+    def setUp(self) -> None:
+        self.vitals, _ = CharacterVitals.objects.get_or_create(
+            character_sheet=self.participant.character_sheet,
+            defaults={"health": 100, "max_health": 100},
+        )
+        self.vitals.health = 100
+        self.vitals.max_health = 100
+        self.vitals.status = CharacterStatus.ALIVE
+        self.vitals.save()
+
+    def test_damage_reduces_health(self) -> None:
+        result = apply_damage_to_participant(self.participant, 30)
+        self.vitals.refresh_from_db()
+        assert self.vitals.health == 70
+        assert result.damage_dealt == 30
 
     def test_health_can_go_negative(self) -> None:
-        participant = CombatParticipantFactory(health=10, max_health=100)
-        result = apply_damage_to_participant(participant, 25)
-
-        participant.refresh_from_db()
-        self.assertEqual(participant.health, -15)
-        self.assertEqual(result.health_after, -15)
+        apply_damage_to_participant(self.participant, 150)
+        self.vitals.refresh_from_db()
+        assert self.vitals.health == -50
 
     def test_knockout_eligible_below_20_percent(self) -> None:
-        participant = CombatParticipantFactory(health=15, max_health=100)
-        result = apply_damage_to_participant(participant, 5)
-
-        self.assertEqual(result.health_after, 10)
-        self.assertTrue(result.knockout_eligible)
-        self.assertFalse(result.death_eligible)
+        result = apply_damage_to_participant(self.participant, 85)
+        assert result.knockout_eligible is True
 
     def test_not_knockout_eligible_above_20_percent(self) -> None:
-        participant = CombatParticipantFactory(health=100, max_health=100)
-        result = apply_damage_to_participant(participant, 10)
-
-        self.assertEqual(result.health_after, 90)
-        self.assertFalse(result.knockout_eligible)
+        result = apply_damage_to_participant(self.participant, 50)
+        assert result.knockout_eligible is False
 
     def test_death_eligible_at_zero(self) -> None:
-        participant = CombatParticipantFactory(health=5, max_health=100)
-        result = apply_damage_to_participant(participant, 10)
-
-        self.assertEqual(result.health_after, -5)
-        self.assertTrue(result.death_eligible)
+        result = apply_damage_to_participant(self.participant, 100)
+        assert result.death_eligible is True
 
     def test_permanent_wound_on_big_hit(self) -> None:
-        participant = CombatParticipantFactory(health=100, max_health=100)
-        result = apply_damage_to_participant(participant, 60)
-
-        self.assertTrue(result.permanent_wound_eligible)
+        result = apply_damage_to_participant(self.participant, 60)
+        assert result.permanent_wound_eligible is True
 
     def test_no_permanent_wound_on_small_hit(self) -> None:
-        participant = CombatParticipantFactory(health=100, max_health=100)
-        result = apply_damage_to_participant(participant, 30)
-
-        self.assertFalse(result.permanent_wound_eligible)
+        result = apply_damage_to_participant(self.participant, 10)
+        assert result.permanent_wound_eligible is False
 
     def test_force_death_sets_dying(self) -> None:
-        participant = CombatParticipantFactory(health=50, max_health=100)
-        result = apply_damage_to_participant(participant, 10, force_death=True)
-
-        participant.refresh_from_db()
-        self.assertEqual(participant.status, CharacterStatus.DYING)
-        self.assertTrue(participant.dying_final_round)
-        self.assertEqual(result.health_after, 40)
+        apply_damage_to_participant(self.participant, 10, force_death=True)
+        self.vitals.refresh_from_db()
+        assert self.vitals.status == CharacterStatus.DYING
+        assert self.vitals.dying_final_round is True
 
 
 class KnockoutDeathProcessingTest(TestCase):
@@ -186,8 +176,12 @@ class KnockoutDeathProcessingTest(TestCase):
         participant = CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet,
+        )
+        CharacterVitals.objects.create(
+            character_sheet=sheet,
             health=pc_health,
             max_health=100,
+            status=CharacterStatus.ALIVE,
         )
         technique = TechniqueFactory(gift=self.gift, effect_type=self.effect_attack)
         CombatRoundAction.objects.create(
@@ -211,8 +205,8 @@ class KnockoutDeathProcessingTest(TestCase):
         encounter, participant, _ = self._setup_encounter(pc_health=15, npc_damage=5)
         resolve_round(encounter)
 
-        participant.refresh_from_db()
-        self.assertEqual(participant.status, CharacterStatus.UNCONSCIOUS)
+        vitals = CharacterVitals.objects.get(character_sheet=participant.character_sheet)
+        self.assertEqual(vitals.status, CharacterStatus.UNCONSCIOUS)
 
     def test_death_at_zero_health(self) -> None:
         """Participant at 0 health becomes DYING."""
@@ -220,12 +214,14 @@ class KnockoutDeathProcessingTest(TestCase):
         encounter, participant, _ = self._setup_encounter(pc_health=10, npc_damage=20)
         resolve_round(encounter)
 
-        participant.refresh_from_db()
+        vitals = CharacterVitals.objects.get(character_sheet=participant.character_sheet)
         # Should be DEAD because dying_final_round is consumed in same round
-        self.assertEqual(participant.status, CharacterStatus.DEAD)
+        self.assertEqual(vitals.status, CharacterStatus.DEAD)
 
     def test_dying_consumed_after_round(self) -> None:
         """DYING participant with dying_final_round becomes DEAD after resolve."""
+        from world.covenants.factories import CovenantRoleFactory
+
         encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING, round_number=1)
         pool = ThreatPoolFactory()
         ThreatPoolEntryFactory(pool=pool, base_damage=10)
@@ -240,11 +236,14 @@ class KnockoutDeathProcessingTest(TestCase):
         dying_pc = CombatParticipantFactory(
             encounter=encounter,
             character_sheet=sheet,
+            covenant_role=CovenantRoleFactory(speed_rank=1),
+        )
+        CharacterVitals.objects.create(
+            character_sheet=sheet,
             health=50,
             max_health=100,
             status=CharacterStatus.DYING,
             dying_final_round=True,
-            base_speed_rank=1,
         )
         technique = TechniqueFactory(gift=self.gift, effect_type=self.effect_attack)
         CombatRoundAction.objects.create(
@@ -257,21 +256,6 @@ class KnockoutDeathProcessingTest(TestCase):
 
         resolve_round(encounter)
 
-        dying_pc.refresh_from_db()
-        self.assertEqual(dying_pc.status, CharacterStatus.DEAD)
-        self.assertFalse(dying_pc.dying_final_round)
-
-    def test_vitals_synced_on_death(self) -> None:
-        """CharacterVitals status updated when participant dies."""
-        sheet = CharacterSheetFactory()
-        participant = CombatParticipantFactory(
-            character_sheet=sheet,
-            health=0,
-            max_health=100,
-            status=CharacterStatus.DEAD,
-        )
-        sync_vitals_from_combat(participant)
-
         vitals = CharacterVitals.objects.get(character_sheet=sheet)
         self.assertEqual(vitals.status, CharacterStatus.DEAD)
-        self.assertIsNotNone(vitals.died_at)
+        self.assertFalse(vitals.dying_final_round)
