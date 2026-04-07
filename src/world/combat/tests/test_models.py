@@ -33,8 +33,6 @@ class CombatEncounterTests(TestCase):
         self.assertEqual(encounter.risk_level, RiskLevel.MODERATE)
         self.assertEqual(encounter.stakes_level, StakesLevel.LOCAL)
         self.assertIsNone(encounter.scene)
-        self.assertIsNone(encounter.story)
-        self.assertIsNone(encounter.episode)
 
     def test_str(self) -> None:
         encounter = CombatEncounter.objects.create(round_number=3)

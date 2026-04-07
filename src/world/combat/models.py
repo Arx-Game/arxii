@@ -49,20 +49,6 @@ class CombatEncounter(SharedMemoryModel):
         choices=StakesLevel.choices,
         default=StakesLevel.LOCAL,
     )
-    story = models.ForeignKey(
-        "stories.Story",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="combat_encounters",
-    )
-    episode = models.ForeignKey(
-        "stories.Episode",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="combat_encounters",
-    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:
