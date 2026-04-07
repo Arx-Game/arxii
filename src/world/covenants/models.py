@@ -19,8 +19,8 @@ class CovenantRole(SharedMemoryModel):
     Different covenant types may have different role sets; the
     covenant_type field scopes which roles are available.
 
-    Combat reads ``speed_rank`` from this model to set a participant's
-    ``base_speed_rank`` when they enter an encounter.
+    Combat reads ``speed_rank`` directly from this model during resolution
+    order calculation.
     """
 
     name = models.CharField(max_length=60, help_text="Display name, e.g. 'Vanguard'.")

@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.covenants.models import CovenantRole
     from world.magic.models import Technique
+    from world.scenes.models.personas import Persona
 
     PerformCheckFn = Callable[..., CheckResult]
 
@@ -108,6 +109,7 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     description: str = "",
     soak_value: int = 0,
     probing_threshold: int | None = None,
+    persona: Persona | None = None,
 ) -> CombatOpponent:
     """Create a CombatOpponent with health equal to max_health."""
     return CombatOpponent.objects.create(
@@ -120,6 +122,7 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
         description=description,
         soak_value=soak_value,
         probing_threshold=probing_threshold,
+        persona=persona,
     )
 
 
@@ -462,7 +465,7 @@ def apply_damage_to_participant(
     """
     from world.vitals.models import CharacterVitals  # noqa: PLC0415
 
-    vitals, _ = CharacterVitals.objects.get_or_create(
+    vitals = CharacterVitals.objects.get(
         character_sheet=participant.character_sheet,
     )
 
@@ -534,6 +537,10 @@ def get_resolution_order(
     for p in participants:
         vitals = vitals_map.get(p.character_sheet_id)
         if vitals is None:
+            logger.warning(
+                "Participant %s has no CharacterVitals record — excluded from resolution",
+                p.character_sheet,
+            )
             continue
         status = vitals.status
         if status == CharacterStatus.ALIVE or (
@@ -1018,11 +1025,16 @@ def _resolve_npc_action(
 
     from world.vitals.models import CharacterVitals  # noqa: PLC0415
 
+    # Batch-fetch vitals for all targets
+    sheet_ids = [t.character_sheet_id for t in targets]
+    vitals_by_sheet: dict[int, CharacterVitals] = {
+        v.character_sheet_id: v
+        for v in CharacterVitals.objects.filter(character_sheet_id__in=sheet_ids)
+    }
+
     for target_participant in targets:
-        vitals_obj = CharacterVitals.objects.get(
-            character_sheet=target_participant.character_sheet,
-        )
-        if vitals_obj.status != CharacterStatus.ALIVE:
+        vitals_obj = vitals_by_sheet.get(target_participant.character_sheet_id)
+        if vitals_obj is None or vitals_obj.status != CharacterStatus.ALIVE:
             continue
 
         if defense_check_type is not None:

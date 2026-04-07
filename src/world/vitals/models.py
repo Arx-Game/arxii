@@ -10,8 +10,8 @@ class CharacterVitals(SharedMemoryModel):
     """Persistent character life state and health tracking.
 
     Tracks the character's current life status (alive, unconscious, dying, dead)
-    independently of any specific combat encounter. Combat creates temporary
-    health snapshots on CombatParticipant; this model tracks the canonical state.
+    independently of any specific combat encounter. Combat reads and writes
+    health directly on this model.
     """
 
     character_sheet = models.OneToOneField(
