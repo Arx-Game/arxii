@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from world.checks.types import CheckResult
     from world.covenants.models import CovenantRole
     from world.magic.models import Technique
-    from world.scenes.models.personas import Persona
+    from world.scenes.models import Persona
 
     PerformCheckFn = Callable[..., CheckResult]
 
