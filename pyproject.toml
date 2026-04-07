@@ -404,6 +404,9 @@ include = [
     "src/world/character_sheets",      # Character demographics and identity system
     "src/world/progression",           # Character advancement and rewards system
     "src/world/character_creation",    # Character creation flow and draft logic
+    "src/world/vitals",               # Character life states and health
+    "src/world/combat",               # Party combat system
+    "src/world/covenants",             # Covenant roles and speed ranks
 ]
 exclude = [
     "**/tests/**",
@@ -413,6 +416,7 @@ exclude = [
     "**/admin/**",        # Django admin directories don't type well
     "**/serializers/**",  # Django REST serializers have too much boilerplate pain
     "**/serializers.py",  # Same — DRF stub overrides cause false positives
+    "**/factories.py",    # FactoryBoy's factory.django triggers false positives in ty
     "src/world/progression/services/scene_integration.py", # Complex Django TextChoices typing issues
 ]
 

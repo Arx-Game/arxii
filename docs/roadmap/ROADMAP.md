@@ -68,7 +68,7 @@ broken regardless of technical correctness.
 | [Character Progression & XP](character-progression.md) | in-progress | XP, skills, path steps, Audere Majora, power tiers, the Durance |
 | [Magic System](magic.md) | in-progress | Affinities, resonances, gifts, techniques, threads, spells |
 | [Capabilities & Challenges](capabilities-and-challenges.md) | in-progress | Properties, capabilities, applications, action generation, challenges, situations |
-| [Combat](combat.md) | not-started | Party combat, battle scenes, duels |
+| [Combat](combat.md) | in-progress | Party combat (Phase 2 complete), battle scenes, duels |
 | [Missions & Living Grid](missions.md) | not-started | Branching narrative quests, world consequences, CK-style events |
 | [Crafting, Fashion & Economy](crafting-economy.md) | not-started | Crafting, fashion-resonance loop, housing, shops, domains, ships |
 | [Items & Equipment](items-equipment.md) | not-started | Worn items, body slots, item stats, fashion integration |
@@ -83,6 +83,8 @@ broken regardless of technical correctness.
 | [OOC Social & Community](ooc-social.md) | in-progress | Kudos, friend tracking, visibility controls, engagement tools |
 | [World Clock & Scheduled Systems](world-clock.md) | in-progress | Game clock, scheduler, weather, timed emits, holidays, rate limit resets |
 | [Tooling](tooling.md) | in-progress | Player building tools, GM tools (level-gated), staff tools |
+| Covenants | skeleton | Covenant roles (stub), speed ranks — needs party model, rituals, bonuses, API |
+| Vitals | skeleton | CharacterStatus, CharacterVitals model — needs non-combat integration, API, frontend |
 
 ### Recent Infrastructure Changes
 

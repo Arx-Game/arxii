@@ -96,13 +96,17 @@ The central spine connecting every system in the game. Characters develop throug
 - **Unified dice roll system** — fatigue checks use perform_check but the broader game needs a
   consistent roll resolution mechanic across all systems
 
+**Done (GameWeek & unified weekly systems):**
+- GameWeek/GameSeason models — formal week tracking, all weekly systems FK to GameWeek
+- Unified weekly rollover cron — single orchestrator advances week then processes all systems
+- All weekly models migrated: WeeklyVoteBudget, WeeklyVote, WeeklySkillUsage, RandomSceneTarget,
+  WeeklyJournalXP, CharacterRelationship, DevelopmentTransaction
+- Concurrent-safe: partial unique constraint on is_current, select_for_update in advance
+
 **Not yet built (other progression):**
 - **GM compensation:** Needs GMing system defined first
-- **Skill rust mechanics:** Weekly debt accumulation for unused skills
 - **Training system:** Persistent TrainingAllocation with mentor bonuses
 - **Path leveling requirements:** Scaling prerequisites engine
-- **Development point hooks:** Trait usage flagging from perform_check → weekly cron
-- **Skill rust mechanics:** Weekly debt accumulation for unused skills
 
 
 ### Future Design: Aspect Focus as Path Evolution Guide
