@@ -139,6 +139,14 @@ class CombatOpponent(SharedMemoryModel):
         choices=OpponentStatus.choices,
         default=OpponentStatus.ACTIVE,
     )
+    persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="combat_opponents",
+        help_text="Links to a persistent NPC identity for story NPCs.",
+    )
 
     @property
     def health_percentage(self) -> float:

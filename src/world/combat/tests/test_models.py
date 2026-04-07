@@ -108,6 +108,20 @@ class CombatOpponentTests(TestCase):
         )
         self.assertAlmostEqual(opponent.health_percentage, 0.0)
 
+    def test_persona_nullable(self) -> None:
+        from world.combat.factories import CombatOpponentFactory
+
+        opp = CombatOpponentFactory()
+        assert opp.persona is None
+
+    def test_persona_linkage(self) -> None:
+        from world.combat.factories import CombatOpponentFactory
+        from world.scenes.factories import PersonaFactory
+
+        persona = PersonaFactory()
+        opp = CombatOpponentFactory(persona=persona)
+        assert opp.persona == persona
+
 
 class CombatParticipantTests(TestCase):
     """Tests for CombatParticipant model."""

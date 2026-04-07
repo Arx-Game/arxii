@@ -20,7 +20,7 @@ from world.combat.models import (
 class CombatOpponentInline(admin.TabularInline):
     model = CombatOpponent
     extra = 0
-    fields = ["name", "tier", "health", "max_health", "status", "threat_pool"]
+    fields = ["name", "persona", "tier", "health", "max_health", "status", "threat_pool"]
 
 
 class CombatParticipantInline(admin.TabularInline):
@@ -61,6 +61,7 @@ class BossPhaseInline(admin.TabularInline):
 class CombatOpponentAdmin(admin.ModelAdmin):
     list_display = [
         "name",
+        "persona",
         "encounter",
         "tier",
         "health",
