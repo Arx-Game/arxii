@@ -151,17 +151,20 @@ def sync_vitals_from_combat(participant: CombatParticipant) -> None:
         character_sheet=participant.character_sheet,
     )
     status = participant.status
+    update_fields: list[str] = ["status"]
     if status == CharacterStatus.DEAD:
         vitals.status = CharacterStatus.DEAD
         vitals.died_at = timezone.now()
+        update_fields.append("died_at")
     elif status == CharacterStatus.UNCONSCIOUS:
         vitals.status = CharacterStatus.UNCONSCIOUS
         vitals.unconscious_at = timezone.now()
+        update_fields.append("unconscious_at")
     elif status == CharacterStatus.DYING:
         vitals.status = CharacterStatus.DYING
     else:
         return
-    vitals.save(update_fields=["status", "died_at", "unconscious_at"])
+    vitals.save(update_fields=update_fields)
 
 
 @transaction.atomic
@@ -306,7 +309,9 @@ def _select_targets(
     if selection == TargetSelection.RANDOM:
         return random.sample(active_participants, count)
 
-    # SPECIFIC_ROLE and HIGHEST_THREAT: placeholder — pick first active participants
+    # TODO: SPECIFIC_ROLE should prioritize tank covenant role (aggro system)
+    # TODO: HIGHEST_THREAT should use a threat tracking mechanic (not yet built)
+    # Placeholder: pick first active participants by DB order
     return list(active_participants[:count])
 
 
@@ -397,6 +402,8 @@ def select_npc_actions(
         encounter.round_number,
     )
 
+    # Design: only ALIVE PCs are targetable. DYING PCs (on their final round)
+    # get one free offensive action without being targeted — "going out swinging."
     active_participants = list(
         CombatParticipant.objects.filter(
             encounter=encounter,
@@ -944,7 +951,7 @@ def _resolve_pc_action(
             else:
                 base_power = technique.effect_type.base_power
                 if base_power is not None:
-                    raw = base_power or 10
+                    raw = base_power
                     if offense_check_type is not None:
                         check_fn = offense_check_fn
                         if check_fn is None:
@@ -1027,8 +1034,8 @@ def _resolve_npc_action(
             )
         outcome.damage_results.append(dmg_result)
 
-        # Knockout/death processing
-        if dmg_result.death_eligible:
+        # Knockout/death processing — only transition from ALIVE
+        if dmg_result.death_eligible and target_participant.status == CharacterStatus.ALIVE:
             target_participant.status = CharacterStatus.DYING
             target_participant.dying_final_round = True
             target_participant.save(update_fields=["status", "dying_final_round"])
