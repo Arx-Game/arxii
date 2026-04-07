@@ -4,7 +4,6 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.combat.constants import (
-    NO_ROLE_SPEED_RANK,
     ActionCategory,
     ComboLearningMethod,
     EncounterStatus,
@@ -17,7 +16,6 @@ from world.combat.constants import (
     TargetSelection,
 )
 from world.fatigue.constants import EffortLevel
-from world.vitals.constants import WOUND_DESCRIPTIONS, CharacterStatus
 
 
 class CombatEncounter(SharedMemoryModel):
@@ -316,26 +314,7 @@ class CombatParticipant(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="combat_participations",
-        help_text="The covenant role this PC holds. Speed rank is denormalized "
-        "into base_speed_rank at participant creation time.",
     )
-    health = models.IntegerField()
-    max_health = models.PositiveIntegerField()
-    base_speed_rank = models.PositiveIntegerField(
-        default=NO_ROLE_SPEED_RANK,
-        help_text="Combat resolution rank derived from covenant_role.speed_rank. "
-        "Lower is faster. Denormalized so resolution doesn't require joins.",
-    )
-    speed_modifier = models.IntegerField(
-        default=0,
-        help_text="Added to base speed rank",
-    )
-    status = models.CharField(
-        max_length=20,
-        choices=CharacterStatus.choices,
-        default=CharacterStatus.ALIVE,
-    )
-    dying_final_round = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
@@ -344,24 +323,6 @@ class CombatParticipant(SharedMemoryModel):
                 name="unique_participant_per_encounter",
             ),
         ]
-
-    @property
-    def effective_speed_rank(self) -> int:
-        return max(1, self.base_speed_rank + self.speed_modifier)
-
-    @property
-    def health_percentage(self) -> float:
-        if self.max_health == 0:
-            return 0.0
-        return max(0.0, self.health / self.max_health)
-
-    @property
-    def wound_description(self) -> str:
-        pct = self.health_percentage
-        for threshold, description in WOUND_DESCRIPTIONS:
-            if pct >= threshold:
-                return description
-        return WOUND_DESCRIPTIONS[-1][1]
 
     def __str__(self) -> str:
         if self.covenant_role_id:

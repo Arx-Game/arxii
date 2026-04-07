@@ -3,9 +3,7 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
-    NO_ROLE_SPEED_RANK,
     EncounterStatus,
     EncounterType,
     OpponentStatus,
@@ -13,16 +11,15 @@ from world.combat.constants import (
     RiskLevel,
     StakesLevel,
 )
+from world.combat.factories import CombatParticipantFactory
 from world.combat.models import (
     BossPhase,
     CombatEncounter,
     CombatOpponent,
-    CombatParticipant,
     ThreatPool,
     ThreatPoolEntry,
 )
 from world.covenants.factories import CovenantRoleFactory
-from world.vitals.constants import CharacterStatus
 
 
 class CombatEncounterTests(TestCase):
@@ -117,92 +114,20 @@ class CombatOpponentTests(TestCase):
 class CombatParticipantTests(TestCase):
     """Tests for CombatParticipant model."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.encounter = CombatEncounter.objects.create()
-        cls.sheet = CharacterSheetFactory()
-
-    def _make_participant(self, **kwargs: object) -> CombatParticipant:
-        defaults: dict[str, object] = {
-            "encounter": CombatEncounter.objects.create(),
-            "character_sheet": CharacterSheetFactory(),
-            "health": 100,
-            "max_health": 100,
-        }
-        defaults.update(kwargs)
-        return CombatParticipant.objects.create(**defaults)
-
     def test_create_defaults(self) -> None:
-        p = self._make_participant()
-        self.assertEqual(p.status, CharacterStatus.ALIVE)
-        self.assertIsNone(p.covenant_role_id)
-        self.assertEqual(p.speed_modifier, 0)
-        self.assertFalse(p.dying_final_round)
+        p = CombatParticipantFactory()
+        assert p.encounter_id is not None
+        assert p.character_sheet_id is not None
+        assert p.covenant_role is None
 
     def test_str_with_role(self) -> None:
-        role = CovenantRoleFactory(name="Vanguard", slug="vanguard-str-test")
-        p = self._make_participant(covenant_role=role)
-        self.assertIn("Vanguard", str(p))
+        role = CovenantRoleFactory(name="Sword")
+        p = CombatParticipantFactory(covenant_role=role)
+        assert "Sword" in str(p)
 
     def test_str_without_role(self) -> None:
-        p = self._make_participant()
-        self.assertEqual(str(p), str(p.character_sheet))
-
-    def test_effective_speed_rank_no_role(self) -> None:
-        p = self._make_participant()
-        self.assertEqual(p.effective_speed_rank, NO_ROLE_SPEED_RANK)
-
-    def test_effective_speed_rank_with_base(self) -> None:
-        p = self._make_participant(base_speed_rank=4)
-        self.assertEqual(p.effective_speed_rank, 4)
-
-    def test_effective_speed_rank_with_modifier(self) -> None:
-        p = self._make_participant(
-            base_speed_rank=1,
-            speed_modifier=-2,
-        )
-        # Base 1 minus 2 = -1, clamped to 1
-        self.assertEqual(p.effective_speed_rank, 1)
-
-    def test_effective_speed_rank_positive_modifier(self) -> None:
-        p = self._make_participant(
-            base_speed_rank=1,
-            speed_modifier=3,
-        )
-        # Base 1 plus 3 = 4
-        self.assertEqual(p.effective_speed_rank, 4)
-
-    def test_health_percentage_normal(self) -> None:
-        p = self._make_participant(health=50, max_health=100)
-        self.assertAlmostEqual(p.health_percentage, 0.5)
-
-    def test_health_percentage_negative(self) -> None:
-        p = self._make_participant(health=-20, max_health=100)
-        self.assertAlmostEqual(p.health_percentage, 0.0)
-
-    def test_health_percentage_zero_max(self) -> None:
-        p = self._make_participant(health=0, max_health=0)
-        self.assertAlmostEqual(p.health_percentage, 0.0)
-
-    def test_wound_description_full_health(self) -> None:
-        p = self._make_participant(health=100, max_health=100)
-        self.assertEqual(p.wound_description, "healthy appearance")
-
-    def test_wound_description_half_health(self) -> None:
-        p = self._make_participant(health=50, max_health=100)
-        self.assertEqual(p.wound_description, "seriously wounded")
-
-    def test_wound_description_low_health(self) -> None:
-        p = self._make_participant(health=25, max_health=100)
-        self.assertEqual(p.wound_description, "near collapse")
-
-    def test_wound_description_zero_health(self) -> None:
-        p = self._make_participant(health=0, max_health=100)
-        self.assertEqual(p.wound_description, "incapacitated")
-
-    def test_wound_description_negative_health(self) -> None:
-        p = self._make_participant(health=-10, max_health=100)
-        self.assertEqual(p.wound_description, "incapacitated")
+        p = CombatParticipantFactory()
+        assert str(p) == str(p.character_sheet)
 
 
 class ThreatPoolTests(TestCase):

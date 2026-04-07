@@ -100,8 +100,6 @@ class CombatParticipantFactory(factory_django.DjangoModelFactory):
 
     encounter = factory.SubFactory(CombatEncounterFactory)
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    health = 100
-    max_health = 100
 
 
 class ComboDefinitionFactory(factory_django.DjangoModelFactory):

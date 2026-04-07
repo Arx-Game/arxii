@@ -27,14 +27,7 @@ class CombatParticipantInline(admin.TabularInline):
     model = CombatParticipant
     extra = 0
     raw_id_fields = ["covenant_role"]
-    fields = [
-        "character_sheet",
-        "covenant_role",
-        "base_speed_rank",
-        "health",
-        "max_health",
-        "status",
-    ]
+    fields = ["character_sheet", "covenant_role"]
 
 
 @admin.register(CombatEncounter)
@@ -80,17 +73,7 @@ class CombatOpponentAdmin(admin.ModelAdmin):
 
 @admin.register(CombatParticipant)
 class CombatParticipantAdmin(admin.ModelAdmin):
-    list_display = [
-        "character_sheet",
-        "encounter",
-        "covenant_role",
-        "base_speed_rank",
-        "health",
-        "max_health",
-        "status",
-    ]
-    list_filter = ["status"]
-    autocomplete_fields = ["covenant_role"]
+    list_display = ["character_sheet", "encounter", "covenant_role"]
 
 
 class ThreatPoolEntryInline(admin.TabularInline):
