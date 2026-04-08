@@ -374,8 +374,11 @@ def _create_instance_from_context(
     rounds_remaining = rounds if template.default_duration_type == DurationType.ROUNDS else None
 
     first_stage = ctx.first_stages.get(template.pk) if template.has_progression else None
-    has_rounds = first_stage and first_stage.rounds_to_next
-    stage_rounds = first_stage.rounds_to_next if has_rounds else None
+    stage_rounds = (
+        first_stage.rounds_to_next
+        if first_stage and first_stage.rounds_to_next is not None
+        else None
+    )
 
     instance = ConditionInstance.objects.create(
         target=params.target,
@@ -489,12 +492,20 @@ def _handle_refresh(
     interaction_results: InteractionResult,
 ) -> ApplyConditionResult:
     """Handle refresh for a non-stackable existing condition."""
-    if params.severity >= existing.severity:
-        existing.severity = params.severity
-        rounds = params.duration_rounds or template.default_duration_value
-        if template.default_duration_type == DurationType.ROUNDS:
-            existing.rounds_remaining = rounds
-        existing.save()
+    if params.severity < existing.severity:
+        return ApplyConditionResult(
+            success=True,
+            instance=existing,
+            message=f"{template.name} already active at higher severity",
+            removed_conditions=interaction_results.removed,
+            applied_conditions=interaction_results.applied,
+        )
+
+    existing.severity = params.severity
+    rounds = params.duration_rounds or template.default_duration_value
+    if template.default_duration_type == DurationType.ROUNDS:
+        existing.rounds_remaining = rounds
+    existing.save()
 
     return ApplyConditionResult(
         success=True,
@@ -984,7 +995,7 @@ def process_action_tick(target: "ObjectDB") -> RoundTickResult:
 
 def _process_round_tick(
     target: "ObjectDB",
-    timing: str,
+    timing: DamageTickTiming,
 ) -> RoundTickResult:
     """
     Process damage-over-time for a specific tick timing.
