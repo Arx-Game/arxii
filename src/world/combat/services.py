@@ -140,6 +140,15 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
             f"'{enc.get_status_display()}', expected 'Between Rounds'."
         )
         raise ValueError(msg)
+
+    has_opponents = CombatOpponent.objects.filter(
+        encounter=enc,
+        status=OpponentStatus.ACTIVE,
+    ).exists()
+    if not has_opponents:
+        msg = "Cannot begin declaration phase: no active opponents in encounter."
+        raise ValueError(msg)
+
     enc.round_number += 1
     enc.status = EncounterStatus.DECLARING
     enc.save(update_fields=["round_number", "status"])
@@ -1032,6 +1041,8 @@ def _resolve_npc_action(
         for v in CharacterVitals.objects.filter(character_sheet_id__in=sheet_ids)
     }
 
+    condition_applications: list[tuple] = []
+
     for target_participant in targets:
         vitals_obj = vitals_by_sheet.get(target_participant.character_sheet_id)
         if vitals_obj is None or vitals_obj.status != CharacterStatus.ALIVE:
@@ -1062,15 +1073,16 @@ def _resolve_npc_action(
             vitals_obj.status = CharacterStatus.UNCONSCIOUS
             vitals_obj.save(update_fields=["status"])
 
-        # Condition application from NPC attacks (only if damage dealt)
+        # Collect condition applications for bulk apply
         if dmg_result.damage_dealt > 0 and conditions:
-            from world.conditions.services import (  # noqa: PLC0415
-                apply_condition,
-            )
-
             target_obj = target_participant.character_sheet.character
-            for condition_template in conditions:
-                apply_condition(target_obj, condition_template)
+            condition_applications.extend((target_obj, ct) for ct in conditions)
+
+    # Bulk-apply all conditions from this NPC action
+    if condition_applications:
+        from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
+
+        bulk_apply_conditions(condition_applications)
 
     return outcome
 

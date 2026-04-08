@@ -10,7 +10,7 @@ Design principles:
 - Bidirectional modifiers (conditions can be good or bad depending on context)
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -163,6 +163,262 @@ class _ApplyConditionParams:
     source_description: str = ""
 
 
+@dataclass
+class _BulkConditionContext:
+    """Pre-fetched data for bulk condition application.
+
+    Holds all DB-fetched state needed by _apply_single, avoiding per-call queries.
+    """
+
+    # target_id -> list of active ConditionInstance
+    active_instances_by_target: dict[int, list[ConditionInstance]] = field(default_factory=dict)
+    # (target_id, condition_id) -> ConditionInstance or None
+    existing_pairs: dict[tuple[int, int], ConditionInstance] = field(default_factory=dict)
+    # All prevention interactions for the template set
+    prevention_interactions: list[ConditionConditionInteraction] = field(default_factory=list)
+    # All application interactions for the template set
+    application_interactions: list[ConditionConditionInteraction] = field(default_factory=list)
+    # condition_id -> first ConditionStage (for progressive templates)
+    first_stages: dict[int, ConditionStage] = field(default_factory=dict)
+
+    def get_existing_instance(
+        self,
+        target_id: int,
+        condition_id: int,
+    ) -> ConditionInstance | None:
+        return self.existing_pairs.get((target_id, condition_id))
+
+    def get_active_condition_ids(self, target_id: int) -> set[int]:
+        return {i.condition_id for i in self.active_instances_by_target.get(target_id, [])}
+
+
+def _build_bulk_context(
+    targets: list["ObjectDB"],
+    templates: list[ConditionTemplate],
+) -> _BulkConditionContext:
+    """Batch-fetch all data needed for applying conditions to multiple targets.
+
+    One query per data type instead of per (target, condition) pair.
+    """
+    target_ids = [t.pk for t in targets]
+    template_ids = [t.pk for t in templates]
+
+    # 1. All active condition instances for all targets (1 query)
+    all_instances = list(
+        ConditionInstance.objects.filter(
+            target_id__in=target_ids,
+        ).select_related("condition", "condition__category", "current_stage")
+    )
+
+    active_by_target: dict[int, list[ConditionInstance]] = {}
+    for inst in all_instances:
+        active_by_target.setdefault(inst.target_id, []).append(inst)
+
+    # 2. Existing instances for specific (target, template) pairs (1 query)
+    existing_for_templates = list(
+        ConditionInstance.objects.filter(
+            target_id__in=target_ids,
+            condition_id__in=template_ids,
+        ).select_related("condition", "condition__category", "current_stage")
+    )
+    existing_pairs: dict[tuple[int, int], ConditionInstance] = {
+        (inst.target_id, inst.condition_id): inst for inst in existing_for_templates
+    }
+
+    # 3. All prevention interactions involving these templates (1 query with Q OR)
+    all_condition_ids = {i.condition_id for i in all_instances}
+    prevention_interactions = list(
+        ConditionConditionInteraction.objects.filter(
+            Q(
+                condition_id__in=all_condition_ids,
+                other_condition_id__in=template_ids,
+                trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+                outcome=ConditionInteractionOutcome.PREVENT_OTHER,
+            )
+            | Q(
+                condition_id__in=template_ids,
+                other_condition_id__in=all_condition_ids,
+                trigger=ConditionInteractionTrigger.ON_SELF_APPLIED,
+                outcome=ConditionInteractionOutcome.PREVENT_SELF,
+            )
+        )
+        .select_related("condition", "other_condition")
+        .order_by("-priority")
+    )
+
+    # 4. All application interactions involving these templates (1 query)
+    application_interactions = list(
+        ConditionConditionInteraction.objects.filter(
+            Q(
+                condition_id__in=template_ids,
+                other_condition_id__in=all_condition_ids,
+                trigger=ConditionInteractionTrigger.ON_SELF_APPLIED,
+            )
+            | Q(
+                condition_id__in=all_condition_ids,
+                other_condition_id__in=template_ids,
+                trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+            )
+        )
+        .select_related("condition", "other_condition")
+        .order_by("-priority")
+    )
+
+    # 5. First stages for progressive templates (1 query, PG DISTINCT ON)
+    progressive_ids = [t.pk for t in templates if t.has_progression]
+    first_stages: dict[int, ConditionStage] = {}
+    if progressive_ids:
+        for stage in (
+            ConditionStage.objects.filter(condition_id__in=progressive_ids)
+            .order_by("condition_id", "stage_order")
+            .distinct("condition_id")
+        ):
+            first_stages[stage.condition_id] = stage
+
+    return _BulkConditionContext(
+        active_instances_by_target=active_by_target,
+        existing_pairs=existing_pairs,
+        prevention_interactions=prevention_interactions,
+        application_interactions=application_interactions,
+        first_stages=first_stages,
+    )
+
+
+def _check_prevention_from_context(
+    target_id: int,
+    incoming_condition: ConditionTemplate,
+    ctx: _BulkConditionContext,
+) -> ConditionTemplate | None:
+    """Check prevention using pre-fetched interactions."""
+    active_condition_ids = ctx.get_active_condition_ids(target_id)
+    for interaction in ctx.prevention_interactions:
+        # Check "existing prevents incoming"
+        if (
+            interaction.other_condition_id == incoming_condition.pk
+            and interaction.condition_id in active_condition_ids
+            and interaction.trigger == ConditionInteractionTrigger.ON_OTHER_APPLIED
+            and interaction.outcome == ConditionInteractionOutcome.PREVENT_OTHER
+        ):
+            return interaction.condition
+        # Check "incoming self-prevents"
+        if (
+            interaction.condition_id == incoming_condition.pk
+            and interaction.other_condition_id in active_condition_ids
+            and interaction.trigger == ConditionInteractionTrigger.ON_SELF_APPLIED
+            and interaction.outcome == ConditionInteractionOutcome.PREVENT_SELF
+        ):
+            return interaction.other_condition
+    return None
+
+
+def _process_interactions_from_context(
+    target_id: int,
+    incoming_condition: ConditionTemplate,
+    ctx: _BulkConditionContext,
+) -> InteractionResult:
+    """Process application interactions using pre-fetched data."""
+    result = InteractionResult()
+    active_instances = list(ctx.active_instances_by_target.get(target_id, []))
+    active_condition_ids = {i.condition_id for i in active_instances}
+
+    for interaction in ctx.application_interactions:
+        # Filter to interactions relevant to this target's active conditions
+        if interaction.condition_id == incoming_condition.pk:
+            if interaction.other_condition_id not in active_condition_ids:
+                continue
+            match_id = interaction.other_condition_id
+        elif interaction.other_condition_id == incoming_condition.pk:
+            if interaction.condition_id not in active_condition_ids:
+                continue
+            match_id = interaction.condition_id
+        else:
+            continue
+
+        existing_instance = next(
+            (i for i in active_instances if i.condition_id == match_id),
+            None,
+        )
+        if not existing_instance:
+            continue
+
+        if _should_remove_existing(interaction, incoming_condition):
+            result.removed.append(existing_instance.condition)
+            existing_instance.delete()
+            active_instances.remove(existing_instance)
+            active_condition_ids.discard(match_id)
+
+    return result
+
+
+def _create_instance_from_context(
+    template: ConditionTemplate,
+    params: _ApplyConditionParams,
+    interaction_results: InteractionResult,
+    ctx: _BulkConditionContext,
+) -> ApplyConditionResult:
+    """Create a new condition instance using pre-fetched stage data."""
+    rounds = params.duration_rounds or template.default_duration_value
+    rounds_remaining = rounds if template.default_duration_type == DurationType.ROUNDS else None
+
+    first_stage = ctx.first_stages.get(template.pk) if template.has_progression else None
+    has_rounds = first_stage and first_stage.rounds_to_next
+    stage_rounds = first_stage.rounds_to_next if has_rounds else None
+
+    instance = ConditionInstance.objects.create(
+        target=params.target,
+        condition=template,
+        severity=params.severity,
+        stacks=1,
+        rounds_remaining=rounds_remaining,
+        current_stage=first_stage,
+        stage_rounds_remaining=stage_rounds,
+        source_character=params.source_character,
+        source_technique=params.source_technique,
+        source_description=params.source_description,
+    )
+
+    return ApplyConditionResult(
+        success=True,
+        instance=instance,
+        stacks_added=1,
+        message=f"{template.name} applied",
+        removed_conditions=interaction_results.removed,
+        applied_conditions=interaction_results.applied,
+    )
+
+
+def _apply_single(
+    target: "ObjectDB",
+    template: ConditionTemplate,
+    params: _ApplyConditionParams,
+    ctx: _BulkConditionContext,
+) -> ApplyConditionResult:
+    """Apply a single condition using pre-fetched context data.
+
+    Core logic extracted from apply_condition. All DB reads come from ctx;
+    only writes (create/save/delete) hit the database.
+    """
+    prevention = _check_prevention_from_context(target.pk, template, ctx)
+    if prevention:
+        return ApplyConditionResult(
+            success=False,
+            was_prevented=True,
+            prevented_by=prevention,
+            message=f"{template.name} was prevented by {prevention.name}",
+        )
+
+    interaction_results = _process_interactions_from_context(target.pk, template, ctx)
+
+    existing = ctx.get_existing_instance(target.pk, template.pk)
+
+    if existing:
+        if template.is_stackable and existing.stacks < template.max_stacks:
+            return _handle_stacking(existing, template, params, interaction_results)
+        return _handle_refresh(existing, template, params, interaction_results)
+
+    return _create_instance_from_context(template, params, interaction_results, ctx)
+
+
 def _handle_stacking(
     existing: ConditionInstance,
     template: ConditionTemplate,
@@ -269,40 +525,15 @@ def apply_condition(  # noqa: PLR0913
     severity: int = 1,
     duration_rounds: int | None = None,
     source_character: "ObjectDB | None" = None,
-    source_technique=None,
+    source_technique: "Technique | None" = None,
     source_description: str = "",
 ) -> ApplyConditionResult:
+    """Apply a condition to a target, handling stacking and interactions.
+
+    Thin wrapper around _apply_single — builds a single-item context
+    and delegates. For applying multiple conditions, use bulk_apply_conditions.
     """
-    Apply a condition to a target, handling stacking and interactions.
-
-    Args:
-        target: The ObjectDB instance to apply to
-        condition: ConditionTemplate instance
-        severity: Intensity/potency of the condition
-        duration_rounds: Override default duration (None uses template default)
-        source_character: Who caused this condition
-        source_technique: What technique caused this (FK to magic.Technique)
-        source_description: Freeform description
-
-    Returns:
-        ApplyConditionResult with outcome details
-    """
-    template = condition
-
-    # Check for prevention interactions from existing conditions
-    prevention = _check_prevention_interactions(target, template)
-    if prevention:
-        return ApplyConditionResult(
-            success=False,
-            was_prevented=True,
-            prevented_by=prevention,
-            message=f"{template.name} was prevented by {prevention.name}",
-        )
-
-    # Process interactions that trigger on application
-    interaction_results = _process_application_interactions(target, template)
-
-    # Bundle parameters for helper functions
+    ctx = _build_bulk_context([target], [condition])
     params = _ApplyConditionParams(
         target=target,
         severity=severity,
@@ -311,20 +542,47 @@ def apply_condition(  # noqa: PLR0913
         source_technique=source_technique,
         source_description=source_description,
     )
+    return _apply_single(target, condition, params, ctx)
 
-    # Check if condition already exists
-    existing = get_condition_instance(target, template)
 
-    if existing:
-        if template.is_stackable:
-            if existing.stacks < template.max_stacks:
-                return _handle_stacking(existing, template, params, interaction_results)
-            # Max stacks reached - just refresh duration/severity
-            return _handle_refresh(existing, template, params, interaction_results)
-        # Non-stackable - refresh
-        return _handle_refresh(existing, template, params, interaction_results)
+@transaction.atomic
+def bulk_apply_conditions(  # noqa: PLR0913
+    applications: list[tuple["ObjectDB", ConditionTemplate]],
+    *,
+    severity: int = 1,
+    duration_rounds: int | None = None,
+    source_character: "ObjectDB | None" = None,
+    source_technique: "Technique | None" = None,
+    source_description: str = "",
+) -> list[ApplyConditionResult]:
+    """Apply multiple conditions in a single transaction with batched queries.
 
-    return _create_new_instance(template, params, interaction_results)
+    Fetches all needed data (active instances, interactions, stages) in ~5
+    queries regardless of how many (target, condition) pairs are passed.
+    Each application still respects prevention, interaction, and stacking rules.
+    """
+    if not applications:
+        return []
+
+    targets = list({target for target, _ in applications})
+    templates = list({template for _, template in applications})
+
+    ctx = _build_bulk_context(targets, templates)
+
+    results: list[ApplyConditionResult] = []
+    for target, template in applications:
+        params = _ApplyConditionParams(
+            target=target,
+            severity=severity,
+            duration_rounds=duration_rounds,
+            source_character=source_character,
+            source_technique=source_technique,
+            source_description=source_description,
+        )
+        result = _apply_single(target, template, params, ctx)
+        results.append(result)
+
+    return results
 
 
 @transaction.atomic

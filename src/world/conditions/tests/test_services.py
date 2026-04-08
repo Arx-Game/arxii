@@ -1474,3 +1474,134 @@ class AdvanceConditionSeverityTests(TestCase):
         advance_condition_severity(instance, 30)
         instance.refresh_from_db()
         assert instance.current_stage == s3
+
+
+class BuildBulkContextTest(TestCase):
+    """Tests for _build_bulk_context batch-fetch function."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.target = CharacterFactory(db_key="bulk_target")
+        cls.template = ConditionTemplateFactory()
+        cls.existing = ConditionInstanceFactory(
+            target=cls.target,
+            condition=cls.template,
+        )
+
+    def test_context_contains_active_instances(self):
+        from world.conditions.services import _build_bulk_context
+
+        ctx = _build_bulk_context([self.target], [self.template])
+        instances = ctx.active_instances_by_target.get(self.target.pk, [])
+        assert len(instances) == 1
+        assert instances[0].condition_id == self.template.pk
+
+    def test_context_contains_existing_pair(self):
+        from world.conditions.services import _build_bulk_context
+
+        ctx = _build_bulk_context([self.target], [self.template])
+        existing = ctx.get_existing_instance(self.target.pk, self.template.pk)
+        assert existing is not None
+        assert existing.pk == self.existing.pk
+
+    def test_context_empty_for_unknown_target(self):
+        from world.conditions.services import _build_bulk_context
+
+        other = CharacterFactory(db_key="other")
+        ctx = _build_bulk_context([other], [self.template])
+        instances = ctx.active_instances_by_target.get(other.pk, [])
+        assert len(instances) == 0
+
+    def test_context_fetches_prevention_interactions(self):
+        from world.conditions.services import _build_bulk_context
+
+        blocker = ConditionTemplateFactory(name="blocker")
+        ConditionConditionInteractionFactory(
+            condition=self.template,
+            other_condition=blocker,
+            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+            outcome=ConditionInteractionOutcome.PREVENT_OTHER,
+        )
+        ctx = _build_bulk_context([self.target], [blocker])
+        assert len(ctx.prevention_interactions) >= 1
+
+    def test_context_fetches_first_stages(self):
+        from world.conditions.services import _build_bulk_context
+
+        progressive = ConditionTemplateFactory(name="staged", has_progression=True)
+        stage1 = ConditionStageFactory(condition=progressive, stage_order=1, rounds_to_next=2)
+        ConditionStageFactory(condition=progressive, stage_order=2, rounds_to_next=None)
+
+        ctx = _build_bulk_context([self.target], [progressive])
+        assert ctx.first_stages.get(progressive.pk) == stage1
+
+
+class BulkApplyConditionsTest(TestCase):
+    """Tests for bulk_apply_conditions service function."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.target1 = CharacterFactory(db_key="bulk_t1")
+        cls.target2 = CharacterFactory(db_key="bulk_t2")
+        cls.template1 = ConditionTemplateFactory(name="Burn")
+        cls.template2 = ConditionTemplateFactory(name="Poison")
+
+    def test_applies_to_multiple_targets(self):
+        from world.conditions.services import bulk_apply_conditions
+
+        results = bulk_apply_conditions(
+            [(self.target1, self.template1), (self.target2, self.template1)],
+        )
+        assert len(results) == 2
+        assert all(r.success for r in results)
+        assert ConditionInstance.objects.filter(condition=self.template1).count() == 2
+
+    def test_applies_multiple_conditions_to_one_target(self):
+        from world.conditions.services import bulk_apply_conditions
+
+        results = bulk_apply_conditions(
+            [(self.target1, self.template1), (self.target1, self.template2)],
+        )
+        assert len(results) == 2
+        assert all(r.success for r in results)
+        assert ConditionInstance.objects.filter(target=self.target1).count() == 2
+
+    def test_prevention_still_works(self):
+        from world.conditions.services import bulk_apply_conditions
+
+        blocker = ConditionTemplateFactory(name="Blocker")
+        ConditionInstanceFactory(target=self.target1, condition=blocker)
+        ConditionConditionInteractionFactory(
+            condition=blocker,
+            other_condition=self.template2,
+            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+            outcome=ConditionInteractionOutcome.PREVENT_OTHER,
+        )
+        results = bulk_apply_conditions(
+            [(self.target1, self.template1), (self.target1, self.template2)],
+        )
+        assert results[0].success is True
+        assert results[1].success is False
+        assert results[1].was_prevented is True
+
+    def test_empty_list_returns_empty(self):
+        from world.conditions.services import bulk_apply_conditions
+
+        results = bulk_apply_conditions([])
+        assert results == []
+
+    def test_severity_and_source_passed_through(self):
+        from world.conditions.services import bulk_apply_conditions
+
+        source = CharacterFactory(db_key="caster")
+        results = bulk_apply_conditions(
+            [(self.target1, self.template1)],
+            severity=3,
+            source_character=source,
+            source_description="spell hit",
+        )
+        assert results[0].success is True
+        inst = results[0].instance
+        assert inst.severity == 3
+        assert inst.source_character == source
+        assert inst.source_description == "spell hit"

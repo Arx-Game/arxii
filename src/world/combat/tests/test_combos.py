@@ -4,7 +4,12 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import ComboLearningMethod, EncounterStatus
+from world.combat.constants import (
+    ActionCategory,
+    ComboLearningMethod,
+    EncounterStatus,
+    OpponentTier,
+)
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatParticipantFactory,
@@ -152,7 +157,7 @@ class DetectAvailableCombosTests(TestCase):
             action = CombatRoundAction.objects.create(
                 participant=p,
                 round_number=1,
-                focused_category="physical",
+                focused_category=ActionCategory.PHYSICAL,
                 focused_action=technique,
             )
             actions.append(action)
@@ -271,7 +276,7 @@ class DetectAvailableCombosTests(TestCase):
         pool = ThreatPoolFactory()
         CombatOpponent.objects.create(
             encounter=encounter,
-            tier="boss",
+            tier=OpponentTier.BOSS,
             name="Boss",
             health=500,
             max_health=500,
@@ -306,7 +311,7 @@ class DetectAvailableCombosTests(TestCase):
         pool = ThreatPoolFactory()
         CombatOpponent.objects.create(
             encounter=encounter,
-            tier="boss",
+            tier=OpponentTier.BOSS,
             name="Boss",
             health=500,
             max_health=500,
@@ -363,7 +368,7 @@ class UpgradeRevertComboTests(TestCase):
         action = CombatRoundAction.objects.create(
             participant=self.participant,
             round_number=1,
-            focused_category="physical",
+            focused_category=ActionCategory.PHYSICAL,
             focused_action=self.technique,
         )
         self.assertIsNone(action.combo_upgrade_id)
@@ -375,7 +380,7 @@ class UpgradeRevertComboTests(TestCase):
         action = CombatRoundAction.objects.create(
             participant=self.participant,
             round_number=1,
-            focused_category="physical",
+            focused_category=ActionCategory.PHYSICAL,
             focused_action=self.technique,
             combo_upgrade=self.combo,
         )
@@ -437,7 +442,7 @@ class ResonanceMatchingTests(TestCase):
         action = CombatRoundAction.objects.create(
             participant=participant,
             round_number=1,
-            focused_category="physical",
+            focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
         )
         return encounter, [action]
@@ -505,7 +510,7 @@ class ResonanceMatchingTests(TestCase):
         CombatRoundAction.objects.create(
             participant=participant_a,
             round_number=1,
-            focused_category="physical",
+            focused_category=ActionCategory.PHYSICAL,
             focused_action=fire_technique,
         )
 
@@ -524,7 +529,7 @@ class ResonanceMatchingTests(TestCase):
         CombatRoundAction.objects.create(
             participant=participant_b,
             round_number=1,
-            focused_category="physical",
+            focused_category=ActionCategory.PHYSICAL,
             focused_action=water_technique,
         )
 

@@ -7,6 +7,7 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     ENTITY_TYPE_PC,
+    ActionCategory,
     EncounterStatus,
     OpponentStatus,
     OpponentTier,
@@ -27,6 +28,7 @@ from world.combat.models import (
 )
 from world.combat.services import resolve_round, upgrade_action_to_combo
 from world.covenants.factories import CovenantRoleFactory
+from world.fatigue.constants import EffortLevel
 from world.fatigue.models import FatiguePool
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
 from world.vitals.constants import CharacterStatus
@@ -74,7 +76,7 @@ class ResolveRoundBasicTests(TestCase):
         action = CombatRoundAction.objects.create(
             participant=participant,
             round_number=1,
-            focused_category="physical",
+            focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
             focused_target=opponent,
         )
@@ -165,7 +167,7 @@ class ResolveRoundBasicTests(TestCase):
         CombatRoundAction.objects.create(
             participant=participant,
             round_number=1,
-            focused_category="physical",
+            focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
             focused_target=opponent,
         )
@@ -226,7 +228,7 @@ class ResolveRoundComboTests(TestCase):
         action = CombatRoundAction.objects.create(
             participant=participant,
             round_number=1,
-            focused_category="physical",
+            focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
             focused_target=opponent,
         )
@@ -286,7 +288,7 @@ class ResolveRoundDefenseCheckTests(TestCase):
         CombatRoundAction.objects.create(
             participant=participant,
             round_number=1,
-            focused_category="physical",
+            focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
             focused_target=opponent,
         )
@@ -369,7 +371,7 @@ class ResolveRoundBossPhaseTests(TestCase):
         CombatRoundAction.objects.create(
             participant=participant,
             round_number=1,
-            focused_category="physical",
+            focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
             focused_target=boss,
         )
@@ -426,8 +428,8 @@ class ResolveRoundOffenseCheckTests(TestCase):
         CombatRoundAction.objects.create(
             participant=participant,
             round_number=1,
-            focused_category="physical",
-            effort_level="medium",
+            focused_category=ActionCategory.PHYSICAL,
+            effort_level=EffortLevel.MEDIUM,
             focused_action=technique,
             focused_target=opponent,
         )
