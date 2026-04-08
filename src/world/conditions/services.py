@@ -229,7 +229,8 @@ def _build_bulk_context(
     }
 
     # 3. All prevention interactions involving these templates (1 query with Q OR)
-    all_condition_ids = {i.condition_id for i in all_instances}
+    # Include template_ids so intra-batch template interactions are detected
+    all_condition_ids = {i.condition_id for i in all_instances} | set(template_ids)
     prevention_interactions = list(
         ConditionConditionInteraction.objects.filter(
             Q(
@@ -353,6 +354,11 @@ def _process_interactions_from_context(
             existing_instance.delete()
             active_instances.remove(existing_instance)
             active_condition_ids.discard(match_id)
+            # Clean existing_pairs so later batch entries don't resurrect it
+            ctx.existing_pairs.pop(
+                (existing_instance.target_id, match_id),
+                None,
+            )
 
     return result
 

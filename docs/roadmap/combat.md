@@ -172,7 +172,7 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - BaseEvenniaTest replaced with TestCase in all combat tests
 - Denormalization cleanup: CombatParticipant stripped to join table (health/status/speed removed), CombatEncounter dropped story/episode FKs (derivable from scene), CombatOpponent gained optional Persona FK for story NPCs
 - CharacterVitals is the health authority: combat reads/writes health directly, no sync step
-- 227 total tests across combat, vitals, conditions, and covenants
+- 232 total tests across combat, vitals, conditions, and covenants
 - Note: DEAL_DAMAGE effect handler still stubbed — to be connected when magic effect pipeline is ready
 
 ### Open Encounters (future — builds on Party Combat)
