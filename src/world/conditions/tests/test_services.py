@@ -1605,3 +1605,89 @@ class BulkApplyConditionsTest(TestCase):
         assert inst.severity == 3
         assert inst.source_character == source
         assert inst.source_description == "spell hit"
+
+    def test_interaction_removal_visible_to_subsequent_iterations(self):
+        """C1 regression: if applying A removes condition X via interaction,
+        applying B in the same batch should not see X as active."""
+        from world.conditions.services import bulk_apply_conditions
+
+        existing_cond = ConditionTemplateFactory(name="ExistingCond")
+        ConditionInstanceFactory(target=self.target1, condition=existing_cond)
+
+        # template1 removes existing_cond on application
+        ConditionConditionInteractionFactory(
+            condition=self.template1,
+            other_condition=existing_cond,
+            trigger=ConditionInteractionTrigger.ON_SELF_APPLIED,
+            outcome=ConditionInteractionOutcome.REMOVE_OTHER,
+        )
+
+        # existing_cond would prevent template2 — but it should be gone
+        ConditionConditionInteractionFactory(
+            condition=existing_cond,
+            other_condition=self.template2,
+            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+            outcome=ConditionInteractionOutcome.PREVENT_OTHER,
+        )
+
+        results = bulk_apply_conditions(
+            [(self.target1, self.template1), (self.target1, self.template2)],
+        )
+        # template1 succeeds and removes existing_cond
+        assert results[0].success is True
+        assert existing_cond in results[0].removed_conditions
+        # template2 should NOT be prevented (existing_cond was removed)
+        assert results[1].success is True
+
+    def test_duplicate_pair_stacks_instead_of_creating_duplicate(self):
+        """C2 regression: same (target, template) twice should stack/refresh,
+        not create two separate instances."""
+        from world.conditions.services import bulk_apply_conditions
+
+        stackable = ConditionTemplateFactory(
+            name="Stackable",
+            is_stackable=True,
+            max_stacks=5,
+        )
+        results = bulk_apply_conditions(
+            [(self.target1, stackable), (self.target1, stackable)],
+        )
+        assert results[0].success is True
+        assert results[1].success is True
+        # Should be one instance with 2 stacks, not two instances
+        assert (
+            ConditionInstance.objects.filter(
+                target=self.target1,
+                condition=stackable,
+            ).count()
+            == 1
+        )
+        instance = ConditionInstance.objects.get(
+            target=self.target1,
+            condition=stackable,
+        )
+        assert instance.stacks == 2
+
+    def test_suppressed_conditions_ignored_in_bulk(self):
+        """C3 regression: suppressed conditions should not participate
+        in prevention checks during bulk application."""
+        from world.conditions.services import bulk_apply_conditions
+
+        blocker = ConditionTemplateFactory(name="SuppressedBlocker")
+        ConditionInstanceFactory(
+            target=self.target1,
+            condition=blocker,
+            is_suppressed=True,
+        )
+        ConditionConditionInteractionFactory(
+            condition=blocker,
+            other_condition=self.template1,
+            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+            outcome=ConditionInteractionOutcome.PREVENT_OTHER,
+        )
+
+        results = bulk_apply_conditions(
+            [(self.target1, self.template1)],
+        )
+        # Should NOT be prevented — blocker is suppressed
+        assert results[0].success is True

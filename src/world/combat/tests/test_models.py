@@ -4,6 +4,7 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from world.combat.constants import (
+    ActionCategory,
     EncounterStatus,
     EncounterType,
     OpponentStatus,
@@ -154,7 +155,7 @@ class ThreatPoolTests(TestCase):
         entry = ThreatPoolEntry.objects.create(
             pool=pool,
             name="Fire Breath",
-            attack_category="physical",
+            attack_category=ActionCategory.PHYSICAL,
         )
         self.assertEqual(str(entry), "Dragon Attacks: Fire Breath")
 

@@ -203,9 +203,16 @@ def _build_bulk_context(
     target_ids = [t.pk for t in targets]
     template_ids = [t.pk for t in templates]
 
-    # 1. All active condition instances for all targets (1 query)
+    # Suppression filter matching get_active_conditions() default behavior
+    not_suppressed = Q(is_suppressed=False) | Q(
+        suppressed_until__isnull=False,
+        suppressed_until__lt=timezone.now(),
+    )
+
+    # 1. All active (non-suppressed) condition instances for all targets (1 query)
     all_instances = list(
         ConditionInstance.objects.filter(
+            not_suppressed,
             target_id__in=target_ids,
         ).select_related("condition", "condition__category", "current_stage")
     )
@@ -214,15 +221,11 @@ def _build_bulk_context(
     for inst in all_instances:
         active_by_target.setdefault(inst.target_id, []).append(inst)
 
-    # 2. Existing instances for specific (target, template) pairs (1 query)
-    existing_for_templates = list(
-        ConditionInstance.objects.filter(
-            target_id__in=target_ids,
-            condition_id__in=template_ids,
-        ).select_related("condition", "condition__category", "current_stage")
-    )
+    # 2. Build existing pairs from all_instances (no extra query — m3 fix)
     existing_pairs: dict[tuple[int, int], ConditionInstance] = {
-        (inst.target_id, inst.condition_id): inst for inst in existing_for_templates
+        (inst.target_id, inst.condition_id): inst
+        for inst in all_instances
+        if inst.condition_id in template_ids
     }
 
     # 3. All prevention interactions involving these templates (1 query with Q OR)
@@ -316,9 +319,13 @@ def _process_interactions_from_context(
     incoming_condition: ConditionTemplate,
     ctx: _BulkConditionContext,
 ) -> InteractionResult:
-    """Process application interactions using pre-fetched data."""
+    """Process application interactions using pre-fetched data.
+
+    Mutates ctx.active_instances_by_target in-place so subsequent
+    iterations in bulk_apply_conditions see removals from earlier iterations.
+    """
     result = InteractionResult()
-    active_instances = list(ctx.active_instances_by_target.get(target_id, []))
+    active_instances = ctx.active_instances_by_target.get(target_id, [])
     active_condition_ids = {i.condition_id for i in active_instances}
 
     for interaction in ctx.application_interactions:
@@ -416,7 +423,22 @@ def _apply_single(
             return _handle_stacking(existing, template, params, interaction_results)
         return _handle_refresh(existing, template, params, interaction_results)
 
-    return _create_instance_from_context(template, params, interaction_results, ctx)
+    apply_result = _create_instance_from_context(
+        template,
+        params,
+        interaction_results,
+        ctx,
+    )
+
+    # Update context so subsequent bulk iterations see this new instance
+    if apply_result.instance:
+        new_inst = apply_result.instance
+        ctx.existing_pairs[(target.pk, template.pk)] = new_inst
+        ctx.active_instances_by_target.setdefault(target.pk, []).append(
+            new_inst,
+        )
+
+    return apply_result
 
 
 def _handle_stacking(
@@ -472,46 +494,6 @@ def _handle_refresh(
         success=True,
         instance=existing,
         message=f"{template.name} refreshed",
-        removed_conditions=interaction_results.removed,
-        applied_conditions=interaction_results.applied,
-    )
-
-
-def _create_new_instance(
-    template: ConditionTemplate,
-    params: _ApplyConditionParams,
-    interaction_results: InteractionResult,
-) -> ApplyConditionResult:
-    """Create a new condition instance."""
-    rounds = params.duration_rounds or template.default_duration_value
-    rounds_remaining = rounds if template.default_duration_type == DurationType.ROUNDS else None
-
-    # Get first stage for progressive conditions
-    first_stage = None
-    stage_rounds = None
-    if template.has_progression:
-        first_stage = template.stages.order_by("stage_order").first()
-        if first_stage and first_stage.rounds_to_next:
-            stage_rounds = first_stage.rounds_to_next
-
-    instance = ConditionInstance.objects.create(
-        target=params.target,
-        condition=template,
-        severity=params.severity,
-        stacks=1,
-        rounds_remaining=rounds_remaining,
-        current_stage=first_stage,
-        stage_rounds_remaining=stage_rounds,
-        source_character=params.source_character,
-        source_technique=params.source_technique,
-        source_description=params.source_description,
-    )
-
-    return ApplyConditionResult(
-        success=True,
-        instance=instance,
-        stacks_added=1,
-        message=f"{template.name} applied",
         removed_conditions=interaction_results.removed,
         applied_conditions=interaction_results.applied,
     )
@@ -642,52 +624,6 @@ def remove_conditions_by_category(
 # =============================================================================
 
 
-def _check_prevention_interactions(
-    target: "ObjectDB",
-    incoming_condition: ConditionTemplate,
-) -> ConditionTemplate | None:
-    """
-    Check if any existing condition prevents the incoming condition.
-
-    Returns the preventing condition template, or None.
-    """
-    existing_conditions = get_active_conditions(target).values_list("condition_id", flat=True)
-
-    # Check if any existing condition prevents this one
-    prevention = (
-        ConditionConditionInteraction.objects.filter(
-            condition_id__in=existing_conditions,
-            other_condition=incoming_condition,
-            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
-            outcome=ConditionInteractionOutcome.PREVENT_OTHER,
-        )
-        .select_related("condition")
-        .order_by("-priority")
-        .first()
-    )
-
-    if prevention:
-        return prevention.condition
-
-    # Check if incoming condition would be prevented by its own interactions
-    self_prevention = (
-        ConditionConditionInteraction.objects.filter(
-            condition=incoming_condition,
-            other_condition_id__in=existing_conditions,
-            trigger=ConditionInteractionTrigger.ON_SELF_APPLIED,
-            outcome=ConditionInteractionOutcome.PREVENT_SELF,
-        )
-        .select_related("other_condition")
-        .order_by("-priority")
-        .first()
-    )
-
-    if self_prevention:
-        return self_prevention.other_condition
-
-    return None
-
-
 def _should_remove_existing(
     interaction: ConditionConditionInteraction,
     incoming_condition: ConditionTemplate,
@@ -712,57 +648,6 @@ def _should_remove_existing(
         return True
 
     return False
-
-
-def _process_application_interactions(
-    target: "ObjectDB",
-    incoming_condition: ConditionTemplate,
-) -> InteractionResult:
-    """
-    Process condition-condition interactions when a new condition is applied.
-
-    Returns InteractionResult with removed and applied condition lists.
-    """
-    result = InteractionResult()
-
-    existing_instances = list(get_active_conditions(target))
-    existing_condition_ids = [i.condition_id for i in existing_instances]
-
-    # Find all relevant interactions, ordered by priority
-    interactions = ConditionConditionInteraction.objects.filter(
-        Q(
-            condition=incoming_condition,
-            other_condition_id__in=existing_condition_ids,
-            trigger=ConditionInteractionTrigger.ON_SELF_APPLIED,
-        )
-        | Q(
-            condition_id__in=existing_condition_ids,
-            other_condition=incoming_condition,
-            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
-        )
-    ).order_by("-priority")
-
-    for interaction in interactions:
-        # Find the existing instance this interaction affects
-        if interaction.condition == incoming_condition:
-            match_id = interaction.other_condition_id
-        else:
-            match_id = interaction.condition_id
-
-        existing_instance = next(
-            (i for i in existing_instances if i.condition_id == match_id),
-            None,
-        )
-
-        if not existing_instance:
-            continue
-
-        if _should_remove_existing(interaction, incoming_condition):
-            result.removed.append(existing_instance.condition)
-            existing_instance.delete()
-            existing_instances.remove(existing_instance)
-
-    return result
 
 
 @transaction.atomic

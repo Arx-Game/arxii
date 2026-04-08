@@ -13,9 +13,12 @@ from django.db import transaction
 from django.db.models import Prefetch, Q
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.checks.types import CheckResult
+    from world.conditions.models import ConditionTemplate
     from world.covenants.models import CovenantRole
     from world.magic.models import Technique
     from world.scenes.models import Persona
@@ -1041,7 +1044,7 @@ def _resolve_npc_action(
         for v in CharacterVitals.objects.filter(character_sheet_id__in=sheet_ids)
     }
 
-    condition_applications: list[tuple] = []
+    condition_applications: list[tuple[ObjectDB, ConditionTemplate]] = []
 
     for target_participant in targets:
         vitals_obj = vitals_by_sheet.get(target_participant.character_sheet_id)
