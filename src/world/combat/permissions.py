@@ -34,7 +34,11 @@ class IsEncounterGMOrStaff(BasePermission):
 
 
 class IsEncounterParticipant(BasePermission):
-    """Allow authenticated users who have a CombatParticipant in this encounter."""
+    """Allow authenticated users who have a CombatParticipant in this encounter.
+
+    Stashes the resolved participant on the view as `_combat_participant`
+    so the action method can reuse it without a second query.
+    """
 
     def has_object_permission(
         self,
@@ -47,11 +51,16 @@ class IsEncounterParticipant(BasePermission):
         user = cast(AccountDB, request.user)
         active_entries = RosterEntry.objects.for_account(user)
         character_ids = active_entries.values_list("character_id", flat=True)
-        return CombatParticipant.objects.filter(
+        participant = CombatParticipant.objects.filter(
             encounter=obj,
             character_sheet__character_id__in=character_ids,
             status=ParticipantStatus.ACTIVE,
-        ).exists()
+        ).first()
+        if participant:
+            if view is not None:
+                view.combat_participant = participant
+            return True
+        return False
 
 
 class IsInEncounterRoom(BasePermission):

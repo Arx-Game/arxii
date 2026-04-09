@@ -123,6 +123,7 @@ def join_encounter(
     if CombatParticipant.objects.filter(
         encounter=encounter,
         character_sheet=character_sheet,
+        status=ParticipantStatus.ACTIVE,
     ).exists():
         msg = "Already participating in this encounter."
         raise ValueError(msg)
@@ -144,7 +145,25 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
 
     Phase 4 will add flee checks and covering actions.
     """
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
     encounter = participant.encounter
+
+    # Encounter status check
+    if encounter.status != EncounterStatus.DECLARING:
+        msg = (
+            f"Cannot flee: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    # Vitality check — dead characters cannot flee
+    vitals = CharacterVitals.objects.get(
+        character_sheet=participant.character_sheet,
+    )
+    if vitals.status not in (CharacterStatus.ALIVE, CharacterStatus.UNCONSCIOUS):
+        msg = f"Cannot flee: character status is '{vitals.get_status_display()}'."
+        raise ValueError(msg)
     action, _ = CombatRoundAction.objects.update_or_create(
         participant=participant,
         round_number=encounter.round_number,

@@ -295,9 +295,13 @@ class CombatEncounterViewSet(ModelViewSet):
             participant=participant,
             round_number=encounter.round_number,
         ).first()
-        if current_action:
-            current_action.is_ready = not current_action.is_ready
-            current_action.save(update_fields=["is_ready"])
+        if not current_action:
+            return Response(
+                {"detail": _ERR_NO_ACTION},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        current_action.is_ready = not current_action.is_ready
+        current_action.save(update_fields=["is_ready"])
         return self._detail_response(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.GET])
@@ -454,7 +458,14 @@ class CombatEncounterViewSet(ModelViewSet):
         request: Request,
         encounter: CombatEncounter,
     ) -> CombatParticipant | None:
-        """Get the requesting user's active participant in this encounter."""
+        """Get the requesting user's active participant in this encounter.
+
+        Reuses the participant stashed by IsEncounterParticipant permission
+        check when available, avoiding a redundant query.
+        """
+        stashed = getattr(self, "combat_participant", None)  # noqa: GETATTR_LITERAL — set by IsEncounterParticipant permission
+        if stashed and stashed.encounter_id == encounter.pk:
+            return stashed
         user = cast(AccountDB, request.user)
         active_entries = RosterEntry.objects.for_account(user)
         character_ids = list(

@@ -349,6 +349,11 @@ class DeclareFleeTest(TestCase):
             round_number=1,
         )
         participant = CombatParticipantFactory(encounter=encounter)
+        CharacterVitals.objects.create(
+            character_sheet=participant.character_sheet,
+            health=50,
+            max_health=100,
+        )
         action = declare_flee(participant)
         assert action.focused_action is None
         assert action.focused_category is None
@@ -360,6 +365,25 @@ class DeclareFleeTest(TestCase):
             round_number=1,
         )
         participant = CombatParticipantFactory(encounter=encounter)
+        CharacterVitals.objects.create(
+            character_sheet=participant.character_sheet,
+            health=50,
+            max_health=100,
+        )
         declare_flee(participant)
         participant.refresh_from_db()
         assert participant.status == ParticipantStatus.FLED
+
+    def test_cannot_flee_outside_declaring(self) -> None:
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.BETWEEN_ROUNDS,
+            round_number=1,
+        )
+        participant = CombatParticipantFactory(encounter=encounter)
+        CharacterVitals.objects.create(
+            character_sheet=participant.character_sheet,
+            health=50,
+            max_health=100,
+        )
+        with pytest.raises(ValueError, match="expected 'Declaring'"):
+            declare_flee(participant)

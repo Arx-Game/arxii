@@ -15,6 +15,7 @@ from world.combat.factories import (
 )
 from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.vitals.models import CharacterVitals
 
 
 class CombatEncounterViewSetTestBase(TestCase):
@@ -220,15 +221,30 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
 
     def test_flee_marks_participant_fled(self) -> None:
         """Flee endpoint marks the participant as FLED."""
+        # Use a separate encounter in DECLARING status for the flee test
+        flee_encounter = CombatEncounterFactory(
+            scene=self.scene,
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        flee_participant = CombatParticipantFactory(
+            encounter=flee_encounter,
+            character_sheet=self.player_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        CharacterVitals.objects.get_or_create(
+            character_sheet=self.player_sheet,
+            defaults={"health": 50, "max_health": 100},
+        )
         client = APIClient()
         client.force_authenticate(user=self.player_account)
         response = client.post(
-            f"/api/combat/{self.encounter.pk}/flee/",
+            f"/api/combat/{flee_encounter.pk}/flee/",
         )
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
-        self.participant.refresh_from_db()
+        flee_participant.refresh_from_db()
         self.assertEqual(
-            self.participant.status,
+            flee_participant.status,
             ParticipantStatus.FLED,
         )
 
