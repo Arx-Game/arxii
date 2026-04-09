@@ -41,6 +41,7 @@ from world.combat.constants import (
     EncounterStatus,
     OpponentStatus,
     OpponentTier,
+    ParticipantStatus,
     TargetingMode,
     TargetSelection,
 )
@@ -66,7 +67,7 @@ from world.combat.types import (
     ParticipantDamageResult,
     RoundResolutionResult,
 )
-from world.fatigue.constants import EFFORT_CHECK_MODIFIER, FatigueCategory
+from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel, FatigueCategory
 from world.fatigue.services import apply_fatigue, get_fatigue_penalty
 from world.vitals.constants import (
     DEATH_HEALTH_THRESHOLD,
@@ -100,6 +101,61 @@ def add_participant(
         character_sheet=character_sheet,
         covenant_role=covenant_role,
     )
+
+
+def join_encounter(
+    encounter: CombatEncounter,
+    character_sheet: CharacterSheet,
+    *,
+    covenant_role: CovenantRole | None = None,
+) -> CombatParticipant:
+    """Allow a PC to join an active combat encounter.
+
+    Can join during DECLARING or BETWEEN_ROUNDS status.
+    Raises ValueError if already participating or encounter is completed.
+    """
+    if encounter.status == EncounterStatus.COMPLETED:
+        msg = "Cannot join a completed encounter."
+        raise ValueError(msg)
+
+    if CombatParticipant.objects.filter(
+        encounter=encounter,
+        character_sheet=character_sheet,
+    ).exists():
+        msg = "Already participating in this encounter."
+        raise ValueError(msg)
+
+    return CombatParticipant.objects.create(
+        encounter=encounter,
+        character_sheet=character_sheet,
+        covenant_role=covenant_role,
+        status=ParticipantStatus.ACTIVE,
+    )
+
+
+def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
+    """Declare intent to flee -- passives-only action, auto-ready.
+
+    Creates a CombatRoundAction with no focused action. Marks the
+    participant as FLED. Flee auto-succeeds in Phase 3 -- the participant
+    is removed from active combat at round resolution.
+
+    Phase 4 will add flee checks and covering actions.
+    """
+    encounter = participant.encounter
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.VERY_LOW,
+            "is_ready": True,
+        },
+    )
+    participant.status = ParticipantStatus.FLED
+    participant.save(update_fields=["status"])
+    return action
 
 
 def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields

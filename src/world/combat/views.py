@@ -47,13 +47,14 @@ from world.combat.services import (
     add_participant,
     begin_declaration_phase,
     declare_action,
+    declare_flee,
+    join_encounter,
     resolve_round,
     revert_combo_upgrade,
     run_combo_detection,
     upgrade_action_to_combo,
 )
 from world.covenants.models import CovenantRole
-from world.fatigue.constants import EffortLevel
 from world.magic.models import Technique
 from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
@@ -410,15 +411,13 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_NO_CHARACTER},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if CombatParticipant.objects.filter(
-            encounter=encounter,
-            character_sheet=sheet,
-        ).exists():
+        try:
+            join_encounter(encounter, sheet)
+        except ValueError:
             return Response(
                 {"detail": _ERR_ALREADY_JOINED},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        add_participant(encounter, sheet)
         return self._detail_response(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
@@ -431,18 +430,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_NOT_PARTICIPANT},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        CombatRoundAction.objects.update_or_create(
-            participant=participant,
-            round_number=encounter.round_number,
-            defaults={
-                "focused_action": None,
-                "focused_category": None,
-                "effort_level": EffortLevel.VERY_LOW,
-                "is_ready": True,
-            },
-        )
-        participant.status = ParticipantStatus.FLED
-        participant.save(update_fields=["status"])
+        declare_flee(participant)
         return self._detail_response(request, encounter)
 
     # --- Helpers ---
