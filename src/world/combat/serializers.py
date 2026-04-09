@@ -209,16 +209,26 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 
     def get_is_gm(self, obj: CombatEncounter) -> bool:
         """Check whether the requesting user is GM of the linked scene."""
-        request = self.context.get("request")
-        if not request or not request.user.is_authenticated:
-            return False
-        if not obj.scene_id:
-            return False
-        return Scene.objects.filter(
-            pk=obj.scene_id,
-            participations__account=request.user,
-            participations__is_gm=True,
-        ).exists()
+        return self._is_gm_cached(obj)
+
+    def _is_gm_cached(self, obj: CombatEncounter) -> bool:
+        """Return cached GM check for the requesting user."""
+        cache_key = f"_is_gm_{obj.pk}"
+        if not hasattr(self, cache_key):
+            request = self.context.get("request")
+            if not request or not request.user.is_authenticated or not obj.scene_id:
+                setattr(self, cache_key, False)
+            else:
+                setattr(
+                    self,
+                    cache_key,
+                    Scene.objects.filter(
+                        pk=obj.scene_id,
+                        participations__account=request.user,
+                        participations__is_gm=True,
+                    ).exists(),
+                )
+        return getattr(self, cache_key)
 
     def get_current_round_actions(
         self,
@@ -241,7 +251,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         )
 
         # Staff and GMs see all actions
-        if request.user.is_staff or self.get_is_gm(obj):
+        if request.user.is_staff or self._is_gm_cached(obj):
             return RoundActionSerializer(actions, many=True).data  # type: ignore[return-value]
 
         # Participants see their covenant's actions.
@@ -293,6 +303,18 @@ class DeclareActionSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+
+
+class RemoveParticipantSerializer(serializers.Serializer):
+    """Write serializer for removing a participant from an encounter."""
+
+    participant_id = serializers.IntegerField()
+
+
+class UpgradeComboSerializer(serializers.Serializer):
+    """Write serializer for upgrading an action to a combo."""
+
+    combo_id = serializers.IntegerField()
 
 
 class AddParticipantSerializer(serializers.Serializer):

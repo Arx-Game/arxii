@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.db.models import Prefetch, Q
+from django.utils import timezone
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -114,8 +115,9 @@ def join_encounter(
     Can join during DECLARING or BETWEEN_ROUNDS status.
     Raises ValueError if already participating or encounter is completed.
     """
-    if encounter.status == EncounterStatus.COMPLETED:
-        msg = "Cannot join a completed encounter."
+    allowed = {EncounterStatus.DECLARING, EncounterStatus.BETWEEN_ROUNDS}
+    if encounter.status not in allowed:
+        msg = "Can only join during declaration or between rounds."
         raise ValueError(msg)
 
     if CombatParticipant.objects.filter(
@@ -210,7 +212,8 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
 
     enc.round_number += 1
     enc.status = EncounterStatus.DECLARING
-    enc.save(update_fields=["round_number", "status"])
+    enc.round_started_at = timezone.now()
+    enc.save(update_fields=["round_number", "status", "round_started_at"])
     # Refresh the caller's instance so it reflects the new state.
     encounter.refresh_from_db()
 
@@ -656,6 +659,8 @@ def _action_matches_slot(
         gift_resonance_ids: Pre-fetched mapping of gift_id -> set of resonance IDs.
     """
     technique = action.focused_action
+    if technique is None:
+        return False
     if technique.effect_type_id != slot.required_action_type_id:
         return False
     if slot.resonance_requirement_id is not None:
@@ -731,6 +736,7 @@ def detect_available_combos(
         CombatRoundAction.objects.filter(
             participant__encounter=encounter,
             round_number=round_number,
+            focused_action__isnull=False,
         ).select_related(
             "participant",
             "participant__character_sheet",
@@ -992,6 +998,35 @@ def check_and_advance_boss_phase(
 # ---------------------------------------------------------------------------
 
 
+def _scale_damage_by_check(  # noqa: PLR0913 - check params are all required
+    raw: int,
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    fatigue_category: str,
+    offense_check_type: CheckType,
+    offense_check_fn: PerformCheckFn | None,
+) -> int:
+    """Roll an offense check and scale raw damage by success level."""
+    check_fn = offense_check_fn
+    if check_fn is None:
+        from world.checks.services import perform_check as check_fn  # noqa: PLC0415
+
+    penalty = get_fatigue_penalty(participant.character_sheet, fatigue_category)
+    effort_mod = EFFORT_CHECK_MODIFIER.get(action.effort_level, 0)
+    character = participant.character_sheet.character
+    result = check_fn(
+        character,
+        offense_check_type,
+        extra_modifiers=effort_mod,
+        fatigue_penalty=penalty,
+    )
+    if result.success_level >= OFFENSE_FULL_THRESHOLD:
+        return raw
+    if result.success_level >= OFFENSE_HALF_THRESHOLD:
+        return raw // 2
+    return 0
+
+
 def _resolve_pc_action(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -1010,8 +1045,12 @@ def _resolve_pc_action(
     """
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
-    target = action.focused_target
     technique = action.focused_action
+    if technique is None:
+        # Passives-only round (e.g. flee) — no focused action to resolve.
+        return outcome
+
+    target = action.focused_target
     fatigue_category = _ACTION_TO_FATIGUE_CATEGORY.get(
         action.focused_category, FatigueCategory.PHYSICAL
     )
@@ -1031,30 +1070,17 @@ def _resolve_pc_action(
             else:
                 base_power = technique.effect_type.base_power
                 if base_power is not None:
-                    raw = base_power
                     if offense_check_type is not None:
-                        check_fn = offense_check_fn
-                        if check_fn is None:
-                            from world.checks.services import (  # noqa: PLC0415
-                                perform_check as check_fn,
-                            )
-                        penalty = get_fatigue_penalty(participant.character_sheet, fatigue_category)
-                        effort_mod = EFFORT_CHECK_MODIFIER.get(action.effort_level, 0)
-                        character = participant.character_sheet.character
-                        result = check_fn(
-                            character,
+                        scaled = _scale_damage_by_check(
+                            base_power,
+                            participant,
+                            action,
+                            fatigue_category,
                             offense_check_type,
-                            extra_modifiers=effort_mod,
-                            fatigue_penalty=penalty,
+                            offense_check_fn,
                         )
-                        if result.success_level >= OFFENSE_FULL_THRESHOLD:
-                            scaled = raw
-                        elif result.success_level >= OFFENSE_HALF_THRESHOLD:
-                            scaled = raw // 2
-                        else:
-                            scaled = 0
                     else:
-                        scaled = raw
+                        scaled = base_power
                     if scaled > 0:
                         dmg_result = apply_damage_to_opponent(target, scaled)
                         outcome.damage_results.append(dmg_result)
@@ -1212,6 +1238,7 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
 
     participant_sheet_ids = CombatParticipant.objects.filter(
         encounter=encounter,
+        status=ParticipantStatus.ACTIVE,
     ).values_list("character_sheet_id", flat=True)
 
     all_pcs_down = not CharacterVitals.objects.filter(

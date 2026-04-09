@@ -316,7 +316,7 @@ class JoinEncounterTest(TestCase):
     def test_cannot_join_completed_encounter(self) -> None:
         encounter = CombatEncounterFactory(status=EncounterStatus.COMPLETED)
         sheet = CharacterSheetFactory()
-        with pytest.raises(ValueError, match="Cannot join"):
+        with pytest.raises(ValueError, match="Can only join during declaration or between rounds"):
             join_encounter(encounter, sheet)
 
     def test_cannot_join_twice(self) -> None:

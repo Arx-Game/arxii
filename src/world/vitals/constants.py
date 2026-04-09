@@ -26,7 +26,7 @@ class CharacterStatus(models.TextChoices):
 
 PERMANENT_WOUND_THRESHOLD: float = 0.5
 KNOCKOUT_HEALTH_THRESHOLD: float = 0.2
-DEATH_HEALTH_THRESHOLD: int = 0
+DEATH_HEALTH_THRESHOLD: float = 0.0
 
 # ---------------------------------------------------------------------------
 # Wound descriptions -- (threshold, description) from healthiest to worst

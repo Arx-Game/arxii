@@ -7,7 +7,6 @@ from typing import cast
 
 from django.db.models import Prefetch, QuerySet
 from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
 from rest_framework import status
@@ -40,7 +39,9 @@ from world.combat.serializers import (
     DeclareActionSerializer,
     EncounterDetailSerializer,
     EncounterListSerializer,
+    RemoveParticipantSerializer,
     RoundActionSerializer,
+    UpgradeComboSerializer,
 )
 from world.combat.services import (
     add_opponent,
@@ -106,6 +107,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 "participants",
                 queryset=CombatParticipant.objects.select_related(
                     "character_sheet__character",
+                    "character_sheet__vitals",
                     "covenant_role",
                 ).filter(status=ParticipantStatus.ACTIVE),
                 to_attr="participants_cached",
@@ -134,8 +136,6 @@ class CombatEncounterViewSet(ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         encounter.refresh_from_db()
-        encounter.round_started_at = timezone.now()
-        encounter.save(update_fields=["round_started_at"])
         return self._detail_response(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
@@ -185,7 +185,9 @@ class CombatEncounterViewSet(ModelViewSet):
     ) -> Response:
         """Remove a PC from the encounter (GM action)."""
         encounter = self.get_object()
-        participant_id = request.data.get("participant_id")
+        serializer = RemoveParticipantSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        participant_id = serializer.validated_data["participant_id"]
         participant = get_object_or_404(
             CombatParticipant,
             pk=participant_id,
@@ -348,7 +350,9 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_NOT_PARTICIPANT},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        combo_id = request.data.get("combo_id")
+        serializer = UpgradeComboSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        combo_id = serializer.validated_data["combo_id"]
         combo = get_object_or_404(ComboDefinition, pk=combo_id)
         current_action = CombatRoundAction.objects.filter(
             participant=participant,
