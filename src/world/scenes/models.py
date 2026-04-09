@@ -114,6 +114,31 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
             part.account_id == account.id and part.is_owner for part in self.participations_cached
         )
 
+    def has_character_present(self, character_ids: "models.QuerySet | set[int]") -> bool:
+        """Check if any of the given characters are at this scene's location.
+
+        Accepts either a lazy queryset (subquery) or a set of PKs.
+        Returns False if the scene has no location.
+        """
+        if not self.location_id:
+            return False
+        from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+        return ObjectDB.objects.filter(
+            pk__in=character_ids,
+            db_location_id=self.location_id,
+        ).exists()
+
+    def is_gm(self, account: "AccountDB | None") -> bool:
+        """Check if the given account is a GM of this scene."""
+        if account is None:
+            return False
+        return SceneParticipation.objects.filter(
+            scene=self,
+            account=account,
+            is_gm=True,
+        ).exists()
+
     def finish_scene(self) -> None:
         """Mark the scene as finished and stop recording new messages"""
         if not self.is_finished:

@@ -112,19 +112,16 @@ class ParticipantSerializer(serializers.ModelSerializer):
             self.context["viewer_character_ids"] = viewer_character_ids
         if obj.character_sheet.character_id in viewer_character_ids:
             return True
-        # Check if viewer is GM of the encounter's scene
+        # Check GM status — prefer cached value, fall back to model method
         is_gm = self.context.get("is_gm")
-        if is_gm is not None:
-            return is_gm
-        # Fall back to direct check if context not set
-        encounter = obj.encounter
-        if encounter.scene_id:
-            return Scene.objects.filter(
-                pk=encounter.scene_id,
-                participations__account=request.user,
-                participations__is_gm=True,
-            ).exists()
-        return False
+        if is_gm is None:
+            encounter = obj.encounter
+            is_gm = (
+                Scene.objects.get(pk=encounter.scene_id).is_gm(request.user)
+                if encounter.scene_id
+                else False
+            )
+        return is_gm
 
     def get_health(self, obj: CombatParticipant) -> int | None:
         """Return current health — only if viewer has permission."""
@@ -306,11 +303,11 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if not request or not request.user.is_authenticated or not obj.scene_id:
             return False
-        return Scene.objects.filter(
-            pk=obj.scene_id,
-            participations__account=request.user,
-            participations__is_gm=True,
-        ).exists()
+        try:
+            scene = Scene.objects.get(pk=obj.scene_id)
+        except Scene.DoesNotExist:
+            return False
+        return scene.is_gm(request.user)
 
     def get_current_round_actions(
         self,
