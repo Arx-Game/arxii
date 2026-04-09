@@ -268,7 +268,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         value would leak across encounters. Use EncounterListSerializer
         for list views.
         """
-        self.context["is_gm"] = self._is_gm_cached(instance)
+        self.context["is_gm"] = self._compute_is_gm(instance)
         return super().to_representation(instance)
 
     def get_is_participant(self, obj: CombatEncounter) -> bool:
@@ -296,26 +296,21 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 
     def get_is_gm(self, obj: CombatEncounter) -> bool:
         """Check whether the requesting user is GM of the linked scene."""
-        return self._is_gm_cached(obj)
+        cached = self.context.get("is_gm")
+        if cached is not None:
+            return cached
+        return self._compute_is_gm(obj)
 
-    def _is_gm_cached(self, obj: CombatEncounter) -> bool:
-        """Return cached GM check for the requesting user."""
-        cache_key = f"_is_gm_{obj.pk}"
-        if not hasattr(self, cache_key):
-            request = self.context.get("request")
-            if not request or not request.user.is_authenticated or not obj.scene_id:
-                setattr(self, cache_key, False)
-            else:
-                setattr(
-                    self,
-                    cache_key,
-                    Scene.objects.filter(
-                        pk=obj.scene_id,
-                        participations__account=request.user,
-                        participations__is_gm=True,
-                    ).exists(),
-                )
-        return getattr(self, cache_key)
+    def _compute_is_gm(self, obj: CombatEncounter) -> bool:
+        """Compute GM status for the requesting user."""
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated or not obj.scene_id:
+            return False
+        return Scene.objects.filter(
+            pk=obj.scene_id,
+            participations__account=request.user,
+            participations__is_gm=True,
+        ).exists()
 
     def get_current_round_actions(
         self,
@@ -338,7 +333,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         )
 
         # Staff and GMs see all actions
-        if request.user.is_staff or self._is_gm_cached(obj):
+        if request.user.is_staff or self.context.get("is_gm", False):
             return RoundActionSerializer(actions, many=True).data  # type: ignore[return-value]
 
         # Participants see their covenant's actions.
