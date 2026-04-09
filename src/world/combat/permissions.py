@@ -88,9 +88,7 @@ class IsInEncounterRoom(BasePermission):
             return False
         user = cast(AccountDB, request.user)
         active_entries = RosterEntry.objects.for_account(user)
-        character_ids = list(
-            active_entries.values_list("character_id", flat=True),
-        )
+        character_ids = active_entries.values_list("character_id", flat=True)
         from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
         return ObjectDB.objects.filter(

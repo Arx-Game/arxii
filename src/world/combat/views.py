@@ -411,9 +411,7 @@ class CombatEncounterViewSet(ModelViewSet):
         encounter = self.get_object()
         user = cast(AccountDB, request.user)
         active_entries = RosterEntry.objects.for_account(user)
-        character_ids = list(
-            active_entries.values_list("character_id", flat=True),
-        )
+        character_ids = active_entries.values_list("character_id", flat=True)
         sheet = CharacterSheet.objects.filter(character_id__in=character_ids).first()
         if not sheet:
             return Response(
@@ -471,9 +469,7 @@ class CombatEncounterViewSet(ModelViewSet):
             return stashed
         user = cast(AccountDB, request.user)
         active_entries = RosterEntry.objects.for_account(user)
-        character_ids = list(
-            active_entries.values_list("character_id", flat=True),
-        )
+        character_ids = active_entries.values_list("character_id", flat=True)
         return CombatParticipant.objects.filter(
             encounter=encounter,
             character_sheet__character_id__in=character_ids,
