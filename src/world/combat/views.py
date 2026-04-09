@@ -78,6 +78,9 @@ class CombatEncounterViewSet(ModelViewSet):
     filterset_class = CombatEncounterFilter
     pagination_class = StandardResultsSetPagination
 
+    # Set by IsEncounterParticipant permission check for query reuse
+    combat_participant: CombatParticipant | None = None
+
     def get_permissions(self) -> list:
         if self.action in ("list", "retrieve"):
             return [IsAuthenticated()]
@@ -463,7 +466,7 @@ class CombatEncounterViewSet(ModelViewSet):
         Reuses the participant stashed by IsEncounterParticipant permission
         check when available, avoiding a redundant query.
         """
-        stashed = getattr(self, "combat_participant", None)  # noqa: GETATTR_LITERAL — set by IsEncounterParticipant permission
+        stashed = self.combat_participant
         if stashed and stashed.encounter_id == encounter.pk:
             return stashed
         user = cast(AccountDB, request.user)
