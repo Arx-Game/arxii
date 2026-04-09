@@ -162,8 +162,8 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
 def declare_action(  # noqa: PLR0913 - action declaration requires all slot fields
     participant: CombatParticipant,
     *,
-    focused_action: Technique,
-    focused_category: str,
+    focused_action: Technique | None = None,
+    focused_category: str | None = None,
     effort_level: str,
     focused_target: CombatOpponent | None = None,
     physical_passive: Technique | None = None,
@@ -201,13 +201,16 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
         )
         raise ValueError(msg)
 
-    # Passive slot validation
-    passive_map = {
-        ActionCategory.PHYSICAL: physical_passive,
-        ActionCategory.SOCIAL: social_passive,
-        ActionCategory.MENTAL: mental_passive,
-    }
-    conflicting_passive = passive_map.get(focused_category)
+    # Passive slot validation (only when a focused category is declared)
+    if focused_category is not None:
+        passive_map = {
+            ActionCategory.PHYSICAL: physical_passive,
+            ActionCategory.SOCIAL: social_passive,
+            ActionCategory.MENTAL: mental_passive,
+        }
+        conflicting_passive = passive_map.get(focused_category)
+    else:
+        conflicting_passive = None
     if conflicting_passive is not None:
         msg = (
             f"Cannot declare action: {focused_category} passive must be "

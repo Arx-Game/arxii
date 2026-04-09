@@ -425,7 +425,8 @@ class CombatRoundAction(SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.participant} Round {self.round_number}: {self.focused_action.name}"
+        action_name = self.focused_action.name if self.focused_action else "passives only"
+        return f"{self.participant} Round {self.round_number}: {action_name}"
 
 
 class CombatOpponentAction(SharedMemoryModel):
