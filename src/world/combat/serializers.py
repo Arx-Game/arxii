@@ -335,10 +335,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
 
         # Participants see their covenant's actions.
         # For now (covenants not fully built), show own actions only.
-        active_entries = RosterEntry.objects.for_account(request.user)
-        character_ids = set(
-            active_entries.values_list("character_id", flat=True),
-        )
+        character_ids = self.context.get("viewer_character_ids", set())
         own_actions = actions.filter(
             participant__character_sheet__character_id__in=character_ids,
         )

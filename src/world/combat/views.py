@@ -58,6 +58,7 @@ from world.combat.services import (
 from world.covenants.models import CovenantRole
 from world.magic.models import Technique
 from world.roster.models import RosterEntry
+from world.scenes.models import Scene
 from world.stories.pagination import StandardResultsSetPagination
 
 # Fixed error messages for API responses (never expose raw exception strings).
@@ -447,12 +448,52 @@ class CombatEncounterViewSet(ModelViewSet):
         request: Request,
         encounter: CombatEncounter,
     ) -> Response:
-        """Re-fetch with prefetches and return detail serializer."""
+        """Re-fetch with prefetches and return detail serializer.
+
+        Pre-computes viewer_character_ids and is_gm so the serializer
+        and its nested serializers never re-query these per-request
+        constants.
+        """
         refreshed = self._base_queryset().get(pk=encounter.pk)
-        context = {"request": request}
+        context = self._build_serializer_context(request, refreshed)
         return Response(
             EncounterDetailSerializer(refreshed, context=context).data,
         )
+
+    def _build_serializer_context(
+        self,
+        request: Request,
+        encounter: CombatEncounter,
+    ) -> dict:
+        """Build serializer context with pre-computed, cached values.
+
+        Computes viewer_character_ids and is_gm once. All serializers
+        and nested serializers read from this context, avoiding redundant
+        roster and scene queries.
+        """
+        context: dict = {"request": request}
+
+        if not request.user.is_authenticated:
+            context["viewer_character_ids"] = set()
+            context["is_gm"] = False
+            return context
+
+        user = cast(AccountDB, request.user)
+        character_ids = set(
+            RosterEntry.objects.for_account(user).character_ids(),
+        )
+        context["viewer_character_ids"] = character_ids
+
+        is_gm = False
+        if not request.user.is_staff and encounter.scene_id:
+            try:
+                scene = Scene.objects.get(pk=encounter.scene_id)
+                is_gm = scene.is_gm(request.user)
+            except Scene.DoesNotExist:
+                pass
+        context["is_gm"] = request.user.is_staff or is_gm
+
+        return context
 
     def _get_participant(
         self,
