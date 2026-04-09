@@ -4,10 +4,13 @@ import factory
 from factory import django as factory_django
 
 from world.combat.constants import (
+    DEFAULT_PACE_TIMER_MINUTES,
     ActionCategory,
     ComboLearningMethod,
     EncounterType,
     OpponentTier,
+    PaceMode,
+    ParticipantStatus,
     TargetingMode,
     TargetSelection,
 )
@@ -31,6 +34,8 @@ class CombatEncounterFactory(factory_django.DjangoModelFactory):
         model = CombatEncounter
 
     encounter_type = EncounterType.PARTY_COMBAT
+    pace_mode = PaceMode.TIMED
+    pace_timer_minutes = DEFAULT_PACE_TIMER_MINUTES
 
 
 class ThreatPoolFactory(factory_django.DjangoModelFactory):
@@ -100,6 +105,7 @@ class CombatParticipantFactory(factory_django.DjangoModelFactory):
 
     encounter = factory.SubFactory(CombatEncounterFactory)
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    status = ParticipantStatus.ACTIVE
 
 
 class ComboDefinitionFactory(factory_django.DjangoModelFactory):

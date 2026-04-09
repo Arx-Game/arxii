@@ -48,6 +48,25 @@ class StakesLevel(models.TextChoices):
     WORLD = "world", "World"
 
 
+class PaceMode(models.TextChoices):
+    """How round timing is managed."""
+
+    TIMED = "timed", "Timed"
+    READY = "ready", "Ready"
+    MANUAL = "manual", "Manual"
+
+
+class ParticipantStatus(models.TextChoices):
+    """Current status of a PC participant in an encounter."""
+
+    ACTIVE = "active", "Active"
+    FLED = "fled", "Fled"
+    REMOVED = "removed", "Removed"
+
+
+DEFAULT_PACE_TIMER_MINUTES: int = 10
+
+
 # ---------------------------------------------------------------------------
 # Opponent enums
 # ---------------------------------------------------------------------------
