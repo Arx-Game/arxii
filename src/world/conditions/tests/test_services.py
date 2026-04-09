@@ -34,8 +34,10 @@ from world.conditions.models import (
     ConditionInstance,
 )
 from world.conditions.services import (
+    _build_bulk_context,
     advance_condition_severity,
     apply_condition,
+    bulk_apply_conditions,
     clear_all_conditions,
     get_active_conditions,
     get_aggro_priority,
@@ -1474,3 +1476,258 @@ class AdvanceConditionSeverityTests(TestCase):
         advance_condition_severity(instance, 30)
         instance.refresh_from_db()
         assert instance.current_stage == s3
+
+
+class BuildBulkContextTest(TestCase):
+    """Tests for _build_bulk_context batch-fetch function."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.target = CharacterFactory(db_key="bulk_target")
+        cls.template = ConditionTemplateFactory()
+        cls.existing = ConditionInstanceFactory(
+            target=cls.target,
+            condition=cls.template,
+        )
+
+    def test_context_contains_active_instances(self):
+        ctx = _build_bulk_context([self.target], [self.template])
+        instances = ctx.active_instances_by_target.get(self.target.pk, [])
+        assert len(instances) == 1
+        assert instances[0].condition_id == self.template.pk
+
+    def test_context_contains_existing_pair(self):
+        ctx = _build_bulk_context([self.target], [self.template])
+        existing = ctx.get_existing_instance(self.target.pk, self.template.pk)
+        assert existing is not None
+        assert existing.pk == self.existing.pk
+
+    def test_context_empty_for_unknown_target(self):
+        other = CharacterFactory(db_key="other")
+        ctx = _build_bulk_context([other], [self.template])
+        instances = ctx.active_instances_by_target.get(other.pk, [])
+        assert len(instances) == 0
+
+    def test_context_fetches_prevention_interactions(self):
+        blocker = ConditionTemplateFactory(name="blocker")
+        ConditionConditionInteractionFactory(
+            condition=self.template,
+            other_condition=blocker,
+            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+            outcome=ConditionInteractionOutcome.PREVENT_OTHER,
+        )
+        ctx = _build_bulk_context([self.target], [blocker])
+        assert len(ctx.prevention_interactions) >= 1
+
+    def test_context_fetches_first_stages(self):
+        progressive = ConditionTemplateFactory(name="staged", has_progression=True)
+        stage1 = ConditionStageFactory(condition=progressive, stage_order=1, rounds_to_next=2)
+        ConditionStageFactory(condition=progressive, stage_order=2, rounds_to_next=None)
+
+        ctx = _build_bulk_context([self.target], [progressive])
+        assert ctx.first_stages.get(progressive.pk) == stage1
+
+
+class BulkApplyConditionsTest(TestCase):
+    """Tests for bulk_apply_conditions service function."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.target1 = CharacterFactory(db_key="bulk_t1")
+        cls.target2 = CharacterFactory(db_key="bulk_t2")
+        cls.template1 = ConditionTemplateFactory(name="Burn")
+        cls.template2 = ConditionTemplateFactory(name="Poison")
+
+    def test_applies_to_multiple_targets(self):
+        results = bulk_apply_conditions(
+            [(self.target1, self.template1), (self.target2, self.template1)],
+        )
+        assert len(results) == 2
+        assert all(r.success for r in results)
+        assert ConditionInstance.objects.filter(condition=self.template1).count() == 2
+
+    def test_applies_multiple_conditions_to_one_target(self):
+        results = bulk_apply_conditions(
+            [(self.target1, self.template1), (self.target1, self.template2)],
+        )
+        assert len(results) == 2
+        assert all(r.success for r in results)
+        assert ConditionInstance.objects.filter(target=self.target1).count() == 2
+
+    def test_prevention_still_works(self):
+        blocker = ConditionTemplateFactory(name="Blocker")
+        ConditionInstanceFactory(target=self.target1, condition=blocker)
+        ConditionConditionInteractionFactory(
+            condition=blocker,
+            other_condition=self.template2,
+            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+            outcome=ConditionInteractionOutcome.PREVENT_OTHER,
+        )
+        results = bulk_apply_conditions(
+            [(self.target1, self.template1), (self.target1, self.template2)],
+        )
+        assert results[0].success is True
+        assert results[1].success is False
+        assert results[1].was_prevented is True
+
+    def test_empty_list_returns_empty(self):
+        results = bulk_apply_conditions([])
+        assert results == []
+
+    def test_severity_and_source_passed_through(self):
+        source = CharacterFactory(db_key="caster")
+        results = bulk_apply_conditions(
+            [(self.target1, self.template1)],
+            severity=3,
+            source_character=source,
+            source_description="spell hit",
+        )
+        assert results[0].success is True
+        inst = results[0].instance
+        assert inst.severity == 3
+        assert inst.source_character == source
+        assert inst.source_description == "spell hit"
+
+    def test_interaction_removal_visible_to_subsequent_iterations(self):
+        """C1 regression: if applying A removes condition X via interaction,
+        applying B in the same batch should not see X as active."""
+
+        existing_cond = ConditionTemplateFactory(name="ExistingCond")
+        ConditionInstanceFactory(target=self.target1, condition=existing_cond)
+
+        # template1 removes existing_cond on application
+        ConditionConditionInteractionFactory(
+            condition=self.template1,
+            other_condition=existing_cond,
+            trigger=ConditionInteractionTrigger.ON_SELF_APPLIED,
+            outcome=ConditionInteractionOutcome.REMOVE_OTHER,
+        )
+
+        # existing_cond would prevent template2 — but it should be gone
+        ConditionConditionInteractionFactory(
+            condition=existing_cond,
+            other_condition=self.template2,
+            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+            outcome=ConditionInteractionOutcome.PREVENT_OTHER,
+        )
+
+        results = bulk_apply_conditions(
+            [(self.target1, self.template1), (self.target1, self.template2)],
+        )
+        # template1 succeeds and removes existing_cond
+        assert results[0].success is True
+        assert existing_cond in results[0].removed_conditions
+        # template2 should NOT be prevented (existing_cond was removed)
+        assert results[1].success is True
+
+    def test_duplicate_pair_stacks_instead_of_creating_duplicate(self):
+        """C2 regression: same (target, template) twice should stack/refresh,
+        not create two separate instances."""
+
+        stackable = ConditionTemplateFactory(
+            name="Stackable",
+            is_stackable=True,
+            max_stacks=5,
+        )
+        results = bulk_apply_conditions(
+            [(self.target1, stackable), (self.target1, stackable)],
+        )
+        assert results[0].success is True
+        assert results[1].success is True
+        # Should be one instance with 2 stacks, not two instances
+        assert (
+            ConditionInstance.objects.filter(
+                target=self.target1,
+                condition=stackable,
+            ).count()
+            == 1
+        )
+        instance = ConditionInstance.objects.get(
+            target=self.target1,
+            condition=stackable,
+        )
+        assert instance.stacks == 2
+
+    def test_suppressed_conditions_ignored_in_bulk(self):
+        """C3 regression: suppressed conditions should not participate
+        in prevention checks during bulk application."""
+
+        blocker = ConditionTemplateFactory(name="SuppressedBlocker")
+        ConditionInstanceFactory(
+            target=self.target1,
+            condition=blocker,
+            is_suppressed=True,
+        )
+        ConditionConditionInteractionFactory(
+            condition=blocker,
+            other_condition=self.template1,
+            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+            outcome=ConditionInteractionOutcome.PREVENT_OTHER,
+        )
+
+        results = bulk_apply_conditions(
+            [(self.target1, self.template1)],
+        )
+        # Should NOT be prevented — blocker is suppressed
+        assert results[0].success is True
+
+    def test_removed_condition_not_resurrected_by_later_apply(self):
+        """M1 regression: if interaction removes B, and B is also being
+        applied later in the batch, it should create a fresh instance
+        rather than .save() on the deleted one."""
+        wet = ConditionTemplateFactory(name="Wet")
+        burning = ConditionTemplateFactory(name="Burning")
+
+        # target1 already has burning
+        ConditionInstanceFactory(target=self.target1, condition=burning)
+
+        # wet removes burning on application
+        ConditionConditionInteractionFactory(
+            condition=wet,
+            other_condition=burning,
+            trigger=ConditionInteractionTrigger.ON_SELF_APPLIED,
+            outcome=ConditionInteractionOutcome.REMOVE_OTHER,
+        )
+
+        results = bulk_apply_conditions(
+            [(self.target1, wet), (self.target1, burning)],
+        )
+        # wet succeeds and removes existing burning
+        assert results[0].success is True
+        assert burning in results[0].removed_conditions
+        # burning re-applied as a fresh instance (not the deleted one)
+        assert results[1].success is True
+        assert results[1].instance is not None
+        assert (
+            ConditionInstance.objects.filter(
+                target=self.target1,
+                condition=burning,
+            ).count()
+            == 1
+        )
+
+    def test_intra_batch_interaction_detected(self):
+        """M2 regression: if both A and B are new in the batch, and A
+        has an interaction with B, it should be detected."""
+        fire = ConditionTemplateFactory(name="FireNew")
+        ice = ConditionTemplateFactory(name="IceNew")
+
+        # fire removes ice on application (self-applied trigger)
+        ConditionConditionInteractionFactory(
+            condition=ice,
+            other_condition=fire,
+            trigger=ConditionInteractionTrigger.ON_OTHER_APPLIED,
+            outcome=ConditionInteractionOutcome.REMOVE_SELF,
+        )
+
+        # Apply ice first, then fire — fire should trigger ice removal
+        results = bulk_apply_conditions(
+            [(self.target1, ice), (self.target1, fire)],
+        )
+        assert results[0].success is True  # ice applied
+        assert results[1].success is True  # fire applied, removes ice
+        assert ice in results[1].removed_conditions
+        # Only fire should remain
+        remaining = ConditionInstance.objects.filter(target=self.target1)
+        assert remaining.count() == 1
+        assert remaining.first().condition == fire

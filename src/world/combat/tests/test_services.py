@@ -94,6 +94,7 @@ class BeginDeclarationPhaseTest(TestCase):
 
     def test_advances_round_and_sets_status(self) -> None:
         encounter = CombatEncounterFactory()
+        CombatOpponentFactory(encounter=encounter)
         self.assertEqual(encounter.round_number, 0)
 
         begin_declaration_phase(encounter)
@@ -102,6 +103,7 @@ class BeginDeclarationPhaseTest(TestCase):
 
     def test_subsequent_call_advances_to_round_2(self) -> None:
         encounter = CombatEncounterFactory()
+        CombatOpponentFactory(encounter=encounter)
 
         begin_declaration_phase(encounter)
         self.assertEqual(encounter.round_number, 1)
@@ -116,12 +118,19 @@ class BeginDeclarationPhaseTest(TestCase):
 
     def test_rejects_non_between_rounds_status(self) -> None:
         encounter = CombatEncounterFactory(status=EncounterStatus.DECLARING)
+        CombatOpponentFactory(encounter=encounter)
         with self.assertRaises(ValueError, msg="expected 'Between Rounds'"):
             begin_declaration_phase(encounter)
 
     def test_rejects_completed_status(self) -> None:
         encounter = CombatEncounterFactory(status=EncounterStatus.COMPLETED)
+        CombatOpponentFactory(encounter=encounter)
         with self.assertRaises(ValueError):
+            begin_declaration_phase(encounter)
+
+    def test_rejects_no_opponents(self) -> None:
+        encounter = CombatEncounterFactory(status=EncounterStatus.BETWEEN_ROUNDS)
+        with self.assertRaises(ValueError, msg="no active opponents"):
             begin_declaration_phase(encounter)
 
 

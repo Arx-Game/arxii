@@ -3,7 +3,7 @@
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import EncounterStatus, OpponentStatus, OpponentTier
+from world.combat.constants import ActionCategory, EncounterStatus, OpponentStatus, OpponentTier
 from world.combat.factories import (
     BossOpponentFactory,
     CombatEncounterFactory,
@@ -187,7 +187,7 @@ class KnockoutDeathProcessingTest(TestCase):
         CombatRoundAction.objects.create(
             participant=participant,
             round_number=1,
-            focused_category="physical",
+            focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
             focused_target=opponent,
         )
@@ -249,7 +249,7 @@ class KnockoutDeathProcessingTest(TestCase):
         CombatRoundAction.objects.create(
             participant=dying_pc,
             round_number=1,
-            focused_category="physical",
+            focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
             focused_target=encounter.opponents.first(),
         )
