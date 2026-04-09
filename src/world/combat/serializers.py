@@ -43,7 +43,12 @@ class OpponentSerializer(serializers.ModelSerializer):
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
-    """Read serializer for combat participants."""
+    """Read serializer for combat participants.
+
+    Vitals (health, max_health, character_status) are private by default.
+    Only visible to staff, the scene GM, or the player who owns the
+    character — same visibility rules as character sheets.
+    """
 
     character_name = serializers.CharField(
         source="character_sheet.character.db_key",
@@ -64,22 +69,62 @@ class ParticipantSerializer(serializers.ModelSerializer):
             "character_status",
         ]
 
+    def _can_view_vitals(self, obj: CombatParticipant) -> bool:
+        """Check if the requesting user can see this participant's vitals.
+
+        Allowed for: staff, scene GMs, or the player who owns the character.
+        """
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        # Check if viewer owns this character
+        viewer_character_ids = self.context.get("viewer_character_ids")
+        if viewer_character_ids is None:
+            active_entries = RosterEntry.objects.for_account(request.user)
+            viewer_character_ids = set(
+                active_entries.values_list("character_id", flat=True),
+            )
+            self.context["viewer_character_ids"] = viewer_character_ids
+        if obj.character_sheet.character_id in viewer_character_ids:
+            return True
+        # Check if viewer is GM of the encounter's scene
+        is_gm = self.context.get("is_gm")
+        if is_gm is not None:
+            return is_gm
+        # Fall back to direct check if context not set
+        encounter = obj.encounter
+        if encounter.scene_id:
+            return Scene.objects.filter(
+                pk=encounter.scene_id,
+                participations__account=request.user,
+                participations__is_gm=True,
+            ).exists()
+        return False
+
     def get_health(self, obj: CombatParticipant) -> int | None:
-        """Return current health from the character's vitals."""
+        """Return current health — only if viewer has permission."""
+        if not self._can_view_vitals(obj):
+            return None
         try:
             return obj.character_sheet.vitals.health
         except Exception:  # noqa: BLE001
             return None
 
     def get_max_health(self, obj: CombatParticipant) -> int | None:
-        """Return max health from the character's vitals."""
+        """Return max health — only if viewer has permission."""
+        if not self._can_view_vitals(obj):
+            return None
         try:
             return obj.character_sheet.vitals.max_health
         except Exception:  # noqa: BLE001
             return None
 
     def get_character_status(self, obj: CombatParticipant) -> str | None:
-        """Return life status from the character's vitals."""
+        """Return life status — only if viewer has permission."""
+        if not self._can_view_vitals(obj):
+            return None
         try:
             return obj.character_sheet.vitals.status
         except Exception:  # noqa: BLE001
@@ -192,6 +237,11 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "is_participant",
             "is_gm",
         ]
+
+    def to_representation(self, instance: CombatEncounter) -> dict[str, Any]:
+        """Inject is_gm into context before nested serializers run."""
+        self.context["is_gm"] = self._is_gm_cached(instance)
+        return super().to_representation(instance)
 
     def get_is_participant(self, obj: CombatEncounter) -> bool:
         """Check whether the requesting user has a character in this encounter."""
