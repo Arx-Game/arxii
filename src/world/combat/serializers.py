@@ -23,7 +23,14 @@ from world.scenes.models import Scene
 
 
 class OpponentSerializer(serializers.ModelSerializer):
-    """Read serializer for combat opponents."""
+    """Read serializer for combat opponents.
+
+    Soak value and probing threshold are GM-only — players discover
+    these through gameplay (probing attacks, combo availability).
+    """
+
+    soak_value = serializers.SerializerMethodField()
+    probing_threshold = serializers.SerializerMethodField()
 
     class Meta:
         model = CombatOpponent
@@ -40,6 +47,22 @@ class OpponentSerializer(serializers.ModelSerializer):
             "current_phase",
             "status",
         ]
+
+    def _is_gm_or_staff(self) -> bool:
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        return self.context.get("is_gm", False)
+
+    def get_soak_value(self, obj: CombatOpponent) -> int | None:
+        """Soak value — GM/staff only."""
+        return obj.soak_value if self._is_gm_or_staff() else None
+
+    def get_probing_threshold(self, obj: CombatOpponent) -> int | None:
+        """Probing threshold — GM/staff only."""
+        return obj.probing_threshold if self._is_gm_or_staff() else None
 
 
 class ParticipantSerializer(serializers.ModelSerializer):
@@ -109,7 +132,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             return None
         try:
             return obj.character_sheet.vitals.health
-        except Exception:  # noqa: BLE001
+        except AttributeError:
             return None
 
     def get_max_health(self, obj: CombatParticipant) -> int | None:
@@ -118,7 +141,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             return None
         try:
             return obj.character_sheet.vitals.max_health
-        except Exception:  # noqa: BLE001
+        except AttributeError:
             return None
 
     def get_character_status(self, obj: CombatParticipant) -> str | None:
@@ -127,7 +150,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
             return None
         try:
             return obj.character_sheet.vitals.status
-        except Exception:  # noqa: BLE001
+        except AttributeError:
             return None
 
 
@@ -239,7 +262,12 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         ]
 
     def to_representation(self, instance: CombatEncounter) -> dict[str, Any]:
-        """Inject is_gm into context before nested serializers run."""
+        """Inject is_gm into context before nested serializers run.
+
+        NOTE: This serializer must NOT be used with many=True — the is_gm
+        value would leak across encounters. Use EncounterListSerializer
+        for list views.
+        """
         self.context["is_gm"] = self._is_gm_cached(instance)
         return super().to_representation(instance)
 
@@ -248,14 +276,23 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return False
-        active_entries = RosterEntry.objects.for_account(request.user)
-        character_ids = set(
-            active_entries.values_list("character_id", flat=True),
-        )
+        character_ids = self._get_viewer_character_ids(request)
         return any(
             p.character_sheet.character_id in character_ids
             for p in obj.participants_cached  # type: ignore[attr-defined]
         )
+
+    def _get_viewer_character_ids(self, request: object) -> set[int]:
+        """Get character IDs for the requesting user, with context caching."""
+        cached = self.context.get("viewer_character_ids")
+        if cached is not None:
+            return cached
+        active_entries = RosterEntry.objects.for_account(request.user)  # type: ignore[union-attr]
+        character_ids = set(
+            active_entries.values_list("character_id", flat=True),
+        )
+        self.context["viewer_character_ids"] = character_ids
+        return character_ids
 
     def get_is_gm(self, obj: CombatEncounter) -> bool:
         """Check whether the requesting user is GM of the linked scene."""
