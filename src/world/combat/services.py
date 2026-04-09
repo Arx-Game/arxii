@@ -1066,15 +1066,15 @@ def _resolve_npc_action(
             )
         outcome.damage_results.append(dmg_result)
 
-        # Knockout/death processing — only transition from ALIVE
-        vitals_obj.refresh_from_db()
-        if dmg_result.death_eligible and vitals_obj.status == CharacterStatus.ALIVE:
-            vitals_obj.status = CharacterStatus.DYING
-            vitals_obj.dying_final_round = True
-            vitals_obj.save(update_fields=["status", "dying_final_round"])
-        elif dmg_result.knockout_eligible and vitals_obj.status == CharacterStatus.ALIVE:
-            vitals_obj.status = CharacterStatus.UNCONSCIOUS
-            vitals_obj.save(update_fields=["status"])
+        # Survivability pipeline — knockout, death, wound checks
+        from world.vitals.services import process_damage_consequences  # noqa: PLC0415
+
+        consequence = process_damage_consequences(
+            character=target_participant.character_sheet.character,
+            damage_dealt=dmg_result.damage_dealt,
+            damage_type=None,  # TODO: get from threat entry when damage types are authored
+        )
+        outcome.damage_consequences.append(consequence)
 
         # Collect condition applications for bulk apply
         if dmg_result.damage_dealt > 0 and conditions:

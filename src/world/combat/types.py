@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from world.vitals.types import DamageConsequenceResult
+
 if TYPE_CHECKING:
     from world.combat.models import (
         CombatOpponent,
@@ -74,6 +76,7 @@ class ActionOutcome:
         default_factory=list,
     )
     combo_used: ComboDefinition | None = None
+    damage_consequences: list[DamageConsequenceResult] = field(default_factory=list)
 
 
 @dataclass
