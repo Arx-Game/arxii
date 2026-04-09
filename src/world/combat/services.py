@@ -152,6 +152,11 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
             "focused_action": None,
             "focused_category": None,
             "effort_level": EffortLevel.VERY_LOW,
+            "focused_target": None,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
             "is_ready": True,
         },
     )
@@ -277,17 +282,26 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
         )
         raise ValueError(msg)
 
-    return CombatRoundAction.objects.create(
+    if focused_target and focused_target.status != OpponentStatus.ACTIVE:
+        msg = "Cannot target a defeated opponent."
+        raise ValueError(msg)
+
+    action, _created = CombatRoundAction.objects.update_or_create(
         participant=participant,
         round_number=encounter.round_number,
-        focused_category=focused_category,
-        effort_level=effort_level,
-        focused_action=focused_action,
-        focused_target=focused_target,
-        physical_passive=physical_passive,
-        social_passive=social_passive,
-        mental_passive=mental_passive,
+        defaults={
+            "focused_action": focused_action,
+            "focused_category": focused_category,
+            "effort_level": effort_level,
+            "focused_target": focused_target,
+            "physical_passive": physical_passive,
+            "social_passive": social_passive,
+            "mental_passive": mental_passive,
+            "combo_upgrade": None,  # Reset combo on re-declaration
+            "is_ready": False,  # Reset ready on re-declaration
+        },
     )
+    return action
 
 
 def _get_eligible_entries(
@@ -457,12 +471,14 @@ def select_npc_actions(
         CharacterVitals.objects.filter(
             status=CharacterStatus.ALIVE,
             character_sheet__combat_participations__encounter=encounter,
+            character_sheet__combat_participations__status=ParticipantStatus.ACTIVE,
         ).values_list("character_sheet_id", flat=True)
     )
     active_participants = list(
         CombatParticipant.objects.filter(
             encounter=encounter,
             character_sheet_id__in=alive_sheet_ids,
+            status=ParticipantStatus.ACTIVE,
         )
     )
 
@@ -598,6 +614,7 @@ def get_resolution_order(
     participants = list(
         CombatParticipant.objects.filter(
             encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
         ).select_related("covenant_role", "character_sheet")
     )
 
@@ -1385,7 +1402,8 @@ def resolve_round(
         # BETWEEN_ROUNDS to DECLARING for the next round.
         enc.status = EncounterStatus.BETWEEN_ROUNDS
 
-    enc.save(update_fields=["status"])
+    enc.round_started_at = None
+    enc.save(update_fields=["status", "round_started_at"])
     encounter.refresh_from_db()
 
     return result

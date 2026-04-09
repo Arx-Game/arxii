@@ -150,6 +150,14 @@ def _deal_damage(
     context: "ResolutionContext",
 ) -> AppliedEffect:
     """Apply damage to target's health and trigger survivability pipeline."""
+    if not effect.damage_amount or effect.damage_amount <= 0:
+        return AppliedEffect(
+            effect_type=EffectType.DEAL_DAMAGE,
+            description="No damage to deal",
+            applied=False,
+            skip_reason="Damage amount is zero or negative",
+        )
+
     target = _resolve_target(effect, context)
     if target is None:
         return AppliedEffect(

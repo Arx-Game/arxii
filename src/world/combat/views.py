@@ -150,8 +150,6 @@ class CombatEncounterViewSet(ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         encounter.refresh_from_db()
-        encounter.round_started_at = None
-        encounter.save(update_fields=["round_started_at"])
         return self._detail_response(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
