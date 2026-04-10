@@ -1,8 +1,9 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
+from world.roster.factories import RosterTenureFactory
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -316,3 +317,44 @@ class FactoryTests(TestCase):
         assert discovery.pk is not None
         assert discovery.persona.is_fake_name is True
         assert discovery.discovered_by is not None
+
+
+class PersonaIdentitySummaryTest(TestCase):
+    """Tests for Persona.get_identity_summary()."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory(username="bob")
+        cls.character = CharacterFactory(db_key="Crucible")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.identity = CharacterIdentityFactory(character=cls.character)
+        cls.tenure = RosterTenureFactory(
+            roster_entry__character=cls.character,
+            player_data__account=cls.account,
+            player_number=1,
+        )
+        # CharacterIdentityFactory already creates a PRIMARY persona named after
+        # the character — reuse it via the identity's active_persona.
+        cls.persona = cls.identity.active_persona
+
+    def test_summary_without_account(self) -> None:
+        """Non-staff view omits the account portion."""
+        summary = self.persona.get_identity_summary(include_account=False)
+        assert "Crucible" in summary
+        assert "Player 1" in summary
+        assert "bob" not in summary.lower()
+
+    def test_summary_with_account(self) -> None:
+        """Staff view includes the account."""
+        summary = self.persona.get_identity_summary(include_account=True)
+        assert "Crucible" in summary
+        assert "Player 1" in summary
+        assert "bob" in summary.lower()
+
+    def test_summary_no_tenure(self) -> None:
+        """Character without an active tenure returns a degraded summary."""
+        char = CharacterFactory(db_key="Orphan")
+        identity = CharacterIdentityFactory(character=char)
+        persona = identity.active_persona
+        summary = persona.get_identity_summary(include_account=True)
+        assert "Orphan" in summary
