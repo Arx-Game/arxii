@@ -120,6 +120,8 @@ def join_encounter(
         msg = "Can only join during declaration or between rounds."
         raise ValueError(msg)
 
+    # Query instead of cache — write path needs fresh data to prevent races.
+    # The unique constraint is the real safety net.
     if CombatParticipant.objects.filter(
         encounter=encounter,
         character_sheet=character_sheet,

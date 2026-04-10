@@ -10,11 +10,14 @@ from rest_framework.views import APIView
 from world.combat.constants import ParticipantStatus
 from world.combat.models import CombatEncounter, CombatParticipant
 from world.roster.models import RosterEntry
-from world.scenes.models import Scene
 
 
 class IsEncounterGMOrStaff(BasePermission):
-    """Allow access to GMs of the encounter's scene or staff."""
+    """Allow access to GMs of the encounter's scene or staff.
+
+    Uses Scene.is_gm() which reads from participations_cached — no query
+    if the scene is already in the identity map.
+    """
 
     def has_object_permission(
         self,
@@ -24,20 +27,16 @@ class IsEncounterGMOrStaff(BasePermission):
     ) -> bool:
         if request.user.is_staff:
             return True
-        if not obj.scene_id:
+        if not obj.scene:
             return False
-        try:
-            scene = Scene.objects.get(pk=obj.scene_id)
-        except Scene.DoesNotExist:
-            return False
-        return scene.is_gm(request.user)
+        return obj.scene.is_gm(request.user)
 
 
 class IsEncounterParticipant(BasePermission):
-    """Allow authenticated users who have a CombatParticipant in this encounter.
+    """Allow authenticated users who have an active CombatParticipant.
 
-    Stashes the resolved participant on the view as `combat_participant`
-    so the action method can reuse it without a second query.
+    Uses the encounter's participants_cached when available (prefetched
+    by _base_queryset) to avoid a separate query.
     """
 
     def has_object_permission(
@@ -49,24 +48,26 @@ class IsEncounterParticipant(BasePermission):
         if request.user.is_staff:
             return True
         user = cast(AccountDB, request.user)
-        character_ids = RosterEntry.objects.for_account(user).character_ids()
-        participant = CombatParticipant.objects.filter(
-            encounter=obj,
-            character_sheet__character_id__in=character_ids,
-            status=ParticipantStatus.ACTIVE,
-        ).first()
-        if participant:
-            if view is not None:
-                view.combat_participant = participant
-            return True
-        return False
+        character_ids = set(
+            RosterEntry.objects.for_account(user).character_ids(),
+        )
+        try:
+            participants = obj.participants_cached
+            return any(p.character_sheet.character_id in character_ids for p in participants)
+        except AttributeError:
+            # Fallback if encounter wasn't loaded via _base_queryset
+            return CombatParticipant.objects.filter(
+                encounter=obj,
+                character_sheet__character_id__in=character_ids,
+                status=ParticipantStatus.ACTIVE,
+            ).exists()
 
 
 class IsInEncounterRoom(BasePermission):
     """Allow any PC currently in the encounter's scene location.
 
-    Used for the join endpoint — any character physically present
-    in the room where combat is happening can join.
+    Uses Scene.has_character_present() which reads the room's contents
+    cache — no DB query for location presence.
     """
 
     def has_object_permission(
@@ -77,12 +78,10 @@ class IsInEncounterRoom(BasePermission):
     ) -> bool:
         if request.user.is_staff:
             return True
-        if not obj.scene_id:
-            return False
-        try:
-            scene = Scene.objects.get(pk=obj.scene_id)
-        except Scene.DoesNotExist:
+        if not obj.scene:
             return False
         user = cast(AccountDB, request.user)
-        character_ids = RosterEntry.objects.for_account(user).character_ids()
-        return scene.has_character_present(character_ids)
+        character_ids = set(
+            RosterEntry.objects.for_account(user).character_ids(),
+        )
+        return obj.scene.has_character_present(character_ids)

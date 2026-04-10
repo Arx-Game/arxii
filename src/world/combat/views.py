@@ -58,7 +58,6 @@ from world.combat.services import (
 from world.covenants.models import CovenantRole
 from world.magic.models import Technique
 from world.roster.models import RosterEntry
-from world.scenes.models import Scene
 from world.stories.pagination import StandardResultsSetPagination
 
 # Fixed error messages for API responses (never expose raw exception strings).
@@ -78,9 +77,6 @@ class CombatEncounterViewSet(ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = CombatEncounterFilter
     pagination_class = StandardResultsSetPagination
-
-    # Set by IsEncounterParticipant permission check for query reuse
-    combat_participant: CombatParticipant | None = None
 
     def get_permissions(self) -> list:
         if self.action in ("list", "retrieve"):
@@ -448,12 +444,13 @@ class CombatEncounterViewSet(ModelViewSet):
         request: Request,
         encounter: CombatEncounter,
     ) -> Response:
-        """Re-fetch with prefetches and return detail serializer.
+        """Return encounter detail, refreshing caches after mutations.
 
-        Pre-computes viewer_character_ids and is_gm so the serializer
-        and its nested serializers never re-query these per-request
-        constants.
+        Flushes the SharedMemoryModel cache for the encounter so
+        participants_cached and opponents_cached are re-populated,
+        then serializes with pre-computed viewer context.
         """
+        encounter.flush_from_cache(force=True)
         refreshed = self._base_queryset().get(pk=encounter.pk)
         context = self._build_serializer_context(request, refreshed)
         return Response(
@@ -468,8 +465,8 @@ class CombatEncounterViewSet(ModelViewSet):
         """Build serializer context with pre-computed, cached values.
 
         Computes viewer_character_ids and is_gm once. All serializers
-        and nested serializers read from this context, avoiding redundant
-        roster and scene queries.
+        and nested serializers read from this context — zero redundant
+        queries.
         """
         context: dict = {"request": request}
 
@@ -485,12 +482,8 @@ class CombatEncounterViewSet(ModelViewSet):
         context["viewer_character_ids"] = character_ids
 
         is_gm = False
-        if not request.user.is_staff and encounter.scene_id:
-            try:
-                scene = Scene.objects.get(pk=encounter.scene_id)
-                is_gm = scene.is_gm(request.user)
-            except Scene.DoesNotExist:
-                pass
+        if not request.user.is_staff and encounter.scene:
+            is_gm = encounter.scene.is_gm(request.user)
         context["is_gm"] = request.user.is_staff or is_gm
 
         return context
@@ -500,19 +493,26 @@ class CombatEncounterViewSet(ModelViewSet):
         request: Request,
         encounter: CombatEncounter,
     ) -> CombatParticipant | None:
-        """Get the requesting user's active participant in this encounter.
+        """Get the requesting user's active participant from cached data.
 
-        Reuses the participant stashed by IsEncounterParticipant permission
-        check when available, avoiding a redundant query.
+        Uses participants_cached (prefetched on the encounter) and
+        viewer_character_ids (from serializer context or fresh lookup).
+        No DB query if the encounter was loaded via _base_queryset.
         """
-        stashed = self.combat_participant
-        if stashed and stashed.encounter_id == encounter.pk:
-            return stashed
         user = cast(AccountDB, request.user)
-        active_entries = RosterEntry.objects.for_account(user)
-        character_ids = active_entries.values_list("character_id", flat=True)
-        return CombatParticipant.objects.filter(
-            encounter=encounter,
-            character_sheet__character_id__in=character_ids,
-            status=ParticipantStatus.ACTIVE,
-        ).first()
+        character_ids = set(
+            RosterEntry.objects.for_account(user).character_ids(),
+        )
+        try:
+            participants = encounter.participants_cached
+        except AttributeError:
+            # Fallback if encounter wasn't loaded via _base_queryset
+            return CombatParticipant.objects.filter(
+                encounter=encounter,
+                character_sheet__character_id__in=character_ids,
+                status=ParticipantStatus.ACTIVE,
+            ).first()
+        return next(
+            (p for p in participants if p.character_sheet.character_id in character_ids),
+            None,
+        )

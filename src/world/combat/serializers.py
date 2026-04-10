@@ -15,7 +15,6 @@ from world.combat.models import (
 )
 from world.fatigue.constants import EffortLevel
 from world.roster.models import RosterEntry
-from world.scenes.models import Scene
 
 # ---------------------------------------------------------------------------
 # Nested read serializers
@@ -116,11 +115,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
         is_gm = self.context.get("is_gm")
         if is_gm is None:
             encounter = obj.encounter
-            is_gm = (
-                Scene.objects.get(pk=encounter.scene_id).is_gm(request.user)
-                if encounter.scene_id
-                else False
-            )
+            is_gm = encounter.scene.is_gm(request.user) if encounter.scene else False
         return is_gm
 
     def get_health(self, obj: CombatParticipant) -> int | None:
@@ -299,15 +294,15 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         return self._compute_is_gm(obj)
 
     def _compute_is_gm(self, obj: CombatEncounter) -> bool:
-        """Compute GM status for the requesting user."""
+        """Compute GM status for the requesting user.
+
+        Uses the select_related scene and Scene.is_gm() which reads
+        from participations_cached — no extra queries.
+        """
         request = self.context.get("request")
-        if not request or not request.user.is_authenticated or not obj.scene_id:
+        if not request or not request.user.is_authenticated or not obj.scene:
             return False
-        try:
-            scene = Scene.objects.get(pk=obj.scene_id)
-        except Scene.DoesNotExist:
-            return False
-        return scene.is_gm(request.user)
+        return obj.scene.is_gm(request.user)
 
     def get_current_round_actions(
         self,
