@@ -38,3 +38,25 @@ class StaffInboxView(APIView):
                 "results": [asdict(item) for item in items],
             },
         )
+
+
+class AccountHistoryView(APIView):
+    """Staff-only view of all submissions related to an account."""
+
+    permission_classes = [IsStaffUser]
+
+    def get(self, request: Request, account_id: int) -> Response:
+        from world.staff_inbox.services import (  # noqa: PLC0415
+            get_account_submission_history,
+        )
+
+        history = get_account_submission_history(account_id=account_id)
+        return Response(
+            {
+                "reports_against": [asdict(i) for i in history["reports_against"]],
+                "reports_submitted": [asdict(i) for i in history["reports_submitted"]],
+                "feedback": [asdict(i) for i in history["feedback"]],
+                "bug_reports": [asdict(i) for i in history["bug_reports"]],
+                "character_applications": [asdict(i) for i in history["character_applications"]],
+            },
+        )

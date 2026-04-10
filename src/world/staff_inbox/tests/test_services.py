@@ -51,3 +51,61 @@ class StaffInboxAggregatorTest(TestCase):
         items = get_staff_inbox(categories=[SubmissionCategory.PLAYER_REPORT])
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].source_pk, pr.pk)
+
+
+class AccountHistoryTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import AccountFactory, CharacterFactory
+        from world.character_sheets.factories import CharacterIdentityFactory
+        from world.roster.factories import RosterTenureFactory
+
+        cls.account = AccountFactory()
+        cls.character = CharacterFactory(db_key="Target")
+        cls.identity = CharacterIdentityFactory(character=cls.character)
+        cls.persona = cls.identity.active_persona
+        cls.tenure = RosterTenureFactory(
+            roster_entry__character=cls.character,
+            player_data__account=cls.account,
+        )
+
+    def test_history_includes_own_feedback(self) -> None:
+        from world.staff_inbox.services import get_account_submission_history
+
+        fb = PlayerFeedbackFactory(reporter_persona=self.persona)
+        history = get_account_submission_history(account_id=self.account.pk)
+        self.assertEqual(len(history["feedback"]), 1)
+        self.assertEqual(history["feedback"][0].source_pk, fb.pk)
+
+    def test_history_includes_reports_against(self) -> None:
+        from world.staff_inbox.services import get_account_submission_history
+
+        pr = PlayerReportFactory(reported_persona=self.persona)
+        history = get_account_submission_history(account_id=self.account.pk)
+        self.assertEqual(len(history["reports_against"]), 1)
+        self.assertEqual(history["reports_against"][0].source_pk, pr.pk)
+
+    def test_history_includes_reports_submitted(self) -> None:
+        from world.staff_inbox.services import get_account_submission_history
+
+        pr = PlayerReportFactory(reporter_persona=self.persona)
+        history = get_account_submission_history(account_id=self.account.pk)
+        self.assertEqual(len(history["reports_submitted"]), 1)
+        self.assertEqual(history["reports_submitted"][0].source_pk, pr.pk)
+
+    def test_history_includes_bug_reports(self) -> None:
+        from world.staff_inbox.services import get_account_submission_history
+
+        br = BugReportFactory(reporter_persona=self.persona)
+        history = get_account_submission_history(account_id=self.account.pk)
+        self.assertEqual(len(history["bug_reports"]), 1)
+        self.assertEqual(history["bug_reports"][0].source_pk, br.pk)
+
+    def test_history_empty_for_unrelated_account(self) -> None:
+        from evennia_extensions.factories import AccountFactory
+        from world.staff_inbox.services import get_account_submission_history
+
+        PlayerFeedbackFactory(reporter_persona=self.persona)
+        other_account = AccountFactory()
+        history = get_account_submission_history(account_id=other_account.pk)
+        self.assertEqual(len(history["feedback"]), 0)

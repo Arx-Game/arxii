@@ -124,3 +124,81 @@ def get_staff_inbox(
 
     items.sort(key=lambda i: i.created_at, reverse=True)
     return items
+
+
+def get_account_submission_history(
+    account_id: int,
+) -> dict[str, list[InboxItem]]:
+    """Return all submissions related to an account.
+
+    Walks the persona -> character -> tenure -> account chain to find:
+    - Reports against any character this account has played
+    - Reports submitted while this account was playing
+    - Feedback and bug reports submitted
+    - Character applications
+
+    Returns a dict with keys: reports_against, reports_submitted,
+    feedback, bug_reports, character_applications.
+    """
+    from world.roster.models.tenures import RosterTenure  # noqa: PLC0415
+
+    # Characters this account has ever played (any tenure, active or ended)
+    character_ids = list(
+        RosterTenure.objects.filter(
+            player_data__account_id=account_id,
+        ).values_list("roster_entry__character_id", flat=True),
+    )
+
+    reports_against = list(
+        PlayerReport.objects.filter(
+            reported_persona__character_id__in=character_ids,
+        )
+        .select_related(
+            "reporter_persona__character",
+            "reported_persona__character",
+        )
+        .order_by("-created_at"),
+    )
+
+    reports_submitted = list(
+        PlayerReport.objects.filter(
+            reporter_persona__character_id__in=character_ids,
+        )
+        .select_related(
+            "reporter_persona__character",
+            "reported_persona__character",
+        )
+        .order_by("-created_at"),
+    )
+
+    feedback = list(
+        PlayerFeedback.objects.filter(
+            reporter_persona__character_id__in=character_ids,
+        )
+        .select_related("reporter_persona__character")
+        .order_by("-created_at"),
+    )
+
+    bug_reports = list(
+        BugReport.objects.filter(
+            reporter_persona__character_id__in=character_ids,
+        )
+        .select_related("reporter_persona__character")
+        .order_by("-created_at"),
+    )
+
+    applications = list(
+        RosterApplication.objects.filter(
+            player_data__account_id=account_id,
+        )
+        .select_related("character", "player_data__account")
+        .order_by("-applied_date"),
+    )
+
+    return {
+        "reports_against": [_report_to_item(r) for r in reports_against],
+        "reports_submitted": [_report_to_item(r) for r in reports_submitted],
+        "feedback": [_feedback_to_item(f) for f in feedback],
+        "bug_reports": [_bug_to_item(b) for b in bug_reports],
+        "character_applications": [_application_to_item(a) for a in applications],
+    }
