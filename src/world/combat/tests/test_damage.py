@@ -199,24 +199,29 @@ class KnockoutDeathProcessingTest(TestCase):
         npc_action.targets.add(participant)
         return encounter, participant, opponent
 
-    def test_knockout_at_low_health(self) -> None:
-        """Participant at low health after NPC damage becomes UNCONSCIOUS."""
+    def test_no_knockout_without_check_type(self) -> None:
+        """Without knockout check type, participant stays ALIVE even at low health."""
         # PC has 15 health, NPC deals 5 damage -> 10/100 = 10% < 20%
         encounter, participant, _ = self._setup_encounter(pc_health=15, npc_damage=5)
-        resolve_round(encounter)
+        result = resolve_round(encounter)
 
         vitals = CharacterVitals.objects.get(character_sheet=participant.character_sheet)
-        self.assertEqual(vitals.status, CharacterStatus.UNCONSCIOUS)
+        self.assertEqual(vitals.status, CharacterStatus.ALIVE)
+        # Damage consequence should still be recorded
+        npc_outcomes = [o for o in result.action_outcomes if o.entity_type == "npc"]
+        self.assertTrue(any(o.damage_consequences for o in npc_outcomes))
 
-    def test_death_at_zero_health(self) -> None:
-        """Participant at 0 health becomes DYING."""
+    def test_no_death_without_check_type(self) -> None:
+        """Without death check type, participant stays ALIVE even at zero health."""
         # PC has 10 health, NPC deals 20 damage -> -10 <= 0
         encounter, participant, _ = self._setup_encounter(pc_health=10, npc_damage=20)
-        resolve_round(encounter)
+        result = resolve_round(encounter)
 
         vitals = CharacterVitals.objects.get(character_sheet=participant.character_sheet)
-        # Should be DEAD because dying_final_round is consumed in same round
-        self.assertEqual(vitals.status, CharacterStatus.DEAD)
+        self.assertEqual(vitals.status, CharacterStatus.ALIVE)
+        # Damage consequence should still be recorded
+        npc_outcomes = [o for o in result.action_outcomes if o.entity_type == "npc"]
+        self.assertTrue(any(o.damage_consequences for o in npc_outcomes))
 
     def test_dying_consumed_after_round(self) -> None:
         """DYING participant with dying_final_round becomes DEAD after resolve."""

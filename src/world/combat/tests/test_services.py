@@ -1,6 +1,7 @@
 """Tests for combat encounter lifecycle service functions."""
 
 from django.test import TestCase
+import pytest
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
@@ -8,6 +9,7 @@ from world.combat.constants import (
     EncounterStatus,
     OpponentStatus,
     OpponentTier,
+    ParticipantStatus,
     TargetingMode,
     TargetSelection,
 )
@@ -24,6 +26,8 @@ from world.combat.services import (
     add_participant,
     begin_declaration_phase,
     declare_action,
+    declare_flee,
+    join_encounter,
     select_npc_actions,
 )
 from world.covenants.factories import CovenantRoleFactory
@@ -293,3 +297,93 @@ class DeclareActionTest(TestCase):
                 effort_level=EffortLevel.MEDIUM,
                 physical_passive=other_technique,
             )
+
+
+class JoinEncounterTest(TestCase):
+    """Tests for join_encounter service function."""
+
+    def test_player_joins_active_encounter(self) -> None:
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        CombatOpponentFactory(encounter=encounter)
+        sheet = CharacterSheetFactory()
+        participant = join_encounter(encounter, sheet)
+        assert participant.encounter == encounter
+        assert participant.status == ParticipantStatus.ACTIVE
+
+    def test_cannot_join_completed_encounter(self) -> None:
+        encounter = CombatEncounterFactory(status=EncounterStatus.COMPLETED)
+        sheet = CharacterSheetFactory()
+        with pytest.raises(ValueError, match="Can only join during declaration or between rounds"):
+            join_encounter(encounter, sheet)
+
+    def test_cannot_join_twice(self) -> None:
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        CombatOpponentFactory(encounter=encounter)
+        sheet = CharacterSheetFactory()
+        join_encounter(encounter, sheet)
+        with pytest.raises(ValueError, match="Already participating"):
+            join_encounter(encounter, sheet)
+
+    def test_can_join_between_rounds(self) -> None:
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.BETWEEN_ROUNDS,
+        )
+        CombatOpponentFactory(encounter=encounter)
+        sheet = CharacterSheetFactory()
+        participant = join_encounter(encounter, sheet)
+        assert participant.status == ParticipantStatus.ACTIVE
+
+
+class DeclareFleeTest(TestCase):
+    """Tests for declare_flee service function."""
+
+    def test_declares_flee_action(self) -> None:
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        participant = CombatParticipantFactory(encounter=encounter)
+        CharacterVitals.objects.create(
+            character_sheet=participant.character_sheet,
+            health=50,
+            max_health=100,
+        )
+        action = declare_flee(participant)
+        assert action.focused_action is None
+        assert action.focused_category is None
+        assert action.is_ready is True
+
+    def test_flee_marks_participant_fled(self) -> None:
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        participant = CombatParticipantFactory(encounter=encounter)
+        CharacterVitals.objects.create(
+            character_sheet=participant.character_sheet,
+            health=50,
+            max_health=100,
+        )
+        declare_flee(participant)
+        participant.refresh_from_db()
+        assert participant.status == ParticipantStatus.FLED
+
+    def test_cannot_flee_outside_declaring(self) -> None:
+        encounter = CombatEncounterFactory(
+            status=EncounterStatus.BETWEEN_ROUNDS,
+            round_number=1,
+        )
+        participant = CombatParticipantFactory(encounter=encounter)
+        CharacterVitals.objects.create(
+            character_sheet=participant.character_sheet,
+            health=50,
+            max_health=100,
+        )
+        with pytest.raises(ValueError, match="expected 'Declaring'"):
+            declare_flee(participant)

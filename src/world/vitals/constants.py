@@ -26,7 +26,7 @@ class CharacterStatus(models.TextChoices):
 
 PERMANENT_WOUND_THRESHOLD: float = 0.5
 KNOCKOUT_HEALTH_THRESHOLD: float = 0.2
-DEATH_HEALTH_THRESHOLD: int = 0
+DEATH_HEALTH_THRESHOLD: float = 0.0
 
 # ---------------------------------------------------------------------------
 # Wound descriptions -- (threshold, description) from healthiest to worst
@@ -44,3 +44,22 @@ WOUND_DESCRIPTIONS: list[tuple[float, str]] = [
     (0.1, "barely clinging to life"),
     (0.0, "incapacitated"),
 ]
+
+# ---------------------------------------------------------------------------
+# Survivability check difficulty scaling
+# ---------------------------------------------------------------------------
+
+# Base difficulty for knockout check at exactly 20% health
+KNOCKOUT_BASE_DIFFICULTY: int = 20
+# Additional difficulty per percentage point below 20% health
+KNOCKOUT_SCALING_PER_PERCENT: int = 3
+
+# Base difficulty for death check at exactly 0% health
+DEATH_BASE_DIFFICULTY: int = 30
+# Additional difficulty per percentage point below 0%
+DEATH_SCALING_PER_PERCENT: int = 5
+
+# Base difficulty for permanent wound check at exactly 50% damage
+WOUND_BASE_DIFFICULTY: int = 15
+# Additional difficulty per percentage point of max_health over threshold
+WOUND_SCALING_PER_PERCENT: int = 2

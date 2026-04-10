@@ -140,7 +140,12 @@ to defend better but drain your pools faster). Focus stays on PCs as active agen
 - **Supporting systems:** Conditions app has combat-relevant fields (affects_turn_order, draws_aggro, turn_order_modifier, aggro_priority). Mechanics app has modifier collection/stacking, plus the Challenge/Situation system and action generation pipeline. Checks app has the roll resolution engine (perform_check)
 - **Capability/Application system:** Properties on enemies/environments, Applications matching character Capabilities to available combat actions, ChallengeApproach with required_effect_property for fine-grained constraints. Action generation auto-surfaces what each character can do in a given combat situation
 - **Magic integration:** TechniqueCapabilityGrant connects magic techniques to capabilities. TraitCapabilityDerivation connects stats to capabilities. Combos link to EffectType and Resonance from magic app
-- **Tests:** 227 tests across combat, vitals, conditions, and covenants
+- **Survivability pipeline (world.vitals.services):** `process_damage_consequences()` is the system-agnostic entry point for damage consequences. Uses `perform_check` with scaled difficulty for knockout (below 20% health), death (at or below 0%), and permanent wound (hit > 50% max health) checks. Callable by combat, missions, traps, or any damage source
+- **DEAL_DAMAGE effect handler:** Connected — `ConsequenceEffect` with `EffectType.DEAL_DAMAGE` applies damage to CharacterVitals and triggers the survivability pipeline. Works for combat, missions, traps, and challenges
+- **Combat REST API:** Full endpoint set at `/api/combat/` — GM lifecycle (begin_round, resolve_round, add/remove participant, add opponent, pause), player actions (declare, ready, combo upgrade/revert, my_action, available_combos), and participation (join, flee). Covenant-scoped action visibility. Permission classes: IsEncounterGMOrStaff, IsEncounterParticipant, IsInEncounterRoom
+- **Round pacing:** Timed mode (default, configurable minutes with auto-resolve), Ready mode (all players mark ready), Manual mode (GM triggers). Timer task runs every 30 seconds via game clock scheduler
+- **Participation:** PCs in the room can self-join active encounters. Flee mechanic (stub — auto-succeeds, Phase 4 will add checks and covering actions)
+- **Tests:** 599 tests across combat, vitals, conditions, mechanics, checks, and covenants
 - **Admin:** Full Django admin with inlines for all combat, vitals, and covenant models
 
 ## What's Needed for MVP
@@ -172,8 +177,16 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - BaseEvenniaTest replaced with TestCase in all combat tests
 - Denormalization cleanup: CombatParticipant stripped to join table (health/status/speed removed), CombatEncounter dropped story/episode FKs (derivable from scene), CombatOpponent gained optional Persona FK for story NPCs
 - CharacterVitals is the health authority: combat reads/writes health directly, no sync step
-- 232 total tests across combat, vitals, conditions, and covenants
-- Note: DEAL_DAMAGE effect handler still stubbed — to be connected when magic effect pipeline is ready
+- 599 total tests across combat, vitals, conditions, mechanics, checks, and covenants
+
+**Phase 3 (complete):** Survivability pipeline, DEAL_DAMAGE handler, REST API, pacing
+- Survivability pipeline in world.vitals.services — knockout/death/wound checks via perform_check with scaled difficulty
+- DEAL_DAMAGE effect handler connected — non-combat damage (traps, spells, consequences) flows through vitals
+- Combat REST API — CombatEncounterViewSet with GM lifecycle, player actions, participation endpoints
+- Round pacing system — timed/ready/manual modes with auto-resolve timer task
+- Join/flee participation — PCs self-join from room, flee stub (auto-succeeds)
+- Nullable focused_action for passives-only rounds (AFK/fleeing players)
+- Permanent wound pool routing stubbed pending content authoring
 
 ### Open Encounters (future — builds on Party Combat)
 - Spontaneous combat for any number of participants, drop-in/drop-out

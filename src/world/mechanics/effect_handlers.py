@@ -3,11 +3,14 @@
 import logging
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from world.checks.constants import EffectTarget, EffectType
 from world.codex.models import CharacterCodexKnowledge
 from world.conditions.services import apply_condition, remove_condition
 from world.mechanics.models import ObjectProperty
 from world.mechanics.types import AppliedEffect
+from world.vitals.services import process_damage_consequences
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -17,7 +20,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_SKIP_DAMAGE = "Damage system not yet implemented."
 _SKIP_ATTACK = "Attack system not yet implemented."
 
 
@@ -145,14 +147,50 @@ def _remove_property(
 
 def _deal_damage(
     effect: "ConsequenceEffect",
-    context: "ResolutionContext",  # noqa: ARG001
+    context: "ResolutionContext",
 ) -> AppliedEffect:
-    """Stub handler for damage effects — awaiting HP/combat system."""
+    """Apply damage to target's health and trigger survivability pipeline."""
+    if not effect.damage_amount or effect.damage_amount <= 0:
+        return AppliedEffect(
+            effect_type=EffectType.DEAL_DAMAGE,
+            description="No damage to deal",
+            applied=False,
+            skip_reason="Damage amount is zero or negative",
+        )
+
+    target = _resolve_target(effect, context)
+    if target is None:
+        return AppliedEffect(
+            effect_type=EffectType.DEAL_DAMAGE,
+            description="No target to damage",
+            applied=False,
+            skip_reason="Target not found",
+        )
+
+    try:
+        vitals = target.sheet_data.vitals
+    except (AttributeError, ObjectDoesNotExist):
+        return AppliedEffect(
+            effect_type=EffectType.DEAL_DAMAGE,
+            description="Target has no vitals",
+            applied=False,
+            skip_reason="Target has no CharacterVitals",
+        )
+
+    vitals.health -= effect.damage_amount
+    vitals.save(update_fields=["health"])
+
+    process_damage_consequences(
+        character=target,
+        damage_dealt=effect.damage_amount,
+        damage_type=effect.damage_type,
+    )
+
+    damage_type_name = effect.damage_type.name if effect.damage_type else "untyped"
     return AppliedEffect(
         effect_type=EffectType.DEAL_DAMAGE,
-        description=f"Would deal {effect.damage_amount} {effect.damage_type.name} damage",
-        applied=False,
-        skip_reason=_SKIP_DAMAGE,
+        description=f"Dealt {effect.damage_amount} {damage_type_name} damage",
+        applied=True,
     )
 
 

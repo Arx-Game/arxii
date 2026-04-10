@@ -4,12 +4,15 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.combat.constants import (
+    DEFAULT_PACE_TIMER_MINUTES,
     ActionCategory,
     ComboLearningMethod,
     EncounterStatus,
     EncounterType,
     OpponentStatus,
     OpponentTier,
+    PaceMode,
+    ParticipantStatus,
     RiskLevel,
     StakesLevel,
     TargetingMode,
@@ -49,6 +52,21 @@ class CombatEncounter(SharedMemoryModel):
         choices=StakesLevel.choices,
         default=StakesLevel.LOCAL,
     )
+    pace_mode = models.CharField(
+        max_length=20,
+        choices=PaceMode.choices,
+        default=PaceMode.TIMED,
+    )
+    pace_timer_minutes = models.PositiveIntegerField(
+        default=DEFAULT_PACE_TIMER_MINUTES,
+        help_text="Minutes before auto-resolving in timed mode.",
+    )
+    round_started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the current declaration phase began.",
+    )
+    is_paused = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self) -> str:
@@ -309,6 +327,11 @@ class CombatParticipant(SharedMemoryModel):
         blank=True,
         related_name="combat_participations",
     )
+    status = models.CharField(
+        max_length=20,
+        choices=ParticipantStatus.choices,
+        default=ParticipantStatus.ACTIVE,
+    )
 
     class Meta:
         constraints = [
@@ -336,6 +359,8 @@ class CombatRoundAction(SharedMemoryModel):
     focused_category = models.CharField(
         max_length=20,
         choices=ActionCategory.choices,
+        null=True,
+        blank=True,
     )
     effort_level = models.CharField(
         max_length=20,
@@ -346,6 +371,13 @@ class CombatRoundAction(SharedMemoryModel):
         "magic.Technique",
         on_delete=models.CASCADE,
         related_name="+",
+        null=True,
+        blank=True,
+        help_text="Null when player did not declare (passives only).",
+    )
+    is_ready = models.BooleanField(
+        default=False,
+        help_text="Player signals they are done with declaration and combo decisions.",
     )
     focused_target = models.ForeignKey(
         CombatOpponent,
@@ -393,7 +425,8 @@ class CombatRoundAction(SharedMemoryModel):
         ]
 
     def __str__(self) -> str:
-        return f"{self.participant} Round {self.round_number}: {self.focused_action.name}"
+        action_name = self.focused_action.name if self.focused_action else "passives only"
+        return f"{self.participant} Round {self.round_number}: {action_name}"
 
 
 class CombatOpponentAction(SharedMemoryModel):

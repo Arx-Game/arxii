@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 from django.db.models import Prefetch, Q
+from django.utils import timezone
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -41,6 +42,7 @@ from world.combat.constants import (
     EncounterStatus,
     OpponentStatus,
     OpponentTier,
+    ParticipantStatus,
     TargetingMode,
     TargetSelection,
 )
@@ -66,7 +68,7 @@ from world.combat.types import (
     ParticipantDamageResult,
     RoundResolutionResult,
 )
-from world.fatigue.constants import EFFORT_CHECK_MODIFIER, FatigueCategory
+from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel, FatigueCategory
 from world.fatigue.services import apply_fatigue, get_fatigue_penalty
 from world.vitals.constants import (
     DEATH_HEALTH_THRESHOLD,
@@ -100,6 +102,88 @@ def add_participant(
         character_sheet=character_sheet,
         covenant_role=covenant_role,
     )
+
+
+def join_encounter(
+    encounter: CombatEncounter,
+    character_sheet: CharacterSheet,
+    *,
+    covenant_role: CovenantRole | None = None,
+) -> CombatParticipant:
+    """Allow a PC to join an active combat encounter.
+
+    Can join during DECLARING or BETWEEN_ROUNDS status.
+    Raises ValueError if already participating or encounter is completed.
+    """
+    allowed = {EncounterStatus.DECLARING, EncounterStatus.BETWEEN_ROUNDS}
+    if encounter.status not in allowed:
+        msg = "Can only join during declaration or between rounds."
+        raise ValueError(msg)
+
+    # Query instead of cache — write path needs fresh data to prevent races.
+    # The unique constraint is the real safety net.
+    if CombatParticipant.objects.filter(
+        encounter=encounter,
+        character_sheet=character_sheet,
+        status=ParticipantStatus.ACTIVE,
+    ).exists():
+        msg = "Already participating in this encounter."
+        raise ValueError(msg)
+
+    return CombatParticipant.objects.create(
+        encounter=encounter,
+        character_sheet=character_sheet,
+        covenant_role=covenant_role,
+        status=ParticipantStatus.ACTIVE,
+    )
+
+
+def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
+    """Declare intent to flee -- passives-only action, auto-ready.
+
+    Creates a CombatRoundAction with no focused action. Marks the
+    participant as FLED. Flee auto-succeeds in Phase 3 -- the participant
+    is removed from active combat at round resolution.
+
+    Phase 4 will add flee checks and covering actions.
+    """
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    encounter = participant.encounter
+
+    # Encounter status check
+    if encounter.status != EncounterStatus.DECLARING:
+        msg = (
+            f"Cannot flee: encounter status is "
+            f"'{encounter.get_status_display()}', expected 'Declaring'."
+        )
+        raise ValueError(msg)
+
+    # Vitality check — dead characters cannot flee
+    vitals = CharacterVitals.objects.get(
+        character_sheet=participant.character_sheet,
+    )
+    if vitals.status not in (CharacterStatus.ALIVE, CharacterStatus.UNCONSCIOUS):
+        msg = f"Cannot flee: character status is '{vitals.get_status_display()}'."
+        raise ValueError(msg)
+    action, _ = CombatRoundAction.objects.update_or_create(
+        participant=participant,
+        round_number=encounter.round_number,
+        defaults={
+            "focused_action": None,
+            "focused_category": None,
+            "effort_level": EffortLevel.VERY_LOW,
+            "focused_target": None,
+            "physical_passive": None,
+            "social_passive": None,
+            "mental_passive": None,
+            "combo_upgrade": None,
+            "is_ready": True,
+        },
+    )
+    participant.status = ParticipantStatus.FLED
+    participant.save(update_fields=["status"])
+    return action
 
 
 def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
@@ -154,7 +238,8 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
 
     enc.round_number += 1
     enc.status = EncounterStatus.DECLARING
-    enc.save(update_fields=["round_number", "status"])
+    enc.round_started_at = timezone.now()
+    enc.save(update_fields=["round_number", "status", "round_started_at"])
     # Refresh the caller's instance so it reflects the new state.
     encounter.refresh_from_db()
 
@@ -162,8 +247,8 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
 def declare_action(  # noqa: PLR0913 - action declaration requires all slot fields
     participant: CombatParticipant,
     *,
-    focused_action: Technique,
-    focused_category: str,
+    focused_action: Technique | None = None,
+    focused_category: str | None = None,
     effort_level: str,
     focused_target: CombatOpponent | None = None,
     physical_passive: Technique | None = None,
@@ -201,13 +286,16 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
         )
         raise ValueError(msg)
 
-    # Passive slot validation
-    passive_map = {
-        ActionCategory.PHYSICAL: physical_passive,
-        ActionCategory.SOCIAL: social_passive,
-        ActionCategory.MENTAL: mental_passive,
-    }
-    conflicting_passive = passive_map.get(focused_category)
+    # Passive slot validation (only when a focused category is declared)
+    if focused_category is not None:
+        passive_map = {
+            ActionCategory.PHYSICAL: physical_passive,
+            ActionCategory.SOCIAL: social_passive,
+            ActionCategory.MENTAL: mental_passive,
+        }
+        conflicting_passive = passive_map.get(focused_category)
+    else:
+        conflicting_passive = None
     if conflicting_passive is not None:
         msg = (
             f"Cannot declare action: {focused_category} passive must be "
@@ -215,17 +303,26 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
         )
         raise ValueError(msg)
 
-    return CombatRoundAction.objects.create(
+    if focused_target and focused_target.status != OpponentStatus.ACTIVE:
+        msg = "Cannot target a defeated opponent."
+        raise ValueError(msg)
+
+    action, _created = CombatRoundAction.objects.update_or_create(
         participant=participant,
         round_number=encounter.round_number,
-        focused_category=focused_category,
-        effort_level=effort_level,
-        focused_action=focused_action,
-        focused_target=focused_target,
-        physical_passive=physical_passive,
-        social_passive=social_passive,
-        mental_passive=mental_passive,
+        defaults={
+            "focused_action": focused_action,
+            "focused_category": focused_category,
+            "effort_level": effort_level,
+            "focused_target": focused_target,
+            "physical_passive": physical_passive,
+            "social_passive": social_passive,
+            "mental_passive": mental_passive,
+            "combo_upgrade": None,  # Reset combo on re-declaration
+            "is_ready": False,  # Reset ready on re-declaration
+        },
     )
+    return action
 
 
 def _get_eligible_entries(
@@ -395,12 +492,14 @@ def select_npc_actions(
         CharacterVitals.objects.filter(
             status=CharacterStatus.ALIVE,
             character_sheet__combat_participations__encounter=encounter,
+            character_sheet__combat_participations__status=ParticipantStatus.ACTIVE,
         ).values_list("character_sheet_id", flat=True)
     )
     active_participants = list(
         CombatParticipant.objects.filter(
             encounter=encounter,
             character_sheet_id__in=alive_sheet_ids,
+            status=ParticipantStatus.ACTIVE,
         )
     )
 
@@ -536,6 +635,7 @@ def get_resolution_order(
     participants = list(
         CombatParticipant.objects.filter(
             encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
         ).select_related("covenant_role", "character_sheet")
     )
 
@@ -597,6 +697,8 @@ def _action_matches_slot(
         gift_resonance_ids: Pre-fetched mapping of gift_id -> set of resonance IDs.
     """
     technique = action.focused_action
+    if technique is None:
+        return False
     if technique.effect_type_id != slot.required_action_type_id:
         return False
     if slot.resonance_requirement_id is not None:
@@ -672,6 +774,7 @@ def detect_available_combos(
         CombatRoundAction.objects.filter(
             participant__encounter=encounter,
             round_number=round_number,
+            focused_action__isnull=False,
         ).select_related(
             "participant",
             "participant__character_sheet",
@@ -933,6 +1036,35 @@ def check_and_advance_boss_phase(
 # ---------------------------------------------------------------------------
 
 
+def _scale_damage_by_check(  # noqa: PLR0913 - check params are all required
+    raw: int,
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    fatigue_category: str,
+    offense_check_type: CheckType,
+    offense_check_fn: PerformCheckFn | None,
+) -> int:
+    """Roll an offense check and scale raw damage by success level."""
+    check_fn = offense_check_fn
+    if check_fn is None:
+        from world.checks.services import perform_check as check_fn  # noqa: PLC0415
+
+    penalty = get_fatigue_penalty(participant.character_sheet, fatigue_category)
+    effort_mod = EFFORT_CHECK_MODIFIER.get(action.effort_level, 0)
+    character = participant.character_sheet.character
+    result = check_fn(
+        character,
+        offense_check_type,
+        extra_modifiers=effort_mod,
+        fatigue_penalty=penalty,
+    )
+    if result.success_level >= OFFENSE_FULL_THRESHOLD:
+        return raw
+    if result.success_level >= OFFENSE_HALF_THRESHOLD:
+        return raw // 2
+    return 0
+
+
 def _resolve_pc_action(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -951,8 +1083,12 @@ def _resolve_pc_action(
     """
     outcome = ActionOutcome(entity_type=ENTITY_TYPE_PC, entity_label=str(participant))
 
-    target = action.focused_target
     technique = action.focused_action
+    if technique is None:
+        # Passives-only round (e.g. flee) — no focused action to resolve.
+        return outcome
+
+    target = action.focused_target
     fatigue_category = _ACTION_TO_FATIGUE_CATEGORY.get(
         action.focused_category, FatigueCategory.PHYSICAL
     )
@@ -972,30 +1108,17 @@ def _resolve_pc_action(
             else:
                 base_power = technique.effect_type.base_power
                 if base_power is not None:
-                    raw = base_power
                     if offense_check_type is not None:
-                        check_fn = offense_check_fn
-                        if check_fn is None:
-                            from world.checks.services import (  # noqa: PLC0415
-                                perform_check as check_fn,
-                            )
-                        penalty = get_fatigue_penalty(participant.character_sheet, fatigue_category)
-                        effort_mod = EFFORT_CHECK_MODIFIER.get(action.effort_level, 0)
-                        character = participant.character_sheet.character
-                        result = check_fn(
-                            character,
+                        scaled = _scale_damage_by_check(
+                            base_power,
+                            participant,
+                            action,
+                            fatigue_category,
                             offense_check_type,
-                            extra_modifiers=effort_mod,
-                            fatigue_penalty=penalty,
+                            offense_check_fn,
                         )
-                        if result.success_level >= OFFENSE_FULL_THRESHOLD:
-                            scaled = raw
-                        elif result.success_level >= OFFENSE_HALF_THRESHOLD:
-                            scaled = raw // 2
-                        else:
-                            scaled = 0
                     else:
-                        scaled = raw
+                        scaled = base_power
                     if scaled > 0:
                         dmg_result = apply_damage_to_opponent(target, scaled)
                         outcome.damage_results.append(dmg_result)
@@ -1066,15 +1189,15 @@ def _resolve_npc_action(
             )
         outcome.damage_results.append(dmg_result)
 
-        # Knockout/death processing — only transition from ALIVE
-        vitals_obj.refresh_from_db()
-        if dmg_result.death_eligible and vitals_obj.status == CharacterStatus.ALIVE:
-            vitals_obj.status = CharacterStatus.DYING
-            vitals_obj.dying_final_round = True
-            vitals_obj.save(update_fields=["status", "dying_final_round"])
-        elif dmg_result.knockout_eligible and vitals_obj.status == CharacterStatus.ALIVE:
-            vitals_obj.status = CharacterStatus.UNCONSCIOUS
-            vitals_obj.save(update_fields=["status"])
+        # Survivability pipeline — knockout, death, wound checks
+        from world.vitals.services import process_damage_consequences  # noqa: PLC0415
+
+        consequence = process_damage_consequences(
+            character=target_participant.character_sheet.character,
+            damage_dealt=dmg_result.damage_dealt,
+            damage_type=None,  # TODO: get from threat entry when damage types are authored
+        )
+        outcome.damage_consequences.append(consequence)
 
         # Collect condition applications for bulk apply
         if dmg_result.damage_dealt > 0 and conditions:
@@ -1153,6 +1276,7 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
 
     participant_sheet_ids = CombatParticipant.objects.filter(
         encounter=encounter,
+        status=ParticipantStatus.ACTIVE,
     ).values_list("character_sheet_id", flat=True)
 
     all_pcs_down = not CharacterVitals.objects.filter(
@@ -1299,7 +1423,8 @@ def resolve_round(
         # BETWEEN_ROUNDS to DECLARING for the next round.
         enc.status = EncounterStatus.BETWEEN_ROUNDS
 
-    enc.save(update_fields=["status"])
+    enc.round_started_at = None
+    enc.save(update_fields=["status", "round_started_at"])
     encounter.refresh_from_db()
 
     return result

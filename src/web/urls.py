@@ -22,6 +22,7 @@ urlpatterns = [
     path("api/journals/", include("world.journals.urls", namespace="journals")),
     path("api/clock/", include("world.game_clock.urls")),
     path("api/events/", include("world.events.urls")),
+    path("api/combat/", include("world.combat.urls")),
     path("api/fatigue/", include("world.fatigue.urls")),
     path("api/areas/", include("world.areas.urls")),
     path("", include("world.scenes.urls")),

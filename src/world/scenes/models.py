@@ -114,6 +114,26 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
             part.account_id == account.id and part.is_owner for part in self.participations_cached
         )
 
+    def has_character_present(self, character_ids: "set[int]") -> bool:
+        """Check if any of the given characters are at this scene's location.
+
+        Uses the room's contents cache (Evennia identity map) instead of
+        querying. No DB hit if the room is already loaded.
+        """
+        if not self.location:
+            return False
+        present_ids = {ob.pk for ob in self.location.contents}
+        return bool(present_ids & set(character_ids))
+
+    def is_gm(self, account: "AccountDB | None") -> bool:
+        """Check if the given account is a GM of this scene.
+
+        Uses participations_cached to avoid a query.
+        """
+        if account is None:
+            return False
+        return any(p.account_id == account.pk and p.is_gm for p in self.participations_cached)
+
     def finish_scene(self) -> None:
         """Mark the scene as finished and stop recording new messages"""
         if not self.is_finished:

@@ -299,6 +299,17 @@ def register_all_tasks() -> None:
         )
     )
 
+    from world.combat.tasks import check_and_resolve_timed_encounters
+
+    register_task(
+        CronDefinition(
+            task_key="combat.timer_check",
+            callable=check_and_resolve_timed_encounters,
+            interval=timedelta(seconds=30),
+            description="Auto-resolve expired timed combat rounds.",
+        )
+    )
+
     # Unified weekly rollover — orchestrates all weekly systems in sequence.
     # Advances the GameWeek, then processes votes, random scenes, skills,
     # journals, relationships, and AP regen.
