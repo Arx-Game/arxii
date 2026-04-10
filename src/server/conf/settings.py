@@ -57,6 +57,7 @@ INSTALLED_APPS += [
     "world.species.apps.SpeciesConfig",
     "world.character_creation.apps.CharacterCreationConfig",
     "world.classes.apps.ClassesConfig",
+    "world.player_submissions.apps.PlayerSubmissionsConfig",
     "world.progression.apps.ProgressionConfig",
     "world.magic.apps.MagicConfig",
     "world.scenes.apps.ScenesConfig",
