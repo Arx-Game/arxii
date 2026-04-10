@@ -135,12 +135,17 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_INVALID_STATUS},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        encounter.refresh_from_db()
-        return self._detail_response(request, encounter)
+        # Service updates encounter in place via refresh_from_db
+        return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def resolve_round(self, request: Request, pk: int | None = None) -> Response:
-        """Resolve the current round."""
+        """Resolve the current round.
+
+        SharedMemoryModel identity map means all .save() calls during
+        resolution update the same Python objects in participants_cached
+        and opponents_cached — no re-fetch needed.
+        """
         encounter = self.get_object()
         try:
             resolve_round(encounter)
@@ -149,8 +154,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_INVALID_STATUS},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        encounter.refresh_from_db()
-        return self._detail_response(request, encounter)
+        return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def add_participant(self, request: Request, pk: int | None = None) -> Response:
@@ -167,13 +171,19 @@ class CombatEncounterViewSet(ModelViewSet):
         if role_id:
             covenant_role = get_object_or_404(CovenantRole, pk=role_id)
         try:
-            add_participant(encounter, sheet, covenant_role=covenant_role)
+            new_participant = add_participant(
+                encounter,
+                sheet,
+                covenant_role=covenant_role,
+            )
         except Exception:  # noqa: BLE001
             return Response(
                 {"detail": _ERR_ADD_PARTICIPANT},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return self._detail_response(request, encounter)
+        # Update cached participant list in-place
+        encounter.participants_cached.append(new_participant)
+        return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def remove_participant(
@@ -193,7 +203,11 @@ class CombatEncounterViewSet(ModelViewSet):
         )
         participant.status = ParticipantStatus.REMOVED
         participant.save(update_fields=["status"])
-        return self._detail_response(request, encounter)
+        # Remove from cached list (prefetch only loads ACTIVE)
+        encounter.participants_cached = [
+            p for p in encounter.participants_cached if p.pk != participant.pk
+        ]
+        return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def add_opponent(self, request: Request, pk: int | None = None) -> Response:
@@ -203,7 +217,7 @@ class CombatEncounterViewSet(ModelViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         pool = get_object_or_404(ThreatPool, pk=data["threat_pool_id"])
-        add_opponent(
+        new_opponent = add_opponent(
             encounter,
             name=data["name"],
             tier=data["tier"],
@@ -213,7 +227,9 @@ class CombatEncounterViewSet(ModelViewSet):
             soak_value=data.get("soak_value", 0),
             probing_threshold=data.get("probing_threshold"),
         )
-        return self._detail_response(request, encounter)
+        # Update cached opponent list in-place
+        encounter.opponents_cached.append(new_opponent)
+        return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def pause(self, request: Request, pk: int | None = None) -> Response:
@@ -221,7 +237,8 @@ class CombatEncounterViewSet(ModelViewSet):
         encounter = self.get_object()
         encounter.is_paused = not encounter.is_paused
         encounter.save(update_fields=["is_paused"])
-        return self._detail_response(request, encounter)
+        # save() updates the identity map — no re-fetch needed
+        return self._serialize_encounter(request, encounter)
 
     # --- Player Actions ---
 
@@ -279,7 +296,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_DECLARE_FAILED},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return self._detail_response(request, encounter)
+        return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def ready(self, request: Request, pk: int | None = None) -> Response:
@@ -302,7 +319,7 @@ class CombatEncounterViewSet(ModelViewSet):
             )
         current_action.is_ready = not current_action.is_ready
         current_action.save(update_fields=["is_ready"])
-        return self._detail_response(request, encounter)
+        return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.GET])
     def my_action(self, request: Request, pk: int | None = None) -> Response:
@@ -374,7 +391,7 @@ class CombatEncounterViewSet(ModelViewSet):
             )
         current_action.is_ready = False
         current_action.save(update_fields=["is_ready"])
-        return self._detail_response(request, encounter)
+        return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def revert_combo(self, request: Request, pk: int | None = None) -> Response:
@@ -398,7 +415,7 @@ class CombatEncounterViewSet(ModelViewSet):
         revert_combo_upgrade(current_action)
         current_action.is_ready = False
         current_action.save(update_fields=["is_ready"])
-        return self._detail_response(request, encounter)
+        return self._serialize_encounter(request, encounter)
 
     # --- Participation ---
 
@@ -416,13 +433,15 @@ class CombatEncounterViewSet(ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         try:
-            join_encounter(encounter, sheet)
+            new_participant = join_encounter(encounter, sheet)
         except ValueError:
             return Response(
                 {"detail": _ERR_ALREADY_JOINED},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return self._detail_response(request, encounter)
+        # Update cached participant list in-place
+        encounter.participants_cached.append(new_participant)
+        return self._serialize_encounter(request, encounter)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def flee(self, request: Request, pk: int | None = None) -> Response:
@@ -435,26 +454,28 @@ class CombatEncounterViewSet(ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
         declare_flee(participant)
-        return self._detail_response(request, encounter)
+        # Participant is now FLED — remove from cached active list
+        encounter.participants_cached = [
+            p for p in encounter.participants_cached if p.pk != participant.pk
+        ]
+        return self._serialize_encounter(request, encounter)
 
     # --- Helpers ---
 
-    def _detail_response(
+    def _serialize_encounter(
         self,
         request: Request,
         encounter: CombatEncounter,
     ) -> Response:
-        """Return encounter detail, refreshing caches after mutations.
+        """Serialize the encounter as-is — no re-fetch.
 
-        Flushes the SharedMemoryModel cache for the encounter so
-        participants_cached and opponents_cached are re-populated,
-        then serializes with pre-computed viewer context.
+        Use when the encounter's cached state (participants_cached,
+        opponents_cached) is still valid. Most endpoints that only
+        touch actions or encounter fields use this.
         """
-        encounter.flush_from_cache(force=True)
-        refreshed = self._base_queryset().get(pk=encounter.pk)
-        context = self._build_serializer_context(request, refreshed)
+        context = self._build_serializer_context(request, encounter)
         return Response(
-            EncounterDetailSerializer(refreshed, context=context).data,
+            EncounterDetailSerializer(encounter, context=context).data,
         )
 
     def _build_serializer_context(
@@ -503,16 +524,11 @@ class CombatEncounterViewSet(ModelViewSet):
         character_ids = set(
             RosterEntry.objects.for_account(user).character_ids(),
         )
-        try:
-            participants = encounter.participants_cached
-        except AttributeError:
-            # Fallback if encounter wasn't loaded via _base_queryset
-            return CombatParticipant.objects.filter(
-                encounter=encounter,
-                character_sheet__character_id__in=character_ids,
-                status=ParticipantStatus.ACTIVE,
-            ).first()
         return next(
-            (p for p in participants if p.character_sheet.character_id in character_ids),
+            (
+                p
+                for p in encounter.participants_cached
+                if p.character_sheet.character_id in character_ids
+            ),
             None,
         )

@@ -7,8 +7,7 @@ from rest_framework.permissions import BasePermission
 from rest_framework.request import Request
 from rest_framework.views import APIView
 
-from world.combat.constants import ParticipantStatus
-from world.combat.models import CombatEncounter, CombatParticipant
+from world.combat.models import CombatEncounter
 from world.roster.models import RosterEntry
 
 
@@ -51,16 +50,7 @@ class IsEncounterParticipant(BasePermission):
         character_ids = set(
             RosterEntry.objects.for_account(user).character_ids(),
         )
-        try:
-            participants = obj.participants_cached
-            return any(p.character_sheet.character_id in character_ids for p in participants)
-        except AttributeError:
-            # Fallback if encounter wasn't loaded via _base_queryset
-            return CombatParticipant.objects.filter(
-                encounter=obj,
-                character_sheet__character_id__in=character_ids,
-                status=ParticipantStatus.ACTIVE,
-            ).exists()
+        return any(p.character_sheet.character_id in character_ids for p in obj.participants_cached)
 
 
 class IsInEncounterRoom(BasePermission):

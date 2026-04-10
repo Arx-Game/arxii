@@ -82,7 +82,7 @@ class IsEncounterParticipantTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.permission = IsEncounterParticipant()
-        cls.encounter = CombatEncounterFactory()
+        encounter = CombatEncounterFactory()
 
         # Create a character with roster entry linked to an account
         cls.account = AccountFactory()
@@ -93,10 +93,24 @@ class IsEncounterParticipantTest(TestCase):
             player_data__account=cls.account,
         )
         CombatParticipantFactory(
-            encounter=cls.encounter,
+            encounter=encounter,
             character_sheet=cls.sheet,
             status=ParticipantStatus.ACTIVE,
         )
+        # Load with prefetch so participants_cached is populated
+        from django.db.models import Prefetch
+
+        from world.combat.models import CombatEncounter, CombatParticipant
+
+        cls.encounter = CombatEncounter.objects.prefetch_related(
+            Prefetch(
+                "participants",
+                queryset=CombatParticipant.objects.select_related(
+                    "character_sheet__character",
+                ).filter(status=ParticipantStatus.ACTIVE),
+                to_attr="participants_cached",
+            ),
+        ).get(pk=encounter.pk)
 
     def test_participant_allowed(self) -> None:
         request = _make_request(self.account)
