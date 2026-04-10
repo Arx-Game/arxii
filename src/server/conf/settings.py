@@ -61,6 +61,7 @@ INSTALLED_APPS += [
     "world.progression.apps.ProgressionConfig",
     "world.magic.apps.MagicConfig",
     "world.scenes.apps.ScenesConfig",
+    "world.staff_inbox.apps.StaffInboxConfig",
     "world.stories.apps.StoriesConfig",
     "world.forms.apps.FormsConfig",
     "world.distinctions.apps.DistinctionsConfig",

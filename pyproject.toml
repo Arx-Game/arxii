@@ -405,6 +405,7 @@ include = [
     "src/world/progression",           # Character advancement and rewards system
     "src/world/character_creation",    # Character creation flow and draft logic
     "src/world/player_submissions",    # Player-submitted feedback, bug reports, and player reports
+    "src/world/staff_inbox",           # Aggregated staff inbox view layer over submissions
     "src/world/vitals",               # Character life states and health
     "src/world/combat",               # Party combat system
     "src/world/covenants",             # Covenant roles and speed ranks
