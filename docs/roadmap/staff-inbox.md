@@ -1,6 +1,6 @@
 # Staff Inbox and Player Submissions
 
-**Status:** not-started
+**Status:** in-progress (backend complete, frontend pending)
 **Depends on:** None (foundational infrastructure)
 
 ## Overview
@@ -101,33 +101,37 @@ Each submission type has a review tier determining who can see/resolve it:
 For the first PR, everything is **staff-only**. Delegation tiers come later.
 
 ## What Exists
-- Nothing in player_submissions or staff_inbox
-- **Existing patterns:** `RosterApplication` has its own flow in the roster app. It is NOT being migrated or wrapped — it just shows up in the inbox alongside the new types.
+- **`player_submissions` app** — `PlayerFeedback`, `BugReport`, `PlayerReport` (stub) models with SharedMemoryModel, factories, admin, migrations
+- **Per-type ViewSets** — create (any authenticated player) / list / retrieve / update (staff only) endpoints at `/api/player-submissions/{feedback,bug-reports,player-reports}/`
+- **FilterSets** — status and date range filters on each ViewSet
+- **Identity summary** — `Persona.get_identity_summary(include_account=...)` produces staff-facing strings like "Crucible (Player 1, Account bob)"
+- **`staff_inbox` app** — thin aggregator with no models. `get_staff_inbox()` service + `GET /api/staff-inbox/` endpoint
+- **Account history** — `get_account_submission_history(account_id)` service + `GET /api/staff-inbox/accounts/{id}/history/` endpoint
+- **RosterApplication integration** — shows up in the inbox alongside new types; no migration or wrapping of the existing flow
 
 ## What's Needed for MVP
 
-### Phase 1 — Core models and submission
+### Phase 1 — Core models and submission ✅
 - `player_submissions` app with three models: `PlayerFeedback`, `BugReport`, `PlayerReport` (stub)
 - All three anchor on `reporter_persona` FK and capture `location` + `created_at`
 - `PlayerReport` additionally has: `reported_persona`, `behavior_description`, `asked_to_stop`, `blocked_or_muted`, `scene`, `interaction`
 - Submission APIs (create-only for players)
 - Identity summary helper on Persona (with staff-only account portion)
 
-### Phase 2 — Per-type management
+### Phase 2 — Per-type management ✅
 - ViewSets for each model with appropriate filters and permissions
-- Mark-reviewed workflow
+- Status filter and date range filter
 - Staff-only review tier enforcement
 
-### Phase 3 — Staff inbox aggregator
-- `staff_inbox` app (or module) — service functions, API endpoint, dataclass
+### Phase 3 — Staff inbox aggregator ✅
+- `staff_inbox` app — service functions, API endpoint, InboxItem dataclass
 - Reads from three new models + existing RosterApplication
-- Filters by category, age, priority, reporter
-- Not a model — purely a view/service layer
+- Filter by categories query param
+- No models — purely a view/service layer
 
-### Phase 4 — Account history view
+### Phase 4 — Account history view ✅
 - Staff-only endpoint: all submissions related to a specific account (walking persona chains)
-- Reports against, reports submitted, other submissions
-- Optimized queries with proper joins
+- Reports against, reports submitted, feedback, bug reports, character applications
 
 ### Phase 5 — Frontend (separate work)
 - Staff dashboard widget showing job counts by category
