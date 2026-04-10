@@ -1,7 +1,7 @@
 # GM System
 
 **Status:** not-started
-**Depends on:** StaffJobs (prerequisite), Stories, Roster, Scenes
+**Depends on:** Staff Inbox & Player Submissions (prerequisite), Stories, Roster, Scenes
 
 ## Overview
 The infrastructure for player GMs to run stories, manage tables of PCs, create roster characters, grant rewards, and progress through a trust-based level system. Staff coordinates the overall game with unrestricted tooling; GMs operate within level-appropriate caps.
@@ -25,7 +25,7 @@ Progression is driven by player feedback/upvotes tied to stories run and how pla
 
 ### GM Applications
 - Players apply to become GMs (motivations, experience, availability)
-- Applications flow through the **StaffJobs** queue (not a separate review UI)
+- Applications are their own model in the `gm` app; they show up in the **staff inbox** alongside other submission types for triage
 - Staff approves/denies from the shared jobs hub
 - On approval: account gains a GMProfile, GM commands unlocked, abbreviated CG flow creates their GMCharacter
 
@@ -78,18 +78,19 @@ The GM system defines these role relationships; the stories app uses them for pe
 
 ## What's Needed for MVP
 
-### Phase 0 (prerequisite) — Staff Jobs System
-- Generic job queue for all staff work (not GM-specific)
-- Categories: character_application, gm_application, bug_report, harassment_report, player_complaint, player_fyi, story_escalation, trust_appeal, etc.
-- Assignment, claim, status, priority, age filtering
-- Existing RosterApplication flow migrated to post jobs
-- **Harassment reporting is a critical safety feature** — must be ready before GM onboarding
+### Phase 0 (prerequisite) — Staff Inbox & Player Submissions
+- See `staff-inbox.md` for the full design
+- New `player_submissions` app with `PlayerFeedback`, `BugReport`, `PlayerReport` (stub) models
+- Staff inbox aggregator that reads from those + existing `RosterApplication`
+- Identity summary helper on Persona for staff context
+- Account history page (staff-only)
+- **PlayerReport is safety-critical** — the model and submission path exist before GM onboarding, even though the full UX design comes later
 
 ### Phase 1 — GM Identity Foundation
 - `GMCharacter` typeclass (no vitals, not attackable, puppetable)
 - `StaffCharacter` typeclass (orthogonal, hosts staff tooling)
 - `GMProfile` model (level, stats, approval date)
-- `GMApplication` model (posts a StaffJob on creation)
+- `GMApplication` model (shows up in the staff inbox aggregator)
 - GM level TextChoices (STARTING/JUNIOR/GM/EXPERIENCED/SENIOR)
 - Permission framework keyed on level
 - Feedback/trust stub data model (no progression math yet)
@@ -115,18 +116,20 @@ The GM system defines these role relationships; the stories app uses them for pe
 
 ### Phase 5 — Dashboards and UI
 - GM dashboard — their table, stories, PCs, pending tasks
-- Staff coordination view — cross-table overview leveraging StaffJob queue
-- Application review UI (wrapped around StaffJob queue with filters)
+- Staff coordination view — cross-table overview leveraging the staff inbox
+- Application review UI — dedicated per-type management for GMApplication and RosterApplication
 - GM story management interface
 
 ## Cross-System Dependencies
 
 - **Stories app** — needs GM role relations and permission checks added as it grows
-- **Roster app** — RosterApplication migrates to post StaffJobs; GMs get scoped approval permissions
+- **Roster app** — RosterApplication stays as-is but shows up in the staff inbox; GMs eventually get scoped approval permissions via delegation tiers
 - **Scenes app** — GMCharacter needs to participate in scenes (likely works out of the box)
 - **Combat app** — GM combat tools build on Phase 3's GM-gated encounter management
 - **Trust system** — current stub needs fleshing out with the upvote mechanics; late design
 
 ## Notes
 
-The GM system is safety-critical. Players complaining about harassment need to reach staff quickly and reliably. The StaffJobs system must support harassment reports as a first-class category with appropriate priority handling, even before GM work begins. This is why Phase 0 (StaffJobs) is the prerequisite — we don't want to build GM onboarding without the safety infrastructure already in place.
+The GM system is safety-critical. Players need a reliable path to report problematic behavior before we open up new trust relationships (GMs have power over other players, so the stakes go up). The Staff Inbox & Player Submissions infrastructure must exist before GM onboarding — we do not want to grant players GM powers without the reporting system already in place.
+
+Note that the full PlayerReport UX (form wording, flow, block/mute integration) is a separate design pass, deferred until we have the right context to design it delicately. The first PR establishes the data model and basic submission path.

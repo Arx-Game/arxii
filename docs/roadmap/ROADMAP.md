@@ -85,8 +85,8 @@ broken regardless of technical correctness.
 | [Tooling](tooling.md) | in-progress | Player building tools, GM tools (level-gated), staff tools |
 | Covenants | skeleton | Covenant roles (stub), speed ranks — needs party model, rituals, bonuses, API |
 | Vitals | skeleton | CharacterStatus, CharacterVitals model — needs non-combat integration, API, frontend |
-| [GM System](gm-system.md) | not-started | GM identity, tables, levels, rewards — depends on StaffJobs prerequisite |
-| [StaffJobs](staff-jobs.md) | not-started | Generic staff work queue — character apps, GM apps, harassment reports, bug reports |
+| [GM System](gm-system.md) | not-started | GM identity, tables, levels, rewards — depends on Staff Inbox prerequisite |
+| [Staff Inbox & Player Submissions](staff-inbox.md) | not-started | Feedback, bug reports, player reports, and triage aggregator for staff |
 
 ### Recent Infrastructure Changes
 
