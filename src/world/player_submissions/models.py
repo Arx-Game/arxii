@@ -11,10 +11,16 @@ from world.player_submissions.constants import SubmissionStatus
 class PlayerFeedback(SharedMemoryModel):
     """General freeform feedback from a player about the game.
 
-    Anchored on the submitter's active Persona so we can always derive
-    the full identity chain (persona -> character -> tenure -> account).
+    Stores both the submitter's account (the actionable unit for staff)
+    and the persona they were wearing (for IC context).
     """
 
+    reporter_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The account that submitted this.",
+    )
     reporter_persona = models.ForeignKey(
         "scenes.Persona",
         on_delete=models.PROTECT,
@@ -49,6 +55,12 @@ class BugReport(SharedMemoryModel):
     can follow up via the account history view if more info is needed.
     """
 
+    reporter_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The account that submitted this.",
+    )
     reporter_persona = models.ForeignKey(
         "scenes.Persona",
         on_delete=models.PROTECT,
@@ -88,6 +100,22 @@ class PlayerReport(SharedMemoryModel):
     See docs/roadmap/staff-inbox.md for full design notes.
     """
 
+    reporter_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The account that submitted this.",
+    )
+    reported_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "The account behind the reported persona at the time of the incident. "
+            "Stored directly so staff can query by account without walking the "
+            "persona chain."
+        ),
+    )
     reporter_persona = models.ForeignKey(
         "scenes.Persona",
         on_delete=models.PROTECT,

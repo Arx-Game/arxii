@@ -6,11 +6,11 @@ from dataclasses import asdict
 from typing import Any
 
 from django.core.paginator import EmptyPage, Paginator
+from rest_framework.permissions import IsAdminUser
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from world.player_submissions.permissions import IsStaffUser
 from world.staff_inbox.filters import StaffInboxFilterSerializer
 from world.staff_inbox.services import (
     get_account_submission_history,
@@ -22,7 +22,7 @@ from world.staff_inbox.types import InboxItem
 class StaffInboxView(APIView):
     """Aggregated inbox of items needing staff attention."""
 
-    permission_classes = [IsStaffUser]
+    permission_classes = [IsAdminUser]
 
     def get(self, request: Request) -> Response:
         filter_serializer = StaffInboxFilterSerializer(data=request.query_params)
@@ -68,7 +68,7 @@ class StaffInboxView(APIView):
 class AccountHistoryView(APIView):
     """Staff-only view of all submissions related to an account."""
 
-    permission_classes = [IsStaffUser]
+    permission_classes = [IsAdminUser]
 
     def get(self, request: Request, account_id: int) -> Response:
         history = get_account_submission_history(account_id=account_id)

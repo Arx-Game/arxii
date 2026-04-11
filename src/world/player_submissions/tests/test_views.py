@@ -19,38 +19,90 @@ from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import PersonaFactory
 
 
+def _create_played_persona(account, key: str = "TestChar"):
+    """Build a valid account -> tenure -> character -> persona chain.
+
+    Returns the (character, persona) pair so tests can post valid
+    submissions and assert on the resulting rows.
+    """
+    character = CharacterFactory(db_key=key)
+    identity = CharacterIdentityFactory(character=character)
+    persona = identity.active_persona
+    RosterTenureFactory(
+        roster_entry__character=character,
+        player_data__account=account,
+    )
+    return character, persona
+
+
 class PlayerFeedbackCreateTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory(username="testplayer")
-        cls.character = CharacterFactory(db_key="TestChar")
-        cls.identity = CharacterIdentityFactory(character=cls.character)
-        cls.persona = cls.identity.active_persona
-        cls.tenure = RosterTenureFactory(
-            roster_entry__character=cls.character,
-            player_data__account=cls.account,
-        )
+        cls.character, cls.persona = _create_played_persona(cls.account, "TestChar")
 
     def test_authenticated_player_can_submit(self) -> None:
         client = APIClient()
         client.force_authenticate(user=self.account)
         response = client.post(
             "/api/player-submissions/feedback/",
-            {"description": "Love the new combat system!"},
+            {
+                "reporter_persona": self.persona.pk,
+                "description": "Love the new combat system!",
+            },
             format="json",
         )
         self.assertEqual(response.status_code, 201)
         fb = PlayerFeedback.objects.get()
         self.assertEqual(fb.reporter_persona, self.persona)
+        self.assertEqual(fb.reporter_account, self.account)
 
     def test_unauthenticated_cannot_submit(self) -> None:
         client = APIClient()
         response = client.post(
             "/api/player-submissions/feedback/",
-            {"description": "anon rant"},
+            {
+                "reporter_persona": self.persona.pk,
+                "description": "anon rant",
+            },
             format="json",
         )
         self.assertIn(response.status_code, (401, 403))
+
+    def test_cannot_submit_as_persona_not_owned(self) -> None:
+        """User cannot submit using a persona they don't currently play."""
+        other_account = AccountFactory(username="otherplayer")
+        _other_char, other_persona = _create_played_persona(
+            other_account,
+            key="OtherChar",
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.account)
+        response = client.post(
+            "/api/player-submissions/feedback/",
+            {
+                "reporter_persona": other_persona.pk,
+                "description": "spoofed",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(PlayerFeedback.objects.count(), 0)
+
+    def test_cannot_submit_as_persona_with_no_tenure(self) -> None:
+        """Persona whose character has no active tenure rejects with 400."""
+        orphan_persona = PersonaFactory()
+        client = APIClient()
+        client.force_authenticate(user=self.account)
+        response = client.post(
+            "/api/player-submissions/feedback/",
+            {
+                "reporter_persona": orphan_persona.pk,
+                "description": "no tenure",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
 
     def test_location_auto_populated_from_character(self) -> None:
         """The location field is set from character.location on create."""
@@ -64,7 +116,10 @@ class PlayerFeedbackCreateTest(TestCase):
         client.force_authenticate(user=self.account)
         response = client.post(
             "/api/player-submissions/feedback/",
-            {"description": "in a room"},
+            {
+                "reporter_persona": self.persona.pk,
+                "description": "in a room",
+            },
             format="json",
         )
         self.assertEqual(response.status_code, 201)
@@ -82,7 +137,11 @@ class PlayerFeedbackCreateTest(TestCase):
         client.force_authenticate(user=self.account)
         response = client.post(
             "/api/player-submissions/feedback/",
-            {"description": "test", "location": other_room.pk},
+            {
+                "reporter_persona": self.persona.pk,
+                "description": "test",
+                "location": other_room.pk,
+            },
             format="json",
         )
         self.assertEqual(response.status_code, 201)
@@ -112,7 +171,10 @@ class PlayerFeedbackCreateTest(TestCase):
         client.force_authenticate(user=self.account)
         response = client.post(
             "/api/player-submissions/feedback/",
-            {"description": "test"},
+            {
+                "reporter_persona": self.persona.pk,
+                "description": "test",
+            },
             format="json",
         )
         self.assertEqual(response.status_code, 201)
@@ -145,38 +207,38 @@ class BugReportCreateTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory(username="buguser")
-        cls.character = CharacterFactory(db_key="BugChar")
-        cls.identity = CharacterIdentityFactory(character=cls.character)
-        cls.persona = cls.identity.active_persona
-        cls.tenure = RosterTenureFactory(
-            roster_entry__character=cls.character,
-            player_data__account=cls.account,
-        )
+        cls.character, cls.persona = _create_played_persona(cls.account, "BugChar")
 
     def test_can_submit_bug_report(self) -> None:
         client = APIClient()
         client.force_authenticate(user=self.account)
         response = client.post(
             "/api/player-submissions/bug-reports/",
-            {"description": "Scene timer desyncs"},
+            {
+                "reporter_persona": self.persona.pk,
+                "description": "Scene timer desyncs",
+            },
             format="json",
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(BugReport.objects.count(), 1)
+        bug = BugReport.objects.get()
+        self.assertEqual(bug.reporter_account, self.account)
 
 
 class PlayerReportCreateTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory(username="reporter")
-        cls.character = CharacterFactory(db_key="ReporterChar")
-        cls.identity = CharacterIdentityFactory(character=cls.character)
-        cls.reporter_persona = cls.identity.active_persona
-        cls.tenure = RosterTenureFactory(
-            roster_entry__character=cls.character,
-            player_data__account=cls.account,
+        cls.character, cls.reporter_persona = _create_played_persona(
+            cls.account,
+            "ReporterChar",
         )
-        cls.target_persona = PersonaFactory()
+        cls.target_account = AccountFactory(username="target")
+        cls.target_character, cls.target_persona = _create_played_persona(
+            cls.target_account,
+            "TargetChar",
+        )
 
     def test_can_submit_report(self) -> None:
         client = APIClient()
@@ -184,6 +246,7 @@ class PlayerReportCreateTest(TestCase):
         response = client.post(
             "/api/player-submissions/player-reports/",
             {
+                "reporter_persona": self.reporter_persona.pk,
                 "reported_persona": self.target_persona.pk,
                 "behavior_description": "harassing behavior",
                 "asked_to_stop": True,
@@ -195,27 +258,56 @@ class PlayerReportCreateTest(TestCase):
         report = PlayerReport.objects.get()
         self.assertEqual(report.reporter_persona, self.reporter_persona)
         self.assertEqual(report.reported_persona, self.target_persona)
+        self.assertEqual(report.reporter_account, self.account)
+        self.assertEqual(report.reported_account, self.target_account)
 
-    def test_staff_detail_shows_account(self) -> None:
-        staff = AccountFactory(username="staffuser", is_staff=True)
-        # Build a report whose reporter has the full character+tenure chain
-        # so the identity summary can surface the account name for staff.
-        reporter_account = AccountFactory(username="reportowner")
-        reporter_char = CharacterFactory(db_key="ReportedReporter")
-        reporter_identity = CharacterIdentityFactory(character=reporter_char)
-        RosterTenureFactory(
-            roster_entry__character=reporter_char,
-            player_data__account=reporter_account,
+    def test_cannot_report_persona_with_no_tenure(self) -> None:
+        """A reported persona with no current player rejects the submission."""
+        orphan_persona = PersonaFactory()
+        client = APIClient()
+        client.force_authenticate(user=self.account)
+        response = client.post(
+            "/api/player-submissions/player-reports/",
+            {
+                "reporter_persona": self.reporter_persona.pk,
+                "reported_persona": orphan_persona.pk,
+                "behavior_description": "no tenure target",
+            },
+            format="json",
         )
-        report = PlayerReportFactory(reporter_persona=reporter_identity.active_persona)
+        self.assertEqual(response.status_code, 400)
+
+    def test_cannot_report_self(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.account)
+        response = client.post(
+            "/api/player-submissions/player-reports/",
+            {
+                "reporter_persona": self.reporter_persona.pk,
+                "reported_persona": self.reporter_persona.pk,
+                "behavior_description": "self",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_staff_detail_shows_account_username(self) -> None:
+        staff = AccountFactory(username="staffuser", is_staff=True)
+        report = PlayerReportFactory()
         client = APIClient()
         client.force_authenticate(user=staff)
         response = client.get(
             f"/api/player-submissions/player-reports/{report.pk}/",
         )
         self.assertEqual(response.status_code, 200)
-        # Account portion visible to staff
-        self.assertIn("Account", response.data["reporter_summary"])
+        self.assertEqual(
+            response.data["reporter_account_username"],
+            report.reporter_account.username,
+        )
+        self.assertEqual(
+            response.data["reported_account_username"],
+            report.reported_account.username,
+        )
 
 
 class PlayerReportPermissionTest(TestCase):
@@ -299,7 +391,10 @@ class BugReportPermissionTest(TestCase):
 
 
 class PlayerFeedbackListQueryCountTest(TestCase):
-    """Regression guard: list query count must not grow with row count."""
+    """Regression guard: list query count must not grow with row count.
+
+    Pins the select_related approach against any future N+1 regression.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -361,35 +456,3 @@ class PlayerReportListQueryCountTest(TestCase):
             3,
             f"Query count grew from {small} to {large} — N+1 regression",
         )
-
-
-class BaseViewSetEnforcementTest(TestCase):
-    """Verify __init_subclass__ enforces required method overrides."""
-
-    def test_missing_detail_serializer_raises(self) -> None:
-        from world.player_submissions.views import _BaseSubmissionViewSet
-
-        with self.assertRaises(NotImplementedError):
-
-            class BrokenFeedbackViewSet(_BaseSubmissionViewSet):
-                queryset = PlayerFeedback.objects.all()
-
-                # Deliberately missing _get_detail_serializer_class override
-                def _collect_persona_ids(self, rows):  # type: ignore[override]
-                    return []
-
-    def test_missing_collect_persona_ids_raises(self) -> None:
-        from world.player_submissions.serializers import (
-            PlayerFeedbackDetailSerializer,
-        )
-        from world.player_submissions.views import _BaseSubmissionViewSet
-
-        with self.assertRaises(NotImplementedError):
-
-            class BrokenBugViewSet(_BaseSubmissionViewSet):
-                queryset = BugReport.objects.all()
-
-                def _get_detail_serializer_class(self):  # type: ignore[override]
-                    return PlayerFeedbackDetailSerializer
-
-                # Deliberately missing _collect_persona_ids override

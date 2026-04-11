@@ -1,7 +1,7 @@
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -249,38 +249,6 @@ class Persona(SharedMemoryModel):
     def is_established_or_primary(self) -> bool:
         """Whether this persona can have relationships, reputation, legend."""
         return self.persona_type in (PersonaType.PRIMARY, PersonaType.ESTABLISHED)
-
-    def get_identity_summary(self, *, include_account: bool = False) -> str:
-        """Return a one-line staff-facing identity summary.
-
-        Format: "Crucible (Player 1, Account bob)" when include_account=True,
-        otherwise "Crucible (Player 1)".
-
-        Walks persona -> character -> current roster tenure to derive the
-        player number and account. If no active tenure exists, returns a
-        degraded summary with just the persona name.
-
-        Args:
-            include_account: If True, include the account username. Only
-                callers in staff context should pass True — this exposes
-                the OOC identity behind the IC character.
-        """
-        name = self.name
-        character = self.character
-        if character is None:
-            return name
-        try:
-            entry = character.roster_entry
-        except ObjectDoesNotExist:
-            return name
-        tenure = entry.current_tenure
-        if tenure is None:
-            return name
-        player_num = tenure.player_number
-        if include_account:
-            account_name = tenure.player_data.account.username
-            return f"{name} (Player {player_num}, Account {account_name})"
-        return f"{name} (Player {player_num})"
 
 
 class PersonaDiscovery(SharedMemoryModel):

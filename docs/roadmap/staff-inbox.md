@@ -104,7 +104,7 @@ For the first PR, everything is **staff-only**. Delegation tiers come later.
 - **`player_submissions` app** — `PlayerFeedback`, `BugReport`, `PlayerReport` (stub) models with SharedMemoryModel, factories, admin, migrations
 - **Per-type ViewSets** — create (any authenticated player) / list / retrieve / update (staff only) endpoints at `/api/player-submissions/{feedback,bug-reports,player-reports}/`
 - **FilterSets** — status and date range filters on each ViewSet
-- **Identity summary** — `Persona.get_identity_summary(include_account=...)` produces staff-facing strings like "Crucible (Player 1, Account bob)"
+- **Direct account FK** — submissions store `reporter_account` (and `reported_account` on `PlayerReport`) so staff can query by account without walking the persona chain. Detail serializers expose `reporter_account_username` / `reporter_persona_name` as structured fields.
 - **`staff_inbox` app** — thin aggregator with no models. `get_staff_inbox()` service + `GET /api/staff-inbox/` endpoint
 - **Account history** — `get_account_submission_history(account_id)` service + `GET /api/staff-inbox/accounts/{id}/history/` endpoint
 - **RosterApplication integration** — shows up in the inbox alongside new types; no migration or wrapping of the existing flow
@@ -113,10 +113,9 @@ For the first PR, everything is **staff-only**. Delegation tiers come later.
 
 ### Phase 1 — Core models and submission ✅
 - `player_submissions` app with three models: `PlayerFeedback`, `BugReport`, `PlayerReport` (stub)
-- All three anchor on `reporter_persona` FK and capture `location` + `created_at`
-- `PlayerReport` additionally has: `reported_persona`, `behavior_description`, `asked_to_stop`, `blocked_or_muted`, `scene`, `interaction`
-- Submission APIs (create-only for players)
-- Identity summary helper on Persona (with staff-only account portion)
+- All three carry `reporter_account` + `reporter_persona` FKs and capture `location` + `created_at`. Account is the actionable unit; persona is the IC context.
+- `PlayerReport` additionally has: `reported_account`, `reported_persona`, `behavior_description`, `asked_to_stop`, `blocked_or_muted`, `scene`, `interaction`
+- Submission APIs (create-only for players). Frontend supplies `reporter_persona`; the serializer validates the requesting account currently plays it.
 
 ### Phase 2 — Per-type management ✅
 - ViewSets for each model with appropriate filters and permissions
