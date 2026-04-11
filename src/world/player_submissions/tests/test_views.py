@@ -54,6 +54,9 @@ class PlayerFeedbackCreateTest(TestCase):
 
     def test_location_auto_populated_from_character(self) -> None:
         """The location field is set from character.location on create."""
+        # Refresh to prevent cross-test pollution from the identity-map
+        # cache under setUpTestData.
+        self.character.refresh_from_db()
         room = RoomProfileFactory().objectdb
         self.character.location = room
 
@@ -70,6 +73,7 @@ class PlayerFeedbackCreateTest(TestCase):
 
     def test_client_location_field_is_ignored(self) -> None:
         """Client-supplied location in POST body is ignored."""
+        self.character.refresh_from_db()
         character_room = RoomProfileFactory().objectdb
         other_room = RoomProfileFactory().objectdb
         self.character.location = character_room
@@ -85,6 +89,35 @@ class PlayerFeedbackCreateTest(TestCase):
         fb = PlayerFeedback.objects.get()
         # Should be character_room, not the client-supplied other_room
         self.assertEqual(fb.location_id, character_room.pk)
+
+    def test_location_picks_up_out_of_band_updates(self) -> None:
+        """If db_location was updated out-of-band (raw SQL or another
+        process), perform_create must still pick up the current location,
+        not a stale cache."""
+        from evennia.objects.models import ObjectDB
+
+        self.character.refresh_from_db()
+        initial_room = RoomProfileFactory().objectdb
+        self.character.db_location = initial_room
+        self.character.save()
+
+        # Access the identity-mapped instance so it's in cache
+        _ = self.character.db_location
+
+        # Simulate out-of-band update (bypassing the identity map)
+        new_room = RoomProfileFactory().objectdb
+        ObjectDB.objects.filter(pk=self.character.pk).update(db_location=new_room)
+
+        client = APIClient()
+        client.force_authenticate(user=self.account)
+        response = client.post(
+            "/api/player-submissions/feedback/",
+            {"description": "test"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        fb = PlayerFeedback.objects.get()
+        self.assertEqual(fb.location_id, new_room.pk)
 
 
 class PlayerFeedbackListTest(TestCase):
@@ -263,3 +296,100 @@ class BugReportPermissionTest(TestCase):
         client.force_authenticate(user=self.staff)
         response = client.get("/api/player-submissions/bug-reports/")
         self.assertEqual(response.status_code, 200)
+
+
+class PlayerFeedbackListQueryCountTest(TestCase):
+    """Regression guard: list query count must not grow with row count."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = AccountFactory(username="querycount_staff", is_staff=True)
+
+    def _count_queries_for_list(self, row_count: int) -> int:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        PlayerFeedback.objects.all().delete()
+        for _ in range(row_count):
+            PlayerFeedbackFactory()
+        client = APIClient()
+        client.force_authenticate(user=self.staff)
+        with CaptureQueriesContext(connection) as ctx:
+            response = client.get("/api/player-submissions/feedback/")
+        self.assertEqual(response.status_code, 200)
+        return len(ctx.captured_queries)
+
+    def test_list_queries_do_not_grow_with_row_count(self) -> None:
+        small = self._count_queries_for_list(2)
+        large = self._count_queries_for_list(10)
+        # Allow a small constant difference (e.g., pagination count query)
+        # but not a per-row growth
+        self.assertLess(
+            large - small,
+            3,
+            f"Query count grew from {small} to {large} — N+1 regression",
+        )
+
+
+class PlayerReportListQueryCountTest(TestCase):
+    """Regression guard: player report list has two personas per row but
+    still constant query count."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = AccountFactory(username="pr_querycount_staff", is_staff=True)
+
+    def _count_queries_for_list(self, row_count: int) -> int:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        PlayerReport.objects.all().delete()
+        for _ in range(row_count):
+            PlayerReportFactory()
+        client = APIClient()
+        client.force_authenticate(user=self.staff)
+        with CaptureQueriesContext(connection) as ctx:
+            response = client.get("/api/player-submissions/player-reports/")
+        self.assertEqual(response.status_code, 200)
+        return len(ctx.captured_queries)
+
+    def test_list_queries_do_not_grow(self) -> None:
+        small = self._count_queries_for_list(2)
+        large = self._count_queries_for_list(10)
+        self.assertLess(
+            large - small,
+            3,
+            f"Query count grew from {small} to {large} — N+1 regression",
+        )
+
+
+class BaseViewSetEnforcementTest(TestCase):
+    """Verify __init_subclass__ enforces required method overrides."""
+
+    def test_missing_detail_serializer_raises(self) -> None:
+        from world.player_submissions.views import _BaseSubmissionViewSet
+
+        with self.assertRaises(NotImplementedError):
+
+            class BrokenFeedbackViewSet(_BaseSubmissionViewSet):
+                queryset = PlayerFeedback.objects.all()
+
+                # Deliberately missing _get_detail_serializer_class override
+                def _collect_persona_ids(self, rows):  # type: ignore[override]
+                    return []
+
+    def test_missing_collect_persona_ids_raises(self) -> None:
+        from world.player_submissions.serializers import (
+            PlayerFeedbackDetailSerializer,
+        )
+        from world.player_submissions.views import _BaseSubmissionViewSet
+
+        with self.assertRaises(NotImplementedError):
+
+            class BrokenBugViewSet(_BaseSubmissionViewSet):
+                queryset = BugReport.objects.all()
+
+                def _get_detail_serializer_class(self):  # type: ignore[override]
+                    return PlayerFeedbackDetailSerializer
+
+                # Deliberately missing _collect_persona_ids override

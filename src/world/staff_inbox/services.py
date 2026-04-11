@@ -22,8 +22,13 @@ from world.staff_inbox.types import InboxItem
 #: with filters for deeper exploration.
 MAX_PER_CATEGORY = 100
 
+#: Fallback identity tuple used when a persona lookup is missing from the
+#: batch-resolved dict (e.g., the persona was deleted between the list and
+#: detail query). Keeps display code total — no KeyError for race cases.
+_UNKNOWN_IDENTITY: tuple[str, int | None, str] = ("[unknown]", None, "")
 
-def _resolve_identities(
+
+def resolve_identities(
     persona_ids: list[int],
 ) -> dict[int, tuple[str, int | None, str]]:
     """Batch-resolve identity summaries for a set of personas.
@@ -95,7 +100,7 @@ def _resolve_identities(
     return result
 
 
-def _format_summary(
+def format_identity_summary(
     resolved: tuple[str, int | None, str],
     *,
     include_account: bool,
@@ -117,8 +122,8 @@ def _feedback_to_item(
         source_type=SubmissionCategory.PLAYER_FEEDBACK,
         source_pk=obj.pk,
         title=f"Feedback: {obj.description[:60]}",
-        reporter_summary=_format_summary(
-            identities[obj.reporter_persona_id],
+        reporter_summary=format_identity_summary(
+            identities.get(obj.reporter_persona_id, _UNKNOWN_IDENTITY),
             include_account=True,
         ),
         created_at=obj.created_at,
@@ -138,8 +143,8 @@ def _bug_to_item(
         source_type=SubmissionCategory.BUG_REPORT,
         source_pk=obj.pk,
         title=f"Bug: {obj.description[:60]}",
-        reporter_summary=_format_summary(
-            identities[obj.reporter_persona_id],
+        reporter_summary=format_identity_summary(
+            identities.get(obj.reporter_persona_id, _UNKNOWN_IDENTITY),
             include_account=True,
         ),
         created_at=obj.created_at,
@@ -155,12 +160,12 @@ def _report_to_item(
     obj: PlayerReport,
     identities: dict[int, tuple[str, int | None, str]],
 ) -> InboxItem:
-    reporter = _format_summary(
-        identities[obj.reporter_persona_id],
+    reporter = format_identity_summary(
+        identities.get(obj.reporter_persona_id, _UNKNOWN_IDENTITY),
         include_account=True,
     )
-    reported = _format_summary(
-        identities[obj.reported_persona_id],
+    reported = format_identity_summary(
+        identities.get(obj.reported_persona_id, _UNKNOWN_IDENTITY),
         include_account=True,
     )
     return InboxItem(
@@ -252,7 +257,7 @@ def get_staff_inbox(
     for pr in report_qs:
         persona_ids.add(pr.reporter_persona_id)
         persona_ids.add(pr.reported_persona_id)
-    identities = _resolve_identities(list(persona_ids))
+    identities = resolve_identities(list(persona_ids))
 
     items: list[InboxItem] = []
     items.extend(_feedback_to_item(fb, identities) for fb in feedback_qs)
@@ -338,7 +343,7 @@ def get_account_submission_history(
         persona_ids.add(f.reporter_persona_id)
     for b in bug_reports:
         persona_ids.add(b.reporter_persona_id)
-    identities = _resolve_identities(list(persona_ids))
+    identities = resolve_identities(list(persona_ids))
 
     def _wrap(items: list[InboxItem], total: int) -> dict[str, Any]:
         return {

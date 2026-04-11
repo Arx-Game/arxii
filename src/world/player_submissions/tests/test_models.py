@@ -55,6 +55,9 @@ class PlayerReportConstraintTest(TestCase):
         """CheckConstraint prevents reporter_persona == reported_persona."""
         persona = PersonaFactory()
         with self.assertRaises(IntegrityError):
+            # Inner atomic() creates a savepoint so the constraint
+            # violation does not poison the enclosing TestCase
+            # transaction on Postgres.
             with transaction.atomic():
                 PlayerReport.objects.create(
                     reporter_persona=persona,

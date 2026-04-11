@@ -7,6 +7,7 @@ from typing import Any
 from rest_framework import serializers
 
 from world.player_submissions.models import BugReport, PlayerFeedback, PlayerReport
+from world.staff_inbox.services import format_identity_summary
 
 
 class _IdentitySummaryMixin:
@@ -28,11 +29,13 @@ class _IdentitySummaryMixin:
         """
         context = self.context  # type: ignore[attr-defined]
         identity_lookup = context.get("identity_lookup")
-        format_summary = context.get("format_summary")
-        if identity_lookup is not None and format_summary is not None:
+        if identity_lookup is not None:
             resolved = identity_lookup.get(persona_id)
             if resolved is not None:
-                return format_summary(resolved, include_account=include_account)
+                return format_identity_summary(
+                    resolved,
+                    include_account=include_account,
+                )
         return persona_obj.get_identity_summary(include_account=include_account)
 
     def _reporter_summary(self, obj: Any) -> str:

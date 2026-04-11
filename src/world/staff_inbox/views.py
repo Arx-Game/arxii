@@ -62,7 +62,7 @@ class StaffInboxView(APIView):
         """Build the URL for a specific page, preserving query params."""
         params = request.query_params.copy()
         params["page"] = str(page)
-        return f"{request.build_absolute_uri(request.path)}?{params.urlencode()}"
+        return request.build_absolute_uri(f"{request.path}?{params.urlencode()}")
 
 
 class AccountHistoryView(APIView):
