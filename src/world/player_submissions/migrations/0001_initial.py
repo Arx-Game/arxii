@@ -153,14 +153,6 @@ class Migration(migrations.Migration):
                         help_text="Whether the reporter blocked or muted as a result.",
                     ),
                 ),
-                (
-                    "interaction_timestamp",
-                    models.DateTimeField(
-                        blank=True,
-                        help_text="Denormalized from interaction — required for composite FK with partitioned table.",
-                        null=True,
-                    ),
-                ),
                 ("created_at", models.DateTimeField(auto_now_add=True, db_index=True)),
                 (
                     "status",
@@ -231,5 +223,15 @@ class Migration(migrations.Migration):
             options={
                 "ordering": ["-created_at"],
             },
+        ),
+        migrations.AddConstraint(
+            model_name="playerreport",
+            constraint=models.CheckConstraint(
+                check=models.Q(
+                    ("reporter_persona", models.F("reported_persona")),
+                    _negated=True,
+                ),
+                name="player_report_reporter_not_reported",
+            ),
         ),
     ]

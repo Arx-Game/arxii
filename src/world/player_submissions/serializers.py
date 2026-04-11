@@ -23,11 +23,15 @@ class _IdentitySummaryMixin:
 
 
 class PlayerFeedbackCreateSerializer(serializers.ModelSerializer):
-    """Write serializer - player creates feedback."""
+    """Write serializer - player creates feedback.
+
+    ``location`` is auto-populated from the submitter's current character
+    location server-side and is not accepted as input (prevents forgery).
+    """
 
     class Meta:
         model = PlayerFeedback
-        fields = ["description", "location"]
+        fields = ["description"]
 
 
 class PlayerFeedbackDetailSerializer(
@@ -55,9 +59,11 @@ class PlayerFeedbackDetailSerializer(
 
 
 class BugReportCreateSerializer(serializers.ModelSerializer):
+    """``location`` is auto-populated server-side; not accepted as input."""
+
     class Meta:
         model = BugReport
-        fields = ["description", "location"]
+        fields = ["description"]
 
 
 class BugReportDetailSerializer(
@@ -83,6 +89,8 @@ class BugReportDetailSerializer(
 
 
 class PlayerReportCreateSerializer(serializers.ModelSerializer):
+    """``location`` is auto-populated server-side; not accepted as input."""
+
     class Meta:
         model = PlayerReport
         fields = [
@@ -92,7 +100,6 @@ class PlayerReportCreateSerializer(serializers.ModelSerializer):
             "blocked_or_muted",
             "scene",
             "interaction",
-            "location",
         ]
 
 

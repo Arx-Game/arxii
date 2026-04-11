@@ -12,11 +12,14 @@ class IsAuthenticatedCanSubmit(BasePermission):
         return bool(request.user and request.user.is_authenticated)
 
 
-class IsStaffForReview(BasePermission):
-    """Only staff can list/retrieve/update submissions.
+class IsStaffUser(BasePermission):
+    """Only staff can access staff-only endpoints.
 
     First-PR scope: all review tiers are staff-only. Delegation to
     senior GMs or GM groups comes later when the GM system exists.
+
+    Shared canonical implementation — imported by both player_submissions
+    and staff_inbox to avoid duplication.
     """
 
     def has_permission(self, request: Request, view: APIView) -> bool:

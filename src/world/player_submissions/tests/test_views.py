@@ -6,6 +6,7 @@ from rest_framework.test import APIClient
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterIdentityFactory
 from world.player_submissions.factories import (
+    BugReportFactory,
     PlayerFeedbackFactory,
     PlayerReportFactory,
 )
@@ -144,3 +145,83 @@ class PlayerReportCreateTest(TestCase):
         self.assertEqual(response.status_code, 200)
         # Account portion visible to staff
         self.assertIn("Account", response.data["reporter_summary"])
+
+
+class PlayerReportPermissionTest(TestCase):
+    """Safety-critical: verify non-staff cannot access player reports."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = AccountFactory(username="permstaff", is_staff=True)
+        cls.regular = AccountFactory(username="permregular")
+        cls.report = PlayerReportFactory()
+
+    def test_unauthenticated_cannot_list(self) -> None:
+        client = APIClient()
+        response = client.get("/api/player-submissions/player-reports/")
+        self.assertIn(response.status_code, (401, 403))
+
+    def test_regular_user_cannot_list(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.regular)
+        response = client.get("/api/player-submissions/player-reports/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_regular_user_cannot_retrieve(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.regular)
+        response = client.get(
+            f"/api/player-submissions/player-reports/{self.report.pk}/",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_regular_user_cannot_update(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.regular)
+        response = client.patch(
+            f"/api/player-submissions/player-reports/{self.report.pk}/",
+            {"status": "reviewed"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_staff_can_list(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.staff)
+        response = client.get("/api/player-submissions/player-reports/")
+        self.assertEqual(response.status_code, 200)
+
+
+class BugReportPermissionTest(TestCase):
+    """Verify non-staff cannot list/retrieve bug reports."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = AccountFactory(username="bugstaff", is_staff=True)
+        cls.regular = AccountFactory(username="bugregular")
+        cls.bug = BugReportFactory()
+
+    def test_unauthenticated_cannot_list(self) -> None:
+        client = APIClient()
+        response = client.get("/api/player-submissions/bug-reports/")
+        self.assertIn(response.status_code, (401, 403))
+
+    def test_regular_user_cannot_list(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.regular)
+        response = client.get("/api/player-submissions/bug-reports/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_regular_user_cannot_retrieve(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.regular)
+        response = client.get(
+            f"/api/player-submissions/bug-reports/{self.bug.pk}/",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_staff_can_list(self) -> None:
+        client = APIClient()
+        client.force_authenticate(user=self.staff)
+        response = client.get("/api/player-submissions/bug-reports/")
+        self.assertEqual(response.status_code, 200)

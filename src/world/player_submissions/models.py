@@ -128,12 +128,6 @@ class PlayerReport(SharedMemoryModel):
         db_constraint=False,
         help_text="A specific flagged interaction, if applicable.",
     )
-    interaction_timestamp = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="Denormalized from interaction — required for composite FK "
-        "with partitioned table.",
-    )
     location = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.SET_NULL,
@@ -152,3 +146,9 @@ class PlayerReport(SharedMemoryModel):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                check=~models.Q(reporter_persona=models.F("reported_persona")),
+                name="player_report_reporter_not_reported",
+            ),
+        ]

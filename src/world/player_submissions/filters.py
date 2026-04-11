@@ -2,11 +2,15 @@
 
 import django_filters
 
+from world.player_submissions.constants import SubmissionStatus
 from world.player_submissions.models import BugReport, PlayerFeedback, PlayerReport
 
 
 class PlayerFeedbackFilter(django_filters.FilterSet):
-    status = django_filters.CharFilter(field_name="status")
+    status = django_filters.ChoiceFilter(
+        field_name="status",
+        choices=SubmissionStatus.choices,
+    )
     created_after = django_filters.DateTimeFilter(
         field_name="created_at",
         lookup_expr="gte",
@@ -22,7 +26,10 @@ class PlayerFeedbackFilter(django_filters.FilterSet):
 
 
 class BugReportFilter(django_filters.FilterSet):
-    status = django_filters.CharFilter(field_name="status")
+    status = django_filters.ChoiceFilter(
+        field_name="status",
+        choices=SubmissionStatus.choices,
+    )
     created_after = django_filters.DateTimeFilter(
         field_name="created_at",
         lookup_expr="gte",
@@ -38,7 +45,10 @@ class BugReportFilter(django_filters.FilterSet):
 
 
 class PlayerReportFilter(django_filters.FilterSet):
-    status = django_filters.CharFilter(field_name="status")
+    status = django_filters.ChoiceFilter(
+        field_name="status",
+        choices=SubmissionStatus.choices,
+    )
     reported_persona = django_filters.NumberFilter(
         field_name="reported_persona_id",
     )
