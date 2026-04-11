@@ -29,6 +29,8 @@ TYPED_DIRS = [
     "src/world/character_sheets",
     "src/world/progression",
     "src/world/character_creation",
+    "src/world/player_submissions",
+    "src/world/staff_inbox",
     "src/world/vitals",
     "src/world/combat",
     "src/world/covenants",
