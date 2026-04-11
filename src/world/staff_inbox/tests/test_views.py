@@ -55,9 +55,29 @@ class StaffInboxViewPermissionTest(TestCase):
         response = client.get("/api/staff-inbox/?page=1&page_size=2")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["count"], 3)
-        self.assertEqual(response.data["page"], 1)
+        self.assertEqual(response.data["current_page"], 1)
         self.assertEqual(response.data["page_size"], 2)
+        self.assertEqual(response.data["num_pages"], 2)
         self.assertEqual(len(response.data["results"]), 2)
+        self.assertIsNotNone(response.data["next"])
+        self.assertIsNone(response.data["previous"])
+
+    def test_pagination_shape_matches_standard(self) -> None:
+        """Response shape matches StandardResultsSetPagination."""
+        client = APIClient()
+        client.force_authenticate(user=self.staff)
+        response = client.get("/api/staff-inbox/")
+        self.assertEqual(response.status_code, 200)
+        expected_keys = {
+            "count",
+            "next",
+            "previous",
+            "page_size",
+            "num_pages",
+            "current_page",
+            "results",
+        }
+        self.assertEqual(set(response.data.keys()), expected_keys)
 
 
 class AccountHistoryViewPermissionTest(TestCase):

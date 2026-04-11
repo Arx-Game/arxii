@@ -74,32 +74,35 @@ class AccountHistoryTest(TestCase):
 
         fb = PlayerFeedbackFactory(reporter_persona=self.persona)
         history = get_account_submission_history(account_id=self.account.pk)
-        self.assertEqual(len(history["feedback"]), 1)
-        self.assertEqual(history["feedback"][0].source_pk, fb.pk)
+        self.assertEqual(len(history["feedback"]["items"]), 1)
+        self.assertEqual(history["feedback"]["items"][0].source_pk, fb.pk)
+        self.assertEqual(history["feedback"]["total"], 1)
+        self.assertFalse(history["feedback"]["truncated"])
 
     def test_history_includes_reports_against(self) -> None:
         from world.staff_inbox.services import get_account_submission_history
 
         pr = PlayerReportFactory(reported_persona=self.persona)
         history = get_account_submission_history(account_id=self.account.pk)
-        self.assertEqual(len(history["reports_against"]), 1)
-        self.assertEqual(history["reports_against"][0].source_pk, pr.pk)
+        self.assertEqual(len(history["reports_against"]["items"]), 1)
+        self.assertEqual(history["reports_against"]["items"][0].source_pk, pr.pk)
+        self.assertEqual(history["reports_against"]["total"], 1)
 
     def test_history_includes_reports_submitted(self) -> None:
         from world.staff_inbox.services import get_account_submission_history
 
         pr = PlayerReportFactory(reporter_persona=self.persona)
         history = get_account_submission_history(account_id=self.account.pk)
-        self.assertEqual(len(history["reports_submitted"]), 1)
-        self.assertEqual(history["reports_submitted"][0].source_pk, pr.pk)
+        self.assertEqual(len(history["reports_submitted"]["items"]), 1)
+        self.assertEqual(history["reports_submitted"]["items"][0].source_pk, pr.pk)
 
     def test_history_includes_bug_reports(self) -> None:
         from world.staff_inbox.services import get_account_submission_history
 
         br = BugReportFactory(reporter_persona=self.persona)
         history = get_account_submission_history(account_id=self.account.pk)
-        self.assertEqual(len(history["bug_reports"]), 1)
-        self.assertEqual(history["bug_reports"][0].source_pk, br.pk)
+        self.assertEqual(len(history["bug_reports"]["items"]), 1)
+        self.assertEqual(history["bug_reports"]["items"][0].source_pk, br.pk)
 
     def test_history_empty_for_unrelated_account(self) -> None:
         from evennia_extensions.factories import AccountFactory
@@ -108,4 +111,26 @@ class AccountHistoryTest(TestCase):
         PlayerFeedbackFactory(reporter_persona=self.persona)
         other_account = AccountFactory()
         history = get_account_submission_history(account_id=other_account.pk)
-        self.assertEqual(len(history["feedback"]), 0)
+        self.assertEqual(len(history["feedback"]["items"]), 0)
+        self.assertEqual(history["feedback"]["total"], 0)
+        self.assertFalse(history["feedback"]["truncated"])
+
+    def test_format_summary_no_account_falls_back_to_player_only(self) -> None:
+        from world.staff_inbox.services import _format_summary
+
+        result = _format_summary(("Alice", 1, ""), include_account=True)
+        self.assertEqual(result, "Alice (Player 1)")
+
+    def test_format_summary_no_player_falls_back_to_name(self) -> None:
+        """None player_num means no active tenure — just show the name."""
+        from world.staff_inbox.services import _format_summary
+
+        result = _format_summary(("Alice", None, ""), include_account=True)
+        self.assertEqual(result, "Alice")
+
+    def test_format_summary_with_player_zero(self) -> None:
+        """player_number=0 is a valid player (first player of char)."""
+        from world.staff_inbox.services import _format_summary
+
+        result = _format_summary(("Alice", 0, "bob"), include_account=True)
+        self.assertEqual(result, "Alice (Player 0, Account bob)")

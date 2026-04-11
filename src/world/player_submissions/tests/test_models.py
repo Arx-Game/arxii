@@ -1,5 +1,6 @@
 """Tests for player submission models."""
 
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.player_submissions.constants import SubmissionStatus
@@ -9,6 +10,7 @@ from world.player_submissions.factories import (
     PlayerReportFactory,
 )
 from world.player_submissions.models import BugReport, PlayerFeedback, PlayerReport
+from world.scenes.factories import PersonaFactory
 
 
 class PlayerFeedbackModelTest(TestCase):
@@ -44,3 +46,18 @@ class PlayerReportModelTest(TestCase):
         pr = PlayerReportFactory()
         assert pr.asked_to_stop is False
         assert pr.blocked_or_muted is False
+
+
+class PlayerReportConstraintTest(TestCase):
+    """Tests for DB constraints on PlayerReport."""
+
+    def test_cannot_report_self(self) -> None:
+        """CheckConstraint prevents reporter_persona == reported_persona."""
+        persona = PersonaFactory()
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                PlayerReport.objects.create(
+                    reporter_persona=persona,
+                    reported_persona=persona,
+                    behavior_description="self-report",
+                )

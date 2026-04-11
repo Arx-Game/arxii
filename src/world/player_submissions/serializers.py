@@ -12,12 +12,37 @@ from world.player_submissions.models import BugReport, PlayerFeedback, PlayerRep
 class _IdentitySummaryMixin:
     """Shared identity summary helper for submission serializers."""
 
+    def _resolved_summary(
+        self,
+        persona_id: int,
+        persona_obj: Any,
+        *,
+        include_account: bool,
+    ) -> str:
+        """Look up an identity summary for a persona.
+
+        Prefers a batch-resolved lookup from the serializer context when
+        available (set by the ViewSet's ``list``/``retrieve`` overrides)
+        to avoid the N+1 ``persona.get_identity_summary()`` walk. Falls
+        back to the per-row walk when no context lookup is present.
+        """
+        context = self.context  # type: ignore[attr-defined]
+        identity_lookup = context.get("identity_lookup")
+        format_summary = context.get("format_summary")
+        if identity_lookup is not None and format_summary is not None:
+            resolved = identity_lookup.get(persona_id)
+            if resolved is not None:
+                return format_summary(resolved, include_account=include_account)
+        return persona_obj.get_identity_summary(include_account=include_account)
+
     def _reporter_summary(self, obj: Any) -> str:
         request = self.context.get("request")  # type: ignore[attr-defined]
         include_account = bool(
             request and request.user.is_authenticated and request.user.is_staff,
         )
-        return obj.reporter_persona.get_identity_summary(
+        return self._resolved_summary(
+            obj.reporter_persona_id,
+            obj.reporter_persona,
             include_account=include_account,
         )
 
@@ -142,6 +167,8 @@ class PlayerReportDetailSerializer(
         include_account = bool(
             request and request.user.is_authenticated and request.user.is_staff,
         )
-        return obj.reported_persona.get_identity_summary(
+        return self._resolved_summary(
+            obj.reported_persona_id,
+            obj.reported_persona,
             include_account=include_account,
         )

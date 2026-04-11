@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import builtins
+from collections.abc import Iterable
 from typing import Any, cast
 
+from django.db.models import Model
 from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
 from rest_framework import mixins, serializers, status
@@ -33,6 +36,7 @@ from world.player_submissions.serializers import (
 from world.roster.models import RosterEntry
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
+from world.staff_inbox.services import _format_summary, _resolve_identities
 from world.stories.pagination import StandardResultsSetPagination
 
 
@@ -52,7 +56,17 @@ class _BaseSubmissionViewSet(
     filter_backends = [DjangoFilterBackend]
     pagination_class = StandardResultsSetPagination
 
-    def get_permissions(self) -> list:
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        # Require concrete subclasses to override the detail-serializer
+        # hook. This catches forgotten overrides at import time rather
+        # than at the first POST that reaches the abstract fallback.
+        base_impl = _BaseSubmissionViewSet._get_detail_serializer_class
+        if cls._get_detail_serializer_class is base_impl:
+            msg = f"{cls.__name__} must override _get_detail_serializer_class"
+            raise NotImplementedError(msg)
+
+    def get_permissions(self) -> builtins.list:
         if self.action == "create":
             return [IsAuthenticatedCanSubmit()]
         return [IsStaffUser()]
@@ -103,14 +117,77 @@ class _BaseSubmissionViewSet(
         msg = "Subclasses must implement _get_detail_serializer_class."
         raise NotImplementedError(msg)
 
+    def _collect_persona_ids(self, rows: Iterable[Model]) -> builtins.list[int]:
+        """Collect persona ids referenced by a page of rows.
+
+        Base implementation grabs only ``reporter_persona_id``; override
+        in ViewSets whose models have additional persona FKs (such as
+        ``PlayerReportViewSet`` with ``reported_persona_id``).
+        """
+        return [row.reporter_persona_id for row in rows]
+
+    def _serializer_context_with_identities(
+        self,
+        rows: Iterable[Model],
+    ) -> dict[str, Any]:
+        """Build serializer context with batch-resolved identity data.
+
+        Resolves every persona id referenced by the page in a single
+        pair of queries (see ``_resolve_identities``) and passes the
+        resulting lookup via context so detail serializers can skip the
+        per-row ``persona.get_identity_summary()`` walk.
+        """
+        persona_ids = list({pid for pid in self._collect_persona_ids(rows) if pid})
+        identity_lookup = _resolve_identities(persona_ids)
+        context = self.get_serializer_context()
+        context["identity_lookup"] = identity_lookup
+        context["format_summary"] = _format_summary
+        return context
+
+    def list(
+        self,
+        request: Request,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Response:
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            context = self._serializer_context_with_identities(page)
+            serializer = self.get_serializer(page, many=True, context=context)
+            return self.get_paginated_response(serializer.data)
+        context = self._serializer_context_with_identities(list(queryset))
+        serializer = self.get_serializer(queryset, many=True, context=context)
+        return Response(serializer.data)
+
+    def retrieve(
+        self,
+        request: Request,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Response:
+        instance = self.get_object()
+        context = self._serializer_context_with_identities([instance])
+        serializer = self.get_serializer(instance, context=context)
+        return Response(serializer.data)
+
     def perform_create(self, serializer: BaseSerializer[Any]) -> None:
         persona = self._get_active_persona()
         # Auto-populate location from the character's current room.
         # Nullable — character might not currently have a location
-        # (e.g., OOC null-space, offline).
-        character = persona.character
-        location = character.location if character is not None else None
-        serializer.save(reporter_persona=persona, location=location)
+        # (e.g., OOC null-space, offline). We query ``db_location_id``
+        # via a fresh values() lookup to bypass any SharedMemoryModel
+        # identity-map cache that may hold a stale Character instance.
+        location_id = None
+        if persona.character_id is not None:
+            from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+            location_id = (
+                ObjectDB.objects.filter(pk=persona.character_id)
+                .values_list("db_location_id", flat=True)
+                .first()
+            )
+        serializer.save(reporter_persona=persona, location_id=location_id)
 
     def create(
         self,
@@ -172,3 +249,11 @@ class PlayerReportViewSet(_BaseSubmissionViewSet):
 
     def _get_detail_serializer_class(self) -> type[BaseSerializer[Any]]:
         return PlayerReportDetailSerializer
+
+    def _collect_persona_ids(self, rows: Iterable[Model]) -> builtins.list[int]:
+        ids: set[int] = set()
+        for row in rows:
+            report = cast(PlayerReport, row)
+            ids.add(report.reporter_persona_id)
+            ids.add(report.reported_persona_id)
+        return list(ids)

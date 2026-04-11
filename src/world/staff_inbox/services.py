@@ -7,6 +7,8 @@ triage. Does not own any models — purely a view layer.
 
 from __future__ import annotations
 
+from typing import Any
+
 from django.urls import reverse
 
 from world.player_submissions.constants import SubmissionCategory, SubmissionStatus
@@ -23,12 +25,14 @@ MAX_PER_CATEGORY = 100
 
 def _resolve_identities(
     persona_ids: list[int],
-) -> dict[int, tuple[str, int, str]]:
+) -> dict[int, tuple[str, int | None, str]]:
     """Batch-resolve identity summaries for a set of personas.
 
     Returns a dict mapping persona_id to (persona_name, player_number,
-    account_username). Personas without an active tenure are mapped to
-    (name, 0, "") so the caller can format them as degraded summaries.
+    account_username). Personas without an active tenure have
+    ``player_number=None`` so the caller can format them as degraded
+    summaries. Using ``None`` as the sentinel avoids collision with
+    factory sequences that start at 0.
 
     Uses two flat queries regardless of persona count, avoiding the N+1
     walk through Persona.get_identity_summary (persona -> character ->
@@ -56,24 +60,34 @@ def _resolve_identities(
 
     tenure_data: dict[int, tuple[int, str]] = {}
     if entry_ids:
-        for tenure in RosterTenure.objects.filter(
-            roster_entry_id__in=entry_ids,
-            end_date__isnull=True,
-        ).values(
-            "roster_entry_id",
-            "player_number",
-            "player_data__account__username",
+        # Defensive ordering: if multiple active tenures exist for a
+        # roster entry (should not happen, but the schema does not
+        # guarantee uniqueness), the most recently started one wins.
+        for tenure in (
+            RosterTenure.objects.filter(
+                roster_entry_id__in=entry_ids,
+                end_date__isnull=True,
+            )
+            .order_by("-start_date")
+            .values(
+                "roster_entry_id",
+                "player_number",
+                "player_data__account__username",
+            )
         ):
-            tenure_data[tenure["roster_entry_id"]] = (
+            entry_id = tenure["roster_entry_id"]
+            if entry_id in tenure_data:
+                continue
+            tenure_data[entry_id] = (
                 tenure["player_number"],
                 tenure["player_data__account__username"] or "",
             )
 
-    result: dict[int, tuple[str, int, str]] = {}
+    result: dict[int, tuple[str, int | None, str]] = {}
     for row in persona_rows:
         entry_id = row["character__roster_entry__pk"]
         if entry_id is None or entry_id not in tenure_data:
-            result[row["pk"]] = (row["name"], 0, "")
+            result[row["pk"]] = (row["name"], None, "")
         else:
             player_num, account_name = tenure_data[entry_id]
             result[row["pk"]] = (row["name"], player_num, account_name)
@@ -82,13 +96,13 @@ def _resolve_identities(
 
 
 def _format_summary(
-    resolved: tuple[str, int, str],
+    resolved: tuple[str, int | None, str],
     *,
     include_account: bool,
 ) -> str:
     """Format a resolved identity tuple into a display summary string."""
     name, player_num, account_name = resolved
-    if player_num == 0:
+    if player_num is None:
         return name
     if include_account and account_name:
         return f"{name} (Player {player_num}, Account {account_name})"
@@ -97,7 +111,7 @@ def _format_summary(
 
 def _feedback_to_item(
     obj: PlayerFeedback,
-    identities: dict[int, tuple[str, int, str]],
+    identities: dict[int, tuple[str, int | None, str]],
 ) -> InboxItem:
     return InboxItem(
         source_type=SubmissionCategory.PLAYER_FEEDBACK,
@@ -118,7 +132,7 @@ def _feedback_to_item(
 
 def _bug_to_item(
     obj: BugReport,
-    identities: dict[int, tuple[str, int, str]],
+    identities: dict[int, tuple[str, int | None, str]],
 ) -> InboxItem:
     return InboxItem(
         source_type=SubmissionCategory.BUG_REPORT,
@@ -139,7 +153,7 @@ def _bug_to_item(
 
 def _report_to_item(
     obj: PlayerReport,
-    identities: dict[int, tuple[str, int, str]],
+    identities: dict[int, tuple[str, int | None, str]],
 ) -> InboxItem:
     reporter = _format_summary(
         identities[obj.reporter_persona_id],
@@ -164,6 +178,10 @@ def _report_to_item(
 
 
 def _application_to_item(obj: RosterApplication) -> InboxItem:
+    # TODO: Switch to `reverse("roster:application-detail", args=[obj.pk])`
+    # once the roster app exposes a RosterApplicationViewSet. Right now
+    # the roster urls.py does not register an applications route, so the
+    # URL is hardcoded to match the future endpoint shape.
     return InboxItem(
         source_type=SubmissionCategory.CHARACTER_APPLICATION,
         source_pk=obj.pk,
@@ -248,7 +266,7 @@ def get_staff_inbox(
 
 def get_account_submission_history(
     account_id: int,
-) -> dict[str, list[InboxItem]]:
+) -> dict[str, dict[str, Any]]:
     """Return all submissions related to an account.
 
     Walks the persona -> character -> tenure -> account chain to find:
@@ -257,12 +275,14 @@ def get_account_submission_history(
     - Feedback and bug reports submitted
     - Character applications
 
-    Each category is capped at ``MAX_PER_CATEGORY`` items — this endpoint
-    is a summary view, not a paginated list. The frontend should link to
-    the per-type management ViewSet with a filter for deeper exploration.
+    Each category is capped at ``MAX_PER_CATEGORY`` items with a
+    ``truncated`` flag and a ``total`` count, so staff can see the scale
+    at a glance and know when to drill into the per-type management
+    ViewSet for deeper exploration.
 
     Returns a dict with keys: reports_against, reports_submitted,
-    feedback, bug_reports, character_applications.
+    feedback, bug_reports, character_applications. Each value is a dict
+    of the shape ``{"items": [...], "total": int, "truncated": bool}``.
     """
     from world.roster.models.tenures import RosterTenure  # noqa: PLC0415
 
@@ -273,37 +293,39 @@ def get_account_submission_history(
         ).values_list("roster_entry__character_id", flat=True),
     )
 
-    reports_against = list(
-        PlayerReport.objects.filter(
-            reported_persona__character_id__in=character_ids,
-        ).order_by("-created_at")[:MAX_PER_CATEGORY],
-    )
+    reports_against_qs = PlayerReport.objects.filter(
+        reported_persona__character_id__in=character_ids,
+    ).order_by("-created_at")
+    reports_against_total = reports_against_qs.count()
+    reports_against = list(reports_against_qs[:MAX_PER_CATEGORY])
 
-    reports_submitted = list(
-        PlayerReport.objects.filter(
-            reporter_persona__character_id__in=character_ids,
-        ).order_by("-created_at")[:MAX_PER_CATEGORY],
-    )
+    reports_submitted_qs = PlayerReport.objects.filter(
+        reporter_persona__character_id__in=character_ids,
+    ).order_by("-created_at")
+    reports_submitted_total = reports_submitted_qs.count()
+    reports_submitted = list(reports_submitted_qs[:MAX_PER_CATEGORY])
 
-    feedback = list(
-        PlayerFeedback.objects.filter(
-            reporter_persona__character_id__in=character_ids,
-        ).order_by("-created_at")[:MAX_PER_CATEGORY],
-    )
+    feedback_qs = PlayerFeedback.objects.filter(
+        reporter_persona__character_id__in=character_ids,
+    ).order_by("-created_at")
+    feedback_total = feedback_qs.count()
+    feedback = list(feedback_qs[:MAX_PER_CATEGORY])
 
-    bug_reports = list(
-        BugReport.objects.filter(
-            reporter_persona__character_id__in=character_ids,
-        ).order_by("-created_at")[:MAX_PER_CATEGORY],
-    )
+    bug_reports_qs = BugReport.objects.filter(
+        reporter_persona__character_id__in=character_ids,
+    ).order_by("-created_at")
+    bug_reports_total = bug_reports_qs.count()
+    bug_reports = list(bug_reports_qs[:MAX_PER_CATEGORY])
 
-    applications = list(
+    applications_qs = (
         RosterApplication.objects.filter(
             player_data__account_id=account_id,
         )
         .select_related("character", "player_data__account")
-        .order_by("-applied_date")[:MAX_PER_CATEGORY],
+        .order_by("-applied_date")
     )
+    applications_total = applications_qs.count()
+    applications = list(applications_qs[:MAX_PER_CATEGORY])
 
     persona_ids: set[int] = set()
     for r in reports_against:
@@ -318,10 +340,32 @@ def get_account_submission_history(
         persona_ids.add(b.reporter_persona_id)
     identities = _resolve_identities(list(persona_ids))
 
+    def _wrap(items: list[InboxItem], total: int) -> dict[str, Any]:
+        return {
+            "items": items,
+            "total": total,
+            "truncated": total > MAX_PER_CATEGORY,
+        }
+
     return {
-        "reports_against": [_report_to_item(r, identities) for r in reports_against],
-        "reports_submitted": [_report_to_item(r, identities) for r in reports_submitted],
-        "feedback": [_feedback_to_item(f, identities) for f in feedback],
-        "bug_reports": [_bug_to_item(b, identities) for b in bug_reports],
-        "character_applications": [_application_to_item(a) for a in applications],
+        "reports_against": _wrap(
+            [_report_to_item(r, identities) for r in reports_against],
+            reports_against_total,
+        ),
+        "reports_submitted": _wrap(
+            [_report_to_item(r, identities) for r in reports_submitted],
+            reports_submitted_total,
+        ),
+        "feedback": _wrap(
+            [_feedback_to_item(f, identities) for f in feedback],
+            feedback_total,
+        ),
+        "bug_reports": _wrap(
+            [_bug_to_item(b, identities) for b in bug_reports],
+            bug_reports_total,
+        ),
+        "character_applications": _wrap(
+            [_application_to_item(a) for a in applications],
+            applications_total,
+        ),
     }

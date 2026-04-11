@@ -3,7 +3,11 @@
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from evennia_extensions.factories import AccountFactory, CharacterFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    RoomProfileFactory,
+)
 from world.character_sheets.factories import CharacterIdentityFactory
 from world.player_submissions.factories import (
     BugReportFactory,
@@ -47,6 +51,40 @@ class PlayerFeedbackCreateTest(TestCase):
             format="json",
         )
         self.assertIn(response.status_code, (401, 403))
+
+    def test_location_auto_populated_from_character(self) -> None:
+        """The location field is set from character.location on create."""
+        room = RoomProfileFactory().objectdb
+        self.character.location = room
+
+        client = APIClient()
+        client.force_authenticate(user=self.account)
+        response = client.post(
+            "/api/player-submissions/feedback/",
+            {"description": "in a room"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        fb = PlayerFeedback.objects.get()
+        self.assertEqual(fb.location_id, room.pk)
+
+    def test_client_location_field_is_ignored(self) -> None:
+        """Client-supplied location in POST body is ignored."""
+        character_room = RoomProfileFactory().objectdb
+        other_room = RoomProfileFactory().objectdb
+        self.character.location = character_room
+
+        client = APIClient()
+        client.force_authenticate(user=self.account)
+        response = client.post(
+            "/api/player-submissions/feedback/",
+            {"description": "test", "location": other_room.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        fb = PlayerFeedback.objects.get()
+        # Should be character_room, not the client-supplied other_room
+        self.assertEqual(fb.location_id, character_room.pk)
 
 
 class PlayerFeedbackListTest(TestCase):
