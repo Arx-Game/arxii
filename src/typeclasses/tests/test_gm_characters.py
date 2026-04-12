@@ -1,7 +1,6 @@
 """Tests for GM and Staff character typeclasses."""
 
 from django.test import TestCase
-from evennia import create_object
 
 from typeclasses.characters import Character
 from typeclasses.gm_characters import GMCharacter, StaffCharacter
@@ -39,89 +38,26 @@ class StaffCharacterClassTest(TestCase):
         assert hasattr(StaffCharacter, "get_targeting_rejection_message")
 
 
-class GMCharacterCreationTest(TestCase):
-    """Test that at_object_creation runs and sets locks."""
+class MechanicalImmunityTest(TestCase):
+    """Verify the attribute-based immunity marker."""
 
-    def test_locks_added_on_creation(self) -> None:
-        gm = create_object(
-            "typeclasses.gm_characters.GMCharacter",
-            key="TestGM",
-        )
-        try:
-            lockstrings = gm.locks.all()
-            assert any("combat_target:false()" in s for s in lockstrings)
-            assert any("give_to:false()" in s for s in lockstrings)
-        finally:
-            gm.delete()
+    def test_gm_character_is_immune(self) -> None:
+        assert GMCharacter.is_mechanically_immune is True
 
-    def test_combat_target_lock_denies(self) -> None:
-        gm = create_object(
-            "typeclasses.gm_characters.GMCharacter",
-            key="TestGMDeny",
+    def test_staff_character_is_immune(self) -> None:
+        assert StaffCharacter.is_mechanically_immune is True
+
+    def test_base_character_is_not_immune(self) -> None:
+        # Either the attribute is absent, or explicitly False. getattr with a
+        # default is the clearest way to express the "absent-or-False" contract
+        # this test is asserting.
+        assert (
+            getattr(Character, "is_mechanically_immune", False)  # noqa: GETATTR_LITERAL
+            is False
         )
-        attacker = create_object(
-            "typeclasses.characters.Character",
-            key="TestGMAttacker",
-        )
-        try:
-            assert not gm.access(attacker, "combat_target")
-            assert not gm.access(attacker, "give_to")
-        finally:
-            gm.delete()
-            attacker.delete()
 
     def test_rejection_message_returns_string(self) -> None:
-        gm = create_object(
-            "typeclasses.gm_characters.GMCharacter",
-            key="TestGMMsg",
-        )
-        try:
-            msg = gm.get_targeting_rejection_message()
-            assert isinstance(msg, str)
-            assert "story" in msg.lower()
-        finally:
-            gm.delete()
-
-
-class StaffCharacterCreationTest(TestCase):
-    """Test that at_object_creation runs and sets locks for StaffCharacter."""
-
-    def test_staff_locks_added_on_creation(self) -> None:
-        staff = create_object(
-            "typeclasses.gm_characters.StaffCharacter",
-            key="TestStaff",
-        )
-        try:
-            lockstrings = staff.locks.all()
-            assert any("combat_target:false()" in s for s in lockstrings)
-            assert any("give_to:false()" in s for s in lockstrings)
-        finally:
-            staff.delete()
-
-    def test_combat_target_lock_denies(self) -> None:
-        staff = create_object(
-            "typeclasses.gm_characters.StaffCharacter",
-            key="TestStaffDeny",
-        )
-        attacker = create_object(
-            "typeclasses.characters.Character",
-            key="TestStaffAttacker",
-        )
-        try:
-            assert not staff.access(attacker, "combat_target")
-            assert not staff.access(attacker, "give_to")
-        finally:
-            staff.delete()
-            attacker.delete()
-
-    def test_rejection_message_returns_string(self) -> None:
-        staff = create_object(
-            "typeclasses.gm_characters.StaffCharacter",
-            key="TestStaffMsg",
-        )
-        try:
-            msg = staff.get_targeting_rejection_message()
-            assert isinstance(msg, str)
-            assert "narrative" in msg.lower()
-        finally:
-            staff.delete()
+        gm_msg = GMCharacter.TARGETING_REJECTION
+        staff_msg = StaffCharacter.TARGETING_REJECTION
+        assert "story" in gm_msg.lower()
+        assert "narrative" in staff_msg.lower()

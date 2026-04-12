@@ -9,23 +9,26 @@ StaffCharacter has all GM capabilities and also represents staff as
 "head GM" for story attribution. Both are allowed to run stories
 (see Story.active_gms).
 
-NOTE: The combat_target and give_to locks added here are aspirational
-— combat commands and interaction systems will need to respect them
-when built. The lock type `combat_target` has no consumer yet.
+NOTE: Mechanical immunity is signalled via the class attribute
+``is_mechanically_immune``. Combat, interaction, and targeting code
+should check ``getattr(target, "is_mechanically_immune", False)`` and
+display ``target.get_targeting_rejection_message()`` when True. No
+Evennia locks are involved — this is a plain Python attribute check.
 """
 
 from typeclasses.characters import Character
 
 
 class _MechanicallyImmuneCharacterMixin:
-    """Shared behavior for characters that are immune to mechanical effects."""
+    """Shared behavior for characters immune to mechanical effects.
 
-    TARGETING_REJECTION = ""
+    Future combat, interaction, and targeting code should check
+    `getattr(target, "is_mechanically_immune", False)` and display
+    `target.get_targeting_rejection_message()` when True.
+    """
 
-    def at_object_creation(self) -> None:
-        """Set up immunity locks on creation."""
-        super().at_object_creation()
-        self.locks.add("combat_target:false();give_to:false()")
+    is_mechanically_immune: bool = True
+    TARGETING_REJECTION: str = ""
 
     def get_targeting_rejection_message(self) -> str:
         """Return a fun message when someone tries to target this character."""
