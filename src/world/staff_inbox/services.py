@@ -107,11 +107,11 @@ def _gm_application_to_item(obj: GMApplication) -> InboxItem:
     return InboxItem(
         source_type=SubmissionCategory.GM_APPLICATION,
         source_pk=obj.pk,
-        title=f"GM Application: {obj.account.username}",
+        title=f"GM Application: {obj.application_text[:60]}",
         reporter_summary=f"Applicant: {obj.account.username}",
         created_at=obj.created_at,
         status=obj.status,
-        detail_url=f"/api/gm/applications/{obj.pk}/",
+        detail_url=reverse("gm:gm-application-detail", args=[obj.pk]),
     )
 
 
@@ -192,8 +192,9 @@ def get_account_submission_history(
     into the per-type management ViewSet for deeper exploration.
 
     Returns a dict with keys: reports_against, reports_submitted,
-    feedback, bug_reports, character_applications. Each value is a dict
-    of the shape ``{"items": [...], "total": int, "truncated": bool}``.
+    feedback, bug_reports, character_applications, gm_applications.
+    Each value is a dict of the shape
+    ``{"items": [...], "total": int, "truncated": bool}``.
     """
     reports_against_qs = (
         PlayerReport.objects.filter(reported_account_id=account_id)
@@ -253,6 +254,14 @@ def get_account_submission_history(
     applications_total = applications_qs.count()
     applications = list(applications_qs[:MAX_PER_CATEGORY])
 
+    gm_applications_qs = (
+        GMApplication.objects.filter(account_id=account_id)
+        .select_related("account", "reviewed_by")
+        .order_by("-created_at")
+    )
+    gm_applications_total = gm_applications_qs.count()
+    gm_applications = list(gm_applications_qs[:MAX_PER_CATEGORY])
+
     def _wrap(items: list[InboxItem], total: int) -> dict[str, Any]:
         return {
             "items": items,
@@ -280,5 +289,9 @@ def get_account_submission_history(
         "character_applications": _wrap(
             [_application_to_item(a) for a in applications],
             applications_total,
+        ),
+        "gm_applications": _wrap(
+            [_gm_application_to_item(g) for g in gm_applications],
+            gm_applications_total,
         ),
     }

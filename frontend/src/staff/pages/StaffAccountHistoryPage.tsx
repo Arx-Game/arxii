@@ -55,7 +55,8 @@ export function StaffAccountHistoryPage() {
     history.reports_submitted.total +
     history.feedback.total +
     history.bug_reports.total +
-    history.character_applications.total;
+    history.character_applications.total +
+    history.gm_applications.total;
 
   return (
     <div className="container mx-auto max-w-4xl space-y-6 px-4 py-8">
@@ -73,6 +74,7 @@ export function StaffAccountHistoryPage() {
             title="Character Applications"
             category={history.character_applications}
           />
+          <HistorySection title="GM Applications" category={history.gm_applications} />
         </>
       )}
     </div>

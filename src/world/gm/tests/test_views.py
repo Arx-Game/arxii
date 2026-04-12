@@ -28,7 +28,7 @@ class GMApplicationCreateTest(TestCase):
         self.client.force_authenticate(user=None)
         url = reverse("gm:gm-application-list")
         resp = self.client.post(url, {"application_text": "test"}, format="json")
-        assert resp.status_code in (401, 403)
+        assert resp.status_code in (401, 403)  # DRF returns 403 with SessionAuth
 
 
 class GMApplicationStaffTest(TestCase):
@@ -68,10 +68,30 @@ class GMApplicationStaffTest(TestCase):
         self.application.refresh_from_db()
         assert self.application.status == GMApplicationStatus.APPROVED
 
-    def test_status_filter(self) -> None:
+    def test_status_filter_returns_only_matching(self) -> None:
+        # Existing fixture self.application is PENDING
+        # Create an APPROVED application
+        other = GMApplicationFactory(status=GMApplicationStatus.APPROVED)
+
         self.client.force_authenticate(user=self.staff)
         url = reverse("gm:gm-application-list")
-        resp = self.client.get(url, {"status": "pending"})
+
+        pending_resp = self.client.get(url, {"status": "pending"})
+        assert pending_resp.status_code == 200
+        pending_ids = {item["id"] for item in pending_resp.data["results"]}
+        assert self.application.pk in pending_ids
+        assert other.pk not in pending_ids
+
+        approved_resp = self.client.get(url, {"status": "approved"})
+        approved_ids = {item["id"] for item in approved_resp.data["results"]}
+        assert other.pk in approved_ids
+        assert self.application.pk not in approved_ids
+
+    def test_non_superuser_staff_can_list(self) -> None:
+        staff_user = AccountFactory(is_staff=True, is_superuser=False)
+        self.client.force_authenticate(user=staff_user)
+        url = reverse("gm:gm-application-list")
+        resp = self.client.get(url)
         assert resp.status_code == 200
 
 

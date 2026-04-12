@@ -85,6 +85,7 @@ export interface AccountHistory {
   feedback: AccountHistoryCategory;
   bug_reports: AccountHistoryCategory;
   character_applications: AccountHistoryCategory;
+  gm_applications: AccountHistoryCategory;
 }
 
 // Submission status values

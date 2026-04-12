@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import builtins
-
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, serializers, viewsets
@@ -44,7 +42,7 @@ class GMApplicationViewSet(
             return GMApplicationCreateSerializer
         return GMApplicationDetailSerializer
 
-    def get_permissions(self) -> builtins.list:
+    def get_permissions(self) -> list:
         if self.action == "create":
             return [IsAuthenticated()]
         return [IsAdminUser()]

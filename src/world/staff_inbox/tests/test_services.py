@@ -117,6 +117,16 @@ class AccountHistoryTest(TestCase):
         self.assertEqual(len(history["bug_reports"]["items"]), 1)
         self.assertEqual(history["bug_reports"]["items"][0].source_pk, br.pk)
 
+    def test_history_includes_gm_applications(self) -> None:
+        from world.gm.factories import GMApplicationFactory
+        from world.staff_inbox.services import get_account_submission_history
+
+        app = GMApplicationFactory(account=self.account)
+        history = get_account_submission_history(account_id=self.account.pk)
+        self.assertEqual(history["gm_applications"]["total"], 1)
+        self.assertEqual(len(history["gm_applications"]["items"]), 1)
+        self.assertEqual(history["gm_applications"]["items"][0].source_pk, app.pk)
+
     def test_history_empty_for_unrelated_account(self) -> None:
         from world.staff_inbox.services import get_account_submission_history
 
