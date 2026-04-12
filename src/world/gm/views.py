@@ -48,7 +48,11 @@ class GMApplicationViewSet(
         return [IsAdminUser()]
 
     def perform_update(self, serializer: serializers.Serializer) -> None:
-        previous_status = serializer.instance.status
+        # Fetch the pre-update status from the DB to avoid relying on
+        # DRF's internal timing of when instance mutation happens.
+        previous_status = GMApplication.objects.values_list("status", flat=True).get(
+            pk=serializer.instance.pk
+        )
         instance = serializer.save(reviewed_by=self.request.user)
         if (
             instance.status == GMApplicationStatus.APPROVED

@@ -15,6 +15,7 @@ import type {
   AccountHistory,
   BugReport,
   GMApplication,
+  GMApplicationStatus,
   InboxResponse,
   PlayerFeedback,
   PlayerReport,
@@ -252,7 +253,7 @@ export function useUpdatePlayerReportStatus() {
 // GM Application Hooks
 // =============================================================================
 
-export function useGMApplicationList(status?: string, page?: number) {
+export function useGMApplicationList(status?: GMApplicationStatus, page?: number) {
   return useQuery<PaginatedResponse<GMApplication>>({
     queryKey: staffKeys.gmApplications(status, page),
     queryFn: () => getGMApplicationList(status, page),
@@ -275,7 +276,7 @@ export function useUpdateGMApplication() {
       data,
     }: {
       id: number;
-      data: { status?: string; staff_response?: string };
+      data: { status?: GMApplicationStatus; staff_response?: string };
     }) => updateGMApplication(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: staffKeys.all });

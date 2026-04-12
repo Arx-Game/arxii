@@ -8,6 +8,7 @@ import type {
   AccountHistory,
   BugReport,
   GMApplication,
+  GMApplicationStatus,
   InboxResponse,
   PlayerFeedback,
   PlayerReport,
@@ -187,7 +188,7 @@ export async function updatePlayerReportStatus(
 // =============================================================================
 
 export async function getGMApplicationList(
-  status?: string,
+  status?: GMApplicationStatus,
   page?: number
 ): Promise<PaginatedResponse<GMApplication>> {
   const params = new URLSearchParams();
@@ -211,7 +212,7 @@ export async function getGMApplicationDetail(id: number): Promise<GMApplication>
 
 export async function updateGMApplication(
   id: number,
-  data: { status?: string; staff_response?: string }
+  data: { status?: GMApplicationStatus; staff_response?: string }
 ): Promise<GMApplication> {
   const res = await apiFetch(`${GM_URL}/${id}/`, {
     method: 'PATCH',

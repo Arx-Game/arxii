@@ -59,11 +59,16 @@ class GMCharacterCreationTest(TestCase):
             "typeclasses.gm_characters.GMCharacter",
             key="TestGMDeny",
         )
+        attacker = create_object(
+            "typeclasses.characters.Character",
+            key="TestGMAttacker",
+        )
         try:
-            assert not gm.access(gm, "combat_target")
-            assert not gm.access(gm, "give_to")
+            assert not gm.access(attacker, "combat_target")
+            assert not gm.access(attacker, "give_to")
         finally:
             gm.delete()
+            attacker.delete()
 
     def test_rejection_message_returns_string(self) -> None:
         gm = create_object(
@@ -98,11 +103,16 @@ class StaffCharacterCreationTest(TestCase):
             "typeclasses.gm_characters.StaffCharacter",
             key="TestStaffDeny",
         )
+        attacker = create_object(
+            "typeclasses.characters.Character",
+            key="TestStaffAttacker",
+        )
         try:
-            assert not staff.access(staff, "combat_target")
-            assert not staff.access(staff, "give_to")
+            assert not staff.access(attacker, "combat_target")
+            assert not staff.access(attacker, "give_to")
         finally:
             staff.delete()
+            attacker.delete()
 
     def test_rejection_message_returns_string(self) -> None:
         staff = create_object(

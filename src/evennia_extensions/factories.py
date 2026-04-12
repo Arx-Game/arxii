@@ -118,13 +118,6 @@ class GMCharacterFactory(ObjectDBFactory):
     db_key = factory.Sequence(lambda n: f"GM_{n}")
     db_typeclass_path = "typeclasses.gm_characters.GMCharacter"
 
-    @classmethod
-    def _setup_next_sequence(cls):
-        """
-        Start sequence at 1 for better test readability.
-        """
-        return 1
-
 
 class StaffCharacterFactory(ObjectDBFactory):
     """
@@ -133,13 +126,6 @@ class StaffCharacterFactory(ObjectDBFactory):
 
     db_key = factory.Sequence(lambda n: f"Staff_{n}")
     db_typeclass_path = "typeclasses.gm_characters.StaffCharacter"
-
-    @classmethod
-    def _setup_next_sequence(cls):
-        """
-        Start sequence at 1 for better test readability.
-        """
-        return 1
 
 
 class EmailAddressFactory(factory.django.DjangoModelFactory):

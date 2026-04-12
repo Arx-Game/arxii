@@ -13,7 +13,7 @@ export function StaffGMApplicationDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const appId = id ? parseInt(id, 10) : undefined;
-  const { data: application, isLoading } = useGMApplicationDetail(appId);
+  const { data: application, isLoading, isError } = useGMApplicationDetail(appId);
   const update = useUpdateGMApplication();
 
   const [staffResponse, setStaffResponse] = useState('');
@@ -25,6 +25,7 @@ export function StaffGMApplicationDetailPage() {
   }, [application]);
 
   if (isLoading) return <p className="p-8 text-muted-foreground">Loading...</p>;
+  if (isError) return <p className="p-8 text-muted-foreground">Failed to load application.</p>;
   if (!application) return <p className="p-8 text-muted-foreground">GM application not found.</p>;
 
   const isTerminal = TERMINAL_STATUSES.includes(application.status);

@@ -107,11 +107,14 @@ class GMApplicationApprovalWorkflowTest(TestCase):
     def setUpTestData(cls) -> None:
         cls.staff = AccountFactory(is_superuser=True)
         cls.applicant = AccountFactory()
-        cls.application = GMApplicationFactory(account=cls.applicant)
 
     def setUp(self) -> None:
         self.client = APIClient()
         self.client.force_authenticate(user=self.staff)
+        # Create the application in setUp (not setUpTestData) to avoid
+        # SharedMemoryModel caching stale in-memory status across tests
+        # when the DB is rolled back.
+        self.application = GMApplicationFactory(account=self.applicant)
 
     def test_approving_creates_gm_profile(self) -> None:
         from world.gm.models import GMProfile
@@ -144,6 +147,24 @@ class GMApplicationApprovalWorkflowTest(TestCase):
             format="json",
         )
         assert not GMProfile.objects.filter(account=self.applicant).exists()
+
+    def test_re_approval_keeps_original_profile(self) -> None:
+        from world.gm.models import GMProfile
+
+        url = reverse("gm:gm-application-detail", args=[self.application.pk])
+        # First approval
+        self.client.patch(url, {"status": GMApplicationStatus.APPROVED}, format="json")
+        profile = GMProfile.objects.get(account=self.applicant)
+        original_approved_at = profile.approved_at
+        # Revert to pending
+        self.client.patch(url, {"status": GMApplicationStatus.PENDING}, format="json")
+        # Re-approve
+        self.client.patch(url, {"status": GMApplicationStatus.APPROVED}, format="json")
+        # Still only one profile
+        assert GMProfile.objects.filter(account=self.applicant).count() == 1
+        profile.refresh_from_db()
+        # approved_at is unchanged (get_or_create doesn't update defaults)
+        assert profile.approved_at == original_approved_at
 
 
 class GMApplicationDuplicateGuardTest(TestCase):
