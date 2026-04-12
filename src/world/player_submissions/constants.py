@@ -22,3 +22,4 @@ class SubmissionCategory(models.TextChoices):
     BUG_REPORT = "bug_report", "Bug Report"
     PLAYER_REPORT = "player_report", "Player Report"
     CHARACTER_APPLICATION = "character_application", "Character Application"
+    GM_APPLICATION = "gm_application", "GM Application"

@@ -28,6 +28,11 @@ const CATEGORY_OPTIONS: { label: string; value: SubmissionCategory; color: strin
     value: 'character_application',
     color: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
   },
+  {
+    label: 'GM Applications',
+    value: 'gm_application',
+    color: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+  },
 ];
 
 const STORAGE_KEY = 'staff-inbox-muted-categories';

@@ -86,6 +86,7 @@ INSTALLED_APPS += [
     "world.covenants.apps.CovenantsConfig",
     "world.vitals.apps.VitalsConfig",
     "world.combat.apps.CombatConfig",
+    "world.gm.apps.GmConfig",
     "behaviors.apps.BehaviorsConfig",
     "drf_spectacular",
     "cloudinary",

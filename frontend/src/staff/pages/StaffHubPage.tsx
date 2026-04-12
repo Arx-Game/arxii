@@ -63,6 +63,18 @@ export function StaffHubPage() {
             </CardContent>
           </Card>
         </Link>
+        <Link to="/staff/gm-applications">
+          <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+            <CardHeader>
+              <CardTitle>GM Applications</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Review player applications to become GMs.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
         <Link to="/staff/applications">
           <Card className="cursor-pointer transition-colors hover:bg-muted/50">
             <CardHeader>
