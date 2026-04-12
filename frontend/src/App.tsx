@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { GuestOnlyRoute } from './components/GuestOnlyRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { StaffRoute } from './components/StaffRoute';
 import { HomePage } from './evennia_replacements/HomePage';
 import { GamePage } from './game/GamePage';
 import { LoginPage } from './evennia_replacements/LoginPage';
@@ -27,8 +28,16 @@ import { EventCreatePage } from '@/events/pages/EventCreatePage';
 import { EventEditPage } from '@/events/pages/EventEditPage';
 import { CodexPage } from './codex/pages/CodexPage';
 import { StaffHubPage } from './staff/pages/StaffHubPage';
+import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
+import { StaffFeedbackPage } from './staff/pages/StaffFeedbackPage';
+import { StaffFeedbackDetailPage } from './staff/pages/StaffFeedbackDetailPage';
+import { StaffBugReportsPage } from './staff/pages/StaffBugReportsPage';
+import { StaffBugReportDetailPage } from './staff/pages/StaffBugReportDetailPage';
+import { StaffPlayerReportsPage } from './staff/pages/StaffPlayerReportsPage';
+import { StaffPlayerReportDetailPage } from './staff/pages/StaffPlayerReportDetailPage';
+import { StaffAccountHistoryPage } from './staff/pages/StaffAccountHistoryPage';
 import { RouletteModal } from './components/roulette/RouletteModal';
 
 function App() {
@@ -98,25 +107,89 @@ function App() {
         <Route
           path="/staff"
           element={
-            <ProtectedRoute>
+            <StaffRoute>
               <StaffHubPage />
-            </ProtectedRoute>
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/inbox"
+          element={
+            <StaffRoute>
+              <StaffInboxPage />
+            </StaffRoute>
           }
         />
         <Route
           path="/staff/applications"
           element={
-            <ProtectedRoute>
+            <StaffRoute>
               <StaffApplicationsPage />
-            </ProtectedRoute>
+            </StaffRoute>
           }
         />
         <Route
           path="/staff/applications/:id"
           element={
-            <ProtectedRoute>
+            <StaffRoute>
               <StaffApplicationDetailPage />
-            </ProtectedRoute>
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/feedback"
+          element={
+            <StaffRoute>
+              <StaffFeedbackPage />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/feedback/:id"
+          element={
+            <StaffRoute>
+              <StaffFeedbackDetailPage />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/bug-reports"
+          element={
+            <StaffRoute>
+              <StaffBugReportsPage />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/bug-reports/:id"
+          element={
+            <StaffRoute>
+              <StaffBugReportDetailPage />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/player-reports"
+          element={
+            <StaffRoute>
+              <StaffPlayerReportsPage />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/player-reports/:id"
+          element={
+            <StaffRoute>
+              <StaffPlayerReportDetailPage />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/accounts/:id/history"
+          element={
+            <StaffRoute>
+              <StaffAccountHistoryPage />
+            </StaffRoute>
           }
         />
         <Route path="/characters/create/application" element={<CharacterCreationPage />} />

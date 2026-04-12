@@ -9,7 +9,7 @@ import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { navigationMenuTriggerStyle } from '@/components/ui/navigation-menu-trigger-style';
 import { useAppSelector } from '@/store/hooks';
-import { usePendingApplicationCount } from '@/staff/queries';
+import { useOpenSubmissionCount } from '@/staff/queries';
 
 const links = [
   { to: '/game', label: 'Play' },
@@ -24,8 +24,7 @@ const links = [
 export function Header() {
   const account = useAppSelector((state) => state.auth.account);
   const isStaff = account?.is_staff ?? false;
-  const pendingCountQuery = usePendingApplicationCount(isStaff);
-  const pendingCount = pendingCountQuery.data;
+  const { data: pendingCount } = useOpenSubmissionCount(isStaff);
 
   return (
     <header className="border-b">
