@@ -32,10 +32,10 @@ export async function getStaffInbox(
       params.append('categories', cat);
     }
   }
-  if (page) {
+  if (page != null) {
     params.append('page', page.toString());
   }
-  if (pageSize) {
+  if (pageSize != null) {
     params.append('page_size', pageSize.toString());
   }
   const qs = params.toString();
@@ -75,7 +75,7 @@ export async function getFeedbackList(
   if (status) {
     params.append('status', status);
   }
-  if (page) {
+  if (page != null) {
     params.append('page', page.toString());
   }
   const qs = params.toString();
@@ -114,7 +114,7 @@ export async function getBugReportList(
   if (status) {
     params.append('status', status);
   }
-  if (page) {
+  if (page != null) {
     params.append('page', page.toString());
   }
   const qs = params.toString();
@@ -153,7 +153,7 @@ export async function getPlayerReportList(
   if (status) {
     params.append('status', status);
   }
-  if (page) {
+  if (page != null) {
     params.append('page', page.toString());
   }
   const qs = params.toString();
