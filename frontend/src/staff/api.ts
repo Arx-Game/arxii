@@ -14,8 +14,8 @@ import type {
   SubmissionStatus,
 } from './types';
 
-const INBOX_URL = '/api/staff_inbox';
-const SUBMISSIONS_URL = '/api/player_submissions';
+const INBOX_URL = '/api/staff-inbox';
+const SUBMISSIONS_URL = '/api/player-submissions';
 
 // =============================================================================
 // Staff Inbox
@@ -51,7 +51,13 @@ export async function getAccountHistory(accountId: number): Promise<AccountHisto
 }
 
 export async function getOpenSubmissionCount(): Promise<number> {
-  const res = await apiFetch(`${INBOX_URL}/?page_size=1`);
+  // Exclude character_application to avoid double-counting with the separate applications badge
+  const params = new URLSearchParams();
+  params.append('categories', 'player_feedback');
+  params.append('categories', 'bug_report');
+  params.append('categories', 'player_report');
+  params.append('page_size', '1');
+  const res = await apiFetch(`${INBOX_URL}/?${params}`);
   if (!res.ok) return 0;
   const data: InboxResponse = await res.json();
   return data.count;
