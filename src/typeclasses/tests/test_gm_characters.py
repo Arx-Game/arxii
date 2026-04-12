@@ -1,8 +1,8 @@
 """Tests for GM and Staff character typeclasses."""
 
 from django.test import TestCase
+from evennia import create_object
 
-from evennia_extensions.factories import ObjectDBFactory
 from typeclasses.characters import Character
 from typeclasses.gm_characters import GMCharacter, StaffCharacter
 
@@ -39,45 +39,79 @@ class StaffCharacterClassTest(TestCase):
         assert hasattr(StaffCharacter, "get_targeting_rejection_message")
 
 
-class GMCharacterLockTest(TestCase):
-    """Test GMCharacter lock behavior using ObjectDBFactory."""
+class GMCharacterCreationTest(TestCase):
+    """Test that at_object_creation runs and sets locks."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.gm = ObjectDBFactory(
-            db_key="storyteller",
-            db_typeclass_path="typeclasses.gm_characters.GMCharacter",
+    def test_locks_added_on_creation(self) -> None:
+        gm = create_object(
+            "typeclasses.gm_characters.GMCharacter",
+            key="TestGM",
         )
+        try:
+            lockstrings = gm.locks.all()
+            assert any("combat_target:false()" in s for s in lockstrings)
+            assert any("give_to:false()" in s for s in lockstrings)
+        finally:
+            gm.delete()
 
     def test_combat_target_lock_denies(self) -> None:
-        assert not self.gm.access(self.gm, "combat_target")
-
-    def test_give_to_lock_denies(self) -> None:
-        assert not self.gm.access(self.gm, "give_to")
+        gm = create_object(
+            "typeclasses.gm_characters.GMCharacter",
+            key="TestGMDeny",
+        )
+        try:
+            assert not gm.access(gm, "combat_target")
+            assert not gm.access(gm, "give_to")
+        finally:
+            gm.delete()
 
     def test_rejection_message_returns_string(self) -> None:
-        msg = self.gm.get_targeting_rejection_message()
-        assert isinstance(msg, str)
-        assert "story" in msg.lower()
-
-
-class StaffCharacterLockTest(TestCase):
-    """Test StaffCharacter lock behavior using ObjectDBFactory."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.staff = ObjectDBFactory(
-            db_key="admin",
-            db_typeclass_path="typeclasses.gm_characters.StaffCharacter",
+        gm = create_object(
+            "typeclasses.gm_characters.GMCharacter",
+            key="TestGMMsg",
         )
+        try:
+            msg = gm.get_targeting_rejection_message()
+            assert isinstance(msg, str)
+            assert "story" in msg.lower()
+        finally:
+            gm.delete()
+
+
+class StaffCharacterCreationTest(TestCase):
+    """Test that at_object_creation runs and sets locks for StaffCharacter."""
+
+    def test_staff_locks_added_on_creation(self) -> None:
+        staff = create_object(
+            "typeclasses.gm_characters.StaffCharacter",
+            key="TestStaff",
+        )
+        try:
+            lockstrings = staff.locks.all()
+            assert any("combat_target:false()" in s for s in lockstrings)
+            assert any("give_to:false()" in s for s in lockstrings)
+        finally:
+            staff.delete()
 
     def test_combat_target_lock_denies(self) -> None:
-        assert not self.staff.access(self.staff, "combat_target")
-
-    def test_give_to_lock_denies(self) -> None:
-        assert not self.staff.access(self.staff, "give_to")
+        staff = create_object(
+            "typeclasses.gm_characters.StaffCharacter",
+            key="TestStaffDeny",
+        )
+        try:
+            assert not staff.access(staff, "combat_target")
+            assert not staff.access(staff, "give_to")
+        finally:
+            staff.delete()
 
     def test_rejection_message_returns_string(self) -> None:
-        msg = self.staff.get_targeting_rejection_message()
-        assert isinstance(msg, str)
-        assert "narrative" in msg.lower()
+        staff = create_object(
+            "typeclasses.gm_characters.StaffCharacter",
+            key="TestStaffMsg",
+        )
+        try:
+            msg = staff.get_targeting_rejection_message()
+            assert isinstance(msg, str)
+            assert "narrative" in msg.lower()
+        finally:
+            staff.delete()

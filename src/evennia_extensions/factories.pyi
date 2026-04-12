@@ -37,3 +37,9 @@ class GMCharacterFactory(ObjectDBFactory):
 
     db_key: str
     db_typeclass_path: str
+
+class StaffCharacterFactory(ObjectDBFactory):
+    def __new__(cls, *args: Any, **kwargs: Any) -> Character: ...
+
+    db_key: str
+    db_typeclass_path: str
