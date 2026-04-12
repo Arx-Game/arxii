@@ -59,8 +59,14 @@ export function StaffBugReportDetailPage() {
 
       {report.status === 'open' && (
         <div className="flex gap-2">
-          <Button onClick={() => handleStatusChange('reviewed')}>Mark Reviewed</Button>
-          <Button variant="outline" onClick={() => handleStatusChange('dismissed')}>
+          <Button disabled={updateStatus.isPending} onClick={() => handleStatusChange('reviewed')}>
+            Mark Reviewed
+          </Button>
+          <Button
+            variant="outline"
+            disabled={updateStatus.isPending}
+            onClick={() => handleStatusChange('dismissed')}
+          >
             Dismiss
           </Button>
         </div>

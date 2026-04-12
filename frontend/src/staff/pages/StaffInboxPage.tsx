@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useStaffInbox } from '@/staff/queries';
 import { useAppSelector } from '@/store/hooks';
-import type { InboxItem, SubmissionCategory } from '@/staff/types';
+import type { SubmissionCategory } from '@/staff/types';
+import { detailPath } from '@/staff/utils';
 
 const CATEGORY_OPTIONS: { label: string; value: SubmissionCategory; color: string }[] = [
   {
@@ -52,19 +53,6 @@ function categoryLabel(sourceType: string): string {
 
 function categoryColor(sourceType: string): string {
   return CATEGORY_OPTIONS.find((c) => c.value === sourceType)?.color ?? '';
-}
-
-function detailPath(item: InboxItem): string {
-  switch (item.source_type) {
-    case 'player_feedback':
-      return `/staff/feedback/${item.source_pk}`;
-    case 'bug_report':
-      return `/staff/bug-reports/${item.source_pk}`;
-    case 'player_report':
-      return `/staff/player-reports/${item.source_pk}`;
-    case 'character_application':
-      return `/staff/applications/${item.source_pk}`;
-  }
 }
 
 function timeAgo(dateString: string): string {

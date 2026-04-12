@@ -3,20 +3,8 @@ import { Link, Navigate, useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAccountHistory } from '@/staff/queries';
 import { useAppSelector } from '@/store/hooks';
-import type { AccountHistoryCategory, InboxItem } from '@/staff/types';
-
-function detailPath(item: InboxItem): string {
-  switch (item.source_type) {
-    case 'player_feedback':
-      return `/staff/feedback/${item.source_pk}`;
-    case 'bug_report':
-      return `/staff/bug-reports/${item.source_pk}`;
-    case 'player_report':
-      return `/staff/player-reports/${item.source_pk}`;
-    case 'character_application':
-      return `/staff/applications/${item.source_pk}`;
-  }
-}
+import type { AccountHistoryCategory } from '@/staff/types';
+import { detailPath } from '@/staff/utils';
 
 function HistorySection({ title, category }: { title: string; category: AccountHistoryCategory }) {
   if (category.total === 0) return null;

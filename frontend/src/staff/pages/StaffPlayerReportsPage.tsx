@@ -7,26 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { usePlayerReportList } from '@/staff/queries';
 import { useAppSelector } from '@/store/hooks';
 import type { SubmissionStatus } from '@/staff/types';
-
-const STATUS_OPTIONS: { label: string; value: SubmissionStatus | undefined }[] = [
-  { label: 'All', value: undefined },
-  { label: 'Open', value: 'open' },
-  { label: 'Reviewed', value: 'reviewed' },
-  { label: 'Dismissed', value: 'dismissed' },
-];
-
-function statusVariant(status: string): 'default' | 'secondary' | 'outline' {
-  switch (status) {
-    case 'open':
-      return 'default';
-    case 'reviewed':
-      return 'secondary';
-    case 'dismissed':
-      return 'outline';
-    default:
-      return 'outline';
-  }
-}
+import { STATUS_OPTIONS, statusVariant } from '@/staff/utils';
 
 export function StaffPlayerReportsPage() {
   const account = useAppSelector((state) => state.auth.account);
@@ -62,31 +43,55 @@ export function StaffPlayerReportsPage() {
       ) : !items?.length ? (
         <p className="text-muted-foreground">No player reports found.</p>
       ) : (
-        <div className="space-y-3">
-          {items.map((item) => (
-            <Link key={item.id} to={`/staff/player-reports/${item.id}`}>
-              <Card className="cursor-pointer transition-colors hover:bg-muted/50">
-                <CardContent className="flex items-center justify-between py-4">
-                  <div>
-                    <p className="font-medium">
-                      {item.behavior_description.length > 80
-                        ? item.behavior_description.slice(0, 80) + '...'
-                        : item.behavior_description}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      Reported: {item.reported_persona_name} ({item.reported_account_username})
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {item.reporter_persona_name} ({item.reporter_account_username}) &middot;{' '}
-                      {new Date(item.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <Badge variant={statusVariant(item.status)}>{item.status}</Badge>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
+        <>
+          <div className="space-y-3">
+            {items.map((item) => (
+              <Link key={item.id} to={`/staff/player-reports/${item.id}`}>
+                <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+                  <CardContent className="flex items-center justify-between py-4">
+                    <div>
+                      <p className="font-medium">
+                        {item.behavior_description.length > 80
+                          ? item.behavior_description.slice(0, 80) + '...'
+                          : item.behavior_description}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Reported: {item.reported_persona_name} ({item.reported_account_username})
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {item.reporter_persona_name} ({item.reporter_account_username}) &middot;{' '}
+                        {new Date(item.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Badge variant={statusVariant(item.status)}>{item.status}</Badge>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+
+          {data && data.count > 0 && (data.next || data.previous) && (
+            <div className="mt-6 flex items-center justify-center gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!data.previous}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">Page {page}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!data.next}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
