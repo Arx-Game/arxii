@@ -73,3 +73,74 @@ class GMApplicationStaffTest(TestCase):
         url = reverse("gm:gm-application-list")
         resp = self.client.get(url, {"status": "pending"})
         assert resp.status_code == 200
+
+
+class GMApplicationApprovalWorkflowTest(TestCase):
+    """Test the approval workflow creates GMProfile and stamps reviewed_by."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = AccountFactory(is_superuser=True)
+        cls.applicant = AccountFactory()
+        cls.application = GMApplicationFactory(account=cls.applicant)
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.staff)
+
+    def test_approving_creates_gm_profile(self) -> None:
+        from world.gm.models import GMProfile
+
+        url = reverse("gm:gm-application-detail", args=[self.application.pk])
+        self.client.patch(
+            url,
+            {"status": GMApplicationStatus.APPROVED},
+            format="json",
+        )
+        assert GMProfile.objects.filter(account=self.applicant).exists()
+
+    def test_update_stamps_reviewed_by(self) -> None:
+        url = reverse("gm:gm-application-detail", args=[self.application.pk])
+        self.client.patch(
+            url,
+            {"staff_response": "looking good"},
+            format="json",
+        )
+        self.application.refresh_from_db()
+        assert self.application.reviewed_by == self.staff
+
+    def test_non_approval_update_does_not_create_profile(self) -> None:
+        from world.gm.models import GMProfile
+
+        url = reverse("gm:gm-application-detail", args=[self.application.pk])
+        self.client.patch(
+            url,
+            {"staff_response": "need more info"},
+            format="json",
+        )
+        assert not GMProfile.objects.filter(account=self.applicant).exists()
+
+
+class GMApplicationDuplicateGuardTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.user = AccountFactory()
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_cannot_submit_while_pending(self) -> None:
+        url = reverse("gm:gm-application-list")
+        r1 = self.client.post(url, {"application_text": "first"}, format="json")
+        assert r1.status_code == 201
+        r2 = self.client.post(url, {"application_text": "second"}, format="json")
+        assert r2.status_code == 400
+
+    def test_cannot_submit_if_already_gm(self) -> None:
+        from world.gm.factories import GMProfileFactory
+
+        GMProfileFactory(account=self.user)
+        url = reverse("gm:gm-application-list")
+        resp = self.client.post(url, {"application_text": "test"}, format="json")
+        assert resp.status_code == 400

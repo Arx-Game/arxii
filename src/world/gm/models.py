@@ -1,6 +1,7 @@
 """GM system models."""
 
 from django.db import models
+from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.gm.constants import GMApplicationStatus, GMLevel
@@ -25,6 +26,7 @@ class GMProfile(SharedMemoryModel):
         db_index=True,
     )
     approved_at = models.DateTimeField(
+        default=timezone.now,
         help_text="When this account was approved as a GM.",
     )
     approved_by = models.ForeignKey(
@@ -33,6 +35,7 @@ class GMProfile(SharedMemoryModel):
         related_name="+",
         help_text="Staff account that approved the GM application.",
     )
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "GM Profile"
@@ -84,7 +87,6 @@ class GMApplication(SharedMemoryModel):
     )
 
     class Meta:
-        ordering = ["-created_at"]
         verbose_name = "GM Application"
         verbose_name_plural = "GM Applications"
 
