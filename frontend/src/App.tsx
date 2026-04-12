@@ -27,6 +27,7 @@ import { EventCreatePage } from '@/events/pages/EventCreatePage';
 import { EventEditPage } from '@/events/pages/EventEditPage';
 import { CodexPage } from './codex/pages/CodexPage';
 import { StaffHubPage } from './staff/pages/StaffHubPage';
+import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
 import { RouletteModal } from './components/roulette/RouletteModal';
@@ -100,6 +101,14 @@ function App() {
           element={
             <ProtectedRoute>
               <StaffHubPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/inbox"
+          element={
+            <ProtectedRoute>
+              <StaffInboxPage />
             </ProtectedRoute>
           }
         />
