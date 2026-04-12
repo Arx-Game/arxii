@@ -24,5 +24,5 @@ class GMApplicationFactory(factory_django.DjangoModelFactory):
         model = GMApplication
 
     account = factory.SubFactory(AccountFactory)
-    application_text = factory.Faker("paragraph")
+    application_text = factory.Faker("paragraph", nb_sentences=5)
     status = GMApplicationStatus.PENDING

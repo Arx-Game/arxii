@@ -1,6 +1,7 @@
 """GM system models."""
 
 from django.db import models
+from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -89,6 +90,13 @@ class GMApplication(SharedMemoryModel):
     class Meta:
         verbose_name = "GM Application"
         verbose_name_plural = "GM Applications"
+        constraints = [
+            UniqueConstraint(
+                fields=["account"],
+                condition=Q(status="pending"),
+                name="unique_pending_gm_application_per_account",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"GMApplication({self.account.username}, {self.status})"

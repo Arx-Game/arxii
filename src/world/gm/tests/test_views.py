@@ -20,14 +20,19 @@ class GMApplicationCreateTest(TestCase):
 
     def test_authenticated_user_can_create(self) -> None:
         url = reverse("gm:gm-application-list")
-        resp = self.client.post(url, {"application_text": "I want to GM!"}, format="json")
+        text = (
+            "I want to GM because I love telling stories and collaborating with players "
+            "to build memorable scenes."
+        )
+        resp = self.client.post(url, {"application_text": text}, format="json")
         assert resp.status_code == 201
-        assert resp.data["application_text"] == "I want to GM!"
+        assert resp.data["application_text"] == text
 
     def test_unauthenticated_cannot_create(self) -> None:
         self.client.force_authenticate(user=None)
         url = reverse("gm:gm-application-list")
-        resp = self.client.post(url, {"application_text": "test"}, format="json")
+        text = "a" * 60
+        resp = self.client.post(url, {"application_text": text}, format="json")
         assert resp.status_code in (401, 403)  # DRF returns 403 with SessionAuth
 
 
@@ -152,9 +157,11 @@ class GMApplicationDuplicateGuardTest(TestCase):
 
     def test_cannot_submit_while_pending(self) -> None:
         url = reverse("gm:gm-application-list")
-        r1 = self.client.post(url, {"application_text": "first"}, format="json")
+        first_text = "first application " + ("x" * 60)
+        second_text = "second application " + ("y" * 60)
+        r1 = self.client.post(url, {"application_text": first_text}, format="json")
         assert r1.status_code == 201
-        r2 = self.client.post(url, {"application_text": "second"}, format="json")
+        r2 = self.client.post(url, {"application_text": second_text}, format="json")
         assert r2.status_code == 400
 
     def test_cannot_submit_if_already_gm(self) -> None:
@@ -162,5 +169,26 @@ class GMApplicationDuplicateGuardTest(TestCase):
 
         GMProfileFactory(account=self.user)
         url = reverse("gm:gm-application-list")
-        resp = self.client.post(url, {"application_text": "test"}, format="json")
+        text = "I would like to apply " + ("z" * 60)
+        resp = self.client.post(url, {"application_text": text}, format="json")
+        assert resp.status_code == 400
+
+
+class GMApplicationValidationTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.user = AccountFactory()
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_empty_application_rejected(self) -> None:
+        url = reverse("gm:gm-application-list")
+        resp = self.client.post(url, {"application_text": ""}, format="json")
+        assert resp.status_code == 400
+
+    def test_too_short_application_rejected(self) -> None:
+        url = reverse("gm:gm-application-list")
+        resp = self.client.post(url, {"application_text": "too short"}, format="json")
         assert resp.status_code == 400

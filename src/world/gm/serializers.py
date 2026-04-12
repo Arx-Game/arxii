@@ -11,7 +11,11 @@ from world.gm.models import GMApplication, GMProfile
 class GMApplicationCreateSerializer(serializers.ModelSerializer):
     """For players submitting a GM application."""
 
-    application_text = serializers.CharField(max_length=10000)
+    application_text = serializers.CharField(
+        min_length=50,
+        max_length=10000,
+        allow_blank=False,
+    )
 
     class Meta:
         model = GMApplication
@@ -39,6 +43,9 @@ class GMApplicationDetailSerializer(serializers.ModelSerializer):
     """For staff reviewing GM applications."""
 
     account_username = serializers.CharField(source="account.username", read_only=True)
+    reviewed_by_username = serializers.CharField(
+        source="reviewed_by.username", read_only=True, allow_null=True
+    )
 
     class Meta:
         model = GMApplication
@@ -52,6 +59,7 @@ class GMApplicationDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "reviewed_by",
+            "reviewed_by_username",
         ]
         read_only_fields = ["id", "account", "created_at", "updated_at", "reviewed_by"]
 

@@ -99,6 +99,7 @@ export interface GMApplication {
   created_at: string;
   updated_at: string;
   reviewed_by: number | null;
+  reviewed_by_username: string | null;
 }
 
 export type GMApplicationStatus = 'pending' | 'approved' | 'denied' | 'withdrawn';

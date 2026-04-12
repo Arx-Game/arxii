@@ -82,7 +82,7 @@ export function StaffGMApplicationDetailPage() {
             {application.reviewed_by != null && (
               <div>
                 <p className="font-medium text-muted-foreground">Reviewed By</p>
-                <p>Account #{application.reviewed_by}</p>
+                <p>{application.reviewed_by_username ?? `Account #${application.reviewed_by}`}</p>
               </div>
             )}
           </div>
