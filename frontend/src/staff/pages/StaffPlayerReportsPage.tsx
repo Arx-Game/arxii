@@ -1,0 +1,93 @@
+import { useState } from 'react';
+import { Link, Navigate } from 'react-router-dom';
+
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { usePlayerReportList } from '@/staff/queries';
+import { useAppSelector } from '@/store/hooks';
+import type { SubmissionStatus } from '@/staff/types';
+
+const STATUS_OPTIONS: { label: string; value: SubmissionStatus | undefined }[] = [
+  { label: 'All', value: undefined },
+  { label: 'Open', value: 'open' },
+  { label: 'Reviewed', value: 'reviewed' },
+  { label: 'Dismissed', value: 'dismissed' },
+];
+
+function statusVariant(status: string): 'default' | 'secondary' | 'outline' {
+  switch (status) {
+    case 'open':
+      return 'default';
+    case 'reviewed':
+      return 'secondary';
+    case 'dismissed':
+      return 'outline';
+    default:
+      return 'outline';
+  }
+}
+
+export function StaffPlayerReportsPage() {
+  const account = useAppSelector((state) => state.auth.account);
+  const [statusFilter, setStatusFilter] = useState<SubmissionStatus | undefined>(undefined);
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = usePlayerReportList(statusFilter, page);
+  const items = data?.results;
+
+  if (!account?.is_staff) return <Navigate to="/" replace />;
+
+  return (
+    <div className="container mx-auto max-w-6xl px-4 py-8">
+      <h1 className="mb-6 text-2xl font-bold">Player Reports</h1>
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        {STATUS_OPTIONS.map((opt) => (
+          <Button
+            key={opt.label}
+            variant={statusFilter === opt.value ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => {
+              setStatusFilter(opt.value);
+              setPage(1);
+            }}
+          >
+            {opt.label}
+          </Button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <p className="text-muted-foreground">Loading...</p>
+      ) : !items?.length ? (
+        <p className="text-muted-foreground">No player reports found.</p>
+      ) : (
+        <div className="space-y-3">
+          {items.map((item) => (
+            <Link key={item.id} to={`/staff/player-reports/${item.id}`}>
+              <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+                <CardContent className="flex items-center justify-between py-4">
+                  <div>
+                    <p className="font-medium">
+                      {item.behavior_description.length > 80
+                        ? item.behavior_description.slice(0, 80) + '...'
+                        : item.behavior_description}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Reported: {item.reported_persona_name} ({item.reported_account_username})
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {item.reporter_persona_name} ({item.reporter_account_username}) &middot;{' '}
+                      {new Date(item.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Badge variant={statusVariant(item.status)}>{item.status}</Badge>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

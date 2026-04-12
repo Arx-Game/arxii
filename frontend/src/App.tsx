@@ -34,6 +34,8 @@ import { StaffFeedbackPage } from './staff/pages/StaffFeedbackPage';
 import { StaffFeedbackDetailPage } from './staff/pages/StaffFeedbackDetailPage';
 import { StaffBugReportsPage } from './staff/pages/StaffBugReportsPage';
 import { StaffBugReportDetailPage } from './staff/pages/StaffBugReportDetailPage';
+import { StaffPlayerReportsPage } from './staff/pages/StaffPlayerReportsPage';
+import { StaffPlayerReportDetailPage } from './staff/pages/StaffPlayerReportDetailPage';
 import { RouletteModal } from './components/roulette/RouletteModal';
 
 function App() {
@@ -161,6 +163,22 @@ function App() {
           element={
             <ProtectedRoute>
               <StaffBugReportDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/player-reports"
+          element={
+            <ProtectedRoute>
+              <StaffPlayerReportsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/player-reports/:id"
+          element={
+            <ProtectedRoute>
+              <StaffPlayerReportDetailPage />
             </ProtectedRoute>
           }
         />
