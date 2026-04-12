@@ -1,6 +1,6 @@
 # GM System
 
-**Status:** not-started
+**Status:** in-progress (Phase 1 backend complete)
 **Depends on:** Staff Inbox & Player Submissions (prerequisite), Stories, Roster, Scenes
 
 ## Overview
@@ -73,7 +73,9 @@ The GM system defines these role relationships; the stories app uses them for pe
 - Staff character hosts these commands; Django admin is a fallback
 
 ## What Exists
-- Nothing. This is a brand new system.
+- **`world.gm` app** — GMProfile, GMApplication models with factories, admin, ViewSet, filters, serializers
+- **`typeclasses.gm_characters`** — GMCharacter and StaffCharacter typeclasses (combat immune, fun rejection messages)
+- **Staff inbox integration** — GMApplication appears as a triage category alongside other submission types
 - **Prerequisites in place:** Roster system, Stories app (partial), Scenes, Covenants stub, Combat (for GM combat tools)
 
 ## What's Needed for MVP
@@ -86,14 +88,16 @@ The GM system defines these role relationships; the stories app uses them for pe
 - Account history page (staff-only)
 - **PlayerReport is safety-critical** — the model and submission path exist before GM onboarding, even though the full UX design comes later
 
-### Phase 1 — GM Identity Foundation
-- `GMCharacter` typeclass (no vitals, not attackable, puppetable)
-- `StaffCharacter` typeclass (orthogonal, hosts staff tooling)
-- `GMProfile` model (level, stats, approval date)
-- `GMApplication` model (shows up in the staff inbox aggregator)
-- GM level TextChoices (STARTING/JUNIOR/GM/EXPERIENCED/SENIOR)
-- Permission framework keyed on level
-- Feedback/trust stub data model (no progression math yet)
+### Phase 1 — GM Identity Foundation ✅
+- ✅ `GMCharacter` typeclass (extends Character, combat/targeting immune, fun rejection messages)
+- ✅ `StaffCharacter` typeclass (orthogonal, same immunity, hosts future staff commands)
+- ✅ `GMProfile` model (OneToOne account, level, approval tracking)
+- ✅ `GMApplication` model (freeform text, staff response, staff inbox integration)
+- ✅ GM level TextChoices (STARTING/JUNIOR/GM/EXPERIENCED/SENIOR)
+- ✅ GMApplication ViewSet (create for players, list/review/update for staff, filters)
+- ✅ Staff inbox integration (GM applications appear as triage category)
+- ✅ Trust/feedback — reuses existing `PlayerTrust.gm_trust_level` from stories app
+- Permission checks deferred to individual commands (each checks `GMProfile.level` as needed)
 
 ### Phase 2 — GM Tables
 - `GMTable` model (one GM owner, many PCs)

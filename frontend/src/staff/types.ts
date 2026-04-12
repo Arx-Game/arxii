@@ -1,6 +1,11 @@
 // Inbox item from /api/staff_inbox/
 export interface InboxItem {
-  source_type: 'player_feedback' | 'bug_report' | 'player_report' | 'character_application';
+  source_type:
+    | 'player_feedback'
+    | 'bug_report'
+    | 'player_report'
+    | 'character_application'
+    | 'gm_application';
   source_pk: number;
   title: string;
   reporter_summary: string;
@@ -80,7 +85,24 @@ export interface AccountHistory {
   feedback: AccountHistoryCategory;
   bug_reports: AccountHistoryCategory;
   character_applications: AccountHistoryCategory;
+  gm_applications: AccountHistoryCategory;
 }
+
+// GM application detail from /api/gm/applications/{id}/
+export interface GMApplication {
+  id: number;
+  account: number;
+  account_username: string;
+  application_text: string;
+  staff_response: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  reviewed_by: number | null;
+  reviewed_by_username: string | null;
+}
+
+export type GMApplicationStatus = 'pending' | 'approved' | 'denied' | 'withdrawn';
 
 // Submission status values
 export type SubmissionStatus = 'open' | 'reviewed' | 'dismissed';
@@ -90,4 +112,5 @@ export type SubmissionCategory =
   | 'player_feedback'
   | 'bug_report'
   | 'player_report'
-  | 'character_application';
+  | 'character_application'
+  | 'gm_application';

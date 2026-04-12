@@ -86,8 +86,9 @@ class Story(SharedMemoryModel):
     active_gms = models.ManyToManyField(
         "objects.ObjectDB",
         related_name="gm_stories",
-        limit_choices_to={"db_typeclass_path__contains": "GMCharacter"},
-        help_text="GM characters currently running this story",
+        limit_choices_to=models.Q(db_typeclass_path__endswith=".GMCharacter")
+        | models.Q(db_typeclass_path__endswith=".StaffCharacter"),
+        help_text="GM or Staff characters currently running this story",
     )
 
     # Trust requirements - stories can require trust in specific categories

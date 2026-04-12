@@ -5,6 +5,7 @@ from evennia.objects.models import ObjectDB
 import factory
 
 from typeclasses.characters import Character
+from typeclasses.gm_characters import GMCharacter, StaffCharacter
 
 class ObjectDBFactory(factory.django.DjangoModelFactory):
     def __new__(cls, *args: Any, **kwargs: Any) -> ObjectDB: ...
@@ -33,7 +34,13 @@ class CharacterFactory(ObjectDBFactory):
     db_typeclass_path: str
 
 class GMCharacterFactory(ObjectDBFactory):
-    def __new__(cls, *args: Any, **kwargs: Any) -> Character: ...
+    def __new__(cls, *args: Any, **kwargs: Any) -> GMCharacter: ...
+
+    db_key: str
+    db_typeclass_path: str
+
+class StaffCharacterFactory(ObjectDBFactory):
+    def __new__(cls, *args: Any, **kwargs: Any) -> StaffCharacter: ...
 
     db_key: str
     db_typeclass_path: str
