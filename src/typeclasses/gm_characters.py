@@ -10,9 +10,11 @@ StaffCharacter has all GM capabilities and also represents staff as
 (see Story.active_gms).
 
 NOTE: Mechanical immunity is signalled via the class attribute
-``is_mechanically_immune``. Combat, interaction, and targeting code
-should check ``getattr(target, "is_mechanically_immune", False)`` and
-display ``target.get_targeting_rejection_message()`` when True. No
+``is_mechanically_immune``. Future combat, interaction, and targeting
+code should check ``target.is_mechanically_immune`` directly. The
+attribute is declared on the base Character class (defaulting to
+False), so no getattr fallback is needed — every Character has it.
+Display ``target.get_targeting_rejection_message()`` when True. No
 Evennia locks are involved — this is a plain Python attribute check.
 """
 
@@ -23,7 +25,9 @@ class _MechanicallyImmuneCharacterMixin:
     """Shared behavior for characters immune to mechanical effects.
 
     Future combat, interaction, and targeting code should check
-    `getattr(target, "is_mechanically_immune", False)` and display
+    `target.is_mechanically_immune` directly. The attribute is declared
+    on the base Character class (defaulting to False), so no getattr
+    fallback is needed — every Character has it. Display
     `target.get_targeting_rejection_message()` when True.
     """
 

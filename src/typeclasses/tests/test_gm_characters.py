@@ -48,13 +48,7 @@ class MechanicalImmunityTest(TestCase):
         assert StaffCharacter.is_mechanically_immune is True
 
     def test_base_character_is_not_immune(self) -> None:
-        # Either the attribute is absent, or explicitly False. getattr with a
-        # default is the clearest way to express the "absent-or-False" contract
-        # this test is asserting.
-        assert (
-            getattr(Character, "is_mechanically_immune", False)  # noqa: GETATTR_LITERAL
-            is False
-        )
+        assert Character.is_mechanically_immune is False
 
     def test_rejection_message_returns_string(self) -> None:
         gm_msg = GMCharacter.TARGETING_REJECTION

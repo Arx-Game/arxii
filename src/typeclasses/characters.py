@@ -43,6 +43,11 @@ class Character(ObjectParent, DefaultCharacter):
 
     """
 
+    #: Mechanical immunity marker. Characters with this set to True are
+    #: inert to combat, targeting, conditions, and other mechanical effects.
+    #: GMCharacter and StaffCharacter override this to True.
+    is_mechanically_immune: bool = False
+
     state_class = CharacterState
 
     # Example typeclass defaults for item_data fallbacks
