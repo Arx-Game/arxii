@@ -2,6 +2,7 @@ from typing import Any, cast
 
 from rest_framework import serializers
 
+from world.gm.serializers import GMProfileSerializer
 from world.stories.models import (
     Chapter,
     Episode,
@@ -50,7 +51,7 @@ class StoryDetailSerializer(serializers.ModelSerializer):
     """Full serializer for story detail views"""
 
     owners = serializers.StringRelatedField(many=True, read_only=True)
-    active_gms = serializers.StringRelatedField(many=True, read_only=True)
+    active_gms = GMProfileSerializer(many=True, read_only=True)
     personal_story_character = serializers.StringRelatedField(read_only=True)
     chapters_count = serializers.IntegerField(source="chapters.count", read_only=True)
     trust_requirements = serializers.SerializerMethodField()

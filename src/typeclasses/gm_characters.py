@@ -6,8 +6,9 @@ represent GM and Staff presence in-game. Fun rejection messages
 maintain the spirit of the game.
 
 StaffCharacter has all GM capabilities and also represents staff as
-"head GM" for story attribution. Both are allowed to run stories
-(see Story.active_gms).
+"head GM" for story attribution. Story authorship is tracked via
+GMProfile (see `world.gm.models.GMProfile`), not these typeclasses —
+these characters only exist as the GM's in-game presence.
 
 NOTE: Mechanical immunity is signalled via the class attribute
 ``is_mechanically_immune``. Future combat, interaction, and targeting
@@ -58,8 +59,8 @@ class StaffCharacter(_MechanicallyImmuneCharacterMixin, Character):
     GMCharacter, but exists to host staff tooling commands. Staff bypass
     all GM level checks and run stories as the "head GM."
 
-    Not a subclass of GMCharacter — they are orthogonal, but both are
-    valid for Story.active_gms.
+    Not a subclass of GMCharacter — they are orthogonal. Story
+    authorship is tracked via GMProfile, not this typeclass.
     """
 
     TARGETING_REJECTION = (

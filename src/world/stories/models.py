@@ -84,11 +84,9 @@ class Story(SharedMemoryModel):
         help_text="Players who own and can manage this story",
     )
     active_gms = models.ManyToManyField(
-        "objects.ObjectDB",
-        related_name="gm_stories",
-        limit_choices_to=models.Q(db_typeclass_path__endswith=".GMCharacter")
-        | models.Q(db_typeclass_path__endswith=".StaffCharacter"),
-        help_text="GM or Staff characters currently running this story",
+        "gm.GMProfile",
+        related_name="active_stories",
+        help_text="GM profiles currently running this story",
     )
 
     # Trust requirements - stories can require trust in specific categories
