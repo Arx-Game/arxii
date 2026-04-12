@@ -30,6 +30,8 @@ import { StaffHubPage } from './staff/pages/StaffHubPage';
 import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
+import { StaffFeedbackPage } from './staff/pages/StaffFeedbackPage';
+import { StaffFeedbackDetailPage } from './staff/pages/StaffFeedbackDetailPage';
 import { RouletteModal } from './components/roulette/RouletteModal';
 
 function App() {
@@ -125,6 +127,22 @@ function App() {
           element={
             <ProtectedRoute>
               <StaffApplicationDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/feedback"
+          element={
+            <ProtectedRoute>
+              <StaffFeedbackPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/feedback/:id"
+          element={
+            <ProtectedRoute>
+              <StaffFeedbackDetailPage />
             </ProtectedRoute>
           }
         />
