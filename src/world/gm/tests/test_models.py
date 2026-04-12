@@ -3,8 +3,8 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.gm.constants import GMLevel
-from world.gm.factories import GMProfileFactory
+from world.gm.constants import GMApplicationStatus, GMLevel
+from world.gm.factories import GMApplicationFactory, GMProfileFactory
 
 
 class GMProfileModelTest(TestCase):
@@ -28,3 +28,24 @@ class GMProfileModelTest(TestCase):
 
     def test_default_level(self) -> None:
         assert self.profile.level == GMLevel.STARTING
+
+
+class GMApplicationModelTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.application = GMApplicationFactory()
+
+    def test_creation(self) -> None:
+        assert self.application.pk is not None
+        assert self.application.status == GMApplicationStatus.PENDING
+
+    def test_str(self) -> None:
+        result = str(self.application)
+        assert "GMApplication(" in result
+        assert self.application.account.username in result
+
+    def test_default_status(self) -> None:
+        assert self.application.status == GMApplicationStatus.PENDING
+
+    def test_staff_response_blank_by_default(self) -> None:
+        assert self.application.staff_response == ""
