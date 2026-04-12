@@ -36,6 +36,7 @@ import { StaffBugReportsPage } from './staff/pages/StaffBugReportsPage';
 import { StaffBugReportDetailPage } from './staff/pages/StaffBugReportDetailPage';
 import { StaffPlayerReportsPage } from './staff/pages/StaffPlayerReportsPage';
 import { StaffPlayerReportDetailPage } from './staff/pages/StaffPlayerReportDetailPage';
+import { StaffAccountHistoryPage } from './staff/pages/StaffAccountHistoryPage';
 import { RouletteModal } from './components/roulette/RouletteModal';
 
 function App() {
@@ -179,6 +180,14 @@ function App() {
           element={
             <ProtectedRoute>
               <StaffPlayerReportDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/accounts/:id/history"
+          element={
+            <ProtectedRoute>
+              <StaffAccountHistoryPage />
             </ProtectedRoute>
           }
         />
