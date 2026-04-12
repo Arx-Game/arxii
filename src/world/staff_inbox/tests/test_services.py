@@ -54,6 +54,29 @@ class StaffInboxAggregatorTest(TestCase):
         self.assertEqual(items[0].source_pk, pr.pk)
 
 
+class StaffInboxGMApplicationTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.gm.factories import GMApplicationFactory
+
+        cls.gm_app = GMApplicationFactory()
+
+    def test_gm_application_appears_in_inbox(self) -> None:
+        items = get_staff_inbox()
+        gm_items = [i for i in items if i.source_type == "gm_application"]
+        assert len(gm_items) == 1
+        assert gm_items[0].source_pk == self.gm_app.pk
+
+    def test_gm_application_filtered_by_category(self) -> None:
+        items = get_staff_inbox(categories=["gm_application"])
+        assert len(items) == 1
+
+    def test_gm_application_excluded_by_category(self) -> None:
+        items = get_staff_inbox(categories=["player_feedback"])
+        gm_items = [i for i in items if i.source_type == "gm_application"]
+        assert len(gm_items) == 0
+
+
 class AccountHistoryTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:

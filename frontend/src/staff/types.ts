@@ -1,6 +1,11 @@
 // Inbox item from /api/staff_inbox/
 export interface InboxItem {
-  source_type: 'player_feedback' | 'bug_report' | 'player_report' | 'character_application';
+  source_type:
+    | 'player_feedback'
+    | 'bug_report'
+    | 'player_report'
+    | 'character_application'
+    | 'gm_application';
   source_pk: number;
   title: string;
   reporter_summary: string;
@@ -90,4 +95,5 @@ export type SubmissionCategory =
   | 'player_feedback'
   | 'bug_report'
   | 'player_report'
-  | 'character_application';
+  | 'character_application'
+  | 'gm_application';

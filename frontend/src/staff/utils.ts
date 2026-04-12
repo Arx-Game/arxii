@@ -10,6 +10,8 @@ export function detailPath(item: InboxItem): string {
       return `/staff/player-reports/${item.source_pk}`;
     case 'character_application':
       return `/staff/applications/${item.source_pk}`;
+    case 'gm_application':
+      return `/staff/gm-applications/${item.source_pk}`;
   }
 }
 

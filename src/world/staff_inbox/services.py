@@ -11,6 +11,8 @@ from typing import Any
 
 from django.urls import reverse
 
+from world.gm.constants import GMApplicationStatus
+from world.gm.models import GMApplication
 from world.player_submissions.constants import SubmissionCategory, SubmissionStatus
 from world.player_submissions.models import BugReport, PlayerFeedback, PlayerReport
 from world.roster.models.applications import RosterApplication
@@ -101,6 +103,18 @@ def _application_to_item(obj: RosterApplication) -> InboxItem:
     )
 
 
+def _gm_application_to_item(obj: GMApplication) -> InboxItem:
+    return InboxItem(
+        source_type=SubmissionCategory.GM_APPLICATION,
+        source_pk=obj.pk,
+        title=f"GM Application: {obj.account.username}",
+        reporter_summary=f"Applicant: {obj.account.username}",
+        created_at=obj.created_at,
+        status=obj.status,
+        detail_url=f"/api/gm/applications/{obj.pk}/",
+    )
+
+
 def get_staff_inbox(
     *,
     categories: list[str] | None = None,
@@ -155,6 +169,12 @@ def get_staff_inbox(
             status=ApplicationStatus.PENDING,
         ).select_related("character", "player_data__account")
         items.extend(_application_to_item(app) for app in application_qs)
+
+    if _include(SubmissionCategory.GM_APPLICATION):
+        gm_app_qs = GMApplication.objects.filter(
+            status=GMApplicationStatus.PENDING,
+        ).select_related("account")
+        items.extend(_gm_application_to_item(app) for app in gm_app_qs)
 
     items.sort(key=lambda i: i.created_at, reverse=True)
     return items
