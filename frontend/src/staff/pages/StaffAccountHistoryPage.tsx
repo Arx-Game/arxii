@@ -1,8 +1,7 @@
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAccountHistory } from '@/staff/queries';
-import { useAppSelector } from '@/store/hooks';
 import type { AccountHistoryCategory } from '@/staff/types';
 import { detailPath } from '@/staff/utils';
 
@@ -44,12 +43,10 @@ function HistorySection({ title, category }: { title: string; category: AccountH
 }
 
 export function StaffAccountHistoryPage() {
-  const account = useAppSelector((state) => state.auth.account);
   const { id } = useParams<{ id: string }>();
   const accountId = id ? parseInt(id, 10) : undefined;
   const { data: history, isLoading } = useAccountHistory(accountId);
 
-  if (!account?.is_staff) return <Navigate to="/" replace />;
   if (isLoading) return <p className="p-8 text-muted-foreground">Loading...</p>;
   if (!history) return <p className="p-8 text-muted-foreground">Account not found.</p>;
 

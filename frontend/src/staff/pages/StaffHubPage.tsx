@@ -1,16 +1,12 @@
-import { Link, Navigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useOpenSubmissionCount, usePendingApplicationCount } from '@/staff/queries';
-import { useAppSelector } from '@/store/hooks';
 
 export function StaffHubPage() {
-  const account = useAppSelector((state) => state.auth.account);
   const { data: pendingAppCount } = usePendingApplicationCount();
   const { data: openInboxCount } = useOpenSubmissionCount();
-
-  if (!account?.is_staff) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8">

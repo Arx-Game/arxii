@@ -1,20 +1,17 @@
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { usePlayerReportDetail, useUpdatePlayerReportStatus } from '@/staff/queries';
-import { useAppSelector } from '@/store/hooks';
 
 export function StaffPlayerReportDetailPage() {
-  const account = useAppSelector((state) => state.auth.account);
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const reportId = id ? parseInt(id, 10) : undefined;
   const { data: report, isLoading } = usePlayerReportDetail(reportId);
   const updateStatus = useUpdatePlayerReportStatus();
 
-  if (!account?.is_staff) return <Navigate to="/" replace />;
   if (isLoading) return <p className="p-8 text-muted-foreground">Loading...</p>;
   if (!report) return <p className="p-8 text-muted-foreground">Report not found.</p>;
 

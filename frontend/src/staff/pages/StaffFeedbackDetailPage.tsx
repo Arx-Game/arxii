@@ -1,20 +1,17 @@
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useFeedbackDetail, useUpdateFeedbackStatus } from '@/staff/queries';
-import { useAppSelector } from '@/store/hooks';
 
 export function StaffFeedbackDetailPage() {
-  const account = useAppSelector((state) => state.auth.account);
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const feedbackId = id ? parseInt(id, 10) : undefined;
   const { data: feedback, isLoading } = useFeedbackDetail(feedbackId);
   const updateStatus = useUpdateFeedbackStatus();
 
-  if (!account?.is_staff) return <Navigate to="/" replace />;
   if (isLoading) return <p className="p-8 text-muted-foreground">Loading...</p>;
   if (!feedback) return <p className="p-8 text-muted-foreground">Feedback not found.</p>;
 

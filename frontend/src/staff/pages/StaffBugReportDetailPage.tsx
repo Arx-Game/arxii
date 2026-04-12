@@ -1,20 +1,17 @@
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useBugReportDetail, useUpdateBugReportStatus } from '@/staff/queries';
-import { useAppSelector } from '@/store/hooks';
 
 export function StaffBugReportDetailPage() {
-  const account = useAppSelector((state) => state.auth.account);
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const reportId = id ? parseInt(id, 10) : undefined;
   const { data: report, isLoading } = useBugReportDetail(reportId);
   const updateStatus = useUpdateBugReportStatus();
 
-  if (!account?.is_staff) return <Navigate to="/" replace />;
   if (isLoading) return <p className="p-8 text-muted-foreground">Loading...</p>;
   if (!report) return <p className="p-8 text-muted-foreground">Bug report not found.</p>;
 

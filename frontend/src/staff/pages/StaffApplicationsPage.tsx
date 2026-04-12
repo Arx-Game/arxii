@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { statusLabel, statusVariant } from '@/character-creation/utils';
 import { useApplications } from '@/staff/queries';
-import { useAppSelector } from '@/store/hooks';
 
 const STATUS_OPTIONS: { label: string; value: string | undefined }[] = [
   { label: 'All', value: undefined },
@@ -19,12 +18,9 @@ const STATUS_OPTIONS: { label: string; value: string | undefined }[] = [
 ];
 
 export function StaffApplicationsPage() {
-  const account = useAppSelector((state) => state.auth.account);
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined);
   const { data, isLoading } = useApplications(statusFilter);
   const applications = data?.results;
-
-  if (!account?.is_staff) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">

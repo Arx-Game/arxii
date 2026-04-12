@@ -1,22 +1,18 @@
 import { useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useBugReportList } from '@/staff/queries';
-import { useAppSelector } from '@/store/hooks';
 import type { SubmissionStatus } from '@/staff/types';
 import { STATUS_OPTIONS, statusVariant } from '@/staff/utils';
 
 export function StaffBugReportsPage() {
-  const account = useAppSelector((state) => state.auth.account);
   const [statusFilter, setStatusFilter] = useState<SubmissionStatus | undefined>(undefined);
   const [page, setPage] = useState(1);
   const { data, isLoading } = useBugReportList(statusFilter, page);
   const items = data?.results;
-
-  if (!account?.is_staff) return <Navigate to="/" replace />;
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">

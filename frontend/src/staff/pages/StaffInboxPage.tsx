@@ -1,10 +1,9 @@
 import { useState } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useStaffInbox } from '@/staff/queries';
-import { useAppSelector } from '@/store/hooks';
 import type { SubmissionCategory } from '@/staff/types';
 import { detailPath } from '@/staff/utils';
 
@@ -69,7 +68,6 @@ function timeAgo(dateString: string): string {
 }
 
 export function StaffInboxPage() {
-  const account = useAppSelector((state) => state.auth.account);
   const [mutedCategories, setMutedCategories] =
     useState<Set<SubmissionCategory>>(loadMutedCategories);
   const [page, setPage] = useState(1);
@@ -82,8 +80,6 @@ export function StaffInboxPage() {
     activeCategories.length < CATEGORY_OPTIONS.length ? activeCategories : undefined,
     page
   );
-
-  if (!account?.is_staff) return <Navigate to="/" replace />;
 
   function toggleCategory(category: SubmissionCategory) {
     setMutedCategories((prev) => {
