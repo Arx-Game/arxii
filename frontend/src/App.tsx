@@ -38,6 +38,8 @@ import { StaffBugReportDetailPage } from './staff/pages/StaffBugReportDetailPage
 import { StaffPlayerReportsPage } from './staff/pages/StaffPlayerReportsPage';
 import { StaffPlayerReportDetailPage } from './staff/pages/StaffPlayerReportDetailPage';
 import { StaffAccountHistoryPage } from './staff/pages/StaffAccountHistoryPage';
+import { StaffGMApplicationsPage } from './staff/pages/StaffGMApplicationsPage';
+import { StaffGMApplicationDetailPage } from './staff/pages/StaffGMApplicationDetailPage';
 import { RouletteModal } from './components/roulette/RouletteModal';
 
 function App() {
@@ -181,6 +183,22 @@ function App() {
           element={
             <StaffRoute>
               <StaffPlayerReportDetailPage />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/gm-applications"
+          element={
+            <StaffRoute>
+              <StaffGMApplicationsPage />
+            </StaffRoute>
+          }
+        />
+        <Route
+          path="/staff/gm-applications/:id"
+          element={
+            <StaffRoute>
+              <StaffGMApplicationDetailPage />
             </StaffRoute>
           }
         />

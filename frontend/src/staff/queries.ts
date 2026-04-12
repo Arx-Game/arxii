@@ -14,6 +14,7 @@ import {
 import type {
   AccountHistory,
   BugReport,
+  GMApplication,
   InboxResponse,
   PlayerFeedback,
   PlayerReport,
@@ -33,6 +34,9 @@ import {
   getPlayerReportDetail,
   updatePlayerReportStatus,
   getOpenSubmissionCount,
+  getGMApplicationList,
+  getGMApplicationDetail,
+  updateGMApplication,
 } from './api';
 
 export const staffKeys = {
@@ -53,6 +57,9 @@ export const staffKeys = {
     [...staffKeys.all, 'player-reports', status, page] as const,
   playerReportDetail: (id: number) => [...staffKeys.all, 'player-report-detail', id] as const,
   accountHistory: (id: number) => [...staffKeys.all, 'account-history', id] as const,
+  gmApplications: (status?: string, page?: number) =>
+    [...staffKeys.all, 'gm-applications', status, page] as const,
+  gmApplicationDetail: (id: number) => [...staffKeys.all, 'gm-application-detail', id] as const,
 };
 
 export function useApplications(statusFilter?: string) {
@@ -235,6 +242,41 @@ export function useUpdatePlayerReportStatus() {
   return useMutation({
     mutationFn: ({ id, status }: { id: number; status: SubmissionStatus }) =>
       updatePlayerReportStatus(id, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: staffKeys.all });
+    },
+  });
+}
+
+// =============================================================================
+// GM Application Hooks
+// =============================================================================
+
+export function useGMApplicationList(status?: string, page?: number) {
+  return useQuery<PaginatedResponse<GMApplication>>({
+    queryKey: staffKeys.gmApplications(status, page),
+    queryFn: () => getGMApplicationList(status, page),
+  });
+}
+
+export function useGMApplicationDetail(id: number | undefined) {
+  return useQuery<GMApplication>({
+    queryKey: staffKeys.gmApplicationDetail(id!),
+    queryFn: () => getGMApplicationDetail(id!),
+    enabled: !!id,
+  });
+}
+
+export function useUpdateGMApplication() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: number;
+      data: { status?: string; staff_response?: string };
+    }) => updateGMApplication(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: staffKeys.all });
     },

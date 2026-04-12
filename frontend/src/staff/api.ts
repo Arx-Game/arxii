@@ -7,6 +7,7 @@ import type { PaginatedResponse } from '@/shared/types';
 import type {
   AccountHistory,
   BugReport,
+  GMApplication,
   InboxResponse,
   PlayerFeedback,
   PlayerReport,
@@ -16,6 +17,7 @@ import type {
 
 const INBOX_URL = '/api/staff-inbox';
 const SUBMISSIONS_URL = '/api/player-submissions';
+const GM_URL = '/api/gm/applications';
 
 // =============================================================================
 // Staff Inbox
@@ -177,5 +179,44 @@ export async function updatePlayerReportStatus(
     body: JSON.stringify({ status }),
   });
   if (!res.ok) throw new Error('Failed to update player report status');
+  return res.json();
+}
+
+// =============================================================================
+// GM Applications
+// =============================================================================
+
+export async function getGMApplicationList(
+  status?: string,
+  page?: number
+): Promise<PaginatedResponse<GMApplication>> {
+  const params = new URLSearchParams();
+  if (status) {
+    params.append('status', status);
+  }
+  if (page != null) {
+    params.append('page', page.toString());
+  }
+  const qs = params.toString();
+  const res = await apiFetch(`${GM_URL}/${qs ? `?${qs}` : ''}`);
+  if (!res.ok) throw new Error('Failed to load GM application list');
+  return res.json();
+}
+
+export async function getGMApplicationDetail(id: number): Promise<GMApplication> {
+  const res = await apiFetch(`${GM_URL}/${id}/`);
+  if (!res.ok) throw new Error('Failed to load GM application detail');
+  return res.json();
+}
+
+export async function updateGMApplication(
+  id: number,
+  data: { status?: string; staff_response?: string }
+): Promise<GMApplication> {
+  const res = await apiFetch(`${GM_URL}/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to update GM application');
   return res.json();
 }
