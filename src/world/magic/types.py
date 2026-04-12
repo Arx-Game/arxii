@@ -7,6 +7,12 @@ from django.db import models
 
 if TYPE_CHECKING:
     from world.checks.types import CheckResult
+    from world.conditions.models import ConditionInstance
+    from world.magic.models import (
+        MagicalAlterationEvent,
+        MagicalAlterationTemplate,
+        PendingAlteration,
+    )
     from world.mechanics.types import AppliedEffect
 
 
@@ -130,3 +136,42 @@ class TechniqueUseResult:
     mishap: MishapResult | None = None
     soulfray_result: SoulfrayResult | None = None
     soulfray_warning: SoulfrayWarning | None = None
+
+
+class AlterationGateError(Exception):
+    """Raised when a character tries to spend advancement points while
+    having unresolved magical alterations."""
+
+    user_message = (
+        "You have an unresolved magical alteration. "
+        "Visit the alteration screen to resolve it before "
+        "spending advancement points."
+    )
+
+
+class AlterationResolutionError(Exception):
+    """Raised when condition application fails during alteration resolution."""
+
+    user_message = (
+        "The magical alteration could not be applied due to a "
+        "condition interaction. Please contact staff."
+    )
+
+
+@dataclass(frozen=True)
+class PendingAlterationResult:
+    """Result of creating or escalating a PendingAlteration."""
+
+    pending: PendingAlteration
+    created: bool  # True if new, False if escalated
+    previous_tier: int | None  # Non-null if escalated
+
+
+@dataclass(frozen=True)
+class AlterationResolutionResult:
+    """Result of resolving a PendingAlteration."""
+
+    pending: PendingAlteration
+    template: MagicalAlterationTemplate
+    condition_instance: ConditionInstance
+    event: MagicalAlterationEvent
