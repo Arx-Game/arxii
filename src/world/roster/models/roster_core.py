@@ -73,6 +73,14 @@ class RosterEntry(SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="roster_entry",
     )
+    character_sheet = models.OneToOneField(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="roster_entry_v2",
+        null=True,
+        blank=True,
+        help_text="The character sheet. Will replace character OneToOne to ObjectDB.",
+    )
     roster = models.ForeignKey(Roster, on_delete=models.CASCADE, related_name="entries")
 
     # Profile picture - references specific media from character's current tenure
