@@ -40,7 +40,7 @@ Story (Campaign)
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Story` | Top-level campaign container | `title`, `description`, `status`, `privacy`, `owners` (M2M AccountDB), `active_gms` (M2M ObjectDB, GMCharacter only), `is_personal_story`, `personal_story_character` (FK ObjectDB) |
+| `Story` | Top-level campaign container | `title`, `description`, `status`, `privacy`, `owners` (M2M AccountDB), `active_gms` (M2M gm.GMProfile), `is_personal_story`, `personal_story_character` (FK ObjectDB) |
 | `Chapter` | Major narrative arc within a story | `story` (FK), `title`, `description`, `order`, `is_active`, `summary`, `consequences` |
 | `Episode` | Individual session within a chapter | `chapter` (FK), `title`, `description`, `order`, `is_active`, `summary`, `consequences`, `connection_to_next`, `connection_summary` |
 | `EpisodeScene` | Links scenes to episodes | `episode` (FK), `scene` (FK scenes.Scene), `order`, `connection_to_next`, `connection_summary` |
