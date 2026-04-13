@@ -121,6 +121,38 @@ class PersonaModelTests(TestCase):
         assert persona.is_established_or_primary is False
 
 
+class PrimaryPersonaPerCharacterSheetConstraintTest(TestCase):
+    """Partial unique constraint: one PRIMARY persona per character_sheet."""
+
+    def test_second_primary_persona_on_same_sheet_rejected(self) -> None:
+        from world.character_sheets.models import CharacterIdentity
+        from world.scenes.models import Persona
+
+        # CharacterIdentityFactory creates a PRIMARY persona; bind to the same character
+        identity = CharacterIdentityFactory()
+        sheet = CharacterSheetFactory(character=identity.character)
+        existing_primary = identity.active_persona
+        existing_primary.character_sheet = sheet
+        existing_primary.save(update_fields=["character_sheet"])
+
+        # Create a bare second CharacterIdentity on a different character (OneToOne)
+        # to avoid tripping the old unique_primary_persona (on character_identity)
+        from evennia_extensions.factories import CharacterFactory
+
+        other_identity = CharacterIdentity.objects.create(
+            character=CharacterFactory(),
+            active_persona=None,
+        )
+
+        with self.assertRaises(IntegrityError):
+            Persona.objects.create(
+                character_sheet=sheet,
+                character_identity=other_identity,
+                name="Second Primary",
+                persona_type=PersonaType.PRIMARY,
+            )
+
+
 class PersonaDiscoveryModelTests(TestCase):
     """Tests for the PersonaDiscovery model."""
 

@@ -237,6 +237,11 @@ class Persona(SharedMemoryModel):
                 fields=["character_identity", "name"],
                 name="unique_persona_name_per_character",
             ),
+            models.UniqueConstraint(
+                fields=["character_sheet"],
+                condition=models.Q(persona_type="primary"),
+                name="unique_primary_persona_per_character_sheet",
+            ),
         ]
 
     def __str__(self) -> str:
