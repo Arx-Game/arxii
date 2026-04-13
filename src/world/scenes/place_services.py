@@ -80,7 +80,7 @@ def clear_place_presence_for_character(character: ObjectDB) -> int:
     from world.scenes.models import Persona as PersonaModel  # noqa: PLC0415
 
     persona_ids = PersonaModel.objects.filter(
-        character_identity__character=character,
+        character_sheet__character=character,
     ).values_list("pk", flat=True)
 
     count, _ = PlacePresence.objects.filter(

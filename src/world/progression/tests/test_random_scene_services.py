@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
+from world.character_sheets.factories import CharacterIdentityFactory
 from world.game_clock.week_services import get_current_game_week
 from world.progression.models import RandomSceneCompletion, RandomSceneTarget
 from world.progression.services.random_scene import (
@@ -97,14 +97,14 @@ class GenerateRandomSceneTargetsTest(TestCase):
     def test_slots_4_5_prefer_relationships(self) -> None:
         """Slots 4-5 should prefer personas with existing relationships."""
         _own_persona, own_entry, _ = _make_active_character(self.account)
-        own_sheet = CharacterSheetFactory(character=own_entry.character)
+        own_sheet = own_entry.character.sheet_data
 
         # Create 2 relationship personas (mark as completed so they
         # don't land in stranger slots 1-3)
         rel_personas = []
         for _ in range(2):
             persona, entry, _ = _make_active_character()
-            other_sheet = CharacterSheetFactory(character=entry.character)
+            other_sheet = entry.character.sheet_data
             CharacterRelationshipFactory(source=own_sheet, target=other_sheet)
             RandomSceneCompletion.objects.create(
                 account=self.account,

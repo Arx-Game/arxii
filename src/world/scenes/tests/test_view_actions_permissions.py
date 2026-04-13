@@ -273,7 +273,7 @@ class PersonaViewPermissionsTestCase(APITestCase):
         self.client.force_authenticate(user=self.participant_account)
         url = reverse("persona-list")
         data = {
-            "character_identity": identity.id,
+            "character_sheet": identity.character.sheet_data.pk,
             "character": identity.character.id,
             "name": "New Persona",
             "description": "Test persona",
@@ -300,7 +300,7 @@ class PersonaViewPermissionsTestCase(APITestCase):
         RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
 
         data = {
-            "character_identity": identity.id,
+            "character_sheet": identity.character.sheet_data.pk,
             "character": identity.character.id,
             "name": "New Persona",
             "description": "Test persona",
@@ -319,7 +319,7 @@ class PersonaViewPermissionsTestCase(APITestCase):
         url = reverse("persona-list")
         identity = CharacterIdentityFactory()
         data = {
-            "character_identity": identity.id,
+            "character_sheet": identity.character.sheet_data.pk,
             "character": identity.character.id,
             "name": "Staff Persona",
             "description": "Staff test persona",

@@ -200,7 +200,7 @@ def _get_author_account_for_target(
     """
     if target_type == VoteTargetType.INTERACTION:
         interaction = get_object_or_404(Interaction, pk=target_id)
-        return get_account_for_character(interaction.persona.character)
+        return get_account_for_character(interaction.persona.character_sheet.character)
     if target_type == VoteTargetType.SCENE_PARTICIPATION:
         participation = get_object_or_404(SceneParticipation, pk=target_id)
         return participation.account

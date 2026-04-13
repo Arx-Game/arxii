@@ -78,7 +78,7 @@ def process_memorable_poses(game_week: GameWeek) -> None:
                     break
 
             xp_amount = MEMORABLE_POSE_XP[tier_index]
-            account = get_account_for_character(interaction.persona.character)
+            account = get_account_for_character(interaction.persona.character_sheet.character)
             if account is None:
                 prev_vote_count = interaction.vote_count
                 continue

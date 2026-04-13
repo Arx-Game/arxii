@@ -154,10 +154,10 @@ class CharacterIdentityFactory(factory_django.DjangoModelFactory):
             character=character,
             defaults={"active_persona": None},
         )
-        # If a PRIMARY persona already exists for this character (e.g. created
-        # by CharacterSheetFactory's post_generation), reuse it. Otherwise
-        # create one and link the sheet if available.
-        sheet = CharacterSheet.objects.filter(character=character).first()
+        # Ensure a CharacterSheet exists for the character. Consumers now
+        # walk character.sheet_data.primary_persona so the sheet must be
+        # present for every character that has an identity.
+        sheet, _ = CharacterSheet.objects.get_or_create(character=character)
         persona = Persona.objects.filter(
             character=character,
             persona_type=PersonaType.PRIMARY,
@@ -176,7 +176,7 @@ class CharacterIdentityFactory(factory_django.DjangoModelFactory):
             if persona.character_identity_id != identity.pk:
                 persona.character_identity = identity
                 updates.append("character_identity")
-            if sheet is not None and persona.character_sheet_id != sheet.pk:
+            if persona.character_sheet_id != sheet.pk:
                 persona.character_sheet = sheet
                 updates.append("character_sheet")
             if updates:

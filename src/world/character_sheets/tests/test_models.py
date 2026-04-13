@@ -302,11 +302,9 @@ class CharacterSheetPrimaryPersonaTest(TestCase):
         # Build a character with an identity + sheet pointing at the same character
         identity = CharacterIdentityFactory()
         character = identity.character
-        sheet = CharacterSheetFactory(character=character)
-        # The identity factory already created a PRIMARY persona; link it to the sheet
+        # CharacterIdentityFactory ensures a sheet exists and links the primary.
+        sheet = character.sheet_data
         primary = identity.active_persona
-        primary.character_sheet = sheet
-        primary.save(update_fields=["character_sheet"])
         # Add an ESTABLISHED persona linked to the same sheet
         Persona.objects.create(
             character_identity=identity,

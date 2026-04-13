@@ -180,7 +180,7 @@ class PersonaPermissionsTestCase(APITestCase):
         url = reverse("persona-list")
         data = {
             "name": "Test Persona",
-            "character_identity": identity.id,
+            "character_sheet": identity.character.sheet_data.pk,
             "character": identity.character.id,
         }
 
@@ -192,7 +192,7 @@ class PersonaPermissionsTestCase(APITestCase):
         # Participant can create persona (owns the character)
         self.client.force_authenticate(user=self.participant)
         response = self.client.post(url, data, format="json")
-        assert response.status_code == status.HTTP_201_CREATED
+        assert response.status_code == status.HTTP_201_CREATED, response.data
 
     @suppress_permission_errors
     def test_modify_persona_participant_permission(self):

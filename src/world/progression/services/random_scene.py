@@ -221,7 +221,7 @@ def validate_random_scene_claim(
     week_end_dt = game_week.ended_at or timezone.now()
 
     # Get target character's account via roster
-    target_account = get_account_for_character(target_persona.character)
+    target_account = get_account_for_character(target_persona.character_sheet.character)
     if target_account is None:
         return False
 
@@ -249,7 +249,7 @@ def validate_random_scene_claim(
             pk__in=RosterEntry.objects.for_account(account).values_list("pk", flat=True),
         ).values_list("character_id", flat=True)
     )
-    target_char_id = target_persona.character_id
+    target_char_id = target_persona.character_sheet.character_id
 
     own_persona_ids = list(
         Persona.objects.filter(character_id__in=own_char_ids).values_list("pk", flat=True)
@@ -321,7 +321,7 @@ def claim_random_scene(
             raise ProgressionError(ProgressionError.RS_NOT_FOUND)
 
         # Get target character's account
-        target_account = get_account_for_character(target.target_persona.character)
+        target_account = get_account_for_character(target.target_persona.character_sheet.character)
 
         # Award XP to claimer
         claimer_xp = RS_BASE_XP

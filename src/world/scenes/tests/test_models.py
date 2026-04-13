@@ -128,9 +128,9 @@ class PrimaryPersonaPerCharacterSheetConstraintTest(TestCase):
         from world.character_sheets.models import CharacterIdentity
         from world.scenes.models import Persona
 
-        # CharacterIdentityFactory creates a PRIMARY persona; bind to the same character
+        # CharacterIdentityFactory creates a PRIMARY persona and ensures a sheet exists
         identity = CharacterIdentityFactory()
-        sheet = CharacterSheetFactory(character=identity.character)
+        sheet = identity.character.sheet_data
         existing_primary = identity.active_persona
         existing_primary.character_sheet = sheet
         existing_primary.save(update_fields=["character_sheet"])

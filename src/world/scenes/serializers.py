@@ -17,7 +17,7 @@ class PersonaSerializer(serializers.ModelSerializer):
         model = Persona
         fields = [
             "id",
-            "character_identity",
+            "character_sheet",
             "name",
             "is_fake_name",
             "persona_type",
@@ -30,7 +30,7 @@ class PersonaSerializer(serializers.ModelSerializer):
 
     def get_roster_entry(self, obj: Persona) -> dict[str, int | str] | None:
         try:
-            entry = obj.character.roster_entry
+            entry = obj.character_sheet.character.roster_entry
         except AttributeError:
             entry = None
         if entry:
@@ -38,6 +38,22 @@ class PersonaSerializer(serializers.ModelSerializer):
         return None
 
     def create(self, validated_data: dict) -> Persona:
+        # During the character_identity -> character_sheet transition, the
+        # Persona model still requires character_identity (NOT NULL). Fill it
+        # in from the character's identity so API callers don't need to know
+        # about the legacy field.
+        if "character_identity" not in validated_data:  # noqa: STRING_LITERAL — transitional shim, removed with Task 15
+            from world.character_sheets.identity_services import (  # noqa: PLC0415
+                ensure_character_identity,
+            )
+
+            character = validated_data.get("character") or (
+                validated_data["character_sheet"].character  # noqa: STRING_LITERAL — transitional shim, removed with Task 15
+                if "character_sheet" in validated_data  # noqa: STRING_LITERAL — transitional shim, removed with Task 15
+                else None
+            )
+            if character is not None:
+                validated_data["character_identity"] = ensure_character_identity(character)  # noqa: STRING_LITERAL — transitional shim, removed with Task 15
         return super().create(validated_data)
 
 
@@ -52,7 +68,7 @@ class SceneParticipantSerializer(serializers.ModelSerializer):
 
     def get_roster_entry(self, obj):
         try:
-            entry = obj.character.roster_entry
+            entry = obj.character_sheet.character.roster_entry
         except AttributeError:
             entry = None
         if entry:
@@ -99,7 +115,7 @@ class SceneListSerializer(serializers.ModelSerializer):
                 is_fake_name=False,
             )
             .distinct()
-            .select_related("character__roster_entry")
+            .select_related("character_sheet__character__roster_entry")
         )
         return SceneParticipantSerializer(personas, many=True).data
 
@@ -133,8 +149,8 @@ class SceneDetailSerializer(SceneListSerializer):
             )
             .distinct()
             .select_related(
-                "character_identity",
-                "character__roster_entry",
+                "character_sheet",
+                "character_sheet__character__roster_entry",
             )
         )
         return PersonaSerializer(personas, many=True).data
@@ -173,7 +189,7 @@ class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
             request = self.context.get("request")
             if request and request.user.is_authenticated:
                 # Check the requesting user owns the character behind this persona
-                roster_entry = getattr(persona.character, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+                roster_entry = getattr(persona.character_sheet.character, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
                 if roster_entry is None:
                     raise serializers.ValidationError(
                         {"persona": "Persona's character has no roster entry."}
@@ -194,7 +210,7 @@ class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
             # Check that persona's character's account is a scene participant
             from world.roster.models import RosterTenure  # noqa: PLC0415
 
-            roster_entry = getattr(persona.character, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+            roster_entry = getattr(persona.character_sheet.character, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
             if roster_entry:
                 active_tenure = (
                     RosterTenure.objects.filter(
