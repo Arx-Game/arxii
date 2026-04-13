@@ -31,7 +31,7 @@ class TestCloudinaryGalleryService(TestCase):
         self.character = CharacterFactory()
         self.roster = RosterFactory(is_active=True)
         self.roster_entry = RosterEntryFactory(
-            character=self.character,
+            character_sheet__character=self.character,
             roster=self.roster,
         )
         self.tenure = RosterTenureFactory(

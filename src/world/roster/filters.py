@@ -11,7 +11,7 @@ class RosterEntryFilterSet(django_filters.FilterSet):
     gender = django_filters.CharFilter(method="filter_gender")
     char_class = django_filters.CharFilter(method="filter_char_class")
     name = django_filters.CharFilter(
-        field_name="character__db_key",
+        field_name="character_sheet__character__db_key",
         lookup_expr="icontains",
     )
     roster = django_filters.NumberFilter(field_name="roster_id")
@@ -24,17 +24,15 @@ class RosterEntryFilterSet(django_filters.FilterSet):
         self, queryset: QuerySet[RosterEntry], name: str, value: str
     ) -> QuerySet[RosterEntry]:
         return queryset.filter(
-            character__db_attributes__db_key="gender",
-            character__db_attributes__db_value__icontains=value,
+            character_sheet__gender__display_name__icontains=value,
         )
 
     def filter_char_class(
         self, queryset: QuerySet[RosterEntry], name: str, value: str
     ) -> QuerySet[RosterEntry]:
         return queryset.filter(
-            character__db_attributes__db_key="class",
-            character__db_attributes__db_value__icontains=value,
-        )
+            character_sheet__character__character_class_levels__character_class__name__icontains=value,
+        ).distinct()
 
 
 class FamilyFilterSet(django_filters.FilterSet):
@@ -78,4 +76,6 @@ class RosterTenureFilterSet(django_filters.FilterSet):
     def filter_search(
         self, queryset: QuerySet[RosterTenure], name: str, value: str
     ) -> QuerySet[RosterTenure]:
-        return queryset.filter(roster_entry__character__db_key__icontains=value)
+        return queryset.filter(
+            roster_entry__character_sheet__character__db_key__icontains=value,
+        )

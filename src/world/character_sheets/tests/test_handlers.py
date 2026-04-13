@@ -237,9 +237,7 @@ class CharacterDataHandlerTests(TestCase):
         )
 
         # Create identity with primary persona
-        from world.character_sheets.factories import CharacterIdentityFactory
-
-        CharacterIdentityFactory(character=self.character)
+        CharacterSheetFactory(character=self.character)
 
         # Test display name (should use primary persona name = character db_key)
         display_name = self.handler.get_display_name()

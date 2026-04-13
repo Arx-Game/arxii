@@ -103,7 +103,7 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
     def get_available_characters(self):
         """Return characters this player is actively playing using cached data."""
         return [
-            tenure.roster_entry.character
+            tenure.roster_entry.character_sheet.character
             for tenure in self.cached_active_tenures
             if tenure.roster_entry.roster.is_active
         ]

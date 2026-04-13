@@ -25,7 +25,7 @@ class CmdPageTests(TestCase):
         player_data = PlayerDataFactory(account=self.target_account)
         self.character = CharacterFactory(db_key="Bob")
         self.character.msg = MagicMock()
-        roster_entry = RosterEntryFactory(character=self.character)
+        roster_entry = RosterEntryFactory(character_sheet__character=self.character)
         RosterTenureFactory(roster_entry=roster_entry, player_data=player_data)
 
     @patch("commands.evennia_overrides.communication.search.object_search")
@@ -50,7 +50,7 @@ class CmdPageTests(TestCase):
 
         mock_search.return_value = [self.character]
         # Remove all tenures to simulate no active player
-        self.character.roster_entry.tenures.all().delete()
+        self.character.sheet_data.roster_entry.tenures.all().delete()
 
         cmd = CmdPage()
         cmd.caller = self.caller

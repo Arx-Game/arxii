@@ -10,7 +10,6 @@ import factory.django as factory_django
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.models import (
-    CharacterIdentity,
     Characteristic,
     CharacteristicValue,
     CharacterSheet,
@@ -53,6 +52,7 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
 
     class Meta:
         model = CharacterSheet
+        django_get_or_create = ("character",)
 
     character = factory.SubFactory(CharacterFactory)
     age = factory.Faker("random_int", min=18, max=50)
@@ -67,6 +67,42 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
     personality = factory.Faker("paragraph")
     background = factory.Faker("paragraph")
 
+    @factory.post_generation
+    def primary_persona(
+        self: "CharacterSheet",
+        create: bool,
+        extracted: object,
+        **kwargs: object,
+    ) -> None:
+        """Ensure every sheet has a PRIMARY persona (the invariant).
+
+        Idempotent: if a PRIMARY persona already exists for this character,
+        link it to the sheet. Otherwise create a new PRIMARY persona for it.
+
+        Pass ``primary_persona=False`` to opt out.
+        """
+        if not create:
+            return
+        if extracted is False:
+            return
+
+        from world.scenes.constants import PersonaType
+        from world.scenes.models import Persona
+
+        existing_primary = Persona.objects.filter(
+            character_sheet=self,
+            persona_type=PersonaType.PRIMARY,
+        ).first()
+
+        if existing_primary is not None:
+            return
+
+        Persona.objects.create(
+            character_sheet=self,
+            name=self.character.db_key,
+            persona_type=PersonaType.PRIMARY,
+        )
+
 
 class ObjectDisplayDataFactory(factory_django.DjangoModelFactory):
     """Factory for creating ObjectDisplayData instances."""
@@ -78,46 +114,6 @@ class ObjectDisplayDataFactory(factory_django.DjangoModelFactory):
     longname = factory.LazyAttribute(lambda obj: f"{obj.object.db_key} the Brave")
     colored_name = factory.LazyAttribute(lambda obj: f"|c{obj.object.db_key}|n")
     permanent_description = ""
-
-
-class CharacterIdentityFactory(factory_django.DjangoModelFactory):
-    """Factory for creating CharacterIdentity with a primary Persona.
-
-    Handles the circular FK between CharacterIdentity and Persona:
-    1. Creates CharacterIdentity with active_persona=None
-    2. Creates a PRIMARY Persona pointing to it
-    3. Sets active_persona on the identity
-    """
-
-    class Meta:
-        model = CharacterIdentity
-
-    character = factory.SubFactory(CharacterFactory)
-
-    @classmethod
-    def _create(
-        cls,
-        model_class: type[CharacterIdentity],
-        *args: object,
-        **kwargs: object,
-    ) -> CharacterIdentity:
-        from world.scenes.constants import PersonaType
-        from world.scenes.models import Persona
-
-        character = kwargs.pop("character", CharacterFactory())
-        identity = model_class.objects.create(
-            character=character,
-            active_persona=None,
-        )
-        persona = Persona.objects.create(
-            character_identity=identity,
-            character=character,
-            name=character.db_key,
-            persona_type=PersonaType.PRIMARY,
-        )
-        identity.active_persona = persona
-        identity.save(update_fields=["active_persona_id"])
-        return identity
 
 
 class CharacteristicFactory(factory_django.DjangoModelFactory):
@@ -168,24 +164,24 @@ class CompleteCharacterFactory:
         character_name: str = "TestChar",
         **kwargs: object,
     ) -> dict:
-        """Create a character with sheet, description, and identity."""
+        """Create a character with sheet and display data.
+
+        CharacterSheetFactory's post_generation hook ensures a PRIMARY
+        Persona exists for the sheet, so the returned sheet is fully wired.
+        """
         # Create the character
         character = CharacterFactory(db_key=character_name)
 
-        # Create sheet data
+        # Create sheet data (post_generation creates the PRIMARY persona)
         sheet = CharacterSheetFactory(character=character, **kwargs)
 
         # Create display data
         display_data = ObjectDisplayDataFactory(object=character)
 
-        # Create character identity (includes primary persona)
-        identity = CharacterIdentityFactory(character=character)
-
         return {
             "character": character,
             "sheet": sheet,
             "display_data": display_data,
-            "identity": identity,
         }
 
 

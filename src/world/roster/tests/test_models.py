@@ -38,7 +38,7 @@ class RosterApplicationModelTestCase(TestCase):
         self.player_data = PlayerDataFactory()
         self.staff_data = PlayerDataFactory(account__is_staff=True)
         self.character = CharacterFactory()
-        self.roster_entry = RosterEntryFactory(character=self.character)
+        self.roster_entry = RosterEntryFactory(character_sheet__character=self.character)
 
     def test_approve_application_creates_tenure(self):
         """Test that approving an application creates a proper tenure"""
@@ -94,10 +94,10 @@ class RosterApplicationModelTestCase(TestCase):
         """Test all application state transitions"""
         # Create fresh characters for each subtest to avoid conflicts
         character2 = CharacterFactory()
-        RosterEntryFactory(character=character2)
+        RosterEntryFactory(character_sheet__character=character2)
 
         character3 = CharacterFactory()
-        RosterEntryFactory(character=character3)
+        RosterEntryFactory(character_sheet__character=character3)
 
         state_tests = [
             {
@@ -155,7 +155,7 @@ class RosterApplicationModelTestCase(TestCase):
             with self.subTest(status=invalid_status):
                 # Create character for this test
                 char = CharacterFactory()
-                RosterEntryFactory(character=char)
+                RosterEntryFactory(character_sheet__character=char)
 
                 app = RosterApplication.objects.create(
                     player_data=self.player_data,
@@ -202,7 +202,7 @@ class RosterTenureModelTestCase(TestCase):
         """Set up test data for each test"""
         self.player_data = PlayerDataFactory()
         self.character = CharacterFactory()
-        self.roster_entry = RosterEntryFactory(character=self.character)
+        self.roster_entry = RosterEntryFactory(character_sheet__character=self.character)
 
     def test_display_name_formatting(self):
         """Test that display names are formatted correctly"""
@@ -259,7 +259,7 @@ class AccountCharactersPropertyTestCase(TestCase):
         )
         self.player_data = PlayerDataFactory(account=self.account)
         self.character = CharacterFactory()
-        self.roster_entry = RosterEntryFactory(character=self.character)
+        self.roster_entry = RosterEntryFactory(character_sheet__character=self.character)
         self.tenure = RosterTenureFactory(
             player_data=self.player_data,
             roster_entry=self.roster_entry,

@@ -31,8 +31,8 @@ def _make_character_with_account() -> tuple:
     account = AccountFactory()
     player_data = PlayerDataFactory(account=account)
     persona = PersonaFactory()
-    character = persona.character
-    entry = RosterEntryFactory(character=character)
+    character = persona.character_sheet.character
+    entry = RosterEntryFactory(character_sheet__character=character)
     RosterTenureFactory(roster_entry=entry, player_data=player_data)
     return account, persona
 

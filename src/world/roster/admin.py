@@ -41,17 +41,17 @@ class RosterAdmin(admin.ModelAdmin):
 
 @admin.register(RosterEntry)
 class RosterEntryAdmin(admin.ModelAdmin):
-    list_display = ["character", "roster", "joined_roster", "frozen", "profile_picture"]
+    list_display = ["character_sheet", "roster", "joined_roster", "frozen", "profile_picture"]
     list_filter = ["roster", "frozen", "joined_roster"]
-    search_fields = ["character__name"]
+    search_fields = ["character_sheet__character__db_key"]
     readonly_fields = ["joined_roster", "created_date", "updated_date"]
 
-    # Use autocomplete for ObjectDB (characters) - could be thousands
-    autocomplete_fields = ["character", "profile_picture"]
+    # Use autocomplete for CharacterSheet (could be many) and profile_picture
+    autocomplete_fields = ["character_sheet", "profile_picture"]
     # Roster is a lookup table with few entries, keep default widget
 
     fieldsets = (
-        ("Character Info", {"fields": ("character", "roster", "profile_picture")}),
+        ("Character Info", {"fields": ("character_sheet", "roster", "profile_picture")}),
         ("Status", {"fields": ("frozen",)}),
         (
             "History",
@@ -78,7 +78,10 @@ class RosterTenureAdmin(admin.ModelAdmin):
         "is_current",
     ]
     list_filter = ["start_date", "end_date", "player_number"]
-    search_fields = ["roster_entry__character__name", "player_data__account__username"]
+    search_fields = [
+        "roster_entry__character_sheet__character__db_key",
+        "player_data__account__username",
+    ]
     readonly_fields = ["display_name"]
     date_hierarchy = "start_date"
 
@@ -199,7 +202,7 @@ class TenureDisplaySettingsAdmin(admin.ModelAdmin):
         "allow_pages",
         "plot_involvement",
     ]
-    search_fields = ["tenure__roster_entry__character__name"]
+    search_fields = ["tenure__roster_entry__character_sheet__character__db_key"]
     readonly_fields = ["created_date", "updated_date"]
 
     # Use autocomplete for tenure (there could be many)
@@ -223,7 +226,7 @@ class TenureDisplaySettingsAdmin(admin.ModelAdmin):
 class TenureGalleryAdmin(admin.ModelAdmin):
     list_display = ["tenure", "name", "is_public"]
     list_filter = ["is_public"]
-    search_fields = ["name", "tenure__roster_entry__character__db_key"]
+    search_fields = ["name", "tenure__roster_entry__character_sheet__character__db_key"]
 
     autocomplete_fields = ["tenure", "allowed_viewers"]
 
@@ -236,7 +239,7 @@ class TenureGalleryAdmin(admin.ModelAdmin):
 @admin.register(TenureMedia)
 class TenureMediaAdmin(admin.ModelAdmin):
     list_display = ["tenure", "media", "gallery", "sort_order"]
-    search_fields = ["tenure__roster_entry__character__db_key", "media__title"]
+    search_fields = ["tenure__roster_entry__character_sheet__character__db_key", "media__title"]
 
     autocomplete_fields = ["tenure", "media", "gallery"]
 
@@ -259,8 +262,8 @@ class PlayerMailAdmin(admin.ModelAdmin):
     list_filter = ["sent_date", "read_date", "archived"]
     search_fields = [
         "sender_tenure__player_data__account__username",
-        "sender_tenure__roster_entry__character__name",
-        "recipient_tenure__roster_entry__character__name",
+        "sender_tenure__roster_entry__character_sheet__character__db_key",
+        "recipient_tenure__roster_entry__character_sheet__character__db_key",
         "subject",
     ]
     readonly_fields = ["sent_date", "read_date"]

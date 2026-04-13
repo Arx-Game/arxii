@@ -50,7 +50,7 @@ def process_memorable_poses(game_week: GameWeek) -> None:
             vote_count__gt=0,
             scene__isnull=False,
         )
-        .select_related("persona__character__roster_entry")
+        .select_related("persona__character_sheet__roster_entry")
         .order_by("scene_id", "-vote_count")
     )
 
@@ -78,7 +78,7 @@ def process_memorable_poses(game_week: GameWeek) -> None:
                     break
 
             xp_amount = MEMORABLE_POSE_XP[tier_index]
-            account = get_account_for_character(interaction.persona.character)
+            account = get_account_for_character(interaction.persona.character_sheet.character)
             if account is None:
                 prev_vote_count = interaction.vote_count
                 continue

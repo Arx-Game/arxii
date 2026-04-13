@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, ClassVar
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
-from evennia.objects.models import ObjectDB
 
 if TYPE_CHECKING:
     from world.roster.models.tenures import RosterTenure
@@ -68,10 +67,11 @@ class RosterEntry(SharedMemoryModel):
     Character's current roster status (Active, Inactive, etc.) lives here.
     """
 
-    character = models.OneToOneField(
-        ObjectDB,
+    character_sheet = models.OneToOneField(
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="roster_entry",
+        help_text="The character sheet for this roster entry.",
     )
     roster = models.ForeignKey(Roster, on_delete=models.CASCADE, related_name="entries")
 
@@ -161,7 +161,7 @@ class RosterEntry(SharedMemoryModel):
         self.save()
 
     def __str__(self) -> str:
-        return f"{self.character.name} ({self.roster.name})"
+        return f"{self.character_sheet.character.name} ({self.roster.name})"
 
     class Meta:
         verbose_name = "Roster Entry"

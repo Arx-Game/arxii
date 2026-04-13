@@ -593,16 +593,14 @@ class SceneActionPathTests(PipelineTestMixin, TestCase):
 
         # Initiator persona (our fire mage)
         cls.initiator_persona = PersonaFactory(
-            character_identity__character=cls.character,
-            character=cls.character,
+            character_sheet=cls.character.sheet_data,
         )
 
         # Target character and persona
         cls.target_sheet = CharacterSheetFactory()
         cls.target_character = cls.target_sheet.character
         cls.target_persona = PersonaFactory(
-            character_identity__character=cls.target_character,
-            character=cls.target_character,
+            character_sheet=cls.target_sheet,
         )
 
         # Anima for technique use (required by enhanced action path)

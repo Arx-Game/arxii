@@ -47,20 +47,20 @@ class TestRosterViewSet(TestCase):
         # Create characters in active roster
         self.available_char1 = CharacterFactory()
         self.available_entry1 = RosterEntryFactory(
-            character=self.available_char1,
+            character_sheet__character=self.available_char1,
             roster=self.active_roster,
         )
 
         self.available_char2 = CharacterFactory()
         self.available_entry2 = RosterEntryFactory(
-            character=self.available_char2,
+            character_sheet__character=self.available_char2,
             roster=self.active_roster,
         )
 
         # Create occupied character in active roster
         self.occupied_char = CharacterFactory()
         self.occupied_entry = RosterEntryFactory(
-            character=self.occupied_char,
+            character_sheet__character=self.occupied_char,
             roster=self.active_roster,
         )
         # Give it an active tenure
@@ -74,7 +74,7 @@ class TestRosterViewSet(TestCase):
         # Create character in inactive roster
         self.inactive_char = CharacterFactory()
         self.inactive_entry = RosterEntryFactory(
-            character=self.inactive_char,
+            character_sheet__character=self.inactive_char,
             roster=self.inactive_roster,
         )
 
@@ -154,7 +154,7 @@ class TestRosterViewSet(TestCase):
         # Create character with ended tenure
         ended_char = CharacterFactory()
         ended_entry = RosterEntryFactory(
-            character=ended_char,
+            character_sheet__character=ended_char,
             roster=self.active_roster,
         )
         RosterTenureFactory(

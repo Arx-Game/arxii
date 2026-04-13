@@ -5,7 +5,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import ScenePrivacyMode, SummaryAction
 from world.scenes.factories import PersonaFactory, SceneFactory, SceneParticipationFactory
@@ -14,27 +14,26 @@ from world.scenes.models import SceneSummaryRevision
 
 def _create_owned_persona(account, **persona_kwargs):
     """Create a Persona whose character is owned by the given account via RosterTenure."""
-    identity = CharacterIdentityFactory()
+    identity = CharacterSheetFactory()
     player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(account=account)
-    roster_entry = RosterEntryFactory(character=identity.character)
+    roster_entry = RosterEntryFactory(character_sheet__character=identity.character)
     RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
     if persona_kwargs:
         return PersonaFactory(
-            character_identity=identity,
-            character=identity.character,
+            character_sheet=identity.character.sheet_data,
             **persona_kwargs,
         )
-    return identity.active_persona
+    return identity.primary_persona
 
 
 class SceneSummaryRevisionViewSetTestCase(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory()
-        cls.identity = CharacterIdentityFactory()
+        cls.identity = CharacterSheetFactory()
 
         cls.other_account = AccountFactory()
-        cls.other_identity = CharacterIdentityFactory()
+        cls.other_identity = CharacterSheetFactory()
 
         # Ephemeral scene with participant
         cls.ephemeral_scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)

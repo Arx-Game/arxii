@@ -7,7 +7,7 @@ Captures and manages roleplay sessions with participant tracking, interaction re
 ### `models.py`
 - **`Scene`**: Primary scene entity with title, status, location, summary, privacy_mode
 - **`SceneParticipation`**: Account participation tracking in scenes
-- **`Persona`**: Unified identity model with PersonaType (PRIMARY/ESTABLISHED/TEMPORARY). Links to CharacterIdentity (character_sheets app) and denormalized character FK
+- **`Persona`**: Unified identity model with PersonaType (PRIMARY/ESTABLISHED/TEMPORARY). FK to CharacterSheet (source of truth); partial unique constraint ensures one PRIMARY per sheet
 - **`PersonaDiscovery`**: Records that a character discovered two personas are the same person
 - **`Interaction`**: Atomic IC interaction record (pose, say, whisper, etc.) with privacy controls
 - **`InteractionFavorite`**: Private bookmarks for cherished RP moments
@@ -42,6 +42,6 @@ Captures and manages roleplay sessions with participant tracking, interaction re
 
 - **`Scene`**: Contains participants and interactions
 - **`SceneParticipation`**: Tracks account involvement in scenes
-- **`Persona`**: Unified identity with `persona_type` field (PRIMARY/ESTABLISHED/TEMPORARY). Has `character_identity` FK to CharacterIdentity and denormalized `character` FK. `is_established_or_primary` property for permission checks
+- **`Persona`**: Unified identity with `persona_type` field (PRIMARY/ESTABLISHED/TEMPORARY). Has `character_sheet` FK to CharacterSheet (the source-of-truth anchor). `is_established_or_primary` property for permission checks. Hosts `display_ic` / `display_with_history` / `display_to_staff` helpers
 - **`PersonaDiscovery`**: Stores raw discovery pairs; service functions handle resolution logic
 - **`Interaction`**: Universal building block of RP recording with privacy tiers

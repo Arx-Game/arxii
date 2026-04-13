@@ -2,7 +2,7 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -94,18 +94,18 @@ class PersonaModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.identity = CharacterIdentityFactory()
+        cls.identity = CharacterSheetFactory()
 
     def test_persona_primary_type(self) -> None:
-        """Primary persona exists from CharacterIdentityFactory."""
-        persona = self.identity.active_persona
+        """Primary persona exists from CharacterSheetFactory."""
+        persona = self.identity.primary_persona
         assert persona.pk is not None
         assert persona.persona_type == PersonaType.PRIMARY
 
     def test_persona_established_type(self) -> None:
         """Established persona can be created."""
         persona = PersonaFactory(
-            character_identity=self.identity,
+            character_sheet=self.identity.character.sheet_data,
             persona_type=PersonaType.ESTABLISHED,
         )
         assert persona.pk is not None
@@ -114,11 +114,29 @@ class PersonaModelTests(TestCase):
     def test_persona_temporary_type(self) -> None:
         """Temporary persona is not established_or_primary."""
         persona = PersonaFactory(
-            character_identity=self.identity,
+            character_sheet=self.identity.character.sheet_data,
             persona_type=PersonaType.TEMPORARY,
         )
         assert persona.pk is not None
         assert persona.is_established_or_primary is False
+
+
+class PrimaryPersonaPerCharacterSheetConstraintTest(TestCase):
+    """Partial unique constraint: one PRIMARY persona per character_sheet."""
+
+    def test_second_primary_persona_on_same_sheet_rejected(self) -> None:
+        from world.scenes.models import Persona
+
+        # CharacterSheetFactory creates a PRIMARY persona and ensures a sheet exists
+        identity = CharacterSheetFactory()
+        sheet = identity.character.sheet_data
+
+        with self.assertRaises(IntegrityError):
+            Persona.objects.create(
+                character_sheet=sheet,
+                name="Second Primary",
+                persona_type=PersonaType.PRIMARY,
+            )
 
 
 class PersonaDiscoveryModelTests(TestCase):
@@ -288,7 +306,7 @@ class FactoryTests(TestCase):
         interaction = InteractionFactory()
         assert interaction.pk is not None
         assert interaction.persona is not None
-        assert interaction.persona.character_identity is not None
+        assert interaction.persona.character_sheet is not None
 
     def test_interaction_receiver_factory(self) -> None:
         """InteractionReceiverFactory creates a valid receiver record."""
@@ -316,3 +334,29 @@ class FactoryTests(TestCase):
         assert discovery.pk is not None
         assert discovery.persona.is_fake_name is True
         assert discovery.discovered_by is not None
+
+
+class PersonaDisplayHelpersTest(TestCase):
+    """Tests for Persona.display_ic / display_with_history / display_to_staff."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        # CharacterSheetFactory auto-creates a PRIMARY persona (no separate
+        # CharacterIdentity model anymore — it was merged into CharacterSheet
+        # in the 2026-04 refactor).
+        identity = CharacterSheetFactory(character=cls.sheet.character)
+        cls.primary_persona = identity.primary_persona
+        cls.primary_persona.character_sheet = cls.sheet
+        cls.primary_persona.name = "Bob"
+        cls.primary_persona.save()
+
+    def test_display_ic_returns_name(self) -> None:
+        assert self.primary_persona.display_ic() == "Bob"
+
+    def test_display_with_history_no_tenure_is_name_only(self) -> None:
+        # No RosterEntry exists for this sheet yet
+        assert self.primary_persona.display_with_history() == "Bob"
+
+    def test_display_to_staff_no_entry_returns_name(self) -> None:
+        assert self.primary_persona.display_to_staff() == "Bob"

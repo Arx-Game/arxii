@@ -13,7 +13,6 @@ from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from commands.frontend import FrontendMetadataMixin
 from commands.frontend_types import UsageEntry
-from world.roster.models import RosterEntry
 from world.scenes.place_models import Place
 
 
@@ -105,8 +104,8 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
 
         character = characters[0]
         try:
-            _ = character.roster_entry
-        except RosterEntry.DoesNotExist:
+            _ = character.sheet_data.roster_entry
+        except ObjectDoesNotExist:
             self.caller.msg(f"Character '{charname}' is not on the roster.")
             return
 
@@ -143,14 +142,12 @@ class CmdTabletalk(ArxCommand):
         from world.scenes.place_models import PlacePresence  # noqa: PLC0415
 
         try:
-            identity = self.caller.character_identity
-            persona = identity.active_persona
-            if persona is None:
-                return None
-            presence = PlacePresence.objects.filter(persona=persona).first()
-            return presence.place if presence else None
+            sheet = self.caller.sheet_data
+            persona = sheet.primary_persona
         except (AttributeError, ObjectDoesNotExist):
             return None
+        presence = PlacePresence.objects.filter(persona=persona).first()
+        return presence.place if presence else None
 
 
 class CmdPose(ArxCommand):

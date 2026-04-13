@@ -782,7 +782,7 @@ class ApproveApplicationIntegrationTests(TestCase):
         approve_application(app, reviewer=self.staff)
 
         entry = RosterEntry.objects.filter(
-            character__db_key__startswith="ApproveTest",
+            character_sheet__character__db_key__startswith="ApproveTest",
         ).first()
         self.assertIsNotNone(entry)
         self.assertEqual(entry.roster.name, "Active")
@@ -796,7 +796,7 @@ class ApproveApplicationIntegrationTests(TestCase):
         approve_application(app, reviewer=self.staff)
 
         tenure = RosterTenure.objects.get(player_data__account=self.account)
-        character = tenure.roster_entry.character
+        character = tenure.roster_entry.character_sheet.character
         self.assertIsNotNone(character)
 
     def test_approve_preserves_application_record(self):

@@ -22,9 +22,9 @@ def _validate_owned_persona(persona: Persona, account_pk: int) -> Persona:
     Walks persona -> character -> roster_entry -> current_tenure and
     confirms the active tenure belongs to the requesting account.
     """
-    character = persona.character
+    sheet = persona.character_sheet
     try:
-        entry = character.roster_entry
+        entry = sheet.roster_entry
     except ObjectDoesNotExist as exc:
         raise serializers.ValidationError(_NO_ROSTER_ENTRY) from exc
     tenure = entry.current_tenure
@@ -42,9 +42,9 @@ def _account_for_persona(persona: Persona) -> int:
     staff shouldn't be actioning reports against characters with no
     current player.
     """
-    character = persona.character
+    sheet = persona.character_sheet
     try:
-        entry = character.roster_entry
+        entry = sheet.roster_entry
     except ObjectDoesNotExist as exc:
         raise serializers.ValidationError(_REPORTED_NO_ROSTER_ENTRY) from exc
     tenure = entry.current_tenure

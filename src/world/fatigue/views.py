@@ -21,10 +21,9 @@ def _get_character_sheet(request: Request) -> CharacterSheet | None:
     entry = RosterEntry.objects.for_account(request.user).first()
     if not entry:
         return None
-    try:
-        return entry.character.sheet_data
-    except CharacterSheet.DoesNotExist:
+    if entry.character_sheet_id is None:
         return None
+    return entry.character_sheet
 
 
 class FatigueStatusView(APIView):

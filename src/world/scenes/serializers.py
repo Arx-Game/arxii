@@ -17,28 +17,24 @@ class PersonaSerializer(serializers.ModelSerializer):
         model = Persona
         fields = [
             "id",
-            "character_identity",
+            "character_sheet",
             "name",
             "is_fake_name",
             "persona_type",
             "description",
             "thumbnail_url",
-            "character",
             "roster_entry",
         ]
         read_only_fields = ["roster_entry"]
 
     def get_roster_entry(self, obj: Persona) -> dict[str, int | str] | None:
         try:
-            entry = obj.character.roster_entry
+            entry = obj.character_sheet.roster_entry
         except AttributeError:
             entry = None
         if entry:
-            return {"id": entry.id, "name": entry.character.db_key}
+            return {"id": entry.id, "name": entry.character_sheet.character.db_key}
         return None
-
-    def create(self, validated_data: dict) -> Persona:
-        return super().create(validated_data)
 
 
 class SceneParticipantSerializer(serializers.ModelSerializer):
@@ -52,11 +48,11 @@ class SceneParticipantSerializer(serializers.ModelSerializer):
 
     def get_roster_entry(self, obj):
         try:
-            entry = obj.character.roster_entry
+            entry = obj.character_sheet.roster_entry
         except AttributeError:
             entry = None
         if entry:
-            return {"id": entry.id, "name": entry.character.db_key}
+            return {"id": entry.id, "name": entry.character_sheet.character.db_key}
         return None
 
 
@@ -99,7 +95,7 @@ class SceneListSerializer(serializers.ModelSerializer):
                 is_fake_name=False,
             )
             .distinct()
-            .select_related("character__roster_entry")
+            .select_related("character_sheet__roster_entry")
         )
         return SceneParticipantSerializer(personas, many=True).data
 
@@ -133,8 +129,8 @@ class SceneDetailSerializer(SceneListSerializer):
             )
             .distinct()
             .select_related(
-                "character_identity",
-                "character__roster_entry",
+                "character_sheet",
+                "character_sheet__roster_entry",
             )
         )
         return PersonaSerializer(personas, many=True).data
@@ -173,7 +169,7 @@ class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
             request = self.context.get("request")
             if request and request.user.is_authenticated:
                 # Check the requesting user owns the character behind this persona
-                roster_entry = getattr(persona.character, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+                roster_entry = getattr(persona.character_sheet, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
                 if roster_entry is None:
                     raise serializers.ValidationError(
                         {"persona": "Persona's character has no roster entry."}
@@ -194,7 +190,7 @@ class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
             # Check that persona's character's account is a scene participant
             from world.roster.models import RosterTenure  # noqa: PLC0415
 
-            roster_entry = getattr(persona.character, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+            roster_entry = getattr(persona.character_sheet.character, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
             if roster_entry:
                 active_tenure = (
                     RosterTenure.objects.filter(

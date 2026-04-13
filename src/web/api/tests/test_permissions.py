@@ -26,7 +26,7 @@ class IsCharacterOwnerTests(TestCase):
             player_data=cls.player_data,
             roster_entry=cls.roster_entry,
         )
-        cls.character = cls.roster_entry.character
+        cls.character = cls.roster_entry.character_sheet.character
         cls.other_account = AccountFactory(username="other_user")
         cls.staff_account = AccountFactory(username="staff_user", is_staff=True)
 
@@ -64,7 +64,7 @@ class IsCharacterOwnerTests(TestCase):
             end_date=timezone.now(),
         )
         request = self._make_request(self.account)
-        view = self._make_view(expired_entry.character.pk)
+        view = self._make_view(expired_entry.character_sheet.character.pk)
         assert self.permission.has_permission(request, view) is False
 
     def test_pending_tenure_denied(self) -> None:
@@ -76,7 +76,7 @@ class IsCharacterOwnerTests(TestCase):
             start_date=None,
         )
         request = self._make_request(self.account)
-        view = self._make_view(pending_entry.character.pk)
+        view = self._make_view(pending_entry.character_sheet.character.pk)
         assert self.permission.has_permission(request, view) is False
 
     def test_staff_bypasses_check(self) -> None:

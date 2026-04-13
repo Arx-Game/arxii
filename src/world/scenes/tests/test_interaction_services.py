@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
-from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -318,12 +318,12 @@ class TestResolveAudience(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         char_b = CharacterFactory(db_key="Bob", location=room)
-        CharacterIdentityFactory(character=char_a)
-        identity_b = CharacterIdentityFactory(character=char_b)
+        CharacterSheetFactory(character=char_a)
+        identity_b = CharacterSheetFactory(character=char_b)
 
         personas = resolve_audience(char_a)
         assert len(personas) == 1
-        assert personas[0] == identity_b.active_persona
+        assert personas[0] == identity_b.primary_persona
 
     def test_skips_characters_without_identity(self) -> None:
         room = ObjectDBFactory(
@@ -332,7 +332,7 @@ class TestResolveAudience(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         CharacterFactory(db_key="NPC", location=room)
-        CharacterIdentityFactory(character=char_a)
+        CharacterSheetFactory(character=char_a)
 
         personas = resolve_audience(char_a)
         assert len(personas) == 0
@@ -343,14 +343,14 @@ class TestResolveAudience(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
-        CharacterIdentityFactory(character=char_a)
+        CharacterSheetFactory(character=char_a)
 
         personas = resolve_audience(char_a)
         assert personas == []
 
     def test_returns_empty_when_no_location(self) -> None:
         char_a = CharacterFactory(db_key="Alice")
-        CharacterIdentityFactory(character=char_a)
+        CharacterSheetFactory(character=char_a)
 
         personas = resolve_audience(char_a)
         assert personas == []
@@ -369,8 +369,8 @@ class TestRecordInteraction(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         char_b = CharacterFactory(db_key="Bob", location=room)
-        identity_a = CharacterIdentityFactory(character=char_a)
-        CharacterIdentityFactory(character=char_b)
+        identity_a = CharacterSheetFactory(character=char_a)
+        CharacterSheetFactory(character=char_b)
 
         result = record_interaction(
             character=char_a,
@@ -378,7 +378,7 @@ class TestRecordInteraction(TestCase):
             mode=InteractionMode.POSE,
         )
         assert result is not None
-        assert result.persona == identity_a.active_persona
+        assert result.persona == identity_a.primary_persona
         assert result.content == "strides in."
         assert result.mode == InteractionMode.POSE
 
@@ -388,7 +388,7 @@ class TestRecordInteraction(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
-        CharacterIdentityFactory(character=char_a)
+        CharacterSheetFactory(character=char_a)
 
         result = record_interaction(
             character=char_a,
@@ -421,8 +421,8 @@ class TestRecordInteraction(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         char_b = CharacterFactory(db_key="Bob", location=room)
-        identity_a = CharacterIdentityFactory(character=char_a)
-        CharacterIdentityFactory(character=char_b)
+        identity_a = CharacterSheetFactory(character=char_a)
+        CharacterSheetFactory(character=char_b)
 
         result = record_interaction(
             character=char_a,
@@ -430,7 +430,7 @@ class TestRecordInteraction(TestCase):
             mode=InteractionMode.POSE,
         )
         assert result is not None
-        assert result.persona == identity_a.active_persona
+        assert result.persona == identity_a.primary_persona
 
     def test_creates_with_place(self) -> None:
         room = ObjectDBFactory(
@@ -438,9 +438,9 @@ class TestRecordInteraction(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
-        identity_a = CharacterIdentityFactory(character=char_a)
+        identity_a = CharacterSheetFactory(character=char_a)
         place = PlaceFactory(room=room)
-        PlacePresenceFactory(place=place, persona=identity_a.active_persona)
+        PlacePresenceFactory(place=place, persona=identity_a.primary_persona)
 
         result = record_interaction(
             character=char_a,
@@ -465,8 +465,8 @@ class TestRecordWhisperInteraction(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         char_b = CharacterFactory(db_key="Bob", location=room)
-        identity_a = CharacterIdentityFactory(character=char_a)
-        identity_b = CharacterIdentityFactory(character=char_b)
+        identity_a = CharacterSheetFactory(character=char_a)
+        identity_b = CharacterSheetFactory(character=char_b)
 
         result = record_whisper_interaction(
             character=char_a,
@@ -475,11 +475,11 @@ class TestRecordWhisperInteraction(TestCase):
         )
         assert result is not None
         assert result.mode == InteractionMode.WHISPER
-        assert result.persona == identity_a.active_persona
+        assert result.persona == identity_a.primary_persona
         receivers = InteractionReceiver.objects.filter(interaction=result)
         assert receivers.count() == 1
-        assert receivers.first().persona == identity_b.active_persona
-        assert identity_b.active_persona in result.target_personas.all()
+        assert receivers.first().persona == identity_b.primary_persona
+        assert identity_b.primary_persona in result.target_personas.all()
 
     def test_returns_none_when_writer_has_no_identity(self) -> None:
         room = ObjectDBFactory(
@@ -488,7 +488,7 @@ class TestRecordWhisperInteraction(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         char_b = CharacterFactory(db_key="Bob", location=room)
-        CharacterIdentityFactory(character=char_b)
+        CharacterSheetFactory(character=char_b)
 
         result = record_whisper_interaction(
             character=char_a,
@@ -504,7 +504,7 @@ class TestRecordWhisperInteraction(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         char_b = CharacterFactory(db_key="Bob", location=room)
-        CharacterIdentityFactory(character=char_a)
+        CharacterSheetFactory(character=char_a)
 
         result = record_whisper_interaction(
             character=char_a,
@@ -523,15 +523,15 @@ class TestPushInteraction(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         char_b = CharacterFactory(db_key="Bob", location=room)
-        identity_a = CharacterIdentityFactory(character=char_a)
-        identity_b = CharacterIdentityFactory(character=char_b)
+        identity_a = CharacterSheetFactory(character=char_a)
+        identity_b = CharacterSheetFactory(character=char_b)
         return room, char_a, char_b, identity_a, identity_b
 
     def test_push_sends_payload_to_room_contents(self) -> None:
         """push_interaction sends structured payload to all objects in the room."""
         _room, char_a, char_b, identity_a, _identity_b = self._make_room_with_characters()
         interaction = InteractionFactory(
-            persona=identity_a.active_persona,
+            persona=identity_a.primary_persona,
             content="strides in.",
             mode=InteractionMode.POSE,
         )
@@ -545,9 +545,9 @@ class TestPushInteraction(TestCase):
         expected_payload = {
             "id": interaction.pk,
             "persona": {
-                "id": identity_a.active_persona.pk,
-                "name": identity_a.active_persona.name,
-                "thumbnail_url": identity_a.active_persona.thumbnail_url or "",
+                "id": identity_a.primary_persona.pk,
+                "name": identity_a.primary_persona.name,
+                "thumbnail_url": identity_a.primary_persona.thumbnail_url or "",
             },
             "content": "strides in.",
             "mode": InteractionMode.POSE,
@@ -564,9 +564,9 @@ class TestPushInteraction(TestCase):
     def test_push_skips_when_no_location(self) -> None:
         """push_interaction does nothing when persona's character has no location."""
         char_no_loc = CharacterFactory(db_key="Wanderer")
-        identity = CharacterIdentityFactory(character=char_no_loc)
+        identity = CharacterSheetFactory(character=char_no_loc)
         interaction = InteractionFactory(
-            persona=identity.active_persona,
+            persona=identity.primary_persona,
             content="floats in the void.",
             mode=InteractionMode.POSE,
         )
@@ -578,7 +578,7 @@ class TestPushInteraction(TestCase):
         _room, char_a, char_b, identity_a, _identity_b = self._make_room_with_characters()
         scene = SceneFactory()
         interaction = InteractionFactory(
-            persona=identity_a.active_persona,
+            persona=identity_a.primary_persona,
             content="waves.",
             mode=InteractionMode.SAY,
             scene=scene,
@@ -593,8 +593,8 @@ class TestPushInteraction(TestCase):
         call_kwargs = captured.call_args
         payload = call_kwargs.kwargs["interaction"][1]
         assert payload["id"] == interaction.pk
-        assert payload["persona"]["id"] == identity_a.active_persona.pk
-        assert payload["persona"]["name"] == identity_a.active_persona.name
+        assert payload["persona"]["id"] == identity_a.primary_persona.pk
+        assert payload["persona"]["name"] == identity_a.primary_persona.name
         assert "thumbnail_url" in payload["persona"]
         assert payload["content"] == "waves."
         assert payload["mode"] == InteractionMode.SAY
@@ -605,7 +605,7 @@ class TestPushInteraction(TestCase):
         """push_interaction skips objects that lack msg()."""
         room, char_a, char_b, identity_a, _identity_b = self._make_room_with_characters()
         interaction = InteractionFactory(
-            persona=identity_a.active_persona,
+            persona=identity_a.primary_persona,
             content="test.",
             mode=InteractionMode.POSE,
         )
@@ -637,8 +637,8 @@ class TestEphemeralInteraction(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         char_b = CharacterFactory(db_key="Bob", location=room)
-        identity_a = CharacterIdentityFactory(character=char_a)
-        identity_b = CharacterIdentityFactory(character=char_b)
+        identity_a = CharacterSheetFactory(character=char_a)
+        identity_b = CharacterSheetFactory(character=char_b)
         return room, char_a, char_b, identity_a, identity_b
 
     def test_ephemeral_scene_pushes_but_does_not_persist(self) -> None:
@@ -677,14 +677,14 @@ class TestEphemeralInteraction(TestCase):
         assert payload["scene_id"] == scene.pk
         assert payload["id"] < 0  # Negative ID for ephemeral
         assert "persona" in payload
-        assert payload["persona"]["name"] == identity_a.active_persona.name
+        assert payload["persona"]["name"] == identity_a.primary_persona.name
 
     def test_ephemeral_whisper_only_sent_to_participants(self) -> None:
         """Whispers in ephemeral scenes are sent only to writer + target, not the room."""
         room, char_a, char_b, _identity_a, _identity_b = self._make_room_with_characters()
         # Add a bystander who should NOT receive the whisper
         char_c = CharacterFactory(db_key="Carol", location=room)
-        CharacterIdentityFactory(character=char_c)
+        CharacterSheetFactory(character=char_c)
         scene = SceneFactory(
             location=room,
             privacy_mode=ScenePrivacyMode.EPHEMERAL,
@@ -738,14 +738,12 @@ class TestEphemeralInteraction(TestCase):
 class TestReassignPersonaInteractions(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.identity = CharacterIdentityFactory()
+        cls.identity = CharacterSheetFactory()
         cls.source_persona = PersonaFactory(
-            character_identity=cls.identity,
-            character=cls.identity.character,
+            character_sheet=cls.identity.character.sheet_data,
         )
         cls.target_persona = PersonaFactory(
-            character_identity=cls.identity,
-            character=cls.identity.character,
+            character_sheet=cls.identity.character.sheet_data,
         )
 
     def test_reassigns_interactions(self) -> None:
@@ -853,7 +851,7 @@ class TestRecordInteractionActiveSceneFromDB(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
-        CharacterIdentityFactory(character=char_a)
+        CharacterSheetFactory(character=char_a)
         scene = SceneFactory(location=room, is_active=True)
 
         result = record_interaction(
@@ -876,9 +874,9 @@ class TestPushInteractionWhisperPrivacy(TestCase):
         char_a = CharacterFactory(db_key="Alice", location=room)
         char_b = CharacterFactory(db_key="Bob", location=room)
         char_c = CharacterFactory(db_key="Carol", location=room)
-        identity_a = CharacterIdentityFactory(character=char_a)
-        identity_b = CharacterIdentityFactory(character=char_b)
-        identity_c = CharacterIdentityFactory(character=char_c)
+        identity_a = CharacterSheetFactory(character=char_a)
+        identity_b = CharacterSheetFactory(character=char_b)
+        identity_c = CharacterSheetFactory(character=char_c)
         return room, char_a, char_b, char_c, identity_a, identity_b, identity_c
 
     def test_whisper_only_sent_to_writer_and_receivers(self) -> None:
@@ -893,13 +891,13 @@ class TestPushInteractionWhisperPrivacy(TestCase):
         ) = self._make_room_with_characters()
 
         interaction = InteractionFactory(
-            persona=identity_a.active_persona,
+            persona=identity_a.primary_persona,
             content="psst!",
             mode=InteractionMode.WHISPER,
         )
         InteractionReceiverFactory(
             interaction=interaction,
-            persona=identity_b.active_persona,
+            persona=identity_b.primary_persona,
         )
 
         mock_a = Mock()
@@ -928,14 +926,14 @@ class TestPushInteractionWhisperPrivacy(TestCase):
 
         place = PlaceFactory(room=room)
         interaction = InteractionFactory(
-            persona=identity_a.active_persona,
+            persona=identity_a.primary_persona,
             content="speaks at the bar.",
             mode=InteractionMode.SAY,
             place=place,
         )
         InteractionReceiverFactory(
             interaction=interaction,
-            persona=identity_b.active_persona,
+            persona=identity_b.primary_persona,
         )
 
         mock_a = Mock()
@@ -963,7 +961,7 @@ class TestPushInteractionWhisperPrivacy(TestCase):
         ) = self._make_room_with_characters()
 
         interaction = InteractionFactory(
-            persona=identity_a.active_persona,
+            persona=identity_a.primary_persona,
             content="waves.",
             mode=InteractionMode.POSE,
         )
@@ -991,8 +989,7 @@ class TestResolvePersonaDisplay(TestCase):
         cls.real_persona = PersonaFactory(is_fake_name=False)
         cls.fake_persona = PersonaFactory(is_fake_name=True, name="The Masked Baron")
         cls.linked_persona = PersonaFactory(
-            character_identity=cls.fake_persona.character_identity,
-            character=cls.fake_persona.character,
+            character_sheet=cls.fake_persona.character_sheet,
             name="Lord Reginald",
         )
 
@@ -1046,9 +1043,9 @@ class TestClearPlacePresenceForCharacter(TestCase):
     def test_clears_all_place_presences(self) -> None:
         from world.scenes.place_services import clear_place_presence_for_character
 
-        identity = CharacterIdentityFactory()
+        identity = CharacterSheetFactory()
         character = identity.character
-        persona = identity.active_persona
+        persona = identity.primary_persona
         place1 = PlaceFactory()
         place2 = PlaceFactory()
         PlacePresenceFactory(place=place1, persona=persona)
@@ -1061,21 +1058,21 @@ class TestClearPlacePresenceForCharacter(TestCase):
     def test_returns_zero_when_no_presences(self) -> None:
         from world.scenes.place_services import clear_place_presence_for_character
 
-        identity = CharacterIdentityFactory()
+        identity = CharacterSheetFactory()
         count = clear_place_presence_for_character(identity.character)
         assert count == 0
 
     def test_does_not_affect_other_characters(self) -> None:
         from world.scenes.place_services import clear_place_presence_for_character
 
-        identity_a = CharacterIdentityFactory()
-        identity_b = CharacterIdentityFactory()
+        identity_a = CharacterSheetFactory()
+        identity_b = CharacterSheetFactory()
         place = PlaceFactory()
-        PlacePresenceFactory(place=place, persona=identity_a.active_persona)
-        PlacePresenceFactory(place=place, persona=identity_b.active_persona)
+        PlacePresenceFactory(place=place, persona=identity_a.primary_persona)
+        PlacePresenceFactory(place=place, persona=identity_b.primary_persona)
 
         clear_place_presence_for_character(identity_a.character)
-        assert PlacePresence.objects.filter(persona=identity_b.active_persona).exists()
+        assert PlacePresence.objects.filter(persona=identity_b.primary_persona).exists()
 
 
 class TestRecordInteractionAutoJoinsScene(TestCase):
@@ -1094,11 +1091,11 @@ class TestRecordInteractionAutoJoinsScene(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
-        CharacterIdentityFactory(character=char_a)
+        CharacterSheetFactory(character=char_a)
         scene = SceneFactory(location=room)
 
         # Set up roster entry with active tenure for the character
-        entry = RosterEntryFactory(character=char_a)
+        entry = RosterEntryFactory(character_sheet__character=char_a)
         tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
         account = tenure.player_data.account
 
@@ -1122,10 +1119,10 @@ class TestRecordInteractionAutoJoinsScene(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
-        CharacterIdentityFactory(character=char_a)
+        CharacterSheetFactory(character=char_a)
         scene = SceneFactory(location=room)
 
-        entry = RosterEntryFactory(character=char_a)
+        entry = RosterEntryFactory(character_sheet__character=char_a)
         tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
         account = tenure.player_data.account
 

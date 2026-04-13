@@ -23,7 +23,7 @@ class RosterTenureViewSetTestCase(TestCase):
         self.client.force_authenticate(self.player.account)
         char = CharacterFactory(db_key="Ariel")
         self.tenure1 = RosterTenureFactory(
-            roster_entry__character=char,
+            roster_entry__character_sheet__character=char,
             start_date=timezone.now() - timedelta(days=2),
         )
         self.tenure2 = RosterTenureFactory(

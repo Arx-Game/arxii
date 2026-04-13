@@ -22,7 +22,7 @@ class PlayerDataServiceTestCase(TestCase):
         self.character = CharacterFactory()
         self.roster = RosterFactory(is_active=True)
         self.roster_entry = RosterEntryFactory(
-            character=self.character,
+            character_sheet__character=self.character,
             roster=self.roster,
         )
 
@@ -71,7 +71,7 @@ class PlayerDataServiceTestCase(TestCase):
         non_roster_char = CharacterFactory()
         inactive_roster = RosterFactory(is_active=False)
         non_roster_entry = RosterEntryFactory(
-            character=non_roster_char,
+            character_sheet__character=non_roster_char,
             roster=inactive_roster,
         )
 
@@ -89,7 +89,7 @@ class PlayerDataServiceTestCase(TestCase):
         """Test getting player's pending applications"""
         # Create a second character for the approved application
         character2 = CharacterFactory()
-        RosterEntryFactory(character=character2, roster=self.roster)
+        RosterEntryFactory(character_sheet__character=character2, roster=self.roster)
 
         # Create pending application
         app = RosterApplication.objects.create(
@@ -158,19 +158,19 @@ class RosterPolicyServiceTestCase(TestCase):
         # Create test characters in different rosters
         self.regular_character = CharacterFactory()
         self.regular_entry = RosterEntryFactory(
-            character=self.regular_character,
+            character_sheet__character=self.regular_character,
             roster=self.active_roster,
         )
 
         self.restricted_character = CharacterFactory()
         self.restricted_entry = RosterEntryFactory(
-            character=self.restricted_character,
+            character_sheet__character=self.restricted_character,
             roster=self.restricted_roster,
         )
 
         self.inactive_character = CharacterFactory()
         self.inactive_entry = RosterEntryFactory(
-            character=self.inactive_character,
+            character_sheet__character=self.inactive_character,
             roster=self.inactive_roster,
         )
 
@@ -261,7 +261,7 @@ class RosterPolicyServiceTestCase(TestCase):
         # Give player a current character for context
         other_character = CharacterFactory()
         other_roster_entry = RosterEntryFactory(
-            character=other_character,
+            character_sheet__character=other_character,
             roster=self.active_roster,
         )
         RosterTenureFactory(

@@ -8,6 +8,7 @@ import factory.django as factory_django
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from evennia_extensions.models import Artist, PlayerData, PlayerMedia
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.models import (
     Family,
     PlayerMail,
@@ -62,7 +63,7 @@ class RosterEntryFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = RosterEntry
 
-    character = factory.SubFactory(CharacterFactory)
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
     roster = factory.SubFactory(RosterFactory)
 
 

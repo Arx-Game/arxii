@@ -56,13 +56,13 @@ class SceneFilter(django_filters.FilterSet):
 
 class PersonaFilter(django_filters.FilterSet):
     scene = django_filters.NumberFilter(field_name="interactions_written__scene__id", distinct=True)
-    character = django_filters.NumberFilter(field_name="character__id")
-    character_identity = django_filters.NumberFilter(field_name="character_identity__id")
+    character = django_filters.NumberFilter(field_name="character_sheet__character__id")
+    character_sheet = django_filters.NumberFilter(field_name="character_sheet__id")
     persona_type = django_filters.CharFilter(field_name="persona_type")
 
     class Meta:
         model = Persona
-        fields = ["scene", "character", "character_identity", "persona_type"]
+        fields = ["scene", "character", "character_sheet", "persona_type"]
 
 
 class SceneSummaryRevisionFilter(django_filters.FilterSet):

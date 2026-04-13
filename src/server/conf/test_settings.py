@@ -32,6 +32,12 @@ INSTALLED_APPS += ["integration_tests"]  # type: ignore[name-defined]
 # Disable email sending during tests
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
+# Tell Evennia we're in a test environment so it gracefully handles missing
+# Limbo (the default home object). Without this, calls to create_object()
+# fail with FK violations on db_home_id when Limbo doesn't exist (which is
+# the case in fresh test DBs that haven't run Evennia's initial_setup).
+TEST_ENVIRONMENT = True
+
 # Disable external services during tests
 SENDGRID_API_KEY = ""
 CLOUDINARY_CLOUD_NAME = ""

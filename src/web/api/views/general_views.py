@@ -93,10 +93,13 @@ class ServerStatusAPIView(APIView):
                 roster__is_active=True,
                 last_puppeted__isnull=False,
             )
-            .select_related("character")
+            .select_related("character_sheet", "character_sheet__character")
             .order_by("-last_puppeted")[:4]
         )
-        recent_players = [{"id": entry.id, "name": entry.character.key} for entry in recent_entries]
+        recent_players = [
+            {"id": entry.id, "name": entry.character_sheet.character.key}
+            for entry in recent_entries
+        ]
 
         data = {
             "online": SESSION_HANDLER.account_count(),

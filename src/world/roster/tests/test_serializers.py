@@ -233,7 +233,7 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
         self.player_data = PlayerDataFactory()
         self.staff_data = PlayerDataFactory(account__is_staff=True)
         self.character = CharacterFactory()
-        self.roster_entry = RosterEntryFactory(character=self.character)
+        self.roster_entry = RosterEntryFactory(character_sheet__character=self.character)
 
     def test_create_valid_application(self):
         """Test creating a valid application"""
@@ -322,7 +322,7 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
                 "name": "roster not accepting applications",
                 "setup": lambda: RosterEntryFactory(
                     roster__allow_applications=False,
-                ).character,
+                ).character_sheet.character,
                 "character_attr": "setup_result",
                 "expected_message": "Player not allowed to apply to this roster type",
             },
@@ -333,7 +333,7 @@ class RosterApplicationCreateSerializerTestCase(TestCase):
                 # Clean up any existing applications/tenures for fresh test
                 RosterApplication.objects.filter(player_data=self.player_data).delete()
                 RosterTenureFactory._meta.model.objects.filter(
-                    roster_entry__character=self.character,
+                    roster_entry__character_sheet__character=self.character,
                 ).delete()
 
                 # Run setup
@@ -381,11 +381,11 @@ class RosterEntrySerializerTestCase(TestCase):
         self.entry = RosterEntryFactory()
 
         # Populate sheet data
-        sheet = self.entry.character.item_data._get_sheet()
+        sheet = self.entry.character_sheet.character.item_data._get_sheet()
         sheet.quote = "Honor above all"
         sheet.save()
 
-        display = self.entry.character.item_data._get_display_data()
+        display = self.entry.character_sheet.character.item_data._get_display_data()
         display.longname = "Sir TestChar the Bold"
         display.permanent_description = "A stalwart knight"
         display.save()
@@ -470,4 +470,4 @@ class MyRosterEntrySerializerTestCase(TestCase):
         assert "id" in data
         assert data["id"] == self.entry.id
         assert "name" in data
-        assert data["name"] == self.entry.character.db_key
+        assert data["name"] == self.entry.character_sheet.character.db_key

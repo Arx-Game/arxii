@@ -120,11 +120,11 @@ class EventViewSet(ModelViewSet):
         if not self.request.user.is_authenticated:
             return []
         character_ids = RosterEntry.objects.for_account(self.request.user).values_list(
-            "character_id", flat=True
+            "character_sheet_id", flat=True
         )
         return list(
             Persona.objects.filter(
-                character_id__in=character_ids,
+                character_sheet_id__in=character_ids,
                 persona_type=PersonaType.PRIMARY,
             ).values_list("id", flat=True)
         )

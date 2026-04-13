@@ -33,9 +33,9 @@ class RosterTenureViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
 
     def get_queryset(self) -> QuerySet[RosterTenure]:
         """Return tenures with related data."""
-        return RosterTenure.objects.select_related("roster_entry__character").order_by(
-            "-start_date"
-        )
+        return RosterTenure.objects.select_related(
+            "roster_entry__character_sheet__character",
+        ).order_by("-start_date")
 
     @action(detail=False, methods=[HTTPMethod.GET], url_path="mine")
     def mine(self, request: Request) -> Response:

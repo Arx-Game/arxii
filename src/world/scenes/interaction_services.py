@@ -65,13 +65,13 @@ def reassign_persona_interactions(
 ) -> int:
     """Reassign all interactions from source_persona to target_persona.
 
-    Both personas must belong to the same CharacterIdentity. This is used
+    Both personas must belong to the same CharacterSheet. This is used
     when merging personas (e.g., discovering a temporary disguise is the
     same person as an established identity).
 
     Returns the number of interactions reassigned.
     """
-    if source_persona.character_identity_id != target_persona.character_identity_id:
+    if source_persona.character_sheet_id != target_persona.character_sheet_id:
         msg = "Cannot reassign between personas of different characters."
         raise ValueError(msg)
 
@@ -248,7 +248,7 @@ def push_interaction(
     falls back to querying.
     """
     persona = interaction.persona
-    location = persona.character.location
+    location = persona.character_sheet.character.location
     if location is None:
         return
 
@@ -257,10 +257,10 @@ def push_interaction(
         receivers = list(
             InteractionReceiver.objects.filter(
                 interaction=interaction,
-            ).select_related("persona__character")
+            ).select_related("persona__character_sheet__character")
         )
         r_ids = [r.persona_id for r in receivers]
-        r_chars = [r.persona.character for r in receivers]
+        r_chars = [r.persona.character_sheet.character for r in receivers]
     else:
         r_ids = receiver_persona_ids
         r_chars = receiver_characters
@@ -289,7 +289,7 @@ def push_interaction(
     )
 
     if interaction.mode == InteractionMode.WHISPER or interaction.place_id is not None:
-        writer_char = persona.character
+        writer_char = persona.character_sheet.character
         _send_to_objects([writer_char, *r_chars], payload)
     else:
         _broadcast_to_location(location, payload)
@@ -348,7 +348,7 @@ def push_ephemeral_interaction(  # noqa: PLR0913 - ephemeral payload mirrors per
     if recipients is not None:
         _send_to_objects(recipients, payload)
     else:
-        location = persona.character.location
+        location = persona.character_sheet.character.location
         if location is None:
             return
         _broadcast_to_location(location, payload)
@@ -416,7 +416,7 @@ def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct bra
 
 def _get_account_for_persona(persona: Persona) -> int | None:
     """Get the account ID for a persona's character via roster tenure."""
-    return _get_account_for_character(persona.character_id)
+    return _get_account_for_character(persona.character_sheet_id)
 
 
 def _get_account_for_character(character_id: int) -> int | None:
@@ -424,7 +424,7 @@ def _get_account_for_character(character_id: int) -> int | None:
     from world.roster.models import RosterEntry  # noqa: PLC0415
 
     try:
-        entry = RosterEntry.objects.get(character_id=character_id)
+        entry = RosterEntry.objects.get(character_sheet_id=character_id)
         tenure = entry.tenures.filter(end_date__isnull=True).first()
         if tenure is None:
             return None
@@ -515,22 +515,25 @@ def resolve_audience(character: ObjectDB) -> list[Persona]:
     """Get the active personas of all other characters in the room.
 
     Returns empty list if the character is alone or has no location.
-    Characters without a CharacterIdentity (NPCs) are skipped.
+    Characters without a CharacterSheet/primary persona (NPCs) are skipped.
     """
     location = character.location
     if location is None:
         return []
 
-    from world.character_sheets.models import CharacterIdentity  # noqa: PLC0415
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
 
     other_pks = [obj.pk for obj in location.contents if obj != character]
     if not other_pks:
         return []
 
-    identities = CharacterIdentity.objects.filter(
-        character_id__in=other_pks,
-    ).select_related("active_persona")
-    return [identity.active_persona for identity in identities if identity.active_persona]
+    return list(
+        Persona.objects.filter(
+            character_sheet__character_id__in=other_pks,
+            persona_type=PersonaType.PRIMARY,
+        )
+    )
 
 
 def record_interaction(  # noqa: PLR0913 - all fields needed for interaction creation
@@ -545,8 +548,8 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
 ) -> Interaction | None:
     """Record an IC interaction to the database.
 
-    Reads the character's active_persona from CharacterIdentity. Skips
-    recording if the character has no CharacterIdentity or no active persona.
+    Reads the character's primary persona from their CharacterSheet. Skips
+    recording if the character has no CharacterSheet or no primary persona.
 
     For public interactions (no place, no receivers), the interaction is
     created without receiver rows. For place-scoped or whispered interactions,
@@ -556,12 +559,8 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     room via WebSocket for real-time delivery.
     """
     try:
-        identity = character.character_identity
+        persona = character.sheet_data.primary_persona
     except ObjectDoesNotExist:
-        return None
-
-    persona = identity.active_persona
-    if persona is None:
         return None
 
     if scene is None:
@@ -598,7 +597,7 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     r_chars: list[ObjectDB] | None = None
     if receivers is not None:
         r_ids = [p.pk for p in receivers]
-        r_chars = [p.character for p in receivers]
+        r_chars = [p.character_sheet.character for p in receivers]
     elif place is None:
         # Public interaction: no receivers
         r_ids = []
@@ -623,15 +622,9 @@ def record_whisper_interaction(
 ) -> Interaction | None:
     """Record a whisper interaction with only the target as receiver."""
     try:
-        writer_identity = character.character_identity
-        target_identity = target.character_identity
+        persona = character.sheet_data.primary_persona
+        target_persona = target.sheet_data.primary_persona
     except ObjectDoesNotExist:
-        return None
-
-    persona = writer_identity.active_persona
-    target_persona = target_identity.active_persona
-
-    if persona is None or target_persona is None:
         return None
 
     scene = _get_active_scene(character.location)
@@ -659,7 +652,7 @@ def record_whisper_interaction(
         interaction,
         receiver_persona_ids=[target_persona.pk],
         target_persona_ids=[target_persona.pk],
-        receiver_characters=[target_persona.character],
+        receiver_characters=[target_persona.character_sheet.character],
     )
     return interaction
 

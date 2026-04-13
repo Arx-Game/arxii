@@ -26,8 +26,8 @@ class RosterApplicationManagerTestCase(TestCase):
         self.character1 = CharacterFactory()
         self.character2 = CharacterFactory()
 
-        RosterEntryFactory(character=self.character1)
-        RosterEntryFactory(character=self.character2)
+        RosterEntryFactory(character_sheet__character=self.character1)
+        RosterEntryFactory(character_sheet__character=self.character2)
 
     def test_pending_applications_query(self):
         """Test the pending() manager method"""

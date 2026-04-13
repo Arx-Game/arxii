@@ -45,10 +45,10 @@ def _get_active_persona_ids() -> list[int]:
     """Return PRIMARY Persona PKs for characters with an active (current) tenure."""
     active_character_ids = RosterEntry.objects.filter(
         tenures__end_date__isnull=True,
-    ).values_list("character_id", flat=True)
+    ).values_list("character_sheet_id", flat=True)
     return list(
         Persona.objects.filter(
-            character_id__in=active_character_ids,
+            character_sheet_id__in=active_character_ids,
             persona_type=PersonaType.PRIMARY,
         ).values_list("pk", flat=True)
     )
@@ -57,10 +57,10 @@ def _get_active_persona_ids() -> list[int]:
 def _get_own_persona_ids(account: AccountDB) -> list[int]:
     """Return PRIMARY Persona PKs belonging to the account's active roster entries."""
     entries = RosterEntry.objects.for_account(account)
-    own_character_ids = list(entries.values_list("character_id", flat=True))
+    own_character_ids = list(entries.values_list("character_sheet_id", flat=True))
     return list(
         Persona.objects.filter(
-            character_id__in=own_character_ids,
+            character_sheet_id__in=own_character_ids,
             persona_type=PersonaType.PRIMARY,
         ).values_list("pk", flat=True)
     )
@@ -91,7 +91,10 @@ def _get_relationship_persona_ids(own_persona_ids: list[int]) -> list[int]:
     for the query, then back to Persona PKs.
     """
     own_character_ids = list(
-        Persona.objects.filter(pk__in=own_persona_ids).values_list("character_id", flat=True)
+        Persona.objects.filter(pk__in=own_persona_ids).values_list(
+            "character_sheet_id",
+            flat=True,
+        )
     )
     # source and target are CharacterSheet FKs where PK = character_id
     source_target_char_ids = CharacterRelationship.objects.filter(
@@ -104,7 +107,7 @@ def _get_relationship_persona_ids(own_persona_ids: list[int]) -> list[int]:
     # Map back to PRIMARY Persona PKs
     return list(
         Persona.objects.filter(
-            character_id__in=related_char_ids,
+            character_sheet_id__in=related_char_ids,
             persona_type=PersonaType.PRIMARY,
         ).values_list("pk", flat=True)
     )
@@ -221,7 +224,7 @@ def validate_random_scene_claim(
     week_end_dt = game_week.ended_at or timezone.now()
 
     # Get target character's account via roster
-    target_account = get_account_for_character(target_persona.character)
+    target_account = get_account_for_character(target_persona.character_sheet.character)
     if target_account is None:
         return False
 
@@ -247,15 +250,21 @@ def validate_random_scene_claim(
     own_char_ids = list(
         RosterEntry.objects.filter(
             pk__in=RosterEntry.objects.for_account(account).values_list("pk", flat=True),
-        ).values_list("character_id", flat=True)
+        ).values_list("character_sheet_id", flat=True)
     )
-    target_char_id = target_persona.character_id
+    target_char_id = target_persona.character_sheet.character_id
 
     own_persona_ids = list(
-        Persona.objects.filter(character_id__in=own_char_ids).values_list("pk", flat=True)
+        Persona.objects.filter(character_sheet_id__in=own_char_ids).values_list(
+            "pk",
+            flat=True,
+        )
     )
     target_persona_ids = list(
-        Persona.objects.filter(character_id=target_char_id).values_list("pk", flat=True)
+        Persona.objects.filter(character_sheet_id=target_char_id).values_list(
+            "pk",
+            flat=True,
+        )
     )
 
     # Find scenes where own personas have interactions this week
@@ -321,7 +330,7 @@ def claim_random_scene(
             raise ProgressionError(ProgressionError.RS_NOT_FOUND)
 
         # Get target character's account
-        target_account = get_account_for_character(target.target_persona.character)
+        target_account = get_account_for_character(target.target_persona.character_sheet.character)
 
         # Award XP to claimer
         claimer_xp = RS_BASE_XP

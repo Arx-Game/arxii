@@ -23,7 +23,7 @@ def get_account_for_character(character: ObjectDB) -> AccountDB | None:
     """
     tenure = (
         RosterTenure.objects.filter(
-            roster_entry__character=character,
+            roster_entry__character_sheet__character=character,
             end_date__isnull=True,
         )
         .select_related("player_data__account")

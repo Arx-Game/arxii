@@ -7,7 +7,7 @@ from django.test import TestCase
 import pytest
 
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.game_clock.week_services import get_current_game_week
 from world.progression.models import RandomSceneCompletion, RandomSceneTarget
 from world.roster.factories import RosterEntryFactory
@@ -19,8 +19,8 @@ class RandomSceneTargetModelTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory(username="rs_player")
-        identity = CharacterIdentityFactory()
-        cls.target_persona = identity.active_persona
+        identity = CharacterSheetFactory()
+        cls.target_persona = identity.primary_persona
         cls.game_week = get_current_game_week()
 
     def setUp(self) -> None:
@@ -67,11 +67,11 @@ class RandomSceneTargetModelTest(TestCase):
             game_week=self.game_week,
             slot_number=1,
         )
-        other_identity = CharacterIdentityFactory()
+        other_identity = CharacterSheetFactory()
         with pytest.raises(IntegrityError):
             RandomSceneTarget.objects.create(
                 account=self.account,
-                target_persona=other_identity.active_persona,
+                target_persona=other_identity.primary_persona,
                 game_week=self.game_week,
                 slot_number=1,
             )
@@ -84,10 +84,10 @@ class RandomSceneTargetModelTest(TestCase):
             game_week=self.game_week,
             slot_number=1,
         )
-        other_identity = CharacterIdentityFactory()
+        other_identity = CharacterSheetFactory()
         target2 = RandomSceneTarget.objects.create(
             account=self.account,
-            target_persona=other_identity.active_persona,
+            target_persona=other_identity.primary_persona,
             game_week=self.game_week,
             slot_number=2,
         )
@@ -112,8 +112,8 @@ class RandomSceneCompletionModelTest(TestCase):
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory(username="rs_completer")
         cls.claimer_entry = RosterEntryFactory()
-        identity = CharacterIdentityFactory()
-        cls.target_persona = identity.active_persona
+        identity = CharacterSheetFactory()
+        cls.target_persona = identity.primary_persona
 
     def setUp(self) -> None:
         RandomSceneCompletion.flush_instance_cache()
@@ -152,11 +152,11 @@ class RandomSceneCompletionModelTest(TestCase):
             claimer_entry=self.claimer_entry,
             target_persona=self.target_persona,
         )
-        other_identity = CharacterIdentityFactory()
+        other_identity = CharacterSheetFactory()
         completion2 = RandomSceneCompletion.objects.create(
             account=self.account,
             claimer_entry=self.claimer_entry,
-            target_persona=other_identity.active_persona,
+            target_persona=other_identity.primary_persona,
         )
         assert completion2.pk is not None
 
