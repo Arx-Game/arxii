@@ -34,7 +34,9 @@ def _make_active_character(account=None):
         kwargs["player_data"] = PlayerDataFactory(account=account)
     tenure = RosterTenureFactory(**kwargs)
     entry = tenure.roster_entry
-    # Create a CharacterIdentity (which auto-creates a PRIMARY persona)
+    # CharacterSheetFactory auto-creates a PRIMARY persona (no separate
+    # CharacterIdentity model anymore — merged into CharacterSheet in the
+    # 2026-04 refactor).
     identity = CharacterSheetFactory(character=entry.character_sheet.character)
     persona = identity.primary_persona
     return persona, entry, tenure

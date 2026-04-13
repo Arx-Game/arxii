@@ -69,6 +69,11 @@ def leave_table(membership: GMTableMembership) -> None:
 def soft_leave_memberships_for_retired_persona(persona: Persona) -> int:
     """Future integration hook: called when a persona is retired.
 
+    TODO: No production caller wired yet. When the persona retirement
+    flow is implemented (likely as a service in world.scenes), it must
+    call this to soft-leave any active table memberships. Without this,
+    retired personas will retain active GM table memberships.
+
     Sets left_at on all active memberships for that persona. Returns
     the count of memberships closed.
     """

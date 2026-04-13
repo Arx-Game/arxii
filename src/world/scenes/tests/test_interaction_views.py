@@ -18,7 +18,9 @@ class InteractionViewSetTestCase(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         # Build the full identity chain: Account -> PlayerData -> RosterTenure
-        # -> RosterEntry -> character -> CharacterIdentity -> Persona
+        # -> RosterEntry -> CharacterSheet -> Persona (PRIMARY, auto-created
+        # by CharacterSheetFactory; no CharacterIdentity model anymore —
+        # merged into CharacterSheet in the 2026-04 refactor)
         cls.account = AccountFactory()
         cls.character = CharacterFactory()
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)

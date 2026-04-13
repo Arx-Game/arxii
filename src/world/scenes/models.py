@@ -260,7 +260,7 @@ class Persona(SharedMemoryModel):
             return f"{char_name} #{tenure.player_number}"
         return f"{self.name} ({char_name} #{tenure.player_number})"
 
-    def display_to_staff(self) -> str:
+    def display_to_staff(self) -> str:  # noqa: PLR0911
         """Full staff context — persona, character, player number, account.
 
         - First tenure: 'Bob (Thomas, played by Fred)'
@@ -279,6 +279,8 @@ class Persona(SharedMemoryModel):
         char_name = sheet.character.db_key
         tenure = entry.current_tenure
         if tenure is None:
+            return f"{self.name} ({char_name} — no current player)"
+        if tenure.player_data is None or tenure.player_data.account is None:
             return f"{self.name} ({char_name} — no current player)"
         account_name = tenure.player_data.account.username
         if tenure.player_number == 1:
@@ -423,6 +425,14 @@ class Interaction(SharedMemoryModel):
                 fields=["timestamp"],
                 name="interaction_no_scene_idx",
                 condition=models.Q(scene__isnull=True),
+            ),
+        ]
+        constraints = [
+            # Mirrors the CHECK (vote_count >= 0) in the partition SQL so
+            # makemigrations stays in sync with the raw DDL.
+            models.CheckConstraint(
+                check=models.Q(vote_count__gte=0),
+                name="interaction_vote_count_nonnegative",
             ),
         ]
 

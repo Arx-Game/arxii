@@ -36,6 +36,7 @@ def create_character_with_sheet(
     character_key: str,
     primary_persona_name: str,
     typeclass: str = "typeclasses.characters.Character",
+    home: ObjectDB | None = None,
     **sheet_kwargs: Any,
 ) -> tuple[ObjectDB, CharacterSheet, Persona]:
     """Atomically create a Character + CharacterSheet + PRIMARY Persona.
@@ -48,6 +49,11 @@ def create_character_with_sheet(
         character_key: The in-game name/key for the Character object.
         primary_persona_name: The name for the PRIMARY persona.
         typeclass: Optional typeclass path (default: standard Character).
+        home: Optional ObjectDB to set as the character's home. In test
+            environments (TEST_ENVIRONMENT=True in settings), Evennia
+            gracefully handles a missing Limbo/DEFAULT_HOME, so omitting
+            this is safe in tests. Production callers should pass an
+            explicit home.
         **sheet_kwargs: Additional CharacterSheet fields (age, gender, etc.).
 
     Returns:
@@ -57,9 +63,10 @@ def create_character_with_sheet(
         Anything the underlying create_object / save calls raise. The
         transaction rolls back on any failure.
     """
-    # nohome=True for test environments where Limbo (DEFAULT_HOME) may not exist;
-    # callers can pass home explicitly via additional kwargs to override.
-    character = create_object(typeclass=typeclass, key=character_key, nohome=True)
+    create_kwargs: dict[str, Any] = {"typeclass": typeclass, "key": character_key}
+    if home is not None:
+        create_kwargs["home"] = home
+    character = create_object(**create_kwargs)
     sheet = CharacterSheet.objects.create(character=character, **sheet_kwargs)
     primary_persona = Persona.objects.create(
         character_sheet=sheet,

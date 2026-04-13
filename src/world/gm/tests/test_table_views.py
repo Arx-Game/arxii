@@ -92,6 +92,13 @@ class GMTableTransferOwnershipTest(TestCase):
         self.table.refresh_from_db()
         assert self.table.gm == self.new_gm
 
+    def test_missing_new_gm_returns_400(self) -> None:
+        self.client.force_authenticate(user=self.staff)
+        url = reverse("gm:gm-table-transfer-ownership", args=[self.table.pk])
+        resp = self.client.post(url, {}, format="json")
+        assert resp.status_code == 400
+        assert "new_gm" in resp.data
+
 
 class GMTableMembershipCreateTest(TestCase):
     @classmethod

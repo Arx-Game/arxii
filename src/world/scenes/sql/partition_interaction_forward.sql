@@ -138,6 +138,15 @@ CREATE INDEX IF NOT EXISTS interaction_ts_brin
 
 -- 8. Recreate FK constraints from Interaction to parent tables
 -- (Django created these but DROP CASCADE removed them)
+--
+-- Note: Django models declare on_delete=PROTECT for persona, but raw SQL
+-- uses NO ACTION (PostgreSQL has no equivalent of PROTECT). The effect is
+-- the same — deletion fails — but the exception type differs:
+--   * PROTECT raises django.db.models.ProtectedError immediately
+--   * NO ACTION raises django.db.utils.IntegrityError at commit (deferred)
+-- Code catching ProtectedError on Persona deletion will NOT catch the
+-- IntegrityError variant. Callers that need to distinguish should catch
+-- both or catch the IntegrityError at the transaction boundary.
 ALTER TABLE scenes_interaction
     ADD CONSTRAINT scenes_interaction_persona_id_fk
     FOREIGN KEY (persona_id) REFERENCES scenes_persona (id)

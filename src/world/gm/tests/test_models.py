@@ -92,7 +92,9 @@ class GMTableMembershipModelTest(TestCase):
 
     def test_unique_active_membership_constraint(self) -> None:
         m1 = GMTableMembershipFactory()
-        with self.assertRaises(IntegrityError):
+        # full_clean() in save() catches the partial unique constraint at the
+        # Django layer (ValidationError) before the DB IntegrityError fires.
+        with self.assertRaises((ValidationError, IntegrityError)):
             GMTableMembershipFactory(table=m1.table, persona=m1.persona)
 
     def test_can_rejoin_after_leaving(self) -> None:

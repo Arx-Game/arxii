@@ -1,5 +1,7 @@
 """GM system models."""
 
+from typing import Any
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q, UniqueConstraint
@@ -139,8 +141,15 @@ class GMTable(SharedMemoryModel):
 class GMTableMembership(SharedMemoryModel):
     """A player's presence at a GM table, pinned to a specific persona.
 
-    Persona-only anchoring preserves privacy — if a persona is retired,
-    there is no sheet breadcrumb.
+    Anchors on Persona rather than CharacterSheet because:
+    - The persona is the IC face other players see at the table
+    - Pinning prevents drift when the player wears a temporary mask in scenes
+    - Membership history can outlive a persona via soft-leave (left_at)
+
+    Note: persona.character_sheet remains walkable, so this is NOT a
+    privacy mechanism. Staff and any caller with ORM access can still
+    derive the underlying character. Privacy is enforced at the
+    serializer/view layer, not at the schema level.
 
     Soft-leave via left_at. The unique constraint ensures only one active
     membership per (table, persona) — historical (left) memberships can
@@ -177,6 +186,16 @@ class GMTableMembership(SharedMemoryModel):
                 "A temporary persona cannot join a GM table — use a primary or established persona."
             )
             raise ValidationError(msg)
+
+    def save(self, *args: Any, **kwargs: Any) -> None:
+        """Run full_clean() on save to enforce TEMPORARY persona rejection.
+
+        The clean() method is otherwise only invoked during form validation,
+        which would let direct ORM calls (``Model.objects.create()`` / raw
+        ``.save()``) bypass the rule.
+        """
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"GMTableMembership({self.table.name}, {self.persona.name})"

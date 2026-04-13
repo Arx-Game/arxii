@@ -7,7 +7,7 @@ from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import mixins, serializers, viewsets
+from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
@@ -35,7 +35,7 @@ from world.gm.services import (
     archive_table,
     join_table,
     leave_table,
-    transfer_ownership,
+    transfer_ownership as transfer_ownership_service,
 )
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -119,10 +119,15 @@ class GMTableViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], permission_classes=[IsAdminUser])
     def transfer_ownership(self, request: Request, pk: str | None = None) -> Response:
-        table = self.get_object()
         new_gm_id = request.data.get("new_gm")
+        if not new_gm_id:
+            return Response(
+                {"new_gm": "This field is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        table = self.get_object()
         new_gm = get_object_or_404(GMProfile, pk=new_gm_id)
-        transfer_ownership(table, new_gm)
+        transfer_ownership_service(table, new_gm)
         return Response(GMTableSerializer(table).data)
 
 
@@ -149,7 +154,14 @@ class GMTableMembershipViewSet(viewsets.ModelViewSet):
         return qs.filter(table__gm__account=user)
 
     def perform_create(self, serializer: serializers.Serializer) -> None:
-        # Use the service so temporary persona validation fires.
+        """Create membership via service to enforce TEMPORARY rejection.
+
+        Idempotent: if an active membership already exists, ``join_table``
+        returns it rather than creating a duplicate. The HTTP response
+        will still be 201 in either case — DRF's CreateModelMixin does
+        not distinguish create-vs-already-exists, and semantic correctness
+        here is minor compared to keeping a single code path.
+        """
         table = serializer.validated_data["table"]
         persona = serializer.validated_data["persona"]
         try:

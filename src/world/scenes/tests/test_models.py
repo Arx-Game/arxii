@@ -342,7 +342,9 @@ class PersonaDisplayHelpersTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
-        # CharacterSheetFactory doesn't create a CharacterIdentity/Persona; build one.
+        # CharacterSheetFactory auto-creates a PRIMARY persona (no separate
+        # CharacterIdentity model anymore — it was merged into CharacterSheet
+        # in the 2026-04 refactor).
         identity = CharacterSheetFactory(character=cls.sheet.character)
         cls.primary_persona = identity.primary_persona
         cls.primary_persona.character_sheet = cls.sheet
