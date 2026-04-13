@@ -211,6 +211,16 @@ arx test world.mechanics world.magic flows --keepdb  # example: all suites that 
 
 **Full regression testing before completion:** Running only the tests for files you changed is not sufficient. Before claiming a branch is ready for PR, run all test suites that could plausibly be affected by your changes. A PR that fails CI is unacceptable — catch regressions locally.
 
+**Run without `--keepdb` before pushing.** `--keepdb` preserves the test DB across runs, which means objects created by Evennia's initial setup (Limbo room #2, default Account #1, etc.) and objects created by prior test runs persist into your current run. CI always starts from a fresh DB, so tests that implicitly depend on that preserved state will pass locally but fail in CI. Before pushing anything that touches migrations, factories, service functions that call `create_object`, typeclass initialization, or test settings, run the full suite WITHOUT `--keepdb`:
+
+```
+echo "yes" | uv run arx test          # no --keepdb — fresh DB, matches CI
+```
+
+This is slower (~3 minutes) but catches an entire class of bugs that `--keepdb` hides. Cost of missing a CI failure is higher.
+
+**Never rely on Evennia defaults in service functions.** When calling `create_object`, always either pass explicit `home=`, `location=`, etc., or pass `nohome=True` / `nolocation=True`. The implicit fallback to `settings.DEFAULT_HOME` (Limbo #2) only works when Evennia's initial setup has run — CI test DBs do not run initial setup, so FK violations fire before any graceful fallback. Same caution for `DEFAULT_SCRIPT_HOME`, Account #1 references, and anything else that assumes "Evennia will figure out the default."
+
 ### Proactive Quality Checks
 
 When editing Python files:
@@ -236,6 +246,7 @@ When completing a task:
 When a feature branch or logical unit of work is finished:
 - **Update the roadmap** — mark completed phases/items in the relevant `docs/roadmap/*.md` file. Document what was built, not just that it's done.
 - **Run full regression tests** — all affected test suites, not just the new tests
+- **Run the suite once without `--keepdb`** before pushing — this matches CI's fresh-DB behavior and catches bugs that depend on preserved test DB state (especially Evennia setup objects like Limbo). See the "Run without --keepdb before pushing" note above for why this matters.
 
 ### Code Quality Standards
 - **Type Annotations Required in Typed Apps**: All functions in apps listed under `[tool.ty.src].include` in `pyproject.toml` **must** have type annotations for all arguments and return types. A pre-commit hook (`check-type-annotations`) enforces this via ruff ANN rules on staged files. If a function truly cannot be annotated, add an inline `# noqa: ANN` with a comment explaining why. The typed apps list is maintained in both `pyproject.toml` and `tools/check_type_annotations.py` — keep them in sync when adding new apps
