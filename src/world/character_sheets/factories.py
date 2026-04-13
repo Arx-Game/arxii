@@ -67,6 +67,49 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
     personality = factory.Faker("paragraph")
     background = factory.Faker("paragraph")
 
+    @factory.post_generation
+    def primary_persona(
+        self: "CharacterSheet",
+        create: bool,
+        extracted: object,
+        **kwargs: object,
+    ) -> None:
+        """Ensure every sheet has a PRIMARY persona (the invariant).
+
+        Idempotent: if a PRIMARY persona already exists for this character,
+        link it to the sheet. Otherwise create one (and the CharacterIdentity
+        if it does not already exist).
+
+        Pass ``primary_persona=False`` to opt out.
+        """
+        if not create:
+            return
+        if extracted is False:
+            return
+
+        from world.scenes.constants import PersonaType
+        from world.scenes.models import Persona
+
+        existing_primary = Persona.objects.filter(
+            character=self.character,
+            persona_type=PersonaType.PRIMARY,
+        ).first()
+
+        if existing_primary is not None:
+            if existing_primary.character_sheet_id != self.pk:
+                existing_primary.character_sheet = self
+                existing_primary.save(update_fields=["character_sheet"])
+            return
+
+        identity, _ = CharacterIdentity.objects.get_or_create(character=self.character)
+        Persona.objects.create(
+            character_sheet=self,
+            character_identity=identity,
+            character=self.character,
+            name=f"Primary of {self.character.db_key}",
+            persona_type=PersonaType.PRIMARY,
+        )
+
 
 class ObjectDisplayDataFactory(factory_django.DjangoModelFactory):
     """Factory for creating ObjectDisplayData instances."""
@@ -105,16 +148,39 @@ class CharacterIdentityFactory(factory_django.DjangoModelFactory):
         from world.scenes.models import Persona
 
         character = kwargs.pop("character", CharacterFactory())
-        identity = model_class.objects.create(
+        # Use get_or_create in case CharacterSheetFactory's post_generation
+        # already created a CharacterIdentity for this character.
+        identity, _ = model_class.objects.get_or_create(
             character=character,
-            active_persona=None,
+            defaults={"active_persona": None},
         )
-        persona = Persona.objects.create(
-            character_identity=identity,
+        # If a PRIMARY persona already exists for this character (e.g. created
+        # by CharacterSheetFactory's post_generation), reuse it. Otherwise
+        # create one and link the sheet if available.
+        sheet = CharacterSheet.objects.filter(character=character).first()
+        persona = Persona.objects.filter(
             character=character,
-            name=character.db_key,
             persona_type=PersonaType.PRIMARY,
-        )
+        ).first()
+        if persona is None:
+            persona = Persona.objects.create(
+                character_identity=identity,
+                character=character,
+                character_sheet=sheet,
+                name=character.db_key,
+                persona_type=PersonaType.PRIMARY,
+            )
+        else:
+            # Make sure it points at this identity and sheet
+            updates: list[str] = []
+            if persona.character_identity_id != identity.pk:
+                persona.character_identity = identity
+                updates.append("character_identity")
+            if sheet is not None and persona.character_sheet_id != sheet.pk:
+                persona.character_sheet = sheet
+                updates.append("character_sheet")
+            if updates:
+                persona.save(update_fields=updates)
         identity.active_persona = persona
         identity.save(update_fields=["active_persona_id"])
         return identity

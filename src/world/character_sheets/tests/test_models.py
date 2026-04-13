@@ -250,7 +250,9 @@ class CharacterIdentityModelTests(TestCase):
 
         identity = CharacterIdentityFactory()
         with pytest.raises(IntegrityError):
-            CharacterIdentityFactory(character=identity.character)
+            # Bypass the factory's get_or_create behavior to exercise the
+            # database-level OneToOne constraint directly.
+            CharacterIdentity.objects.create(character=identity.character)
 
     def test_str_representation(self):
         """Test string representation."""
@@ -318,7 +320,9 @@ class CharacterSheetPrimaryPersonaTest(TestCase):
     def test_primary_persona_raises_when_no_primary(self) -> None:
         from world.scenes.models import Persona
 
-        sheet = CharacterSheetFactory()
+        # Opt out of the factory's PRIMARY persona creation to exercise the
+        # "no primary exists" branch of the cached_property.
+        sheet = CharacterSheetFactory(primary_persona=False)
         with self.assertRaises(Persona.DoesNotExist):
             _ = sheet.primary_persona
 

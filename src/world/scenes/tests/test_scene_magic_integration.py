@@ -12,7 +12,6 @@ from django.test import TestCase
 
 from actions.factories import ConsequencePoolFactory
 from actions.models import ActionEnhancement
-from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.checks.factories import create_social_action_templates
 from world.conditions.factories import (
@@ -70,7 +69,7 @@ class SceneMagicTestMixin:
             anima_cost=2,
         )
 
-        initiator_sheet = CharacterSheetFactory(character=cls.initiator.character)
+        initiator_sheet = cls.initiator.character_sheet
         CharacterTechniqueFactory(
             character=initiator_sheet,
             technique=cls.charm_technique,

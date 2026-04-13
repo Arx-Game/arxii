@@ -4,6 +4,7 @@ import factory.django as factory_django
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
+from world.character_sheets.models import CharacterSheet
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.constants import (
@@ -25,6 +26,30 @@ from world.scenes.models import (
     SceneSummaryRevision,
 )
 from world.scenes.place_models import InteractionReceiver, Place, PlacePresence
+
+
+def _ensure_sheet_for_character(character: object) -> CharacterSheet | None:
+    """Get or create a CharacterSheet for the given Character object.
+
+    Also backfills ``character_sheet`` on an existing PRIMARY persona for this
+    character if one exists but hasn't been linked yet — preserves the
+    "every sheet has a PRIMARY persona linked via FK" invariant even when the
+    primary persona was created before the sheet (e.g. via
+    CharacterIdentityFactory SubFactory in PersonaFactory).
+    """
+    # If the character isn't saved (e.g. factory .build() strategy), we can't
+    # link it to a sheet.
+    if character.pk is None:  # type: ignore[attr-defined]
+        return None
+    sheet, _ = CharacterSheet.objects.get_or_create(character=character)
+    primary = Persona.objects.filter(
+        character=character,
+        persona_type=PersonaType.PRIMARY,
+    ).first()
+    if primary is not None and primary.character_sheet_id != sheet.pk:
+        primary.character_sheet = sheet
+        primary.save(update_fields=["character_sheet"])
+    return sheet
 
 
 class SceneFactory(factory_django.DjangoModelFactory):
@@ -82,6 +107,7 @@ class PersonaFactory(factory_django.DjangoModelFactory):
 
     character_identity = factory.SubFactory(CharacterIdentityFactory)
     character = factory.LazyAttribute(lambda o: o.character_identity.character)
+    character_sheet = factory.LazyAttribute(lambda o: _ensure_sheet_for_character(o.character))
     name = factory.Sequence(lambda n: f"Persona {n}")
     persona_type = PersonaType.ESTABLISHED
     description = factory.Faker("text", max_nb_chars=100)

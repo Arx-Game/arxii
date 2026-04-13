@@ -156,10 +156,10 @@ class TestTechniqueEnhancementValidation(TestCase):
         cls.initiator = PersonaFactory()
         cls.target = PersonaFactory()
 
-        from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 
-        cls.initiator_sheet = CharacterSheetFactory(character=cls.initiator.character)
+        # PersonaFactory ensures a CharacterSheet exists for its character.
+        cls.initiator_sheet = cls.initiator.character_sheet
         cls.technique = TechniqueFactory(name="Mesmerizing Gaze")
         CharacterTechniqueFactory(
             character=cls.initiator_sheet,
@@ -281,7 +281,6 @@ class TestEnhancedActionResolution(TestCase):
         cls.target = PersonaFactory()
 
         from actions.models import ActionEnhancement
-        from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.factories import (
             CharacterAnimaFactory,
             CharacterTechniqueFactory,
@@ -299,7 +298,7 @@ class TestEnhancedActionResolution(TestCase):
             anima_cost=5,
         )
 
-        initiator_sheet = CharacterSheetFactory(character=cls.initiator.character)
+        initiator_sheet = cls.initiator.character_sheet
         CharacterTechniqueFactory(
             character=initiator_sheet,
             technique=cls.technique,
@@ -408,9 +407,7 @@ class TestAvailableActionsService(TestCase):
         cls.scene = SceneFactory()
         cls.initiator = PersonaFactory()
 
-        from world.character_sheets.factories import CharacterSheetFactory
-
-        cls.initiator_sheet = CharacterSheetFactory(character=cls.initiator.character)
+        cls.initiator_sheet = cls.initiator.character_sheet
         cls.technique = TechniqueFactory(
             name="Mesmerizing Gaze",
             intensity=5,

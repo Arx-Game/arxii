@@ -1510,7 +1510,9 @@ class TestPersonasEmpty(TestCase):
     def setUpTestData(cls) -> None:
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="NoPersonas")
-        CharacterSheetFactory(character=cls.character)
+        # Opt out of factory PRIMARY persona creation so the response has
+        # an empty personas list.
+        CharacterSheetFactory(character=cls.character, primary_persona=False)
         cls.roster_entry = RosterEntryFactory(character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
