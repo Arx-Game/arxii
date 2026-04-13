@@ -6,7 +6,7 @@ from factory import django as factory_django
 
 from evennia_extensions.factories import AccountFactory
 from world.gm.constants import GMApplicationStatus, GMLevel
-from world.gm.models import GMApplication, GMProfile
+from world.gm.models import GMApplication, GMProfile, GMTable
 
 
 class GMProfileFactory(factory_django.DjangoModelFactory):
@@ -26,3 +26,11 @@ class GMApplicationFactory(factory_django.DjangoModelFactory):
     account = factory.SubFactory(AccountFactory)
     application_text = factory.Faker("paragraph", nb_sentences=5)
     status = GMApplicationStatus.PENDING
+
+
+class GMTableFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = GMTable
+
+    gm = factory.SubFactory(GMProfileFactory)
+    name = factory.Sequence(lambda n: f"Test Table {n}")

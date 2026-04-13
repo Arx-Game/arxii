@@ -3,8 +3,8 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.gm.constants import GMApplicationStatus, GMLevel
-from world.gm.factories import GMApplicationFactory, GMProfileFactory
+from world.gm.constants import GMApplicationStatus, GMLevel, GMTableStatus
+from world.gm.factories import GMApplicationFactory, GMProfileFactory, GMTableFactory
 
 
 class GMProfileModelTest(TestCase):
@@ -49,3 +49,18 @@ class GMApplicationModelTest(TestCase):
 
     def test_staff_response_blank_by_default(self) -> None:
         assert self.application.staff_response == ""
+
+
+class GMTableModelTest(TestCase):
+    def test_creation(self) -> None:
+        table = GMTableFactory()
+        assert table.pk is not None
+        assert table.status == GMTableStatus.ACTIVE
+        assert table.archived_at is None
+
+    def test_str_contains_name_and_gm(self) -> None:
+        table = GMTableFactory()
+        result = str(table)
+        assert "GMTable(" in result
+        assert table.name in result
+        assert table.gm.account.username in result

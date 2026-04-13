@@ -5,7 +5,7 @@ from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.gm.constants import GMApplicationStatus, GMLevel
+from world.gm.constants import GMApplicationStatus, GMLevel, GMTableStatus
 
 
 class GMProfile(SharedMemoryModel):
@@ -100,3 +100,30 @@ class GMApplication(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"GMApplication({self.account.username}, {self.status})"
+
+
+class GMTable(SharedMemoryModel):
+    """A GM's working group — players engaging with a set of stories."""
+
+    gm = models.ForeignKey(
+        "gm.GMProfile",
+        on_delete=models.PROTECT,
+        related_name="tables",
+    )
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=20,
+        choices=GMTableStatus.choices,
+        default=GMTableStatus.ACTIVE,
+        db_index=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "GM Table"
+        verbose_name_plural = "GM Tables"
+
+    def __str__(self) -> str:
+        return f"GMTable({self.name}, gm={self.gm.account.username})"

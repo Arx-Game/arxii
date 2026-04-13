@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from world.gm.models import GMApplication, GMProfile
+from world.gm.models import GMApplication, GMProfile, GMTable
 
 
 @admin.register(GMProfile)
@@ -17,3 +17,10 @@ class GMApplicationAdmin(admin.ModelAdmin):
     list_display = ["account", "status", "created_at", "reviewed_by"]
     list_filter = ["status"]
     raw_id_fields = ["account", "reviewed_by"]
+
+
+@admin.register(GMTable)
+class GMTableAdmin(admin.ModelAdmin):
+    list_display = ["name", "gm", "status", "created_at"]
+    list_filter = ["status"]
+    raw_id_fields = ["gm"]
