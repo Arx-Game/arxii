@@ -292,6 +292,37 @@ class EnsureCharacterIdentityTests(TestCase):
         assert identity1.pk == identity2.pk
 
 
+class CharacterSheetPrimaryPersonaTest(TestCase):
+    def test_primary_persona_returns_primary_when_exists(self) -> None:
+        from world.scenes.constants import PersonaType
+        from world.scenes.models import Persona
+
+        # Build a character with an identity + sheet pointing at the same character
+        identity = CharacterIdentityFactory()
+        character = identity.character
+        sheet = CharacterSheetFactory(character=character)
+        # The identity factory already created a PRIMARY persona; link it to the sheet
+        primary = identity.active_persona
+        primary.character_sheet = sheet
+        primary.save(update_fields=["character_sheet"])
+        # Add an ESTABLISHED persona linked to the same sheet
+        Persona.objects.create(
+            character_identity=identity,
+            character=character,
+            character_sheet=sheet,
+            name="Alter Ego",
+            persona_type=PersonaType.ESTABLISHED,
+        )
+        assert sheet.primary_persona == primary
+
+    def test_primary_persona_raises_when_no_primary(self) -> None:
+        from world.scenes.models import Persona
+
+        sheet = CharacterSheetFactory()
+        with self.assertRaises(Persona.DoesNotExist):
+            _ = sheet.primary_persona
+
+
 class CharacterIdentityFactoryTests(TestCase):
     """Test CharacterIdentityFactory."""
 

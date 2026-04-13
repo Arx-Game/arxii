@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from world.achievements.handlers import StatHandler
+    from world.scenes.models import Persona
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -267,6 +268,18 @@ class CharacterSheet(SharedMemoryModel):
         from world.achievements.handlers import StatHandler  # noqa: PLC0415
 
         return StatHandler(self)
+
+    @cached_property
+    def primary_persona(self) -> Persona:
+        """Return the PRIMARY persona for this character.
+
+        Raises Persona.DoesNotExist if somehow the invariant is violated.
+        Every CharacterSheet must have exactly one PRIMARY persona; if it
+        does not, that is a loud error state, not a silent None.
+        """
+        from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+        return self.personas_v2.get(persona_type=PersonaType.PRIMARY)
 
     class Meta:
         verbose_name = "Character Sheet"
