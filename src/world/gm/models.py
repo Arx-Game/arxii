@@ -1,11 +1,13 @@
 """GM system models."""
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q, UniqueConstraint
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.gm.constants import GMApplicationStatus, GMLevel, GMTableStatus
+from world.scenes.constants import PersonaType
 
 
 class GMProfile(SharedMemoryModel):
@@ -127,3 +129,49 @@ class GMTable(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"GMTable({self.name}, gm={self.gm.account.username})"
+
+
+class GMTableMembership(SharedMemoryModel):
+    """A player's presence at a GM table, pinned to a specific persona.
+
+    Persona-only anchoring preserves privacy — if a persona is retired,
+    there is no sheet breadcrumb.
+
+    Soft-leave via left_at. The unique constraint ensures only one active
+    membership per (table, persona) — historical (left) memberships can
+    coexist with current ones.
+    """
+
+    table = models.ForeignKey(
+        "gm.GMTable",
+        on_delete=models.CASCADE,
+        related_name="memberships",
+    )
+    persona = models.ForeignKey(
+        "scenes.Persona",
+        on_delete=models.PROTECT,
+        related_name="gm_table_memberships",
+    )
+    joined_at = models.DateTimeField(auto_now_add=True)
+    left_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        verbose_name = "GM Table Membership"
+        verbose_name_plural = "GM Table Memberships"
+        constraints = [
+            UniqueConstraint(
+                fields=["table", "persona"],
+                condition=Q(left_at__isnull=True),
+                name="unique_active_gm_table_membership",
+            ),
+        ]
+
+    def clean(self) -> None:
+        if self.persona_id and self.persona.persona_type == PersonaType.TEMPORARY:
+            msg = (
+                "A temporary persona cannot join a GM table — use a primary or established persona."
+            )
+            raise ValidationError(msg)
+
+    def __str__(self) -> str:
+        return f"GMTableMembership({self.table.name}, {self.persona.name})"

@@ -6,7 +6,8 @@ from factory import django as factory_django
 
 from evennia_extensions.factories import AccountFactory
 from world.gm.constants import GMApplicationStatus, GMLevel
-from world.gm.models import GMApplication, GMProfile, GMTable
+from world.gm.models import GMApplication, GMProfile, GMTable, GMTableMembership
+from world.scenes.factories import PersonaFactory
 
 
 class GMProfileFactory(factory_django.DjangoModelFactory):
@@ -34,3 +35,11 @@ class GMTableFactory(factory_django.DjangoModelFactory):
 
     gm = factory.SubFactory(GMProfileFactory)
     name = factory.Sequence(lambda n: f"Test Table {n}")
+
+
+class GMTableMembershipFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = GMTableMembership
+
+    table = factory.SubFactory(GMTableFactory)
+    persona = factory.SubFactory(PersonaFactory)  # defaults to ESTABLISHED
