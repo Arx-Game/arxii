@@ -348,3 +348,27 @@ class FactoryTests(TestCase):
         assert discovery.pk is not None
         assert discovery.persona.is_fake_name is True
         assert discovery.discovered_by is not None
+
+
+class PersonaDisplayHelpersTest(TestCase):
+    """Tests for Persona.display_ic / display_with_history / display_to_staff."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        # CharacterSheetFactory doesn't create a CharacterIdentity/Persona; build one.
+        identity = CharacterIdentityFactory(character=cls.sheet.character)
+        cls.primary_persona = identity.active_persona
+        cls.primary_persona.character_sheet = cls.sheet
+        cls.primary_persona.name = "Bob"
+        cls.primary_persona.save()
+
+    def test_display_ic_returns_name(self) -> None:
+        assert self.primary_persona.display_ic() == "Bob"
+
+    def test_display_with_history_no_tenure_is_name_only(self) -> None:
+        # No RosterEntry exists for this sheet yet
+        assert self.primary_persona.display_with_history() == "Bob"
+
+    def test_display_to_staff_no_entry_returns_name(self) -> None:
+        assert self.primary_persona.display_to_staff() == "Bob"

@@ -1,7 +1,7 @@
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -262,6 +262,58 @@ class Persona(SharedMemoryModel):
     def is_established_or_primary(self) -> bool:
         """Whether this persona can have relationships, reputation, legend."""
         return self.persona_type in (PersonaType.PRIMARY, PersonaType.ESTABLISHED)
+
+    def display_ic(self) -> str:
+        """Persona name only — what IC observers see."""
+        return self.name
+
+    def display_with_history(self) -> str:
+        """Add tenure disambiguation when useful.
+
+        - No tenure or first tenure: 'Bob'
+        - Later tenure (player_number > 1), name differs from character:
+          'Bob (Thomas #2)'
+        - Later tenure, name matches character: 'Thomas #2' (collapse redundancy)
+        """
+        sheet = self.character_sheet
+        if sheet is None:
+            return self.name
+        try:
+            entry = sheet.roster_entry_v2
+        except ObjectDoesNotExist:
+            return self.name
+        tenure = entry.current_tenure if entry else None
+        if tenure is None or tenure.player_number == 1:
+            return self.name
+        char_name = sheet.character.db_key
+        if self.name == char_name:
+            return f"{char_name} #{tenure.player_number}"
+        return f"{self.name} ({char_name} #{tenure.player_number})"
+
+    def display_to_staff(self) -> str:
+        """Full staff context — persona, character, player number, account.
+
+        - First tenure: 'Bob (Thomas, played by Fred)'
+        - Later tenure: 'Bob (Thomas #2, played by Fred)'
+        - No current player: 'Bob (Thomas — no current player)'
+        """
+        sheet = self.character_sheet
+        if sheet is None:
+            return self.name
+        try:
+            entry = sheet.roster_entry_v2
+        except ObjectDoesNotExist:
+            return self.name
+        if entry is None:
+            return self.name
+        char_name = sheet.character.db_key
+        tenure = entry.current_tenure
+        if tenure is None:
+            return f"{self.name} ({char_name} — no current player)"
+        account_name = tenure.player_data.account.username
+        if tenure.player_number == 1:
+            return f"{self.name} ({char_name}, played by {account_name})"
+        return f"{self.name} ({char_name} #{tenure.player_number}, played by {account_name})"
 
 
 class PersonaDiscovery(SharedMemoryModel):
