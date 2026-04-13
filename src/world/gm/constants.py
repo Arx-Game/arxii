@@ -20,3 +20,10 @@ class GMApplicationStatus(models.TextChoices):
     APPROVED = "approved", "Approved"
     DENIED = "denied", "Denied"
     WITHDRAWN = "withdrawn", "Withdrawn"
+
+
+class GMTableStatus(models.TextChoices):
+    """Lifecycle status for a GM table."""
+
+    ACTIVE = "active", "Active"
+    ARCHIVED = "archived", "Archived"
