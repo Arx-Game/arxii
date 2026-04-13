@@ -1,0 +1,359 @@
+"""Add MagicalAlterationTemplate, PendingAlteration, and MagicalAlterationEvent."""
+
+from django.db import migrations, models
+import django.db.models.deletion
+
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ("accounts", "0012_defaultaccount_alter_accountdb_id_account_bot_and_more"),
+        ("character_sheets", "0003_initial"),
+        ("conditions", "0003_conditionstage_consequence_pool_and_more"),
+        ("magic", "0007_rename_warpconfig_to_soulfrayconfig"),
+        ("scenes", "0012_interaction_vote_count"),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name="MagicalAlterationTemplate",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "tier",
+                    models.PositiveSmallIntegerField(
+                        choices=[
+                            (1, "Cosmetic Touch"),
+                            (2, "Marked"),
+                            (3, "Touched"),
+                            (4, "Marked Profoundly"),
+                            (5, "Remade"),
+                        ],
+                        help_text="Severity tier 1 (cosmetic) through 5 (body partially remade).",
+                    ),
+                ),
+                (
+                    "weakness_magnitude",
+                    models.PositiveSmallIntegerField(
+                        default=0,
+                        help_text="Vulnerability magnitude, tier-bounded.",
+                    ),
+                ),
+                (
+                    "resonance_bonus_magnitude",
+                    models.PositiveSmallIntegerField(
+                        default=0,
+                        help_text="Bonus when channeling origin_resonance, tier-bounded.",
+                    ),
+                ),
+                (
+                    "social_reactivity_magnitude",
+                    models.PositiveSmallIntegerField(
+                        default=0,
+                        help_text=(
+                            "Reaction strength from magic-phobic observers. Calibrated as "
+                            "situational world-friction, not character-concept blocker."
+                        ),
+                    ),
+                ),
+                (
+                    "is_visible_at_rest",
+                    models.BooleanField(
+                        default=False,
+                        help_text="Shows through normal clothing? Required True at tier 4+.",
+                    ),
+                ),
+                (
+                    "is_library_entry",
+                    models.BooleanField(
+                        default=False,
+                        help_text=(
+                            "If True, shown to players browsing tier-matched alterations. "
+                            "Only staff can set this flag."
+                        ),
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "authored_by",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="Account that authored this. NULL = system/staff seed.",
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="authored_alterations",
+                        to="accounts.accountdb",
+                    ),
+                ),
+                (
+                    "condition_template",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="magical_alteration",
+                        to="conditions.conditiontemplate",
+                    ),
+                ),
+                (
+                    "origin_affinity",
+                    models.ForeignKey(
+                        help_text="Which affinity (Celestial/Primal/Abyssal) caused this.",
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="alteration_templates",
+                        to="magic.affinity",
+                    ),
+                ),
+                (
+                    "origin_resonance",
+                    models.ForeignKey(
+                        help_text="The resonance channeled at overburn.",
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="alteration_templates",
+                        to="magic.resonance",
+                    ),
+                ),
+                (
+                    "parent_template",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="If spun off from a library entry or prior alteration.",
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="variants",
+                        to="magic.magicalalterationtemplate",
+                    ),
+                ),
+                (
+                    "weakness_damage_type",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="Damage type the character is now vulnerable to.",
+                        null=True,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="alteration_weaknesses",
+                        to="conditions.damagetype",
+                    ),
+                ),
+            ],
+            options={
+                "abstract": False,
+            },
+        ),
+        migrations.CreateModel(
+            name="PendingAlteration",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("open", "Open"),
+                            ("resolved", "Resolved"),
+                            ("staff_cleared", "Staff Cleared"),
+                        ],
+                        default="open",
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "tier",
+                    models.PositiveSmallIntegerField(
+                        choices=[
+                            (1, "Cosmetic Touch"),
+                            (2, "Marked"),
+                            (3, "Touched"),
+                            (4, "Marked Profoundly"),
+                            (5, "Remade"),
+                        ],
+                        help_text=(
+                            "Required tier for resolved alteration. "
+                            "Upgradeable via same-scene escalation only."
+                        ),
+                    ),
+                ),
+                ("triggering_intensity", models.IntegerField(blank=True, null=True)),
+                ("triggering_control", models.IntegerField(blank=True, null=True)),
+                ("triggering_anima_cost", models.IntegerField(blank=True, null=True)),
+                ("triggering_anima_deficit", models.IntegerField(blank=True, null=True)),
+                (
+                    "triggering_soulfray_stage",
+                    models.PositiveSmallIntegerField(blank=True, null=True),
+                ),
+                ("audere_active", models.BooleanField(default=False)),
+                ("resolved_at", models.DateTimeField(blank=True, null=True)),
+                (
+                    "notes",
+                    models.TextField(
+                        blank=True,
+                        help_text="Staff notes (e.g. reason for staff clear).",
+                    ),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "character",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="pending_alterations",
+                        to="character_sheets.charactersheet",
+                    ),
+                ),
+                (
+                    "origin_affinity",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="pending_alteration_origins",
+                        to="magic.affinity",
+                    ),
+                ),
+                (
+                    "origin_resonance",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="pending_alteration_origins",
+                        to="magic.resonance",
+                    ),
+                ),
+                (
+                    "resolved_alteration",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="Set when player picks/authors a template.",
+                        null=True,
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="resolved_pending",
+                        to="magic.magicalalterationtemplate",
+                    ),
+                ),
+                (
+                    "resolved_by",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="resolved_pending_alterations",
+                        to="accounts.accountdb",
+                    ),
+                ),
+                (
+                    "triggering_scene",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="triggered_alterations",
+                        to="scenes.scene",
+                    ),
+                ),
+                (
+                    "triggering_technique",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to="magic.technique",
+                    ),
+                ),
+            ],
+            options={
+                "abstract": False,
+            },
+        ),
+        migrations.AddIndex(
+            model_name="pendingalteration",
+            index=models.Index(
+                fields=["character", "status"], name="magic_pendi_charact_4fea0a_idx"
+            ),
+        ),
+        migrations.CreateModel(
+            name="MagicalAlterationEvent",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("triggering_intensity", models.IntegerField(blank=True, null=True)),
+                ("triggering_control", models.IntegerField(blank=True, null=True)),
+                ("triggering_anima_cost", models.IntegerField(blank=True, null=True)),
+                ("triggering_anima_deficit", models.IntegerField(blank=True, null=True)),
+                (
+                    "triggering_soulfray_stage",
+                    models.PositiveSmallIntegerField(blank=True, null=True),
+                ),
+                ("audere_active", models.BooleanField(default=False)),
+                ("applied_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "notes",
+                    models.TextField(
+                        blank=True,
+                        help_text="Freeform staff/system notes.",
+                    ),
+                ),
+                (
+                    "active_condition",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="alteration_events",
+                        to="conditions.conditioninstance",
+                    ),
+                ),
+                (
+                    "alteration_template",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="application_events",
+                        to="magic.magicalalterationtemplate",
+                    ),
+                ),
+                (
+                    "character",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="alteration_events",
+                        to="character_sheets.charactersheet",
+                    ),
+                ),
+                (
+                    "triggering_scene",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to="scenes.scene",
+                    ),
+                ),
+                (
+                    "triggering_technique",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to="magic.technique",
+                    ),
+                ),
+            ],
+            options={
+                "abstract": False,
+            },
+        ),
+    ]
