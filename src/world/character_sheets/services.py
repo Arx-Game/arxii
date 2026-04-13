@@ -57,7 +57,9 @@ def create_character_with_sheet(
         Anything the underlying create_object / save calls raise. The
         transaction rolls back on any failure.
     """
-    character = create_object(typeclass=typeclass, key=character_key)
+    # nohome=True for test environments where Limbo (DEFAULT_HOME) may not exist;
+    # callers can pass home explicitly via additional kwargs to override.
+    character = create_object(typeclass=typeclass, key=character_key, nohome=True)
     sheet = CharacterSheet.objects.create(character=character, **sheet_kwargs)
     primary_persona = Persona.objects.create(
         character_sheet=sheet,

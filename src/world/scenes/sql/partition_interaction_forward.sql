@@ -29,6 +29,7 @@ CREATE TABLE scenes_interaction (
     content     text NOT NULL,
     mode        varchar(20) NOT NULL,
     visibility  varchar(20) NOT NULL,
+    vote_count  integer NOT NULL DEFAULT 0 CHECK (vote_count >= 0),
     "timestamp" timestamptz NOT NULL,
     persona_id  bigint NOT NULL,
     scene_id    bigint,
@@ -105,7 +106,9 @@ CREATE TABLE scenes_interaction_default PARTITION OF scenes_interaction DEFAULT;
 
 -- 4. Copy data from old table (preserves any existing interaction data)
 INSERT INTO scenes_interaction
-    SELECT * FROM scenes_interaction_old;
+    (id, content, mode, visibility, vote_count, "timestamp", persona_id, scene_id, place_id)
+    SELECT id, content, mode, visibility, vote_count, "timestamp", persona_id, scene_id, place_id
+    FROM scenes_interaction_old;
 
 -- Advance the sequence past any existing IDs
 SELECT setval('scenes_interaction_id_seq',
@@ -116,21 +119,21 @@ DROP TABLE scenes_interaction_old CASCADE;
 
 -- 6. Recreate Django-defined indexes on the partitioned table
 -- (These automatically propagate to all partitions)
-CREATE INDEX scenes_interaction_timestamp_idx
+CREATE INDEX IF NOT EXISTS scenes_interaction_timestamp_idx
     ON scenes_interaction ("timestamp");
-CREATE INDEX scenes_inte_persona_ts_idx
+CREATE INDEX IF NOT EXISTS scenes_inte_persona_ts_idx
     ON scenes_interaction (persona_id, "timestamp");
-CREATE INDEX scenes_inte_scene_ts_idx
+CREATE INDEX IF NOT EXISTS scenes_inte_scene_ts_idx
     ON scenes_interaction (scene_id, "timestamp");
-CREATE INDEX interaction_very_private_idx
+CREATE INDEX IF NOT EXISTS interaction_very_private_idx
     ON scenes_interaction ("timestamp")
     WHERE visibility = 'very_private';
-CREATE INDEX interaction_no_scene_idx
+CREATE INDEX IF NOT EXISTS interaction_no_scene_idx
     ON scenes_interaction ("timestamp")
     WHERE scene_id IS NULL;
 
 -- 7. BRIN index for efficient time-range scans on the high-volume table
-CREATE INDEX interaction_ts_brin
+CREATE INDEX IF NOT EXISTS interaction_ts_brin
     ON scenes_interaction USING brin ("timestamp");
 
 -- 8. Recreate FK constraints from Interaction to parent tables
@@ -138,7 +141,7 @@ CREATE INDEX interaction_ts_brin
 ALTER TABLE scenes_interaction
     ADD CONSTRAINT scenes_interaction_persona_id_fk
     FOREIGN KEY (persona_id) REFERENCES scenes_persona (id)
-    ON DELETE PROTECT DEFERRABLE INITIALLY DEFERRED;
+    ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE scenes_interaction
     ADD CONSTRAINT scenes_interaction_scene_id_fk
@@ -177,14 +180,14 @@ ALTER TABLE scenes_interactionreaction
     ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 -- 10. BRIN indexes on child table timestamp columns
-CREATE INDEX interactionreceiver_ts_brin
+CREATE INDEX IF NOT EXISTS interactionreceiver_ts_brin
     ON scenes_interactionreceiver USING brin ("timestamp");
 
-CREATE INDEX interactionfavorite_ts_brin
+CREATE INDEX IF NOT EXISTS interactionfavorite_ts_brin
     ON scenes_interactionfavorite USING brin ("timestamp");
 
-CREATE INDEX interactiontargetpersona_ts_brin
+CREATE INDEX IF NOT EXISTS interactiontargetpersona_ts_brin
     ON scenes_interactiontargetpersona USING brin ("timestamp");
 
-CREATE INDEX interactionreaction_ts_brin
+CREATE INDEX IF NOT EXISTS interactionreaction_ts_brin
     ON scenes_interactionreaction USING brin ("timestamp");
