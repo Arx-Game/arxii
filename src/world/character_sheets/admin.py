@@ -1,7 +1,6 @@
 from django.contrib import admin
 
 from world.character_sheets.models import (
-    CharacterIdentity,
     Characteristic,
     CharacteristicValue,
     CharacterSheet,
@@ -86,12 +85,6 @@ class CharacterSheetAdmin(admin.ModelAdmin):
 # CharacterDescription admin removed - display data now handled by:
 # - evennia_extensions.ObjectDisplayData for basic display info
 # - world.scenes.Persona for character identities and contextual appearances
-
-
-@admin.register(CharacterIdentity)
-class CharacterIdentityAdmin(admin.ModelAdmin):
-    list_display = ["character", "active_persona"]
-    list_select_related = ["active_persona"]
 
 
 @admin.register(Characteristic)

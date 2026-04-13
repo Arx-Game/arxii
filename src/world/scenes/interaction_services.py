@@ -65,7 +65,7 @@ def reassign_persona_interactions(
 ) -> int:
     """Reassign all interactions from source_persona to target_persona.
 
-    Both personas must belong to the same CharacterIdentity. This is used
+    Both personas must belong to the same CharacterSheet. This is used
     when merging personas (e.g., discovering a temporary disguise is the
     same person as an established identity).
 
@@ -515,7 +515,7 @@ def resolve_audience(character: ObjectDB) -> list[Persona]:
     """Get the active personas of all other characters in the room.
 
     Returns empty list if the character is alone or has no location.
-    Characters without a CharacterIdentity (NPCs) are skipped.
+    Characters without a CharacterSheet/primary persona (NPCs) are skipped.
     """
     location = character.location
     if location is None:
@@ -548,8 +548,8 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
 ) -> Interaction | None:
     """Record an IC interaction to the database.
 
-    Reads the character's active_persona from CharacterIdentity. Skips
-    recording if the character has no CharacterIdentity or no active persona.
+    Reads the character's primary persona from their CharacterSheet. Skips
+    recording if the character has no CharacterSheet or no primary persona.
 
     For public interactions (no place, no receivers), the interaction is
     created without receiver rows. For place-scoped or whispered interactions,

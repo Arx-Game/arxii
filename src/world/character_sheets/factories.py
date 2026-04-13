@@ -5,12 +5,13 @@ Provides efficient test data creation using factory_boy to improve
 test performance and maintainability.
 """
 
+from dataclasses import dataclass
+
 import factory
 import factory.django as factory_django
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.models import (
-    CharacterIdentity,
     Characteristic,
     CharacteristicValue,
     CharacterSheet,
@@ -78,8 +79,7 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
         """Ensure every sheet has a PRIMARY persona (the invariant).
 
         Idempotent: if a PRIMARY persona already exists for this character,
-        link it to the sheet. Otherwise create one (and the CharacterIdentity
-        if it does not already exist).
+        link it to the sheet. Otherwise create a new PRIMARY persona for it.
 
         Pass ``primary_persona=False`` to opt out.
         """
@@ -118,40 +118,37 @@ class ObjectDisplayDataFactory(factory_django.DjangoModelFactory):
     permanent_description = ""
 
 
-class CharacterIdentityFactory(factory_django.DjangoModelFactory):
-    """Factory for creating CharacterIdentity with a primary Persona.
+@dataclass
+class _CharacterIdentityStub:
+    """Lightweight stub returned by CharacterIdentityFactory.
 
-    Handles the circular FK between CharacterIdentity and Persona:
-    1. Creates CharacterIdentity with active_persona=None
-    2. Creates a PRIMARY Persona pointing to it
-    3. Sets active_persona on the identity
+    CharacterIdentity has been removed from the schema, but many existing
+    tests use a helper that returns an object exposing `.character` and
+    `.active_persona`. This stub preserves that ergonomic without needing
+    a backing model.
     """
 
-    class Meta:
-        model = CharacterIdentity
+    character: object
+    active_persona: object
 
-    character = factory.SubFactory(CharacterFactory)
 
-    @classmethod
-    def _create(
-        cls,
-        model_class: type[CharacterIdentity],
-        *args: object,
-        **kwargs: object,
-    ) -> CharacterIdentity:
+class CharacterIdentityFactory:
+    """Ensures a CharacterSheet and PRIMARY Persona exist for a character.
+
+    Returns a lightweight stub with `.character` and `.active_persona`
+    attributes. CharacterIdentity itself was deleted; this helper remains
+    as a convenient test fixture for code paths that still want a single
+    call to produce "character + primary persona".
+    """
+
+    def __new__(cls, **kwargs: object) -> _CharacterIdentityStub:
         from world.scenes.constants import PersonaType
         from world.scenes.models import Persona
 
-        character = kwargs.pop("character", CharacterFactory())
-        # Use get_or_create in case something already created a
-        # CharacterIdentity for this character.
-        identity, _ = model_class.objects.get_or_create(
-            character=character,
-            defaults={"active_persona": None},
-        )
-        # Ensure a CharacterSheet exists for the character. Consumers now
-        # walk character.sheet_data.primary_persona so the sheet must be
-        # present for every character that has an identity.
+        character = kwargs.pop("character", None)
+        if character is None:
+            character = CharacterFactory()
+
         sheet, _ = CharacterSheet.objects.get_or_create(character=character)
         persona = Persona.objects.filter(
             character_sheet=sheet,
@@ -163,9 +160,7 @@ class CharacterIdentityFactory(factory_django.DjangoModelFactory):
                 name=character.db_key,
                 persona_type=PersonaType.PRIMARY,
             )
-        identity.active_persona = persona
-        identity.save(update_fields=["active_persona_id"])
-        return identity
+        return _CharacterIdentityStub(character=character, active_persona=persona)
 
 
 class CharacteristicFactory(factory_django.DjangoModelFactory):

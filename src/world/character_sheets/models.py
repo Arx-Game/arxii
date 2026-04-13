@@ -304,39 +304,6 @@ class CharacterSheet(SharedMemoryModel):
 # - world.scenes.Persona for character identities and contextual appearances
 
 
-class CharacterIdentity(SharedMemoryModel):
-    """Single source of truth for who a character presents as and what they know.
-
-    Sits alongside CharacterSheet: CharacterSheet = what they are (stats,
-    demographics). CharacterIdentity = who they present as (personas)
-    and what they know (discoveries, future codex knowledge).
-    """
-
-    character = models.OneToOneField(
-        ObjectDB,
-        on_delete=models.CASCADE,
-        related_name="character_identity",
-        help_text="The character this identity belongs to",
-    )
-    active_persona = models.ForeignKey(
-        "scenes.Persona",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="active_for_identities",
-        help_text="Who this character is presenting as right now. Nullable to break "
-        "the circular FK with Persona.character_identity during creation; "
-        "ensure_character_identity() always sets this immediately.",
-    )
-
-    class Meta:
-        verbose_name = "Character Identity"
-        verbose_name_plural = "Character Identities"
-
-    def __str__(self) -> str:
-        return f"Identity: {self.active_persona.name} ({self.character.db_key})"
-
-
 class Characteristic(NaturalKeyMixin, SharedMemoryModel):
     """
     Defines types of physical characteristics characters can have.
