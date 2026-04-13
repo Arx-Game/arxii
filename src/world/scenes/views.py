@@ -205,7 +205,7 @@ class PersonaViewSet(viewsets.ModelViewSet):
     def get_queryset(self) -> QuerySet[Persona]:
         return Persona.objects.select_related(
             "character_sheet",
-            "character_sheet__character__roster_entry",
+            "character_sheet__roster_entry",
         ).order_by("created_at")
 
 

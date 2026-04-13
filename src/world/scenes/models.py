@@ -249,7 +249,7 @@ class Persona(SharedMemoryModel):
         if sheet is None:
             return self.name
         try:
-            entry = sheet.roster_entry_v2
+            entry = sheet.roster_entry
         except ObjectDoesNotExist:
             return self.name
         tenure = entry.current_tenure if entry else None
@@ -271,7 +271,7 @@ class Persona(SharedMemoryModel):
         if sheet is None:
             return self.name
         try:
-            entry = sheet.roster_entry_v2
+            entry = sheet.roster_entry
         except ObjectDoesNotExist:
             return self.name
         if entry is None:

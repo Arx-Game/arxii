@@ -458,7 +458,7 @@ class ProcessWeeklyTrainingTests(TestCase):
         super().setUpTestData()
         cls.student_identity = CharacterIdentityFactory()
         cls.student = cls.student_identity.character
-        RosterEntryFactory(character=cls.student)
+        RosterEntryFactory(character_sheet__character=cls.student)
         cls.skill = SkillFactory()
 
     def setUp(self) -> None:
@@ -641,7 +641,7 @@ class ApplyWeeklyRustTests(TestCase):
         super().setUp()
         self.identity = CharacterIdentityFactory()
         self.character = self.identity.character
-        RosterEntryFactory(character=self.character)
+        RosterEntryFactory(character_sheet__character=self.character)
         self.skill = SkillFactory()
         self.skill_value = CharacterSkillValueFactory(
             character=self.character,
@@ -735,7 +735,7 @@ class RunWeeklySkillCronTests(TestCase):
         super().setUp()
         self.identity = CharacterIdentityFactory()
         self.character = self.identity.character
-        RosterEntryFactory(character=self.character)
+        RosterEntryFactory(character_sheet__character=self.character)
         self.trained_skill = SkillFactory()
         self.untrained_skill = SkillFactory()
         self.trained_sv = CharacterSkillValueFactory(

@@ -44,7 +44,10 @@ class CommandUpdateTests(TestCase):
         room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
         char = CharacterFactory(location=room)
         roster = Roster.objects.create(name="Active")
-        entry = RosterEntry.objects.create(character=char, roster=roster)
+        from world.character_sheets.models import CharacterSheet
+
+        sheet, _ = CharacterSheet.objects.get_or_create(character=char)
+        entry = RosterEntry.objects.create(character_sheet=sheet, roster=roster)
         now = timezone.now()
         with (
             patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]),

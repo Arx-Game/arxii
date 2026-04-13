@@ -15,7 +15,7 @@ from world.roster.serializers.tenures import RosterTenureSerializer
 class RosterEntrySerializer(serializers.ModelSerializer):
     """Serialize roster entry data with nested character info."""
 
-    character = CharacterSerializer(read_only=True)
+    character = CharacterSerializer(read_only=True, source="character_sheet.character")
     profile_picture = TenureMediaSerializer(read_only=True)
     tenures = RosterTenureSerializer(many=True, read_only=True, source="cached_tenures")
     can_apply = serializers.SerializerMethodField()

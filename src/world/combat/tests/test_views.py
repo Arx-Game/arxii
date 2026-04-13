@@ -28,7 +28,7 @@ class CombatEncounterViewSetTestBase(TestCase):
         cls.gm_character = CharacterFactory(db_key="gmchar")
         cls.gm_sheet = CharacterSheetFactory(character=cls.gm_character)
         cls.gm_tenure = RosterTenureFactory(
-            roster_entry__character=cls.gm_character,
+            roster_entry__character_sheet__character=cls.gm_character,
             player_data__account=cls.gm_account,
         )
 
@@ -39,7 +39,7 @@ class CombatEncounterViewSetTestBase(TestCase):
             character=cls.player_character,
         )
         cls.player_tenure = RosterTenureFactory(
-            roster_entry__character=cls.player_character,
+            roster_entry__character_sheet__character=cls.player_character,
             player_data__account=cls.player_account,
         )
 
@@ -190,7 +190,7 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         other_char = CharacterFactory(db_key="outsiderchar")
         CharacterSheetFactory(character=other_char)
         RosterTenureFactory(
-            roster_entry__character=other_char,
+            roster_entry__character_sheet__character=other_char,
             player_data__account=other_account,
         )
         client = APIClient()

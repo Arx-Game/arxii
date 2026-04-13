@@ -36,7 +36,7 @@ class EventViewSetTestCase(APITestCase):
         # Give the requesting user a persona
         identity = CharacterIdentityFactory()
         RosterTenureFactory(
-            roster_entry__character=identity.character,
+            roster_entry__character_sheet__character=identity.character,
             player_data__account=self.account,
         )
         # Create a private event hosted by someone else
@@ -49,7 +49,7 @@ class EventViewSetTestCase(APITestCase):
         event = EventFactory(status=EventStatus.DRAFT)
         host = EventHostFactory(event=event)
         RosterTenureFactory(
-            roster_entry__character=host.persona.character_sheet.character,
+            roster_entry__character_sheet__character=host.persona.character_sheet.character,
             player_data__account=self.account,
         )
         response = self.client.post(f"/api/events/{event.id}/schedule/")
@@ -61,7 +61,7 @@ class EventViewSetTestCase(APITestCase):
         event = EventFactory(status=EventStatus.ACTIVE)
         host = EventHostFactory(event=event)
         RosterTenureFactory(
-            roster_entry__character=host.persona.character_sheet.character,
+            roster_entry__character_sheet__character=host.persona.character_sheet.character,
             player_data__account=self.account,
         )
         response = self.client.post(f"/api/events/{event.id}/schedule/")
@@ -71,7 +71,7 @@ class EventViewSetTestCase(APITestCase):
         event = EventFactory(status=EventStatus.SCHEDULED)
         host = EventHostFactory(event=event)
         RosterTenureFactory(
-            roster_entry__character=host.persona.character_sheet.character,
+            roster_entry__character_sheet__character=host.persona.character_sheet.character,
             player_data__account=self.account,
         )
         response = self.client.post(f"/api/events/{event.id}/start/")
@@ -83,7 +83,7 @@ class EventViewSetTestCase(APITestCase):
         event = EventFactory(status=EventStatus.ACTIVE)
         host = EventHostFactory(event=event)
         RosterTenureFactory(
-            roster_entry__character=host.persona.character_sheet.character,
+            roster_entry__character_sheet__character=host.persona.character_sheet.character,
             player_data__account=self.account,
         )
         response = self.client.post(f"/api/events/{event.id}/complete/")
@@ -95,7 +95,7 @@ class EventViewSetTestCase(APITestCase):
         event = EventFactory(status=EventStatus.SCHEDULED)
         host = EventHostFactory(event=event)
         RosterTenureFactory(
-            roster_entry__character=host.persona.character_sheet.character,
+            roster_entry__character_sheet__character=host.persona.character_sheet.character,
             player_data__account=self.account,
         )
         response = self.client.post(f"/api/events/{event.id}/cancel/")
@@ -153,7 +153,7 @@ class EventViewSetTestCase(APITestCase):
         # Give the requesting user a persona via the standard identity chain
         identity = CharacterIdentityFactory()
         RosterTenureFactory(
-            roster_entry__character=identity.character,
+            roster_entry__character_sheet__character=identity.character,
             player_data__account=self.account,
         )
         # Create a private event hosted by someone else entirely
@@ -171,7 +171,7 @@ class EventViewSetTestCase(APITestCase):
         primary_persona = identity.active_persona
         host = EventHostFactory(event=private_event, persona=primary_persona)
         RosterTenureFactory(
-            roster_entry__character=host.persona.character_sheet.character,
+            roster_entry__character_sheet__character=host.persona.character_sheet.character,
             player_data__account=self.account,
         )
         response = self.client.get("/api/events/")
@@ -240,7 +240,7 @@ class EventInvitationViewSetTestCase(APITestCase):
         self.event = EventFactory(status=EventStatus.DRAFT)
         EventHostFactory(event=self.event, persona=self.host_persona)
         RosterTenureFactory(
-            roster_entry__character=identity.character,
+            roster_entry__character_sheet__character=identity.character,
             player_data__account=self.account,
         )
 

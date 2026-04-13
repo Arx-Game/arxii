@@ -76,7 +76,7 @@ class RosterEntryViewSetTestCase(TestCase):
         assert "profile_picture" in response.data
         assert "tenures" in response.data
         character = response.data["character"]
-        assert character["name"] == self.roster_entry.character.name
+        assert character["name"] == self.roster_entry.character_sheet.character.name
         assert character["age"] == self.sheet.age
         # Gender returns display_name string via item_data handler
         assert character["gender"] == self.gender.display_name
@@ -96,7 +96,7 @@ class RosterEntryViewSetTestCase(TestCase):
         """Ensure filtering by name works."""
         RosterEntryFactory()
         response = self.client.get(
-            f"/api/roster/entries/?name={self.roster_entry.character.db_key}",
+            f"/api/roster/entries/?name={self.roster_entry.character_sheet.character.db_key}",
         )
         assert response.status_code == 200
         assert response.data["count"] == 1

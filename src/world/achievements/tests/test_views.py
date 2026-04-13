@@ -25,7 +25,7 @@ class AchievementViewSetTests(TestCase):
         cls.user = AccountFactory()
         cls.character = CharacterFactory()
         player_data = PlayerDataFactory(account=cls.user)
-        roster_entry = RosterEntryFactory(character=cls.character)
+        roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
         cls.sheet = CharacterSheetFactory(character=cls.character)
 
@@ -106,7 +106,7 @@ class CharacterAchievementViewSetTests(TestCase):
         cls.user = AccountFactory()
         cls.character = CharacterFactory()
         player_data = PlayerDataFactory(account=cls.user)
-        roster_entry = RosterEntryFactory(character=cls.character)
+        roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
         cls.sheet = CharacterSheetFactory(character=cls.character)
 

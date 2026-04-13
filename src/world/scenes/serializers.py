@@ -29,7 +29,7 @@ class PersonaSerializer(serializers.ModelSerializer):
 
     def get_roster_entry(self, obj: Persona) -> dict[str, int | str] | None:
         try:
-            entry = obj.character_sheet.character.roster_entry
+            entry = obj.character_sheet.roster_entry
         except AttributeError:
             entry = None
         if entry:
@@ -48,7 +48,7 @@ class SceneParticipantSerializer(serializers.ModelSerializer):
 
     def get_roster_entry(self, obj):
         try:
-            entry = obj.character_sheet.character.roster_entry
+            entry = obj.character_sheet.roster_entry
         except AttributeError:
             entry = None
         if entry:
@@ -95,7 +95,7 @@ class SceneListSerializer(serializers.ModelSerializer):
                 is_fake_name=False,
             )
             .distinct()
-            .select_related("character_sheet__character__roster_entry")
+            .select_related("character_sheet__roster_entry")
         )
         return SceneParticipantSerializer(personas, many=True).data
 
@@ -130,7 +130,7 @@ class SceneDetailSerializer(SceneListSerializer):
             .distinct()
             .select_related(
                 "character_sheet",
-                "character_sheet__character__roster_entry",
+                "character_sheet__roster_entry",
             )
         )
         return PersonaSerializer(personas, many=True).data
@@ -169,7 +169,7 @@ class SceneSummaryRevisionSerializer(serializers.ModelSerializer):
             request = self.context.get("request")
             if request and request.user.is_authenticated:
                 # Check the requesting user owns the character behind this persona
-                roster_entry = getattr(persona.character_sheet.character, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
+                roster_entry = getattr(persona.character_sheet, "roster_entry", None)  # noqa: GETATTR_LITERAL — OneToOne reverse may not exist
                 if roster_entry is None:
                     raise serializers.ValidationError(
                         {"persona": "Persona's character has no roster entry."}

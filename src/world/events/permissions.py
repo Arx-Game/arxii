@@ -13,7 +13,7 @@ def _is_event_host_or_staff(request: Request, event: Event) -> bool:
         return True
     active_entries = RosterEntry.objects.for_account(request.user)
     return event.hosts.filter(
-        persona__character_sheet__character__roster_entry__in=active_entries,
+        persona__character_sheet__roster_entry__in=active_entries,
     ).exists()
 
 
@@ -43,7 +43,7 @@ class IsEventHostGMOrStaff(BasePermission):
             return True
         active_entries = RosterEntry.objects.for_account(request.user)
         if obj.hosts.filter(
-            persona__character_sheet__character__roster_entry__in=active_entries,
+            persona__character_sheet__roster_entry__in=active_entries,
         ).exists():
             return True
         # Check if user is a GM in the event's active scene

@@ -106,7 +106,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
         if viewer_character_ids is None:
             active_entries = RosterEntry.objects.for_account(request.user)
             viewer_character_ids = set(
-                active_entries.values_list("character_id", flat=True),
+                active_entries.values_list("character_sheet_id", flat=True),
             )
             self.context["viewer_character_ids"] = viewer_character_ids
         if obj.character_sheet.character_id in viewer_character_ids:
@@ -281,7 +281,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             return cached
         active_entries = RosterEntry.objects.for_account(request.user)  # type: ignore[union-attr]
         character_ids = set(
-            active_entries.values_list("character_id", flat=True),
+            active_entries.values_list("character_sheet_id", flat=True),
         )
         self.context["viewer_character_ids"] = character_ids
         return character_ids

@@ -49,7 +49,7 @@ class SceneActionRequestViewSetTestCase(APITestCase):
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory()
         cls.character = CharacterFactory()
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.player_data = PlayerDataFactory(account=cls.account)
         cls.tenure = RosterTenureFactory(
             player_data=cls.player_data,
@@ -60,7 +60,9 @@ class SceneActionRequestViewSetTestCase(APITestCase):
 
         cls.target_account = AccountFactory()
         cls.target_character = CharacterFactory()
-        cls.target_roster_entry = RosterEntryFactory(character=cls.target_character)
+        cls.target_roster_entry = RosterEntryFactory(
+            character_sheet__character=cls.target_character
+        )
         cls.target_player_data = PlayerDataFactory(account=cls.target_account)
         cls.target_tenure = RosterTenureFactory(
             player_data=cls.target_player_data,
@@ -134,7 +136,7 @@ class PlaceViewSetTestCase(APITestCase):
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory()
         cls.character = CharacterFactory()
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.player_data = PlayerDataFactory(account=cls.account)
         cls.tenure = RosterTenureFactory(
             player_data=cls.player_data,

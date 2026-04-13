@@ -88,10 +88,10 @@ _SHARED_PATH_HISTORY_PREFETCH = Prefetch(
 
 # --- Per-section prefetch declarations + builder functions ---
 
-_CAN_EDIT_SELECT_RELATED: tuple[str, ...] = ("character__roster_entry",)
+_CAN_EDIT_SELECT_RELATED: tuple[str, ...] = ("roster_entry",)
 _CAN_EDIT_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
-        "character__roster_entry__tenures",
+        "roster_entry__tenures",
         queryset=RosterTenure.objects.select_related("player_data__account").order_by(
             "-start_date"
         ),
@@ -547,9 +547,7 @@ def _build_theming(sheet: CharacterSheet) -> ThemingSection:
     return ThemingSection(aura=aura_data)
 
 
-_PROFILE_PICTURE_SELECT_RELATED: tuple[str, ...] = (
-    "character__roster_entry__profile_picture__media",
-)
+_PROFILE_PICTURE_SELECT_RELATED: tuple[str, ...] = ("roster_entry__profile_picture__media",)
 _PROFILE_PICTURE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
 
@@ -559,7 +557,7 @@ def _build_profile_picture(sheet: CharacterSheet) -> str | None:
     RosterEntry.profile_picture is a FK to TenureMedia, which in turn
     has a FK to PlayerMedia containing the ``cloudinary_url``.
     """
-    roster_entry = sheet.character.roster_entry
+    roster_entry = sheet.roster_entry
     profile_pic = roster_entry.profile_picture
     if profile_pic is None:
         return None
@@ -624,7 +622,7 @@ class CharacterSheetSerializer(serializers.Serializer):
     def to_representation(self, instance: Any) -> dict[str, Any]:
         sheet: CharacterSheet = instance
         request: Request | None = self.context.get("request")
-        roster_entry = sheet.character.roster_entry
+        roster_entry = sheet.roster_entry
         user = request.user if request else None
 
         return {

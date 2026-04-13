@@ -45,7 +45,7 @@ def _get_active_persona_ids() -> list[int]:
     """Return PRIMARY Persona PKs for characters with an active (current) tenure."""
     active_character_ids = RosterEntry.objects.filter(
         tenures__end_date__isnull=True,
-    ).values_list("character_id", flat=True)
+    ).values_list("character_sheet_id", flat=True)
     return list(
         Persona.objects.filter(
             character_sheet_id__in=active_character_ids,
@@ -57,7 +57,7 @@ def _get_active_persona_ids() -> list[int]:
 def _get_own_persona_ids(account: AccountDB) -> list[int]:
     """Return PRIMARY Persona PKs belonging to the account's active roster entries."""
     entries = RosterEntry.objects.for_account(account)
-    own_character_ids = list(entries.values_list("character_id", flat=True))
+    own_character_ids = list(entries.values_list("character_sheet_id", flat=True))
     return list(
         Persona.objects.filter(
             character_sheet_id__in=own_character_ids,
@@ -250,7 +250,7 @@ def validate_random_scene_claim(
     own_char_ids = list(
         RosterEntry.objects.filter(
             pk__in=RosterEntry.objects.for_account(account).values_list("pk", flat=True),
-        ).values_list("character_id", flat=True)
+        ).values_list("character_sheet_id", flat=True)
     )
     target_char_id = target_persona.character_sheet.character_id
 

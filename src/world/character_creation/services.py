@@ -273,7 +273,7 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
         # Staff/GM directly adding to roster - no application needed
         roster = _get_or_create_available_roster()
         RosterEntry.objects.create(
-            character=character,
+            character_sheet=character.sheet_data,
             roster=roster,
         )
     else:
@@ -281,7 +281,7 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
         # approve_application() moves to Active and creates RosterTenure.
         roster = _get_or_create_pending_roster()
         RosterEntry.objects.create(
-            character=character,
+            character_sheet=character.sheet_data,
             roster=roster,
         )
 
@@ -745,7 +745,7 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
             )
         )
         if grant_entry_ids:
-            roster_entry = sheet.character.roster_entry
+            roster_entry = sheet.roster_entry
             for entry_id in grant_entry_ids:
                 CharacterCodexKnowledge.objects.get_or_create(
                     roster_entry=roster_entry,
@@ -1005,7 +1005,7 @@ def approve_application(
 
     # Move character from Pending → Active roster
     active_roster = _get_or_create_active_roster()
-    roster_entry = character.roster_entry
+    roster_entry = character.sheet_data.roster_entry
     roster_entry.move_to_roster(active_roster)
 
     # Create RosterTenure linking player to character

@@ -73,10 +73,10 @@ class RosterApplication(SharedMemoryModel):
         RosterTenure = apps.get_model("roster", "RosterTenure")
 
         # Create the tenure
-        player_number = self.character.roster_entry.tenures.count() + 1
+        player_number = self.character.sheet_data.roster_entry.tenures.count() + 1
         tenure = RosterTenure.objects.create(
             player_data=self.player_data,
-            roster_entry=self.character.roster_entry,
+            roster_entry=self.character.sheet_data.roster_entry,
             player_number=player_number,
             start_date=timezone.now(),
             applied_date=self.applied_date,

@@ -286,6 +286,6 @@ class HasExistingCharactersFieldTest(TestCase):
         roster = Roster.objects.create(name="Active")
         character = ObjectDB.objects.create(db_key="TestChar", db_account=self.account)
         sheet = CharacterSheet.objects.create(character=character)
-        RosterEntry.objects.create(character=character, character_sheet=sheet, roster=roster)
+        RosterEntry.objects.create(character_sheet=sheet, roster=roster)
         serializer = CharacterDraftSerializer(instance=self.draft)
         assert serializer.data["has_existing_characters"] is True

@@ -23,7 +23,7 @@ def _create_owned_persona(account, **persona_kwargs):
     """Create a Persona whose character is owned by the given account via RosterTenure."""
     identity = CharacterIdentityFactory()
     player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(account=account)
-    roster_entry = RosterEntryFactory(character=identity.character)
+    roster_entry = RosterEntryFactory(character_sheet__character=identity.character)
     RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
     if persona_kwargs:
         return PersonaFactory(
@@ -266,7 +266,7 @@ class PersonaViewPermissionsTestCase(APITestCase):
         player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(
             account=self.participant_account,
         )
-        roster_entry = RosterEntryFactory(character=identity.character)
+        roster_entry = RosterEntryFactory(character_sheet__character=identity.character)
         RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
 
         self.client.force_authenticate(user=self.participant_account)
@@ -294,7 +294,7 @@ class PersonaViewPermissionsTestCase(APITestCase):
         player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(
             account=self.participant_account,
         )
-        roster_entry = RosterEntryFactory(character=identity.character)
+        roster_entry = RosterEntryFactory(character_sheet__character=identity.character)
         RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
 
         data = {

@@ -105,8 +105,8 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
 
         character = characters[0]
         try:
-            _ = character.roster_entry
-        except RosterEntry.DoesNotExist:
+            _ = character.sheet_data.roster_entry
+        except (RosterEntry.DoesNotExist, ObjectDoesNotExist):
             self.caller.msg(f"Character '{charname}' is not on the roster.")
             return
 

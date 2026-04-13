@@ -33,7 +33,7 @@ def _make_active_character(account: AccountDB | None = None) -> tuple:
         kwargs["player_data"] = PlayerDataFactory(account=account)
     tenure = RosterTenureFactory(**kwargs)
     entry = tenure.roster_entry
-    identity = CharacterIdentityFactory(character=entry.character)
+    identity = CharacterIdentityFactory(character=entry.character_sheet.character)
     persona = identity.active_persona
     return persona, entry, tenure
 

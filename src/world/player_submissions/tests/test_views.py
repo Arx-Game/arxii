@@ -29,7 +29,7 @@ def _create_played_persona(account, key: str = "TestChar"):
     identity = CharacterIdentityFactory(character=character)
     persona = identity.active_persona
     RosterTenureFactory(
-        roster_entry__character=character,
+        roster_entry__character_sheet__character=character,
         player_data__account=account,
     )
     return character, persona

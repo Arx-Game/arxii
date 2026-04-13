@@ -8,6 +8,7 @@ import factory.django as factory_django
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from evennia_extensions.models import Artist, PlayerData, PlayerMedia
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.models import (
     Family,
     PlayerMail,
@@ -62,31 +63,8 @@ class RosterEntryFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = RosterEntry
 
-    character = factory.SubFactory(CharacterFactory)
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
     roster = factory.SubFactory(RosterFactory)
-
-    @factory.post_generation
-    def _ensure_character_sheet(
-        self: "RosterEntry",
-        create: bool,
-        extracted: object,
-        **kwargs: object,
-    ) -> None:
-        """Ensure the entry has a character_sheet linked to its character.
-
-        During the character_sheet transition, RosterEntry.character_sheet is
-        nullable but consumers now expect it to be populated. Auto-link to the
-        character's sheet_data (create it if missing).
-        """
-        if not create:
-            return
-        if self.character_sheet_id is not None:
-            return
-        from world.character_sheets.models import CharacterSheet
-
-        sheet, _ = CharacterSheet.objects.get_or_create(character=self.character)
-        self.character_sheet = sheet
-        self.save(update_fields=["character_sheet"])
 
 
 class RosterTenureFactory(factory_django.DjangoModelFactory):

@@ -89,7 +89,7 @@ class IsEncounterParticipantTest(TestCase):
         cls.character = CharacterFactory()
         cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.tenure = RosterTenureFactory(
-            roster_entry__character=cls.character,
+            roster_entry__character_sheet__character=cls.character,
             player_data__account=cls.account,
         )
         CombatParticipantFactory(
@@ -123,7 +123,7 @@ class IsEncounterParticipantTest(TestCase):
         other_char = CharacterFactory()
         CharacterSheetFactory(character=other_char)
         RosterTenureFactory(
-            roster_entry__character=other_char,
+            roster_entry__character_sheet__character=other_char,
             player_data__account=other_account,
         )
         request = _make_request(other_account)
@@ -137,7 +137,7 @@ class IsEncounterParticipantTest(TestCase):
         fled_char = CharacterFactory()
         fled_sheet = CharacterSheetFactory(character=fled_char)
         RosterTenureFactory(
-            roster_entry__character=fled_char,
+            roster_entry__character_sheet__character=fled_char,
             player_data__account=fled_account,
         )
         CombatParticipantFactory(
@@ -172,7 +172,7 @@ class IsInEncounterRoomTest(TestCase):
         account = AccountFactory()
         character = CharacterFactory(location=self.room)
         RosterTenureFactory(
-            roster_entry__character=character,
+            roster_entry__character_sheet__character=character,
             player_data__account=account,
         )
         request = _make_request(account)
@@ -185,7 +185,7 @@ class IsInEncounterRoomTest(TestCase):
         account = AccountFactory()
         character = CharacterFactory(location=other_room)
         RosterTenureFactory(
-            roster_entry__character=character,
+            roster_entry__character_sheet__character=character,
             player_data__account=account,
         )
         request = _make_request(account)

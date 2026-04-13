@@ -1095,7 +1095,7 @@ class TestRecordInteractionAutoJoinsScene(TestCase):
         scene = SceneFactory(location=room)
 
         # Set up roster entry with active tenure for the character
-        entry = RosterEntryFactory(character=char_a)
+        entry = RosterEntryFactory(character_sheet__character=char_a)
         tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
         account = tenure.player_data.account
 
@@ -1122,7 +1122,7 @@ class TestRecordInteractionAutoJoinsScene(TestCase):
         CharacterIdentityFactory(character=char_a)
         scene = SceneFactory(location=room)
 
-        entry = RosterEntryFactory(character=char_a)
+        entry = RosterEntryFactory(character_sheet__character=char_a)
         tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
         account = tenure.player_data.account
 

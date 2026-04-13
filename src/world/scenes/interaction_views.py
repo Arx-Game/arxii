@@ -72,7 +72,7 @@ class InteractionViewSet(
     def get_queryset(self) -> QuerySet[Interaction]:
         base_qs = Interaction.objects.select_related(
             "persona__character_sheet",
-            "persona__character_sheet__character__roster_entry",
+            "persona__character_sheet__roster_entry",
             "persona",
             "scene",
             "place",

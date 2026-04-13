@@ -53,8 +53,11 @@ class WebAPITests(TestCase):
             db_typeclass_path="typeclasses.characters.Character",
             db_account=self.account,
         )
+        from world.character_sheets.models import CharacterSheet
+
+        sheet, _ = CharacterSheet.objects.get_or_create(character=character)
         entry = RosterEntry.objects.create(
-            character=character,
+            character_sheet=sheet,
             roster=Roster.objects.create(name="Active"),
         )
         entry.last_puppeted = timezone.now()
@@ -136,7 +139,10 @@ class WebAPITests(TestCase):
             db_typeclass_path="typeclasses.characters.Character",
         )
         roster = Roster.objects.create(name="Active")
-        entry = RosterEntry.objects.create(character=character, roster=roster)
+        from world.character_sheets.models import CharacterSheet
+
+        sheet, _ = CharacterSheet.objects.get_or_create(character=character)
+        entry = RosterEntry.objects.create(character_sheet=sheet, roster=roster)
         url = reverse("roster-detail", args=[entry.id])
         response = self.client.get(url)
         assert response.status_code == 200
@@ -160,7 +166,10 @@ class WebAPITests(TestCase):
             db_typeclass_path="typeclasses.characters.Character",
         )
         roster = Roster.objects.create(name="Active")
-        entry = RosterEntry.objects.create(character=character, roster=roster)
+        from world.character_sheets.models import CharacterSheet
+
+        sheet, _ = CharacterSheet.objects.get_or_create(character=character)
+        entry = RosterEntry.objects.create(character_sheet=sheet, roster=roster)
         self.client.force_login(self.account)
         url = reverse("roster-apply", args=[entry.id])
         response = self.client.post(url, {"message": "Let me play"})
@@ -171,7 +180,7 @@ class WebAPITests(TestCase):
         mock_connected.return_value = [self.account]
         player_data = PlayerDataFactory(account=self.account)
         character = CharacterFactory(db_key="Bob")
-        entry = RosterEntryFactory(character=character)
+        entry = RosterEntryFactory(character_sheet__character=character)
         tenure = RosterTenureFactory(roster_entry=entry, player_data=player_data)
         TenureDisplaySettingsFactory(tenure=tenure)
         self.client.force_login(self.account)

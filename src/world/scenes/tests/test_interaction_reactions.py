@@ -14,7 +14,7 @@ class InteractionReactionToggleTestCase(APITestCase):
     def setUpTestData(cls) -> None:
         cls.account = AccountFactory()
         cls.character = CharacterFactory()
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.player_data = PlayerDataFactory(account=cls.account)
         cls.tenure = RosterTenureFactory(
             player_data=cls.player_data,
@@ -25,7 +25,7 @@ class InteractionReactionToggleTestCase(APITestCase):
 
         cls.other_account = AccountFactory()
         cls.other_character = CharacterFactory()
-        cls.other_roster_entry = RosterEntryFactory(character=cls.other_character)
+        cls.other_roster_entry = RosterEntryFactory(character_sheet__character=cls.other_character)
         cls.other_player_data = PlayerDataFactory(account=cls.other_account)
         cls.other_tenure = RosterTenureFactory(
             player_data=cls.other_player_data,

@@ -10,6 +10,7 @@ from world.codex.models import CharacterCodexKnowledge
 from world.conditions.services import apply_condition, remove_condition
 from world.mechanics.models import ObjectProperty
 from world.mechanics.types import AppliedEffect
+from world.roster.models import RosterEntry
 from world.vitals.services import process_damage_consequences
 
 if TYPE_CHECKING:
@@ -232,8 +233,8 @@ def _grant_codex(
     """Grant a codex entry to the character via their RosterEntry."""
     character = context.character
     try:
-        roster_entry = character.roster_entry
-    except character.roster_entry.RelatedObjectDoesNotExist:
+        roster_entry = character.sheet_data.roster_entry
+    except RosterEntry.DoesNotExist:
         return AppliedEffect(
             effect_type=EffectType.GRANT_CODEX,
             description="Character has no roster entry",

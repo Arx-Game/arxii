@@ -244,7 +244,7 @@ class AvailableActionsViewTests(TestCase):
 
         # Create the roster entry (character is an ObjectDB inside)
         cls.roster_entry = RosterEntryFactory()
-        cls.character = cls.roster_entry.character  # ObjectDB instance
+        cls.character = cls.roster_entry.character_sheet.character  # ObjectDB instance
 
         # Create an active tenure linking owner to character
         cls.tenure = RosterTenureFactory(

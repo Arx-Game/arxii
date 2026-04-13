@@ -63,7 +63,7 @@ class CanCreatePersonaInScene(permissions.BasePermission):
 
                 # CharacterSheet shares pk with ObjectDB, so character_sheet_id == character_id
                 return RosterTenure.objects.filter(
-                    roster_entry__character_id=character_sheet_id,
+                    roster_entry__character_sheet_id=character_sheet_id,
                     player_data__account=request.user,
                     end_date__isnull=True,
                 ).exists()
@@ -79,7 +79,7 @@ class CanCreatePersonaInScene(permissions.BasePermission):
         from world.roster.models import RosterTenure  # noqa: PLC0415
 
         return RosterTenure.objects.filter(
-            roster_entry__character=obj.character_sheet.character,
+            roster_entry__character_sheet__character=obj.character_sheet.character,
             player_data__account=request.user,
             end_date__isnull=True,
         ).exists()
