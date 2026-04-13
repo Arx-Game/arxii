@@ -281,6 +281,18 @@ class CharacterSheet(SharedMemoryModel):
 
         return self.personas_v2.get(persona_type=PersonaType.PRIMARY)
 
+    def display_ic(self) -> str:
+        """Delegate to primary_persona.display_ic()."""
+        return self.primary_persona.display_ic()
+
+    def display_with_history(self) -> str:
+        """Delegate to primary_persona.display_with_history()."""
+        return self.primary_persona.display_with_history()
+
+    def display_to_staff(self) -> str:
+        """Delegate to primary_persona.display_to_staff()."""
+        return self.primary_persona.display_to_staff()
+
     class Meta:
         verbose_name = "Character Sheet"
         verbose_name_plural = "Character Sheets"

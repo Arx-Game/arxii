@@ -323,6 +323,54 @@ class CharacterSheetPrimaryPersonaTest(TestCase):
             _ = sheet.primary_persona
 
 
+class CharacterSheetDisplayDelegatesTest(TestCase):
+    """Tests that CharacterSheet.display_* delegate to primary_persona."""
+
+    def test_display_ic_delegates_to_primary_persona(self) -> None:
+        from world.character_sheets.factories import (
+            CharacterIdentityFactory,
+            CharacterSheetFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        identity = CharacterIdentityFactory(character=sheet.character)
+        primary = identity.active_persona
+        primary.character_sheet = sheet
+        primary.name = "Bob"
+        primary.save()
+        assert sheet.display_ic() == "Bob"
+
+    def test_display_with_history_delegates(self) -> None:
+        from world.character_sheets.factories import (
+            CharacterIdentityFactory,
+            CharacterSheetFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        identity = CharacterIdentityFactory(character=sheet.character)
+        primary = identity.active_persona
+        primary.character_sheet = sheet
+        primary.name = "Alice"
+        primary.save()
+        # No tenure, so result is just the name
+        assert sheet.display_with_history() == "Alice"
+
+    def test_display_to_staff_delegates(self) -> None:
+        from world.character_sheets.factories import (
+            CharacterIdentityFactory,
+            CharacterSheetFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        identity = CharacterIdentityFactory(character=sheet.character)
+        primary = identity.active_persona
+        primary.character_sheet = sheet
+        primary.name = "Charlie"
+        primary.save()
+        # No roster_entry → name only
+        assert sheet.display_to_staff() == "Charlie"
+
+
 class CharacterIdentityFactoryTests(TestCase):
     """Test CharacterIdentityFactory."""
 
