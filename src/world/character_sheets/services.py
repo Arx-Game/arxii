@@ -66,6 +66,13 @@ def create_character_with_sheet(
     create_kwargs: dict[str, Any] = {"typeclass": typeclass, "key": character_key}
     if home is not None:
         create_kwargs["home"] = home
+    else:
+        # No default home provided — skip the Evennia DEFAULT_HOME lookup
+        # (which is Limbo #2 by default). Fresh test DBs and in-progress
+        # production grids may not have Limbo yet. Callers that need a
+        # home must pass it explicitly; others set character.home after
+        # creation (e.g., character_creation sets it from the starting room).
+        create_kwargs["nohome"] = True
     character = create_object(**create_kwargs)
     sheet = CharacterSheet.objects.create(character=character, **sheet_kwargs)
     primary_persona = Persona.objects.create(
