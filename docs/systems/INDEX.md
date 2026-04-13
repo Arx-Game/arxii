@@ -7,6 +7,12 @@
 
 ---
 
+## Recent Infrastructure Changes
+
+- **Character architecture refactor (2026-04):** CharacterSheet is now the single source-of-truth anchor for all character-related data. `CharacterIdentity` has been merged into `CharacterSheet` and deleted. `Persona`, `RosterEntry`, and `CharacterVitals` all FK directly to CharacterSheet. The `primary_persona` concept is marked by `Persona.persona_type=PRIMARY` (with a unique constraint) and accessed via `sheet.primary_persona`. Display helpers (`display_ic`, `display_with_history`, `display_to_staff`) live on Persona with thin delegates on CharacterSheet. See `docs/plans/2026-04-12-character-sheet-refactor-design.md`.
+
+---
+
 ## Game Systems
 
 ### Magic

@@ -99,12 +99,13 @@ The GM system defines these role relationships; the stories app uses them for pe
 - ✅ Trust/feedback — reuses existing `PlayerTrust.gm_trust_level` from stories app
 - Permission checks deferred to individual commands (each checks `GMProfile.level` as needed)
 
-### Phase 2 — GM Tables
-- `GMTable` model (one GM owner, many PCs)
-- `GMTableMembership` (PC assignment with role)
-- Table lifecycle: create, surrender, archive
-- Staff tools to reassign idle/quit tables to a new GM
-- Idle detection tracking (no automation yet — just data)
+### Phase 2 — GM Tables ✅
+- ✅ `GMTable` model (gm FK, name, status, lifecycle fields, archived_at)
+- ✅ `GMTableMembership` (persona-pinned, soft-leave, unique-active-constraint, temporary-persona rejection)
+- ✅ Service functions (create, archive, transfer_ownership, join, leave, retire-persona hook)
+- ✅ ViewSets with staff/GM permission split and staff-only actions (archive, transfer_ownership)
+- ✅ `last_active_at` stub on GMProfile (not yet auto-stamped)
+- Remaining: story attachment (future phase when stories are wired up), frontend pages (Phase 5)
 
 ### Phase 3 — Roster & Recruitment
 - GM creates roster characters (level-gated scope)

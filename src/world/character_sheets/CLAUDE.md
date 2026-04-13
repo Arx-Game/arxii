@@ -1,53 +1,55 @@
-# Character Sheets - Character Demographics and Identity
+# Character Sheets - Source of Truth
 
-Character identity, appearance, and biographical data using Django models. Replaces Evennia attributes with structured data storage and integrates with item_data system.
+**CharacterSheet is the single source-of-truth anchor for all character-related data.** Every playable character has one CharacterSheet (OneToOne to ObjectDB, `primary_key=True`, sharing pk with the character). All related models — `Persona`, `RosterEntry`, `CharacterVitals`, and mechanical systems — FK back to CharacterSheet.
+
+`CharacterIdentity` existed historically as a separate OneToOne peer but was merged into CharacterSheet and deleted in the 2026-04 refactor. Its only unique contribution (`active_persona`) is now derived from `Persona.persona_type=PRIMARY` with a partial unique constraint.
 
 ## Key Files
 
 ### `models.py`
-- **`CharacterSheet`**: Primary character data (age, gender, concept, description, background)
-- **`Race`**: Character race definitions with bonuses - uses SharedMemoryModel
-- **`Subrace`**: Race variants within broader categories
-- **`Characteristic`**: Physical traits (height, build, hair_color, etc.)
-- **`CharacteristicValue`**: Character-specific characteristic data
-- **`CharacterIdentity`**: OneToOne link between a character and their active Persona (lives in this app)
+- **`CharacterSheet`**: Primary character data (age, gender, concept, description, background, demographics). Anchor for character-related FKs. Has `primary_persona` cached property and thin `display_*` delegates that call through to the primary persona.
+- **`Heritage`**: Origin story types (Sleeper, Misbegotten, Normal) - SharedMemoryModel
+- **`Gender`** / **`Pronouns`**: Canonical lookup tables - SharedMemoryModel
+- **`Characteristic`**: Physical trait types (eye_color, hair_color, etc.) - SharedMemoryModel
+- **`CharacteristicValue`**: Specific values per trait type - SharedMemoryModel
+- **`CharacterSheetValue`**: Links characters to their chosen characteristic values
+
+### `services.py`
+- **`create_character_with_sheet()`**: The blessed character creation path. Atomically creates the Character typeclass, CharacterSheet, and PRIMARY Persona in a single transaction. Factories and the character_creation app both use this.
 
 ### `types.py`
-- Type definitions for character sheet data structures
-- Enum definitions for gender, characteristics, etc.
+- Type definitions and TextChoices enums (MaritalStatus, Gender choices, etc.)
 
-## Key Classes
+## Primary Persona Invariant
 
-- **`CharacterSheet`**: OneToOne with ObjectDB, automatic creation via item_data
-- **`Race`**: Extensible race system with characteristic restrictions
-- **`Characteristic`**: Flexible trait system with category organization
-- **`CharacterIdentity`**: Links a character to the Persona system (Persona model lives in `scenes` app)
+Every CharacterSheet should have exactly one `Persona` with `persona_type=PRIMARY`, enforced by a partial unique constraint. Access via `sheet.primary_persona` (cached property). If no PRIMARY exists, it raises `Persona.DoesNotExist` — intentionally loud, not a silent None.
+
+## Display Helpers
+
+Three display tiers live on `Persona` (`display_ic`, `display_with_history`, `display_to_staff`). CharacterSheet has thin delegates that call through to `primary_persona`:
+
+```python
+sheet.display_to_staff()                # uses primary persona
+persona.display_to_staff()              # uses that specific persona
+membership.persona.display_to_staff()   # context-pinned persona (e.g., GM table)
+```
+
+When a caller has a specific persona (membership, event enrollment), call directly on the persona. When you have only a sheet, use the delegate.
 
 ## Item Data Integration
 
-Character data accessed through unified item_data system:
+Character data accessed through the unified item_data system:
 
 ```python
 character.item_data.age        # Routes to CharacterSheet
-character.item_data.race       # Routes to Race model
 character.item_data.sheet      # Direct CharacterSheet access
 ```
 
-Data routing:
-- `age`, `gender`, `race` → character_sheets models
-- `traits.*` → traits system
-- `classes.*` → classes system
-
-## Key Features
-
-- **Race-Based Validation**: Characteristic restrictions by race
-- **Persona System**: Multiple identities via CharacterIdentity + Persona (PersonaType: PRIMARY/ESTABLISHED/TEMPORARY)
-- **Item Data Handler**: Unified data access across systems
-- **Automatic Creation**: CharacterSheet created on first access
-
 ## Integration Points
 
+- **Scenes**: `Persona.character_sheet` FK; `sheet.primary_persona` accesses PRIMARY
+- **Roster**: `RosterEntry` is OneToOne to CharacterSheet
+- **Vitals**: `CharacterVitals` is OneToOne to CharacterSheet
 - **Evennia Extensions**: item_data system for unified access
-- **Roster System**: Character applications and race selection
-- **Scenes System**: Persona model (in `scenes` app) for identity in scenes; CharacterIdentity bridges character_sheets to scenes
-- **Traits System**: Race bonuses and characteristic restrictions
+- **Species / Forms / Realms**: FK fields on CharacterSheet
+- **Character Creation**: Populates sheet fields via `finalize_character()`, using `create_character_with_sheet()` as the creation entry point
