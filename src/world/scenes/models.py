@@ -182,6 +182,14 @@ class Persona(SharedMemoryModel):
         related_name="personas",
         help_text="The real character behind this persona",
     )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="personas_v2",
+        null=True,
+        blank=True,
+        help_text="The character sheet this persona belongs to. Will replace character_identity.",
+    )
     character = models.ForeignKey(
         "objects.ObjectDB",
         on_delete=models.CASCADE,
