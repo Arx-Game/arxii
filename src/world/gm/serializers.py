@@ -5,7 +5,12 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from world.gm.constants import GMApplicationStatus
-from world.gm.models import GMApplication, GMProfile
+from world.gm.models import (
+    GMApplication,
+    GMProfile,
+    GMTable,
+    GMTableMembership,
+)
 
 
 class GMApplicationCreateSerializer(serializers.ModelSerializer):
@@ -79,3 +84,34 @@ class GMProfileSerializer(serializers.ModelSerializer):
             "approved_at",
         ]
         read_only_fields = fields
+
+
+class GMTableSerializer(serializers.ModelSerializer):
+    """Serializer for GM tables."""
+
+    gm_username = serializers.CharField(source="gm.account.username", read_only=True)
+
+    class Meta:
+        model = GMTable
+        fields = [
+            "id",
+            "gm",
+            "gm_username",
+            "name",
+            "description",
+            "status",
+            "created_at",
+            "archived_at",
+        ]
+        read_only_fields = ["id", "gm_username", "created_at", "archived_at", "status"]
+
+
+class GMTableMembershipSerializer(serializers.ModelSerializer):
+    """Serializer for persona memberships at GM tables."""
+
+    persona_name = serializers.CharField(source="persona.name", read_only=True)
+
+    class Meta:
+        model = GMTableMembership
+        fields = ["id", "table", "persona", "persona_name", "joined_at", "left_at"]
+        read_only_fields = ["id", "persona_name", "joined_at", "left_at"]
