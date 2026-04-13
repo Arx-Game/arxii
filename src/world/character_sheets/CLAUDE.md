@@ -2,8 +2,6 @@
 
 **CharacterSheet is the single source-of-truth anchor for all character-related data.** Every playable character has one CharacterSheet (OneToOne to ObjectDB, `primary_key=True`, sharing pk with the character). All related models — `Persona`, `RosterEntry`, `CharacterVitals`, and mechanical systems — FK back to CharacterSheet.
 
-`CharacterIdentity` existed historically as a separate OneToOne peer but was merged into CharacterSheet and deleted in the 2026-04 refactor. Its only unique contribution (`active_persona`) is now derived from `Persona.persona_type=PRIMARY` with a partial unique constraint.
-
 ## Key Files
 
 ### `models.py`

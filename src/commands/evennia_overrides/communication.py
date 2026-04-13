@@ -13,7 +13,6 @@ from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from commands.frontend import FrontendMetadataMixin
 from commands.frontend_types import UsageEntry
-from world.roster.models import RosterEntry
 from world.scenes.place_models import Place
 
 
@@ -106,7 +105,7 @@ class CmdPage(FrontendMetadataMixin, Command):  # ty: ignore[invalid-base]
         character = characters[0]
         try:
             _ = character.sheet_data.roster_entry
-        except (RosterEntry.DoesNotExist, ObjectDoesNotExist):
+        except ObjectDoesNotExist:
             self.caller.msg(f"Character '{charname}' is not on the roster.")
             return
 
