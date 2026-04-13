@@ -39,6 +39,11 @@ class GMProfile(SharedMemoryModel):
         help_text="Staff account that approved the GM application.",
     )
     updated_at = models.DateTimeField(auto_now=True)
+    last_active_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Stubbed — will be stamped by future story-update activity hooks.",
+    )
 
     class Meta:
         verbose_name = "GM Profile"
