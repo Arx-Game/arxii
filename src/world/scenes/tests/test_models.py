@@ -105,7 +105,7 @@ class PersonaModelTests(TestCase):
     def test_persona_established_type(self) -> None:
         """Established persona can be created."""
         persona = PersonaFactory(
-            character_identity=self.identity,
+            character_sheet=self.identity.character.sheet_data,
             persona_type=PersonaType.ESTABLISHED,
         )
         assert persona.pk is not None
@@ -114,7 +114,7 @@ class PersonaModelTests(TestCase):
     def test_persona_temporary_type(self) -> None:
         """Temporary persona is not established_or_primary."""
         persona = PersonaFactory(
-            character_identity=self.identity,
+            character_sheet=self.identity.character.sheet_data,
             persona_type=PersonaType.TEMPORARY,
         )
         assert persona.pk is not None
@@ -125,29 +125,15 @@ class PrimaryPersonaPerCharacterSheetConstraintTest(TestCase):
     """Partial unique constraint: one PRIMARY persona per character_sheet."""
 
     def test_second_primary_persona_on_same_sheet_rejected(self) -> None:
-        from world.character_sheets.models import CharacterIdentity
         from world.scenes.models import Persona
 
         # CharacterIdentityFactory creates a PRIMARY persona and ensures a sheet exists
         identity = CharacterIdentityFactory()
         sheet = identity.character.sheet_data
-        existing_primary = identity.active_persona
-        existing_primary.character_sheet = sheet
-        existing_primary.save(update_fields=["character_sheet"])
-
-        # Create a bare second CharacterIdentity on a different character (OneToOne)
-        # to avoid tripping the old unique_primary_persona (on character_identity)
-        from evennia_extensions.factories import CharacterFactory
-
-        other_identity = CharacterIdentity.objects.create(
-            character=CharacterFactory(),
-            active_persona=None,
-        )
 
         with self.assertRaises(IntegrityError):
             Persona.objects.create(
                 character_sheet=sheet,
-                character_identity=other_identity,
                 name="Second Primary",
                 persona_type=PersonaType.PRIMARY,
             )
@@ -320,7 +306,7 @@ class FactoryTests(TestCase):
         interaction = InteractionFactory()
         assert interaction.pk is not None
         assert interaction.persona is not None
-        assert interaction.persona.character_identity is not None
+        assert interaction.persona.character_sheet is not None
 
     def test_interaction_receiver_factory(self) -> None:
         """InteractionReceiverFactory creates a valid receiver record."""

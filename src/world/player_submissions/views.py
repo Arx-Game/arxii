@@ -72,7 +72,7 @@ class PlayerFeedbackViewSet(
 ):
     queryset = PlayerFeedback.objects.select_related(
         "reporter_account",
-        "reporter_persona__character",
+        "reporter_persona__character_sheet__character",
     ).order_by("-created_at")
     filterset_class = PlayerFeedbackFilter
 
@@ -83,7 +83,7 @@ class PlayerFeedbackViewSet(
 
     def perform_create(self, serializer: serializers.BaseSerializer) -> None:
         persona = serializer.validated_data["reporter_persona"]
-        location_id = _resolve_location_id(persona.character_id)
+        location_id = _resolve_location_id(persona.character_sheet_id)
         serializer.save(
             reporter_account=self.request.user,
             location_id=location_id,
@@ -100,7 +100,7 @@ class BugReportViewSet(
 ):
     queryset = BugReport.objects.select_related(
         "reporter_account",
-        "reporter_persona__character",
+        "reporter_persona__character_sheet__character",
     ).order_by("-created_at")
     filterset_class = BugReportFilter
 
@@ -111,7 +111,7 @@ class BugReportViewSet(
 
     def perform_create(self, serializer: serializers.BaseSerializer) -> None:
         persona = serializer.validated_data["reporter_persona"]
-        location_id = _resolve_location_id(persona.character_id)
+        location_id = _resolve_location_id(persona.character_sheet_id)
         serializer.save(
             reporter_account=self.request.user,
             location_id=location_id,
@@ -129,8 +129,8 @@ class PlayerReportViewSet(
     queryset = PlayerReport.objects.select_related(
         "reporter_account",
         "reported_account",
-        "reporter_persona__character",
-        "reported_persona__character",
+        "reporter_persona__character_sheet__character",
+        "reported_persona__character_sheet__character",
     ).order_by("-created_at")
     filterset_class = PlayerReportFilter
 
@@ -141,7 +141,7 @@ class PlayerReportViewSet(
 
     def perform_create(self, serializer: serializers.BaseSerializer) -> None:
         persona = serializer.validated_data["reporter_persona"]
-        location_id = _resolve_location_id(persona.character_id)
+        location_id = _resolve_location_id(persona.character_sheet_id)
         serializer.save(
             reporter_account=self.request.user,
             location_id=location_id,

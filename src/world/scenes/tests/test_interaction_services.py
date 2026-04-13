@@ -740,12 +740,10 @@ class TestReassignPersonaInteractions(TestCase):
     def setUpTestData(cls) -> None:
         cls.identity = CharacterIdentityFactory()
         cls.source_persona = PersonaFactory(
-            character_identity=cls.identity,
-            character=cls.identity.character,
+            character_sheet=cls.identity.character.sheet_data,
         )
         cls.target_persona = PersonaFactory(
-            character_identity=cls.identity,
-            character=cls.identity.character,
+            character_sheet=cls.identity.character.sheet_data,
         )
 
     def test_reassigns_interactions(self) -> None:
@@ -991,8 +989,7 @@ class TestResolvePersonaDisplay(TestCase):
         cls.real_persona = PersonaFactory(is_fake_name=False)
         cls.fake_persona = PersonaFactory(is_fake_name=True, name="The Masked Baron")
         cls.linked_persona = PersonaFactory(
-            character_identity=cls.fake_persona.character_identity,
-            character=cls.fake_persona.character,
+            character_sheet=cls.fake_persona.character_sheet,
             name="Lord Reginald",
         )
 

@@ -53,7 +53,7 @@ class SceneMagicTestMixin:
 
         presence_trait = Trait.objects.get(name="presence")
         CharacterTraitValue.objects.create(
-            character=cls.initiator.character,
+            character=cls.initiator.character_sheet.character,
             trait=presence_trait,
             value=30,
         )
@@ -75,7 +75,7 @@ class SceneMagicTestMixin:
             technique=cls.charm_technique,
         )
         CharacterAnimaFactory(
-            character=cls.initiator.character,
+            character=cls.initiator.character_sheet.character,
             current=20,
             maximum=30,
         )
@@ -131,7 +131,9 @@ class TestEnhancedActionFullPipeline(SceneMagicTestMixin, TestCase):
             control=1,
             anima_cost=5,
         )
-        initiator_sheet = CharacterSheet.objects.get(character=self.initiator.character)
+        initiator_sheet = CharacterSheet.objects.get(
+            character=self.initiator.character_sheet.character
+        )
         CharacterTechniqueFactory(character=initiator_sheet, technique=costly_technique)
 
         ActionEnhancement.objects.create(
@@ -161,12 +163,12 @@ class TestEnhancedActionFullPipeline(SceneMagicTestMixin, TestCase):
         assert result.technique_result.confirmed is True
         assert result.action_resolution is not None
 
-        anima = CharacterAnima.objects.get(character=self.initiator.character)
+        anima = CharacterAnima.objects.get(character=self.initiator.character_sheet.character)
         assert anima.current < 20
 
     def test_free_technique_no_soulfray_warning(self) -> None:
         """Technique where control >> intensity has no Soulfray warning in available actions."""
-        actions = get_available_scene_actions(character=self.initiator.character)
+        actions = get_available_scene_actions(character=self.initiator.character_sheet.character)
         flirt_action = next((a for a in actions if a.action_key == "flirt"), None)
         assert flirt_action is not None
 
@@ -185,7 +187,9 @@ class TestEnhancedActionFullPipeline(SceneMagicTestMixin, TestCase):
         from world.character_sheets.models import CharacterSheet
 
         unregistered_technique = TechniqueFactory(name="Unregistered Spell")
-        initiator_sheet = CharacterSheet.objects.get(character=self.initiator.character)
+        initiator_sheet = CharacterSheet.objects.get(
+            character=self.initiator.character_sheet.character
+        )
         CharacterTechniqueFactory(character=initiator_sheet, technique=unregistered_technique)
 
         with self.assertRaises(ValidationError):
@@ -233,7 +237,7 @@ class TestAvailableActionsFiltering(SceneMagicTestMixin, TestCase):
             technique=unknown_technique,
         )
 
-        actions = get_available_scene_actions(character=self.initiator.character)
+        actions = get_available_scene_actions(character=self.initiator.character_sheet.character)
         flirt_action = next(a for a in actions if a.action_key == "flirt")
 
         technique_ids = {e.technique.pk for e in flirt_action.enhancements}
@@ -244,7 +248,7 @@ class TestAvailableActionsFiltering(SceneMagicTestMixin, TestCase):
         """Characters without known techniques have no enhancements on any action."""
         non_magical = PersonaFactory()
 
-        actions = get_available_scene_actions(character=non_magical.character)
+        actions = get_available_scene_actions(character=non_magical.character_sheet.character)
         for action in actions:
             assert len(action.enhancements) == 0
 
@@ -265,7 +269,9 @@ class TestEnhancedActionEdgeCases(SceneMagicTestMixin, TestCase):
             control=1,
             anima_cost=5,
         )
-        initiator_sheet = CharacterSheet.objects.get(character=self.initiator.character)
+        initiator_sheet = CharacterSheet.objects.get(
+            character=self.initiator.character_sheet.character
+        )
         CharacterTechniqueFactory(character=initiator_sheet, technique=costly_technique)
         ActionEnhancement.objects.create(
             base_action_key="flirt",
@@ -288,13 +294,13 @@ class TestEnhancedActionEdgeCases(SceneMagicTestMixin, TestCase):
             severity_threshold=1,
         )
         ConditionInstance.objects.create(
-            target=self.initiator.character,
+            target=self.initiator.character_sheet.character,
             condition=soulfray_template,
             current_stage=soulfray_stage,
             severity=5,
         )
 
-        actions = get_available_scene_actions(character=self.initiator.character)
+        actions = get_available_scene_actions(character=self.initiator.character_sheet.character)
         flirt_action = next((a for a in actions if a.action_key == "flirt"), None)
         assert flirt_action is not None
 
@@ -320,7 +326,9 @@ class TestEnhancedActionEdgeCases(SceneMagicTestMixin, TestCase):
             control=1,
             anima_cost=5,
         )
-        initiator_sheet = CharacterSheet.objects.get(character=self.initiator.character)
+        initiator_sheet = CharacterSheet.objects.get(
+            character=self.initiator.character_sheet.character
+        )
         CharacterTechniqueFactory(character=initiator_sheet, technique=costly_technique)
         ActionEnhancement.objects.create(
             base_action_key="flirt",
@@ -332,7 +340,7 @@ class TestEnhancedActionEdgeCases(SceneMagicTestMixin, TestCase):
         # Set anima very low so post-deduction ratio falls below soulfray threshold
         # Current=1, effective_cost=9: after deduction current=0 (deficit=8)
         # ratio = 0 / 30 = 0.0, below threshold 0.30 -> Soulfray accumulates
-        anima = CharacterAnima.objects.get(character=self.initiator.character)
+        anima = CharacterAnima.objects.get(character=self.initiator.character_sheet.character)
         anima.current = 1
         anima.save(update_fields=["current"])
 
@@ -383,7 +391,9 @@ class TestEnhancedActionEdgeCases(SceneMagicTestMixin, TestCase):
             control=1,
             anima_cost=5,
         )
-        initiator_sheet = CharacterSheet.objects.get(character=self.initiator.character)
+        initiator_sheet = CharacterSheet.objects.get(
+            character=self.initiator.character_sheet.character
+        )
         CharacterTechniqueFactory(character=initiator_sheet, technique=mishap_technique)
         ActionEnhancement.objects.create(
             base_action_key="flirt",

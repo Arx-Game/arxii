@@ -501,7 +501,7 @@ def _build_goals(sheet: CharacterSheet) -> list[GoalEntry]:
 _PERSONAS_SELECT_RELATED: tuple[str, ...] = ()
 _PERSONAS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
-        "character__personas",
+        "personas",
         queryset=Persona.objects.select_related("thumbnail"),
         to_attr="cached_personas",
     ),
@@ -510,7 +510,6 @@ _PERSONAS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
 
 def _build_personas(sheet: CharacterSheet) -> list[PersonaEntry]:
     """Build the personas section from prefetched Persona data."""
-    character = sheet.character
     return [
         PersonaEntry(
             id=persona.pk,
@@ -518,7 +517,7 @@ def _build_personas(sheet: CharacterSheet) -> list[PersonaEntry]:
             description=persona.description,
             thumbnail=persona.thumbnail.cloudinary_url if persona.thumbnail else None,
         )
-        for persona in character.cached_personas
+        for persona in sheet.cached_personas
     ]
 
 

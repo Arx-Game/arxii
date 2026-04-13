@@ -49,7 +49,7 @@ class EventViewSetTestCase(APITestCase):
         event = EventFactory(status=EventStatus.DRAFT)
         host = EventHostFactory(event=event)
         RosterTenureFactory(
-            roster_entry__character=host.persona.character,
+            roster_entry__character=host.persona.character_sheet.character,
             player_data__account=self.account,
         )
         response = self.client.post(f"/api/events/{event.id}/schedule/")
@@ -61,7 +61,7 @@ class EventViewSetTestCase(APITestCase):
         event = EventFactory(status=EventStatus.ACTIVE)
         host = EventHostFactory(event=event)
         RosterTenureFactory(
-            roster_entry__character=host.persona.character,
+            roster_entry__character=host.persona.character_sheet.character,
             player_data__account=self.account,
         )
         response = self.client.post(f"/api/events/{event.id}/schedule/")
@@ -71,7 +71,7 @@ class EventViewSetTestCase(APITestCase):
         event = EventFactory(status=EventStatus.SCHEDULED)
         host = EventHostFactory(event=event)
         RosterTenureFactory(
-            roster_entry__character=host.persona.character,
+            roster_entry__character=host.persona.character_sheet.character,
             player_data__account=self.account,
         )
         response = self.client.post(f"/api/events/{event.id}/start/")
@@ -83,7 +83,7 @@ class EventViewSetTestCase(APITestCase):
         event = EventFactory(status=EventStatus.ACTIVE)
         host = EventHostFactory(event=event)
         RosterTenureFactory(
-            roster_entry__character=host.persona.character,
+            roster_entry__character=host.persona.character_sheet.character,
             player_data__account=self.account,
         )
         response = self.client.post(f"/api/events/{event.id}/complete/")
@@ -95,7 +95,7 @@ class EventViewSetTestCase(APITestCase):
         event = EventFactory(status=EventStatus.SCHEDULED)
         host = EventHostFactory(event=event)
         RosterTenureFactory(
-            roster_entry__character=host.persona.character,
+            roster_entry__character=host.persona.character_sheet.character,
             player_data__account=self.account,
         )
         response = self.client.post(f"/api/events/{event.id}/cancel/")
@@ -171,7 +171,7 @@ class EventViewSetTestCase(APITestCase):
         primary_persona = identity.active_persona
         host = EventHostFactory(event=private_event, persona=primary_persona)
         RosterTenureFactory(
-            roster_entry__character=host.persona.character,
+            roster_entry__character=host.persona.character_sheet.character,
             player_data__account=self.account,
         )
         response = self.client.get("/api/events/")

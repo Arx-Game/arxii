@@ -241,7 +241,6 @@ class CharacterIdentityModelTests(TestCase):
         identity = CharacterIdentityFactory()
         assert identity.character is not None
         assert identity.active_persona is not None
-        assert identity.active_persona.character_identity == identity
         assert identity.active_persona is not None
 
     def test_onetoone_constraint(self):
@@ -272,8 +271,7 @@ class EnsureCharacterIdentityTests(TestCase):
         assert identity.character == character
         assert identity.active_persona is not None
         assert identity.active_persona.name == character.db_key
-        assert identity.active_persona.character == character
-        assert identity.active_persona.character_identity == identity
+        assert identity.active_persona.character_sheet.character == character
         assert identity.active_persona.is_fake_name is False
 
     def test_idempotent(self):
@@ -307,8 +305,6 @@ class CharacterSheetPrimaryPersonaTest(TestCase):
         primary = identity.active_persona
         # Add an ESTABLISHED persona linked to the same sheet
         Persona.objects.create(
-            character_identity=identity,
-            character=character,
             character_sheet=sheet,
             name="Alter Ego",
             persona_type=PersonaType.ESTABLISHED,
@@ -380,5 +376,4 @@ class CharacterIdentityFactoryTests(TestCase):
         """Test that the factory creates a valid CharacterIdentity."""
         identity = CharacterIdentityFactory()
         assert identity.pk is not None
-        assert identity.active_persona.character == identity.character
-        assert identity.active_persona.character_identity == identity
+        assert identity.active_persona.character_sheet.character == identity.character

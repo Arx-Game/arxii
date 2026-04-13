@@ -23,7 +23,6 @@ class PersonaSerializer(serializers.ModelSerializer):
             "persona_type",
             "description",
             "thumbnail_url",
-            "character",
             "roster_entry",
         ]
         read_only_fields = ["roster_entry"]
@@ -36,25 +35,6 @@ class PersonaSerializer(serializers.ModelSerializer):
         if entry:
             return {"id": entry.id, "name": entry.character_sheet.character.db_key}
         return None
-
-    def create(self, validated_data: dict) -> Persona:
-        # During the character_identity -> character_sheet transition, the
-        # Persona model still requires character_identity (NOT NULL). Fill it
-        # in from the character's identity so API callers don't need to know
-        # about the legacy field.
-        if "character_identity" not in validated_data:  # noqa: STRING_LITERAL — transitional shim, removed with Task 15
-            from world.character_sheets.identity_services import (  # noqa: PLC0415
-                ensure_character_identity,
-            )
-
-            character = validated_data.get("character") or (
-                validated_data["character_sheet"].character  # noqa: STRING_LITERAL — transitional shim, removed with Task 15
-                if "character_sheet" in validated_data  # noqa: STRING_LITERAL — transitional shim, removed with Task 15
-                else None
-            )
-            if character is not None:
-                validated_data["character_identity"] = ensure_character_identity(character)  # noqa: STRING_LITERAL — transitional shim, removed with Task 15
-        return super().create(validated_data)
 
 
 class SceneParticipantSerializer(serializers.ModelSerializer):

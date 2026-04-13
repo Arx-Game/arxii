@@ -22,7 +22,7 @@ def _validate_owned_persona(persona: Persona, account_pk: int) -> Persona:
     Walks persona -> character -> roster_entry -> current_tenure and
     confirms the active tenure belongs to the requesting account.
     """
-    character = persona.character
+    character = persona.character_sheet.character
     try:
         entry = character.roster_entry
     except ObjectDoesNotExist as exc:
@@ -42,7 +42,7 @@ def _account_for_persona(persona: Persona) -> int:
     staff shouldn't be actioning reports against characters with no
     current player.
     """
-    character = persona.character
+    character = persona.character_sheet.character
     try:
         entry = character.roster_entry
     except ObjectDoesNotExist as exc:

@@ -3,10 +3,13 @@
 --
 -- CAVEAT: After a migration squash, you must manually add a RunSQL operation
 -- pointing at this file. Django's makemigrations won't auto-generate it.
+--
+-- Note: character_sheet_id equals character_id since CharacterSheet shares pk
+-- with ObjectDB.
 
 CREATE MATERIALIZED VIEW IF NOT EXISTS societies_characterlegendsummary AS
 SELECT
-    p.character_id,
+    p.character_sheet_id AS character_id,
     COALESCE(SUM(
         CASE WHEN le.is_active THEN
             le.base_value + COALESCE(spread_totals.total_spread, 0)
@@ -19,7 +22,7 @@ LEFT JOIN (
     FROM societies_legendspread
     GROUP BY legend_entry_id
 ) spread_totals ON spread_totals.legend_entry_id = le.id
-GROUP BY p.character_id;
+GROUP BY p.character_sheet_id;
 
 CREATE UNIQUE INDEX IF NOT EXISTS societies_characterlegendsummary_character_id
     ON societies_characterlegendsummary (character_id);

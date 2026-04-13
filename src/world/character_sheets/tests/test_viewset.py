@@ -1448,7 +1448,7 @@ class TestPersonasSection(TestCase):
             cloudinary_url="https://res.cloudinary.com/test/image/upload/iron_voice.jpg",
         )
         cls.persona_with_thumb = PersonaFactory(
-            character_identity=cls.char_identity,
+            character_sheet=cls.char_identity.character.sheet_data,
             name="The Iron Voice",
             description="A masked figure.",
             thumbnail=cls.media,
@@ -1456,7 +1456,7 @@ class TestPersonasSection(TestCase):
 
         # Persona without thumbnail
         cls.persona_no_thumb = PersonaFactory(
-            character_identity=cls.char_identity,
+            character_sheet=cls.char_identity.character.sheet_data,
             name="Shadow",
             description="",
             thumbnail=None,
@@ -1813,7 +1813,7 @@ class TestCharacterSheetQueryCount(TestCase):
 
         identity = CharacterIdentityFactory(character=cls.character)
         PersonaFactory(
-            character_identity=identity,
+            character_sheet=identity.character.sheet_data,
             name="FullPersona",
             description="A persona.",
             thumbnail=media,
@@ -2001,7 +2001,7 @@ class TestPrefetchCompleteness(TestCase):
 
         pf_identity = CharacterIdentityFactory(character=cls.character)
         PersonaFactory(
-            character_identity=pf_identity,
+            character_sheet=pf_identity.character.sheet_data,
             name="PFPersona",
             description="A persona.",
             thumbnail=media,

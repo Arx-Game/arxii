@@ -279,7 +279,7 @@ class CharacterSheet(SharedMemoryModel):
         """
         from world.scenes.constants import PersonaType  # noqa: PLC0415
 
-        return self.personas_v2.get(persona_type=PersonaType.PRIMARY)
+        return self.personas.get(persona_type=PersonaType.PRIMARY)
 
     def display_ic(self) -> str:
         """Delegate to primary_persona.display_ic()."""
@@ -335,13 +335,6 @@ class CharacterIdentity(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Identity: {self.active_persona.name} ({self.character.db_key})"
-
-    def clean(self) -> None:
-        super().clean()
-        if self.active_persona_id and self.active_persona.character_identity_id != self.pk:
-            raise ValidationError(
-                {"active_persona": "Active persona must belong to this character identity."}
-            )
 
 
 class Characteristic(NaturalKeyMixin, SharedMemoryModel):

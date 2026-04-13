@@ -140,7 +140,7 @@ def get_staff_inbox(
             status=SubmissionStatus.OPEN,
         ).select_related(
             "reporter_account",
-            "reporter_persona__character",
+            "reporter_persona__character_sheet__character",
         )
         items.extend(_feedback_to_item(fb) for fb in feedback_qs)
 
@@ -149,7 +149,7 @@ def get_staff_inbox(
             status=SubmissionStatus.OPEN,
         ).select_related(
             "reporter_account",
-            "reporter_persona__character",
+            "reporter_persona__character_sheet__character",
         )
         items.extend(_bug_to_item(br) for br in bug_qs)
 
@@ -159,8 +159,8 @@ def get_staff_inbox(
         ).select_related(
             "reporter_account",
             "reported_account",
-            "reporter_persona__character",
-            "reported_persona__character",
+            "reporter_persona__character_sheet__character",
+            "reported_persona__character_sheet__character",
         )
         items.extend(_report_to_item(pr) for pr in report_qs)
 
@@ -201,8 +201,8 @@ def get_account_submission_history(
         .select_related(
             "reporter_account",
             "reported_account",
-            "reporter_persona__character",
-            "reported_persona__character",
+            "reporter_persona__character_sheet__character",
+            "reported_persona__character_sheet__character",
         )
         .order_by("-created_at")
     )
@@ -214,8 +214,8 @@ def get_account_submission_history(
         .select_related(
             "reporter_account",
             "reported_account",
-            "reporter_persona__character",
-            "reported_persona__character",
+            "reporter_persona__character_sheet__character",
+            "reported_persona__character_sheet__character",
         )
         .order_by("-created_at")
     )
@@ -226,7 +226,7 @@ def get_account_submission_history(
         PlayerFeedback.objects.filter(reporter_account_id=account_id)
         .select_related(
             "reporter_account",
-            "reporter_persona__character",
+            "reporter_persona__character_sheet__character",
         )
         .order_by("-created_at")
     )
@@ -237,7 +237,7 @@ def get_account_submission_history(
         BugReport.objects.filter(reporter_account_id=account_id)
         .select_related(
             "reporter_account",
-            "reporter_persona__character",
+            "reporter_persona__character_sheet__character",
         )
         .order_by("-created_at")
     )

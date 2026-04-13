@@ -20,8 +20,7 @@ def _create_owned_persona(account, **persona_kwargs):
     RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
     if persona_kwargs:
         return PersonaFactory(
-            character_identity=identity,
-            character=identity.character,
+            character_sheet=identity.character.sheet_data,
             **persona_kwargs,
         )
     return identity.active_persona

@@ -1,7 +1,7 @@
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -176,25 +176,11 @@ class Persona(SharedMemoryModel):
     and relationships. Temporary personas are throwaway disguises.
     """
 
-    character_identity = models.ForeignKey(
-        "character_sheets.CharacterIdentity",
-        on_delete=models.CASCADE,
-        related_name="personas",
-        help_text="The real character behind this persona",
-    )
     character_sheet = models.ForeignKey(
         "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
-        related_name="personas_v2",
-        null=True,
-        blank=True,
-        help_text="The character sheet this persona belongs to. Will replace character_identity.",
-    )
-    character = models.ForeignKey(
-        "objects.ObjectDB",
-        on_delete=models.CASCADE,
         related_name="personas",
-        help_text="The character object (denormalized from character_identity for queries)",
+        help_text="The character sheet this persona belongs to.",
     )
     name = models.CharField(max_length=255, help_text="Display name for this persona")
     colored_name = models.CharField(
@@ -229,12 +215,7 @@ class Persona(SharedMemoryModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["character_identity"],
-                condition=models.Q(persona_type="primary"),
-                name="unique_primary_persona",
-            ),
-            models.UniqueConstraint(
-                fields=["character_identity", "name"],
+                fields=["character_sheet", "name"],
                 name="unique_persona_name_per_character",
             ),
             models.UniqueConstraint(
@@ -246,17 +227,6 @@ class Persona(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.get_persona_type_display()})"
-
-    def clean(self) -> None:
-        super().clean()
-        if (
-            self.character_identity_id
-            and self.character_id
-            and self.character_identity.character_id != self.character_id
-        ):
-            raise ValidationError(
-                {"character": "Character must match character_identity.character."}
-            )
 
     @property
     def is_established_or_primary(self) -> bool:

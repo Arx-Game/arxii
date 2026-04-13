@@ -416,7 +416,7 @@ def can_view_interaction(  # noqa: PLR0911 - visibility cascade has distinct bra
 
 def _get_account_for_persona(persona: Persona) -> int | None:
     """Get the account ID for a persona's character via roster tenure."""
-    return _get_account_for_character(persona.character_id)
+    return _get_account_for_character(persona.character_sheet_id)
 
 
 def _get_account_for_character(character_id: int) -> int | None:

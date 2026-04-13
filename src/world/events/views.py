@@ -124,7 +124,7 @@ class EventViewSet(ModelViewSet):
         )
         return list(
             Persona.objects.filter(
-                character_id__in=character_ids,
+                character_sheet_id__in=character_ids,
                 persona_type=PersonaType.PRIMARY,
             ).values_list("id", flat=True)
         )

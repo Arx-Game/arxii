@@ -9,7 +9,7 @@ from django.db import transaction
 from evennia.objects.models import ObjectDB
 from evennia.utils.create import create_object
 
-from world.character_sheets.models import CharacterIdentity, CharacterSheet
+from world.character_sheets.models import CharacterSheet
 from world.roster.models import RosterEntry
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
@@ -61,21 +61,7 @@ def create_character_with_sheet(
     sheet = CharacterSheet.objects.create(character=character, **sheet_kwargs)
     primary_persona = Persona.objects.create(
         character_sheet=sheet,
-        # character_identity and character set during the transition period.
-        # Task 15 will drop these.
-        character=character,
-        character_identity=_ensure_identity(character),
         name=primary_persona_name,
         persona_type=PersonaType.PRIMARY,
     )
     return character, sheet, primary_persona
-
-
-def _ensure_identity(character: ObjectDB) -> CharacterIdentity:
-    """Temporary shim during the refactor transition.
-
-    Before Task 15 drops CharacterIdentity, the Persona model still has
-    non-nullable FK to CharacterIdentity. Create one if absent.
-    """
-    identity, _ = CharacterIdentity.objects.get_or_create(character=character)
-    return identity

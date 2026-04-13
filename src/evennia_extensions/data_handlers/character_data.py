@@ -85,7 +85,10 @@ class CharacterItemDataHandler(BaseItemDataHandler):
             from world.scenes.models import Persona
 
             self._personas_cache = list(
-                Persona.objects.filter(character=self.obj).order_by("persona_type", "name"),
+                Persona.objects.filter(character_sheet__character=self.obj).order_by(
+                    "persona_type",
+                    "name",
+                ),
             )
         return self._personas_cache
 

@@ -47,7 +47,9 @@ def get_account_personas(request: Request) -> list[int]:
     if not roster_entries:
         return []
     character_ids = [re.character_id for re in roster_entries]
-    return list(Persona.objects.filter(character_id__in=character_ids).values_list("id", flat=True))
+    return list(
+        Persona.objects.filter(character_sheet_id__in=character_ids).values_list("id", flat=True)
+    )
 
 
 def _is_receiver_or_writer(

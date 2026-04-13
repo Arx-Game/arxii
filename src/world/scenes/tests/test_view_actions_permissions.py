@@ -27,8 +27,7 @@ def _create_owned_persona(account, **persona_kwargs):
     RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
     if persona_kwargs:
         return PersonaFactory(
-            character_identity=identity,
-            character=identity.character,
+            character_sheet=identity.character.sheet_data,
             **persona_kwargs,
         )
     return identity.active_persona
@@ -274,7 +273,6 @@ class PersonaViewPermissionsTestCase(APITestCase):
         url = reverse("persona-list")
         data = {
             "character_sheet": identity.character.sheet_data.pk,
-            "character": identity.character.id,
             "name": "New Persona",
             "description": "Test persona",
         }
@@ -301,7 +299,6 @@ class PersonaViewPermissionsTestCase(APITestCase):
 
         data = {
             "character_sheet": identity.character.sheet_data.pk,
-            "character": identity.character.id,
             "name": "New Persona",
             "description": "Test persona",
         }
@@ -320,7 +317,6 @@ class PersonaViewPermissionsTestCase(APITestCase):
         identity = CharacterIdentityFactory()
         data = {
             "character_sheet": identity.character.sheet_data.pk,
-            "character": identity.character.id,
             "name": "Staff Persona",
             "description": "Staff test persona",
         }

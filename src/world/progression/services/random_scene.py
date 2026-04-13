@@ -48,7 +48,7 @@ def _get_active_persona_ids() -> list[int]:
     ).values_list("character_id", flat=True)
     return list(
         Persona.objects.filter(
-            character_id__in=active_character_ids,
+            character_sheet_id__in=active_character_ids,
             persona_type=PersonaType.PRIMARY,
         ).values_list("pk", flat=True)
     )
@@ -60,7 +60,7 @@ def _get_own_persona_ids(account: AccountDB) -> list[int]:
     own_character_ids = list(entries.values_list("character_id", flat=True))
     return list(
         Persona.objects.filter(
-            character_id__in=own_character_ids,
+            character_sheet_id__in=own_character_ids,
             persona_type=PersonaType.PRIMARY,
         ).values_list("pk", flat=True)
     )
@@ -91,7 +91,10 @@ def _get_relationship_persona_ids(own_persona_ids: list[int]) -> list[int]:
     for the query, then back to Persona PKs.
     """
     own_character_ids = list(
-        Persona.objects.filter(pk__in=own_persona_ids).values_list("character_id", flat=True)
+        Persona.objects.filter(pk__in=own_persona_ids).values_list(
+            "character_sheet_id",
+            flat=True,
+        )
     )
     # source and target are CharacterSheet FKs where PK = character_id
     source_target_char_ids = CharacterRelationship.objects.filter(
@@ -104,7 +107,7 @@ def _get_relationship_persona_ids(own_persona_ids: list[int]) -> list[int]:
     # Map back to PRIMARY Persona PKs
     return list(
         Persona.objects.filter(
-            character_id__in=related_char_ids,
+            character_sheet_id__in=related_char_ids,
             persona_type=PersonaType.PRIMARY,
         ).values_list("pk", flat=True)
     )
@@ -252,10 +255,16 @@ def validate_random_scene_claim(
     target_char_id = target_persona.character_sheet.character_id
 
     own_persona_ids = list(
-        Persona.objects.filter(character_id__in=own_char_ids).values_list("pk", flat=True)
+        Persona.objects.filter(character_sheet_id__in=own_char_ids).values_list(
+            "pk",
+            flat=True,
+        )
     )
     target_persona_ids = list(
-        Persona.objects.filter(character_id=target_char_id).values_list("pk", flat=True)
+        Persona.objects.filter(character_sheet_id=target_char_id).values_list(
+            "pk",
+            flat=True,
+        )
     )
 
     # Find scenes where own personas have interactions this week

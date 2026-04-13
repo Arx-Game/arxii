@@ -92,21 +92,15 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
         from world.scenes.models import Persona
 
         existing_primary = Persona.objects.filter(
-            character=self.character,
+            character_sheet=self,
             persona_type=PersonaType.PRIMARY,
         ).first()
 
         if existing_primary is not None:
-            if existing_primary.character_sheet_id != self.pk:
-                existing_primary.character_sheet = self
-                existing_primary.save(update_fields=["character_sheet"])
             return
 
-        identity, _ = CharacterIdentity.objects.get_or_create(character=self.character)
         Persona.objects.create(
             character_sheet=self,
-            character_identity=identity,
-            character=self.character,
             name=f"Primary of {self.character.db_key}",
             persona_type=PersonaType.PRIMARY,
         )
@@ -149,8 +143,8 @@ class CharacterIdentityFactory(factory_django.DjangoModelFactory):
         from world.scenes.models import Persona
 
         character = kwargs.pop("character", CharacterFactory())
-        # Use get_or_create in case CharacterSheetFactory's post_generation
-        # already created a CharacterIdentity for this character.
+        # Use get_or_create in case something already created a
+        # CharacterIdentity for this character.
         identity, _ = model_class.objects.get_or_create(
             character=character,
             defaults={"active_persona": None},
@@ -160,28 +154,15 @@ class CharacterIdentityFactory(factory_django.DjangoModelFactory):
         # present for every character that has an identity.
         sheet, _ = CharacterSheet.objects.get_or_create(character=character)
         persona = Persona.objects.filter(
-            character=character,
+            character_sheet=sheet,
             persona_type=PersonaType.PRIMARY,
         ).first()
         if persona is None:
             persona = Persona.objects.create(
-                character_identity=identity,
-                character=character,
                 character_sheet=sheet,
                 name=character.db_key,
                 persona_type=PersonaType.PRIMARY,
             )
-        else:
-            # Make sure it points at this identity and sheet
-            updates: list[str] = []
-            if persona.character_identity_id != identity.pk:
-                persona.character_identity = identity
-                updates.append("character_identity")
-            if persona.character_sheet_id != sheet.pk:
-                persona.character_sheet = sheet
-                updates.append("character_sheet")
-            if updates:
-                persona.save(update_fields=updates)
         identity.active_persona = persona
         identity.save(update_fields=["active_persona_id"])
         return identity

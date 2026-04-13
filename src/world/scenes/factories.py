@@ -3,8 +3,7 @@ import factory
 import factory.django as factory_django
 
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
-from world.character_sheets.models import CharacterSheet
+from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.constants import (
@@ -26,30 +25,6 @@ from world.scenes.models import (
     SceneSummaryRevision,
 )
 from world.scenes.place_models import InteractionReceiver, Place, PlacePresence
-
-
-def _ensure_sheet_for_character(character: object) -> CharacterSheet | None:
-    """Get or create a CharacterSheet for the given Character object.
-
-    Also backfills ``character_sheet`` on an existing PRIMARY persona for this
-    character if one exists but hasn't been linked yet — preserves the
-    "every sheet has a PRIMARY persona linked via FK" invariant even when the
-    primary persona was created before the sheet (e.g. via
-    CharacterIdentityFactory SubFactory in PersonaFactory).
-    """
-    # If the character isn't saved (e.g. factory .build() strategy), we can't
-    # link it to a sheet.
-    if character.pk is None:  # type: ignore[attr-defined]
-        return None
-    sheet, _ = CharacterSheet.objects.get_or_create(character=character)
-    primary = Persona.objects.filter(
-        character=character,
-        persona_type=PersonaType.PRIMARY,
-    ).first()
-    if primary is not None and primary.character_sheet_id != sheet.pk:
-        primary.character_sheet = sheet
-        primary.save(update_fields=["character_sheet"])
-    return sheet
 
 
 class SceneFactory(factory_django.DjangoModelFactory):
@@ -99,15 +74,13 @@ class PersonaFactory(factory_django.DjangoModelFactory):
     """Factory for creating non-primary Persona instances.
 
     Defaults to ESTABLISHED type. For primary personas, use
-    CharacterIdentityFactory and access identity.active_persona.
+    CharacterSheetFactory and access sheet.primary_persona.
     """
 
     class Meta:
         model = Persona
 
-    character_identity = factory.SubFactory(CharacterIdentityFactory)
-    character = factory.LazyAttribute(lambda o: o.character_identity.character)
-    character_sheet = factory.LazyAttribute(lambda o: _ensure_sheet_for_character(o.character))
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
     name = factory.Sequence(lambda n: f"Persona {n}")
     persona_type = PersonaType.ESTABLISHED
     description = factory.Faker("text", max_nb_chars=100)
@@ -171,11 +144,7 @@ class SceneSummaryRevisionFactory(factory_django.DjangoModelFactory):
 
     account = factory.SubFactory(AccountFactory)
     scene = factory.SubFactory(SceneFactory, privacy_mode=ScenePrivacyMode.EPHEMERAL)
-    persona = factory.LazyAttribute(
-        lambda _obj: PersonaFactory(
-            character_identity=CharacterIdentityFactory(),
-        ),
-    )
+    persona = factory.SubFactory(PersonaFactory)
     content = factory.Faker("text", max_nb_chars=300)
     action = SummaryAction.SUBMIT
 

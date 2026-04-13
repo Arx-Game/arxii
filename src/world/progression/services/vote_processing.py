@@ -50,7 +50,7 @@ def process_memorable_poses(game_week: GameWeek) -> None:
             vote_count__gt=0,
             scene__isnull=False,
         )
-        .select_related("persona__character__roster_entry")
+        .select_related("persona__character_sheet__character__roster_entry")
         .order_by("scene_id", "-vote_count")
     )
 

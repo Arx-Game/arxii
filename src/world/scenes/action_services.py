@@ -99,7 +99,7 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, technique is o
         _validate_technique_enhancement(
             technique=technique,
             action_key=action_key,
-            character_id=initiator_persona.character_id,
+            character_id=initiator_persona.character_sheet_id,
         )
 
     return SceneActionRequest.objects.create(
@@ -153,8 +153,8 @@ def respond_to_action_request(
                 msg = f"Cannot resolve action '{action_request.action_key}': no ActionTemplate set."
                 raise ValueError(msg)
 
-            character = action_request.initiator_persona.character
-            target_character = action_request.target_persona.character
+            character = action_request.initiator_persona.character_sheet.character
+            target_character = action_request.target_persona.character_sheet.character
             context = ResolutionContext(character=character, target=target_character)
 
             if action_request.technique is not None:
