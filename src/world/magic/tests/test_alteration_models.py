@@ -5,7 +5,14 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.magic.constants import AlterationTier, PendingAlterationStatus
-from world.magic.factories import AffinityFactory, ResonanceFactory, TechniqueFactory
+from world.magic.factories import (
+    AffinityFactory,
+    MagicalAlterationEventFactory,
+    MagicalAlterationTemplateFactory,
+    PendingAlterationFactory,
+    ResonanceFactory,
+    TechniqueFactory,
+)
 from world.magic.models import MagicalAlterationEvent, MagicalAlterationTemplate, PendingAlteration
 
 
@@ -19,7 +26,7 @@ class MagicalAlterationTemplateTests(TestCase):
 
     def test_create_minimal(self) -> None:
         """Can create a template with required fields only."""
-        template = MagicalAlterationTemplate.objects.create(
+        template = MagicalAlterationTemplateFactory(
             condition_template=self.condition_template,
             tier=AlterationTier.COSMETIC_TOUCH,
             origin_affinity=self.affinity,
@@ -29,7 +36,7 @@ class MagicalAlterationTemplateTests(TestCase):
 
     def test_create_with_all_fields(self) -> None:
         """Can create a template with all optional fields populated."""
-        template = MagicalAlterationTemplate.objects.create(
+        template = MagicalAlterationTemplateFactory(
             condition_template=self.condition_template,
             tier=AlterationTier.MARKED,
             origin_affinity=self.affinity,
@@ -120,7 +127,7 @@ class PendingAlterationTests(TestCase):
 
     def test_create_with_open_status_default(self) -> None:
         """PendingAlteration defaults to OPEN status."""
-        pending = PendingAlteration.objects.create(
+        pending = PendingAlterationFactory(
             character=self.character,
             tier=AlterationTier.COSMETIC_TOUCH,
             origin_affinity=self.affinity,
@@ -131,7 +138,7 @@ class PendingAlterationTests(TestCase):
     def test_create_with_all_provenance_fields(self) -> None:
         """Can create with all triggering context fields populated."""
         technique = TechniqueFactory()
-        pending = PendingAlteration.objects.create(
+        pending = PendingAlterationFactory(
             character=self.character,
             tier=AlterationTier.TOUCHED,
             origin_affinity=self.affinity,
@@ -204,7 +211,7 @@ class MagicalAlterationEventTests(TestCase):
     def test_create_with_provenance_fields(self) -> None:
         """Can create an event with triggering context."""
         technique = TechniqueFactory()
-        event = MagicalAlterationEvent.objects.create(
+        event = MagicalAlterationEventFactory(
             character=self.character,
             alteration_template=self.alteration_template,
             triggering_technique=technique,
