@@ -15,11 +15,11 @@ from django.db import transaction
 from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
 from evennia.objects.models import ObjectDB
-from evennia.utils import create
 
 from evennia_extensions.models import PlayerData
 from world.character_creation.constants import ApplicationStatus, CommentType
 from world.character_creation.models import CharacterDraft
+from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
 from world.mechanics.constants import RESONANCE_CATEGORY_NAME
 from world.roster.models import Roster, RosterEntry, RosterTenure
@@ -124,19 +124,20 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
     # Resolve starting room
     starting_room = draft.get_starting_room()
 
-    # Create the Character object using Evennia's create_object
-    character = create.create_object(
-        typeclass="typeclasses.characters.Character",
-        key=full_name,
-        location=starting_room,
-        home=starting_room,  # Set home to starting room as well
-        nohome=starting_room is None,  # Allow no home if no starting room
+    # Create Character + CharacterSheet + PRIMARY Persona atomically.
+    # The service ensures every sheet has a PRIMARY persona, preserving the
+    # invariant used everywhere else (tests, factories, etc.).
+    from world.character_sheets.models import Heritage  # noqa: PLC0415
+
+    character, sheet, _primary_persona = create_character_with_sheet(
+        character_key=full_name,
+        primary_persona_name=full_name,
     )
 
-    # Create or update CharacterSheet with canonical data
-    from world.character_sheets.models import CharacterSheet, Heritage  # noqa: PLC0415
-
-    sheet, _ = CharacterSheet.objects.get_or_create(character=character)
+    # Apply Evennia room/home wiring (not handled by the service).
+    if starting_room is not None:
+        character.location = starting_room
+        character.home = starting_room
 
     # Set demographic data from draft's FK references
     if draft.selected_gender:
