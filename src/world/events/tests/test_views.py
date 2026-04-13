@@ -3,7 +3,7 @@ from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.events.constants import EventStatus, InvitationTargetType
 from world.events.factories import EventFactory, EventHostFactory, EventInvitationFactory
 from world.events.models import EventInvitation
@@ -34,7 +34,7 @@ class EventViewSetTestCase(APITestCase):
     def test_retrieve_private_event_returns_404_for_non_invitee(self) -> None:
         """Non-host, non-invitee cannot retrieve a private event by ID."""
         # Give the requesting user a persona
-        identity = CharacterIdentityFactory()
+        identity = CharacterSheetFactory()
         RosterTenureFactory(
             roster_entry__character_sheet__character=identity.character,
             player_data__account=self.account,
@@ -151,7 +151,7 @@ class EventViewSetTestCase(APITestCase):
     def test_list_hides_private_events_from_non_invitee(self) -> None:
         """User with a persona but not invited cannot see private events."""
         # Give the requesting user a persona via the standard identity chain
-        identity = CharacterIdentityFactory()
+        identity = CharacterSheetFactory()
         RosterTenureFactory(
             roster_entry__character_sheet__character=identity.character,
             player_data__account=self.account,
@@ -167,8 +167,8 @@ class EventViewSetTestCase(APITestCase):
 
     def test_list_shows_private_events_to_host(self) -> None:
         private_event = EventFactory(is_public=False)
-        identity = CharacterIdentityFactory()
-        primary_persona = identity.active_persona
+        identity = CharacterSheetFactory()
+        primary_persona = identity.primary_persona
         host = EventHostFactory(event=private_event, persona=primary_persona)
         RosterTenureFactory(
             roster_entry__character_sheet__character=host.persona.character_sheet.character,
@@ -235,8 +235,8 @@ class EventInvitationViewSetTestCase(APITestCase):
     def setUp(self) -> None:
         self.account = AccountFactory()
         self.client.force_authenticate(user=self.account)
-        identity = CharacterIdentityFactory()
-        self.host_persona = identity.active_persona
+        identity = CharacterSheetFactory()
+        self.host_persona = identity.primary_persona
         self.event = EventFactory(status=EventStatus.DRAFT)
         EventHostFactory(event=self.event, persona=self.host_persona)
         RosterTenureFactory(

@@ -213,7 +213,7 @@ class LegendRequirementTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from world.character_sheets.factories import CharacterIdentityFactory
+        from world.character_sheets.factories import CharacterSheetFactory
         from world.classes.factories import CharacterClassFactory
 
         char_class = CharacterClassFactory()
@@ -221,7 +221,7 @@ class LegendRequirementTests(TestCase):
             character_class=char_class,
             target_level=5,
         )
-        cls.identity = CharacterIdentityFactory()
+        cls.identity = CharacterSheetFactory()
         cls.character = cls.identity.character
         cls.requirement = LegendRequirement.objects.create(
             class_level_unlock=cls.class_unlock,
@@ -251,7 +251,7 @@ class LegendRequirementTests(TestCase):
         from world.societies.factories import LegendEntryFactory
         from world.societies.models import refresh_legend_views
 
-        LegendEntryFactory(persona=self.identity.active_persona, base_value=60)
+        LegendEntryFactory(persona=self.identity.primary_persona, base_value=60)
         refresh_legend_views()
         met, msg = self.requirement.is_met_by_character(self.character)
         assert met
@@ -262,7 +262,7 @@ class LegendRequirementTests(TestCase):
         from world.societies.factories import LegendEntryFactory
         from world.societies.models import refresh_legend_views
 
-        LegendEntryFactory(persona=self.identity.active_persona, base_value=10)
+        LegendEntryFactory(persona=self.identity.primary_persona, base_value=10)
         refresh_legend_views()
         met, msg = self.requirement.is_met_by_character(self.character)
         assert not met

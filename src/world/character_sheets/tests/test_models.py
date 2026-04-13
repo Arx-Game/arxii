@@ -10,7 +10,6 @@ import pytest
 
 from world.character_sheets.factories import (
     CharacterFactory,
-    CharacterIdentityFactory,
     CharacteristicFactory,
     CharacteristicValueFactory,
     CharacterSheetFactory,
@@ -238,11 +237,11 @@ class CharacterSheetPrimaryPersonaTest(TestCase):
         from world.scenes.models import Persona
 
         # Build a character with an identity + sheet pointing at the same character
-        identity = CharacterIdentityFactory()
+        identity = CharacterSheetFactory()
         character = identity.character
-        # CharacterIdentityFactory ensures a sheet exists and links the primary.
+        # CharacterSheetFactory ensures a sheet exists and links the primary.
         sheet = character.sheet_data
-        primary = identity.active_persona
+        primary = identity.primary_persona
         # Add an ESTABLISHED persona linked to the same sheet
         Persona.objects.create(
             character_sheet=sheet,
@@ -266,13 +265,12 @@ class CharacterSheetDisplayDelegatesTest(TestCase):
 
     def test_display_ic_delegates_to_primary_persona(self) -> None:
         from world.character_sheets.factories import (
-            CharacterIdentityFactory,
             CharacterSheetFactory,
         )
 
         sheet = CharacterSheetFactory()
-        identity = CharacterIdentityFactory(character=sheet.character)
-        primary = identity.active_persona
+        identity = CharacterSheetFactory(character=sheet.character)
+        primary = identity.primary_persona
         primary.character_sheet = sheet
         primary.name = "Bob"
         primary.save()
@@ -280,13 +278,12 @@ class CharacterSheetDisplayDelegatesTest(TestCase):
 
     def test_display_with_history_delegates(self) -> None:
         from world.character_sheets.factories import (
-            CharacterIdentityFactory,
             CharacterSheetFactory,
         )
 
         sheet = CharacterSheetFactory()
-        identity = CharacterIdentityFactory(character=sheet.character)
-        primary = identity.active_persona
+        identity = CharacterSheetFactory(character=sheet.character)
+        primary = identity.primary_persona
         primary.character_sheet = sheet
         primary.name = "Alice"
         primary.save()
@@ -295,13 +292,12 @@ class CharacterSheetDisplayDelegatesTest(TestCase):
 
     def test_display_to_staff_delegates(self) -> None:
         from world.character_sheets.factories import (
-            CharacterIdentityFactory,
             CharacterSheetFactory,
         )
 
         sheet = CharacterSheetFactory()
-        identity = CharacterIdentityFactory(character=sheet.character)
-        primary = identity.active_persona
+        identity = CharacterSheetFactory(character=sheet.character)
+        primary = identity.primary_persona
         primary.character_sheet = sheet
         primary.name = "Charlie"
         primary.save()

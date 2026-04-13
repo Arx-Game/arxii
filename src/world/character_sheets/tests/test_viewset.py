@@ -1440,9 +1440,7 @@ class TestPersonasSection(TestCase):
         )
 
         # Persona with thumbnail
-        from world.character_sheets.factories import CharacterIdentityFactory
-
-        cls.char_identity = CharacterIdentityFactory(character=cls.character)
+        cls.char_identity = CharacterSheetFactory(character=cls.character)
         cls.media = PlayerMediaFactory(
             player_data=cls.player,
             cloudinary_url="https://res.cloudinary.com/test/image/upload/iron_voice.jpg",
@@ -1475,7 +1473,7 @@ class TestPersonasSection(TestCase):
     def test_personas_returns_correct_count(self) -> None:
         """Personas section returns all character personas."""
         personas = self._get_personas()
-        # 2 explicit personas + 1 primary persona auto-created by CharacterIdentityFactory
+        # 2 explicit personas + 1 primary persona auto-created by CharacterSheetFactory
         assert len(personas) == 3
 
     def test_persona_entry_keys(self) -> None:
@@ -1812,9 +1810,7 @@ class TestCharacterSheetQueryCount(TestCase):
             player_data=cls.player,
             cloudinary_url="https://res.cloudinary.com/test/guise.jpg",
         )
-        from world.character_sheets.factories import CharacterIdentityFactory
-
-        identity = CharacterIdentityFactory(character=cls.character)
+        identity = CharacterSheetFactory(character=cls.character)
         PersonaFactory(
             character_sheet=identity.character.sheet_data,
             name="FullPersona",
@@ -1863,7 +1859,7 @@ class TestCharacterSheetQueryCount(TestCase):
         assert data["identity"]["name"] == "FullChar"
         assert data["story"]["background"] == "Full background."
         assert len(data["goals"]) == 1
-        # 1 explicit persona + 1 primary persona from CharacterIdentityFactory
+        # 1 explicit persona + 1 primary persona from CharacterSheetFactory
         assert len(data["personas"]) == 2
         assert data["theming"]["aura"] is not None
         assert data["profile_picture"] is not None
@@ -2000,9 +1996,7 @@ class TestPrefetchCompleteness(TestCase):
             cloudinary_url="https://res.cloudinary.com/test/pfguise.jpg",
         )
 
-        from world.character_sheets.factories import CharacterIdentityFactory
-
-        pf_identity = CharacterIdentityFactory(character=cls.character)
+        pf_identity = CharacterSheetFactory(character=cls.character)
         PersonaFactory(
             character_sheet=pf_identity.character.sheet_data,
             name="PFPersona",

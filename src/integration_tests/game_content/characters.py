@@ -44,7 +44,7 @@ class CharacterContent:
         """
         from evennia_extensions.factories import CharacterFactory  # noqa: PLC0415
         from world.character_sheets.factories import (  # noqa: PLC0415
-            CharacterIdentityFactory,
+            CharacterSheetFactory,
         )
         from world.magic.factories import CharacterAnimaFactory  # noqa: PLC0415
         from world.traits.factories import StatTraitFactory  # noqa: PLC0415
@@ -55,10 +55,10 @@ class CharacterContent:
             kwargs["db_key"] = name
 
         character = CharacterFactory(**kwargs)
-        identity = CharacterIdentityFactory(character=character)
-        persona = identity.active_persona
+        identity = CharacterSheetFactory(character=character)
+        persona = identity.primary_persona
 
-        # CharacterIdentityFactory already ensures the sheet exists.
+        # CharacterSheetFactory already ensures the sheet exists.
         CharacterAnimaFactory(character=character, current=20, maximum=30)
 
         for stat_name in _SOCIAL_STAT_NAMES:
@@ -89,7 +89,7 @@ class CharacterContent:
         """
         from evennia_extensions.factories import CharacterFactory  # noqa: PLC0415
         from world.character_sheets.factories import (  # noqa: PLC0415
-            CharacterIdentityFactory,
+            CharacterSheetFactory,
         )
         from world.magic.factories import CharacterAnimaFactory  # noqa: PLC0415
         from world.traits.factories import StatTraitFactory  # noqa: PLC0415
@@ -100,10 +100,10 @@ class CharacterContent:
             kwargs["db_key"] = name
 
         character = CharacterFactory(**kwargs)
-        identity = CharacterIdentityFactory(character=character)
-        persona = identity.active_persona
+        identity = CharacterSheetFactory(character=character)
+        persona = identity.primary_persona
 
-        # CharacterIdentityFactory already ensures the sheet exists.
+        # CharacterSheetFactory already ensures the sheet exists.
         CharacterAnimaFactory(character=character, current=20, maximum=30)
 
         for stat_name in _CHALLENGE_STAT_NAMES:

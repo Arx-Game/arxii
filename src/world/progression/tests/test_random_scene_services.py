@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.game_clock.week_services import get_current_game_week
 from world.progression.models import RandomSceneCompletion, RandomSceneTarget
 from world.progression.services.random_scene import (
@@ -35,8 +35,8 @@ def _make_active_character(account=None):
     tenure = RosterTenureFactory(**kwargs)
     entry = tenure.roster_entry
     # Create a CharacterIdentity (which auto-creates a PRIMARY persona)
-    identity = CharacterIdentityFactory(character=entry.character_sheet.character)
-    persona = identity.active_persona
+    identity = CharacterSheetFactory(character=entry.character_sheet.character)
+    persona = identity.primary_persona
     return persona, entry, tenure
 
 

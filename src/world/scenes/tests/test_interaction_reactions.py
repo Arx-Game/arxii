@@ -3,7 +3,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import InteractionFactory, InteractionReactionFactory
 from world.scenes.models import InteractionReaction
@@ -20,8 +20,8 @@ class InteractionReactionToggleTestCase(APITestCase):
             player_data=cls.player_data,
             roster_entry=cls.roster_entry,
         )
-        cls.identity = CharacterIdentityFactory(character=cls.character)
-        cls.persona = cls.identity.active_persona
+        cls.identity = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.identity.primary_persona
 
         cls.other_account = AccountFactory()
         cls.other_character = CharacterFactory()
@@ -31,8 +31,8 @@ class InteractionReactionToggleTestCase(APITestCase):
             player_data=cls.other_player_data,
             roster_entry=cls.other_roster_entry,
         )
-        cls.other_identity = CharacterIdentityFactory(character=cls.other_character)
-        cls.other_persona = cls.other_identity.active_persona
+        cls.other_identity = CharacterSheetFactory(character=cls.other_character)
+        cls.other_persona = cls.other_identity.primary_persona
 
     def setUp(self) -> None:
         self.client.force_authenticate(user=self.account)

@@ -9,7 +9,7 @@ from rest_framework.test import APITestCase
 from actions.constants import ResolutionPhase
 from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.factories import (
@@ -55,8 +55,8 @@ class SceneActionRequestViewSetTestCase(APITestCase):
             player_data=cls.player_data,
             roster_entry=cls.roster_entry,
         )
-        cls.identity = CharacterIdentityFactory(character=cls.character)
-        cls.persona = cls.identity.active_persona
+        cls.identity = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.identity.primary_persona
 
         cls.target_account = AccountFactory()
         cls.target_character = CharacterFactory()
@@ -68,8 +68,8 @@ class SceneActionRequestViewSetTestCase(APITestCase):
             player_data=cls.target_player_data,
             roster_entry=cls.target_roster_entry,
         )
-        cls.target_identity = CharacterIdentityFactory(character=cls.target_character)
-        cls.target_persona = cls.target_identity.active_persona
+        cls.target_identity = CharacterSheetFactory(character=cls.target_character)
+        cls.target_persona = cls.target_identity.primary_persona
 
         cls.scene = SceneFactory()
 
@@ -142,8 +142,8 @@ class PlaceViewSetTestCase(APITestCase):
             player_data=cls.player_data,
             roster_entry=cls.roster_entry,
         )
-        cls.identity = CharacterIdentityFactory(character=cls.character)
-        cls.persona = cls.identity.active_persona
+        cls.identity = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.identity.primary_persona
         cls.room = ObjectDBFactory(
             db_key="Tavern",
             db_typeclass_path="typeclasses.rooms.Room",

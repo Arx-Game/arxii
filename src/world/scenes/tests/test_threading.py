@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import (
     InteractionFactory,
@@ -86,13 +86,13 @@ class TestPushPayloadNewFields(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         self.char_a = CharacterFactory(db_key="Alice", location=self.room)
-        self.identity_a = CharacterIdentityFactory(character=self.char_a)
+        self.identity_a = CharacterSheetFactory(character=self.char_a)
 
     def test_payload_includes_new_fields(self) -> None:
         place = PlaceFactory(name="Corner Booth", room=self.room)
         target_persona = PersonaFactory()
         interaction = InteractionFactory(
-            persona=self.identity_a.active_persona,
+            persona=self.identity_a.primary_persona,
             content="waves.",
             mode=InteractionMode.POSE,
             place=place,
@@ -120,7 +120,7 @@ class TestPushPayloadNewFields(TestCase):
 
     def test_payload_defaults_for_public_pose(self) -> None:
         interaction = InteractionFactory(
-            persona=self.identity_a.active_persona,
+            persona=self.identity_a.primary_persona,
             content="waves.",
             mode=InteractionMode.POSE,
         )
@@ -155,8 +155,8 @@ class TestPoseActionWithTargets(TestCase):
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
         char_b = CharacterFactory(db_key="Bob", location=room)
-        CharacterIdentityFactory(character=char_a)
-        identity_b = CharacterIdentityFactory(character=char_b)
+        CharacterSheetFactory(character=char_a)
+        identity_b = CharacterSheetFactory(character=char_b)
 
         action = PoseAction()
         result = action.run(actor=char_a, text="waves at Bob.", targets=[char_b])
@@ -164,7 +164,7 @@ class TestPoseActionWithTargets(TestCase):
 
         # Check that target persona was recorded
         target_entries = InteractionTargetPersona.objects.filter(
-            persona=identity_b.active_persona,
+            persona=identity_b.primary_persona,
         )
         assert target_entries.exists()
 
@@ -177,7 +177,7 @@ class TestPoseActionWithTargets(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         char_a = CharacterFactory(db_key="Alice", location=room)
-        CharacterIdentityFactory(character=char_a)
+        CharacterSheetFactory(character=char_a)
         place = PlaceFactory(name="The Bar", room=room)
 
         action = PoseAction()
@@ -206,9 +206,9 @@ class TestTabletalkCommand(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         char = CharacterFactory(db_key="Alice", location=room)
-        identity = CharacterIdentityFactory(character=char)
+        identity = CharacterSheetFactory(character=char)
         place = PlaceFactory(name="Corner Booth", room=room)
-        PlacePresenceFactory(place=place, persona=identity.active_persona)
+        PlacePresenceFactory(place=place, persona=identity.primary_persona)
 
         cmd = CmdTabletalk()
         cmd.caller = char
@@ -234,7 +234,7 @@ class TestTabletalkCommand(TestCase):
             db_typeclass_path="typeclasses.rooms.Room",
         )
         char = CharacterFactory(db_key="Alice", location=room)
-        CharacterIdentityFactory(character=char)
+        CharacterSheetFactory(character=char)
 
         messages: list[object] = []
         char.msg = lambda *args, **kwargs: messages.append((args, kwargs))

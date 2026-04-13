@@ -6,7 +6,7 @@ from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import (
@@ -21,7 +21,7 @@ from world.scenes.models import Scene
 
 def _create_owned_persona(account, **persona_kwargs):
     """Create a Persona whose character is owned by the given account via RosterTenure."""
-    identity = CharacterIdentityFactory()
+    identity = CharacterSheetFactory()
     player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(account=account)
     roster_entry = RosterEntryFactory(character_sheet__character=identity.character)
     RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
@@ -30,7 +30,7 @@ def _create_owned_persona(account, **persona_kwargs):
             character_sheet=identity.character.sheet_data,
             **persona_kwargs,
         )
-    return identity.active_persona
+    return identity.primary_persona
 
 
 class SceneViewActionsTestCase(APITestCase):
@@ -262,7 +262,7 @@ class PersonaViewPermissionsTestCase(APITestCase):
     def test_persona_create_participant_permission(self):
         """Test character owner can create personas"""
         # Create identity owned by participant
-        identity = CharacterIdentityFactory()
+        identity = CharacterSheetFactory()
         player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(
             account=self.participant_account,
         )
@@ -290,7 +290,7 @@ class PersonaViewPermissionsTestCase(APITestCase):
         self.client.force_authenticate(user=self.non_participant_account)
         url = reverse("persona-list")
         # Use a character owned by participant, not non_participant
-        identity = CharacterIdentityFactory()
+        identity = CharacterSheetFactory()
         player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(
             account=self.participant_account,
         )
@@ -314,7 +314,7 @@ class PersonaViewPermissionsTestCase(APITestCase):
         """Test staff can create personas for any character"""
         self.client.force_authenticate(user=self.staff_account)
         url = reverse("persona-list")
-        identity = CharacterIdentityFactory()
+        identity = CharacterSheetFactory()
         data = {
             "character_sheet": identity.character.sheet_data.pk,
             "name": "Staff Persona",

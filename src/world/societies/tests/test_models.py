@@ -9,7 +9,7 @@ from django.test import TestCase
 import pytest
 
 from world.character_creation.factories import RealmFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import (
@@ -260,8 +260,8 @@ class OrganizationMembershipValidationTests(TestCase):
 
     def test_primary_persona_can_join(self):
         """Test that primary persona can join organizations."""
-        identity = CharacterIdentityFactory()
-        persona = identity.active_persona
+        identity = CharacterSheetFactory()
+        persona = identity.primary_persona
         membership = OrganizationMembershipFactory(
             organization=self.organization,
             persona=persona,
@@ -325,8 +325,8 @@ class SocietyReputationValidationTests(TestCase):
 
     def test_primary_persona_can_have_reputation(self):
         """Test that primary persona can have society reputation."""
-        identity = CharacterIdentityFactory()
-        persona = identity.active_persona
+        identity = CharacterSheetFactory()
+        persona = identity.primary_persona
         reputation = SocietyReputationFactory(
             persona=persona,
             society=self.society,
@@ -367,8 +367,8 @@ class OrganizationReputationValidationTests(TestCase):
 
     def test_primary_persona_can_have_reputation(self):
         """Test that primary persona can have organization reputation."""
-        identity = CharacterIdentityFactory()
-        persona = identity.active_persona
+        identity = CharacterSheetFactory()
+        persona = identity.primary_persona
         reputation = OrganizationReputationFactory(
             persona=persona,
             organization=self.organization,
@@ -849,11 +849,9 @@ class CharacterLegendSummaryTests(TestCase):
 
     def test_multiple_personas_summed(self) -> None:
         """Multiple personas for same character are summed together."""
-        from world.character_sheets.factories import CharacterIdentityFactory
-
-        identity = CharacterIdentityFactory()
+        identity = CharacterSheetFactory()
         character = identity.character
-        persona1 = identity.active_persona
+        persona1 = identity.primary_persona
         persona2 = PersonaFactory(
             character_sheet=identity.character.sheet_data,
             name="Identity B",

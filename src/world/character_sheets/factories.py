@@ -5,8 +5,6 @@ Provides efficient test data creation using factory_boy to improve
 test performance and maintainability.
 """
 
-from dataclasses import dataclass
-
 import factory
 import factory.django as factory_django
 
@@ -101,7 +99,7 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
 
         Persona.objects.create(
             character_sheet=self,
-            name=f"Primary of {self.character.db_key}",
+            name=self.character.db_key,
             persona_type=PersonaType.PRIMARY,
         )
 
@@ -116,51 +114,6 @@ class ObjectDisplayDataFactory(factory_django.DjangoModelFactory):
     longname = factory.LazyAttribute(lambda obj: f"{obj.object.db_key} the Brave")
     colored_name = factory.LazyAttribute(lambda obj: f"|c{obj.object.db_key}|n")
     permanent_description = ""
-
-
-@dataclass
-class _CharacterIdentityStub:
-    """Lightweight stub returned by CharacterIdentityFactory.
-
-    CharacterIdentity has been removed from the schema, but many existing
-    tests use a helper that returns an object exposing `.character` and
-    `.active_persona`. This stub preserves that ergonomic without needing
-    a backing model.
-    """
-
-    character: object
-    active_persona: object
-
-
-class CharacterIdentityFactory:
-    """Ensures a CharacterSheet and PRIMARY Persona exist for a character.
-
-    Returns a lightweight stub with `.character` and `.active_persona`
-    attributes. CharacterIdentity itself was deleted; this helper remains
-    as a convenient test fixture for code paths that still want a single
-    call to produce "character + primary persona".
-    """
-
-    def __new__(cls, **kwargs: object) -> _CharacterIdentityStub:
-        from world.scenes.constants import PersonaType
-        from world.scenes.models import Persona
-
-        character = kwargs.pop("character", None)
-        if character is None:
-            character = CharacterFactory()
-
-        sheet, _ = CharacterSheet.objects.get_or_create(character=character)
-        persona = Persona.objects.filter(
-            character_sheet=sheet,
-            persona_type=PersonaType.PRIMARY,
-        ).first()
-        if persona is None:
-            persona = Persona.objects.create(
-                character_sheet=sheet,
-                name=character.db_key,
-                persona_type=PersonaType.PRIMARY,
-            )
-        return _CharacterIdentityStub(character=character, active_persona=persona)
 
 
 class CharacteristicFactory(factory_django.DjangoModelFactory):
@@ -211,24 +164,24 @@ class CompleteCharacterFactory:
         character_name: str = "TestChar",
         **kwargs: object,
     ) -> dict:
-        """Create a character with sheet, description, and identity."""
+        """Create a character with sheet and display data.
+
+        CharacterSheetFactory's post_generation hook ensures a PRIMARY
+        Persona exists for the sheet, so the returned sheet is fully wired.
+        """
         # Create the character
         character = CharacterFactory(db_key=character_name)
 
-        # Create sheet data
+        # Create sheet data (post_generation creates the PRIMARY persona)
         sheet = CharacterSheetFactory(character=character, **kwargs)
 
         # Create display data
         display_data = ObjectDisplayDataFactory(object=character)
 
-        # Create character identity (includes primary persona)
-        identity = CharacterIdentityFactory(character=character)
-
         return {
             "character": character,
             "sheet": sheet,
             "display_data": display_data,
-            "identity": identity,
         }
 
 

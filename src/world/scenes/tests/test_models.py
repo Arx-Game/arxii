@@ -2,7 +2,7 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -94,11 +94,11 @@ class PersonaModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        cls.identity = CharacterIdentityFactory()
+        cls.identity = CharacterSheetFactory()
 
     def test_persona_primary_type(self) -> None:
-        """Primary persona exists from CharacterIdentityFactory."""
-        persona = self.identity.active_persona
+        """Primary persona exists from CharacterSheetFactory."""
+        persona = self.identity.primary_persona
         assert persona.pk is not None
         assert persona.persona_type == PersonaType.PRIMARY
 
@@ -127,8 +127,8 @@ class PrimaryPersonaPerCharacterSheetConstraintTest(TestCase):
     def test_second_primary_persona_on_same_sheet_rejected(self) -> None:
         from world.scenes.models import Persona
 
-        # CharacterIdentityFactory creates a PRIMARY persona and ensures a sheet exists
-        identity = CharacterIdentityFactory()
+        # CharacterSheetFactory creates a PRIMARY persona and ensures a sheet exists
+        identity = CharacterSheetFactory()
         sheet = identity.character.sheet_data
 
         with self.assertRaises(IntegrityError):
@@ -343,8 +343,8 @@ class PersonaDisplayHelpersTest(TestCase):
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
         # CharacterSheetFactory doesn't create a CharacterIdentity/Persona; build one.
-        identity = CharacterIdentityFactory(character=cls.sheet.character)
-        cls.primary_persona = identity.active_persona
+        identity = CharacterSheetFactory(character=cls.sheet.character)
+        cls.primary_persona = identity.primary_persona
         cls.primary_persona.character_sheet = cls.sheet
         cls.primary_persona.name = "Bob"
         cls.primary_persona.save()
