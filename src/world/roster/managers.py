@@ -53,8 +53,10 @@ class RosterEntryQuerySet(models.QuerySet):
         """Return character PKs as a lazy subquery (not evaluated).
 
         Use for __in filters to let Django compose as a SQL subquery.
+        CharacterSheet shares its PK with ObjectDB, so character_sheet_id is
+        equivalent to character_id.
         """
-        return self.values_list("character_id", flat=True)
+        return self.values_list("character_sheet_id", flat=True)
 
     def exclude_characters_for_player(self, player_data: PlayerData) -> RosterEntryQuerySet:
         """Exclude characters player has access to or pending applications."""
@@ -63,7 +65,7 @@ class RosterEntryQuerySet(models.QuerySet):
         queryset = self
 
         if current_chars:
-            queryset = queryset.exclude(character__in=current_chars)
+            queryset = queryset.exclude(character_sheet__character__in=current_chars)
 
         # Characters with pending applications from this player
         pending_apps = player_data.applications.filter(status="pending").values_list(
@@ -71,7 +73,7 @@ class RosterEntryQuerySet(models.QuerySet):
             flat=True,
         )
         if pending_apps:
-            queryset = queryset.exclude(character_id__in=pending_apps)
+            queryset = queryset.exclude(character_sheet_id__in=pending_apps)
 
         return queryset
 

@@ -48,7 +48,7 @@ class RosterEntrySerializer(serializers.ModelSerializer):
     def get_fullname(self, obj):
         """Character's full long name."""
         try:
-            item_data = obj.character.item_data
+            item_data = obj.character_sheet.character.item_data
             return item_data.longname or ""
         except AttributeError:
             return ""
@@ -56,7 +56,7 @@ class RosterEntrySerializer(serializers.ModelSerializer):
     def get_quote(self, obj):
         """Character's quote."""
         try:
-            item_data = obj.character.item_data
+            item_data = obj.character_sheet.character.item_data
             return item_data.quote or ""
         except AttributeError:
             return ""
@@ -64,7 +64,7 @@ class RosterEntrySerializer(serializers.ModelSerializer):
     def get_description(self, obj):
         """Character's current description."""
         try:
-            item_data = obj.character.item_data
+            item_data = obj.character_sheet.character.item_data
             return item_data.get_display_description() or ""
         except AttributeError:
             return ""
@@ -73,7 +73,7 @@ class RosterEntrySerializer(serializers.ModelSerializer):
 class MyRosterEntrySerializer(serializers.ModelSerializer):
     """Serialize a summary of a roster entry for account menus."""
 
-    name = serializers.CharField(source="character.db_key")
+    name = serializers.CharField(source="character_sheet.character.db_key")
     profile_picture_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -95,8 +95,14 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
     Automatically filters based on player permissions and eligibility.
     """
 
-    character_name = serializers.CharField(source="character.db_key", read_only=True)
-    character_id = serializers.IntegerField(source="character.id", read_only=True)
+    character_name = serializers.CharField(
+        source="character_sheet.character.db_key",
+        read_only=True,
+    )
+    character_id = serializers.IntegerField(
+        source="character_sheet.character.id",
+        read_only=True,
+    )
     roster_name = serializers.CharField(source="roster.name", read_only=True)
     roster_description = serializers.CharField(
         source="roster.description",

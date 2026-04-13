@@ -89,8 +89,7 @@ class TestCharacterSheetViewSet(TestCase):
         # Original creator: player_number=1
         cls.original_player = PlayerDataFactory()
         cls.roster_entry = RosterEntryFactory()
-        # Every roster entry needs a CharacterSheet for the serializer
-        CharacterSheetFactory(character=cls.roster_entry.character)
+        # RosterEntryFactory auto-creates a CharacterSheet for the character.
         cls.original_tenure = RosterTenureFactory(
             player_data=cls.original_player,
             roster_entry=cls.roster_entry,
@@ -178,7 +177,7 @@ class TestCharacterSheetViewSet(TestCase):
     def test_can_edit_false_when_no_tenures_exist(self) -> None:
         """An entry with no tenures returns can_edit=false for any user."""
         empty_entry = RosterEntryFactory()
-        CharacterSheetFactory(character=empty_entry.character)
+        # RosterEntryFactory already creates the CharacterSheet.
         self.client.force_authenticate(user=self.original_player.account)
         url = f"/api/character-sheets/{empty_entry.character.pk}/"
         response = self.client.get(url)

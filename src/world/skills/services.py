@@ -445,7 +445,9 @@ def process_weekly_training() -> dict[int, set[int]]:
     # Pre-fetch the Teaching skill once for all mentor calculations.
     teaching_skill = _get_teaching_skill()
 
-    active_characters = RosterEntry.objects.active_rosters().exclude_frozen().values("character")
+    active_characters = (
+        RosterEntry.objects.active_rosters().exclude_frozen().values("character_sheet")
+    )
     allocations = list(
         TrainingAllocation.objects.filter(
             character__in=active_characters,
@@ -548,7 +550,9 @@ def apply_weekly_rust(trained_skills: dict[int, set[int]]) -> None:
         trained_skills: Dict from ``process_weekly_training()`` mapping
             character PKs to sets of Skill PKs that were active this week.
     """
-    active_characters = RosterEntry.objects.active_rosters().exclude_frozen().values("character")
+    active_characters = (
+        RosterEntry.objects.active_rosters().exclude_frozen().values("character_sheet")
+    )
     all_skill_values = list(
         CharacterSkillValue.objects.filter(
             character__in=active_characters,

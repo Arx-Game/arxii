@@ -53,6 +53,7 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
 
     class Meta:
         model = CharacterSheet
+        django_get_or_create = ("character",)
 
     character = factory.SubFactory(CharacterFactory)
     age = factory.Faker("random_int", min=18, max=50)

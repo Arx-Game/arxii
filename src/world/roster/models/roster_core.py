@@ -169,7 +169,7 @@ class RosterEntry(SharedMemoryModel):
         self.save()
 
     def __str__(self) -> str:
-        return f"{self.character.name} ({self.roster.name})"
+        return f"{self.character_sheet.character.name} ({self.roster.name})"
 
     class Meta:
         verbose_name = "Roster Entry"

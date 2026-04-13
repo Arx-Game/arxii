@@ -371,7 +371,9 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         """True if account has any characters with roster entries (for advanced CG options)."""
         from world.roster.models import RosterEntry  # noqa: PLC0415
 
-        return RosterEntry.objects.filter(character__db_account=obj.account).exists()
+        return RosterEntry.objects.filter(
+            character_sheet__character__db_account=obj.account,
+        ).exists()
 
     def get_stage_completion(self, obj: CharacterDraft) -> dict[int, bool]:
         """Get completion status for each stage."""

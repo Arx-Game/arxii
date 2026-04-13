@@ -87,7 +87,9 @@ class RosterTenure(RelatedCacheClearingMixin, SharedMemoryModel):
     def display_name(self) -> str:
         """Returns anonymous display like '2nd player of Ariel'"""
         character_name = (
-            self.roster_entry.character.name if self.roster_entry else "Unknown Character"
+            self.roster_entry.character_sheet.character.name
+            if self.roster_entry
+            else "Unknown Character"
         )
 
         if self.player_number is None:
@@ -117,7 +119,7 @@ class RosterTenure(RelatedCacheClearingMixin, SharedMemoryModel):
     @property
     def character(self) -> ObjectDB | None:
         """Convenience property to access character through roster_entry."""
-        return self.roster_entry.character if self.roster_entry else None
+        return self.roster_entry.character_sheet.character if self.roster_entry else None
 
     def __str__(self) -> str:
         status = "current" if self.is_current else f"ended {self.end_date}"

@@ -424,7 +424,7 @@ def _get_account_for_character(character_id: int) -> int | None:
     from world.roster.models import RosterEntry  # noqa: PLC0415
 
     try:
-        entry = RosterEntry.objects.get(character_id=character_id)
+        entry = RosterEntry.objects.get(character_sheet_id=character_id)
         tenure = entry.tenures.filter(end_date__isnull=True).first()
         if tenure is None:
             return None

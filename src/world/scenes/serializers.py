@@ -34,7 +34,7 @@ class PersonaSerializer(serializers.ModelSerializer):
         except AttributeError:
             entry = None
         if entry:
-            return {"id": entry.id, "name": entry.character.db_key}
+            return {"id": entry.id, "name": entry.character_sheet.character.db_key}
         return None
 
     def create(self, validated_data: dict) -> Persona:
@@ -72,7 +72,7 @@ class SceneParticipantSerializer(serializers.ModelSerializer):
         except AttributeError:
             entry = None
         if entry:
-            return {"id": entry.id, "name": entry.character.db_key}
+            return {"id": entry.id, "name": entry.character_sheet.character.db_key}
         return None
 
 

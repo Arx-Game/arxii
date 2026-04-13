@@ -45,7 +45,10 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
         """Return a queryset of roster entries."""
 
         return (
-            RosterEntry.objects.select_related("character")
+            RosterEntry.objects.select_related(
+                "character_sheet",
+                "character_sheet__character",
+            )
             .prefetch_related(
                 Prefetch(
                     "tenures",
@@ -59,7 +62,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
                     to_attr="cached_tenures",
                 ),
             )
-            .order_by("character__db_key")
+            .order_by("character_sheet__character__db_key")
         )
 
     def get_serializer_class(self) -> type[BaseSerializer]:
@@ -84,7 +87,7 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
         except AttributeError:
             available_characters = []
 
-        entries = RosterEntry.objects.filter(character__in=available_characters)
+        entries = RosterEntry.objects.filter(character_sheet__character__in=available_characters)
         serializer = self.get_serializer(entries, many=True)
         return Response(serializer.data)
 
