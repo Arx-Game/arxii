@@ -368,12 +368,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         ]
 
     def get_has_existing_characters(self, obj: CharacterDraft) -> bool:
-        """True if account has any characters with roster entries (for advanced CG options)."""
+        """True if account has any active roster tenure (for advanced CG options)."""
         from world.roster.models import RosterEntry  # noqa: PLC0415
 
-        return RosterEntry.objects.filter(
-            character_sheet__character__db_account=obj.account,
-        ).exists()
+        return RosterEntry.objects.for_account(obj.account).exists()
 
     def get_stage_completion(self, obj: CharacterDraft) -> dict[int, bool]:
         """Get completion status for each stage."""

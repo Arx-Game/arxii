@@ -276,16 +276,11 @@ class HasExistingCharactersFieldTest(TestCase):
         serializer = CharacterDraftSerializer(instance=self.draft)
         assert serializer.data["has_existing_characters"] is False
 
-    def test_true_when_account_has_roster_entry(self) -> None:
-        """has_existing_characters is True when account has a character with roster entry."""
-        from evennia.objects.models import ObjectDB
+    def test_true_when_account_has_active_tenure(self) -> None:
+        """has_existing_characters is True when account has an active roster tenure."""
+        from world.roster.factories import PlayerDataFactory, RosterTenureFactory
 
-        from world.character_sheets.models import CharacterSheet
-        from world.roster.models import Roster, RosterEntry
-
-        roster = Roster.objects.create(name="Active")
-        character = ObjectDB.objects.create(db_key="TestChar", db_account=self.account)
-        sheet = CharacterSheet.objects.create(character=character)
-        RosterEntry.objects.create(character_sheet=sheet, roster=roster)
+        player_data = PlayerDataFactory(account=self.account)
+        RosterTenureFactory(player_data=player_data)
         serializer = CharacterDraftSerializer(instance=self.draft)
         assert serializer.data["has_existing_characters"] is True
