@@ -8,9 +8,11 @@ from world.gm.constants import GMApplicationStatus
 from world.gm.models import (
     GMApplication,
     GMProfile,
+    GMRosterInvite,
     GMTable,
     GMTableMembership,
 )
+from world.roster.models.applications import RosterApplication
 
 
 class GMApplicationCreateSerializer(serializers.ModelSerializer):
@@ -115,3 +117,63 @@ class GMTableMembershipSerializer(serializers.ModelSerializer):
         model = GMTableMembership
         fields = ["id", "table", "persona", "persona_name", "joined_at", "left_at"]
         read_only_fields = ["id", "persona_name", "joined_at", "left_at"]
+
+
+class GMRosterInviteSerializer(serializers.ModelSerializer):
+    """For GM create/list operations on invites for their own characters."""
+
+    claimed_username = serializers.CharField(
+        source="claimed_by.username",
+        read_only=True,
+        allow_null=True,
+    )
+    expires_at = serializers.DateTimeField(required=False, allow_null=True)
+    invited_email = serializers.EmailField(required=False, allow_blank=True)
+
+    class Meta:
+        model = GMRosterInvite
+        fields = [
+            "id",
+            "roster_entry",
+            "code",
+            "created_by",
+            "created_at",
+            "expires_at",
+            "is_public",
+            "invited_email",
+            "claimed_at",
+            "claimed_by",
+            "claimed_username",
+        ]
+        read_only_fields = [
+            "id",
+            "code",
+            "created_by",
+            "created_at",
+            "claimed_at",
+            "claimed_by",
+            "claimed_username",
+        ]
+
+
+class GMApplicationQueueSerializer(serializers.ModelSerializer):
+    """Pending application surfaced to the overseeing GM."""
+
+    character_key = serializers.CharField(source="character.db_key", read_only=True)
+    applicant_username = serializers.CharField(
+        source="player_data.account.username",
+        read_only=True,
+    )
+
+    class Meta:
+        model = RosterApplication
+        fields = [
+            "id",
+            "character",
+            "character_key",
+            "applicant_username",
+            "status",
+            "applied_date",
+            "application_text",
+        ]
+        read_only_fields = fields

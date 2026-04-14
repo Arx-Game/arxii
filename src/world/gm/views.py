@@ -7,11 +7,13 @@ from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import mixins, serializers, status, viewsets
+from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from world.gm.constants import GMApplicationStatus
 from world.gm.filters import (
@@ -22,21 +24,31 @@ from world.gm.filters import (
 from world.gm.models import (
     GMApplication,
     GMProfile,
+    GMRosterInvite,
     GMTable,
     GMTableMembership,
 )
 from world.gm.serializers import (
     GMApplicationCreateSerializer,
     GMApplicationDetailSerializer,
+    GMApplicationQueueSerializer,
+    GMRosterInviteSerializer,
     GMTableMembershipSerializer,
     GMTableSerializer,
 )
 from world.gm.services import (
+    approve_application_as_gm as approve_as_gm_service,
     archive_table,
+    claim_invite as claim_invite_service,
+    create_invite as create_invite_service,
+    deny_application_as_gm as deny_as_gm_service,
+    gm_application_queue,
     join_table,
     leave_table,
+    revoke_invite as revoke_invite_service,
     transfer_ownership as transfer_ownership_service,
 )
+from world.roster.models.applications import RosterApplication
 from world.stories.pagination import StandardResultsSetPagination
 
 
@@ -172,3 +184,141 @@ class GMTableMembershipViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance: GMTableMembership) -> None:
         leave_table(instance)
+
+
+class GMRosterInviteViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """GM invites for specific roster characters.
+
+    - create: GM only, must oversee the character
+    - list/retrieve: scoped to GM's invites (staff sees all)
+    - destroy: revokes (unclaimed invites only)
+    """
+
+    serializer_class = GMRosterInviteSerializer
+    pagination_class = StandardResultsSetPagination
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self) -> QuerySet[GMRosterInvite]:
+        qs = GMRosterInvite.objects.select_related(
+            "roster_entry", "created_by__account", "claimed_by"
+        ).order_by("-created_at")
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        return qs.filter(created_by__account=user)
+
+    def _get_gm(self) -> GMProfile:
+        try:
+            return self.request.user.gm_profile
+        except GMProfile.DoesNotExist as exc:
+            msg = "You must be a GM to use this endpoint."
+            raise PermissionDenied(msg) from exc
+
+    def perform_create(self, serializer: serializers.Serializer) -> None:
+        gm = self._get_gm()
+        try:
+            invite = create_invite_service(
+                gm=gm,
+                roster_entry=serializer.validated_data["roster_entry"],
+                is_public=serializer.validated_data.get("is_public", False),
+                invited_email=serializer.validated_data.get("invited_email", ""),
+                expires_at=serializer.validated_data.get("expires_at"),
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"detail": exc.messages}) from exc
+        serializer.instance = invite
+
+    def perform_destroy(self, instance: GMRosterInvite) -> None:
+        gm = self._get_gm()
+        try:
+            revoke_invite_service(gm=gm, invite=instance)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"detail": exc.messages}) from exc
+
+
+class GMApplicationQueueView(generics.ListAPIView):
+    """Read-only list of pending applications for this GM's characters."""
+
+    serializer_class = GMApplicationQueueSerializer
+    pagination_class = StandardResultsSetPagination
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self) -> QuerySet[RosterApplication]:
+        try:
+            gm = self.request.user.gm_profile
+        except GMProfile.DoesNotExist as exc:
+            msg = "You must be a GM to use this endpoint."
+            raise PermissionDenied(msg) from exc
+        return gm_application_queue(gm)
+
+
+APPROVE_ACTION = "approve"
+DENY_ACTION = "deny"
+
+
+class GMApplicationActionView(APIView):
+    """GM approves or denies a pending application in their queue.
+
+    URL path: /api/gm/queue/<id>/<action>/ where action is 'approve' or 'deny'.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request, pk: int, action: str) -> Response:
+        try:
+            gm = request.user.gm_profile
+        except GMProfile.DoesNotExist as exc:
+            msg = "You must be a GM to use this endpoint."
+            raise PermissionDenied(msg) from exc
+        application = get_object_or_404(RosterApplication, pk=pk)
+        try:
+            if action == APPROVE_ACTION:
+                approve_as_gm_service(gm, application)
+            elif action == DENY_ACTION:
+                deny_as_gm_service(
+                    gm,
+                    application,
+                    review_notes=request.data.get("review_notes", ""),
+                )
+            else:
+                return Response(
+                    {"detail": f"Unknown action: {action}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except DjangoValidationError as exc:
+            return Response(
+                {"detail": exc.messages},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"status": "ok"})
+
+
+class GMInviteClaimView(APIView):
+    """Logged-in user claims an invite by code."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        code = request.data.get("code")
+        if not code:
+            return Response(
+                {"code": "This field is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            application = claim_invite_service(code=code, account=request.user)
+        except DjangoValidationError as exc:
+            return Response(
+                {"detail": exc.messages},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {"application_id": application.pk},
+            status=status.HTTP_201_CREATED,
+        )
