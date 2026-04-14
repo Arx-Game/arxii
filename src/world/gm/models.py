@@ -199,3 +199,68 @@ class GMTableMembership(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"GMTableMembership({self.table.name}, {self.persona.name})"
+
+
+class GMRosterInvite(SharedMemoryModel):
+    """A GM-generated invite to apply for a specific roster character.
+
+    Single-use: once claimed, can't be reused. Expires after a configurable
+    window (default 30 days, set by service). Public invites accept anyone
+    with the code; private invites are scoped to a specific email (enforced
+    at claim).
+    """
+
+    roster_entry = models.ForeignKey(
+        "roster.RosterEntry",
+        on_delete=models.CASCADE,
+        related_name="invites",
+    )
+    code = models.CharField(max_length=64, unique=True, db_index=True)
+    created_by = models.ForeignKey(
+        "gm.GMProfile",
+        on_delete=models.PROTECT,
+        related_name="invites_created",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    expires_at = models.DateTimeField(
+        help_text="Invite cannot be claimed after this time.",
+    )
+    is_public = models.BooleanField(
+        default=False,
+        help_text=(
+            "If True, anyone with the code can claim. If False, only the invited_email may claim."
+        ),
+    )
+    invited_email = models.EmailField(
+        blank=True,
+        default="",
+        help_text="For private invites: the email expected to claim.",
+    )
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    claimed_by = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
+    class Meta:
+        verbose_name = "GM Roster Invite"
+        verbose_name_plural = "GM Roster Invites"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"GMRosterInvite({self.code[:8]}… → {self.roster_entry_id})"
+
+    @property
+    def is_claimed(self) -> bool:
+        return self.claimed_at is not None
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() >= self.expires_at
+
+    @property
+    def is_usable(self) -> bool:
+        return not self.is_claimed and not self.is_expired
