@@ -52,6 +52,20 @@ from world.roster.models.applications import RosterApplication
 from world.stories.pagination import StandardResultsSetPagination
 
 
+def _get_gm_or_403(user) -> GMProfile:
+    """Return ``user.gm_profile`` or raise PermissionDenied.
+
+    Centralizes the try/except that several GM views would otherwise
+    duplicate. Callers should have already ensured authentication via
+    ``IsAuthenticated`` permission.
+    """
+    try:
+        return user.gm_profile
+    except GMProfile.DoesNotExist as exc:
+        msg = "You must be a GM to use this endpoint."
+        raise PermissionDenied(msg) from exc
+
+
 class GMApplicationViewSet(
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
@@ -213,15 +227,8 @@ class GMRosterInviteViewSet(
             return qs
         return qs.filter(created_by__account=user)
 
-    def _get_gm(self) -> GMProfile:
-        try:
-            return self.request.user.gm_profile
-        except GMProfile.DoesNotExist as exc:
-            msg = "You must be a GM to use this endpoint."
-            raise PermissionDenied(msg) from exc
-
     def perform_create(self, serializer: serializers.Serializer) -> None:
-        gm = self._get_gm()
+        gm = _get_gm_or_403(self.request.user)
         try:
             invite = create_invite_service(
                 gm=gm,
@@ -235,7 +242,7 @@ class GMRosterInviteViewSet(
         serializer.instance = invite
 
     def perform_destroy(self, instance: GMRosterInvite) -> None:
-        gm = self._get_gm()
+        gm = _get_gm_or_403(self.request.user)
         try:
             revoke_invite_service(gm=gm, invite=instance)
         except DjangoValidationError as exc:
@@ -250,11 +257,7 @@ class GMApplicationQueueView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self) -> QuerySet[RosterApplication]:
-        try:
-            gm = self.request.user.gm_profile
-        except GMProfile.DoesNotExist as exc:
-            msg = "You must be a GM to use this endpoint."
-            raise PermissionDenied(msg) from exc
+        gm = _get_gm_or_403(self.request.user)
         return gm_application_queue(gm)
 
 
@@ -271,11 +274,7 @@ class GMApplicationActionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request, pk: int, action: str) -> Response:
-        try:
-            gm = request.user.gm_profile
-        except GMProfile.DoesNotExist as exc:
-            msg = "You must be a GM to use this endpoint."
-            raise PermissionDenied(msg) from exc
+        gm = _get_gm_or_403(request.user)
         application = get_object_or_404(RosterApplication, pk=pk)
         try:
             if action == APPROVE_ACTION:

@@ -21,6 +21,11 @@ router.register("tables", GMTableViewSet, basename="gm-table")
 router.register("table-memberships", GMTableMembershipViewSet, basename="gm-table-membership")
 router.register("invites", GMRosterInviteViewSet, basename="gm-invite")
 
+# Ordering is load-bearing: ``invites/claim/`` MUST be registered before
+# ``router.urls``. DRF's default detail regex for the ``invites`` viewset
+# (``invites/<pk>/``) would otherwise match ``invites/claim/`` with
+# ``pk="claim"`` and route to GMRosterInviteViewSet.retrieve, silently
+# breaking the claim endpoint. Don't reorder without keeping this in mind.
 urlpatterns = [
     path("invites/claim/", GMInviteClaimView.as_view(), name="gm-invite-claim"),
     path("", include(router.urls)),

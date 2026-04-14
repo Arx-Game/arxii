@@ -1345,3 +1345,15 @@ class FinalizeGMCharacterTests(TestCase):
         draft = self._make_gm_draft(story_title="")
         with self.assertRaises(ValidationError):
             finalize_gm_character(draft)
+
+    def test_rejects_target_table_owned_by_other_gm(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.character_creation.services import finalize_gm_character
+        from world.gm.factories import GMProfileFactory, GMTableFactory
+
+        other_gm = GMProfileFactory()
+        other_table = GMTableFactory(gm=other_gm)
+        draft = self._make_gm_draft(target_table=other_table)
+        with self.assertRaises(ValidationError):
+            finalize_gm_character(draft)

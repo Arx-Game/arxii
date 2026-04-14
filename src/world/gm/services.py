@@ -114,6 +114,7 @@ def gm_application_queue(gm: GMProfile) -> QuerySet[RosterApplication]:
             status=ApplicationStatus.PENDING,
             character__story_participations__is_active=True,
             character__story_participations__story__primary_table__gm=gm,
+            character__story_participations__story__primary_table__status=(GMTableStatus.ACTIVE),
         )
         .select_related("character", "player_data__account")
         .distinct()
@@ -128,11 +129,24 @@ def approve_application_as_gm(gm: GMProfile, application: RosterApplication) -> 
     hosting a story the applied-for character participates in). Then
     delegates to RosterApplication.approve().
     """
+    from world.roster.models.applications import RosterApplication  # noqa: PLC0415
+    from world.roster.models.choices import ApplicationStatus  # noqa: PLC0415
+
     queue = gm_application_queue(gm)
     if not queue.filter(pk=application.pk).exists():
         msg = "This application is not in your GM application queue."
         raise ValidationError(msg)
-    application.approve(staff_player_data=gm.account.player_data)
+
+    # Lock the application row and re-check status to avoid racing with
+    # a concurrent staff approval / denial.
+    locked = RosterApplication.objects.select_for_update().get(pk=application.pk)
+    if locked.status != ApplicationStatus.PENDING:
+        msg = "This application has already been processed."
+        raise ValidationError(msg)
+
+    if not locked.approve(staff_player_data=gm.account.player_data):
+        msg = "Application could not be approved."
+        raise ValidationError(msg)
 
 
 @transaction.atomic
@@ -142,19 +156,41 @@ def deny_application_as_gm(
     review_notes: str = "",
 ) -> None:
     """Deny an application in the GM's queue."""
+    from world.roster.models.applications import RosterApplication  # noqa: PLC0415
+    from world.roster.models.choices import ApplicationStatus  # noqa: PLC0415
+
     queue = gm_application_queue(gm)
     if not queue.filter(pk=application.pk).exists():
         msg = "This application is not in your GM application queue."
         raise ValidationError(msg)
-    application.deny(staff_player_data=gm.account.player_data, reason=review_notes)
+
+    # Lock the application row and re-check status to avoid racing with
+    # a concurrent staff approval / denial.
+    locked = RosterApplication.objects.select_for_update().get(pk=application.pk)
+    if locked.status != ApplicationStatus.PENDING:
+        msg = "This application has already been processed."
+        raise ValidationError(msg)
+
+    if not locked.deny(staff_player_data=gm.account.player_data, reason=review_notes):
+        msg = "Application could not be denied."
+        raise ValidationError(msg)
 
 
 @transaction.atomic
 def surrender_character_story(gm: GMProfile, story: Story) -> None:
     """GM surrenders oversight of a story.
 
-    Clears primary_table so the story becomes orphaned (character falls
-    out of default visibility until another GM picks up oversight).
+    Clears the Story's ``primary_table`` so the story becomes orphaned.
+
+    Semantics:
+    - The Story's ``primary_table`` is set to None.
+    - Existing ``StoryParticipation`` records remain ACTIVE — the character
+      is still in the story, there's simply no one overseeing it.
+    - ``actively_overseen()`` will exclude the character from default
+      visibility until oversight is re-established.
+    - There is currently no "pick up orphan story" service. Staff or
+      another GM must manually set ``primary_table`` again (tracked as
+      follow-up work).
     """
     if story.primary_table is None or story.primary_table.gm != gm:
         msg = "You do not oversee this story."
@@ -179,11 +215,14 @@ def create_invite(
     """
     from world.roster.models import RosterEntry  # noqa: PLC0415
 
-    # Verify GM oversees this entry
+    # Verify GM oversees this entry via an ACTIVE table
     oversees = RosterEntry.objects.filter(
         pk=roster_entry.pk,
         character_sheet__character__story_participations__is_active=True,
         character_sheet__character__story_participations__story__primary_table__gm=gm,
+        character_sheet__character__story_participations__story__primary_table__status=(
+            GMTableStatus.ACTIVE
+        ),
     ).exists()
     if not oversees:
         msg = "You do not oversee this character."
@@ -198,7 +237,7 @@ def create_invite(
         code=secrets.token_urlsafe(48),
         expires_at=expires_at,
         is_public=is_public,
-        invited_email=invited_email,
+        invited_email=invited_email.strip(),
     )
 
 
@@ -231,10 +270,17 @@ def claim_invite(code: str, account: AccountDB) -> RosterApplication:
 
     Marks the invite as claimed atomically. Creates a PlayerData for
     the account if none exists. Returns the new RosterApplication.
+
+    Identity-map note: if the caller's enclosing transaction rolls back
+    after this function returns, the in-memory ``invite`` object may
+    retain stale ``claimed_at`` / ``claimed_by`` values from this call's
+    ``.save()``. Callers that survive a rollback should ``refresh_from_db()``
+    (or re-fetch) the invite before trusting those fields.
     """
     from evennia_extensions.models import PlayerData  # noqa: PLC0415
     from world.gm.models import GMRosterInvite  # noqa: PLC0415
     from world.roster.models.applications import RosterApplication  # noqa: PLC0415
+    from world.roster.models.choices import ApplicationStatus  # noqa: PLC0415
 
     try:
         invite = GMRosterInvite.objects.select_for_update().get(code=code)
@@ -250,7 +296,9 @@ def claim_invite(code: str, account: AccountDB) -> RosterApplication:
         raise ValidationError(msg)
 
     if not invite.is_public and invite.invited_email:
-        if not account.email or invite.invited_email.lower() != account.email.lower():
+        invited = invite.invited_email.strip().lower()
+        account_email = (account.email or "").strip().lower()
+        if not account_email or invited != account_email:
             msg = "This invite is private and does not match your account email."
             raise ValidationError(msg)
 
@@ -262,9 +310,31 @@ def claim_invite(code: str, account: AccountDB) -> RosterApplication:
     # Get or create the PlayerData record
     player_data, _ = PlayerData.objects.get_or_create(account=account)
 
+    character = invite.roster_entry.character_sheet.character
+
+    # Handle duplicate application — RosterApplication has unique_together
+    # on (player_data, character), so create() would raise IntegrityError
+    # if the claimer already has an application for this character.
+    existing = RosterApplication.objects.filter(
+        player_data=player_data,
+        character=character,
+    ).first()
+    if existing is not None:
+        if existing.status != ApplicationStatus.PENDING:
+            msg = (
+                "You already have a finalized application for this character. "
+                "Contact staff if you want to re-apply."
+            )
+            raise ValidationError(msg)
+        # Reuse the pending application — annotate that it was claimed via invite.
+        note = f"\n[Claimed invite from {invite.created_by.account.username}]"
+        existing.application_text = (existing.application_text or "") + note
+        existing.save(update_fields=["application_text"])
+        return existing
+
     # Create the application
     return RosterApplication.objects.create(
         player_data=player_data,
-        character=invite.roster_entry.character_sheet.character,
+        character=character,
         application_text=f"Claiming invite from {invite.created_by.account.username}",
     )

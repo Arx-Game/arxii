@@ -196,6 +196,15 @@ class GMApplicationQueueTest(TestCase):
         queue = gm_application_queue(lonely_gm)
         assert queue.count() == 0
 
+    def test_queue_excludes_applications_for_archived_tables(self) -> None:
+        from world.gm.constants import GMTableStatus
+        from world.gm.services import gm_application_queue
+
+        self.table.status = GMTableStatus.ARCHIVED
+        self.table.save()
+        queue = gm_application_queue(self.gm)
+        assert self.app_at_table not in queue
+
 
 class ApproveApplicationAsGMTest(TestCase):
     @classmethod
@@ -237,6 +246,29 @@ class ApproveApplicationAsGMTest(TestCase):
 
         with self.assertRaises(ValidationError):
             approve_application_as_gm(self.other_gm, self.app)
+
+    def test_cannot_approve_already_processed_application(self) -> None:
+        # Fresh entry/app to avoid mutating the shared cls.app (SharedMemoryModel
+        # identity map would leak the status change across tests).
+        from world.gm.services import approve_application_as_gm
+        from world.roster.factories import RosterApplicationFactory, RosterEntryFactory
+        from world.roster.models.choices import ApplicationStatus
+        from world.stories.factories import StoryFactory
+        from world.stories.models import StoryParticipation
+
+        entry = RosterEntryFactory()
+        story = StoryFactory(primary_table=self.table)
+        StoryParticipation.objects.create(
+            story=story,
+            character=entry.character_sheet.character,
+            is_active=True,
+        )
+        app = RosterApplicationFactory(
+            character=entry.character_sheet.character,
+            status=ApplicationStatus.APPROVED,
+        )
+        with self.assertRaises(ValidationError):
+            approve_application_as_gm(self.gm, app)
 
 
 class DenyApplicationAsGMTest(TestCase):
@@ -354,6 +386,17 @@ class CreateInviteTest(TestCase):
         lonely_gm = GMProfileFactory()
         with self.assertRaises(ValidationError):
             create_invite(lonely_gm, self.entry)
+
+    def test_rejects_invite_creation_for_archived_table(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.gm.constants import GMTableStatus
+        from world.gm.services import create_invite
+
+        self.table.status = GMTableStatus.ARCHIVED
+        self.table.save()
+        with self.assertRaises(ValidationError):
+            create_invite(self.gm, self.entry)
 
     def test_defaults_30_day_expiry(self) -> None:
         from datetime import timedelta
@@ -516,3 +559,33 @@ class ClaimInviteTest(TestCase):
         random_account = AccountFactory(email="random@example.com")
         application = claim_invite(self.invite.code, random_account)
         assert application.pk is not None
+
+    def test_rejects_claim_when_prior_denied_application_exists(self) -> None:
+        from evennia_extensions.models import PlayerData
+        from world.gm.services import claim_invite
+        from world.roster.factories import RosterApplicationFactory
+        from world.roster.models.choices import ApplicationStatus
+
+        player_data, _ = PlayerData.objects.get_or_create(account=self.account)
+        RosterApplicationFactory(
+            player_data=player_data,
+            character=self.invite.roster_entry.character_sheet.character,
+            status=ApplicationStatus.DENIED,
+        )
+        with self.assertRaises(ValidationError):
+            claim_invite(self.invite.code, self.account)
+
+    def test_claim_returns_existing_pending_application(self) -> None:
+        from evennia_extensions.models import PlayerData
+        from world.gm.services import claim_invite
+        from world.roster.factories import RosterApplicationFactory
+        from world.roster.models.choices import ApplicationStatus
+
+        player_data, _ = PlayerData.objects.get_or_create(account=self.account)
+        existing = RosterApplicationFactory(
+            player_data=player_data,
+            character=self.invite.roster_entry.character_sheet.character,
+            status=ApplicationStatus.PENDING,
+        )
+        result = claim_invite(self.invite.code, self.account)
+        assert result.pk == existing.pk

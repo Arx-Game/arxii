@@ -1222,6 +1222,9 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
     if draft.target_table is None:
         msg = "GM drafts require a target_table at finalize."
         raise ValidationError(msg)
+    if draft.target_table.gm.account_id != draft.account_id:
+        msg = "You do not own the target table."
+        raise ValidationError(msg)
     if not draft.story_title:
         msg = "GM drafts require a story_title at finalize."
         raise ValidationError(msg)
@@ -1240,6 +1243,14 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
     _apply_sheet_demographics(sheet, draft)
     _apply_character_mechanics(character, draft)
 
+    # Finalize magic data (same as player finalize flow — GM-created
+    # characters may have cantrip/tradition/aura selections in the draft).
+    finalize_magic_data(draft, sheet)
+
+    # NOTE: home and location are intentionally unset. A GM-created character
+    # sits on the Available roster with no location. Once a player claims the
+    # character (via RosterApplication → tenure), downstream code sets the
+    # starting location at activation time.
     # Create RosterEntry on Available roster (no tenure).
     entry = RosterEntry.objects.create(
         character_sheet=sheet,
