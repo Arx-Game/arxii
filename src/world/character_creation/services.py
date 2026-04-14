@@ -62,9 +62,7 @@ class DraftExpiredError(CharacterCreationError):
 
 
 @transaction.atomic
-def finalize_character(  # noqa: C901, PLR0912, PLR0915
-    draft: CharacterDraft, *, add_to_roster: bool = False
-) -> ObjectDB:
+def finalize_character(draft: CharacterDraft, *, add_to_roster: bool = False) -> ObjectDB:
     """
     Create a Character from a completed CharacterDraft.
 
@@ -96,6 +94,73 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
         raise DraftIncompleteError(msg)
 
     # Build character name
+    full_name = _build_character_full_name(draft)
+
+    # Resolve starting room
+    starting_room = draft.get_starting_room()
+
+    # Create Character + CharacterSheet + PRIMARY Persona atomically.
+    # The service ensures every sheet has a PRIMARY persona, preserving the
+    # invariant used everywhere else (tests, factories, etc.).
+    character, sheet, _primary_persona = create_character_with_sheet(
+        character_key=full_name,
+        primary_persona_name=full_name,
+    )
+
+    # Apply Evennia room/home wiring (not handled by the service).
+    if starting_room is not None:
+        character.location = starting_room
+        character.home = starting_room
+
+    # Populate sheet fields (demographics, descriptive text, physical traits) and save.
+    _apply_sheet_demographics(sheet, draft)
+
+    character.save()
+
+    # Create true form from appearance form traits
+    _create_true_form(character, draft.draft_data)
+
+    # Create stat trait values, skills, goals, distinctions, path history, post-CG bonuses
+    _apply_character_mechanics(character, draft)
+
+    # Handle roster assignment
+    if add_to_roster:
+        # Staff/GM directly adding to roster - no application needed
+        roster = _get_or_create_available_roster()
+        RosterEntry.objects.create(
+            character_sheet=character.sheet_data,
+            roster=roster,
+        )
+    else:
+        # Character awaiting approval — placed in Pending roster.
+        # approve_application() moves to Active and creates RosterTenure.
+        roster = _get_or_create_pending_roster()
+        RosterEntry.objects.create(
+            character_sheet=character.sheet_data,
+            roster=roster,
+        )
+
+    # Family is already set on CharacterSheet above
+
+    # Finalize magic data before deleting draft
+    finalize_magic_data(draft, sheet)
+
+    # Convert unspent CG points to locked XP (best-effort: don't block finalization)
+    _convert_remaining_cg_points_to_xp(draft, character)
+
+    # Clean up the draft (CASCADE deletes all Draft* models)
+    draft.delete()
+
+    return character
+
+
+def _build_character_full_name(draft: CharacterDraft) -> str:
+    """
+    Build the character's full name from draft data.
+
+    Uses the family name if a family is set, otherwise tries to derive a
+    surname from the selected tarot card (for familyless characters).
+    """
     first_name = draft.draft_data.get("first_name", "")
     family_name = ""
     if draft.family:
@@ -117,27 +182,20 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
                 )
 
     if family_name:
-        full_name = f"{first_name} {family_name}"
-    else:
-        full_name = first_name
+        return f"{first_name} {family_name}"
+    return first_name
 
-    # Resolve starting room
-    starting_room = draft.get_starting_room()
 
-    # Create Character + CharacterSheet + PRIMARY Persona atomically.
-    # The service ensures every sheet has a PRIMARY persona, preserving the
-    # invariant used everywhere else (tests, factories, etc.).
+def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> None:  # noqa: C901, PLR0912
+    """
+    Populate demographic, heritage, descriptive, and physical fields on a CharacterSheet
+    from a CharacterDraft and save it.
+
+    Covers: gender/pronouns, age, species, family, tarot, heritage, origin realm,
+    descriptive text (description/background/personality/concept/quote), and
+    physical characteristics (height/build/weight).
+    """
     from world.character_sheets.models import Heritage  # noqa: PLC0415
-
-    character, sheet, _primary_persona = create_character_with_sheet(
-        character_key=full_name,
-        primary_persona_name=full_name,
-    )
-
-    # Apply Evennia room/home wiring (not handled by the service).
-    if starting_room is not None:
-        character.location = starting_room
-        character.home = starting_room
 
     # Set demographic data from draft's FK references
     if draft.selected_gender:
@@ -211,14 +269,17 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
 
     sheet.save()
 
-    character.save()
 
-    # Create true form from appearance form traits
-    _create_true_form(character, draft_data)
+def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> None:
+    """
+    Create stat trait values, skills, goals, distinctions, path history, and post-CG
+    bonuses for the character from draft data.
 
-    # Create stat values from draft (optimized with bulk operations)
+    Centralized so both player and GM finalize flows share the same mechanics setup.
+    """
     from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
 
+    # Create stat values from draft (optimized with bulk operations)
     stats = draft.draft_data.get("stats", {})
     if stats:
         # Fetch all stat traits in one query
@@ -268,52 +329,33 @@ def finalize_character(  # noqa: C901, PLR0912, PLR0915
                 trait_value.value += int(bonus)
                 trait_value.save()
 
-    # Handle roster assignment
-    if add_to_roster:
-        # Staff/GM directly adding to roster - no application needed
-        roster = _get_or_create_available_roster()
-        RosterEntry.objects.create(
-            character_sheet=character.sheet_data,
-            roster=roster,
-        )
-    else:
-        # Character awaiting approval — placed in Pending roster.
-        # approve_application() moves to Active and creates RosterTenure.
-        roster = _get_or_create_pending_roster()
-        RosterEntry.objects.create(
-            character_sheet=character.sheet_data,
-            roster=roster,
-        )
 
-    # Family is already set on CharacterSheet above
+def _convert_remaining_cg_points_to_xp(draft: CharacterDraft, character: ObjectDB) -> None:
+    """
+    Convert any unspent CG points on the draft to locked XP on the character.
 
-    # Finalize magic data before deleting draft
-    finalize_magic_data(draft, sheet)
-
-    # Convert unspent CG points to locked XP (best-effort: don't block finalization)
+    Best-effort: failures are logged but do not block finalization.
+    """
     remaining_cg_points = draft.calculate_cg_points_remaining()
-    if remaining_cg_points > 0:
-        try:
-            from world.character_creation.models import CGPointBudget  # noqa: PLC0415
-            from world.progression.services import award_cg_conversion_xp  # noqa: PLC0415
+    if remaining_cg_points <= 0:
+        return
 
-            conversion_rate = CGPointBudget.get_active_conversion_rate()
-            award_cg_conversion_xp(
-                character,
-                remaining_cg_points=remaining_cg_points,
-                conversion_rate=conversion_rate,
-            )
-        except Exception:
-            logger.exception(
-                "Failed to convert %d CG points to XP for character %s",
-                remaining_cg_points,
-                character.key,
-            )
+    try:
+        from world.character_creation.models import CGPointBudget  # noqa: PLC0415
+        from world.progression.services import award_cg_conversion_xp  # noqa: PLC0415
 
-    # Clean up the draft (CASCADE deletes all Draft* models)
-    draft.delete()
-
-    return character
+        conversion_rate = CGPointBudget.get_active_conversion_rate()
+        award_cg_conversion_xp(
+            character,
+            remaining_cg_points=remaining_cg_points,
+            conversion_rate=conversion_rate,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to convert %d CG points to XP for character %s",
+            remaining_cg_points,
+            character.key,
+        )
 
 
 def _set_pronouns_from_gender(sheet: CharacterSheet, gender: str) -> None:
