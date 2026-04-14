@@ -17,6 +17,7 @@ from world.scenes.models import Persona
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
+    from evennia.accounts.models import AccountDB
 
     from world.roster.models import RosterEntry
     from world.roster.models.applications import RosterApplication
@@ -216,3 +217,54 @@ def revoke_invite(gm: GMProfile, invite: GMRosterInvite) -> None:
         raise ValidationError(msg)
     invite.expires_at = timezone.now()
     invite.save(update_fields=["expires_at"])
+
+
+@transaction.atomic
+def claim_invite(code: str, account: AccountDB) -> RosterApplication:
+    """Claim a GM invite, creating a RosterApplication for the account.
+
+    Validates:
+    - Invite exists (code found)
+    - Not already claimed
+    - Not expired
+    - Email matches for private invites (invited_email set)
+
+    Marks the invite as claimed atomically. Creates a PlayerData for
+    the account if none exists. Returns the new RosterApplication.
+    """
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.gm.models import GMRosterInvite  # noqa: PLC0415
+    from world.roster.models.applications import RosterApplication  # noqa: PLC0415
+
+    try:
+        invite = GMRosterInvite.objects.select_for_update().get(code=code)
+    except GMRosterInvite.DoesNotExist as exc:
+        msg = "Invalid invite code."
+        raise ValidationError(msg) from exc
+
+    if invite.is_claimed:
+        msg = "This invite has already been claimed."
+        raise ValidationError(msg)
+    if invite.is_expired:
+        msg = "This invite has expired."
+        raise ValidationError(msg)
+
+    if not invite.is_public and invite.invited_email:
+        if not account.email or invite.invited_email.lower() != account.email.lower():
+            msg = "This invite is private and does not match your account email."
+            raise ValidationError(msg)
+
+    # Mark claimed
+    invite.claimed_at = timezone.now()
+    invite.claimed_by = account
+    invite.save(update_fields=["claimed_at", "claimed_by"])
+
+    # Get or create the PlayerData record
+    player_data, _ = PlayerData.objects.get_or_create(account=account)
+
+    # Create the application
+    return RosterApplication.objects.create(
+        player_data=player_data,
+        character=invite.roster_entry.character_sheet.character,
+        application_text=f"Claiming invite from {invite.created_by.account.username}",
+    )

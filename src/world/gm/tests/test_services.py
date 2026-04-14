@@ -427,3 +427,92 @@ class RevokeInviteTest(TestCase):
         self.invite.save(update_fields=["claimed_at"])
         with self.assertRaises(ValidationError):
             revoke_invite(self.invite.created_by, self.invite)
+
+
+class ClaimInviteTest(TestCase):
+    def setUp(self) -> None:
+        from evennia_extensions.factories import AccountFactory
+        from world.gm.factories import GMRosterInviteFactory
+
+        self.account = AccountFactory(email="claimer@example.com")
+        self.invite = GMRosterInviteFactory(is_public=True)
+
+    def test_claim_marks_invite(self) -> None:
+        from world.gm.services import claim_invite
+
+        application = claim_invite(self.invite.code, self.account)
+        assert application.pk is not None
+        self.invite.refresh_from_db()
+        assert self.invite.is_claimed is True
+        assert self.invite.claimed_by == self.account
+
+    def test_claim_creates_application(self) -> None:
+        from world.gm.services import claim_invite
+
+        application = claim_invite(self.invite.code, self.account)
+        assert application.character == self.invite.roster_entry.character_sheet.character
+
+    def test_rejects_invalid_code(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.gm.services import claim_invite
+
+        with self.assertRaises(ValidationError):
+            claim_invite("does-not-exist", self.account)
+
+    def test_rejects_expired_invite(self) -> None:
+        from datetime import timedelta
+
+        from django.core.exceptions import ValidationError
+        from django.utils import timezone
+
+        from world.gm.factories import GMRosterInviteFactory
+        from world.gm.services import claim_invite
+
+        past = timezone.now() - timedelta(days=1)
+        invite = GMRosterInviteFactory(expires_at=past, is_public=True)
+        with self.assertRaises(ValidationError):
+            claim_invite(invite.code, self.account)
+
+    def test_rejects_already_claimed(self) -> None:
+        from django.core.exceptions import ValidationError
+        from django.utils import timezone
+
+        from world.gm.services import claim_invite
+
+        self.invite.claimed_at = timezone.now()
+        self.invite.save(update_fields=["claimed_at"])
+        with self.assertRaises(ValidationError):
+            claim_invite(self.invite.code, self.account)
+
+    def test_private_invite_rejects_wrong_email(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.gm.factories import GMRosterInviteFactory
+        from world.gm.services import claim_invite
+
+        invite = GMRosterInviteFactory(
+            is_public=False,
+            invited_email="someone_else@example.com",
+        )
+        with self.assertRaises(ValidationError):
+            claim_invite(invite.code, self.account)
+
+    def test_private_invite_accepts_matching_email(self) -> None:
+        from world.gm.factories import GMRosterInviteFactory
+        from world.gm.services import claim_invite
+
+        invite = GMRosterInviteFactory(
+            is_public=False,
+            invited_email="claimer@example.com",
+        )
+        application = claim_invite(invite.code, self.account)
+        assert application.pk is not None
+
+    def test_public_invite_accepts_any_email(self) -> None:
+        from evennia_extensions.factories import AccountFactory
+        from world.gm.services import claim_invite
+
+        random_account = AccountFactory(email="random@example.com")
+        application = claim_invite(self.invite.code, random_account)
+        assert application.pk is not None
