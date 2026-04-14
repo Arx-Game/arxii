@@ -1251,3 +1251,97 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
 
         aura = CharacterAura.objects.get(character=character)
         assert aura.glimpse_story == ""
+
+
+class FinalizeGMCharacterTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.gm.factories import GMProfileFactory, GMTableFactory
+
+        cls.gm = GMProfileFactory()
+        cls.table = GMTableFactory(gm=cls.gm)
+
+    def _make_gm_draft(self, **overrides) -> CharacterDraft:
+        from world.character_creation.factories import CharacterDraftFactory
+
+        defaults = {
+            "account": self.gm.account,
+            "is_gm_creation": True,
+            "target_table": self.table,
+            "story_title": "The Grand Design",
+            "story_description": "A story of intrigue and power.",
+            "draft_data": {"first_name": "Aurelius"},
+        }
+        defaults.update(overrides)
+        return CharacterDraftFactory(**defaults)
+
+    def test_creates_roster_entry_on_available(self) -> None:
+        from world.character_creation.services import finalize_gm_character
+
+        draft = self._make_gm_draft()
+        entry, _ = finalize_gm_character(draft)
+        assert entry.pk is not None
+        assert entry.roster.name == "Available"
+
+    def test_creates_story_linked_to_target_table(self) -> None:
+        from world.character_creation.services import finalize_gm_character
+
+        draft = self._make_gm_draft()
+        _, story = finalize_gm_character(draft)
+        assert story.primary_table == self.table
+        assert story.title == "The Grand Design"
+        assert self.gm.account in story.owners.all()
+
+    def test_creates_active_story_participation(self) -> None:
+        from world.character_creation.services import finalize_gm_character
+        from world.stories.models import StoryParticipation
+
+        draft = self._make_gm_draft()
+        entry, story = finalize_gm_character(draft)
+        participation = StoryParticipation.objects.get(
+            story=story, character=entry.character_sheet.character
+        )
+        assert participation.is_active is True
+
+    def test_no_tenure_created(self) -> None:
+        from world.character_creation.services import finalize_gm_character
+
+        draft = self._make_gm_draft()
+        entry, _ = finalize_gm_character(draft)
+        assert entry.tenures.count() == 0
+
+    def test_draft_deleted_on_success(self) -> None:
+        from world.character_creation.models import CharacterDraft
+        from world.character_creation.services import finalize_gm_character
+
+        draft = self._make_gm_draft()
+        draft_pk = draft.pk
+        finalize_gm_character(draft)
+        assert not CharacterDraft.objects.filter(pk=draft_pk).exists()
+
+    def test_rejects_non_gm_draft(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.character_creation.services import finalize_gm_character
+
+        draft = self._make_gm_draft(is_gm_creation=False)
+        with self.assertRaises(ValidationError):
+            finalize_gm_character(draft)
+
+    def test_rejects_missing_target_table(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.character_creation.services import finalize_gm_character
+
+        draft = self._make_gm_draft(target_table=None)
+        with self.assertRaises(ValidationError):
+            finalize_gm_character(draft)
+
+    def test_rejects_missing_story_title(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.character_creation.services import finalize_gm_character
+
+        draft = self._make_gm_draft(story_title="")
+        with self.assertRaises(ValidationError):
+            finalize_gm_character(draft)

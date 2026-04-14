@@ -11,6 +11,7 @@ from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Prefetch, QuerySet
 from django.utils import timezone
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
         DraftApplicationComment,
     )
     from world.character_sheets.models import CharacterSheet
+    from world.stories.models import Story
 
 logger = logging.getLogger(__name__)
 
@@ -1191,3 +1193,76 @@ def add_application_comment(
         text=text,
         comment_type=CommentType.MESSAGE,
     )
+
+
+@transaction.atomic
+def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
+    """Finalize a GM-initiated draft into a roster character + story.
+
+    Creates Character + CharacterSheet + PRIMARY Persona, a RosterEntry on
+    the Available roster (no tenure), a Story linked to the GM's target
+    table, and a StoryParticipation linking the character to the story.
+
+    Args:
+        draft: CharacterDraft with is_gm_creation=True, target_table set,
+            story_title set.
+
+    Returns:
+        (roster_entry, story)
+
+    Raises:
+        ValidationError: if draft is not a GM draft, or missing target_table,
+            or missing story_title.
+    """
+    from world.stories.models import Story, StoryParticipation  # noqa: PLC0415
+
+    if not draft.is_gm_creation:
+        msg = "Draft is not a GM creation draft."
+        raise ValidationError(msg)
+    if draft.target_table is None:
+        msg = "GM drafts require a target_table at finalize."
+        raise ValidationError(msg)
+    if not draft.story_title:
+        msg = "GM drafts require a story_title at finalize."
+        raise ValidationError(msg)
+
+    # Build name — reuse helper (handles tarot surname for orphans, plain
+    # first_name otherwise).
+    full_name = _build_character_full_name(draft)
+
+    # Create Character + Sheet + Primary Persona atomically.
+    character, sheet, _primary = create_character_with_sheet(
+        character_key=full_name,
+        primary_persona_name=full_name,
+    )
+
+    # Populate sheet demographics and mechanics (shared helpers).
+    _apply_sheet_demographics(sheet, draft)
+    _apply_character_mechanics(character, draft)
+
+    # Create RosterEntry on Available roster (no tenure).
+    entry = RosterEntry.objects.create(
+        character_sheet=sheet,
+        roster=_get_or_create_available_roster(),
+    )
+
+    # Create the Story tied to the GM's target table.
+    story = Story.objects.create(
+        title=draft.story_title,
+        description=draft.story_description,
+        primary_table=draft.target_table,
+    )
+    story.owners.add(draft.account)
+
+    # Link character to the story.
+    StoryParticipation.objects.create(
+        story=story,
+        character=character,
+        is_active=True,
+    )
+
+    # Convert unspent CG points → XP (best-effort) and delete draft.
+    _convert_remaining_cg_points_to_xp(draft, character)
+    draft.delete()
+
+    return entry, story
