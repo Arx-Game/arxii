@@ -195,3 +195,124 @@ class GMApplicationQueueTest(TestCase):
         lonely_gm = GMProfileFactory()
         queue = gm_application_queue(lonely_gm)
         assert queue.count() == 0
+
+
+class ApproveApplicationAsGMTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.gm.factories import GMProfileFactory, GMTableFactory
+        from world.roster.factories import (
+            RosterApplicationFactory,
+            RosterEntryFactory,
+        )
+        from world.stories.factories import StoryFactory
+        from world.stories.models import StoryParticipation
+
+        cls.gm = GMProfileFactory()
+        cls.table = GMTableFactory(gm=cls.gm)
+        cls.other_gm = GMProfileFactory()
+        cls.other_table = GMTableFactory(gm=cls.other_gm)
+
+        cls.entry = RosterEntryFactory()
+        story = StoryFactory(primary_table=cls.table)
+        StoryParticipation.objects.create(
+            story=story,
+            character=cls.entry.character_sheet.character,
+            is_active=True,
+        )
+        cls.app = RosterApplicationFactory(
+            character=cls.entry.character_sheet.character,
+        )
+
+    def test_gm_can_approve_own_queue_application(self) -> None:
+        from world.gm.services import approve_application_as_gm
+        from world.roster.models.choices import ApplicationStatus
+
+        approve_application_as_gm(self.gm, self.app)
+        self.app.refresh_from_db()
+        assert self.app.status == ApplicationStatus.APPROVED
+
+    def test_gm_cannot_approve_other_gms_application(self) -> None:
+        from world.gm.services import approve_application_as_gm
+
+        with self.assertRaises(ValidationError):
+            approve_application_as_gm(self.other_gm, self.app)
+
+
+class DenyApplicationAsGMTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.gm.factories import GMProfileFactory, GMTableFactory
+        from world.roster.factories import (
+            RosterApplicationFactory,
+            RosterEntryFactory,
+        )
+        from world.stories.factories import StoryFactory
+        from world.stories.models import StoryParticipation
+
+        cls.gm = GMProfileFactory()
+        cls.table = GMTableFactory(gm=cls.gm)
+        cls.other_gm = GMProfileFactory()
+
+        cls.entry = RosterEntryFactory()
+        story = StoryFactory(primary_table=cls.table)
+        StoryParticipation.objects.create(
+            story=story,
+            character=cls.entry.character_sheet.character,
+            is_active=True,
+        )
+        cls.app = RosterApplicationFactory(
+            character=cls.entry.character_sheet.character,
+        )
+
+    def test_gm_can_deny_own_queue_application(self) -> None:
+        from world.gm.services import deny_application_as_gm
+        from world.roster.models.choices import ApplicationStatus
+
+        deny_application_as_gm(self.gm, self.app, review_notes="Not a fit")
+        self.app.refresh_from_db()
+        assert self.app.status == ApplicationStatus.DENIED
+        assert self.app.review_notes == "Not a fit"
+        assert self.app.reviewed_by == self.gm.account.player_data
+
+    def test_gm_cannot_deny_other_gms_application(self) -> None:
+        from world.gm.services import deny_application_as_gm
+
+        with self.assertRaises(ValidationError):
+            deny_application_as_gm(self.other_gm, self.app)
+
+
+class SurrenderCharacterStoryTest(TestCase):
+    def test_gm_surrenders_own_story(self) -> None:
+        from world.gm.factories import GMProfileFactory, GMTableFactory
+        from world.gm.services import surrender_character_story
+        from world.stories.factories import StoryFactory
+
+        gm = GMProfileFactory()
+        table = GMTableFactory(gm=gm)
+        story = StoryFactory(primary_table=table)
+        surrender_character_story(gm, story)
+        story.refresh_from_db()
+        assert story.primary_table is None
+
+    def test_cannot_surrender_other_gms_story(self) -> None:
+        from world.gm.factories import GMProfileFactory, GMTableFactory
+        from world.gm.services import surrender_character_story
+        from world.stories.factories import StoryFactory
+
+        gm = GMProfileFactory()
+        other_gm = GMProfileFactory()
+        other_table = GMTableFactory(gm=other_gm)
+        story = StoryFactory(primary_table=other_table)
+        with self.assertRaises(ValidationError):
+            surrender_character_story(gm, story)
+
+    def test_cannot_surrender_orphan_story(self) -> None:
+        from world.gm.factories import GMProfileFactory
+        from world.gm.services import surrender_character_story
+        from world.stories.factories import StoryFactory
+
+        gm = GMProfileFactory()
+        story = StoryFactory(primary_table=None)
+        with self.assertRaises(ValidationError):
+            surrender_character_story(gm, story)

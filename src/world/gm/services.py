@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
 
     from world.roster.models.applications import RosterApplication
+    from world.stories.models import Story
 
 TEMPORARY_PERSONA_REJECTION = (
     "A temporary persona cannot join a GM table — use a primary or established persona."
@@ -111,3 +112,46 @@ def gm_application_queue(gm: GMProfile) -> QuerySet[RosterApplication]:
         .select_related("character", "player_data__account")
         .distinct()
     )
+
+
+@transaction.atomic
+def approve_application_as_gm(gm: GMProfile, application: RosterApplication) -> None:
+    """Approve a roster application on behalf of the overseeing GM.
+
+    Verifies the application is in this GM's queue (i.e. GM owns a table
+    hosting a story the applied-for character participates in). Then
+    delegates to RosterApplication.approve().
+    """
+    queue = gm_application_queue(gm)
+    if not queue.filter(pk=application.pk).exists():
+        msg = "This application is not in your GM application queue."
+        raise ValidationError(msg)
+    application.approve(staff_player_data=gm.account.player_data)
+
+
+@transaction.atomic
+def deny_application_as_gm(
+    gm: GMProfile,
+    application: RosterApplication,
+    review_notes: str = "",
+) -> None:
+    """Deny an application in the GM's queue."""
+    queue = gm_application_queue(gm)
+    if not queue.filter(pk=application.pk).exists():
+        msg = "This application is not in your GM application queue."
+        raise ValidationError(msg)
+    application.deny(staff_player_data=gm.account.player_data, reason=review_notes)
+
+
+@transaction.atomic
+def surrender_character_story(gm: GMProfile, story: Story) -> None:
+    """GM surrenders oversight of a story.
+
+    Clears primary_table so the story becomes orphaned (character falls
+    out of default visibility until another GM picks up oversight).
+    """
+    if story.primary_table is None or story.primary_table.gm != gm:
+        msg = "You do not oversee this story."
+        raise ValidationError(msg)
+    story.primary_table = None
+    story.save(update_fields=["primary_table"])
