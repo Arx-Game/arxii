@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,6 @@ import {
   useDenyApplication,
   useRequestRevisions,
 } from '@/staff/queries';
-import { useAppSelector } from '@/store/hooks';
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -27,7 +26,6 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 export function StaffApplicationDetailPage() {
-  const account = useAppSelector((state) => state.auth.account);
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const appId = id ? parseInt(id, 10) : undefined;
@@ -41,7 +39,6 @@ export function StaffApplicationDetailPage() {
 
   const [actionComment, setActionComment] = useState('');
 
-  if (!account?.is_staff) return <Navigate to="/" replace />;
   if (isLoading) return <p className="p-8 text-muted-foreground">Loading...</p>;
   if (!application) return <p className="p-8 text-muted-foreground">Application not found.</p>;
 

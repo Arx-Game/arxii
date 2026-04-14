@@ -312,7 +312,12 @@ class LegendEntryAdmin(admin.ModelAdmin):
         "spread_count",
         "created_at",
     ]
-    list_filter = ["is_active", "source_type", "societies_aware", "persona__character"]
+    list_filter = [
+        "is_active",
+        "source_type",
+        "societies_aware",
+        "persona__character_sheet__character",
+    ]
     search_fields = ["title", "description", "persona__name"]
     ordering = ["-created_at"]
     readonly_fields = ["created_at", "updated_at", "get_total_value"]
@@ -383,7 +388,7 @@ class LegendSpreadAdmin(admin.ModelAdmin):
         "method",
         "created_at",
     ]
-    list_filter = ["societies_reached", "legend_entry__persona__character"]
+    list_filter = ["societies_reached", "legend_entry__persona__character_sheet__character"]
     search_fields = [
         "legend_entry__title",
         "spreader_persona__name",

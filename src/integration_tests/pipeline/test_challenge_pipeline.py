@@ -97,14 +97,11 @@ class ChallengeAvailabilityTests(TestCase):
     def test_character_without_relevant_stats_sees_no_approaches(self) -> None:
         """A bare character with no trait values sees no available actions."""
         from evennia_extensions.factories import CharacterFactory
-        from world.character_sheets.factories import (
-            CharacterIdentityFactory,
-            CharacterSheetFactory,
-        )
+        from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.factories import CharacterAnimaFactory
 
         bare_char = CharacterFactory(db_key="Nobody")
-        CharacterIdentityFactory(character=bare_char)
+        # CharacterSheetFactory also ensures a CharacterSheet exists.
         CharacterSheetFactory(character=bare_char)
         CharacterAnimaFactory(character=bare_char)
 

@@ -61,7 +61,9 @@ class CreateSoloDeedTests(TestCase):
             source_type=self.source_type,
             base_value=25,
         )
-        summary = CharacterLegendSummary.objects.get(character=self.persona.character)
+        summary = CharacterLegendSummary.objects.get(
+            character=self.persona.character_sheet.character
+        )
         self.assertEqual(summary.personal_legend, 25)
 
 
@@ -108,8 +110,12 @@ class CreateLegendEventTests(TestCase):
             base_value=30,
             personas=[self.persona_a, self.persona_b],
         )
-        summary_a = CharacterLegendSummary.objects.get(character=self.persona_a.character)
-        summary_b = CharacterLegendSummary.objects.get(character=self.persona_b.character)
+        summary_a = CharacterLegendSummary.objects.get(
+            character=self.persona_a.character_sheet.character
+        )
+        summary_b = CharacterLegendSummary.objects.get(
+            character=self.persona_b.character_sheet.character
+        )
         self.assertEqual(summary_a.personal_legend, 30)
         self.assertEqual(summary_b.personal_legend, 30)
 
@@ -214,7 +220,7 @@ class SpreadDeedTests(TestCase):
             spreader_persona=self.spreader,
             value_added=5,
         )
-        summary = CharacterLegendSummary.objects.get(character=persona.character)
+        summary = CharacterLegendSummary.objects.get(character=persona.character_sheet.character)
         # base_value 10 + spread 5 = 15
         self.assertEqual(summary.personal_legend, 15)
 
@@ -288,7 +294,7 @@ class GetCharacterLegendTotalTests(TestCase):
         from world.societies.models import refresh_legend_views
 
         refresh_legend_views()
-        total = get_character_legend_total(persona.character)
+        total = get_character_legend_total(persona.character_sheet.character)
         self.assertEqual(total, 0)
 
     def test_returns_correct_total(self) -> None:
@@ -306,15 +312,15 @@ class GetCharacterLegendTotalTests(TestCase):
             source_type=self.source_type,
             base_value=20,
         )
-        total = get_character_legend_total(persona.character)
+        total = get_character_legend_total(persona.character_sheet.character)
         self.assertEqual(total, 30)
 
     def test_sums_across_personas(self) -> None:
         """Sums legend from multiple personas of the same character."""
         persona_a = PersonaFactory()
-        character = persona_a.character
+        character = persona_a.character_sheet.character
         persona_b = PersonaFactory(
-            character=character,
+            character_sheet=persona_a.character_sheet,
             name="Alias",
             persona_type=PersonaType.ESTABLISHED,
         )

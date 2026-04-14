@@ -22,7 +22,7 @@ class FatigueStatusViewTests(APITestCase):
         cls.account = AccountFactory()
         cls.sheet = CharacterSheetFactory()
         cls.tenure = RosterTenureFactory(
-            roster_entry__character=cls.sheet.character,
+            roster_entry__character_sheet__character=cls.sheet.character,
             player_data__account=cls.account,
         )
         # Set up stats so capacity is non-zero
@@ -82,7 +82,7 @@ class RestViewTests(APITestCase):
         cls.account = AccountFactory()
         cls.sheet = CharacterSheetFactory()
         cls.tenure = RosterTenureFactory(
-            roster_entry__character=cls.sheet.character,
+            roster_entry__character_sheet__character=cls.sheet.character,
             player_data__account=cls.account,
         )
 

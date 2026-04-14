@@ -11,6 +11,8 @@ from typing import Any
 
 from django.urls import reverse
 
+from world.gm.constants import GMApplicationStatus
+from world.gm.models import GMApplication
 from world.player_submissions.constants import SubmissionCategory, SubmissionStatus
 from world.player_submissions.models import BugReport, PlayerFeedback, PlayerReport
 from world.roster.models.applications import RosterApplication
@@ -101,6 +103,18 @@ def _application_to_item(obj: RosterApplication) -> InboxItem:
     )
 
 
+def _gm_application_to_item(obj: GMApplication) -> InboxItem:
+    return InboxItem(
+        source_type=SubmissionCategory.GM_APPLICATION,
+        source_pk=obj.pk,
+        title=f"GM Application: {obj.application_text[:60]}",
+        reporter_summary=f"Applicant: {obj.account.username}",
+        created_at=obj.created_at,
+        status=obj.status,
+        detail_url=reverse("gm:gm-application-detail", args=[obj.pk]),
+    )
+
+
 def get_staff_inbox(
     *,
     categories: list[str] | None = None,
@@ -126,7 +140,7 @@ def get_staff_inbox(
             status=SubmissionStatus.OPEN,
         ).select_related(
             "reporter_account",
-            "reporter_persona__character",
+            "reporter_persona__character_sheet__character",
         )
         items.extend(_feedback_to_item(fb) for fb in feedback_qs)
 
@@ -135,7 +149,7 @@ def get_staff_inbox(
             status=SubmissionStatus.OPEN,
         ).select_related(
             "reporter_account",
-            "reporter_persona__character",
+            "reporter_persona__character_sheet__character",
         )
         items.extend(_bug_to_item(br) for br in bug_qs)
 
@@ -145,8 +159,8 @@ def get_staff_inbox(
         ).select_related(
             "reporter_account",
             "reported_account",
-            "reporter_persona__character",
-            "reported_persona__character",
+            "reporter_persona__character_sheet__character",
+            "reported_persona__character_sheet__character",
         )
         items.extend(_report_to_item(pr) for pr in report_qs)
 
@@ -155,6 +169,12 @@ def get_staff_inbox(
             status=ApplicationStatus.PENDING,
         ).select_related("character", "player_data__account")
         items.extend(_application_to_item(app) for app in application_qs)
+
+    if _include(SubmissionCategory.GM_APPLICATION):
+        gm_app_qs = GMApplication.objects.filter(
+            status=GMApplicationStatus.PENDING,
+        ).select_related("account")
+        items.extend(_gm_application_to_item(app) for app in gm_app_qs)
 
     items.sort(key=lambda i: i.created_at, reverse=True)
     return items
@@ -172,16 +192,17 @@ def get_account_submission_history(
     into the per-type management ViewSet for deeper exploration.
 
     Returns a dict with keys: reports_against, reports_submitted,
-    feedback, bug_reports, character_applications. Each value is a dict
-    of the shape ``{"items": [...], "total": int, "truncated": bool}``.
+    feedback, bug_reports, character_applications, gm_applications.
+    Each value is a dict of the shape
+    ``{"items": [...], "total": int, "truncated": bool}``.
     """
     reports_against_qs = (
         PlayerReport.objects.filter(reported_account_id=account_id)
         .select_related(
             "reporter_account",
             "reported_account",
-            "reporter_persona__character",
-            "reported_persona__character",
+            "reporter_persona__character_sheet__character",
+            "reported_persona__character_sheet__character",
         )
         .order_by("-created_at")
     )
@@ -193,8 +214,8 @@ def get_account_submission_history(
         .select_related(
             "reporter_account",
             "reported_account",
-            "reporter_persona__character",
-            "reported_persona__character",
+            "reporter_persona__character_sheet__character",
+            "reported_persona__character_sheet__character",
         )
         .order_by("-created_at")
     )
@@ -205,7 +226,7 @@ def get_account_submission_history(
         PlayerFeedback.objects.filter(reporter_account_id=account_id)
         .select_related(
             "reporter_account",
-            "reporter_persona__character",
+            "reporter_persona__character_sheet__character",
         )
         .order_by("-created_at")
     )
@@ -216,7 +237,7 @@ def get_account_submission_history(
         BugReport.objects.filter(reporter_account_id=account_id)
         .select_related(
             "reporter_account",
-            "reporter_persona__character",
+            "reporter_persona__character_sheet__character",
         )
         .order_by("-created_at")
     )
@@ -232,6 +253,14 @@ def get_account_submission_history(
     )
     applications_total = applications_qs.count()
     applications = list(applications_qs[:MAX_PER_CATEGORY])
+
+    gm_applications_qs = (
+        GMApplication.objects.filter(account_id=account_id)
+        .select_related("account", "reviewed_by")
+        .order_by("-created_at")
+    )
+    gm_applications_total = gm_applications_qs.count()
+    gm_applications = list(gm_applications_qs[:MAX_PER_CATEGORY])
 
     def _wrap(items: list[InboxItem], total: int) -> dict[str, Any]:
         return {
@@ -260,5 +289,9 @@ def get_account_submission_history(
         "character_applications": _wrap(
             [_application_to_item(a) for a in applications],
             applications_total,
+        ),
+        "gm_applications": _wrap(
+            [_gm_application_to_item(g) for g in gm_applications],
+            gm_applications_total,
         ),
     }

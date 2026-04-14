@@ -1,6 +1,6 @@
 # Staff Inbox and Player Submissions
 
-**Status:** in-progress (backend complete, frontend pending)
+**Status:** in-progress (staff frontend complete, player submission forms pending)
 **Depends on:** None (foundational infrastructure)
 
 ## Overview
@@ -132,11 +132,17 @@ For the first PR, everything is **staff-only**. Delegation tiers come later.
 - Staff-only endpoint: all submissions related to a specific account (walking persona chains)
 - Reports against, reports submitted, feedback, bug reports, character applications
 
-### Phase 5 — Frontend (separate work)
-- Staff dashboard widget showing job counts by category
-- Per-type list views
-- Account history page UI
+### Phase 5a — Staff frontend ✅
+- Staff hub cards with inbox count badge and per-type navigation
+- Inbox triage page with toggleable category filters (localStorage-persisted)
+- Per-type list views with status filters and pagination (feedback, bug reports, player reports)
+- Per-type detail views with status management (mark reviewed, dismiss)
+- Player report detail with reported player info, flags, and account history link
+- Account history page showing grouped submissions per account
+
+### Phase 5b — Player submission forms (TODO)
 - Submission forms for players (feedback, bug report)
+- Player-facing UI for submitting reports
 
 ## PlayerReport — Full Design Deferred
 

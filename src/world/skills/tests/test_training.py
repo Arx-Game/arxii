@@ -4,7 +4,7 @@ from django.db import IntegrityError
 from django.test import TestCase
 
 from world.action_points.models import ActionPointConfig, ActionPointPool
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import CharacterClassLevelFactory
 from world.progression.models.rewards import DevelopmentTransaction
 from world.progression.types import DevelopmentSource
@@ -33,7 +33,7 @@ class TrainingAllocationModelTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.identity = CharacterIdentityFactory()
+        cls.identity = CharacterSheetFactory()
         cls.character = cls.identity.character
         cls.skill = SkillFactory()
         cls.specialization = SpecializationFactory(parent_skill=cls.skill)
@@ -136,7 +136,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.student_identity = CharacterIdentityFactory()
+        cls.student_identity = CharacterSheetFactory()
         cls.student = cls.student_identity.character
         # Ensure CharacterSheet exists (DevelopmentTransaction uses CharacterSheet FK)
         from world.character_sheets.models import CharacterSheet
@@ -152,7 +152,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
         )
 
         # Mentor guise + character
-        cls.mentor_identity = CharacterIdentityFactory()
+        cls.mentor_identity = CharacterSheetFactory()
         cls.mentor = cls.mentor_identity.character
 
         # Mentor has skill value 100
@@ -192,7 +192,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
         alloc = TrainingAllocation.objects.create(
             character=self.student,
             skill=self.skill,
-            mentor=self.mentor_identity.active_persona,
+            mentor=self.mentor_identity.primary_persona,
             ap_amount=20,
         )
         result = calculate_training_development(alloc)
@@ -208,7 +208,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
 
     def test_no_path_level_defaults_to_one(self) -> None:
         """Character with no class levels uses path_level=1."""
-        student_identity = CharacterIdentityFactory()
+        student_identity = CharacterSheetFactory()
         student = student_identity.character
         CharacterSkillValueFactory(character=student, skill=self.skill, value=20)
         alloc = TrainingAllocation.objects.create(
@@ -225,7 +225,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
         alloc = TrainingAllocation.objects.create(
             character=self.student,
             skill=self.skill,
-            mentor=self.mentor_identity.active_persona,
+            mentor=self.mentor_identity.primary_persona,
             ap_amount=7,
         )
         result = calculate_training_development(alloc)
@@ -233,14 +233,14 @@ class CalculateTrainingDevelopmentTests(TestCase):
 
     def test_zero_student_skill_uses_floor(self) -> None:
         """Student with 0 skill uses 1 to prevent division by zero."""
-        student_identity = CharacterIdentityFactory()
+        student_identity = CharacterSheetFactory()
         student = student_identity.character
         # No CharacterSkillValue created — defaults to 0 -> floor to 1
         CharacterClassLevelFactory(character=student, level=1)
         alloc = TrainingAllocation.objects.create(
             character=student,
             skill=self.skill,
-            mentor=self.mentor_identity.active_persona,
+            mentor=self.mentor_identity.primary_persona,
             ap_amount=10,
         )
         result = calculate_training_development(alloc)
@@ -260,7 +260,7 @@ class CalculateSpecializationTrainingTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.student_identity = CharacterIdentityFactory()
+        cls.student_identity = CharacterSheetFactory()
         cls.student = cls.student_identity.character
 
         cls.skill = SkillFactory()
@@ -275,7 +275,7 @@ class CalculateSpecializationTrainingTests(TestCase):
         )
 
         # Mentor: parent=50, spec=50, teaching=20
-        cls.mentor_identity = CharacterIdentityFactory()
+        cls.mentor_identity = CharacterSheetFactory()
         cls.mentor = cls.mentor_identity.character
         CharacterSkillValueFactory(character=cls.mentor, skill=cls.skill, value=50)
         CharacterSpecializationValueFactory(
@@ -300,7 +300,7 @@ class CalculateSpecializationTrainingTests(TestCase):
         alloc = TrainingAllocation.objects.create(
             character=self.student,
             specialization=self.spec,
-            mentor=self.mentor_identity.active_persona,
+            mentor=self.mentor_identity.primary_persona,
             ap_amount=20,
         )
         result = calculate_training_development(alloc)
@@ -332,7 +332,7 @@ class CreateTrainingAllocationTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.identity = CharacterIdentityFactory()
+        cls.identity = CharacterSheetFactory()
         cls.character = cls.identity.character
         cls.skill = SkillFactory()
         cls.mentor = PersonaFactory()
@@ -391,7 +391,7 @@ class UpdateTrainingAllocationTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.identity = CharacterIdentityFactory()
+        cls.identity = CharacterSheetFactory()
         cls.character = cls.identity.character
         cls.skill = SkillFactory()
 
@@ -435,7 +435,7 @@ class RemoveTrainingAllocationTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.identity = CharacterIdentityFactory()
+        cls.identity = CharacterSheetFactory()
         cls.character = cls.identity.character
         cls.skill = SkillFactory()
 
@@ -456,9 +456,9 @@ class ProcessWeeklyTrainingTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
-        cls.student_identity = CharacterIdentityFactory()
+        cls.student_identity = CharacterSheetFactory()
         cls.student = cls.student_identity.character
-        RosterEntryFactory(character=cls.student)
+        RosterEntryFactory(character_sheet__character=cls.student)
         cls.skill = SkillFactory()
 
     def setUp(self) -> None:
@@ -639,9 +639,9 @@ class ApplyWeeklyRustTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.identity = CharacterIdentityFactory()
+        self.identity = CharacterSheetFactory()
         self.character = self.identity.character
-        RosterEntryFactory(character=self.character)
+        RosterEntryFactory(character_sheet__character=self.character)
         self.skill = SkillFactory()
         self.skill_value = CharacterSkillValueFactory(
             character=self.character,
@@ -689,7 +689,7 @@ class RustPayoffTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.identity = CharacterIdentityFactory()
+        self.identity = CharacterSheetFactory()
         self.character = self.identity.character
         self.skill = SkillFactory()
         self.skill_value = CharacterSkillValueFactory(
@@ -733,9 +733,9 @@ class RunWeeklySkillCronTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.identity = CharacterIdentityFactory()
+        self.identity = CharacterSheetFactory()
         self.character = self.identity.character
-        RosterEntryFactory(character=self.character)
+        RosterEntryFactory(character_sheet__character=self.character)
         self.trained_skill = SkillFactory()
         self.untrained_skill = SkillFactory()
         self.trained_sv = CharacterSkillValueFactory(

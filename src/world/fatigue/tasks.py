@@ -25,11 +25,11 @@ def _build_character_to_account_map(character_pks: list[int]) -> dict[int, int]:
     """
     tenures = (
         RosterTenure.objects.filter(
-            roster_entry__character_id__in=character_pks,
+            roster_entry__character_sheet_id__in=character_pks,
             end_date__isnull=True,
         )
         .select_related("player_data")
-        .values_list("roster_entry__character_id", "player_data__account_id")
+        .values_list("roster_entry__character_sheet_id", "player_data__account_id")
     )
     return dict(tenures)
 

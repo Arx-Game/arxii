@@ -523,7 +523,6 @@ class CharacterFacetModelTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.factories import ResonanceFactory
 
         cls.sheet = CharacterSheetFactory()
@@ -562,8 +561,6 @@ class CharacterFacetModelTest(TestCase):
 
     def test_same_facet_different_characters(self):
         """Test that different characters can have the same facet."""
-        from world.character_sheets.factories import CharacterSheetFactory
-
         other_sheet = CharacterSheetFactory()
 
         CharacterFacet.objects.create(

@@ -89,8 +89,7 @@ class TestCharacterSheetViewSet(TestCase):
         # Original creator: player_number=1
         cls.original_player = PlayerDataFactory()
         cls.roster_entry = RosterEntryFactory()
-        # Every roster entry needs a CharacterSheet for the serializer
-        CharacterSheetFactory(character=cls.roster_entry.character)
+        # RosterEntryFactory auto-creates a CharacterSheet for the character.
         cls.original_tenure = RosterTenureFactory(
             player_data=cls.original_player,
             roster_entry=cls.roster_entry,
@@ -118,11 +117,11 @@ class TestCharacterSheetViewSet(TestCase):
     def test_retrieve_returns_200_for_valid_entry(self) -> None:
         """GET /api/character-sheets/{id}/ returns 200 for an existing character."""
         self.client.force_authenticate(user=self.original_player.account)
-        url = f"/api/character-sheets/{self.roster_entry.character.pk}/"
+        url = f"/api/character-sheets/{self.roster_entry.character_sheet.character.pk}/"
         response = self.client.get(url)
 
         assert response.status_code == 200
-        assert response.data["id"] == self.roster_entry.character.pk
+        assert response.data["id"] == self.roster_entry.character_sheet.character.pk
 
     def test_retrieve_returns_404_for_nonexistent_entry(self) -> None:
         """GET /api/character-sheets/{id}/ returns 404 for a nonexistent ID."""
@@ -135,7 +134,7 @@ class TestCharacterSheetViewSet(TestCase):
     def test_can_edit_true_for_original_account(self) -> None:
         """Original creator (player_number=1) gets can_edit=true."""
         self.client.force_authenticate(user=self.original_player.account)
-        url = f"/api/character-sheets/{self.roster_entry.character.pk}/"
+        url = f"/api/character-sheets/{self.roster_entry.character_sheet.character.pk}/"
         response = self.client.get(url)
 
         assert response.status_code == 200
@@ -144,7 +143,7 @@ class TestCharacterSheetViewSet(TestCase):
     def test_can_edit_false_for_second_player(self) -> None:
         """Second player (player_number=2) gets can_edit=false."""
         self.client.force_authenticate(user=self.second_player.account)
-        url = f"/api/character-sheets/{self.roster_entry.character.pk}/"
+        url = f"/api/character-sheets/{self.roster_entry.character_sheet.character.pk}/"
         response = self.client.get(url)
 
         assert response.status_code == 200
@@ -153,7 +152,7 @@ class TestCharacterSheetViewSet(TestCase):
     def test_can_edit_true_for_staff(self) -> None:
         """Staff users get can_edit=true regardless of tenure."""
         self.client.force_authenticate(user=self.staff_account)
-        url = f"/api/character-sheets/{self.roster_entry.character.pk}/"
+        url = f"/api/character-sheets/{self.roster_entry.character_sheet.character.pk}/"
         response = self.client.get(url)
 
         assert response.status_code == 200
@@ -162,7 +161,7 @@ class TestCharacterSheetViewSet(TestCase):
     def test_can_edit_false_for_unrelated_user(self) -> None:
         """A user with no tenure on the character gets can_edit=false."""
         self.client.force_authenticate(user=self.other_player.account)
-        url = f"/api/character-sheets/{self.roster_entry.character.pk}/"
+        url = f"/api/character-sheets/{self.roster_entry.character_sheet.character.pk}/"
         response = self.client.get(url)
 
         assert response.status_code == 200
@@ -170,7 +169,7 @@ class TestCharacterSheetViewSet(TestCase):
 
     def test_unauthenticated_returns_403(self) -> None:
         """Unauthenticated requests are rejected."""
-        url = f"/api/character-sheets/{self.roster_entry.character.pk}/"
+        url = f"/api/character-sheets/{self.roster_entry.character_sheet.character.pk}/"
         response = self.client.get(url)
 
         assert response.status_code in (401, 403)
@@ -178,9 +177,9 @@ class TestCharacterSheetViewSet(TestCase):
     def test_can_edit_false_when_no_tenures_exist(self) -> None:
         """An entry with no tenures returns can_edit=false for any user."""
         empty_entry = RosterEntryFactory()
-        CharacterSheetFactory(character=empty_entry.character)
+        # RosterEntryFactory already creates the CharacterSheet.
         self.client.force_authenticate(user=self.original_player.account)
-        url = f"/api/character-sheets/{empty_entry.character.pk}/"
+        url = f"/api/character-sheets/{empty_entry.character_sheet.character.pk}/"
         response = self.client.get(url)
 
         assert response.status_code == 200
@@ -228,7 +227,7 @@ class TestIdentitySection(TestCase):
             additional_desc="Tall and broad-shouldered.",
         )
 
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -354,7 +353,7 @@ class TestIdentityNullableFields(TestCase):
             heritage=None,
         )
 
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -429,7 +428,7 @@ class TestAppearanceSection(TestCase):
             additional_desc="Lithe and graceful.",
         )
 
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -505,7 +504,7 @@ class TestAppearanceNoTrueForm(TestCase):
             additional_desc="",
         )
 
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -552,7 +551,7 @@ class TestStatsSection(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="StatChar")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -596,7 +595,7 @@ class TestStatsEmpty(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="NoStats")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -624,7 +623,7 @@ class TestSkillsSection(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="SkillChar")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -690,7 +689,7 @@ class TestSkillsEmpty(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="NoSkills")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -718,7 +717,7 @@ class TestPathDetailSection(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="PathWalker")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -810,7 +809,7 @@ class TestPathDetailNull(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="NoPath")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -838,7 +837,7 @@ class TestDistinctionsSection(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="DistChar")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -909,7 +908,7 @@ class TestDistinctionsEmpty(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="NoDist")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -937,7 +936,7 @@ class TestMagicSectionFull(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="MageChar")
         cls.sheet = CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1134,7 +1133,7 @@ class TestMagicNull(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="NoMagic")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1162,7 +1161,7 @@ class TestMagicPartialData(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="PartialMage")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1231,7 +1230,7 @@ class TestMagicGiftWithoutTechniques(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="NewMage")
         cls.sheet = CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1269,7 +1268,7 @@ class TestStorySection(TestCase):
             background="Born under a blood moon.",
             personality="Quiet and calculating.",
         )
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1314,7 +1313,7 @@ class TestStoryEmpty(TestCase):
             background="",
             personality="",
         )
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1343,7 +1342,7 @@ class TestGoalsSection(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="GoalChar")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1406,7 +1405,7 @@ class TestGoalsEmpty(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="NoGoals")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1433,7 +1432,7 @@ class TestPersonasSection(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="PersonaChar")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1441,15 +1440,13 @@ class TestPersonasSection(TestCase):
         )
 
         # Persona with thumbnail
-        from world.character_sheets.factories import CharacterIdentityFactory
-
-        cls.char_identity = CharacterIdentityFactory(character=cls.character)
+        cls.char_identity = CharacterSheetFactory(character=cls.character)
         cls.media = PlayerMediaFactory(
             player_data=cls.player,
             cloudinary_url="https://res.cloudinary.com/test/image/upload/iron_voice.jpg",
         )
         cls.persona_with_thumb = PersonaFactory(
-            character_identity=cls.char_identity,
+            character_sheet=cls.char_identity.character.sheet_data,
             name="The Iron Voice",
             description="A masked figure.",
             thumbnail=cls.media,
@@ -1457,7 +1454,7 @@ class TestPersonasSection(TestCase):
 
         # Persona without thumbnail
         cls.persona_no_thumb = PersonaFactory(
-            character_identity=cls.char_identity,
+            character_sheet=cls.char_identity.character.sheet_data,
             name="Shadow",
             description="",
             thumbnail=None,
@@ -1476,7 +1473,7 @@ class TestPersonasSection(TestCase):
     def test_personas_returns_correct_count(self) -> None:
         """Personas section returns all character personas."""
         personas = self._get_personas()
-        # 2 explicit personas + 1 primary persona auto-created by CharacterIdentityFactory
+        # 2 explicit personas + 1 primary persona auto-created by CharacterSheetFactory
         assert len(personas) == 3
 
     def test_persona_entry_keys(self) -> None:
@@ -1510,8 +1507,13 @@ class TestPersonasEmpty(TestCase):
     def setUpTestData(cls) -> None:
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="NoPersonas")
-        CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        # Opt out of factory PRIMARY persona creation so the response has
+        # an empty personas list.
+        CharacterSheetFactory(character=cls.character, primary_persona=False)
+        cls.roster_entry = RosterEntryFactory(
+            character_sheet__character=cls.character,
+            character_sheet__primary_persona=False,
+        )
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1544,7 +1546,7 @@ class TestThemingSection(TestCase):
             origin_realm=cls.realm,
             species=cls.species,
         )
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1595,7 +1597,7 @@ class TestThemingNulls(TestCase):
             origin_realm=None,
             species=None,
         )
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1622,7 +1624,7 @@ class TestProfilePictureSection(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="PicChar")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.tenure = RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1658,7 +1660,7 @@ class TestProfilePictureNull(TestCase):
         cls.player = PlayerDataFactory()
         cls.character = CharacterFactory(db_key="NoPic")
         CharacterSheetFactory(character=cls.character)
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1720,7 +1722,7 @@ class TestCharacterSheetQueryCount(TestCase):
             personality="Full personality.",
         )
 
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.tenure = RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1808,11 +1810,9 @@ class TestCharacterSheetQueryCount(TestCase):
             player_data=cls.player,
             cloudinary_url="https://res.cloudinary.com/test/guise.jpg",
         )
-        from world.character_sheets.factories import CharacterIdentityFactory
-
-        identity = CharacterIdentityFactory(character=cls.character)
+        identity = CharacterSheetFactory(character=cls.character)
         PersonaFactory(
-            character_identity=identity,
+            character_sheet=identity.character.sheet_data,
             name="FullPersona",
             description="A persona.",
             thumbnail=media,
@@ -1859,7 +1859,7 @@ class TestCharacterSheetQueryCount(TestCase):
         assert data["identity"]["name"] == "FullChar"
         assert data["story"]["background"] == "Full background."
         assert len(data["goals"]) == 1
-        # 1 explicit persona + 1 primary persona from CharacterIdentityFactory
+        # 1 explicit persona + 1 primary persona from CharacterSheetFactory
         assert len(data["personas"]) == 2
         assert data["theming"]["aura"] is not None
         assert data["profile_picture"] is not None
@@ -1910,7 +1910,7 @@ class TestPrefetchCompleteness(TestCase):
             personality="PF personality.",
         )
 
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.tenure = RosterTenureFactory(
             player_data=cls.player,
             roster_entry=cls.roster_entry,
@@ -1996,11 +1996,9 @@ class TestPrefetchCompleteness(TestCase):
             cloudinary_url="https://res.cloudinary.com/test/pfguise.jpg",
         )
 
-        from world.character_sheets.factories import CharacterIdentityFactory
-
-        pf_identity = CharacterIdentityFactory(character=cls.character)
+        pf_identity = CharacterSheetFactory(character=cls.character)
         PersonaFactory(
-            character_identity=pf_identity,
+            character_sheet=pf_identity.character.sheet_data,
             name="PFPersona",
             description="A persona.",
             thumbnail=media,
@@ -2013,7 +2011,7 @@ class TestPrefetchCompleteness(TestCase):
     def test_can_edit_tenure_walk_zero_queries(self) -> None:
         """Walking cached_tenures requires no additional queries."""
         sheet = self._get_sheet()
-        roster_entry = sheet.character.roster_entry
+        roster_entry = sheet.roster_entry
         with self.assertNumQueries(0):
             list(roster_entry.cached_tenures)  # type: ignore[attr-defined]
 

@@ -4,7 +4,7 @@ from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory, CharacterFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionVisibility
 from world.scenes.factories import (
@@ -18,28 +18,30 @@ class InteractionViewSetTestCase(APITestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         # Build the full identity chain: Account -> PlayerData -> RosterTenure
-        # -> RosterEntry -> character -> CharacterIdentity -> Persona
+        # -> RosterEntry -> CharacterSheet -> Persona (PRIMARY, auto-created
+        # by CharacterSheetFactory; no CharacterIdentity model anymore —
+        # merged into CharacterSheet in the 2026-04 refactor)
         cls.account = AccountFactory()
         cls.character = CharacterFactory()
-        cls.roster_entry = RosterEntryFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         cls.player_data = PlayerDataFactory(account=cls.account)
         cls.tenure = RosterTenureFactory(
             player_data=cls.player_data,
             roster_entry=cls.roster_entry,
         )
-        cls.identity = CharacterIdentityFactory(character=cls.character)
-        cls.persona = cls.identity.active_persona
+        cls.identity = CharacterSheetFactory(character=cls.character)
+        cls.persona = cls.identity.primary_persona
 
         cls.other_account = AccountFactory()
         cls.other_character = CharacterFactory()
-        cls.other_roster_entry = RosterEntryFactory(character=cls.other_character)
+        cls.other_roster_entry = RosterEntryFactory(character_sheet__character=cls.other_character)
         cls.other_player_data = PlayerDataFactory(account=cls.other_account)
         cls.other_tenure = RosterTenureFactory(
             player_data=cls.other_player_data,
             roster_entry=cls.other_roster_entry,
         )
-        cls.other_identity = CharacterIdentityFactory(character=cls.other_character)
-        cls.other_persona = cls.other_identity.active_persona
+        cls.other_identity = CharacterSheetFactory(character=cls.other_character)
+        cls.other_persona = cls.other_identity.primary_persona
 
     def setUp(self) -> None:
         self.client.force_authenticate(user=self.account)

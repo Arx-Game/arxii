@@ -55,14 +55,15 @@ class CanCreatePersonaInScene(permissions.BasePermission):
         if request.user.is_staff:
             return True
 
-        # For create operations, check the user owns the character
+        # For create operations, check the user owns the character sheet's character
         if request.method == "POST":
-            character_id = request.data.get("character")
-            if character_id:
+            character_sheet_id = request.data.get("character_sheet")
+            if character_sheet_id:
                 from world.roster.models import RosterTenure  # noqa: PLC0415
 
+                # CharacterSheet shares pk with ObjectDB, so character_sheet_id == character_id
                 return RosterTenure.objects.filter(
-                    roster_entry__character_id=character_id,
+                    roster_entry__character_sheet_id=character_sheet_id,
                     player_data__account=request.user,
                     end_date__isnull=True,
                 ).exists()
@@ -78,7 +79,7 @@ class CanCreatePersonaInScene(permissions.BasePermission):
         from world.roster.models import RosterTenure  # noqa: PLC0415
 
         return RosterTenure.objects.filter(
-            roster_entry__character=obj.character,
+            roster_entry__character_sheet__character=obj.character_sheet.character,
             player_data__account=request.user,
             end_date__isnull=True,
         ).exists()

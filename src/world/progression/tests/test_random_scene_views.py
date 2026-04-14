@@ -8,7 +8,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.game_clock.models import GameWeek
 from world.game_clock.week_services import advance_game_week, get_current_game_week
 from world.progression.models import RandomSceneCompletion, RandomSceneTarget
@@ -33,8 +33,8 @@ def _make_active_character(account: AccountDB | None = None) -> tuple:
         kwargs["player_data"] = PlayerDataFactory(account=account)
     tenure = RosterTenureFactory(**kwargs)
     entry = tenure.roster_entry
-    identity = CharacterIdentityFactory(character=entry.character)
-    persona = identity.active_persona
+    identity = CharacterSheetFactory(character=entry.character_sheet.character)
+    persona = identity.primary_persona
     return persona, entry, tenure
 
 

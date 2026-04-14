@@ -66,7 +66,9 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
         """Basic validation checks that prevent application creation entirely"""
 
         # 1. Character must be on roster
-        if not hasattr(character, "roster_entry"):
+        if not hasattr(character, "sheet_data") or not hasattr(
+            character.sheet_data, "roster_entry"
+        ):
             raise serializers.ValidationError(
                 {
                     "code": ValidationErrorCodes.CHARACTER_NOT_ON_ROSTER,
@@ -75,7 +77,7 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
             )
 
         # 2. Player cannot already be playing this character
-        if character.roster_entry.tenures.filter(
+        if character.sheet_data.roster_entry.tenures.filter(
             player_data=player_data,
             end_date__isnull=True,
         ).exists():
@@ -87,8 +89,8 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
             )
 
         # 3. Character must be accepting applications
-        if not character.roster_entry.accepts_applications:
-            if character.roster_entry.current_tenure:
+        if not character.sheet_data.roster_entry.accepts_applications:
+            if character.sheet_data.roster_entry.current_tenure:
                 code = ValidationErrorCodes.CHARACTER_ALREADY_PLAYED
                 message = ValidationMessages.CHARACTER_ALREADY_PLAYED
             else:

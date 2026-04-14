@@ -86,7 +86,7 @@ class FinalizeMagicTraditionTests(TestCase):
         from world.roster.factories import RosterEntryFactory
 
         sheet = CharacterSheetFactory()
-        RosterEntryFactory(character=sheet.character)
+        RosterEntryFactory(character_sheet__character=sheet.character)
         draft = CharacterDraftFactory(selected_tradition=self.tradition)
 
         # Simulate step 5 of finalize_magic_data
@@ -95,7 +95,8 @@ class FinalizeMagicTraditionTests(TestCase):
         grants = TraditionCodexGrant.objects.filter(tradition=draft.selected_tradition).values_list(
             "entry_id", flat=True
         )
-        roster_entry = sheet.character.roster_entry
+        sheet.refresh_from_db()
+        roster_entry = sheet.roster_entry
         for entry_id in grants:
             CharacterCodexKnowledge.objects.get_or_create(
                 roster_entry=roster_entry,

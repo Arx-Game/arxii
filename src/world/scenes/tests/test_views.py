@@ -5,7 +5,7 @@ from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory, ObjectDBFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import (
@@ -19,17 +19,16 @@ from world.scenes.models import Persona, Scene
 
 def _create_owned_persona(account, **persona_kwargs):
     """Create a Persona whose character is owned by the given account via RosterTenure."""
-    identity = CharacterIdentityFactory()
+    identity = CharacterSheetFactory()
     player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(account=account)
-    roster_entry = RosterEntryFactory(character=identity.character)
+    roster_entry = RosterEntryFactory(character_sheet__character=identity.character)
     RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
     if persona_kwargs:
         return PersonaFactory(
-            character_identity=identity,
-            character=identity.character,
+            character_sheet=identity.character.sheet_data,
             **persona_kwargs,
         )
-    return identity.active_persona
+    return identity.primary_persona
 
 
 class SceneViewSetTestCase(APITestCase):
@@ -247,16 +246,15 @@ class PersonaViewSetTestCase(APITestCase):
     def test_persona_list(self):
         """Test persona list with pagination"""
         Persona.objects.all().delete()
-        identity = CharacterIdentityFactory()
+        identity = CharacterSheetFactory()
         player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(
             account=self.account,
         )
-        roster_entry = RosterEntryFactory(character=identity.character)
+        roster_entry = RosterEntryFactory(character_sheet__character=identity.character)
         RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
         PersonaFactory.create_batch(
             3,
-            character_identity=identity,
-            character=identity.character,
+            character_sheet=identity.character.sheet_data,
         )
 
         url = reverse("persona-list")
@@ -264,7 +262,7 @@ class PersonaViewSetTestCase(APITestCase):
 
         assert response.status_code == status.HTTP_200_OK
         assert "results" in response.data
-        # 3 established personas + 1 primary persona from CharacterIdentityFactory
+        # 3 established personas + 1 primary persona from CharacterSheetFactory
         assert len(response.data["results"]) == 4
 
     def test_persona_filtering_by_scene(self):

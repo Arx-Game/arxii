@@ -15,7 +15,12 @@ SRC_DIR = PROJECT_ROOT / "src"
 
 # Migrations that are allowed to have data insertion
 # These are typically essential system configurations, not seed data
-ALLOWED_MIGRATIONS: set[str] = set()
+ALLOWED_MIGRATIONS: set[str] = {
+    # Data migration: backfills Persona.character_sheet FK from character_identity chain
+    "world/scenes/migrations/0014_populate_persona_character_sheet.py",
+    # Data migration: backfills RosterEntry.character_sheet FK from character chain
+    "world/roster/migrations/0003_populate_roster_entry_character_sheet.py",
+}
 
 # Patterns that suggest seed data in migrations
 SEED_FUNCTION_PATTERNS = [

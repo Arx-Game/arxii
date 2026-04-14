@@ -17,7 +17,7 @@ def _create_character_with_account():
     """
     sheet = CharacterSheetFactory()
     player_data = PlayerDataFactory()
-    roster_entry = RosterEntryFactory(character=sheet.character)
+    roster_entry = RosterEntryFactory(character_sheet__character=sheet.character)
     RosterTenureFactory(
         player_data=player_data,
         roster_entry=roster_entry,

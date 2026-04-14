@@ -3,7 +3,7 @@ import factory
 import factory.django as factory_django
 
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterIdentityFactory, CharacterSheetFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.constants import (
@@ -74,14 +74,13 @@ class PersonaFactory(factory_django.DjangoModelFactory):
     """Factory for creating non-primary Persona instances.
 
     Defaults to ESTABLISHED type. For primary personas, use
-    CharacterIdentityFactory and access identity.active_persona.
+    CharacterSheetFactory and access sheet.primary_persona.
     """
 
     class Meta:
         model = Persona
 
-    character_identity = factory.SubFactory(CharacterIdentityFactory)
-    character = factory.LazyAttribute(lambda o: o.character_identity.character)
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
     name = factory.Sequence(lambda n: f"Persona {n}")
     persona_type = PersonaType.ESTABLISHED
     description = factory.Faker("text", max_nb_chars=100)
@@ -145,11 +144,7 @@ class SceneSummaryRevisionFactory(factory_django.DjangoModelFactory):
 
     account = factory.SubFactory(AccountFactory)
     scene = factory.SubFactory(SceneFactory, privacy_mode=ScenePrivacyMode.EPHEMERAL)
-    persona = factory.LazyAttribute(
-        lambda _obj: PersonaFactory(
-            character_identity=CharacterIdentityFactory(),
-        ),
-    )
+    persona = factory.SubFactory(PersonaFactory)
     content = factory.Faker("text", max_nb_chars=300)
     action = SummaryAction.SUBMIT
 

@@ -4,7 +4,7 @@ from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import (
@@ -18,17 +18,16 @@ from world.scenes.factories import (
 
 def _create_owned_persona(account, **persona_kwargs):
     """Create a Persona whose character is owned by the given account via RosterTenure."""
-    identity = CharacterIdentityFactory()
+    identity = CharacterSheetFactory()
     player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(account=account)
-    roster_entry = RosterEntryFactory(character=identity.character)
+    roster_entry = RosterEntryFactory(character_sheet__character=identity.character)
     RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
     if persona_kwargs:
         return PersonaFactory(
-            character_identity=identity,
-            character=identity.character,
+            character_sheet=identity.character.sheet_data,
             **persona_kwargs,
         )
-    return identity.active_persona
+    return identity.primary_persona
 
 
 class ScenePermissionsTestCase(APITestCase):
@@ -170,18 +169,17 @@ class PersonaPermissionsTestCase(APITestCase):
     def test_create_persona_participant_only(self):
         """Only scene participants can create personas"""
         # Create identity owned by participant
-        identity = CharacterIdentityFactory()
+        identity = CharacterSheetFactory()
         player_data, _ = PlayerDataFactory._meta.model.objects.get_or_create(
             account=self.participant,
         )
-        roster_entry = RosterEntryFactory(character=identity.character)
+        roster_entry = RosterEntryFactory(character_sheet__character=identity.character)
         RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
 
         url = reverse("persona-list")
         data = {
             "name": "Test Persona",
-            "character_identity": identity.id,
-            "character": identity.character.id,
+            "character_sheet": identity.character.sheet_data.pk,
         }
 
         # Outsider cannot create persona (doesn't own the character)
@@ -192,7 +190,7 @@ class PersonaPermissionsTestCase(APITestCase):
         # Participant can create persona (owns the character)
         self.client.force_authenticate(user=self.participant)
         response = self.client.post(url, data, format="json")
-        assert response.status_code == status.HTTP_201_CREATED
+        assert response.status_code == status.HTTP_201_CREATED, response.data
 
     @suppress_permission_errors
     def test_modify_persona_participant_permission(self):

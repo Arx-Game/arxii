@@ -42,7 +42,7 @@ class SceneAdmin(admin.ModelAdmin):
 
 @admin.register(Persona)
 class PersonaAdmin(admin.ModelAdmin):
-    list_display = ["name", "character_identity", "persona_type", "created_at"]
+    list_display = ["name", "character_sheet", "persona_type", "created_at"]
     list_filter = ["persona_type", "created_at"]
     search_fields = ["name", "character__db_key"]
     readonly_fields = ["created_at"]

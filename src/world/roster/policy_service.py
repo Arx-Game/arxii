@@ -45,7 +45,7 @@ class RosterPolicyService:
 
         # Check roster restrictions
         try:
-            roster_entry = character.roster_entry
+            roster_entry = character.sheet_data.roster_entry
         except AttributeError:
             roster_entry = None
         if not roster_entry:
@@ -103,5 +103,5 @@ class RosterPolicyService:
             player_current_characters=[
                 char.db_key for char in application.player_data.get_available_characters()
             ],
-            character_previous_players=application.character.roster_entry.tenures.count(),
+            character_previous_players=application.character.sheet_data.roster_entry.tenures.count(),
         )

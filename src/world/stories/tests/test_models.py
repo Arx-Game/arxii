@@ -3,8 +3,8 @@ from django.test import TestCase
 from evennia_extensions.factories import (
     AccountFactory,
     CharacterFactory,
-    GMCharacterFactory,
 )
+from world.gm.factories import GMProfileFactory
 from world.stories.factories import (
     ChapterFactory,
     EpisodeFactory,
@@ -101,10 +101,10 @@ class StoryModelTestCase(TestCase):
     def test_is_active_returns_true_with_gms(self):
         """Test that stories with active GMs and active status are active"""
 
-        gm_char = GMCharacterFactory()
+        gm_profile = GMProfileFactory()
 
         self.story.status = StoryStatus.ACTIVE
-        self.story.active_gms.add(gm_char)
+        self.story.active_gms.add(gm_profile)
         self.story.save()
 
         assert self.story.is_active()

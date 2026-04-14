@@ -1,7 +1,7 @@
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -176,17 +176,11 @@ class Persona(SharedMemoryModel):
     and relationships. Temporary personas are throwaway disguises.
     """
 
-    character_identity = models.ForeignKey(
-        "character_sheets.CharacterIdentity",
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="personas",
-        help_text="The real character behind this persona",
-    )
-    character = models.ForeignKey(
-        "objects.ObjectDB",
-        on_delete=models.CASCADE,
-        related_name="personas",
-        help_text="The character object (denormalized from character_identity for queries)",
+        help_text="The character sheet this persona belongs to.",
     )
     name = models.CharField(max_length=255, help_text="Display name for this persona")
     colored_name = models.CharField(
@@ -221,34 +215,77 @@ class Persona(SharedMemoryModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=["character_identity"],
-                condition=models.Q(persona_type="primary"),
-                name="unique_primary_persona",
+                fields=["character_sheet", "name"],
+                name="unique_persona_name_per_character",
             ),
             models.UniqueConstraint(
-                fields=["character_identity", "name"],
-                name="unique_persona_name_per_character",
+                fields=["character_sheet"],
+                condition=models.Q(persona_type="primary"),
+                name="unique_primary_persona_per_character_sheet",
             ),
         ]
 
     def __str__(self) -> str:
         return f"{self.name} ({self.get_persona_type_display()})"
 
-    def clean(self) -> None:
-        super().clean()
-        if (
-            self.character_identity_id
-            and self.character_id
-            and self.character_identity.character_id != self.character_id
-        ):
-            raise ValidationError(
-                {"character": "Character must match character_identity.character."}
-            )
-
     @property
     def is_established_or_primary(self) -> bool:
         """Whether this persona can have relationships, reputation, legend."""
         return self.persona_type in (PersonaType.PRIMARY, PersonaType.ESTABLISHED)
+
+    def display_ic(self) -> str:
+        """Persona name only — what IC observers see."""
+        return self.name
+
+    def display_with_history(self) -> str:
+        """Add tenure disambiguation when useful.
+
+        - No tenure or first tenure: 'Bob'
+        - Later tenure (player_number > 1), name differs from character:
+          'Bob (Thomas #2)'
+        - Later tenure, name matches character: 'Thomas #2' (collapse redundancy)
+        """
+        sheet = self.character_sheet
+        if sheet is None:
+            return self.name
+        try:
+            entry = sheet.roster_entry
+        except ObjectDoesNotExist:
+            return self.name
+        tenure = entry.current_tenure if entry else None
+        if tenure is None or tenure.player_number == 1:
+            return self.name
+        char_name = sheet.character.db_key
+        if self.name == char_name:
+            return f"{char_name} #{tenure.player_number}"
+        return f"{self.name} ({char_name} #{tenure.player_number})"
+
+    def display_to_staff(self) -> str:  # noqa: PLR0911
+        """Full staff context — persona, character, player number, account.
+
+        - First tenure: 'Bob (Thomas, played by Fred)'
+        - Later tenure: 'Bob (Thomas #2, played by Fred)'
+        - No current player: 'Bob (Thomas — no current player)'
+        """
+        sheet = self.character_sheet
+        if sheet is None:
+            return self.name
+        try:
+            entry = sheet.roster_entry
+        except ObjectDoesNotExist:
+            return self.name
+        if entry is None:
+            return self.name
+        char_name = sheet.character.db_key
+        tenure = entry.current_tenure
+        if tenure is None:
+            return f"{self.name} ({char_name} — no current player)"
+        if tenure.player_data is None or tenure.player_data.account is None:
+            return f"{self.name} ({char_name} — no current player)"
+        account_name = tenure.player_data.account.username
+        if tenure.player_number == 1:
+            return f"{self.name} ({char_name}, played by {account_name})"
+        return f"{self.name} ({char_name} #{tenure.player_number}, played by {account_name})"
 
 
 class PersonaDiscovery(SharedMemoryModel):
@@ -388,6 +425,14 @@ class Interaction(SharedMemoryModel):
                 fields=["timestamp"],
                 name="interaction_no_scene_idx",
                 condition=models.Q(scene__isnull=True),
+            ),
+        ]
+        constraints = [
+            # Mirrors the CHECK (vote_count >= 0) in the partition SQL so
+            # makemigrations stays in sync with the raw DDL.
+            models.CheckConstraint(
+                check=models.Q(vote_count__gte=0),
+                name="interaction_vote_count_nonnegative",
             ),
         ]
 

@@ -32,7 +32,8 @@ class CloudinaryGalleryService:
 
         # Create folder name: character_pk/tenure_number_uuid for uniqueness
         folder_name = (
-            f"char_{tenure.roster_entry.character.pk}/{tenure.player_number}_{uuid.uuid4().hex[:8]}"
+            f"char_{tenure.roster_entry.character_sheet_id}"
+            f"/{tenure.player_number}_{uuid.uuid4().hex[:8]}"
         )
         tenure.photo_folder = folder_name
         tenure.save()

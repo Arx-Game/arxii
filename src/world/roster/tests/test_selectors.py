@@ -18,7 +18,7 @@ class GetAccountForCharacterTest(TestCase):
         """Character with an active tenure returns the associated account."""
         player_data = PlayerDataFactory()
         character = CharacterFactory()
-        entry = RosterEntryFactory(character=character)
+        entry = RosterEntryFactory(character_sheet__character=character)
         RosterTenureFactory(roster_entry=entry, player_data=player_data)
 
         result = get_account_for_character(character)
@@ -32,7 +32,7 @@ class GetAccountForCharacterTest(TestCase):
 
         player_data = PlayerDataFactory()
         character = CharacterFactory()
-        entry = RosterEntryFactory(character=character)
+        entry = RosterEntryFactory(character_sheet__character=character)
         RosterTenureFactory(
             roster_entry=entry,
             player_data=player_data,

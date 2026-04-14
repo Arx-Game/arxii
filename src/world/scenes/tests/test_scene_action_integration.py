@@ -47,7 +47,7 @@ class TestSceneActionIntegration(TestCase):
         # Give the initiator character some presence so checks aren't all zero
         presence_trait = Trait.objects.get(name="presence")
         CharacterTraitValue.objects.create(
-            character=cls.initiator.character,
+            character=cls.initiator.character_sheet.character,
             trait=presence_trait,
             value=30,
         )
@@ -156,10 +156,10 @@ class TestTechniqueEnhancementValidation(TestCase):
         cls.initiator = PersonaFactory()
         cls.target = PersonaFactory()
 
-        from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
 
-        cls.initiator_sheet = CharacterSheetFactory(character=cls.initiator.character)
+        # PersonaFactory ensures a CharacterSheet exists for its character.
+        cls.initiator_sheet = cls.initiator.character_sheet
         cls.technique = TechniqueFactory(name="Mesmerizing Gaze")
         CharacterTechniqueFactory(
             character=cls.initiator_sheet,
@@ -241,7 +241,7 @@ class TestMundaneActionConsequences(TestCase):
 
         presence_trait = Trait.objects.get(name="presence")
         CharacterTraitValue.objects.create(
-            character=cls.initiator.character,
+            character=cls.initiator.character_sheet.character,
             trait=presence_trait,
             value=30,
         )
@@ -281,7 +281,6 @@ class TestEnhancedActionResolution(TestCase):
         cls.target = PersonaFactory()
 
         from actions.models import ActionEnhancement
-        from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.factories import (
             CharacterAnimaFactory,
             CharacterTechniqueFactory,
@@ -299,13 +298,13 @@ class TestEnhancedActionResolution(TestCase):
             anima_cost=5,
         )
 
-        initiator_sheet = CharacterSheetFactory(character=cls.initiator.character)
+        initiator_sheet = cls.initiator.character_sheet
         CharacterTechniqueFactory(
             character=initiator_sheet,
             technique=cls.technique,
         )
         CharacterAnimaFactory(
-            character=cls.initiator.character,
+            character=cls.initiator.character_sheet.character,
             current=20,
             maximum=30,
         )
@@ -319,7 +318,7 @@ class TestEnhancedActionResolution(TestCase):
 
         presence_trait = Trait.objects.get(name="presence")
         CharacterTraitValue.objects.create(
-            character=cls.initiator.character,
+            character=cls.initiator.character_sheet.character,
             trait=presence_trait,
             value=30,
         )
@@ -348,7 +347,7 @@ class TestEnhancedActionResolution(TestCase):
         assert result.technique_result.confirmed is True
         assert result.technique_result.anima_cost is not None
 
-        anima = CharacterAnima.objects.get(character=self.initiator.character)
+        anima = CharacterAnima.objects.get(character=self.initiator.character_sheet.character)
         assert anima.current < 20
 
     def test_enhanced_action_includes_action_resolution(self) -> None:
@@ -408,9 +407,7 @@ class TestAvailableActionsService(TestCase):
         cls.scene = SceneFactory()
         cls.initiator = PersonaFactory()
 
-        from world.character_sheets.factories import CharacterSheetFactory
-
-        cls.initiator_sheet = CharacterSheetFactory(character=cls.initiator.character)
+        cls.initiator_sheet = cls.initiator.character_sheet
         cls.technique = TechniqueFactory(
             name="Mesmerizing Gaze",
             intensity=5,
@@ -422,7 +419,7 @@ class TestAvailableActionsService(TestCase):
             technique=cls.technique,
         )
         CharacterAnimaFactory(
-            character=cls.initiator.character,
+            character=cls.initiator.character_sheet.character,
             current=20,
             maximum=30,
         )
@@ -437,7 +434,7 @@ class TestAvailableActionsService(TestCase):
         """Characters with known techniques see enhancement options for matching actions."""
         from world.scenes.action_availability import get_available_scene_actions
 
-        actions = get_available_scene_actions(character=self.initiator.character)
+        actions = get_available_scene_actions(character=self.initiator.character_sheet.character)
         flirt_action = next((a for a in actions if a.action_key == "flirt"), None)
         assert flirt_action is not None
         assert len(flirt_action.enhancements) == 1
@@ -454,7 +451,7 @@ class TestAvailableActionsService(TestCase):
             source_type="technique",
             technique=unknown,
         )
-        actions = get_available_scene_actions(character=self.initiator.character)
+        actions = get_available_scene_actions(character=self.initiator.character_sheet.character)
         flirt_action = next(a for a in actions if a.action_key == "flirt")
         # Only the known technique's enhancement is present
         assert len(flirt_action.enhancements) == 1
@@ -465,7 +462,7 @@ class TestAvailableActionsService(TestCase):
         from world.scenes.action_availability import get_available_scene_actions
 
         non_magical = PersonaFactory()
-        actions = get_available_scene_actions(character=non_magical.character)
+        actions = get_available_scene_actions(character=non_magical.character_sheet.character)
         for action in actions:
             assert len(action.enhancements) == 0
 
@@ -475,14 +472,14 @@ class TestAvailableActionsService(TestCase):
         from world.scenes.action_availability import get_available_scene_actions
 
         social_count = ActionTemplate.objects.filter(category="social").count()
-        actions = get_available_scene_actions(character=self.initiator.character)
+        actions = get_available_scene_actions(character=self.initiator.character_sheet.character)
         assert len(actions) == social_count
 
     def test_effective_cost_calculated(self) -> None:
         """Effective anima cost is pre-calculated for each enhancement."""
         from world.scenes.action_availability import get_available_scene_actions
 
-        actions = get_available_scene_actions(character=self.initiator.character)
+        actions = get_available_scene_actions(character=self.initiator.character_sheet.character)
         flirt_action = next(a for a in actions if a.action_key == "flirt")
         enhancement = flirt_action.enhancements[0]
         # Cost is an integer (non-negative)

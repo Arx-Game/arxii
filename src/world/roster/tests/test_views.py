@@ -5,7 +5,7 @@ Tests for roster views and API endpoints.
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from world.character_sheets.factories import CharacterSheetFactory, GenderFactory
+from world.character_sheets.factories import GenderFactory
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 
 
@@ -16,15 +16,15 @@ class RosterEntryViewSetTestCase(TestCase):
         """Set up test data for each test"""
         self.roster_entry = RosterEntryFactory()
         self.gender = GenderFactory(key="male", display_name="Male")
-        self.sheet = CharacterSheetFactory(
-            character=self.roster_entry.character,
-            age=30,
-            gender=self.gender,
-            concept="Brave knight",
-            vocation="Warrior",
-            social_rank=5,
-            background="Born into nobility",
-        )
+        # Factory already created a sheet; update it with test-specific fields.
+        self.sheet = self.roster_entry.character_sheet
+        self.sheet.age = 30
+        self.sheet.gender = self.gender
+        self.sheet.concept = "Brave knight"
+        self.sheet.vocation = "Warrior"
+        self.sheet.social_rank = 5
+        self.sheet.background = "Born into nobility"
+        self.sheet.save()
         self.tenure = RosterTenureFactory(roster_entry=self.roster_entry)
         self.client = APIClient()
 
@@ -76,7 +76,7 @@ class RosterEntryViewSetTestCase(TestCase):
         assert "profile_picture" in response.data
         assert "tenures" in response.data
         character = response.data["character"]
-        assert character["name"] == self.roster_entry.character.name
+        assert character["name"] == self.roster_entry.character_sheet.character.name
         assert character["age"] == self.sheet.age
         # Gender returns display_name string via item_data handler
         assert character["gender"] == self.gender.display_name
@@ -96,7 +96,7 @@ class RosterEntryViewSetTestCase(TestCase):
         """Ensure filtering by name works."""
         RosterEntryFactory()
         response = self.client.get(
-            f"/api/roster/entries/?name={self.roster_entry.character.db_key}",
+            f"/api/roster/entries/?name={self.roster_entry.character_sheet.character.db_key}",
         )
         assert response.status_code == 200
         assert response.data["count"] == 1

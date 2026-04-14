@@ -8,7 +8,7 @@ from evennia_extensions.factories import (
     CharacterFactory,
     RoomProfileFactory,
 )
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.player_submissions.factories import (
     BugReportFactory,
     PlayerFeedbackFactory,
@@ -26,10 +26,10 @@ def _create_played_persona(account, key: str = "TestChar"):
     submissions and assert on the resulting rows.
     """
     character = CharacterFactory(db_key=key)
-    identity = CharacterIdentityFactory(character=character)
-    persona = identity.active_persona
+    identity = CharacterSheetFactory(character=character)
+    persona = identity.primary_persona
     RosterTenureFactory(
-        roster_entry__character=character,
+        roster_entry__character_sheet__character=character,
         player_data__account=account,
     )
     return character, persona

@@ -121,10 +121,10 @@ class CreateFirstImpressionTest(TestCase):
         source_sheet = CharacterSheetFactory()
         target_sheet = CharacterSheetFactory()
         source_tenure = RosterTenureFactory(
-            roster_entry__character=source_sheet.character,
+            roster_entry__character_sheet__character=source_sheet.character,
         )
         target_tenure = RosterTenureFactory(
-            roster_entry__character=target_sheet.character,
+            roster_entry__character_sheet__character=target_sheet.character,
         )
         source_account = source_tenure.player_data.account
         target_account = target_tenure.player_data.account

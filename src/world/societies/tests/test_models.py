@@ -9,7 +9,7 @@ from django.test import TestCase
 import pytest
 
 from world.character_creation.factories import RealmFactory
-from world.character_sheets.factories import CharacterIdentityFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import (
@@ -260,8 +260,8 @@ class OrganizationMembershipValidationTests(TestCase):
 
     def test_primary_persona_can_join(self):
         """Test that primary persona can join organizations."""
-        identity = CharacterIdentityFactory()
-        persona = identity.active_persona
+        identity = CharacterSheetFactory()
+        persona = identity.primary_persona
         membership = OrganizationMembershipFactory(
             organization=self.organization,
             persona=persona,
@@ -325,8 +325,8 @@ class SocietyReputationValidationTests(TestCase):
 
     def test_primary_persona_can_have_reputation(self):
         """Test that primary persona can have society reputation."""
-        identity = CharacterIdentityFactory()
-        persona = identity.active_persona
+        identity = CharacterSheetFactory()
+        persona = identity.primary_persona
         reputation = SocietyReputationFactory(
             persona=persona,
             society=self.society,
@@ -367,8 +367,8 @@ class OrganizationReputationValidationTests(TestCase):
 
     def test_primary_persona_can_have_reputation(self):
         """Test that primary persona can have organization reputation."""
-        identity = CharacterIdentityFactory()
-        persona = identity.active_persona
+        identity = CharacterSheetFactory()
+        persona = identity.primary_persona
         reputation = OrganizationReputationFactory(
             persona=persona,
             organization=self.organization,
@@ -816,7 +816,7 @@ class CharacterLegendSummaryTests(TestCase):
         """Character with no deeds has personal_legend = 0 or no row."""
         persona = PersonaFactory()
         self._refresh()
-        row = CharacterLegendSummary.objects.filter(character_id=persona.character_id).first()
+        row = CharacterLegendSummary.objects.filter(character_id=persona.character_sheet_id).first()
         if row is not None:
             assert row.personal_legend == 0
 
@@ -825,7 +825,7 @@ class CharacterLegendSummaryTests(TestCase):
         persona = PersonaFactory()
         LegendEntryFactory(persona=persona, base_value=42, is_active=True)
         self._refresh()
-        row = CharacterLegendSummary.objects.get(character_id=persona.character_id)
+        row = CharacterLegendSummary.objects.get(character_id=persona.character_sheet_id)
         assert row.personal_legend == 42
 
     def test_deed_with_spreads(self) -> None:
@@ -835,7 +835,7 @@ class CharacterLegendSummaryTests(TestCase):
         LegendSpreadFactory(legend_entry=entry, value_added=25)
         LegendSpreadFactory(legend_entry=entry, value_added=15)
         self._refresh()
-        row = CharacterLegendSummary.objects.get(character_id=persona.character_id)
+        row = CharacterLegendSummary.objects.get(character_id=persona.character_sheet_id)
         assert row.personal_legend == 140  # 100 + 25 + 15
 
     def test_inactive_deed_excluded(self) -> None:
@@ -844,18 +844,16 @@ class CharacterLegendSummaryTests(TestCase):
         LegendEntryFactory(persona=persona, base_value=100, is_active=False)
         LegendEntryFactory(persona=persona, base_value=50, is_active=True)
         self._refresh()
-        row = CharacterLegendSummary.objects.get(character_id=persona.character_id)
+        row = CharacterLegendSummary.objects.get(character_id=persona.character_sheet_id)
         assert row.personal_legend == 50
 
     def test_multiple_personas_summed(self) -> None:
         """Multiple personas for same character are summed together."""
-        from world.character_sheets.factories import CharacterIdentityFactory
-
-        identity = CharacterIdentityFactory()
+        identity = CharacterSheetFactory()
         character = identity.character
-        persona1 = identity.active_persona
+        persona1 = identity.primary_persona
         persona2 = PersonaFactory(
-            character_identity=identity,
+            character_sheet=identity.character.sheet_data,
             name="Identity B",
         )
         LegendEntryFactory(persona=persona1, base_value=30, is_active=True)

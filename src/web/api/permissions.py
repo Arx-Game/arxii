@@ -19,7 +19,7 @@ class IsCharacterOwner(permissions.BasePermission):
             return False
         try:
             return RosterTenure.objects.filter(
-                roster_entry__character_id=character_id,
+                roster_entry__character_sheet_id=character_id,
                 player_data__account=request.user,
                 start_date__isnull=False,
                 end_date__isnull=True,

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from world.achievements.handlers import StatHandler
+    from world.scenes.models import Persona
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -268,6 +269,30 @@ class CharacterSheet(SharedMemoryModel):
 
         return StatHandler(self)
 
+    @cached_property
+    def primary_persona(self) -> Persona:
+        """Return the PRIMARY persona for this character.
+
+        Raises Persona.DoesNotExist if somehow the invariant is violated.
+        Every CharacterSheet must have exactly one PRIMARY persona; if it
+        does not, that is a loud error state, not a silent None.
+        """
+        from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+        return self.personas.get(persona_type=PersonaType.PRIMARY)
+
+    def display_ic(self) -> str:
+        """Delegate to primary_persona.display_ic()."""
+        return self.primary_persona.display_ic()
+
+    def display_with_history(self) -> str:
+        """Delegate to primary_persona.display_with_history()."""
+        return self.primary_persona.display_with_history()
+
+    def display_to_staff(self) -> str:
+        """Delegate to primary_persona.display_to_staff()."""
+        return self.primary_persona.display_to_staff()
+
     class Meta:
         verbose_name = "Character Sheet"
         verbose_name_plural = "Character Sheets"
@@ -277,46 +302,6 @@ class CharacterSheet(SharedMemoryModel):
 # - evennia_extensions.ObjectDisplayData for basic display info
 #   (colored_name, longname, descriptions)
 # - world.scenes.Persona for character identities and contextual appearances
-
-
-class CharacterIdentity(SharedMemoryModel):
-    """Single source of truth for who a character presents as and what they know.
-
-    Sits alongside CharacterSheet: CharacterSheet = what they are (stats,
-    demographics). CharacterIdentity = who they present as (personas)
-    and what they know (discoveries, future codex knowledge).
-    """
-
-    character = models.OneToOneField(
-        ObjectDB,
-        on_delete=models.CASCADE,
-        related_name="character_identity",
-        help_text="The character this identity belongs to",
-    )
-    active_persona = models.ForeignKey(
-        "scenes.Persona",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="active_for_identities",
-        help_text="Who this character is presenting as right now. Nullable to break "
-        "the circular FK with Persona.character_identity during creation; "
-        "ensure_character_identity() always sets this immediately.",
-    )
-
-    class Meta:
-        verbose_name = "Character Identity"
-        verbose_name_plural = "Character Identities"
-
-    def __str__(self) -> str:
-        return f"Identity: {self.active_persona.name} ({self.character.db_key})"
-
-    def clean(self) -> None:
-        super().clean()
-        if self.active_persona_id and self.active_persona.character_identity_id != self.pk:
-            raise ValidationError(
-                {"active_persona": "Active persona must belong to this character identity."}
-            )
 
 
 class Characteristic(NaturalKeyMixin, SharedMemoryModel):

@@ -29,11 +29,12 @@ def _characters_to_active_personas(characters: list[ObjectDB]) -> list[Persona] 
     personas: list[Persona] = []
     for character in characters:
         try:
-            identity = character.character_identity
-            if identity.active_persona:
-                personas.append(identity.active_persona)
+            sheet = character.sheet_data
+            primary = sheet.primary_persona
         except (AttributeError, ObjectDoesNotExist):
             continue
+        if primary is not None:
+            personas.append(primary)
     return personas or None
 
 

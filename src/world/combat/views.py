@@ -425,7 +425,7 @@ class CombatEncounterViewSet(ModelViewSet):
         encounter = self.get_object()
         user = cast(AccountDB, request.user)
         active_entries = RosterEntry.objects.for_account(user)
-        character_ids = active_entries.values_list("character_id", flat=True)
+        character_ids = active_entries.values_list("character_sheet_id", flat=True)
         sheet = CharacterSheet.objects.filter(character_id__in=character_ids).first()
         if not sheet:
             return Response(

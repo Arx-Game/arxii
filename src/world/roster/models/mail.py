@@ -82,7 +82,7 @@ class PlayerMail(SharedMemoryModel):
             self.sender_tenure.player_data.account.username if self.sender_tenure else "Unknown"
         )
         recipient = (
-            self.recipient_tenure.roster_entry.character.name
+            self.recipient_tenure.roster_entry.character_sheet.character.name
             if self.recipient_tenure
             else "Unknown"
         )
