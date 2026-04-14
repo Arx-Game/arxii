@@ -182,25 +182,16 @@ class GMRosterInviteSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data: dict) -> GMRosterInvite:
-        """Create the invite directly. Validation already ran in ``validate()``."""
-        from datetime import timedelta  # noqa: PLC0415
-        import secrets  # noqa: PLC0415
-
-        from django.utils import timezone  # noqa: PLC0415
-
-        from world.gm.services import DEFAULT_INVITE_DURATION_DAYS  # noqa: PLC0415
+        """Delegate to the service. Validation already ran in ``validate()``."""
+        from world.gm.services import create_invite  # noqa: PLC0415
 
         request = self.context["request"]
-        expires_at = validated_data.get("expires_at") or (
-            timezone.now() + timedelta(days=DEFAULT_INVITE_DURATION_DAYS)
-        )
-        return GMRosterInvite.objects.create(
+        return create_invite(
+            gm=request.user.gm_profile,
             roster_entry=validated_data["roster_entry"],
-            created_by=request.user.gm_profile,
-            code=secrets.token_urlsafe(48),
-            expires_at=expires_at,
             is_public=validated_data.get("is_public", False),
             invited_email=validated_data.get("invited_email", "").strip(),
+            expires_at=validated_data.get("expires_at"),
         )
 
 
@@ -221,10 +212,9 @@ class GMInviteRevokeSerializer(serializers.Serializer):
         return attrs
 
     def save(self, **kwargs: object) -> GMRosterInvite:  # noqa: ARG002
-        from django.utils import timezone  # noqa: PLC0415
+        from world.gm.services import revoke_invite  # noqa: PLC0415
 
-        self.instance.expires_at = timezone.now()
-        self.instance.save(update_fields=["expires_at"])
+        revoke_invite(self.instance)
         return self.instance
 
 
@@ -249,6 +239,9 @@ class GMInviteClaimSerializer(serializers.Serializer):
         return value
 
     def validate(self, attrs: dict) -> dict:
+        from evennia_extensions.models import PlayerData  # noqa: PLC0415
+        from world.roster.models.choices import ApplicationStatus  # noqa: PLC0415
+
         invite = self.context["invite"]
         request = self.context["request"]
         account = request.user
@@ -258,49 +251,33 @@ class GMInviteClaimSerializer(serializers.Serializer):
             if not account_email or invited != account_email:
                 msg = "This invite is private and does not match your account email."
                 raise serializers.ValidationError(msg)
+
+        # Reject if a finalized (non-pending) application already exists for
+        # this (player_data, character). The service will reuse a PENDING one.
+        try:
+            player_data = PlayerData.objects.get(account=account)
+        except PlayerData.DoesNotExist:
+            player_data = None
+        if player_data is not None:
+            character = invite.roster_entry.character_sheet.character
+            existing = RosterApplication.objects.filter(
+                player_data=player_data,
+                character=character,
+            ).first()
+            if existing is not None and existing.status != ApplicationStatus.PENDING:
+                msg = (
+                    "You already have a finalized application for this character. "
+                    "Contact staff if you want to re-apply."
+                )
+                raise serializers.ValidationError(msg)
         return attrs
 
     def save(self, **kwargs: object) -> RosterApplication:  # noqa: ARG002
-        """Mark the invite claimed and create (or annotate) a RosterApplication.
-
-        Mirrors the logic in ``world.gm.services.claim_invite`` for the API path.
-        The service remains for programmatic / test callers.
-        """
-        from django.utils import timezone  # noqa: PLC0415
-
-        from evennia_extensions.models import PlayerData  # noqa: PLC0415
-        from world.roster.models.choices import ApplicationStatus  # noqa: PLC0415
+        from world.gm.services import claim_invite  # noqa: PLC0415
 
         invite: GMRosterInvite = self.context["invite"]
         account = self.context["request"].user
-
-        invite.claimed_at = timezone.now()
-        invite.claimed_by = account
-        invite.save(update_fields=["claimed_at", "claimed_by"])
-
-        player_data, _ = PlayerData.objects.get_or_create(account=account)
-        character = invite.roster_entry.character_sheet.character
-
-        app, created = RosterApplication.objects.get_or_create(
-            player_data=player_data,
-            character=character,
-            defaults={
-                "application_text": (f"Claiming invite from {invite.created_by.account.username}"),
-            },
-        )
-        if created:
-            return app
-
-        if app.status != ApplicationStatus.PENDING:
-            msg = (
-                "You already have a finalized application for this character. "
-                "Contact staff if you want to re-apply."
-            )
-            raise serializers.ValidationError(msg)
-        note = f"\n[Claimed invite from {invite.created_by.account.username}]"
-        app.application_text = (app.application_text or "") + note
-        app.save(update_fields=["application_text"])
-        return app
+        return claim_invite(invite=invite, account=account)
 
 
 class GMApplicationActionSerializer(serializers.Serializer):
@@ -338,21 +315,20 @@ class GMApplicationActionSerializer(serializers.Serializer):
         return attrs
 
     def save(self, **kwargs: object) -> RosterApplication:  # noqa: ARG002
+        from world.gm.services import (  # noqa: PLC0415
+            approve_application_as_gm,
+            deny_application_as_gm,
+        )
+
         application: RosterApplication = self.context["application"]
         gm = self.context["request"].user.gm_profile
         action = self.validated_data["action"]
         notes = self.validated_data.get("review_notes", "")
 
         if action == self.APPROVE:
-            if not application.approve(staff_player_data=gm.account.player_data):
-                msg = "Application could not be approved."
-                raise serializers.ValidationError(msg)
-        elif not application.deny(
-            staff_player_data=gm.account.player_data,
-            reason=notes,
-        ):
-            msg = "Application could not be denied."
-            raise serializers.ValidationError(msg)
+            approve_application_as_gm(gm, application)
+        else:
+            deny_application_as_gm(gm, application, review_notes=notes)
         return application
 
 

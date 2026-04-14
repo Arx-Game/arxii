@@ -130,37 +130,9 @@ def gm_application_queue(gm: GMProfile) -> QuerySet[RosterApplication]:
 def approve_application_as_gm(gm: GMProfile, application: RosterApplication) -> None:
     """Approve a roster application on behalf of the overseeing GM.
 
-    Verifies the application is in this GM's queue (i.e. GM owns a table
-    hosting a story the applied-for character participates in). Then
-    delegates to RosterApplication.approve().
+    Caller (serializer) must validate queue membership and PENDING status.
     """
-    from world.roster.models.applications import RosterApplication  # noqa: PLC0415
-    from world.roster.models.choices import ApplicationStatus  # noqa: PLC0415
-
-    queue = gm_application_queue(gm)
-    if not queue.filter(pk=application.pk).exists():
-        msg = "This application is not in your GM application queue."
-        raise ValidationError(msg)
-
-    # Acquire row lock AND read status via values_list to bypass the
-    # SharedMemoryModel identity map (which would return any stale cached
-    # status value from a prior read).
-    locked_status = (
-        RosterApplication.objects.select_for_update()
-        .filter(pk=application.pk)
-        .values_list("status", flat=True)
-        .first()
-    )
-    if locked_status != ApplicationStatus.PENDING:
-        msg = "This application has already been processed."
-        raise ValidationError(msg)
-
-    # Sync the in-memory instance with DB state before mutation.
-    application.refresh_from_db(fields=["status"])
-
-    if not application.approve(staff_player_data=gm.account.player_data):
-        msg = "Application could not be approved."
-        raise ValidationError(msg)
+    application.approve(staff_player_data=gm.account.player_data)
 
 
 @transaction.atomic
@@ -169,34 +141,11 @@ def deny_application_as_gm(
     application: RosterApplication,
     review_notes: str = "",
 ) -> None:
-    """Deny an application in the GM's queue."""
-    from world.roster.models.applications import RosterApplication  # noqa: PLC0415
-    from world.roster.models.choices import ApplicationStatus  # noqa: PLC0415
+    """Deny an application on behalf of the overseeing GM.
 
-    queue = gm_application_queue(gm)
-    if not queue.filter(pk=application.pk).exists():
-        msg = "This application is not in your GM application queue."
-        raise ValidationError(msg)
-
-    # Acquire row lock AND read status via values_list to bypass the
-    # SharedMemoryModel identity map (which would return any stale cached
-    # status value from a prior read).
-    locked_status = (
-        RosterApplication.objects.select_for_update()
-        .filter(pk=application.pk)
-        .values_list("status", flat=True)
-        .first()
-    )
-    if locked_status != ApplicationStatus.PENDING:
-        msg = "This application has already been processed."
-        raise ValidationError(msg)
-
-    # Sync the in-memory instance with DB state before mutation.
-    application.refresh_from_db(fields=["status"])
-
-    if not application.deny(staff_player_data=gm.account.player_data, reason=review_notes):
-        msg = "Application could not be denied."
-        raise ValidationError(msg)
+    Caller (serializer) must validate queue membership and PENDING status.
+    """
+    application.deny(staff_player_data=gm.account.player_data, reason=review_notes)
 
 
 @transaction.atomic
@@ -214,6 +163,9 @@ def surrender_character_story(gm: GMProfile, story: Story) -> None:
     - There is currently no "pick up orphan story" service. Staff or
       another GM must manually set ``primary_table`` again (tracked as
       follow-up work).
+
+    Validation lives here because no API endpoint/serializer exists yet.
+    When an endpoint is added, move the oversight check into the serializer.
     """
     if story.primary_table is None or story.primary_table.gm != gm:
         msg = "You do not oversee this story."
@@ -230,136 +182,62 @@ def create_invite(
     invited_email: str = "",
     expires_at: datetime | None = None,
 ) -> GMRosterInvite:
-    """Create a GMRosterInvite for a roster character.
-
-    Validates that the GM oversees the roster_entry (character has an
-    active story at one of this GM's tables). Private invites should
-    have invited_email set; public invites accept anyone with the code.
-    """
-    from world.roster.models import RosterEntry  # noqa: PLC0415
-
-    # Verify GM oversees this entry via an ACTIVE table
-    oversees = RosterEntry.objects.filter(
-        pk=roster_entry.pk,
-        character_sheet__character__story_participations__is_active=True,
-        character_sheet__character__story_participations__story__primary_table__gm=gm,
-        character_sheet__character__story_participations__story__primary_table__status=(
-            GMTableStatus.ACTIVE
-        ),
-    ).exists()
-    if not oversees:
-        msg = "You do not oversee this character."
-        raise ValidationError(msg)
-
+    """Create a GMRosterInvite. Callers must validate GM oversight."""
     if expires_at is None:
         expires_at = timezone.now() + timedelta(days=DEFAULT_INVITE_DURATION_DAYS)
-
     return GMRosterInvite.objects.create(
         roster_entry=roster_entry,
         created_by=gm,
         code=secrets.token_urlsafe(48),
         expires_at=expires_at,
         is_public=is_public,
-        invited_email=invited_email.strip(),
+        invited_email=invited_email,
     )
 
 
 @transaction.atomic
-def revoke_invite(gm: GMProfile, invite: GMRosterInvite) -> None:
-    """Revoke an unclaimed invite by setting expires_at to now.
+def revoke_invite(invite: GMRosterInvite) -> None:
+    """Revoke an invite by setting expires_at to now.
 
-    Only the GM who created the invite can revoke it. Claimed invites
-    cannot be revoked (too late).
+    Caller must validate that the invite is revocable (not claimed) and
+    that the requester is authorized.
     """
-    if invite.created_by != gm:
-        msg = "You did not create this invite."
-        raise ValidationError(msg)
-    if invite.is_claimed:
-        msg = "Claimed invites cannot be revoked."
-        raise ValidationError(msg)
     invite.expires_at = timezone.now()
     invite.save(update_fields=["expires_at"])
 
 
 @transaction.atomic
-def claim_invite(code: str, account: AccountDB) -> RosterApplication:
-    """Claim a GM invite, creating a RosterApplication for the account.
+def claim_invite(invite: GMRosterInvite, account: AccountDB) -> RosterApplication:
+    """Mark an invite claimed and create (or reuse) a RosterApplication.
 
-    Validates:
-    - Invite exists (code found)
-    - Not already claimed
-    - Not expired
-    - Email matches for private invites (invited_email set)
-
-    Marks the invite as claimed atomically. Creates a PlayerData for
-    the account if none exists. Returns the new RosterApplication.
-
-    Identity-map note: if the caller's enclosing transaction rolls back
-    after this function returns, the in-memory ``invite`` object may
-    retain stale ``claimed_at`` / ``claimed_by`` values from this call's
-    ``.save()``. Callers that survive a rollback should ``refresh_from_db()``
-    (or re-fetch) the invite before trusting those fields.
+    Caller must validate invite usability (existence, not claimed, not
+    expired, email match for private invites). Reuses a PENDING
+    application for the same (player_data, character) if one exists,
+    annotating its text with a claim note; never reuses a finalized
+    application — the caller must validate that case too if they care.
     """
     from evennia_extensions.models import PlayerData  # noqa: PLC0415
-    from world.gm.models import GMRosterInvite  # noqa: PLC0415
     from world.roster.models.applications import RosterApplication  # noqa: PLC0415
-    from world.roster.models.choices import ApplicationStatus  # noqa: PLC0415
 
-    try:
-        invite = GMRosterInvite.objects.select_for_update().get(code=code)
-    except GMRosterInvite.DoesNotExist as exc:
-        msg = "Invalid invite code."
-        raise ValidationError(msg) from exc
-
-    if invite.is_claimed:
-        msg = "This invite has already been claimed."
-        raise ValidationError(msg)
-    if invite.is_expired:
-        msg = "This invite has expired."
-        raise ValidationError(msg)
-
-    if not invite.is_public and invite.invited_email:
-        invited = invite.invited_email.strip().lower()
-        account_email = (account.email or "").strip().lower()
-        if not account_email or invited != account_email:
-            msg = "This invite is private and does not match your account email."
-            raise ValidationError(msg)
-
-    # Mark claimed
     invite.claimed_at = timezone.now()
     invite.claimed_by = account
     invite.save(update_fields=["claimed_at", "claimed_by"])
 
-    # Get or create the PlayerData record
     player_data, _ = PlayerData.objects.get_or_create(account=account)
-
     character = invite.roster_entry.character_sheet.character
 
     # Use get_or_create to race-safely handle duplicate applications —
-    # RosterApplication has unique_together on (player_data, character),
-    # so a filter-then-create pattern could allow two concurrent claims
-    # to both pass the existence check and one to then crash with
-    # IntegrityError.
+    # RosterApplication has unique_together on (player_data, character).
     app, created = RosterApplication.objects.get_or_create(
         player_data=player_data,
         character=character,
         defaults={
-            "application_text": (f"Claiming invite from {invite.created_by.account.username}"),
+            "application_text": f"Claiming invite from {invite.created_by.account.username}",
         },
     )
-    if created:
-        return app
-
-    # Existing application — check its status.
-    if app.status != ApplicationStatus.PENDING:
-        msg = (
-            "You already have a finalized application for this character. "
-            "Contact staff if you want to re-apply."
-        )
-        raise ValidationError(msg)
-    # Pending — annotate that this invite was claimed against it.
-    # Note: we don't update applied_date so the staff queue ordering remains stable.
-    note = f"\n[Claimed invite from {invite.created_by.account.username}]"
-    app.application_text = (app.application_text or "") + note
-    app.save(update_fields=["application_text"])
+    if not created:
+        app.application_text = (
+            app.application_text or ""
+        ) + f"\n[Claimed invite from {invite.created_by.account.username}]"
+        app.save(update_fields=["application_text"])
     return app

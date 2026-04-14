@@ -207,19 +207,12 @@ class GMApplicationQueueTest(TestCase):
 
 
 class ApproveApplicationAsGMTest(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
-        from world.gm.factories import GMProfileFactory, GMTableFactory
-
-        cls.gm = GMProfileFactory()
-        cls.table = GMTableFactory(gm=cls.gm)
-        cls.other_gm = GMProfileFactory()
-        cls.other_table = GMTableFactory(gm=cls.other_gm)
+    """Service performs the atomic approve. Validation (queue membership,
+    PENDING status) is the serializer's responsibility and lives in view tests.
+    """
 
     def setUp(self) -> None:
-        # Create the mutable application/entry in setUp so each test starts
-        # with fresh DB rows. Otherwise SharedMemoryModel's identity map
-        # would leak mutations (e.g. status changes) across tests.
+        from world.gm.factories import GMProfileFactory, GMTableFactory
         from world.roster.factories import (
             RosterApplicationFactory,
             RosterEntryFactory,
@@ -227,6 +220,8 @@ class ApproveApplicationAsGMTest(TestCase):
         from world.stories.factories import StoryFactory
         from world.stories.models import StoryParticipation
 
+        self.gm = GMProfileFactory()
+        self.table = GMTableFactory(gm=self.gm)
         self.entry = RosterEntryFactory()
         story = StoryFactory(primary_table=self.table)
         StoryParticipation.objects.create(
@@ -238,7 +233,7 @@ class ApproveApplicationAsGMTest(TestCase):
             character=self.entry.character_sheet.character,
         )
 
-    def test_gm_can_approve_own_queue_application(self) -> None:
+    def test_approve_flips_status(self) -> None:
         from world.gm.services import approve_application_as_gm
         from world.roster.models.choices import ApplicationStatus
 
@@ -246,49 +241,12 @@ class ApproveApplicationAsGMTest(TestCase):
         self.app.refresh_from_db()
         assert self.app.status == ApplicationStatus.APPROVED
 
-    def test_gm_cannot_approve_other_gms_application(self) -> None:
-        from world.gm.services import approve_application_as_gm
-
-        with self.assertRaises(ValidationError):
-            approve_application_as_gm(self.other_gm, self.app)
-
-    def test_cannot_approve_already_processed_application(self) -> None:
-        # Fresh entry/app to avoid mutating the shared cls.app (SharedMemoryModel
-        # identity map would leak the status change across tests).
-        from world.gm.services import approve_application_as_gm
-        from world.roster.factories import RosterApplicationFactory, RosterEntryFactory
-        from world.roster.models.choices import ApplicationStatus
-        from world.stories.factories import StoryFactory
-        from world.stories.models import StoryParticipation
-
-        entry = RosterEntryFactory()
-        story = StoryFactory(primary_table=self.table)
-        StoryParticipation.objects.create(
-            story=story,
-            character=entry.character_sheet.character,
-            is_active=True,
-        )
-        app = RosterApplicationFactory(
-            character=entry.character_sheet.character,
-            status=ApplicationStatus.APPROVED,
-        )
-        with self.assertRaises(ValidationError):
-            approve_application_as_gm(self.gm, app)
-
 
 class DenyApplicationAsGMTest(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
-        from world.gm.factories import GMProfileFactory, GMTableFactory
-
-        cls.gm = GMProfileFactory()
-        cls.table = GMTableFactory(gm=cls.gm)
-        cls.other_gm = GMProfileFactory()
+    """Service performs the atomic deny. Validation lives in the serializer."""
 
     def setUp(self) -> None:
-        # Create the mutable application/entry in setUp so each test starts
-        # with fresh DB rows. Otherwise SharedMemoryModel's identity map
-        # would leak mutations (e.g. status changes) across tests.
+        from world.gm.factories import GMProfileFactory, GMTableFactory
         from world.roster.factories import (
             RosterApplicationFactory,
             RosterEntryFactory,
@@ -296,6 +254,8 @@ class DenyApplicationAsGMTest(TestCase):
         from world.stories.factories import StoryFactory
         from world.stories.models import StoryParticipation
 
+        self.gm = GMProfileFactory()
+        self.table = GMTableFactory(gm=self.gm)
         self.entry = RosterEntryFactory()
         story = StoryFactory(primary_table=self.table)
         StoryParticipation.objects.create(
@@ -307,7 +267,7 @@ class DenyApplicationAsGMTest(TestCase):
             character=self.entry.character_sheet.character,
         )
 
-    def test_gm_can_deny_own_queue_application(self) -> None:
+    def test_deny_flips_status_and_records_notes(self) -> None:
         from world.gm.services import deny_application_as_gm
         from world.roster.models.choices import ApplicationStatus
 
@@ -316,12 +276,6 @@ class DenyApplicationAsGMTest(TestCase):
         assert self.app.status == ApplicationStatus.DENIED
         assert self.app.review_notes == "Not a fit"
         assert self.app.reviewed_by == self.gm.account.player_data
-
-    def test_gm_cannot_deny_other_gms_application(self) -> None:
-        from world.gm.services import deny_application_as_gm
-
-        with self.assertRaises(ValidationError):
-            deny_application_as_gm(self.other_gm, self.app)
 
 
 class SurrenderCharacterStoryTest(TestCase):
@@ -361,24 +315,17 @@ class SurrenderCharacterStoryTest(TestCase):
 
 
 class CreateInviteTest(TestCase):
+    """Atomic creation only. GM-oversight validation lives in the serializer."""
+
     @classmethod
     def setUpTestData(cls) -> None:
-        from world.gm.factories import GMProfileFactory, GMTableFactory
+        from world.gm.factories import GMProfileFactory
         from world.roster.factories import RosterEntryFactory
-        from world.stories.factories import StoryFactory
-        from world.stories.models import StoryParticipation
 
         cls.gm = GMProfileFactory()
-        cls.table = GMTableFactory(gm=cls.gm)
         cls.entry = RosterEntryFactory()
-        story = StoryFactory(primary_table=cls.table)
-        StoryParticipation.objects.create(
-            story=story,
-            character=cls.entry.character_sheet.character,
-            is_active=True,
-        )
 
-    def test_creates_invite_for_overseen_entry(self) -> None:
+    def test_creates_invite_with_expected_fields(self) -> None:
         from world.gm.services import create_invite
 
         invite = create_invite(self.gm, self.entry)
@@ -386,27 +333,6 @@ class CreateInviteTest(TestCase):
         assert invite.created_by == self.gm
         assert invite.roster_entry == self.entry
         assert invite.code
-
-    def test_rejects_entry_not_overseen(self) -> None:
-        from django.core.exceptions import ValidationError
-
-        from world.gm.factories import GMProfileFactory
-        from world.gm.services import create_invite
-
-        lonely_gm = GMProfileFactory()
-        with self.assertRaises(ValidationError):
-            create_invite(lonely_gm, self.entry)
-
-    def test_rejects_invite_creation_for_archived_table(self) -> None:
-        from django.core.exceptions import ValidationError
-
-        from world.gm.constants import GMTableStatus
-        from world.gm.services import create_invite
-
-        self.table.status = GMTableStatus.ARCHIVED
-        self.table.save()
-        with self.assertRaises(ValidationError):
-            create_invite(self.gm, self.entry)
 
     def test_defaults_30_day_expiry(self) -> None:
         from datetime import timedelta
@@ -444,45 +370,26 @@ class CreateInviteTest(TestCase):
 
 
 class RevokeInviteTest(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
-        from world.gm.factories import GMRosterInviteFactory
-
-        cls.invite = GMRosterInviteFactory()
+    """Atomic revocation only. Authorization and claimed-check live in the serializer."""
 
     def test_revoke_sets_expires_at_to_now(self) -> None:
         from django.utils import timezone
 
+        from world.gm.factories import GMRosterInviteFactory
         from world.gm.services import revoke_invite
 
-        revoke_invite(self.invite.created_by, self.invite)
-        self.invite.refresh_from_db()
-        assert self.invite.expires_at <= timezone.now()
-        assert self.invite.is_expired is True
-
-    def test_rejects_revoking_another_gms_invite(self) -> None:
-        from django.core.exceptions import ValidationError
-
-        from world.gm.factories import GMProfileFactory
-        from world.gm.services import revoke_invite
-
-        other_gm = GMProfileFactory()
-        with self.assertRaises(ValidationError):
-            revoke_invite(other_gm, self.invite)
-
-    def test_rejects_revoking_claimed_invite(self) -> None:
-        from django.core.exceptions import ValidationError
-        from django.utils import timezone
-
-        from world.gm.services import revoke_invite
-
-        self.invite.claimed_at = timezone.now()
-        self.invite.save(update_fields=["claimed_at"])
-        with self.assertRaises(ValidationError):
-            revoke_invite(self.invite.created_by, self.invite)
+        invite = GMRosterInviteFactory()
+        revoke_invite(invite)
+        invite.refresh_from_db()
+        assert invite.expires_at <= timezone.now()
+        assert invite.is_expired is True
 
 
 class ClaimInviteTest(TestCase):
+    """Atomic claim/application creation only. Usability validation (expired,
+    claimed, email match, prior finalized app) lives in the serializer.
+    """
+
     def setUp(self) -> None:
         from evennia_extensions.factories import AccountFactory
         from world.gm.factories import GMRosterInviteFactory
@@ -490,102 +397,17 @@ class ClaimInviteTest(TestCase):
         self.account = AccountFactory(email="claimer@example.com")
         self.invite = GMRosterInviteFactory(is_public=True)
 
-    def test_claim_marks_invite(self) -> None:
+    def test_claim_marks_invite_and_creates_application(self) -> None:
         from world.gm.services import claim_invite
 
-        application = claim_invite(self.invite.code, self.account)
+        application = claim_invite(invite=self.invite, account=self.account)
         assert application.pk is not None
+        assert application.character == self.invite.roster_entry.character_sheet.character
         self.invite.refresh_from_db()
         assert self.invite.is_claimed is True
         assert self.invite.claimed_by == self.account
 
-    def test_claim_creates_application(self) -> None:
-        from world.gm.services import claim_invite
-
-        application = claim_invite(self.invite.code, self.account)
-        assert application.character == self.invite.roster_entry.character_sheet.character
-
-    def test_rejects_invalid_code(self) -> None:
-        from django.core.exceptions import ValidationError
-
-        from world.gm.services import claim_invite
-
-        with self.assertRaises(ValidationError):
-            claim_invite("does-not-exist", self.account)
-
-    def test_rejects_expired_invite(self) -> None:
-        from datetime import timedelta
-
-        from django.core.exceptions import ValidationError
-        from django.utils import timezone
-
-        from world.gm.factories import GMRosterInviteFactory
-        from world.gm.services import claim_invite
-
-        past = timezone.now() - timedelta(days=1)
-        invite = GMRosterInviteFactory(expires_at=past, is_public=True)
-        with self.assertRaises(ValidationError):
-            claim_invite(invite.code, self.account)
-
-    def test_rejects_already_claimed(self) -> None:
-        from django.core.exceptions import ValidationError
-        from django.utils import timezone
-
-        from world.gm.services import claim_invite
-
-        self.invite.claimed_at = timezone.now()
-        self.invite.save(update_fields=["claimed_at"])
-        with self.assertRaises(ValidationError):
-            claim_invite(self.invite.code, self.account)
-
-    def test_private_invite_rejects_wrong_email(self) -> None:
-        from django.core.exceptions import ValidationError
-
-        from world.gm.factories import GMRosterInviteFactory
-        from world.gm.services import claim_invite
-
-        invite = GMRosterInviteFactory(
-            is_public=False,
-            invited_email="someone_else@example.com",
-        )
-        with self.assertRaises(ValidationError):
-            claim_invite(invite.code, self.account)
-
-    def test_private_invite_accepts_matching_email(self) -> None:
-        from world.gm.factories import GMRosterInviteFactory
-        from world.gm.services import claim_invite
-
-        invite = GMRosterInviteFactory(
-            is_public=False,
-            invited_email="claimer@example.com",
-        )
-        application = claim_invite(invite.code, self.account)
-        assert application.pk is not None
-
-    def test_public_invite_accepts_any_email(self) -> None:
-        from evennia_extensions.factories import AccountFactory
-        from world.gm.services import claim_invite
-
-        random_account = AccountFactory(email="random@example.com")
-        application = claim_invite(self.invite.code, random_account)
-        assert application.pk is not None
-
-    def test_rejects_claim_when_prior_denied_application_exists(self) -> None:
-        from evennia_extensions.models import PlayerData
-        from world.gm.services import claim_invite
-        from world.roster.factories import RosterApplicationFactory
-        from world.roster.models.choices import ApplicationStatus
-
-        player_data, _ = PlayerData.objects.get_or_create(account=self.account)
-        RosterApplicationFactory(
-            player_data=player_data,
-            character=self.invite.roster_entry.character_sheet.character,
-            status=ApplicationStatus.DENIED,
-        )
-        with self.assertRaises(ValidationError):
-            claim_invite(self.invite.code, self.account)
-
-    def test_claim_returns_existing_pending_application(self) -> None:
+    def test_claim_reuses_existing_pending_application(self) -> None:
         from evennia_extensions.models import PlayerData
         from world.gm.services import claim_invite
         from world.roster.factories import RosterApplicationFactory
@@ -597,5 +419,8 @@ class ClaimInviteTest(TestCase):
             character=self.invite.roster_entry.character_sheet.character,
             status=ApplicationStatus.PENDING,
         )
-        result = claim_invite(self.invite.code, self.account)
+        result = claim_invite(invite=self.invite, account=self.account)
         assert result.pk == existing.pk
+        # Claim note appended to the existing application text
+        result.refresh_from_db()
+        assert "Claimed invite" in (result.application_text or "")
