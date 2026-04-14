@@ -107,11 +107,20 @@ The GM system defines these role relationships; the stories app uses them for pe
 - ✅ `last_active_at` stub on GMProfile (not yet auto-stamped)
 - Remaining: story attachment (future phase when stories are wired up), frontend pages (Phase 5)
 
-### Phase 3 — Roster & Recruitment
-- GM creates roster characters (level-gated scope)
-- GM approves/denies apps to their table's roster (via job queue)
-- Invite code flow for out-of-game recruitment
-- Integration with existing roster application system
+### Phase 3 — Roster & Recruitment ✅
+- ✅ `Story.primary_table` FK links stories to tables (orphaned stories are legal, character falls out of default visibility)
+- ✅ `CharacterDraft` extended with `is_gm_creation`, `target_table`, `story_title`, `story_description`
+- ✅ `finalize_gm_character` service creates character + story + participation atomically; character goes to Available roster with no tenure
+- ✅ Shared finalize helpers extracted from `finalize_character` for reuse
+- ✅ `RosterEntry.objects.actively_overseen()` queryset filters for characters with active stories at active GM tables
+- ✅ `gm_application_queue` service surfaces pending apps to the overseeing GM
+- ✅ `approve_application_as_gm` / `deny_application_as_gm` — GM-side approval that verifies table ownership; delegates to existing `RosterApplication` flow so tenure creation + side effects stay intact
+- ✅ `surrender_character_story` — GM releases a story, clearing `primary_table`
+- ✅ `GMRosterInvite` model (single-use, 30-day default expiry, public or private with email match)
+- ✅ Invite services: `create_invite`, `revoke_invite`, `claim_invite` with `select_for_update` for race safety
+- ✅ API: `GMRosterInviteViewSet`, `GMApplicationQueueView`, `GMApplicationActionView`, `GMInviteClaimView`
+- ✅ Staff continue to see applications via existing staff inbox; GM queue surfaces the same apps to the overseeing GM
+- Remaining: frontend (Phase 5), email delivery for private invites (follow-up), level-gated character creation exceptions (kudo points / GM leeway — post-MVP)
 
 ### Phase 4 — Reward Tooling
 - Level-capped reward granting (XP, items, codex, legend)
