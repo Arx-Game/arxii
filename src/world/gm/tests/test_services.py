@@ -125,3 +125,73 @@ class SoftLeaveForRetiredPersonaTest(TestCase):
         assert m2.left_at is not None
         other.refresh_from_db()
         assert other.left_at is None
+
+
+class GMApplicationQueueTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.gm.factories import GMProfileFactory, GMTableFactory
+        from world.roster.factories import (
+            RosterApplicationFactory,
+            RosterEntryFactory,
+        )
+        from world.stories.factories import StoryFactory
+        from world.stories.models import StoryParticipation
+
+        cls.gm = GMProfileFactory()
+        cls.table = GMTableFactory(gm=cls.gm)
+        cls.other_gm = GMProfileFactory()
+        cls.other_table = GMTableFactory(gm=cls.other_gm)
+
+        # Entry whose story is at our GM's table
+        cls.entry_at_table = RosterEntryFactory()
+        story = StoryFactory(primary_table=cls.table)
+        StoryParticipation.objects.create(
+            story=story,
+            character=cls.entry_at_table.character_sheet.character,
+            is_active=True,
+        )
+        cls.app_at_table = RosterApplicationFactory(
+            character=cls.entry_at_table.character_sheet.character,
+        )
+
+        # Entry at another GM's table
+        cls.entry_at_other = RosterEntryFactory()
+        other_story = StoryFactory(primary_table=cls.other_table)
+        StoryParticipation.objects.create(
+            story=other_story,
+            character=cls.entry_at_other.character_sheet.character,
+            is_active=True,
+        )
+        cls.app_at_other = RosterApplicationFactory(
+            character=cls.entry_at_other.character_sheet.character,
+        )
+
+    def test_queue_includes_own_table_applications(self) -> None:
+        from world.gm.services import gm_application_queue
+
+        queue = gm_application_queue(self.gm)
+        assert self.app_at_table in queue
+
+    def test_queue_excludes_other_gm_applications(self) -> None:
+        from world.gm.services import gm_application_queue
+
+        queue = gm_application_queue(self.gm)
+        assert self.app_at_other not in queue
+
+    def test_queue_excludes_non_pending_applications(self) -> None:
+        from world.gm.services import gm_application_queue
+        from world.roster.models.choices import ApplicationStatus
+
+        self.app_at_table.status = ApplicationStatus.APPROVED
+        self.app_at_table.save()
+        queue = gm_application_queue(self.gm)
+        assert self.app_at_table not in queue
+
+    def test_queue_empty_for_gm_with_no_tables(self) -> None:
+        from world.gm.factories import GMProfileFactory
+        from world.gm.services import gm_application_queue
+
+        lonely_gm = GMProfileFactory()
+        queue = gm_application_queue(lonely_gm)
+        assert queue.count() == 0

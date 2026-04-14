@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -10,6 +12,11 @@ from world.gm.constants import GMTableStatus
 from world.gm.models import GMProfile, GMTable, GMTableMembership
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
+
+if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
+    from world.roster.models.applications import RosterApplication
 
 TEMPORARY_PERSONA_REJECTION = (
     "A temporary persona cannot join a GM table — use a primary or established persona."
@@ -84,3 +91,23 @@ def soft_leave_memberships_for_retired_persona(persona: Persona) -> int:
         m.save(update_fields=["left_at"])
         count += 1
     return count
+
+
+def gm_application_queue(gm: GMProfile) -> QuerySet[RosterApplication]:
+    """Pending applications for characters at tables this GM owns.
+
+    Derived from: application.character → story_participations → story.primary_table.gm
+    Only pending applications are included.
+    """
+    from world.roster.models.applications import RosterApplication  # noqa: PLC0415
+    from world.roster.models.choices import ApplicationStatus  # noqa: PLC0415
+
+    return (
+        RosterApplication.objects.filter(
+            status=ApplicationStatus.PENDING,
+            character__story_participations__is_active=True,
+            character__story_participations__story__primary_table__gm=gm,
+        )
+        .select_related("character", "player_data__account")
+        .distinct()
+    )
