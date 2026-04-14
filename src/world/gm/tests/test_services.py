@@ -316,3 +316,114 @@ class SurrenderCharacterStoryTest(TestCase):
         story = StoryFactory(primary_table=None)
         with self.assertRaises(ValidationError):
             surrender_character_story(gm, story)
+
+
+class CreateInviteTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.gm.factories import GMProfileFactory, GMTableFactory
+        from world.roster.factories import RosterEntryFactory
+        from world.stories.factories import StoryFactory
+        from world.stories.models import StoryParticipation
+
+        cls.gm = GMProfileFactory()
+        cls.table = GMTableFactory(gm=cls.gm)
+        cls.entry = RosterEntryFactory()
+        story = StoryFactory(primary_table=cls.table)
+        StoryParticipation.objects.create(
+            story=story,
+            character=cls.entry.character_sheet.character,
+            is_active=True,
+        )
+
+    def test_creates_invite_for_overseen_entry(self) -> None:
+        from world.gm.services import create_invite
+
+        invite = create_invite(self.gm, self.entry)
+        assert invite.pk is not None
+        assert invite.created_by == self.gm
+        assert invite.roster_entry == self.entry
+        assert invite.code
+
+    def test_rejects_entry_not_overseen(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.gm.factories import GMProfileFactory
+        from world.gm.services import create_invite
+
+        lonely_gm = GMProfileFactory()
+        with self.assertRaises(ValidationError):
+            create_invite(lonely_gm, self.entry)
+
+    def test_defaults_30_day_expiry(self) -> None:
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from world.gm.services import create_invite
+
+        invite = create_invite(self.gm, self.entry)
+        expected = timezone.now() + timedelta(days=30)
+        assert abs((invite.expires_at - expected).total_seconds()) < 10
+
+    def test_honors_explicit_expires_at(self) -> None:
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from world.gm.services import create_invite
+
+        explicit = timezone.now() + timedelta(days=7)
+        invite = create_invite(self.gm, self.entry, expires_at=explicit)
+        assert invite.expires_at == explicit
+
+    def test_private_invite_stores_email(self) -> None:
+        from world.gm.services import create_invite
+
+        invite = create_invite(
+            self.gm,
+            self.entry,
+            is_public=False,
+            invited_email="friend@example.com",
+        )
+        assert invite.is_public is False
+        assert invite.invited_email == "friend@example.com"
+
+
+class RevokeInviteTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.gm.factories import GMRosterInviteFactory
+
+        cls.invite = GMRosterInviteFactory()
+
+    def test_revoke_sets_expires_at_to_now(self) -> None:
+        from django.utils import timezone
+
+        from world.gm.services import revoke_invite
+
+        revoke_invite(self.invite.created_by, self.invite)
+        self.invite.refresh_from_db()
+        assert self.invite.expires_at <= timezone.now()
+        assert self.invite.is_expired is True
+
+    def test_rejects_revoking_another_gms_invite(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.gm.factories import GMProfileFactory
+        from world.gm.services import revoke_invite
+
+        other_gm = GMProfileFactory()
+        with self.assertRaises(ValidationError):
+            revoke_invite(other_gm, self.invite)
+
+    def test_rejects_revoking_claimed_invite(self) -> None:
+        from django.core.exceptions import ValidationError
+        from django.utils import timezone
+
+        from world.gm.services import revoke_invite
+
+        self.invite.claimed_at = timezone.now()
+        self.invite.save(update_fields=["claimed_at"])
+        with self.assertRaises(ValidationError):
+            revoke_invite(self.invite.created_by, self.invite)

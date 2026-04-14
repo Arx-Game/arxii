@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+import secrets
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
@@ -9,15 +11,18 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.gm.constants import GMTableStatus
-from world.gm.models import GMProfile, GMTable, GMTableMembership
+from world.gm.models import GMProfile, GMRosterInvite, GMTable, GMTableMembership
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
 
+    from world.roster.models import RosterEntry
     from world.roster.models.applications import RosterApplication
     from world.stories.models import Story
+
+DEFAULT_INVITE_DURATION_DAYS = 30
 
 TEMPORARY_PERSONA_REJECTION = (
     "A temporary persona cannot join a GM table — use a primary or established persona."
@@ -155,3 +160,59 @@ def surrender_character_story(gm: GMProfile, story: Story) -> None:
         raise ValidationError(msg)
     story.primary_table = None
     story.save(update_fields=["primary_table"])
+
+
+@transaction.atomic
+def create_invite(
+    gm: GMProfile,
+    roster_entry: RosterEntry,
+    is_public: bool = False,
+    invited_email: str = "",
+    expires_at: datetime | None = None,
+) -> GMRosterInvite:
+    """Create a GMRosterInvite for a roster character.
+
+    Validates that the GM oversees the roster_entry (character has an
+    active story at one of this GM's tables). Private invites should
+    have invited_email set; public invites accept anyone with the code.
+    """
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+
+    # Verify GM oversees this entry
+    oversees = RosterEntry.objects.filter(
+        pk=roster_entry.pk,
+        character_sheet__character__story_participations__is_active=True,
+        character_sheet__character__story_participations__story__primary_table__gm=gm,
+    ).exists()
+    if not oversees:
+        msg = "You do not oversee this character."
+        raise ValidationError(msg)
+
+    if expires_at is None:
+        expires_at = timezone.now() + timedelta(days=DEFAULT_INVITE_DURATION_DAYS)
+
+    return GMRosterInvite.objects.create(
+        roster_entry=roster_entry,
+        created_by=gm,
+        code=secrets.token_urlsafe(48),
+        expires_at=expires_at,
+        is_public=is_public,
+        invited_email=invited_email,
+    )
+
+
+@transaction.atomic
+def revoke_invite(gm: GMProfile, invite: GMRosterInvite) -> None:
+    """Revoke an unclaimed invite by setting expires_at to now.
+
+    Only the GM who created the invite can revoke it. Claimed invites
+    cannot be revoked (too late).
+    """
+    if invite.created_by != gm:
+        msg = "You did not create this invite."
+        raise ValidationError(msg)
+    if invite.is_claimed:
+        msg = "Claimed invites cannot be revoked."
+        raise ValidationError(msg)
+    invite.expires_at = timezone.now()
+    invite.save(update_fields=["expires_at"])
