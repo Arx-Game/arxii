@@ -15,7 +15,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from world.gm.constants import GMApplicationStatus
+from world.gm.constants import GMApplicationStatus, GMTableStatus
 from world.gm.filters import (
     GMApplicationFilter,
     GMTableFilter,
@@ -242,6 +242,16 @@ class GMRosterInviteViewSet(
         serializer.instance = invite
 
     def perform_destroy(self, instance: GMRosterInvite) -> None:
+        if self.request.user.is_staff:
+            if instance.is_claimed:
+                from rest_framework.exceptions import (  # noqa: PLC0415
+                    ValidationError as DRFValidationError,
+                )
+
+                raise DRFValidationError({"detail": "Claimed invites cannot be revoked."})
+            instance.expires_at = timezone.now()
+            instance.save(update_fields=["expires_at"])
+            return
         gm = _get_gm_or_403(self.request.user)
         try:
             revoke_invite_service(gm=gm, invite=instance)
@@ -257,6 +267,22 @@ class GMApplicationQueueView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self) -> QuerySet[RosterApplication]:
+        if self.request.user.is_staff:
+            # Staff see all pending apps across all GM tables.
+            from world.roster.models.choices import ApplicationStatus  # noqa: PLC0415
+
+            return (
+                RosterApplication.objects.filter(
+                    status=ApplicationStatus.PENDING,
+                    character__story_participations__is_active=True,
+                    character__story_participations__story__primary_table__isnull=False,
+                    character__story_participations__story__primary_table__status=(
+                        GMTableStatus.ACTIVE
+                    ),
+                )
+                .select_related("character", "player_data__account")
+                .distinct()
+            )
         gm = _get_gm_or_403(self.request.user)
         return gm_application_queue(gm)
 

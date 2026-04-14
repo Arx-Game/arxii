@@ -39,6 +39,11 @@ def create_table(gm: GMProfile, name: str, description: str = "") -> GMTable:
 @transaction.atomic
 def archive_table(table: GMTable) -> None:
     """Mark a table archived. Sets archived_at timestamp."""
+    # TODO: Archiving a table leaves PENDING applications for characters at
+    # this table invisible to the GM queue (filtered out by status=ACTIVE).
+    # Those applications become orphaned PENDING rows. A follow-up should
+    # either auto-deny them with a "table archived" reason or route them to
+    # a staff override queue.
     if table.status == GMTableStatus.ARCHIVED:
         return
     table.status = GMTableStatus.ARCHIVED
@@ -137,14 +142,23 @@ def approve_application_as_gm(gm: GMProfile, application: RosterApplication) -> 
         msg = "This application is not in your GM application queue."
         raise ValidationError(msg)
 
-    # Lock the application row and re-check status to avoid racing with
-    # a concurrent staff approval / denial.
-    locked = RosterApplication.objects.select_for_update().get(pk=application.pk)
-    if locked.status != ApplicationStatus.PENDING:
+    # Acquire row lock AND read status via values_list to bypass the
+    # SharedMemoryModel identity map (which would return any stale cached
+    # status value from a prior read).
+    locked_status = (
+        RosterApplication.objects.select_for_update()
+        .filter(pk=application.pk)
+        .values_list("status", flat=True)
+        .first()
+    )
+    if locked_status != ApplicationStatus.PENDING:
         msg = "This application has already been processed."
         raise ValidationError(msg)
 
-    if not locked.approve(staff_player_data=gm.account.player_data):
+    # Sync the in-memory instance with DB state before mutation.
+    application.refresh_from_db(fields=["status"])
+
+    if not application.approve(staff_player_data=gm.account.player_data):
         msg = "Application could not be approved."
         raise ValidationError(msg)
 
@@ -164,14 +178,23 @@ def deny_application_as_gm(
         msg = "This application is not in your GM application queue."
         raise ValidationError(msg)
 
-    # Lock the application row and re-check status to avoid racing with
-    # a concurrent staff approval / denial.
-    locked = RosterApplication.objects.select_for_update().get(pk=application.pk)
-    if locked.status != ApplicationStatus.PENDING:
+    # Acquire row lock AND read status via values_list to bypass the
+    # SharedMemoryModel identity map (which would return any stale cached
+    # status value from a prior read).
+    locked_status = (
+        RosterApplication.objects.select_for_update()
+        .filter(pk=application.pk)
+        .values_list("status", flat=True)
+        .first()
+    )
+    if locked_status != ApplicationStatus.PENDING:
         msg = "This application has already been processed."
         raise ValidationError(msg)
 
-    if not locked.deny(staff_player_data=gm.account.player_data, reason=review_notes):
+    # Sync the in-memory instance with DB state before mutation.
+    application.refresh_from_db(fields=["status"])
+
+    if not application.deny(staff_player_data=gm.account.player_data, reason=review_notes):
         msg = "Application could not be denied."
         raise ValidationError(msg)
 
@@ -312,29 +335,31 @@ def claim_invite(code: str, account: AccountDB) -> RosterApplication:
 
     character = invite.roster_entry.character_sheet.character
 
-    # Handle duplicate application — RosterApplication has unique_together
-    # on (player_data, character), so create() would raise IntegrityError
-    # if the claimer already has an application for this character.
-    existing = RosterApplication.objects.filter(
+    # Use get_or_create to race-safely handle duplicate applications —
+    # RosterApplication has unique_together on (player_data, character),
+    # so a filter-then-create pattern could allow two concurrent claims
+    # to both pass the existence check and one to then crash with
+    # IntegrityError.
+    app, created = RosterApplication.objects.get_or_create(
         player_data=player_data,
         character=character,
-    ).first()
-    if existing is not None:
-        if existing.status != ApplicationStatus.PENDING:
-            msg = (
-                "You already have a finalized application for this character. "
-                "Contact staff if you want to re-apply."
-            )
-            raise ValidationError(msg)
-        # Reuse the pending application — annotate that it was claimed via invite.
-        note = f"\n[Claimed invite from {invite.created_by.account.username}]"
-        existing.application_text = (existing.application_text or "") + note
-        existing.save(update_fields=["application_text"])
-        return existing
-
-    # Create the application
-    return RosterApplication.objects.create(
-        player_data=player_data,
-        character=character,
-        application_text=f"Claiming invite from {invite.created_by.account.username}",
+        defaults={
+            "application_text": (f"Claiming invite from {invite.created_by.account.username}"),
+        },
     )
+    if created:
+        return app
+
+    # Existing application — check its status.
+    if app.status != ApplicationStatus.PENDING:
+        msg = (
+            "You already have a finalized application for this character. "
+            "Contact staff if you want to re-apply."
+        )
+        raise ValidationError(msg)
+    # Pending — annotate that this invite was claimed against it.
+    # Note: we don't update applied_date so the staff queue ordering remains stable.
+    note = f"\n[Claimed invite from {invite.created_by.account.username}]"
+    app.application_text = (app.application_text or "") + note
+    app.save(update_fields=["application_text"])
+    return app

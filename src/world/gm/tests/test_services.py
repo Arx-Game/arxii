@@ -210,6 +210,16 @@ class ApproveApplicationAsGMTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         from world.gm.factories import GMProfileFactory, GMTableFactory
+
+        cls.gm = GMProfileFactory()
+        cls.table = GMTableFactory(gm=cls.gm)
+        cls.other_gm = GMProfileFactory()
+        cls.other_table = GMTableFactory(gm=cls.other_gm)
+
+    def setUp(self) -> None:
+        # Create the mutable application/entry in setUp so each test starts
+        # with fresh DB rows. Otherwise SharedMemoryModel's identity map
+        # would leak mutations (e.g. status changes) across tests.
         from world.roster.factories import (
             RosterApplicationFactory,
             RosterEntryFactory,
@@ -217,20 +227,15 @@ class ApproveApplicationAsGMTest(TestCase):
         from world.stories.factories import StoryFactory
         from world.stories.models import StoryParticipation
 
-        cls.gm = GMProfileFactory()
-        cls.table = GMTableFactory(gm=cls.gm)
-        cls.other_gm = GMProfileFactory()
-        cls.other_table = GMTableFactory(gm=cls.other_gm)
-
-        cls.entry = RosterEntryFactory()
-        story = StoryFactory(primary_table=cls.table)
+        self.entry = RosterEntryFactory()
+        story = StoryFactory(primary_table=self.table)
         StoryParticipation.objects.create(
             story=story,
-            character=cls.entry.character_sheet.character,
+            character=self.entry.character_sheet.character,
             is_active=True,
         )
-        cls.app = RosterApplicationFactory(
-            character=cls.entry.character_sheet.character,
+        self.app = RosterApplicationFactory(
+            character=self.entry.character_sheet.character,
         )
 
     def test_gm_can_approve_own_queue_application(self) -> None:
@@ -275,6 +280,15 @@ class DenyApplicationAsGMTest(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         from world.gm.factories import GMProfileFactory, GMTableFactory
+
+        cls.gm = GMProfileFactory()
+        cls.table = GMTableFactory(gm=cls.gm)
+        cls.other_gm = GMProfileFactory()
+
+    def setUp(self) -> None:
+        # Create the mutable application/entry in setUp so each test starts
+        # with fresh DB rows. Otherwise SharedMemoryModel's identity map
+        # would leak mutations (e.g. status changes) across tests.
         from world.roster.factories import (
             RosterApplicationFactory,
             RosterEntryFactory,
@@ -282,19 +296,15 @@ class DenyApplicationAsGMTest(TestCase):
         from world.stories.factories import StoryFactory
         from world.stories.models import StoryParticipation
 
-        cls.gm = GMProfileFactory()
-        cls.table = GMTableFactory(gm=cls.gm)
-        cls.other_gm = GMProfileFactory()
-
-        cls.entry = RosterEntryFactory()
-        story = StoryFactory(primary_table=cls.table)
+        self.entry = RosterEntryFactory()
+        story = StoryFactory(primary_table=self.table)
         StoryParticipation.objects.create(
             story=story,
-            character=cls.entry.character_sheet.character,
+            character=self.entry.character_sheet.character,
             is_active=True,
         )
-        cls.app = RosterApplicationFactory(
-            character=cls.entry.character_sheet.character,
+        self.app = RosterApplicationFactory(
+            character=self.entry.character_sheet.character,
         )
 
     def test_gm_can_deny_own_queue_application(self) -> None:
