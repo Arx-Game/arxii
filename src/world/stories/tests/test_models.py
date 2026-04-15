@@ -290,3 +290,33 @@ class FeedbackRatingSystemTestCase(TestCase):
         avg = feedback.get_average_rating()
         assert avg < 0
         assert not feedback.is_overall_positive()
+
+
+class StoryPrimaryTableTest(TestCase):
+    def test_primary_table_default_null(self) -> None:
+        from world.stories.factories import StoryFactory
+
+        story = StoryFactory()
+        assert story.primary_table is None
+
+    def test_primary_table_can_be_set(self) -> None:
+        from world.gm.factories import GMTableFactory
+        from world.stories.factories import StoryFactory
+
+        table = GMTableFactory()
+        story = StoryFactory(primary_table=table)
+        assert story.primary_table == table
+        assert story in table.primary_stories.all()
+
+    def test_primary_table_set_null_on_table_delete(self) -> None:
+        from world.gm.factories import GMTableFactory
+        from world.stories.factories import StoryFactory
+        from world.stories.models import Story
+
+        table = GMTableFactory()
+        story = StoryFactory(primary_table=table)
+        table.delete()
+        # Flush identity mapper cache so refresh_from_db picks up SET_NULL change
+        Story.flush_instance_cache()
+        story.refresh_from_db()
+        assert story.primary_table is None

@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import mixins, serializers, status, viewsets
+from rest_framework import generics, mixins, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from world.gm.constants import GMApplicationStatus
+from world.gm.constants import GMApplicationStatus, GMTableStatus
 from world.gm.filters import (
     GMApplicationFilter,
     GMTableFilter,
@@ -22,21 +24,30 @@ from world.gm.filters import (
 from world.gm.models import (
     GMApplication,
     GMProfile,
+    GMRosterInvite,
     GMTable,
     GMTableMembership,
 )
+from world.gm.permissions import IsGM, IsGMOrStaff
 from world.gm.serializers import (
+    GMApplicationActionSerializer,
     GMApplicationCreateSerializer,
     GMApplicationDetailSerializer,
+    GMApplicationQueueSerializer,
+    GMInviteClaimSerializer,
+    GMInviteRevokeSerializer,
+    GMRosterInviteSerializer,
     GMTableMembershipSerializer,
     GMTableSerializer,
 )
 from world.gm.services import (
     archive_table,
+    gm_application_queue,
     join_table,
     leave_table,
     transfer_ownership as transfer_ownership_service,
 )
+from world.roster.models.applications import RosterApplication
 from world.stories.pagination import StandardResultsSetPagination
 
 
@@ -172,3 +183,112 @@ class GMTableMembershipViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance: GMTableMembership) -> None:
         leave_table(instance)
+
+
+class GMRosterInviteViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """GM invites for specific roster characters.
+
+    - create: GM only, must oversee the character (validated in serializer)
+    - list/retrieve: scoped to GM's invites (staff sees all)
+    - destroy: revokes unclaimed invites (validated in serializer)
+    """
+
+    serializer_class = GMRosterInviteSerializer
+    pagination_class = StandardResultsSetPagination
+    permission_classes = [IsGMOrStaff]
+
+    def get_queryset(self) -> QuerySet[GMRosterInvite]:
+        qs = GMRosterInvite.objects.select_related(
+            "roster_entry", "created_by__account", "claimed_by"
+        ).order_by("-created_at")
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        return qs.filter(created_by__account=user)
+
+    def destroy(self, request: Request, *args: object, **kwargs: object) -> Response:
+        instance = self.get_object()
+        serializer = GMInviteRevokeSerializer(
+            instance,
+            data={},
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class GMApplicationQueueView(generics.ListAPIView):
+    """Read-only list of pending applications for this GM's characters."""
+
+    serializer_class = GMApplicationQueueSerializer
+    pagination_class = StandardResultsSetPagination
+    permission_classes = [IsGMOrStaff]
+
+    def get_queryset(self) -> QuerySet[RosterApplication]:
+        from world.roster.models.choices import ApplicationStatus  # noqa: PLC0415
+
+        user = self.request.user
+        if user.is_staff:
+            # Staff see all pending apps across all GM tables.
+            return (
+                RosterApplication.objects.filter(
+                    status=ApplicationStatus.PENDING,
+                    character__story_participations__is_active=True,
+                    character__story_participations__story__primary_table__isnull=False,
+                    character__story_participations__story__primary_table__status=(
+                        GMTableStatus.ACTIVE
+                    ),
+                )
+                .select_related("character", "player_data__account")
+                .distinct()
+            )
+        return gm_application_queue(user.gm_profile)
+
+
+class GMApplicationActionView(APIView):
+    """GM approves or denies a pending application in their queue.
+
+    URL path: /api/gm/queue/<id>/<action>/ where action is 'approve' or 'deny'.
+    """
+
+    permission_classes = [IsGM]
+
+    @transaction.atomic
+    def post(self, request: Request, pk: int, action: str) -> Response:
+        application = get_object_or_404(RosterApplication, pk=pk)
+        serializer = GMApplicationActionSerializer(
+            data={
+                "action": action,
+                "review_notes": request.data.get("review_notes", ""),
+            },
+            context={"request": request, "application": application},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({"status": "ok"})
+
+
+class GMInviteClaimView(APIView):
+    """Logged-in user claims an invite by code."""
+
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request: Request) -> Response:
+        serializer = GMInviteClaimSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        application = serializer.save()
+        return Response(
+            {"application_id": application.pk},
+            status=status.HTTP_201_CREATED,
+        )

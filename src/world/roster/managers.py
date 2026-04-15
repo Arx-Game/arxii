@@ -49,6 +49,21 @@ class RosterEntryQuerySet(models.QuerySet):
             tenures__end_date__isnull=True,
         )
 
+    def actively_overseen(self) -> RosterEntryQuerySet:
+        """Entries whose character has at least one active story at an
+        active (non-archived) GM table.
+
+        Used for default roster browsing so players only see characters
+        with a committed GM. The "show all" toggle bypasses this filter.
+        """
+        from world.gm.constants import GMTableStatus  # noqa: PLC0415
+
+        return self.filter(
+            character_sheet__character__story_participations__is_active=True,
+            character_sheet__character__story_participations__story__primary_table__isnull=False,
+            character_sheet__character__story_participations__story__primary_table__status=GMTableStatus.ACTIVE,
+        ).distinct()
+
     def character_ids(self) -> models.QuerySet:
         """Return character PKs as a lazy subquery (not evaluated).
 
@@ -101,6 +116,9 @@ class RosterEntryManager(models.Manager):
 
     def for_account(self, user: AccountDB) -> RosterEntryQuerySet:
         return self.get_queryset().for_account(user)
+
+    def actively_overseen(self) -> RosterEntryQuerySet:
+        return self.get_queryset().actively_overseen()
 
     def exclude_characters_for_player(self, player_data: PlayerData) -> RosterEntryQuerySet:
         return self.get_queryset().exclude_characters_for_player(player_data)

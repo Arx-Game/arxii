@@ -12,7 +12,7 @@ from world.roster.factories import (
     PlayerDataFactory,
     RosterEntryFactory,
 )
-from world.roster.models import ApplicationStatus, RosterApplication
+from world.roster.models import ApplicationStatus, RosterApplication, RosterEntry
 
 
 class RosterApplicationManagerTestCase(TestCase):
@@ -133,3 +133,71 @@ class RosterApplicationManagerTestCase(TestCase):
 
         assert recent_apps.count() == 1
         assert recent_apps.first() == recent_app
+
+
+class ActivelyOverseenTest(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.gm.factories import GMProfileFactory, GMTableFactory
+
+        cls.gm = GMProfileFactory()
+        cls.table = GMTableFactory(gm=cls.gm)
+
+    def test_entry_with_active_story_at_active_table_is_overseen(self) -> None:
+        from world.stories.factories import StoryFactory
+        from world.stories.models import StoryParticipation
+
+        entry = RosterEntryFactory()
+        story = StoryFactory(primary_table=self.table)
+        StoryParticipation.objects.create(
+            story=story,
+            character=entry.character_sheet.character,
+            is_active=True,
+        )
+        assert RosterEntry.objects.actively_overseen().filter(pk=entry.pk).exists()
+
+    def test_entry_with_no_story_is_not_overseen(self) -> None:
+        entry = RosterEntryFactory()
+        assert not RosterEntry.objects.actively_overseen().filter(pk=entry.pk).exists()
+
+    def test_entry_with_story_but_no_primary_table_is_not_overseen(self) -> None:
+        from world.stories.factories import StoryFactory
+        from world.stories.models import StoryParticipation
+
+        entry = RosterEntryFactory()
+        story = StoryFactory(primary_table=None)
+        StoryParticipation.objects.create(
+            story=story,
+            character=entry.character_sheet.character,
+            is_active=True,
+        )
+        assert not RosterEntry.objects.actively_overseen().filter(pk=entry.pk).exists()
+
+    def test_entry_with_archived_table_is_not_overseen(self) -> None:
+        from world.gm.constants import GMTableStatus
+        from world.gm.factories import GMTableFactory
+        from world.stories.factories import StoryFactory
+        from world.stories.models import StoryParticipation
+
+        archived_table = GMTableFactory(status=GMTableStatus.ARCHIVED)
+        entry = RosterEntryFactory()
+        story = StoryFactory(primary_table=archived_table)
+        StoryParticipation.objects.create(
+            story=story,
+            character=entry.character_sheet.character,
+            is_active=True,
+        )
+        assert not RosterEntry.objects.actively_overseen().filter(pk=entry.pk).exists()
+
+    def test_entry_with_inactive_participation_is_not_overseen(self) -> None:
+        from world.stories.factories import StoryFactory
+        from world.stories.models import StoryParticipation
+
+        entry = RosterEntryFactory()
+        story = StoryFactory(primary_table=self.table)
+        StoryParticipation.objects.create(
+            story=story,
+            character=entry.character_sheet.character,
+            is_active=False,
+        )
+        assert not RosterEntry.objects.actively_overseen().filter(pk=entry.pk).exists()

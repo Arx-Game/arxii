@@ -88,6 +88,18 @@ class Story(SharedMemoryModel):
         related_name="active_stories",
         help_text="GM profiles currently running this story",
     )
+    primary_table = models.ForeignKey(
+        "gm.GMTable",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="primary_stories",
+        help_text=(
+            "Table bearing primary responsibility for this story. "
+            "Individual beats/episodes may happen at other tables. "
+            "Null = orphaned (no active oversight)."
+        ),
+    )
 
     # Trust requirements - stories can require trust in specific categories
     required_trust_categories = models.ManyToManyField(
