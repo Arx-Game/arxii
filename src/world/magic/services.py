@@ -10,21 +10,27 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.utils import timezone
 
 from world.magic.constants import (
     ALTERATION_TIER_CAPS,
     MIN_ALTERATION_DESCRIPTION_LENGTH,
     AlterationTier,
+    PendingAlterationStatus,
 )
 from world.magic.models import (
     CharacterAnima,
     CharacterResonanceTotal,
     IntensityTier,
+    MagicalAlterationEvent,
     MagicalAlterationTemplate,
+    PendingAlteration,
     SoulfrayConfig,
 )
 from world.magic.types import (
     AffinityType,
+    AlterationResolutionError,
+    AlterationResolutionResult,
     AnimaCostResult,
     AuraPercentages,
     MishapResult,
@@ -45,11 +51,13 @@ if TYPE_CHECKING:
     from typing import Any
 
     from django.db.models import QuerySet
+    from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
     from actions.models.action_templates import ConsequencePool
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
+    from world.conditions.models import ConditionCategory, DamageType
     from world.magic.models import (
         Affinity,
         Resonance as ResonanceModel,
@@ -782,3 +790,143 @@ def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901 — sequential
                 errors.append("Character already has this condition active.")
 
     return errors
+
+
+@transaction.atomic
+def resolve_pending_alteration(  # noqa: PLR0913 — kw-only resolution fields are intentional
+    *,
+    pending: PendingAlteration,
+    name: str,
+    player_description: str,
+    observer_description: str,
+    weakness_damage_type: DamageType | None = None,
+    weakness_magnitude: int,
+    resonance_bonus_magnitude: int,
+    social_reactivity_magnitude: int,
+    is_visible_at_rest: bool,
+    resolved_by: AccountDB | None,
+    parent_template: MagicalAlterationTemplate | None = None,
+    is_library_entry: bool = False,
+    library_template: MagicalAlterationTemplate | None = None,
+) -> AlterationResolutionResult:
+    """Resolve a PendingAlteration by creating or selecting a template.
+
+    If library_template is provided, use it directly (use-as-is path).
+    Otherwise create a new ConditionTemplate + MagicalAlterationTemplate.
+    In both cases: apply the condition, create the event, mark resolved.
+    """
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+    from world.conditions.models import (  # noqa: PLC0415
+        ConditionResistanceModifier,
+        ConditionTemplate,
+    )
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+
+    if library_template is not None:
+        alteration_template = library_template
+        condition_template = library_template.condition_template
+    else:
+        condition_template = ConditionTemplate.objects.create(
+            name=name,
+            category=_get_or_create_alteration_category(),
+            player_description=player_description,
+            observer_description=observer_description,
+            default_duration_type=DurationType.PERMANENT,
+        )
+
+        if weakness_damage_type and weakness_magnitude > 0:
+            ConditionResistanceModifier.objects.create(
+                condition=condition_template,
+                damage_type=weakness_damage_type,
+                modifier_value=-weakness_magnitude,  # negative = vulnerability
+            )
+
+        # TODO: Create ConditionCheckModifier for social_reactivity when
+        # observer targeting is resolved (Open Question #1 in spec)
+
+        # TODO: Create resonance bonus modifier when the target model
+        # for resonance bonuses is clarified
+
+        alteration_template = MagicalAlterationTemplate.objects.create(
+            condition_template=condition_template,
+            tier=pending.tier,
+            origin_affinity=pending.origin_affinity,
+            origin_resonance=pending.origin_resonance,
+            weakness_damage_type=weakness_damage_type,
+            weakness_magnitude=weakness_magnitude,
+            resonance_bonus_magnitude=resonance_bonus_magnitude,
+            social_reactivity_magnitude=social_reactivity_magnitude,
+            is_visible_at_rest=is_visible_at_rest,
+            authored_by=resolved_by,
+            parent_template=parent_template,
+            is_library_entry=is_library_entry,
+        )
+
+    # Apply the condition to the character (CharacterSheet.character is the ObjectDB)
+    target_obj = pending.character.character
+    result = apply_condition(target_obj, condition_template)
+
+    if not result.success or result.instance is None:
+        raise AlterationResolutionError
+
+    # Create the audit event
+    event = MagicalAlterationEvent.objects.create(
+        character=pending.character,
+        alteration_template=alteration_template,
+        active_condition=result.instance,
+        triggering_scene=pending.triggering_scene,
+        triggering_technique=pending.triggering_technique,
+        triggering_intensity=pending.triggering_intensity,
+        triggering_control=pending.triggering_control,
+        triggering_anima_cost=pending.triggering_anima_cost,
+        triggering_anima_deficit=pending.triggering_anima_deficit,
+        triggering_soulfray_stage=pending.triggering_soulfray_stage,
+        audere_active=pending.audere_active,
+    )
+
+    # Mark pending as resolved
+    pending.status = PendingAlterationStatus.RESOLVED
+    pending.resolved_alteration = alteration_template
+    pending.resolved_at = timezone.now()
+    pending.resolved_by = resolved_by
+    pending.save()
+
+    return AlterationResolutionResult(
+        pending=pending,
+        template=alteration_template,
+        condition_instance=result.instance,
+        event=event,
+    )
+
+
+def _get_or_create_alteration_category() -> ConditionCategory:
+    """Get or create the ConditionCategory for magical alterations."""
+    from world.conditions.models import ConditionCategory  # noqa: PLC0415
+
+    cat, _ = ConditionCategory.objects.get_or_create(
+        name="Magical Alteration",
+        defaults={"description": "Permanent magical changes from Soulfray overburn."},
+    )
+    return cat
+
+
+def has_pending_alterations(character: CharacterSheet) -> bool:
+    """Check if this character has any unresolved magical alterations."""
+    return PendingAlteration.objects.filter(
+        character=character,
+        status=PendingAlterationStatus.OPEN,
+    ).exists()
+
+
+def staff_clear_alteration(
+    *,
+    pending: PendingAlteration,
+    staff_account: AccountDB | None,
+    notes: str = "",
+) -> None:
+    """Clear a PendingAlteration without resolving it. Staff escape hatch."""
+    pending.status = PendingAlterationStatus.STAFF_CLEARED
+    pending.resolved_by = staff_account
+    pending.resolved_at = timezone.now()
+    pending.notes = notes
+    pending.save()
