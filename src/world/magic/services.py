@@ -14,6 +14,7 @@ from django.db import transaction
 from world.magic.constants import (
     ALTERATION_TIER_CAPS,
     MIN_ALTERATION_DESCRIPTION_LENGTH,
+    AlterationTier,
 )
 from world.magic.models import (
     CharacterAnima,
@@ -704,7 +705,11 @@ def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901 — sequential
     caps = ALTERATION_TIER_CAPS.get(pending_tier, {})
 
     if tier != pending_tier:
-        errors.append(f"Tier mismatch: payload tier {tier} != pending tier {pending_tier}.")
+        try:
+            pending_label = AlterationTier(pending_tier).label
+        except ValueError:
+            pending_label = str(pending_tier)
+        errors.append(f"Tier mismatch: payload tier {tier} != pending tier {pending_label}.")
 
     if payload.get("origin_affinity_id") != pending_affinity_id:
         errors.append("Origin affinity does not match the pending alteration.")
@@ -716,7 +721,7 @@ def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901 — sequential
     if weakness > caps.get("weakness_cap", 0):
         errors.append(
             f"Weakness magnitude {weakness} exceeds tier {pending_tier} cap "
-            f"of {caps['weakness_cap']}."
+            f"of {caps.get('weakness_cap', 0)}."
         )
     if weakness > 0 and not payload.get("weakness_damage_type_id"):
         errors.append("weakness_damage_type is required when weakness_magnitude > 0.")
@@ -725,14 +730,14 @@ def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901 — sequential
     if resonance > caps.get("resonance_cap", 0):
         errors.append(
             f"Resonance bonus magnitude {resonance} exceeds tier {pending_tier} cap "
-            f"of {caps['resonance_cap']}."
+            f"of {caps.get('resonance_cap', 0)}."
         )
 
     social = payload.get("social_reactivity_magnitude", 0)
     if social > caps.get("social_cap", 0):
         errors.append(
             f"Social reactivity magnitude {social} exceeds tier {pending_tier} cap "
-            f"of {caps['social_cap']}."
+            f"of {caps.get('social_cap', 0)}."
         )
 
     if caps.get("visibility_required") and not payload.get("is_visible_at_rest"):
@@ -751,19 +756,22 @@ def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901 — sequential
 
     # Library use-as-is duplicate check
     library_pk = payload.get("library_entry_pk")
-    if library_pk and character_sheet is not None:
-        from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    if library_pk:
+        if character_sheet is None:
+            errors.append("character_sheet is required to validate library_entry_pk.")
+        else:
+            from world.conditions.models import ConditionInstance  # noqa: PLC0415
 
-        library_entry = MagicalAlterationTemplate.objects.filter(
-            pk=library_pk,
-            is_library_entry=True,
-        ).first()
-        if library_entry is None:
-            errors.append("Library entry not found or not a library entry.")
-        elif ConditionInstance.objects.filter(
-            target=character_sheet.character,
-            condition=library_entry.condition_template,
-        ).exists():
-            errors.append("Character already has this condition active.")
+            library_entry = MagicalAlterationTemplate.objects.filter(
+                pk=library_pk,
+                is_library_entry=True,
+            ).first()
+            if library_entry is None:
+                errors.append("Library entry not found or not a library entry.")
+            elif ConditionInstance.objects.filter(
+                target=character_sheet.character,
+                condition=library_entry.condition_template,
+            ).exists():
+                errors.append("Character already has this condition active.")
 
     return errors

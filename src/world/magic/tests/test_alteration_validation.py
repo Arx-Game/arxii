@@ -175,7 +175,7 @@ class ValidateAlterationResolutionTests(TestCase):
     def test_library_duplicate_rejected(self):
         """Cannot use a library entry the character already has active."""
         from world.character_sheets.factories import CharacterSheetFactory
-        from world.conditions.models import ConditionInstance
+        from world.conditions.factories import ConditionInstanceFactory
         from world.magic.factories import MagicalAlterationTemplateFactory
 
         sheet = CharacterSheetFactory()
@@ -184,7 +184,7 @@ class ValidateAlterationResolutionTests(TestCase):
             tier=AlterationTier.MARKED,
         )
         # Simulate the condition already being active
-        ConditionInstance.objects.create(
+        ConditionInstanceFactory(
             target=sheet.character,
             condition=library_entry.condition_template,
             severity=1,
@@ -198,6 +198,18 @@ class ValidateAlterationResolutionTests(TestCase):
             character_sheet=sheet,
         )
         assert any("already" in e.lower() for e in errors)
+
+    def test_library_pk_without_character_sheet_rejected(self):
+        """library_entry_pk requires character_sheet to validate duplicates."""
+        errors = validate_alteration_resolution(
+            pending_tier=AlterationTier.MARKED,
+            pending_affinity_id=self.affinity.pk,
+            pending_resonance_id=self.resonance.pk,
+            payload={"library_entry_pk": 1},
+            is_staff=False,
+            character_sheet=None,
+        )
+        assert any("character_sheet" in e.lower() for e in errors)
 
     def test_resonance_mismatch_rejected(self):
         """Payload resonance must match pending origin."""
