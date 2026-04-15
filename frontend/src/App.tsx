@@ -27,6 +27,8 @@ import { EventDetailPage } from '@/events/pages/EventDetailPage';
 import { EventCreatePage } from '@/events/pages/EventCreatePage';
 import { EventEditPage } from '@/events/pages/EventEditPage';
 import { CodexPage } from './codex/pages/CodexPage';
+import { FeedbackPage } from './submissions/pages/FeedbackPage';
+import { BugReportPage } from './submissions/pages/BugReportPage';
 import { StaffHubPage } from './staff/pages/StaffHubPage';
 import { StaffInboxPage } from './staff/pages/StaffInboxPage';
 import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
@@ -101,6 +103,22 @@ function App() {
           element={
             <ProtectedRoute>
               <XpKudosPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/feedback"
+          element={
+            <ProtectedRoute>
+              <FeedbackPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/bug-report"
+          element={
+            <ProtectedRoute>
+              <BugReportPage />
             </ProtectedRoute>
           }
         />
