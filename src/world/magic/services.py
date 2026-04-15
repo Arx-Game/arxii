@@ -22,6 +22,7 @@ from world.magic.types import (
     AnimaCostResult,
     AuraPercentages,
     MishapResult,
+    PendingAlterationResult,
     RuntimeTechniqueStats,
     SoulfrayResult,
     SoulfrayWarning,
@@ -43,8 +44,13 @@ if TYPE_CHECKING:
     from actions.models.action_templates import ConsequencePool
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
-    from world.magic.models import Resonance as ResonanceModel, Technique
+    from world.magic.models import (
+        Affinity,
+        Resonance as ResonanceModel,
+        Technique,
+    )
     from world.mechanics.models import ModifierTarget
+    from world.scenes.models import Scene
 
 
 def calculate_affinity_breakdown(resonances: QuerySet[ResonanceModel]) -> dict[str, int]:
@@ -597,4 +603,78 @@ def _resolve_mishap(
     return MishapResult(
         consequence_label=pending.selected_consequence.label,
         applied_effect_ids=[e.created_instance.pk for e in applied if e.created_instance],
+    )
+
+
+def create_pending_alteration(  # noqa: PLR0913 — kw-only snapshot fields are intentional
+    *,
+    character: CharacterSheet,
+    tier: int,
+    origin_affinity: Affinity,
+    origin_resonance: ResonanceModel,
+    scene: Scene | None,
+    triggering_technique: Technique | None = None,
+    triggering_intensity: int | None = None,
+    triggering_control: int | None = None,
+    triggering_anima_cost: int | None = None,
+    triggering_anima_deficit: int | None = None,
+    triggering_soulfray_stage: int | None = None,
+    audere_active: bool = False,
+) -> PendingAlterationResult:
+    """Create or escalate a PendingAlteration for a character.
+
+    Same-scene dedup: if an OPEN pending exists for the same character +
+    scene, upgrade its tier if the new tier is higher. Otherwise no-op.
+    Different scenes (or scene=None) always create new pendings.
+    """
+    from world.magic.constants import PendingAlterationStatus  # noqa: PLC0415
+    from world.magic.models import PendingAlteration  # noqa: PLC0415
+
+    snapshot_fields = {
+        "triggering_technique": triggering_technique,
+        "triggering_intensity": triggering_intensity,
+        "triggering_control": triggering_control,
+        "triggering_anima_cost": triggering_anima_cost,
+        "triggering_anima_deficit": triggering_anima_deficit,
+        "triggering_soulfray_stage": triggering_soulfray_stage,
+        "audere_active": audere_active,
+    }
+
+    if scene is not None:
+        existing = PendingAlteration.objects.filter(
+            character=character,
+            triggering_scene=scene,
+            status=PendingAlterationStatus.OPEN,
+        ).first()
+
+        if existing is not None:
+            if tier > existing.tier:
+                previous_tier = existing.tier
+                existing.tier = tier
+                for field_name, value in snapshot_fields.items():
+                    setattr(existing, field_name, value)
+                existing.save()
+                return PendingAlterationResult(
+                    pending=existing,
+                    created=False,
+                    previous_tier=previous_tier,
+                )
+            return PendingAlterationResult(
+                pending=existing,
+                created=False,
+                previous_tier=None,
+            )
+
+    pending = PendingAlteration.objects.create(
+        character=character,
+        tier=tier,
+        origin_affinity=origin_affinity,
+        origin_resonance=origin_resonance,
+        triggering_scene=scene,
+        **snapshot_fields,
+    )
+    return PendingAlterationResult(
+        pending=pending,
+        created=True,
+        previous_tier=None,
     )
