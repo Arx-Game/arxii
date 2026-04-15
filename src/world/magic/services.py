@@ -686,6 +686,14 @@ def create_pending_alteration(  # noqa: PLR0913 — kw-only snapshot fields are 
     )
 
 
+def _alteration_tier_label(value: object) -> str:
+    """Render an alteration tier as its human label, falling back to the raw value."""
+    try:
+        return AlterationTier(value).label
+    except (ValueError, TypeError):
+        return str(value)
+
+
 def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901 — sequential validation gates, kw-only args
     *,
     pending_tier: int,
@@ -705,11 +713,10 @@ def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901 — sequential
     caps = ALTERATION_TIER_CAPS.get(pending_tier, {})
 
     if tier != pending_tier:
-        try:
-            pending_label = AlterationTier(pending_tier).label
-        except ValueError:
-            pending_label = str(pending_tier)
-        errors.append(f"Tier mismatch: payload tier {tier} != pending tier {pending_label}.")
+        errors.append(
+            f"Tier mismatch: payload tier {_alteration_tier_label(tier)} "
+            f"!= pending tier {_alteration_tier_label(pending_tier)}."
+        )
 
     if payload.get("origin_affinity_id") != pending_affinity_id:
         errors.append("Origin affinity does not match the pending alteration.")

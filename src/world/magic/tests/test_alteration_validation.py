@@ -205,7 +205,7 @@ class ValidateAlterationResolutionTests(TestCase):
             pending_tier=AlterationTier.MARKED,
             pending_affinity_id=self.affinity.pk,
             pending_resonance_id=self.resonance.pk,
-            payload={"library_entry_pk": 1},
+            payload=self._valid_payload(library_entry_pk=1),
             is_staff=False,
             character_sheet=None,
         )
