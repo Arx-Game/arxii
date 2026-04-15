@@ -122,17 +122,41 @@ The GM system defines these role relationships; the stories app uses them for pe
 - ✅ Staff continue to see applications via existing staff inbox; GM queue surfaces the same apps to the overseeing GM
 - Remaining: frontend (Phase 5), email delivery for private invites (follow-up), level-gated character creation exceptions (kudo points / GM leeway — post-MVP)
 
-### Phase 4 — Reward Tooling
-- Level-capped reward granting (XP, items, codex, legend)
-- Audit log of all grants
-- Anti-abuse caps and reporting
-- Hooks into existing reward systems (no new pipeline)
+### Phase 4 — Reward Tooling (cut — moved to Stories)
+Rewards are not a GM concern. GMs are storytellers and umpires, not
+paymasters. Story beats resolve into automatic rewards/consequences based
+on success conditions. GMs describe outcomes but do not decide them.
+Things that belong to Stories instead:
+- Story risk/stakes tiers gating reward magnitude
+- Automatic reward dispatch when a beat resolves
+- Anti-abuse via story-level caps, not per-GM quotas
+- Audit trail via story beat history
 
-### Phase 5 — Dashboards and UI
-- GM dashboard — their table, stories, PCs, pending tasks
-- Staff coordination view — cross-table overview leveraging the staff inbox
-- Application review UI — dedicated per-type management for GMApplication and RosterApplication
-- GM story management interface
+Potential GM-specific tooling that may warrant a future phase:
+- Umpire check-modifier tooling (GM applies `+2 difficulty` or
+  `+2 advantage` to an in-progress check based on RP context)
+- This is GM *shaping* outcomes without *deciding* them
+
+### Phase 5 — Dashboards and UI (deferred until after Stories)
+The GM dashboard is story-shaped, not roster-shaped. What GMs actually
+need to see day-to-day:
+- Their tables, with upcoming planned sessions for each
+- Stories at each table, with their current beat/chapter state
+- Encounters, challenges, NPCs mapped to upcoming sessions
+- A calendar for session scheduling + player coordination
+- Q/A with individual players (story clarifications, character
+  development questions, etc.)
+- Roster application review is infrequent — it's the blue-moon task,
+  not the daily one
+
+Building this frontend before Stories exists would mean throwing it
+away. Deferring until after Stories is in place so the dashboard
+reflects real GM workflow.
+
+Day-to-day GM ops that the staff inbox + existing APIs cover for now:
+- Application queue (staff / admin can action; GMs will get the
+  dedicated view post-Stories)
+- Invite generation (can be done via admin / API until dashboard lands)
 
 ## Cross-System Dependencies
 
