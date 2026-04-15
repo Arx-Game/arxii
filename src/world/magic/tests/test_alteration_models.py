@@ -201,9 +201,8 @@ class MagicalAlterationEventTests(TestCase):
         self.affinity = AffinityFactory()
         self.resonance = ResonanceFactory(affinity=self.affinity)
         self.condition_template = ConditionTemplateFactory()
-        self.alteration_template = MagicalAlterationTemplate.objects.create(
+        self.alteration_template = MagicalAlterationTemplateFactory(
             condition_template=self.condition_template,
-            tier=AlterationTier.COSMETIC_TOUCH,
             origin_affinity=self.affinity,
             origin_resonance=self.resonance,
         )
