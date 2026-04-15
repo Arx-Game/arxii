@@ -11,10 +11,15 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
+from world.magic.constants import (
+    ALTERATION_TIER_CAPS,
+    MIN_ALTERATION_DESCRIPTION_LENGTH,
+)
 from world.magic.models import (
     CharacterAnima,
     CharacterResonanceTotal,
     IntensityTier,
+    MagicalAlterationTemplate,
     SoulfrayConfig,
 )
 from world.magic.types import (
@@ -678,3 +683,87 @@ def create_pending_alteration(  # noqa: PLR0913 — kw-only snapshot fields are 
         created=True,
         previous_tier=None,
     )
+
+
+def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901 — sequential validation gates, kw-only args
+    *,
+    pending_tier: int,
+    pending_affinity_id: int,
+    pending_resonance_id: int,
+    payload: dict,
+    is_staff: bool,
+    character_sheet: CharacterSheet | None = None,
+) -> list[str]:
+    """Validate a resolution payload against the pending's tier and origin.
+
+    Returns a list of error strings. Empty list = valid.
+    character_sheet is required for library duplicate checks.
+    """
+    errors: list[str] = []
+    tier = payload.get("tier")
+    caps = ALTERATION_TIER_CAPS.get(pending_tier, {})
+
+    if tier != pending_tier:
+        errors.append(f"Tier mismatch: payload tier {tier} != pending tier {pending_tier}.")
+
+    if payload.get("origin_affinity_id") != pending_affinity_id:
+        errors.append("Origin affinity does not match the pending alteration.")
+
+    if payload.get("origin_resonance_id") != pending_resonance_id:
+        errors.append("Origin resonance does not match the pending alteration.")
+
+    weakness = payload.get("weakness_magnitude", 0)
+    if weakness > caps.get("weakness_cap", 0):
+        errors.append(
+            f"Weakness magnitude {weakness} exceeds tier {pending_tier} cap "
+            f"of {caps['weakness_cap']}."
+        )
+    if weakness > 0 and not payload.get("weakness_damage_type_id"):
+        errors.append("weakness_damage_type is required when weakness_magnitude > 0.")
+
+    resonance = payload.get("resonance_bonus_magnitude", 0)
+    if resonance > caps.get("resonance_cap", 0):
+        errors.append(
+            f"Resonance bonus magnitude {resonance} exceeds tier {pending_tier} cap "
+            f"of {caps['resonance_cap']}."
+        )
+
+    social = payload.get("social_reactivity_magnitude", 0)
+    if social > caps.get("social_cap", 0):
+        errors.append(
+            f"Social reactivity magnitude {social} exceeds tier {pending_tier} cap "
+            f"of {caps['social_cap']}."
+        )
+
+    if caps.get("visibility_required") and not payload.get("is_visible_at_rest"):
+        errors.append(f"is_visible_at_rest must be True at tier {pending_tier}.")
+
+    for field in ("player_description", "observer_description"):
+        value = payload.get(field, "")
+        if len(value) < MIN_ALTERATION_DESCRIPTION_LENGTH:
+            errors.append(
+                f"{field} must be at least {MIN_ALTERATION_DESCRIPTION_LENGTH} characters "
+                f"(got {len(value)})."
+            )
+
+    if payload.get("is_library_entry") and not is_staff:
+        errors.append("Only staff can create library entries.")
+
+    # Library use-as-is duplicate check
+    library_pk = payload.get("library_entry_pk")
+    if library_pk and character_sheet is not None:
+        from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+        library_entry = MagicalAlterationTemplate.objects.filter(
+            pk=library_pk,
+            is_library_entry=True,
+        ).first()
+        if library_entry is None:
+            errors.append("Library entry not found or not a library entry.")
+        elif ConditionInstance.objects.filter(
+            target=character_sheet.character,
+            condition=library_entry.condition_template,
+        ).exists():
+            errors.append("Character already has this condition active.")
+
+    return errors
