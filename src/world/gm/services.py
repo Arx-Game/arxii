@@ -2,14 +2,28 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+import secrets
+from typing import TYPE_CHECKING
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
 from world.gm.constants import GMTableStatus
-from world.gm.models import GMProfile, GMTable, GMTableMembership
+from world.gm.models import GMProfile, GMRosterInvite, GMTable, GMTableMembership
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
+
+if TYPE_CHECKING:
+    from django.db.models import QuerySet
+    from evennia.accounts.models import AccountDB
+
+    from world.roster.models import RosterEntry
+    from world.roster.models.applications import RosterApplication
+    from world.stories.models import Story
+
+DEFAULT_INVITE_DURATION_DAYS = 30
 
 TEMPORARY_PERSONA_REJECTION = (
     "A temporary persona cannot join a GM table — use a primary or established persona."
@@ -25,6 +39,11 @@ def create_table(gm: GMProfile, name: str, description: str = "") -> GMTable:
 @transaction.atomic
 def archive_table(table: GMTable) -> None:
     """Mark a table archived. Sets archived_at timestamp."""
+    # TODO: Archiving a table leaves PENDING applications for characters at
+    # this table invisible to the GM queue (filtered out by status=ACTIVE).
+    # Those applications become orphaned PENDING rows. A follow-up should
+    # either auto-deny them with a "table archived" reason or route them to
+    # a staff override queue.
     if table.status == GMTableStatus.ARCHIVED:
         return
     table.status = GMTableStatus.ARCHIVED
@@ -84,3 +103,141 @@ def soft_leave_memberships_for_retired_persona(persona: Persona) -> int:
         m.save(update_fields=["left_at"])
         count += 1
     return count
+
+
+def gm_application_queue(gm: GMProfile) -> QuerySet[RosterApplication]:
+    """Pending applications for characters at tables this GM owns.
+
+    Derived from: application.character → story_participations → story.primary_table.gm
+    Only pending applications are included.
+    """
+    from world.roster.models.applications import RosterApplication  # noqa: PLC0415
+    from world.roster.models.choices import ApplicationStatus  # noqa: PLC0415
+
+    return (
+        RosterApplication.objects.filter(
+            status=ApplicationStatus.PENDING,
+            character__story_participations__is_active=True,
+            character__story_participations__story__primary_table__gm=gm,
+            character__story_participations__story__primary_table__status=(GMTableStatus.ACTIVE),
+        )
+        .select_related("character", "player_data__account")
+        .distinct()
+    )
+
+
+@transaction.atomic
+def approve_application_as_gm(gm: GMProfile, application: RosterApplication) -> None:
+    """Approve a roster application on behalf of the overseeing GM.
+
+    Caller (serializer) must validate queue membership and PENDING status.
+    """
+    application.approve(staff_player_data=gm.account.player_data)
+
+
+@transaction.atomic
+def deny_application_as_gm(
+    gm: GMProfile,
+    application: RosterApplication,
+    review_notes: str = "",
+) -> None:
+    """Deny an application on behalf of the overseeing GM.
+
+    Caller (serializer) must validate queue membership and PENDING status.
+    """
+    application.deny(staff_player_data=gm.account.player_data, reason=review_notes)
+
+
+@transaction.atomic
+def surrender_character_story(gm: GMProfile, story: Story) -> None:
+    """GM surrenders oversight of a story.
+
+    Clears the Story's ``primary_table`` so the story becomes orphaned.
+
+    Semantics:
+    - The Story's ``primary_table`` is set to None.
+    - Existing ``StoryParticipation`` records remain ACTIVE — the character
+      is still in the story, there's simply no one overseeing it.
+    - ``actively_overseen()`` will exclude the character from default
+      visibility until oversight is re-established.
+    - There is currently no "pick up orphan story" service. Staff or
+      another GM must manually set ``primary_table`` again (tracked as
+      follow-up work).
+
+    Validation lives here because no API endpoint/serializer exists yet.
+    When an endpoint is added, move the oversight check into the serializer.
+    """
+    if story.primary_table is None or story.primary_table.gm != gm:
+        msg = "You do not oversee this story."
+        raise ValidationError(msg)
+    story.primary_table = None
+    story.save(update_fields=["primary_table"])
+
+
+@transaction.atomic
+def create_invite(
+    gm: GMProfile,
+    roster_entry: RosterEntry,
+    is_public: bool = False,
+    invited_email: str = "",
+    expires_at: datetime | None = None,
+) -> GMRosterInvite:
+    """Create a GMRosterInvite. Callers must validate GM oversight."""
+    if expires_at is None:
+        expires_at = timezone.now() + timedelta(days=DEFAULT_INVITE_DURATION_DAYS)
+    return GMRosterInvite.objects.create(
+        roster_entry=roster_entry,
+        created_by=gm,
+        code=secrets.token_urlsafe(48),
+        expires_at=expires_at,
+        is_public=is_public,
+        invited_email=invited_email,
+    )
+
+
+@transaction.atomic
+def revoke_invite(invite: GMRosterInvite) -> None:
+    """Revoke an invite by setting expires_at to now.
+
+    Caller must validate that the invite is revocable (not claimed) and
+    that the requester is authorized.
+    """
+    invite.expires_at = timezone.now()
+    invite.save(update_fields=["expires_at"])
+
+
+@transaction.atomic
+def claim_invite(invite: GMRosterInvite, account: AccountDB) -> RosterApplication:
+    """Mark an invite claimed and create (or reuse) a RosterApplication.
+
+    Caller must validate invite usability (existence, not claimed, not
+    expired, email match for private invites). Reuses a PENDING
+    application for the same (player_data, character) if one exists,
+    annotating its text with a claim note; never reuses a finalized
+    application — the caller must validate that case too if they care.
+    """
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.roster.models.applications import RosterApplication  # noqa: PLC0415
+
+    invite.claimed_at = timezone.now()
+    invite.claimed_by = account
+    invite.save(update_fields=["claimed_at", "claimed_by"])
+
+    player_data, _ = PlayerData.objects.get_or_create(account=account)
+    character = invite.roster_entry.character_sheet.character
+
+    # Use get_or_create to race-safely handle duplicate applications —
+    # RosterApplication has unique_together on (player_data, character).
+    app, created = RosterApplication.objects.get_or_create(
+        player_data=player_data,
+        character=character,
+        defaults={
+            "application_text": f"Claiming invite from {invite.created_by.account.username}",
+        },
+    )
+    if not created:
+        app.application_text = (
+            app.application_text or ""
+        ) + f"\n[Claimed invite from {invite.created_by.account.username}]"
+        app.save(update_fields=["application_text"])
+    return app

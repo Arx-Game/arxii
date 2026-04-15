@@ -1,12 +1,22 @@
 """GM system factories."""
 
+from datetime import timedelta
+import secrets
+
 from django.utils import timezone
 import factory
 from factory import django as factory_django
 
 from evennia_extensions.factories import AccountFactory
 from world.gm.constants import GMApplicationStatus, GMLevel
-from world.gm.models import GMApplication, GMProfile, GMTable, GMTableMembership
+from world.gm.models import (
+    GMApplication,
+    GMProfile,
+    GMRosterInvite,
+    GMTable,
+    GMTableMembership,
+)
+from world.roster.factories import RosterEntryFactory
 from world.scenes.factories import PersonaFactory
 
 
@@ -43,3 +53,14 @@ class GMTableMembershipFactory(factory_django.DjangoModelFactory):
 
     table = factory.SubFactory(GMTableFactory)
     persona = factory.SubFactory(PersonaFactory)  # defaults to ESTABLISHED
+
+
+class GMRosterInviteFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = GMRosterInvite
+
+    roster_entry = factory.SubFactory(RosterEntryFactory)
+    created_by = factory.SubFactory(GMProfileFactory)
+    code = factory.LazyFunction(lambda: secrets.token_urlsafe(48))
+    expires_at = factory.LazyFunction(lambda: timezone.now() + timedelta(days=30))
+    is_public = False

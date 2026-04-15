@@ -211,6 +211,16 @@ arx test world.mechanics world.magic flows --keepdb  # example: all suites that 
 
 **Full regression testing before completion:** Running only the tests for files you changed is not sufficient. Before claiming a branch is ready for PR, run all test suites that could plausibly be affected by your changes. A PR that fails CI is unacceptable — catch regressions locally.
 
+**Run without `--keepdb` before pushing.** `--keepdb` preserves the test DB across runs, which means objects created by Evennia's initial setup (Limbo room #2, default Account #1, etc.) and objects created by prior test runs persist into your current run. CI always starts from a fresh DB, so tests that implicitly depend on that preserved state will pass locally but fail in CI. Before pushing anything that touches migrations, factories, service functions that call `create_object`, typeclass initialization, or test settings, run the full suite WITHOUT `--keepdb`:
+
+```
+echo "yes" | uv run arx test          # no --keepdb — fresh DB, matches CI
+```
+
+This is slower (~3 minutes) but catches an entire class of bugs that `--keepdb` hides. Cost of missing a CI failure is higher.
+
+**Never rely on Evennia defaults in service functions.** When calling `create_object`, always either pass explicit `home=`, `location=`, etc., or pass `nohome=True` / `nolocation=True`. The implicit fallback to `settings.DEFAULT_HOME` (Limbo #2) only works when Evennia's initial setup has run — CI test DBs do not run initial setup, so FK violations fire before any graceful fallback. Same caution for `DEFAULT_SCRIPT_HOME`, Account #1 references, and anything else that assumes "Evennia will figure out the default."
+
 ### Proactive Quality Checks
 
 When editing Python files:
@@ -236,6 +246,7 @@ When completing a task:
 When a feature branch or logical unit of work is finished:
 - **Update the roadmap** — mark completed phases/items in the relevant `docs/roadmap/*.md` file. Document what was built, not just that it's done.
 - **Run full regression tests** — all affected test suites, not just the new tests
+- **Run the suite once without `--keepdb`** before pushing — this matches CI's fresh-DB behavior and catches bugs that depend on preserved test DB state (especially Evennia setup objects like Limbo). See the "Run without --keepdb before pushing" note above for why this matters.
 
 ### Code Quality Standards
 - **Type Annotations Required in Typed Apps**: All functions in apps listed under `[tool.ty.src].include` in `pyproject.toml` **must** have type annotations for all arguments and return types. A pre-commit hook (`check-type-annotations`) enforces this via ruff ANN rules on staged files. If a function truly cannot be annotated, add an inline `# noqa: ANN` with a comment explaining why. The typed apps list is maintained in both `pyproject.toml` and `tools/check_type_annotations.py` — keep them in sync when adding new apps
@@ -279,6 +290,8 @@ Key Django requirements:
 - **No implicit first-item selection**: Never silently select the first item from a queryset or list when the choice should be user-specified. If there are multiple valid options (e.g., which persona to act as), require explicit selection via request data. Picking `items[0]` hides a decision that should be the caller's
 - **Prefer Django/DRF helpers over manual boilerplate**: Use `get_object_or_404` over manual `try/except DoesNotExist`. Use FilterSets over `request.query_params` access. Use DRF's destroy/create mixins over manual `.delete()` and `.create()` with hand-rolled error handling
 - **Never use `str(exc)` in API responses**: Always use typed exception classes with a `user_message` property and an allowlist of safe messages (see `EventError`, `JournalError`, `ProgressionError` for the pattern). Raw `str(exc)` risks exposing internal details and triggers CodeQL warnings. Service functions should raise these typed exceptions, and views should use `exc.user_message`
+- **Validation belongs in serializers, not views or services**: Views should be thin — accept request, delegate to serializer, return response. Do NOT wrap service calls in `try/except ValidationError` inside views; that indicates validation that belongs in a serializer's `validate()` / `validate_<field>()` methods, which DRF surfaces as 400 responses natively. If a view has `try/except DjangoValidationError as exc: raise serializers.ValidationError(...)`, that's a code smell — move the check into the serializer. Services do not duplicate serializer validation. There is exactly one path to an operation: serializer validates, serializer calls service, service performs the atomic work. Services may raise `ValidationError` only for defensive assertions against programmer errors (e.g., passing the wrong type) — not for user-input validation that belongs in a serializer.
+- **Permissions belong in permission classes, not inline checks**: Inline `try/except GMProfile.DoesNotExist → raise PermissionDenied` (or similar) inside a view method is a code smell. Extract to a `BasePermission` subclass (e.g., `IsGM`, `IsGMOrStaff`). That way DRF's permission pipeline handles the 403 uniformly, auth logging/metrics work, and views can safely access `request.user.gm_profile` (or similar) without defensive checks.
 
 ### Migration Management for New Apps
 **IMPORTANT: When working on a new app, avoid multiple migrations during development**

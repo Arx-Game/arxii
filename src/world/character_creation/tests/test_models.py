@@ -587,3 +587,30 @@ class CGPointsCalculationTests(TestCase):
         draft = CharacterDraftFactory(selected_beginnings=beginnings)
         budget = CGPointBudget.get_active_budget()
         assert draft.calculate_cg_points_remaining() == budget - 25
+
+
+class CharacterDraftGMFieldsTest(TestCase):
+    def test_defaults(self) -> None:
+        from world.character_creation.factories import CharacterDraftFactory
+
+        draft = CharacterDraftFactory()
+        assert draft.is_gm_creation is False
+        assert draft.target_table is None
+        assert draft.story_title == ""
+        assert draft.story_description == ""
+
+    def test_gm_fields_can_be_set(self) -> None:
+        from world.character_creation.factories import CharacterDraftFactory
+        from world.gm.factories import GMTableFactory
+
+        table = GMTableFactory()
+        draft = CharacterDraftFactory(
+            is_gm_creation=True,
+            target_table=table,
+            story_title="The Blade's Edge",
+            story_description="A tale of...",
+        )
+        assert draft.is_gm_creation is True
+        assert draft.target_table == table
+        assert draft.story_title == "The Blade's Edge"
+        assert draft.story_description == "A tale of..."

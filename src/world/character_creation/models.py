@@ -580,6 +580,32 @@ class CharacterDraft(SharedMemoryModel):
         help_text="Staged data: stats, skills, traits, identity, etc.",
     )
 
+    # GM roster character creation fields
+    is_gm_creation = models.BooleanField(
+        default=False,
+        help_text="GM is designing a roster character, not playing one.",
+    )
+    target_table = models.ForeignKey(
+        "gm.GMTable",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="draft_characters",
+        help_text="Which GM table the finalized character will belong to. "
+        "Required at finalize for GM drafts.",
+    )
+    story_title = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text="Title for the Story created at finalize (GM drafts only).",
+    )
+    story_description = models.TextField(
+        blank=True,
+        default="",
+        help_text="Description for the Story created at finalize (GM drafts only).",
+    )
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
