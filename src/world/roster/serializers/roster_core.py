@@ -75,10 +75,16 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
 
     name = serializers.CharField(source="character_sheet.character.db_key")
     profile_picture_url = serializers.SerializerMethodField()
+    primary_persona_id = serializers.SerializerMethodField()
 
     class Meta:
         model = RosterEntry
-        fields: ClassVar[tuple[str, ...]] = ("id", "name", "profile_picture_url")
+        fields: ClassVar[tuple[str, ...]] = (
+            "id",
+            "name",
+            "profile_picture_url",
+            "primary_persona_id",
+        )
         read_only_fields: ClassVar[tuple[str, ...]] = fields
 
     def get_profile_picture_url(self, obj: RosterEntry) -> str | None:
@@ -86,6 +92,18 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
         try:
             return obj.profile_picture.media.cloudinary_url
         except AttributeError:
+            return None
+
+    def get_primary_persona_id(self, obj: RosterEntry) -> int | None:
+        """Return the PRIMARY persona's id, or None if none exists.
+
+        Used by player-submission forms to attach a reporter_persona.
+        """
+        from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+        try:
+            return obj.character_sheet.primary_persona.pk
+        except ObjectDoesNotExist:
             return None
 
 

@@ -4,6 +4,7 @@ export interface MyRosterEntry {
   id: number;
   name: CharacterData['name'];
   profile_picture_url: string | null;
+  primary_persona_id: number | null;
 }
 
 export interface CharacterGallery {
