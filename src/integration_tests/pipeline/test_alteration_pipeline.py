@@ -129,7 +129,6 @@ class AlterationCoreFlowTests(TestCase):
         ).exists()
 
         # PendingAlteration status is RESOLVED
-        pending.refresh_from_db()
         assert pending.status == PendingAlterationStatus.RESOLVED
 
     def test_pending_blocks_xp_spend(self) -> None:
@@ -389,7 +388,6 @@ class AlterationLibraryTests(TestCase):
         ).exists()
 
         # Pending is RESOLVED
-        pending.refresh_from_db()
         assert pending.status == PendingAlterationStatus.RESOLVED
 
 
@@ -454,19 +452,19 @@ class AlterationFullPipelineTests(TestCase):
         # Engage the character so the social safety bonus does not inflate control
         CharacterEngagementFactory(character=character)
 
+        # Cache the outcome_tier for the MAGICAL_SCARS consequence so tests don't
+        # re-query get_effective_consequences on every call.
+        from actions.services import get_effective_consequences
+
+        pool = cls.alteration_content.soulfray_consequence_pool
+        consequences = get_effective_consequences(pool)
+        cls.soulfray_outcome = consequences[0].outcome_tier if consequences else None
+
     def _drain_anima(self) -> None:
         """Set the character's anima to 0 so every technique use accumulates Soulfray."""
         from world.magic.models import CharacterAnima
 
         CharacterAnima.objects.filter(character=self.character).update(current=0)
-
-    def _get_soulfray_outcome(self):
-        """Return the outcome_tier of the MAGICAL_SCARS consequence for patching."""
-        from actions.services import get_effective_consequences
-
-        pool = self.alteration_content.soulfray_consequence_pool
-        consequences = get_effective_consequences(pool)
-        return consequences[0].outcome_tier if consequences else None
 
     def _run_technique_with_mocked_outcome(self, outcome):
         """Run use_technique with the resilience check patched to return outcome."""
@@ -501,10 +499,9 @@ class AlterationFullPipelineTests(TestCase):
            → consequence pool fires → MAGICAL_SCARS handler creates PendingAlteration.
         """
         self._drain_anima()
-        outcome = self._get_soulfray_outcome()
 
         # First use: creates the Soulfray condition, returns before firing the pool
-        self._run_technique_with_mocked_outcome(outcome)
+        self._run_technique_with_mocked_outcome(self.soulfray_outcome)
 
         # Verify Soulfray condition exists on character but no pending yet
         from world.conditions.models import ConditionInstance
@@ -523,7 +520,7 @@ class AlterationFullPipelineTests(TestCase):
 
         # Second use: fires the consequence pool on the existing Soulfray instance
         self._drain_anima()
-        result = self._run_technique_with_mocked_outcome(outcome)
+        result = self._run_technique_with_mocked_outcome(self.soulfray_outcome)
 
         assert result.confirmed is True
         assert result.soulfray_result is not None
@@ -549,12 +546,11 @@ class AlterationFullPipelineTests(TestCase):
         and clears has_pending_alterations."""
 
         self._drain_anima()
-        outcome = self._get_soulfray_outcome()
 
         # Run two overburns to produce a PendingAlteration (same as previous test)
-        self._run_technique_with_mocked_outcome(outcome)
+        self._run_technique_with_mocked_outcome(self.soulfray_outcome)
         self._drain_anima()
-        self._run_technique_with_mocked_outcome(outcome)
+        self._run_technique_with_mocked_outcome(self.soulfray_outcome)
 
         assert PendingAlteration.objects.filter(
             character=self.sheet,
@@ -598,6 +594,5 @@ class AlterationFullPipelineTests(TestCase):
         ).exists()
 
         # Gate released
-        pending.refresh_from_db()
         assert pending.status == PendingAlterationStatus.RESOLVED
         assert has_pending_alterations(self.sheet) is False

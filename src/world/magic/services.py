@@ -521,6 +521,8 @@ def _handle_soulfray_accumulation(
         advance_condition_severity(soulfray_instance, soulfray_severity - 1)
         soulfray_instance.refresh_from_db()
 
+        # On first creation the pool is not fired; callers must trigger a second
+        # accumulation for the stage threshold to evaluate.
         return SoulfrayResult(
             severity_added=soulfray_severity,
             stage_name=(

@@ -380,7 +380,7 @@ class MagicContent:
             stage_order=1,
             name="Searing (alteration test)",
             consequence_pool=pool,
-            severity_threshold=1,
+            severity_threshold=1,  # fires on first severity increment past zero (i.e. second use)
         )
 
         return AlterationContentResult(
