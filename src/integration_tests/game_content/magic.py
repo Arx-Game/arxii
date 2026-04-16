@@ -11,7 +11,13 @@ if TYPE_CHECKING:
 
     from actions.models import ActionEnhancement
     from world.conditions.models import CapabilityType
-    from world.magic.models import Technique, TechniqueCapabilityGrant
+    from world.magic.models import (
+        Affinity,
+        MagicalAlterationTemplate,
+        Resonance,
+        Technique,
+        TechniqueCapabilityGrant,
+    )
     from world.mechanics.models import Property
 
 # Maps action_key → technique name (narrative, not mechanical)
@@ -56,6 +62,17 @@ class MagicContentResult:
     enhancements: dict[str, ActionEnhancement]  # action_key → ActionEnhancement
     elemental_techniques: dict[str, Technique] = field(default_factory=dict)
     capability_grants: list[TechniqueCapabilityGrant] = field(default_factory=list)
+
+
+@dataclass
+class AlterationContentResult:
+    """Returned by MagicContent.create_alteration_content()."""
+
+    tier1_entry: MagicalAlterationTemplate  # AlterationTier.COSMETIC_TOUCH
+    tier2_entry: MagicalAlterationTemplate  # AlterationTier.MARKED
+    tier3_entry: MagicalAlterationTemplate  # AlterationTier.TOUCHED
+    affinity: Affinity
+    resonance: Resonance
 
 
 class MagicContent:
@@ -232,3 +249,67 @@ class MagicContent:
                 grants.append(grant)
 
         return grants
+
+    @staticmethod
+    def create_alteration_content() -> AlterationContentResult:
+        """Create library entries at three tiers for alteration pipeline tests.
+
+        Creates:
+        - Three staff library MagicalAlterationTemplate entries at tiers
+          COSMETIC_TOUCH (1), MARKED (2), and TOUCHED (3), each backed by a
+          ConditionTemplate with permanent duration.
+        - A shared Affinity + Resonance so library query filtering by affinity
+          works correctly across all three entries.
+
+        Safe to call from setUpTestData. Returns an AlterationContentResult
+        dataclass with the three templates and the shared affinity/resonance.
+
+        Returns:
+            AlterationContentResult dataclass.
+        """
+        from world.conditions.constants import DurationType  # noqa: PLC0415
+        from world.conditions.factories import (  # noqa: PLC0415
+            ConditionCategoryFactory,
+            ConditionTemplateFactory,
+        )
+        from world.magic.constants import AlterationTier  # noqa: PLC0415
+        from world.magic.factories import (  # noqa: PLC0415
+            AffinityFactory,
+            MagicalAlterationTemplateFactory,
+            ResonanceFactory,
+        )
+
+        alteration_cat = ConditionCategoryFactory(name="Magical Alteration")
+        affinity = AffinityFactory(name="Primal (Alteration Test)")
+        resonance = ResonanceFactory(name="Ember Touch (Alteration Test)", affinity=affinity)
+
+        tier_data = [
+            (AlterationTier.COSMETIC_TOUCH, "Faint Ember Traces"),
+            (AlterationTier.MARKED, "Seared Markings"),
+            (AlterationTier.TOUCHED, "Flame-Written Flesh"),
+        ]
+        templates = []
+        for tier, cond_name in tier_data:
+            condition_template = ConditionTemplateFactory(
+                name=cond_name,
+                category=alteration_cat,
+                description=f"A permanent magical mark from overburn at tier {tier}.",
+                default_duration_type=DurationType.PERMANENT,
+            )
+            template = MagicalAlterationTemplateFactory(
+                condition_template=condition_template,
+                tier=tier,
+                origin_affinity=affinity,
+                origin_resonance=resonance,
+                is_library_entry=True,
+                is_visible_at_rest=(tier >= AlterationTier.MARKED_PROFOUNDLY),
+            )
+            templates.append(template)
+
+        return AlterationContentResult(
+            tier1_entry=templates[0],
+            tier2_entry=templates[1],
+            tier3_entry=templates[2],
+            affinity=affinity,
+            resonance=resonance,
+        )
