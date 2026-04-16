@@ -237,6 +237,9 @@ class ResolvePendingAlterationTests(BaseEvenniaTest):
         )
         pending = result.pending
 
+        from world.conditions.models import ConditionTemplate
+
+        condition_template_count_before = ConditionTemplate.objects.count()
         template_count_before = MagicalAlterationTemplate.objects.count()
 
         # Mock apply_condition to simulate a prevention interaction
@@ -262,7 +265,8 @@ class ResolvePendingAlterationTests(BaseEvenniaTest):
                     resolved_by=None,
                 )
 
-        # Verify rollback: no new template was created
+        # Verify rollback: no new templates were created
+        assert ConditionTemplate.objects.count() == condition_template_count_before
         assert MagicalAlterationTemplate.objects.count() == template_count_before
         # Pending is still OPEN
         pending.refresh_from_db()
