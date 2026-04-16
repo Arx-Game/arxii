@@ -1,6 +1,6 @@
 """Tests for magical alteration service functions."""
 
-from evennia.utils.test_resources import BaseEvenniaTest
+from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import (
@@ -29,7 +29,7 @@ from world.magic.services import (
 from world.scenes.factories import SceneFactory
 
 
-class CreatePendingAlterationTests(BaseEvenniaTest):
+class CreatePendingAlterationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.sheet = CharacterSheetFactory()
@@ -135,7 +135,7 @@ class CreatePendingAlterationTests(BaseEvenniaTest):
         )
 
 
-class ResolvePendingAlterationTests(BaseEvenniaTest):
+class ResolvePendingAlterationTests(TestCase):
     """Test resolve_pending_alteration service function."""
 
     @classmethod
@@ -273,7 +273,7 @@ class ResolvePendingAlterationTests(BaseEvenniaTest):
         assert pending.status == PendingAlterationStatus.OPEN
 
 
-class HasPendingAlterationsTests(BaseEvenniaTest):
+class HasPendingAlterationsTests(TestCase):
     """Test has_pending_alterations helper."""
 
     @classmethod

@@ -1,6 +1,6 @@
 """Tests for progression gate integration."""
 
-from evennia.utils.test_resources import BaseEvenniaTest
+from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import PendingAlterationStatus
@@ -8,7 +8,7 @@ from world.magic.factories import AffinityFactory, PendingAlterationFactory, Res
 from world.magic.services import has_pending_alterations
 
 
-class ProgressionGateTests(BaseEvenniaTest):
+class ProgressionGateTests(TestCase):
     """Test that has_pending_alterations correctly gates progression."""
 
     @classmethod

@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from evennia.utils.test_resources import BaseEvenniaTest
+from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectType
@@ -14,7 +14,7 @@ from world.magic.models import PendingAlteration
 from world.mechanics.effect_handlers import apply_effect
 
 
-class ApplyMagicalScarsHandlerTests(BaseEvenniaTest):
+class ApplyMagicalScarsHandlerTests(TestCase):
     """Test _apply_magical_scars handler creates PendingAlteration."""
 
     @classmethod
