@@ -19,6 +19,7 @@ from world.magic.views import (
     EffectTypeViewSet,
     FacetViewSet,
     GiftViewSet,
+    PendingAlterationViewSet,
     RestrictionViewSet,
     TechniqueStyleViewSet,
     TechniqueViewSet,
@@ -58,5 +59,12 @@ router.register("character-facets", CharacterFacetViewSet, basename="character-f
 router.register("threads", ThreadViewSet, basename="thread")
 router.register("thread-journals", ThreadJournalViewSet, basename="thread-journal")
 router.register("thread-resonances", ThreadResonanceViewSet, basename="thread-resonance")
+
+# Alterations
+router.register(
+    "pending-alterations",
+    PendingAlterationViewSet,
+    basename="pending-alteration",
+)
 
 urlpatterns = router.urls

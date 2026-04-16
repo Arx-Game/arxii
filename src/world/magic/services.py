@@ -816,6 +816,37 @@ def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901 — sequential
     return errors
 
 
+def get_library_entries(
+    *,
+    tier: int,
+    character_affinity_id: int | None = None,
+) -> QuerySet[MagicalAlterationTemplate]:
+    """Return library entries matching the given tier.
+
+    Sorted: matching origin_affinity first, then everything else, then by name.
+    """
+    from django.db.models import Case, Value, When  # noqa: PLC0415
+
+    qs = MagicalAlterationTemplate.objects.filter(
+        is_library_entry=True,
+        tier=tier,
+    ).select_related(
+        "condition_template",
+        "origin_affinity",
+        "origin_resonance",
+    )
+    if character_affinity_id is not None:
+        qs = qs.annotate(
+            affinity_match=Case(
+                When(origin_affinity_id=character_affinity_id, then=Value(0)),
+                default=Value(1),
+            ),
+        ).order_by("affinity_match", "condition_template__name")
+    else:
+        qs = qs.order_by("condition_template__name")
+    return qs
+
+
 @transaction.atomic
 def resolve_pending_alteration(  # noqa: PLR0913 — kw-only resolution fields are intentional
     *,
