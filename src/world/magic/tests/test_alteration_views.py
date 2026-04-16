@@ -1,11 +1,10 @@
 """Tests for alteration API endpoints."""
 
 from django.urls import reverse
-from evennia.utils.test_resources import BaseEvenniaTest
 from rest_framework import status
-from rest_framework.test import APIClient
+from rest_framework.test import APITestCase
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import (
     MIN_ALTERATION_DESCRIPTION_LENGTH,
@@ -20,27 +19,22 @@ from world.magic.factories import (
 )
 
 
-class PendingAlterationViewSetTests(BaseEvenniaTest):
+class PendingAlterationViewSetTests(APITestCase):
     """Test the PendingAlteration API."""
 
     @classmethod
     def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.character = CharacterFactory()
+        cls.character.db_account = cls.account
+        cls.character.save()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
         cls.affinity = AffinityFactory(name="Abyssal")
         cls.resonance = ResonanceFactory(name="Shadow", affinity=cls.affinity)
 
     def setUp(self):
         super().setUp()
-        # Create account and sheet per-test so the db_account save is visible
-        # within the test's transaction, avoiding SharedMemoryModel stale-cache issues.
-        self.account = AccountFactory()
-        self.sheet = CharacterSheetFactory()
-        character = self.sheet.character
-        character.db_account = self.account
-        character.save()
-        # Refresh to clear identity-map cache so the ORM filter sees db_account.
-        character.refresh_from_db()
-        self.client = APIClient()
-        self.client.force_login(self.account)
+        self.client.force_authenticate(user=self.account)
 
     def test_list_pending_alterations(self):
         """GET returns the character's open pending alterations."""
