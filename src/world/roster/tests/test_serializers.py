@@ -471,3 +471,17 @@ class MyRosterEntrySerializerTestCase(TestCase):
         assert data["id"] == self.entry.id
         assert "name" in data
         assert data["name"] == self.entry.character_sheet.character.db_key
+
+    def test_primary_persona_id_returns_pk_when_present(self):
+        """primary_persona_id returns the PRIMARY persona's pk."""
+        data = MyRosterEntrySerializer(self.entry).data
+        # CharacterSheetFactory.post_generation creates a PRIMARY persona.
+        primary = self.entry.character_sheet.primary_persona
+        assert data["primary_persona_id"] == primary.pk
+
+    def test_primary_persona_id_none_when_missing(self):
+        """primary_persona_id is None if the sheet has no PRIMARY persona."""
+        # Build a sheet without the post_generation PRIMARY persona
+        entry = RosterEntryFactory(character_sheet__primary_persona=False)
+        data = MyRosterEntrySerializer(entry).data
+        assert data["primary_persona_id"] is None
