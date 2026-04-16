@@ -10,12 +10,16 @@ from world.conditions.models import (
     ConditionInstance,
     ConditionResistanceModifier,
 )
-from world.magic.constants import AlterationTier, PendingAlterationStatus
+from world.magic.constants import (
+    MIN_ALTERATION_DESCRIPTION_LENGTH,
+    AlterationTier,
+    PendingAlterationStatus,
+)
 from world.magic.factories import (
     AffinityFactory,
     ResonanceFactory,
 )
-from world.magic.models import PendingAlteration
+from world.magic.models import MagicalAlterationTemplate, PendingAlteration
 from world.magic.services import (
     create_pending_alteration,
     has_pending_alterations,
@@ -177,6 +181,7 @@ class ResolvePendingAlterationTests(BaseEvenniaTest):
         # Template was created
         assert resolution.template.tier == AlterationTier.MARKED
         assert resolution.template.origin_affinity == self.affinity
+        assert resolution.template.condition_template.category.name == "Magical Alteration"
 
         # Condition was applied
         assert resolution.condition_instance is not None
@@ -200,8 +205,8 @@ class ResolvePendingAlterationTests(BaseEvenniaTest):
         resolution = resolve_pending_alteration(
             pending=result.pending,
             name="Holy Sensitivity",
-            player_description="A" * 40,
-            observer_description="B" * 40,
+            player_description="A" * MIN_ALTERATION_DESCRIPTION_LENGTH,
+            observer_description="B" * MIN_ALTERATION_DESCRIPTION_LENGTH,
             weakness_damage_type=self.damage_type,
             weakness_magnitude=2,
             resonance_bonus_magnitude=0,
@@ -210,10 +215,58 @@ class ResolvePendingAlterationTests(BaseEvenniaTest):
             resolved_by=None,
         )
         ct = resolution.template.condition_template
-        assert ConditionResistanceModifier.objects.filter(
+        modifier = ConditionResistanceModifier.objects.get(
             condition=ct,
             damage_type=self.damage_type,
-        ).exists()
+        )
+        assert modifier.modifier_value == -2
+
+    def test_resolve_rolls_back_on_condition_application_failure(self):
+        """If apply_condition fails, all DB writes are rolled back and error is raised."""
+        from unittest.mock import patch
+
+        from world.conditions.types import ApplyConditionResult
+        from world.magic.types import AlterationResolutionError
+
+        result = create_pending_alteration(
+            character=self.sheet,
+            tier=AlterationTier.MARKED,
+            origin_affinity=self.affinity,
+            origin_resonance=self.resonance,
+            scene=None,
+        )
+        pending = result.pending
+
+        template_count_before = MagicalAlterationTemplate.objects.count()
+
+        # Mock apply_condition to simulate a prevention interaction
+        mock_result = ApplyConditionResult(
+            success=False,
+            instance=None,
+            was_prevented=True,
+        )
+        with patch(
+            "world.conditions.services.apply_condition",
+            return_value=mock_result,
+        ):
+            with self.assertRaises(AlterationResolutionError):
+                resolve_pending_alteration(
+                    pending=pending,
+                    name="Rollback Test",
+                    player_description="A" * MIN_ALTERATION_DESCRIPTION_LENGTH,
+                    observer_description="B" * MIN_ALTERATION_DESCRIPTION_LENGTH,
+                    weakness_magnitude=0,
+                    resonance_bonus_magnitude=0,
+                    social_reactivity_magnitude=0,
+                    is_visible_at_rest=False,
+                    resolved_by=None,
+                )
+
+        # Verify rollback: no new template was created
+        assert MagicalAlterationTemplate.objects.count() == template_count_before
+        # Pending is still OPEN
+        pending.refresh_from_db()
+        assert pending.status == PendingAlterationStatus.OPEN
 
 
 class HasPendingAlterationsTests(BaseEvenniaTest):
@@ -249,8 +302,8 @@ class HasPendingAlterationsTests(BaseEvenniaTest):
         resolve_pending_alteration(
             pending=result.pending,
             name="Resolved Scar",
-            player_description="A" * 40,
-            observer_description="B" * 40,
+            player_description="A" * MIN_ALTERATION_DESCRIPTION_LENGTH,
+            observer_description="B" * MIN_ALTERATION_DESCRIPTION_LENGTH,
             weakness_magnitude=0,
             resonance_bonus_magnitude=0,
             social_reactivity_magnitude=0,

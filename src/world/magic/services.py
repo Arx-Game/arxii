@@ -800,9 +800,9 @@ def resolve_pending_alteration(  # noqa: PLR0913 — kw-only resolution fields a
     player_description: str,
     observer_description: str,
     weakness_damage_type: DamageType | None = None,
-    weakness_magnitude: int,
-    resonance_bonus_magnitude: int,
-    social_reactivity_magnitude: int,
+    weakness_magnitude: int = 0,
+    resonance_bonus_magnitude: int = 0,
+    social_reactivity_magnitude: int = 0,
     is_visible_at_rest: bool,
     resolved_by: AccountDB | None,
     parent_template: MagicalAlterationTemplate | None = None,
@@ -815,6 +815,11 @@ def resolve_pending_alteration(  # noqa: PLR0913 — kw-only resolution fields a
     Otherwise create a new ConditionTemplate + MagicalAlterationTemplate.
     In both cases: apply the condition, create the event, mark resolved.
     """
+    # Lock the pending row to prevent concurrent double-resolution.
+    pending = PendingAlteration.objects.select_for_update().get(pk=pending.pk)
+    if pending.status != PendingAlterationStatus.OPEN:
+        raise AlterationResolutionError
+
     from world.conditions.constants import DurationType  # noqa: PLC0415
     from world.conditions.models import (  # noqa: PLC0415
         ConditionResistanceModifier,
@@ -842,10 +847,13 @@ def resolve_pending_alteration(  # noqa: PLR0913 — kw-only resolution fields a
             )
 
         # TODO: Create ConditionCheckModifier for social_reactivity when
-        # observer targeting is resolved (Open Question #1 in spec)
+        # observer targeting is resolved (Open Question #1 in spec).
+        # Current behavior: magnitude is stored on the template but no effect
+        # row is created; the value is a data-capture placeholder.
 
-        # TODO: Create resonance bonus modifier when the target model
-        # for resonance bonuses is clarified
+        # TODO: Create resonance bonus modifier when the target model for
+        # resonance bonuses is clarified. Current behavior: magnitude is stored
+        # on the template but no effect row is created.
 
         alteration_template = MagicalAlterationTemplate.objects.create(
             condition_template=condition_template,
