@@ -10,12 +10,15 @@ This module provides ViewSets for:
 
 from django.db.models import Count, Prefetch, Q
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import viewsets
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.viewsets import GenericViewSet
 
+from world.magic.constants import PendingAlterationStatus
 from world.magic.filters import CantripFilter
 from world.magic.models import (
     Cantrip,
@@ -28,6 +31,8 @@ from world.magic.models import (
     EffectType,
     Facet,
     Gift,
+    MagicalAlterationTemplate,
+    PendingAlteration,
     Resonance,
     Restriction,
     Technique,
@@ -38,6 +43,7 @@ from world.magic.models import (
     ThreadType,
 )
 from world.magic.serializers import (
+    AlterationResolutionSerializer,
     CantripSerializer,
     CharacterAnimaRitualSerializer,
     CharacterAnimaSerializer,
@@ -51,6 +57,8 @@ from world.magic.serializers import (
     GiftCreateSerializer,
     GiftListSerializer,
     GiftSerializer,
+    LibraryEntrySerializer,
+    PendingAlterationSerializer,
     RestrictionSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
@@ -60,6 +68,7 @@ from world.magic.serializers import (
     ThreadSerializer,
     ThreadTypeSerializer,
 )
+from world.magic.services import get_library_entries, resolve_pending_alteration
 from world.stories.pagination import StandardResultsSetPagination
 
 # =============================================================================
@@ -502,3 +511,120 @@ class ThreadResonanceViewSet(viewsets.ModelViewSet):
         return queryset.filter(
             Q(thread__initiator__db_account=user) | Q(thread__receiver__db_account=user)
         )
+
+
+# =============================================================================
+# Alteration ViewSets
+# =============================================================================
+
+
+class PendingAlterationViewSet(
+    ListModelMixin,
+    RetrieveModelMixin,
+    GenericViewSet,
+):
+    """ViewSet for pending magical alterations.
+
+    list: Returns the authenticated player's open pending alterations.
+    retrieve: Returns a single pending alteration.
+    resolve: Custom action to resolve a pending via author or library path.
+    library: Custom action to browse tier-matched library entries.
+    """
+
+    serializer_class = PendingAlterationSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["status", "tier"]
+
+    def get_queryset(self):
+        """Filter to pending alterations for characters owned by the current user.
+
+        Defaults to status=OPEN when no ?status= query param is supplied. Clients may
+        pass ?status=resolved (or any other value) to see non-open rows; django-filter
+        then applies the explicit status filter on top of the base ownership queryset.
+        """
+        qs = (
+            PendingAlteration.objects.filter(
+                character__character__db_account=self.request.user,
+            )
+            .select_related(
+                "origin_affinity",
+                "origin_resonance",
+                "triggering_scene",
+            )
+            .order_by("-pk")
+        )
+        # Apply OPEN default only when the client has not explicitly requested a status.
+        if "status" not in self.request.query_params:  # noqa: STRING_LITERAL — HTTP param name
+            qs = qs.filter(status=PendingAlterationStatus.OPEN)
+        return qs
+
+    @action(detail=True, methods=["post"])
+    def resolve(self, request, pk=None):
+        """Resolve a pending alteration via author-from-scratch or library path."""
+        pending = self.get_object()
+        serializer = AlterationResolutionSerializer(
+            data=request.data,
+            context={
+                "pending": pending,
+                "request": request,
+                "character_sheet": pending.character,
+            },
+        )
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        library_template = data.get("library_template_id")  # PrimaryKeyRelatedField → instance
+        if library_template is not None:
+            # Re-fetch with select_related to ensure condition_template is loaded.
+            library_template = MagicalAlterationTemplate.objects.select_related(
+                "condition_template"
+            ).get(pk=library_template.pk)
+            result = resolve_pending_alteration(
+                pending=pending,
+                name=library_template.condition_template.name,
+                player_description=library_template.condition_template.player_description,
+                observer_description=library_template.condition_template.observer_description,
+                weakness_magnitude=library_template.weakness_magnitude,
+                resonance_bonus_magnitude=library_template.resonance_bonus_magnitude,
+                social_reactivity_magnitude=library_template.social_reactivity_magnitude,
+                is_visible_at_rest=library_template.is_visible_at_rest,
+                resolved_by=request.user,
+                library_template=library_template,
+            )
+        else:
+            # weakness_damage_type_id and parent_template_id are PrimaryKeyRelatedField →
+            # validated_data holds instances (or None), no extra .objects.get() needed.
+            weakness_dt = data.get("weakness_damage_type_id")
+            parent = data.get("parent_template_id")
+
+            result = resolve_pending_alteration(
+                pending=pending,
+                name=data["name"],
+                player_description=data["player_description"],
+                observer_description=data["observer_description"],
+                weakness_damage_type=weakness_dt,
+                weakness_magnitude=data.get("weakness_magnitude", 0),
+                resonance_bonus_magnitude=data.get("resonance_bonus_magnitude", 0),
+                social_reactivity_magnitude=data.get("social_reactivity_magnitude", 0),
+                is_visible_at_rest=data.get("is_visible_at_rest", False),
+                resolved_by=request.user,
+                parent_template=parent,
+            )
+
+        return Response(
+            {"status": "resolved", "event_id": result.event.pk},
+            status=status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["get"])
+    def library(self, request, pk=None):
+        """Browse tier-matched library entries for a pending alteration."""
+        pending = self.get_object()
+        entries = get_library_entries(
+            tier=pending.tier,
+            character_affinity_id=pending.origin_affinity_id,
+        )
+        serializer = LibraryEntrySerializer(entries, many=True)
+        return Response(serializer.data)

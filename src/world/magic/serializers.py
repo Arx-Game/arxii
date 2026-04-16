@@ -9,6 +9,8 @@ Affinities and Resonances are proper domain models in the magic app.
 
 from rest_framework import serializers
 
+from world.conditions.models import DamageType
+from world.magic.constants import ALTERATION_TIER_CAPS
 from world.magic.models import (
     Cantrip,
     CharacterAnima,
@@ -20,9 +22,11 @@ from world.magic.models import (
     EffectType,
     Facet,
     Gift,
+    MagicalAlterationTemplate,
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
+    PendingAlteration,
     Resonance,
     Restriction,
     Technique,
@@ -683,3 +687,162 @@ class MotifSerializer(serializers.ModelSerializer):
         model = Motif
         fields = ["id", "description", "resonances"]
         read_only_fields = ["id"]
+
+
+# =============================================================================
+# Alteration Serializers
+# =============================================================================
+
+
+class PendingAlterationSerializer(serializers.ModelSerializer):
+    """Read-only serializer for pending alterations shown on character sheet."""
+
+    origin_affinity_name = serializers.CharField(
+        source="origin_affinity.name",
+        read_only=True,
+    )
+    origin_resonance_name = serializers.CharField(
+        source="origin_resonance.name",
+        read_only=True,
+    )
+    tier_display = serializers.CharField(
+        source="get_tier_display",
+        read_only=True,
+    )
+    tier_caps = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PendingAlteration
+        fields = [
+            "id",
+            "status",
+            "tier",
+            "tier_display",
+            "tier_caps",
+            "origin_affinity_name",
+            "origin_resonance_name",
+            "triggering_scene",
+            "created_at",
+        ]
+
+    def get_tier_caps(self, obj: PendingAlteration) -> dict:
+        return ALTERATION_TIER_CAPS.get(obj.tier, {})
+
+
+class LibraryEntrySerializer(serializers.ModelSerializer):
+    """Read-only serializer for library browse cards."""
+
+    name = serializers.CharField(
+        source="condition_template.name",
+        read_only=True,
+    )
+    player_description = serializers.CharField(
+        source="condition_template.player_description",
+        read_only=True,
+    )
+    observer_description = serializers.CharField(
+        source="condition_template.observer_description",
+        read_only=True,
+    )
+    origin_affinity_name = serializers.CharField(
+        source="origin_affinity.name",
+        read_only=True,
+    )
+
+    class Meta:
+        model = MagicalAlterationTemplate
+        fields = [
+            "id",
+            "name",
+            "tier",
+            "player_description",
+            "observer_description",
+            "origin_affinity_name",
+            "weakness_magnitude",
+            "resonance_bonus_magnitude",
+            "social_reactivity_magnitude",
+            "is_visible_at_rest",
+        ]
+
+
+class AlterationResolutionSerializer(serializers.Serializer):
+    """Write serializer for resolving a PendingAlteration."""
+
+    # Use-as-is path
+    library_template_id = serializers.PrimaryKeyRelatedField(
+        queryset=MagicalAlterationTemplate.objects.filter(is_library_entry=True),
+        required=False,
+        allow_null=True,
+    )
+
+    # Author-from-scratch path
+    name = serializers.CharField(max_length=60, min_length=3, required=False)
+    player_description = serializers.CharField(required=False)
+    observer_description = serializers.CharField(required=False)
+    weakness_damage_type_id = serializers.PrimaryKeyRelatedField(
+        queryset=DamageType.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    weakness_magnitude = serializers.IntegerField(
+        min_value=0,
+        default=0,
+    )
+    resonance_bonus_magnitude = serializers.IntegerField(
+        min_value=0,
+        default=0,
+    )
+    social_reactivity_magnitude = serializers.IntegerField(
+        min_value=0,
+        default=0,
+    )
+    is_visible_at_rest = serializers.BooleanField(default=False)
+    parent_template_id = serializers.PrimaryKeyRelatedField(
+        queryset=MagicalAlterationTemplate.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+
+    def validate(self, attrs):
+        """Run tier schema validation against the pending's constraints."""
+        from world.magic.services import validate_alteration_resolution  # noqa: PLC0415
+
+        pending = self.context["pending"]
+        is_staff = self.context["request"].user.is_staff
+
+        # If library template, validate library entry exists and no duplicate
+        library_template = attrs.get("library_template_id")  # noqa: STRING_LITERAL — dict key matches field name
+        if library_template is not None:
+            library_errors = validate_alteration_resolution(
+                pending_tier=pending.tier,
+                pending_affinity_id=pending.origin_affinity_id,
+                pending_resonance_id=pending.origin_resonance_id,
+                payload={"library_entry_pk": library_template.pk},
+                is_staff=is_staff,
+                character_sheet=self.context.get("character_sheet"),
+            )
+            if library_errors:
+                raise serializers.ValidationError(library_errors)
+            return attrs
+
+        # Author-from-scratch: inject tier + origin from pending (not client-supplied).
+        # weakness_damage_type_id holds a DamageType instance after PrimaryKeyRelatedField
+        # validation — the service checks this key for truthiness, so passing the instance
+        # directly is safe.
+        payload = {
+            "tier": pending.tier,
+            "origin_affinity_id": pending.origin_affinity_id,
+            "origin_resonance_id": pending.origin_resonance_id,
+            **attrs,
+        }
+        errors = validate_alteration_resolution(
+            pending_tier=pending.tier,
+            pending_affinity_id=pending.origin_affinity_id,
+            pending_resonance_id=pending.origin_resonance_id,
+            payload=payload,
+            is_staff=is_staff,
+            character_sheet=self.context.get("character_sheet"),
+        )
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs

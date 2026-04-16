@@ -10,8 +10,15 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.models import ActionEnhancement
-    from world.conditions.models import CapabilityType
-    from world.magic.models import Technique, TechniqueCapabilityGrant
+    from actions.models.consequence_pools import ConsequencePool
+    from world.conditions.models import CapabilityType, ConditionStage
+    from world.magic.models import (
+        Affinity,
+        MagicalAlterationTemplate,
+        Resonance,
+        Technique,
+        TechniqueCapabilityGrant,
+    )
     from world.mechanics.models import Property
 
 # Maps action_key → technique name (narrative, not mechanical)
@@ -56,6 +63,19 @@ class MagicContentResult:
     enhancements: dict[str, ActionEnhancement]  # action_key → ActionEnhancement
     elemental_techniques: dict[str, Technique] = field(default_factory=dict)
     capability_grants: list[TechniqueCapabilityGrant] = field(default_factory=list)
+
+
+@dataclass
+class AlterationContentResult:
+    """Returned by MagicContent.create_alteration_content()."""
+
+    tier1_entry: MagicalAlterationTemplate  # AlterationTier.COSMETIC_TOUCH
+    tier2_entry: MagicalAlterationTemplate  # AlterationTier.MARKED
+    tier3_entry: MagicalAlterationTemplate  # AlterationTier.TOUCHED
+    affinity: Affinity
+    resonance: Resonance
+    soulfray_consequence_pool: ConsequencePool  # pool with MAGICAL_SCARS entry
+    soulfray_stage: ConditionStage  # stage whose consequence_pool fires MAGICAL_SCARS
 
 
 class MagicContent:
@@ -232,3 +252,143 @@ class MagicContent:
                 grants.append(grant)
 
         return grants
+
+    @staticmethod
+    def create_alteration_content() -> AlterationContentResult:
+        """Create library entries at three tiers for alteration pipeline tests.
+
+        Creates:
+        - Three staff library MagicalAlterationTemplate entries at tiers
+          COSMETIC_TOUCH (1), MARKED (2), and TOUCHED (3), each backed by a
+          ConditionTemplate with permanent duration and a ConditionResistanceModifier
+          effect row (the one effect type that resolve_pending_alteration authors).
+        - A shared Affinity + Resonance so library query filtering by affinity
+          works correctly across all three entries.
+        - A Soulfray ConditionTemplate with one stage whose consequence_pool contains
+          a Consequence with a MAGICAL_SCARS ConsequenceEffect, so end-to-end tests
+          can drive the full use_technique → Soulfray → MAGICAL_SCARS → PendingAlteration
+          pipeline without mocking.
+
+        Safe to call from setUpTestData. Returns an AlterationContentResult
+        dataclass with the three templates, shared affinity/resonance, and the
+        soulfray consequence pool + stage for pipeline wiring.
+
+        Returns:
+            AlterationContentResult dataclass.
+        """
+        from actions.factories import (  # noqa: PLC0415
+            ConsequencePoolEntryFactory,
+            ConsequencePoolFactory,
+        )
+        from world.checks.constants import EffectType as CheckEffectType  # noqa: PLC0415
+        from world.checks.factories import (  # noqa: PLC0415
+            CheckTypeFactory,
+            ConsequenceEffectFactory,
+            ConsequenceFactory,
+        )
+        from world.conditions.constants import DurationType  # noqa: PLC0415
+        from world.conditions.factories import (  # noqa: PLC0415
+            ConditionCategoryFactory,
+            ConditionCheckModifierFactory,
+            ConditionResistanceModifierFactory,
+            ConditionStageFactory,
+            ConditionTemplateFactory,
+        )
+        from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
+        from world.magic.constants import AlterationTier  # noqa: PLC0415
+        from world.magic.factories import (  # noqa: PLC0415
+            AffinityFactory,
+            MagicalAlterationTemplateFactory,
+            ResonanceFactory,
+        )
+
+        alteration_cat = ConditionCategoryFactory(name="Magical Alteration")
+        affinity = AffinityFactory(name="Primal (Alteration Test)")
+        resonance = ResonanceFactory(name="Ember Touch (Alteration Test)", affinity=affinity)
+        check_type = CheckTypeFactory(name="Resilience (Alteration Test)")
+
+        # --- Library entries with full effect rows ---
+        # Each entry gets a ConditionResistanceModifier (the one effect that
+        # resolve_pending_alteration actually creates on scratch-path resolution).
+        tier_data = [
+            (AlterationTier.COSMETIC_TOUCH, "Faint Ember Traces"),
+            (AlterationTier.MARKED, "Seared Markings"),
+            (AlterationTier.TOUCHED, "Flame-Written Flesh"),
+        ]
+        templates = []
+        for tier, cond_name in tier_data:
+            from world.conditions.factories import DamageTypeFactory  # noqa: PLC0415
+
+            damage_type = DamageTypeFactory(name=f"Fire (tier {tier} test)")
+            condition_template = ConditionTemplateFactory(
+                name=cond_name,
+                category=alteration_cat,
+                description=f"A permanent magical mark from overburn at tier {tier}.",
+                default_duration_type=DurationType.PERMANENT,
+            )
+            # Resistance modifier: fire vulnerability — the effect row type that is
+            # authored by resolve_pending_alteration on the scratch path.
+            ConditionResistanceModifierFactory(
+                condition=condition_template,
+                stage=None,
+                damage_type=damage_type,
+                modifier_value=-5,  # small vulnerability for test purposes
+            )
+            # Check penalty (social/observer reactivity analogue — for completeness).
+            ConditionCheckModifierFactory(
+                condition=condition_template,
+                stage=None,
+                check_type=check_type,
+                modifier_value=-5,
+                scales_with_severity=False,
+            )
+            template = MagicalAlterationTemplateFactory(
+                condition_template=condition_template,
+                tier=tier,
+                origin_affinity=affinity,
+                origin_resonance=resonance,
+                is_library_entry=True,
+                is_visible_at_rest=(tier >= AlterationTier.MARKED_PROFOUNDLY),
+            )
+            templates.append(template)
+
+        # --- Soulfray stage with MAGICAL_SCARS consequence pool ---
+        # This wires the full pipeline:
+        #   use_technique (low anima) → _handle_soulfray_accumulation
+        #     → stage.consequence_pool fires
+        #       → Consequence with MAGICAL_SCARS effect
+        #         → _apply_magical_scars handler → create_pending_alteration
+        soulfray_template = ConditionTemplateFactory(
+            name=SOULFRAY_CONDITION_NAME,
+            has_progression=True,
+            default_duration_type=DurationType.PERMANENT,
+        )
+
+        pool = ConsequencePoolFactory(name="Soulfray Stage 1 Consequences (Alteration Test)")
+
+        # Consequence whose effect fires MAGICAL_SCARS with severity=2 → tier MARKED
+        magical_scars_consequence = ConsequenceFactory(label="Magical Scars (alteration test)")
+        ConsequenceEffectFactory(
+            consequence=magical_scars_consequence,
+            effect_type=CheckEffectType.MAGICAL_SCARS,
+            condition_severity=2,  # severity 2 → AlterationTier.MARKED
+        )
+        ConsequencePoolEntryFactory(pool=pool, consequence=magical_scars_consequence)
+
+        soulfray_stage = ConditionStageFactory(
+            condition=soulfray_template,
+            stage_order=1,
+            name="Searing (alteration test)",
+            consequence_pool=pool,
+            severity_threshold=1,  # fires on first severity increment past zero (i.e. second use)
+        )
+
+        return AlterationContentResult(
+            tier1_entry=templates[0],
+            tier2_entry=templates[1],
+            tier3_entry=templates[2],
+            affinity=affinity,
+            resonance=resonance,
+            soulfray_consequence_pool=pool,
+            soulfray_stage=soulfray_stage,
+        )

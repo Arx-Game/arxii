@@ -165,12 +165,187 @@ What was built:
 - **Layered result display** — ActionResult shows both social outcome and technique effects as distinct results, making the layered action pipeline transparent to players
 - **Integration tests** — Comprehensive tests covering mundane consequences, enhanced pipeline, validation, and available-actions filtering
 
-Deferred to future scopes:
+**Scope #5 — Magical Alteration Resolution (DONE):**
+
+What was built:
+- **Three new models** — `MagicalAlterationTemplate` (OneToOne on `ConditionTemplate`,
+  carries magic-specific metadata: tier, origin affinity/resonance, library flag,
+  visibility), `PendingAlteration` (queued unresolved scars with status lifecycle
+  OPEN → RESOLVED / STAFF_CLEARED, scene + triggering-state snapshot), and
+  `MagicalAlterationEvent` (immutable provenance audit log). Single migration covers
+  all three. Plan/spec at `docs/superpowers/plans/2026-04-12-scope5-magical-alteration-resolution.md`.
+- **MAGICAL_SCARS handler rewrite** — `_apply_magical_scars` in
+  `src/world/mechanics/effect_handlers.py` no longer applies a placeholder condition.
+  It calls `create_pending_alteration()`, which queues a `PendingAlteration` and
+  defers the actual `ConditionInstance` until the player resolves it.
+- **Same-scene escalation** — successive overburns within the same scene upgrade the
+  open `PendingAlteration` in place rather than stacking. Higher tier wins; the
+  triggering-state snapshot updates to the latest. Different scenes still create
+  separate pendings.
+- **Progression gate** — `has_pending_alterations(sheet)` is checked by
+  `world.progression.services.spends.spend_xp_on_unlock`; XP/unlock spending raises
+  `AlterationGateError` until all pendings are RESOLVED or STAFF_CLEARED.
+- **Service layer** — `create_pending_alteration`, `resolve_pending_alteration`,
+  `staff_clear_alteration`, `validate_alteration_resolution`, `get_library_entries`,
+  `has_pending_alterations`. Resolution is atomic: schema validation → template
+  creation/lookup → condition instance application → event log → pending status update,
+  all in one transaction with rollback on apply failure.
+- **Two resolution paths** — *library pick* (player selects an existing staff-curated
+  `MagicalAlterationTemplate` matching their tier/affinity/resonance, applied as-is)
+  and *author from scratch* (player provides name, descriptions, weakness/resonance/
+  social-reactivity magnitudes, visibility flag — validated against `ALTERATION_TIER_CAPS`
+  per-tier ceilings). Library path is duplicate-checked.
+- **Constrained-authoring schema validation** — `validate_alteration_resolution` enforces
+  per-tier caps on weakness magnitude, resonance bonus magnitude, social reactivity
+  magnitude, visibility-required flag, and minimum description length. First instance of
+  the constrained-authoring pattern (structured form → ceiling check → atomic effect
+  creation) intended to be reused for techniques and consequences.
+- **REST API** — `PendingAlterationViewSet` (account-scoped queryset) at
+  `/api/magic/pending-alterations/` with `GET` list/retrieve, `POST {id}/resolve/`
+  (dispatches library vs scratch by payload), and `GET {id}/library/` (returns
+  tier-matched templates ordered by affinity match).
+- **Comprehensive test coverage** — model unit tests, service tests (creation,
+  escalation, resolution, gate, staff-clear, atomic rollback), validation tests
+  (both paths, all caps), view tests (APITestCase + setUpTestData + force_authenticate),
+  handler tests, and 12 end-to-end pipeline integration tests in
+  `src/integration_tests/pipeline/test_alteration_pipeline.py` driving the full chain
+  `use_technique → Soulfray accumulation → consequence pool → MAGICAL_SCARS handler →
+  PendingAlteration → resolve_pending_alteration → ConditionInstance + event + gate
+  release`. `MagicContent.create_alteration_content()` extends the integration-test
+  game-content factory with library entries (with effect rows) plus a wired Soulfray
+  consequence pool and stage.
+- **Scope boundary preserved** — passive effects only. Reactive side effects on the
+  scar template (cold-iron triggers, holy-ground reactions) remain Scope 5.5.
+
+Decoupling: Standalone. Does NOT depend on Scope 6 (Soulfray recovery). Shipped on
+the `magical-scars` branch.
+
+**Scope #5.5 — Reactive Foundations (TODO — CRITICAL FOLLOW-UP):**
+
+> **Roadmap blind spot acknowledgment.** The flows/triggers system in `src/flows/`
+> is a fully-implemented reactive layer — `Event`, `TriggerDefinition`, `Trigger`,
+> `TriggerRegistry`, `FlowDefinition`, `FlowExecution` all exist with passing
+> integration tests. But it has **no content**: no events are emitted at most
+> reactive moments, no FlowDefinitions or TriggerDefinitions live in the database,
+> and no system declares triggers to attach. This means the entire architectural
+> answer to "something happens when X" — curses, environmental hazards, item
+> reactions, divine wrath, allergies, contact effects, observer reactions —
+> currently *cannot be authored at all*. This is a foundational gap that was
+> not previously called out in any roadmap doc, and it blocks the witchiest
+> magical scars (the Scope 5 ones where the world reacts to you), most
+> interesting cursed item designs, environmental hazards, and a long tail of
+> reactive gameplay across every domain.
+
+Scope 5.5 is the deliberate "light up flows/triggers" PR. It must follow Scope 5
+**sooner rather than later** — magical scars without reactive side effects are
+half a feature, and every later system that wants reactive behavior is blocked
+on the same plumbing. This is the wedge that turns paper architecture into
+real infrastructure.
+
+What to build:
+- **Event seeding and emission at reactive moments.** At minimum: character
+  arrival in a room (`character_arrived_in_room`), technique use
+  (`technique_used`), social interaction targeting a character (`social_targeted`),
+  damage taken (`damage_taken`). Each event carries a payload rich enough for
+  trigger filters — destination Property names, technique affinity, source
+  identity, damage type, etc.
+- **Service function surface for flows.** Concrete service functions that
+  FlowDefinitions can call: `force_check(target, check_type, difficulty)`,
+  `apply_condition(target, template, severity)`, `deal_damage(target, type, amount)`,
+  `emit_observer_message(scene, text)`. Mirrors the pattern in
+  `flows/service_functions/`.
+- **ConditionTemplate → TriggerDefinition M2M.** Add `reactive_triggers` as
+  an M2M from `ConditionTemplate` to `flows.TriggerDefinition`. When a condition
+  is applied to a character, any TriggerDefinitions on the template get
+  instantiated as `Trigger` rows on the character's `ObjectDB` and registered
+  with the room's `TriggerRegistry` on entry. When the condition is removed,
+  triggers go with it. This lives on the condition (not on
+  `MagicalAlterationTemplate`) so distinctions, races, items, curses, and any
+  other condition source benefit from the same plumbing.
+- **Reference content.** 2-3 fully-authored reactive scars exercising the loop
+  end-to-end: e.g., an Abyssal-aligned character with the "Hallowed Rejection"
+  scar takes a forced check on entering rooms with the `holy_ground` Property,
+  applying a `Burning` condition on failure. These are the integration tests
+  that prove the plumbing works.
+- **Documentation pass.** A new `docs/roadmap/reactive-layer.md` (or section in
+  `capabilities-and-challenges.md`) describing the event surface, payload
+  conventions, the service function set, and how to author triggers. This is
+  cross-cutting infra; every later consumer needs the reference.
+
+Key design questions to resolve during brainstorm:
+- What's the minimum event surface for MVP, and what's the naming convention?
+  (Event names are global — once we ship them, renaming is painful.)
+- Should event payloads carry resolved Property name lists, or just object PKs
+  the trigger flow has to look up? (Affects trigger filter ergonomics vs.
+  payload size.)
+- How does trigger registration handle scenes vs. the grid? `TriggerRegistry`
+  lives on rooms today — does it apply during scene RP, or do scenes get their
+  own registry?
+- Does `force_check` block flow execution (synchronous resolution) or fire
+  asynchronously into a player prompt? Affects how reactive side effects compose.
+- How do we prevent trigger storms? (Same character with five reactive scars
+  entering a room shouldn't fire 20 nested flows.)
+
+Dependencies:
+- Flows/triggers infrastructure (live — `flows/` app, fully implemented)
+- Scope 5 ships first so the `MagicalAlterationTemplate.reactive_triggers` link
+  exists as the first real consumer
+
+Decoupling: Sequenced AFTER Scope 5, but unblocks far more than magic. Combat
+reactions, cursed items, environmental hazards, divine wrath, allergies, observer
+reactions, and any future "something happens when X" feature flows through
+this PR's plumbing.
+
+**Scope #6 — Soulfray Recovery & Decay (TODO):**
+
+Soulfray severity currently only accumulates — there is no mechanism for it to go down.
+This scope adds the recovery side: time-based decay, ritual-driven recovery, and the
+"anima fade out of combat" behavior the world-clock roadmap has been waiting on.
+
+What to build:
+- **`decay_soulfray_severity(character)`** service — decrements severity by a configured
+  amount per tick, retreating through stages when severity drops below the current
+  stage's threshold. Inverse of `advance_condition_severity()` from Scope 3.
+- **`SoulfrayConfig.decay_rate`** — authored field for base decay per unit time.
+  Consider separate rates for in-scene vs out-of-scene vs post-ritual.
+- **Weekly / periodic hook** — wire decay into the `weekly_rollover` orchestrator
+  (or a faster tick) via the world-clock scheduler. Task registry pattern, idempotent,
+  matches AP regen shape.
+- **Ritual-driven recovery** — `AnimaRitualPerformance.apply_recovery()` (or similar)
+  consumes the existing CharacterAnimaRitual + AnimaRitualPerformance records and
+  decrements Soulfray severity as one of the outcomes. Scene-linked, so ritual
+  performance in RP has a concrete mechanical effect.
+- **`CharacterAnima` anima recovery too** — while we're here, make the existing
+  `last_recovery` field actually drive anima pool recovery on the same scheduler tick.
+  This is the "anima fade out of combat" item from the world-clock deferred list.
+- **Engagement-aware recovery** — Soulfray should NOT decay while a character has an
+  active high-stakes CharacterEngagement (combat, mission). Recovery is a between-scenes
+  phenomenon, not a mid-fight one.
+- **Integration test** in `src/integration_tests/pipeline/` exercising: character
+  overburns into Soulfray stage 2, performs a ritual (factory-built), severity drops,
+  stage retreats to 1. A second test covers time-based decay via the scheduler tick.
+  A third covers engagement blocking decay.
+
+Key design questions to resolve during brainstorm:
+- Does decay ever fully clear Soulfray, or does it asymptote toward stage 1 so some
+  lingering magical fatigue remains until a proper ritual?
+- Does ritual recovery require the character to be OUT of engagement, or can it happen
+  mid-arc as a dramatic pause?
+- Should decay rate scale with resonance/affinity (some characters recover faster)?
+- Does the scheduler hook run weekly (GameWeek-aligned) or daily (AP-regen-aligned)?
+  This affects how "spiky" recovery feels.
+- Do we need a "soulfray history" audit trail, or is live severity enough?
+
+Dependencies:
+- World-clock scheduler (live — `GameWeek`, `weekly_rollover`, task registry exist)
+- CharacterAnimaRitual / AnimaRitualPerformance (live)
+- Soulfray stage progression from Scope 3 (live — reuse `ConditionStage.severity_threshold`)
+
+Decoupling: Standalone. Does NOT depend on Scope 5 (alteration resolution). A separate PR.
+
+Deferred to later scopes:
 - Abyssal corruption as long-term consequence of abyssal magic overuse
 - Character loss deferral during Audere (needs combat/mission lifecycle)
-- Soulfray recovery/decay mechanics
-- Magical alteration resolution (the function that determines *what* alteration
-  occurs based on character identity — resonances, affinity, Soulfray state)
 
 **Key design principles (apply across all scopes):**
 - Anima is a safety margin, not a gate. Magic always works. Deficit costs life force.

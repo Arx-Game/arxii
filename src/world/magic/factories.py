@@ -2,8 +2,10 @@ from decimal import Decimal
 
 import factory
 
+from world.character_sheets.factories import CharacterSheetFactory
+from world.conditions.factories import ConditionTemplateFactory
 from world.magic.audere import AudereThreshold
-from world.magic.constants import CantripArchetype
+from world.magic.constants import AlterationTier, CantripArchetype, PendingAlterationStatus
 from world.magic.models import (
     Affinity,
     AnimaRitualPerformance,
@@ -19,10 +21,13 @@ from world.magic.models import (
     Facet,
     Gift,
     IntensityTier,
+    MagicalAlterationEvent,
+    MagicalAlterationTemplate,
     MishapPoolTier,
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
+    PendingAlteration,
     Resonance,
     Restriction,
     SoulfrayConfig,
@@ -490,3 +495,52 @@ class TechniqueOutcomeModifierFactory(factory.django.DjangoModelFactory):
 
     outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
     modifier_value = 0
+
+
+# =============================================================================
+# Scope #5: Magical Alteration Factories
+# =============================================================================
+
+
+class MagicalAlterationTemplateFactory(factory.django.DjangoModelFactory):
+    """Factory for MagicalAlterationTemplate."""
+
+    class Meta:
+        model = MagicalAlterationTemplate
+
+    condition_template = factory.SubFactory(ConditionTemplateFactory)
+    tier = AlterationTier.MARKED
+    origin_affinity = factory.SubFactory(AffinityFactory)
+    origin_resonance = factory.LazyAttribute(
+        lambda o: ResonanceFactory(affinity=o.origin_affinity),
+    )
+    weakness_magnitude = 0
+    resonance_bonus_magnitude = 0
+    social_reactivity_magnitude = 0
+    is_visible_at_rest = False
+    is_library_entry = False
+
+
+class PendingAlterationFactory(factory.django.DjangoModelFactory):
+    """Factory for PendingAlteration."""
+
+    class Meta:
+        model = PendingAlteration
+
+    character = factory.SubFactory(CharacterSheetFactory)
+    status = PendingAlterationStatus.OPEN
+    tier = AlterationTier.MARKED
+    origin_affinity = factory.SubFactory(AffinityFactory)
+    origin_resonance = factory.LazyAttribute(
+        lambda o: ResonanceFactory(affinity=o.origin_affinity),
+    )
+
+
+class MagicalAlterationEventFactory(factory.django.DjangoModelFactory):
+    """Factory for MagicalAlterationEvent."""
+
+    class Meta:
+        model = MagicalAlterationEvent
+
+    character = factory.SubFactory(CharacterSheetFactory)
+    alteration_template = factory.SubFactory(MagicalAlterationTemplateFactory)
