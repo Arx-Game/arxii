@@ -182,6 +182,8 @@ class ValidateAlterationResolutionTests(TestCase):
         library_entry = MagicalAlterationTemplateFactory(
             is_library_entry=True,
             tier=AlterationTier.MARKED,
+            origin_affinity=self.affinity,
+            origin_resonance=self.resonance,
         )
         # Simulate the condition already being active
         ConditionInstanceFactory(
@@ -197,7 +199,97 @@ class ValidateAlterationResolutionTests(TestCase):
             is_staff=False,
             character_sheet=sheet,
         )
-        assert any("already" in e.lower() for e in errors)
+        assert errors == ["Character already has this condition active."]
+
+    def test_library_pick_valid_returns_empty(self):
+        """Library entry with matching tier/affinity/resonance and no duplicate returns []."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import MagicalAlterationTemplateFactory
+
+        sheet = CharacterSheetFactory()
+        library_entry = MagicalAlterationTemplateFactory(
+            is_library_entry=True,
+            tier=AlterationTier.MARKED,
+            origin_affinity=self.affinity,
+            origin_resonance=self.resonance,
+        )
+        errors = validate_alteration_resolution(
+            pending_tier=AlterationTier.MARKED,
+            pending_affinity_id=self.affinity.pk,
+            pending_resonance_id=self.resonance.pk,
+            payload={"library_entry_pk": library_entry.pk},
+            is_staff=False,
+            character_sheet=sheet,
+        )
+        assert errors == []
+
+    def test_library_pick_tier_mismatch_rejected(self):
+        """Library entry tier differing from pending tier produces a tier error."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import MagicalAlterationTemplateFactory
+
+        sheet = CharacterSheetFactory()
+        library_entry = MagicalAlterationTemplateFactory(
+            is_library_entry=True,
+            tier=AlterationTier.TOUCHED,
+            origin_affinity=self.affinity,
+            origin_resonance=self.resonance,
+        )
+        errors = validate_alteration_resolution(
+            pending_tier=AlterationTier.MARKED,
+            pending_affinity_id=self.affinity.pk,
+            pending_resonance_id=self.resonance.pk,
+            payload={"library_entry_pk": library_entry.pk},
+            is_staff=False,
+            character_sheet=sheet,
+        )
+        assert any("tier" in e.lower() for e in errors)
+
+    def test_library_pick_affinity_mismatch_rejected(self):
+        """Library entry affinity differing from pending affinity produces an affinity error."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import MagicalAlterationTemplateFactory
+
+        other_affinity = AffinityFactory(name="Celestial")
+        sheet = CharacterSheetFactory()
+        library_entry = MagicalAlterationTemplateFactory(
+            is_library_entry=True,
+            tier=AlterationTier.MARKED,
+            origin_affinity=other_affinity,
+            origin_resonance=self.resonance,
+        )
+        errors = validate_alteration_resolution(
+            pending_tier=AlterationTier.MARKED,
+            pending_affinity_id=self.affinity.pk,
+            pending_resonance_id=self.resonance.pk,
+            payload={"library_entry_pk": library_entry.pk},
+            is_staff=False,
+            character_sheet=sheet,
+        )
+        assert any("affinity" in e.lower() for e in errors)
+
+    def test_library_pick_resonance_mismatch_rejected(self):
+        """Library entry resonance differing from pending resonance produces a resonance error."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import MagicalAlterationTemplateFactory
+
+        other_resonance = ResonanceFactory(name="Flame", affinity=self.affinity)
+        sheet = CharacterSheetFactory()
+        library_entry = MagicalAlterationTemplateFactory(
+            is_library_entry=True,
+            tier=AlterationTier.MARKED,
+            origin_affinity=self.affinity,
+            origin_resonance=other_resonance,
+        )
+        errors = validate_alteration_resolution(
+            pending_tier=AlterationTier.MARKED,
+            pending_affinity_id=self.affinity.pk,
+            pending_resonance_id=self.resonance.pk,
+            payload={"library_entry_pk": library_entry.pk},
+            is_staff=False,
+            character_sheet=sheet,
+        )
+        assert any("resonance" in e.lower() for e in errors)
 
     def test_library_pk_without_character_sheet_rejected(self):
         """library_entry_pk requires character_sheet to validate duplicates."""

@@ -715,8 +715,52 @@ def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901 — sequential
 
     Returns a list of error strings. Empty list = valid.
     character_sheet is required for library duplicate checks.
+
+    Two distinct paths:
+    - Library path (library_entry_pk present): validates tier/affinity/resonance match and
+      duplicate check only. All scratch-path checks are skipped — the library entry was
+      already validated when authored.
+    - Scratch path (no library_entry_pk): validates all tier, magnitude, description, and
+      visibility constraints.
     """
     errors: list[str] = []
+    library_pk = payload.get("library_entry_pk")
+
+    if library_pk:
+        # Library use-as-is path — minimal checks only.
+        if character_sheet is None:
+            errors.append("character_sheet is required to validate library_entry_pk.")
+        else:
+            from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+            library_entry = MagicalAlterationTemplate.objects.filter(
+                pk=library_pk,
+                is_library_entry=True,
+            ).first()
+            if library_entry is None:
+                errors.append("Library entry not found or not a library entry.")
+            else:
+                if library_entry.tier != pending_tier:
+                    errors.append(
+                        f"Library entry tier {_alteration_tier_label(library_entry.tier)} "
+                        f"does not match pending tier {_alteration_tier_label(pending_tier)}."
+                    )
+                if library_entry.origin_affinity_id != pending_affinity_id:
+                    errors.append(
+                        "Library entry origin affinity does not match the pending alteration."
+                    )
+                if library_entry.origin_resonance_id != pending_resonance_id:
+                    errors.append(
+                        "Library entry origin resonance does not match the pending alteration."
+                    )
+                if ConditionInstance.objects.filter(
+                    target=character_sheet.character,
+                    condition=library_entry.condition_template,
+                ).exists():
+                    errors.append("Character already has this condition active.")
+        return errors
+
+    # Scratch path — validate all tier, magnitude, description, and visibility constraints.
     tier = payload.get("tier")
     caps = ALTERATION_TIER_CAPS.get(pending_tier, {})
 
@@ -768,26 +812,6 @@ def validate_alteration_resolution(  # noqa: PLR0912,PLR0913,C901 — sequential
 
     if payload.get("is_library_entry") and not is_staff:
         errors.append("Only staff can create library entries.")
-
-    # Library use-as-is duplicate check
-    library_pk = payload.get("library_entry_pk")
-    if library_pk:
-        if character_sheet is None:
-            errors.append("character_sheet is required to validate library_entry_pk.")
-        else:
-            from world.conditions.models import ConditionInstance  # noqa: PLC0415
-
-            library_entry = MagicalAlterationTemplate.objects.filter(
-                pk=library_pk,
-                is_library_entry=True,
-            ).first()
-            if library_entry is None:
-                errors.append("Library entry not found or not a library entry.")
-            elif ConditionInstance.objects.filter(
-                target=character_sheet.character,
-                condition=library_entry.condition_template,
-            ).exists():
-                errors.append("Character already has this condition active.")
 
     return errors
 
