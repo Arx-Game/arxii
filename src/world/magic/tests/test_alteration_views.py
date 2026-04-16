@@ -48,6 +48,38 @@ class PendingAlterationViewSetTests(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert len(response.data["results"]) == 1
 
+    def test_list_excludes_resolved_by_default(self):
+        """GET list excludes resolved and staff-cleared alterations unless ?status= is given."""
+        PendingAlterationFactory(
+            character=self.sheet,
+            origin_affinity=self.affinity,
+            origin_resonance=self.resonance,
+            status=PendingAlterationStatus.OPEN,
+        )
+        PendingAlterationFactory(
+            character=self.sheet,
+            origin_affinity=self.affinity,
+            origin_resonance=self.resonance,
+            status=PendingAlterationStatus.RESOLVED,
+        )
+        PendingAlterationFactory(
+            character=self.sheet,
+            origin_affinity=self.affinity,
+            origin_resonance=self.resonance,
+            status=PendingAlterationStatus.STAFF_CLEARED,
+        )
+        url = reverse("magic:pending-alteration-list")
+
+        # Default: only OPEN rows returned.
+        response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data["results"]) == 1
+
+        # Explicit ?status=resolved: only RESOLVED rows returned.
+        response = self.client.get(url, {"status": PendingAlterationStatus.RESOLVED})
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data["results"]) == 1
+
     def test_resolve_author_from_scratch(self):
         """POST resolve action creates template and applies condition."""
         pending = PendingAlterationFactory(

@@ -18,6 +18,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet
 
+from world.magic.constants import PendingAlterationStatus
 from world.magic.filters import CantripFilter
 from world.magic.models import (
     Cantrip,
@@ -537,8 +538,13 @@ class PendingAlterationViewSet(
     filterset_fields = ["status", "tier"]
 
     def get_queryset(self):
-        """Filter to pending alterations for characters owned by the current user."""
-        return (
+        """Filter to pending alterations for characters owned by the current user.
+
+        Defaults to status=OPEN when no ?status= query param is supplied. Clients may
+        pass ?status=resolved (or any other value) to see non-open rows; django-filter
+        then applies the explicit status filter on top of the base ownership queryset.
+        """
+        qs = (
             PendingAlteration.objects.filter(
                 character__character__db_account=self.request.user,
             )
@@ -549,6 +555,10 @@ class PendingAlterationViewSet(
             )
             .order_by("-pk")
         )
+        # Apply OPEN default only when the client has not explicitly requested a status.
+        if "status" not in self.request.query_params:  # noqa: STRING_LITERAL — HTTP param name
+            qs = qs.filter(status=PendingAlterationStatus.OPEN)
+        return qs
 
     @action(detail=True, methods=["post"])
     def resolve(self, request, pk=None):
@@ -565,14 +575,12 @@ class PendingAlterationViewSet(
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        library_id = data.get("library_template_id")
-        if library_id:
+        library_template = data.get("library_template_id")  # PrimaryKeyRelatedField → instance
+        if library_template is not None:
+            # Re-fetch with select_related to ensure condition_template is loaded.
             library_template = MagicalAlterationTemplate.objects.select_related(
                 "condition_template"
-            ).get(
-                pk=library_id,
-                is_library_entry=True,
-            )
+            ).get(pk=library_template.pk)
             result = resolve_pending_alteration(
                 pending=pending,
                 name=library_template.condition_template.name,
@@ -586,12 +594,10 @@ class PendingAlterationViewSet(
                 library_template=library_template,
             )
         else:
-            from world.conditions.models import DamageType  # noqa: PLC0415
-
-            weakness_dt_id = data.get("weakness_damage_type_id")
-            weakness_dt = DamageType.objects.get(pk=weakness_dt_id) if weakness_dt_id else None
-            parent_id = data.get("parent_template_id")
-            parent = MagicalAlterationTemplate.objects.get(pk=parent_id) if parent_id else None
+            # weakness_damage_type_id and parent_template_id are PrimaryKeyRelatedField →
+            # validated_data holds instances (or None), no extra .objects.get() needed.
+            weakness_dt = data.get("weakness_damage_type_id")
+            parent = data.get("parent_template_id")
 
             result = resolve_pending_alteration(
                 pending=pending,

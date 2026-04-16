@@ -9,6 +9,7 @@ Affinities and Resonances are proper domain models in the magic app.
 
 from rest_framework import serializers
 
+from world.conditions.models import DamageType
 from world.magic.constants import ALTERATION_TIER_CAPS
 from world.magic.models import (
     Cantrip,
@@ -768,13 +769,18 @@ class AlterationResolutionSerializer(serializers.Serializer):
     """Write serializer for resolving a PendingAlteration."""
 
     # Use-as-is path
-    library_template_id = serializers.IntegerField(required=False)
+    library_template_id = serializers.PrimaryKeyRelatedField(
+        queryset=MagicalAlterationTemplate.objects.filter(is_library_entry=True),
+        required=False,
+        allow_null=True,
+    )
 
     # Author-from-scratch path
     name = serializers.CharField(max_length=60, min_length=3, required=False)
     player_description = serializers.CharField(required=False)
     observer_description = serializers.CharField(required=False)
-    weakness_damage_type_id = serializers.IntegerField(
+    weakness_damage_type_id = serializers.PrimaryKeyRelatedField(
+        queryset=DamageType.objects.all(),
         required=False,
         allow_null=True,
     )
@@ -791,7 +797,8 @@ class AlterationResolutionSerializer(serializers.Serializer):
         default=0,
     )
     is_visible_at_rest = serializers.BooleanField(default=False)
-    parent_template_id = serializers.IntegerField(
+    parent_template_id = serializers.PrimaryKeyRelatedField(
+        queryset=MagicalAlterationTemplate.objects.all(),
         required=False,
         allow_null=True,
     )
@@ -804,12 +811,13 @@ class AlterationResolutionSerializer(serializers.Serializer):
         is_staff = self.context["request"].user.is_staff
 
         # If library template, validate library entry exists and no duplicate
-        if "library_template_id" in attrs:  # noqa: STRING_LITERAL — dict membership check, not an identifier
+        library_template = attrs.get("library_template_id")  # noqa: STRING_LITERAL — dict key matches field name
+        if library_template is not None:
             library_errors = validate_alteration_resolution(
                 pending_tier=pending.tier,
                 pending_affinity_id=pending.origin_affinity_id,
                 pending_resonance_id=pending.origin_resonance_id,
-                payload={"library_entry_pk": attrs["library_template_id"]},
+                payload={"library_entry_pk": library_template.pk},
                 is_staff=is_staff,
                 character_sheet=self.context.get("character_sheet"),
             )
@@ -817,7 +825,10 @@ class AlterationResolutionSerializer(serializers.Serializer):
                 raise serializers.ValidationError(library_errors)
             return attrs
 
-        # Author-from-scratch: inject tier + origin from pending (not client-supplied)
+        # Author-from-scratch: inject tier + origin from pending (not client-supplied).
+        # weakness_damage_type_id holds a DamageType instance after PrimaryKeyRelatedField
+        # validation — the service checks this key for truthiness, so passing the instance
+        # directly is safe.
         payload = {
             "tier": pending.tier,
             "origin_affinity_id": pending.origin_affinity_id,
