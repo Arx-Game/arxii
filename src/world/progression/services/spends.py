@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from evennia.objects.models import ObjectDB
 
+from world.character_sheets.models import CharacterSheet
 from world.magic.services import has_pending_alterations
 from world.magic.types import AlterationGateError
 from world.progression.models import CharacterUnlock, ClassLevelUnlock, XPTransaction
@@ -50,7 +51,7 @@ def spend_xp_on_unlock(
     """
     try:
         sheet = character.sheet_data
-    except Exception:  # noqa: BLE001
+    except (CharacterSheet.DoesNotExist, AttributeError):
         sheet = None
     if sheet is not None and has_pending_alterations(sheet):
         raise AlterationGateError
