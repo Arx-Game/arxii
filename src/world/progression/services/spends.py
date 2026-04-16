@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from evennia.objects.models import ObjectDB
 
+from world.magic.services import has_pending_alterations
+from world.magic.types import AlterationGateError
 from world.progression.models import CharacterUnlock, ClassLevelUnlock, XPTransaction
 from world.progression.services.awards import get_or_create_xp_tracker
 from world.progression.types import (
@@ -42,7 +44,17 @@ def spend_xp_on_unlock(
 
     Returns:
         tuple: (success: bool, message: str, unlock: CharacterUnlock or None)
+
+    Raises:
+        AlterationGateError: If the character has unresolved magical alterations.
     """
+    try:
+        sheet = character.sheet_data
+    except Exception:  # noqa: BLE001
+        sheet = None
+    if sheet is not None and has_pending_alterations(sheet):
+        raise AlterationGateError
+
     account = character.account
 
     # Check if already unlocked (only works for ClassLevelUnlock now)
