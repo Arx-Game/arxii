@@ -4,9 +4,13 @@ Test structure:
   AlterationCoreFlowTests       — pending lifecycle: create → resolve → condition + event
   AlterationEscalationTests     — same-scene dedup / escalation vs. separate scenes
   AlterationLibraryTests        — library query and use-as-is resolution path
+  AlterationFullPipelineTests   — full chain: use_technique → Soulfray → MAGICAL_SCARS
+                                   → PendingAlteration → player resolution → ConditionInstance
 """
 
 from __future__ import annotations
+
+from unittest.mock import patch
 
 from django.test import TestCase
 import pytest
@@ -16,8 +20,11 @@ from integration_tests.game_content.magic import MagicContent
 from world.magic.constants import AlterationTier, PendingAlterationStatus
 from world.magic.factories import (
     AffinityFactory,
+    CharacterResonanceFactory,
     MagicalAlterationTemplateFactory,
     ResonanceFactory,
+    SoulfrayConfigFactory,
+    TechniqueFactory,
 )
 from world.magic.models import MagicalAlterationEvent, MagicalAlterationTemplate, PendingAlteration
 from world.magic.services import (
@@ -25,6 +32,7 @@ from world.magic.services import (
     get_library_entries,
     has_pending_alterations,
     resolve_pending_alteration,
+    use_technique,
 )
 from world.magic.types import AlterationGateError, AlterationResolutionResult
 
@@ -383,3 +391,213 @@ class AlterationLibraryTests(TestCase):
         # Pending is RESOLVED
         pending.refresh_from_db()
         assert pending.status == PendingAlterationStatus.RESOLVED
+
+
+# ---------------------------------------------------------------------------
+# Class D: Full pipeline — use_technique → Soulfray → MAGICAL_SCARS → resolution
+# ---------------------------------------------------------------------------
+
+
+class AlterationFullPipelineTests(TestCase):
+    """Full pipeline: use_technique → Soulfray accumulation → MAGICAL_SCARS consequence
+    → PendingAlteration → player resolution → ConditionInstance applied + gate released.
+
+    This class tests the spec-mandated end-to-end chain (spec line 2452–2453).
+    The existing AlterationCoreFlowTests cover the service layer directly;
+    this class covers the path from technique use through to resolution.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.models import CharacterSheet
+        from world.mechanics.factories import CharacterEngagementFactory
+
+        # --- Character with active resonance ---
+        character, _persona = CharacterContent.create_base_social_character(name="Orindra")
+        cls.character = character
+        cls.sheet = CharacterSheet.objects.get(character=character)
+
+        # Active resonance so _apply_magical_scars can derive origin
+        affinity = AffinityFactory(name="Primal (pipeline test)")
+        resonance = ResonanceFactory(name="Ember (pipeline test)", affinity=affinity)
+        CharacterResonanceFactory(character=character, resonance=resonance, is_active=True)
+        cls.affinity = affinity
+        cls.resonance = resonance
+
+        # --- Alteration content: Soulfray template + consequence pool ---
+        cls.alteration_content = MagicContent.create_alteration_content()
+        # The soulfray_stage already has consequence_pool wired with MAGICAL_SCARS effect.
+
+        # --- Technique: high anima cost, low control so effective_cost > current_anima ---
+        # With SoulfrayConfig threshold=0.30: anima=0/10 = 0.0 < 0.30 → severity > 0.
+        cls.technique = TechniqueFactory(
+            name="Overburn Blast (pipeline test)",
+            intensity=5,
+            control=2,
+            anima_cost=20,
+        )
+
+        # --- SoulfrayConfig: threshold 0.30, severity_scale 10 ---
+        from world.checks.factories import CheckTypeFactory
+
+        cls.resilience_check_type = CheckTypeFactory(name="Resilience (pipeline test)")
+        from decimal import Decimal
+
+        cls.soulfray_config = SoulfrayConfigFactory(
+            soulfray_threshold_ratio=Decimal("0.30"),
+            severity_scale=10,
+            deficit_scale=5,
+            resilience_check_type=cls.resilience_check_type,
+            base_check_difficulty=15,
+        )
+
+        # Engage the character so the social safety bonus does not inflate control
+        CharacterEngagementFactory(character=character)
+
+    def _drain_anima(self) -> None:
+        """Set the character's anima to 0 so every technique use accumulates Soulfray."""
+        from world.magic.models import CharacterAnima
+
+        CharacterAnima.objects.filter(character=self.character).update(current=0)
+
+    def _get_soulfray_outcome(self):
+        """Return the outcome_tier of the MAGICAL_SCARS consequence for patching."""
+        from actions.services import get_effective_consequences
+
+        pool = self.alteration_content.soulfray_consequence_pool
+        consequences = get_effective_consequences(pool)
+        return consequences[0].outcome_tier if consequences else None
+
+    def _run_technique_with_mocked_outcome(self, outcome):
+        """Run use_technique with the resilience check patched to return outcome."""
+        from world.checks.types import CheckResult
+
+        mock_result = CheckResult(
+            check_type=self.resilience_check_type,
+            outcome=outcome,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+
+        with patch("world.checks.services.perform_check", return_value=mock_result):
+            return use_technique(
+                character=self.character,
+                technique=self.technique,
+                resolve_fn=lambda: "resolved",
+                confirm_soulfray_risk=True,
+            )
+
+    def test_use_technique_overburn_creates_pending_alteration(self) -> None:
+        """Full pipeline: use_technique overburn → Soulfray → MAGICAL_SCARS → PendingAlteration.
+
+        Two technique uses are required:
+        1. First use: Soulfray condition created for character (no consequence pool fired yet).
+        2. Second use: Soulfray severity incremented on existing condition → stage reached
+           → consequence pool fires → MAGICAL_SCARS handler creates PendingAlteration.
+        """
+        self._drain_anima()
+        outcome = self._get_soulfray_outcome()
+
+        # First use: creates the Soulfray condition, returns before firing the pool
+        self._run_technique_with_mocked_outcome(outcome)
+
+        # Verify Soulfray condition exists on character but no pending yet
+        from world.conditions.models import ConditionInstance
+        from world.magic.audere import SOULFRAY_CONDITION_NAME
+
+        assert ConditionInstance.objects.filter(
+            target=self.character,
+            condition__name=SOULFRAY_CONDITION_NAME,
+        ).exists(), "Soulfray condition should exist after first overburn"
+
+        # No PendingAlteration yet (pool fires only on subsequent accumulation)
+        assert not PendingAlteration.objects.filter(
+            character=self.sheet,
+            status=PendingAlterationStatus.OPEN,
+        ).exists(), "No PendingAlteration expected after first overburn"
+
+        # Second use: fires the consequence pool on the existing Soulfray instance
+        self._drain_anima()
+        result = self._run_technique_with_mocked_outcome(outcome)
+
+        assert result.confirmed is True
+        assert result.soulfray_result is not None
+
+        # MAGICAL_SCARS handler should have created a PendingAlteration
+        assert PendingAlteration.objects.filter(
+            character=self.sheet,
+            status=PendingAlterationStatus.OPEN,
+        ).exists(), "PendingAlteration should exist after second overburn fires pool"
+
+        pending = PendingAlteration.objects.filter(
+            character=self.sheet,
+            status=PendingAlterationStatus.OPEN,
+        ).first()
+        assert pending is not None
+        # Severity 2 → MARKED tier (as set on the ConsequenceEffect.condition_severity)
+        assert pending.tier == AlterationTier.MARKED
+        assert pending.origin_affinity_id == self.affinity.pk
+        assert pending.origin_resonance_id == self.resonance.pk
+
+    def test_resolve_pending_from_pipeline_applies_condition_and_releases_gate(self) -> None:
+        """Resolving the PendingAlteration from an overburn chain applies ConditionInstance
+        and clears has_pending_alterations."""
+
+        self._drain_anima()
+        outcome = self._get_soulfray_outcome()
+
+        # Run two overburns to produce a PendingAlteration (same as previous test)
+        self._run_technique_with_mocked_outcome(outcome)
+        self._drain_anima()
+        self._run_technique_with_mocked_outcome(outcome)
+
+        assert PendingAlteration.objects.filter(
+            character=self.sheet,
+            status=PendingAlterationStatus.OPEN,
+        ).exists(), "Precondition: PendingAlteration must exist before resolve"
+
+        pending = PendingAlteration.objects.filter(
+            character=self.sheet,
+            status=PendingAlterationStatus.OPEN,
+        ).first()
+
+        # Gate should be active before resolution
+        assert has_pending_alterations(self.sheet) is True
+
+        # Player resolves the alteration from scratch
+        resolution = resolve_pending_alteration(
+            pending=pending,
+            name="Ember-Scorched Skin",
+            player_description=(
+                "A tracery of ember-scorched lines runs across the character's forearm, "
+                "a permanent reminder of overburn. The marks are warm to the touch."
+            ),
+            observer_description=(
+                "Faint ember-coloured markings trace the forearm, glowing subtly in low light."
+            ),
+            weakness_magnitude=0,
+            resonance_bonus_magnitude=0,
+            social_reactivity_magnitude=0,
+            is_visible_at_rest=False,
+            resolved_by=None,
+        )
+
+        # ConditionInstance applied to the character
+        assert resolution.condition_instance is not None
+        assert resolution.condition_instance.target_id == self.character.pk
+
+        # MagicalAlterationEvent created linking the pipeline run
+        assert MagicalAlterationEvent.objects.filter(
+            character=self.sheet,
+            alteration_template=resolution.template,
+        ).exists()
+
+        # Gate released
+        pending.refresh_from_db()
+        assert pending.status == PendingAlterationStatus.RESOLVED
+        assert has_pending_alterations(self.sheet) is False
