@@ -165,68 +165,60 @@ What was built:
 - **Layered result display** — ActionResult shows both social outcome and technique effects as distinct results, making the layered action pipeline transparent to players
 - **Integration tests** — Comprehensive tests covering mundane consequences, enhanced pipeline, validation, and available-actions filtering
 
-**Scope #5 — Magical Alteration Resolution (TODO):**
+**Scope #5 — Magical Alteration Resolution (DONE):**
 
-The `MAGICAL_SCARS` effect handler at `src/world/mechanics/effect_handlers.py:261-279`
-is currently a stub that applies whatever ConditionTemplate the consequence authored.
-The full system replaces this with a player-authored, GM-collaborated resolution
-flow: when a character overburns into a magical scar, the system queues a
-`PendingAlteration`, gates progression spending until it's resolved, and lets the
-player browse a tier-matched library or author from scratch (subject to schema
-validation). Two characters hitting the same consequence pool should end up with
-different scars that reflect who they are magically.
+What was built:
+- **Three new models** — `MagicalAlterationTemplate` (OneToOne on `ConditionTemplate`,
+  carries magic-specific metadata: tier, origin affinity/resonance, library flag,
+  visibility), `PendingAlteration` (queued unresolved scars with status lifecycle
+  OPEN → RESOLVED / STAFF_CLEARED, scene + triggering-state snapshot), and
+  `MagicalAlterationEvent` (immutable provenance audit log). Single migration covers
+  all three. Plan/spec at `docs/superpowers/plans/2026-04-12-scope5-magical-alteration-resolution.md`.
+- **MAGICAL_SCARS handler rewrite** — `_apply_magical_scars` in
+  `src/world/mechanics/effect_handlers.py` no longer applies a placeholder condition.
+  It calls `create_pending_alteration()`, which queues a `PendingAlteration` and
+  defers the actual `ConditionInstance` until the player resolves it.
+- **Same-scene escalation** — successive overburns within the same scene upgrade the
+  open `PendingAlteration` in place rather than stacking. Higher tier wins; the
+  triggering-state snapshot updates to the latest. Different scenes still create
+  separate pendings.
+- **Progression gate** — `has_pending_alterations(sheet)` is checked by
+  `world.progression.services.spends.spend_xp_on_unlock`; XP/unlock spending raises
+  `AlterationGateError` until all pendings are RESOLVED or STAFF_CLEARED.
+- **Service layer** — `create_pending_alteration`, `resolve_pending_alteration`,
+  `staff_clear_alteration`, `validate_alteration_resolution`, `get_library_entries`,
+  `has_pending_alterations`. Resolution is atomic: schema validation → template
+  creation/lookup → condition instance application → event log → pending status update,
+  all in one transaction with rollback on apply failure.
+- **Two resolution paths** — *library pick* (player selects an existing staff-curated
+  `MagicalAlterationTemplate` matching their tier/affinity/resonance, applied as-is)
+  and *author from scratch* (player provides name, descriptions, weakness/resonance/
+  social-reactivity magnitudes, visibility flag — validated against `ALTERATION_TIER_CAPS`
+  per-tier ceilings). Library path is duplicate-checked.
+- **Constrained-authoring schema validation** — `validate_alteration_resolution` enforces
+  per-tier caps on weakness magnitude, resonance bonus magnitude, social reactivity
+  magnitude, visibility-required flag, and minimum description length. First instance of
+  the constrained-authoring pattern (structured form → ceiling check → atomic effect
+  creation) intended to be reused for techniques and consequences.
+- **REST API** — `PendingAlterationViewSet` (account-scoped queryset) at
+  `/api/magic/pending-alterations/` with `GET` list/retrieve, `POST {id}/resolve/`
+  (dispatches library vs scratch by payload), and `GET {id}/library/` (returns
+  tier-matched templates ordered by affinity match).
+- **Comprehensive test coverage** — model unit tests, service tests (creation,
+  escalation, resolution, gate, staff-clear, atomic rollback), validation tests
+  (both paths, all caps), view tests (APITestCase + setUpTestData + force_authenticate),
+  handler tests, and 12 end-to-end pipeline integration tests in
+  `src/integration_tests/pipeline/test_alteration_pipeline.py` driving the full chain
+  `use_technique → Soulfray accumulation → consequence pool → MAGICAL_SCARS handler →
+  PendingAlteration → resolve_pending_alteration → ConditionInstance + event + gate
+  release`. `MagicContent.create_alteration_content()` extends the integration-test
+  game-content factory with library entries (with effect rows) plus a wired Soulfray
+  consequence pool and stage.
+- **Scope boundary preserved** — passive effects only. Reactive side effects on the
+  scar template (cold-iron triggers, holy-ground reactions) remain Scope 5.5.
 
-This is the highest-leverage deferred item: it removes a known stub, unblocks meaningful
-Pass 3 challenge pipeline tests, and finally connects the consequence pipeline to
-character authorship.
-
-> **Scope boundary — passive effects only.** Scope 5 only supports side effects
-> expressible via the existing `ConditionTemplate` effect tables: `ConditionCheckModifier`,
-> `ConditionCapabilityEffect`, `ConditionResistanceModifier`, `ConditionDamageOverTime`,
-> `ConditionDamageInteraction`, `properties` M2M, and observer/player descriptions.
-> Reactive environmental side effects ("walking on holy ground forces a save against
-> bursting into flame", "touching cold iron triggers a check") are deferred to Scope
-> 5.5. Scope 5.5 adds the reactive M2M to `ConditionTemplate` itself (not to
-> `MagicalAlterationTemplate`) — magical alterations are just one consumer; the
-> reactive layer is a property of conditions in general.
-
-What to build:
-- **`resolve_magical_alteration(character, severity, context)`** service — returns a
-  ConditionTemplate (the specific scar) given the character's magical identity. Pure
-  function: no side effects, deterministic given a seeded roll.
-- **AlterationPool model** — staff-authored pools of candidate ConditionTemplates
-  weighted by resonance/affinity match. Analogous to ConsequencePool but scoped to
-  magical alterations. Each entry declares which resonance targets or affinity
-  thresholds it matches.
-- **Matching algorithm** — score each candidate by the character's resonance strength
-  at matching ModifierTargets plus affinity alignment, then weighted-select. Ties into
-  the existing `CharacterResonance` / `CharacterAffinityTotal` queries.
-- **Severity-to-pool mapping** — higher severity unlocks more dramatic alterations.
-  Could live on AlterationPool as a min_severity threshold or on individual entries.
-- **`_apply_magical_scars` handler rewrite** — call `resolve_magical_alteration()`,
-  apply the selected ConditionTemplate, return AppliedEffect with the identity-driven
-  description.
-- **Integration test** in `src/integration_tests/pipeline/` exercising the full flow:
-  two characters with different resonance profiles use the same technique, overburn,
-  receive different scars. Factories extend `game_content/magic.py` with alteration
-  pool content. Tests drive implementation (TDD).
-
-Key design questions to resolve during brainstorm:
-- Does alteration selection use the same rolled CheckResult as the Soulfray stage
-  consequence, or a fresh resolution-only roll?
-- Can an alteration be *refused* by the character at application time (spend resource
-  to negate, rethemed as "you wake up unchanged")? Or is it always applied?
-- How do Abyssal-aligned characters differ from Celestial-aligned at the same severity?
-  Does affinity just weight the pool, or does it gate entire pool families?
-- Is there a concept of "scar intensity" separate from the underlying ConditionTemplate
-  severity, so the same scar can land harder on one character than another?
-- Do alterations stack (add new instances each time) or escalate existing ones?
-
-Dependencies:
-- None beyond what already exists. CharacterResonance, CharacterAffinityTotal,
-  ConditionTemplate, and the Soulfray stage consequence pipeline are all live.
-
-Decoupling: Standalone. Does NOT depend on Scope 6 (Soulfray recovery). A separate PR.
+Decoupling: Standalone. Does NOT depend on Scope 6 (Soulfray recovery). Shipped on
+the `magical-scars` branch.
 
 **Scope #5.5 — Reactive Foundations (TODO — CRITICAL FOLLOW-UP):**
 
