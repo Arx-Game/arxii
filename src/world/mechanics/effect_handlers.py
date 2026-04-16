@@ -283,9 +283,12 @@ def _derive_alteration_origin(
     """
     from world.magic.models import CharacterResonance  # noqa: PLC0415
 
+    # Pick most recently acquired active resonance as the alteration origin.
+    # When multiple exist, newest (highest pk) is used deterministically.
     char_res = (
         CharacterResonance.objects.filter(character=character, is_active=True)
         .select_related("resonance__affinity")
+        .order_by("-pk")
         .first()
     )
     if char_res is None:
@@ -335,7 +338,7 @@ def _apply_magical_scars(
         tier=tier,
         origin_affinity=affinity,
         origin_resonance=resonance,
-        scene=None,  # ResolutionContext carries no scene reference
+        scene=None,  # Deferred: thread scene through ResolutionContext when available
     )
 
     verb = "escalated" if not result.created else "acquired"
