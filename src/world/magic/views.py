@@ -533,6 +533,7 @@ class PendingAlterationViewSet(
     serializer_class = PendingAlterationSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend]
     filterset_fields = ["status", "tier"]
 
     def get_queryset(self):
@@ -566,7 +567,9 @@ class PendingAlterationViewSet(
 
         library_id = data.get("library_template_id")
         if library_id:
-            library_template = MagicalAlterationTemplate.objects.get(
+            library_template = MagicalAlterationTemplate.objects.select_related(
+                "condition_template"
+            ).get(
                 pk=library_id,
                 is_library_entry=True,
             )
