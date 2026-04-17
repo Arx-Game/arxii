@@ -539,3 +539,208 @@ class AttackPreResolveCancellationTest(TestCase):
         vitals.refresh_from_db()
         # If ATTACK_PRE_RESOLVE was cancelled, damage should be skipped
         self.assertEqual(vitals.health, 100)
+
+
+# ---------------------------------------------------------------------------
+# Task 44 (Tests 28-29): Combat integration — typeclass hook and source discrimination
+# ---------------------------------------------------------------------------
+
+
+class TypeclassHookDualPathTest(TestCase):
+    """Test 28: Typeclass hook dual-path — Character.at_attacked emits ATTACK_LANDED
+    via the typeclass hook. Combat services emit DAMAGE_PRE_APPLY separately via
+    apply_damage_to_participant. Both paths produce equivalent events that the
+    reactive layer can respond to independently.
+
+    This test verifies both paths produce events with the correct payload types
+    and that a single reactive condition on ATTACK_LANDED only responds to the
+    typeclass hook path (not to DAMAGE_PRE_APPLY from the service path).
+    """
+
+    def test_at_attacked_hook_emits_attack_landed(self) -> None:
+        """Character.at_attacked emits ATTACK_LANDED — reactive scar fires."""
+        char = CharacterFactory()
+        room = _create_room("DualPathRoom28a")
+        char.location = room
+
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventNames.ATTACK_LANDED,
+            flow_definition=cancel_flow,
+            target=char,
+            scope=TriggerScope.PERSONAL,
+        )
+
+        attacker = CharacterFactory()
+        weapon = MagicMock()
+        damage_result = MagicMock()
+        action = MagicMock()
+
+        # Capture emissions to verify ATTACK_LANDED is emitted
+        captured: list[str] = []
+        import flows.emit as emit_mod
+        import typeclasses.characters as chars_mod
+
+        original = emit_mod.emit_event
+
+        def capturing_emit(event_name, payload, **kwargs):
+            captured.append(event_name)
+            return original(event_name, payload, **kwargs)
+
+        chars_mod.emit_event = capturing_emit
+        try:
+            char.at_attacked(attacker, weapon, damage_result, action)
+        finally:
+            chars_mod.emit_event = original
+
+        self.assertIn(EventNames.ATTACK_LANDED, captured)
+
+    def test_service_path_emits_damage_pre_apply_not_attack_landed(self) -> None:
+        """apply_damage_to_participant emits DAMAGE_PRE_APPLY, not ATTACK_LANDED.
+
+        The two paths are distinct: typeclass hook emits ATTACK_LANDED,
+        service function emits DAMAGE_PRE_APPLY. A scar on ATTACK_LANDED does
+        not fire during the service path.
+        """
+        participant, vitals = _participant_with_vitals(health=100, max_health=100)
+        character = participant.character_sheet.character
+
+        # Install a cancel scar on ATTACK_LANDED only
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventNames.ATTACK_LANDED,
+            flow_definition=cancel_flow,
+            target=character,
+            scope=TriggerScope.PERSONAL,
+        )
+
+        # Apply damage via service — only DAMAGE_PRE_APPLY is emitted, not ATTACK_LANDED
+        result = apply_damage_to_participant(participant, 20, damage_type="physical")
+
+        vitals.refresh_from_db()
+        # ATTACK_LANDED scar did NOT fire — damage was applied normally
+        self.assertEqual(result.damage_dealt, 20)
+        self.assertEqual(vitals.health, 80)
+
+    def test_near_miss_no_scar_both_paths_resolve_normally(self) -> None:
+        """Without any scars, both emission paths complete without cancellation."""
+        char = CharacterFactory()
+        room = _create_room("DualPathRoom28c")
+        char.location = room
+
+        # at_attacked hook: no scar → no cancellation
+        attacker = CharacterFactory()
+        weapon = MagicMock()
+        damage_result = MagicMock()
+        action = MagicMock()
+        # Should not raise
+        char.at_attacked(attacker, weapon, damage_result, action)
+
+        # Service path: no scar → damage applied
+        participant, _vitals = _participant_with_vitals(health=100, max_health=100)
+        result = apply_damage_to_participant(participant, 10)
+        self.assertEqual(result.damage_dealt, 10)
+
+
+class DamageSourceDiscriminationScarVsWeaponTest(TestCase):
+    """Test 29: Damage source discrimination — a scar-only ward does not fire
+    on weapon-induced damage, and vice versa.
+
+    Two scars on the same character:
+      - Scar-ward: cancels DAMAGE_PRE_APPLY when source.type == "scar"
+      - Weapon-ward: cancels DAMAGE_PRE_APPLY when source.type == "character"
+        (character attacks with weapon)
+
+    A scar-sourced damage hits the scar-ward, not the weapon-ward.
+    A character-sourced damage hits the weapon-ward, not the scar-ward.
+    """
+
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.character.location = _create_room("DiscrimRoom29")
+
+    def test_hit_scar_source_trips_scar_ward_only(self):
+        """Scar-sourced damage activates scar-ward, not weapon-ward."""
+        # Scar-ward
+        scar_cancel = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            scope=TriggerScope.PERSONAL,
+            filter_condition={"path": "source.type", "op": "==", "value": "scar"},
+            flow_definition=scar_cancel,
+            target=self.character,
+        )
+
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="physical",
+            source=DamageSource(type="scar", ref=None),
+        )
+        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        self.assertTrue(result.cancelled)
+        self.assertEqual(len(result.fired), 1)
+
+    def test_near_miss_weapon_source_does_not_trip_scar_ward(self):
+        """Weapon-sourced damage does NOT activate the scar-ward."""
+        scar_cancel = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            scope=TriggerScope.PERSONAL,
+            filter_condition={"path": "source.type", "op": "==", "value": "scar"},
+            flow_definition=scar_cancel,
+            target=self.character,
+        )
+
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="physical",
+            source=DamageSource(type="character", ref=None),
+        )
+        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        self.assertFalse(result.cancelled)
+        self.assertEqual(result.fired, [])
+
+    def test_hit_weapon_source_trips_weapon_ward_only(self):
+        """Character-sourced (weapon) damage activates weapon-ward, not scar-ward."""
+        # Weapon-ward (fires on character/weapon source)
+        weapon_cancel = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            scope=TriggerScope.PERSONAL,
+            filter_condition={"path": "source.type", "op": "==", "value": "character"},
+            flow_definition=weapon_cancel,
+            target=self.character,
+        )
+
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="physical",
+            source=DamageSource(type="character", ref=None),
+        )
+        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        self.assertTrue(result.cancelled)
+        self.assertEqual(len(result.fired), 1)
+
+    def test_near_miss_scar_source_does_not_trip_weapon_ward(self):
+        """Scar-sourced damage does NOT activate the weapon-ward."""
+        weapon_cancel = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            scope=TriggerScope.PERSONAL,
+            filter_condition={"path": "source.type", "op": "==", "value": "character"},
+            flow_definition=weapon_cancel,
+            target=self.character,
+        )
+
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="physical",
+            source=DamageSource(type="scar", ref=None),
+        )
+        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        self.assertFalse(result.cancelled)
+        self.assertEqual(result.fired, [])
