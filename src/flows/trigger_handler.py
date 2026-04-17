@@ -6,10 +6,16 @@ on first access, stays synced via explicit sync hooks.
 """
 
 from collections import defaultdict
+import logging
 from typing import TYPE_CHECKING, Any
+
+from flows.filters.errors import FilterPathError
+from flows.filters.evaluator import evaluate_filter
 
 if TYPE_CHECKING:
     from flows.models.triggers import Trigger
+
+logger = logging.getLogger(__name__)
 
 
 class DispatchResult:
@@ -74,3 +80,60 @@ class TriggerHandler:
         # This hook exists so future subclasses (line-of-sight rooms) can
         # maintain additional indexes.
         return
+
+    # ---- dispatch ----
+
+    def dispatch(
+        self,
+        event_name: str,
+        payload: Any,
+        *,
+        flow_stack: Any = None,
+    ) -> DispatchResult:
+        """Walk active triggers for event_name, evaluate filters, execute flows."""
+        result = DispatchResult()
+        for trigger in sorted(
+            self.triggers_for(event_name),
+            key=lambda t: -t.priority,
+        ):
+            if self._usage_cap_reached(trigger):
+                continue
+            try:
+                matched = evaluate_filter(
+                    trigger.additional_filter_condition,
+                    payload,
+                    self_ref=self.owner,
+                )
+            except FilterPathError:
+                logger.warning(
+                    "FilterPathError on trigger %s during dispatch of %s",
+                    trigger.pk,
+                    event_name,
+                )
+                continue
+            if not matched:
+                continue
+            result.fired.append(trigger.pk)
+            self._execute_flow(trigger, payload, flow_stack, result)
+            if result.cancelled:
+                break
+        return result
+
+    def _execute_flow(
+        self,
+        trigger: "Trigger",
+        payload: Any,
+        flow_stack: Any,
+        result: DispatchResult,
+    ) -> None:
+        """Execute the trigger's flow definition. Stub — Task 16 wires this."""
+        return
+
+    def _usage_cap_reached(self, trigger: "Trigger") -> bool:
+        """Usage-cap stub. Real implementation lands at Task 42 Test 24.
+
+        Spec § Integration test 24 (Usage cap is pre-filter) requires that
+        TriggerData.max_uses_per_scene is consulted BEFORE filter evaluation.
+        For now: return False.
+        """
+        return False
