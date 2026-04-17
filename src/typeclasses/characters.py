@@ -15,6 +15,9 @@ from django.utils import timezone
 from evennia.objects.objects import DefaultCharacter
 
 from commands.utils import serialize_cmdset
+from flows.emit import emit_event
+from flows.events.names import EventNames
+from flows.events.payloads import AttackLandedPayload, MovePreDepartPayload
 from flows.object_states.character_state import CharacterState
 from flows.service_functions.serializers import build_room_state_payload
 from typeclasses.mixins import ObjectParent
@@ -184,6 +187,52 @@ class Character(ObjectParent, DefaultCharacter):
 
         # Send room state to frontend
         self.send_room_state()
+
+    def at_attacked(self, attacker, weapon, damage_result, action) -> None:
+        """Called by combat after damage calc, before damage apply.
+
+        Emits ATTACK_LANDED and gives listeners a chance to react. Downstream
+        damage application fires DAMAGE_PRE_APPLY separately (Task 28).
+        """
+        payload = AttackLandedPayload(
+            attacker=attacker,
+            target=self,
+            weapon=weapon,
+            damage_result=damage_result,
+            action=action,
+        )
+        emit_event(
+            EventNames.ATTACK_LANDED,
+            payload,
+            personal_target=self,
+            room=self.location,
+        )
+
+    def at_pre_move(self, destination, move_type="move", **kwargs):
+        """Called just before moving to destination.
+
+        Emits MOVE_PRE_DEPART and returns False if a reactive listener
+        cancels the event, allowing conditions/triggers to block movement.
+        """
+        origin = self.location
+        result = super().at_pre_move(destination, move_type=move_type, **kwargs)
+        if result is False:
+            return False  # Evennia-side cancel; skip emission
+        payload = MovePreDepartPayload(
+            character=self,
+            origin=origin,
+            destination=destination,
+            exit_used=kwargs.get("exit_used") or kwargs.get("move_type"),
+        )
+        stack = emit_event(
+            EventNames.MOVE_PRE_DEPART,
+            payload,
+            personal_target=self,
+            room=origin,
+        )
+        if stack is not None and stack.was_cancelled():
+            return False
+        return True
 
     def at_post_unpuppet(self, account=None, session=None, **kwargs):
         """Handle cleanup after a session stops puppeting this character.
