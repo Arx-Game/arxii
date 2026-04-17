@@ -6,6 +6,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from flows.constants import TriggerScope
+from flows.filters.validator import validate_filter_schema
 from flows.flow_event import FlowEvent
 from flows.helpers.logic import resolve_self_placeholders
 from flows.models.events import Event
@@ -55,6 +56,14 @@ class TriggerDefinition(SharedMemoryModel):
         default=0,
         help_text="Higher priority triggers fire first.",
     )
+
+    def clean(self) -> None:
+        super().clean()
+        if self.base_filter_condition:
+            validate_filter_schema(
+                self.base_filter_condition,
+                event_name=self.event.name,
+            )
 
     def matches_event(self, event: FlowEvent, obj: object = None) -> bool:
         conditions = resolve_self_placeholders(
@@ -121,6 +130,11 @@ class Trigger(SharedMemoryModel):
                         ),
                     }
                 )
+        if self.additional_filter_condition:
+            validate_filter_schema(
+                self.additional_filter_condition,
+                event_name=self.trigger_definition.event.name,
+            )
 
     @cached_property
     def trigger_data_items(self) -> list["TriggerData"]:
