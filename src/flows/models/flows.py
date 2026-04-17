@@ -118,6 +118,7 @@ class FlowStepDefinition(SharedMemoryModel):
             FlowActionChoices.CALL_SERVICE_FUNCTION: (self._execute_call_service_function),
             FlowActionChoices.EMIT_FLOW_EVENT: self._execute_emit_flow_event,
             FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH: (self._execute_emit_flow_event_for_each),
+            FlowActionChoices.CANCEL_EVENT: self._execute_cancel_event,
         }
         handler = action_map.get(self.action)
         if handler:
@@ -455,6 +456,23 @@ class FlowStepDefinition(SharedMemoryModel):
             if flow_event.stop_propagation:
                 return None
         return next_step
+
+    def _execute_cancel_event(
+        self,
+        flow_execution: "FlowExecution",
+    ) -> Optional["FlowStepDefinition"]:
+        """Set DispatchResult.cancelled=True and mark the FlowStack cancelled.
+
+        Emission sites check ``flow_stack.was_cancelled()`` after dispatch to
+        decide whether to suppress the default behavior (e.g., skip damage).
+        The dispatch loop in TriggerHandler also reads ``result.cancelled``
+        and stops walking further triggers.
+        """
+        if flow_execution.dispatch_result is not None:
+            flow_execution.dispatch_result.cancelled = True
+        if flow_execution.flow_stack is not None:
+            flow_execution.flow_stack.mark_cancelled()
+        return flow_execution.get_next_child(self)
 
     def __str__(self) -> str:
         return f"{self.flow.name} - Step: {self.pk} ({self.action})"

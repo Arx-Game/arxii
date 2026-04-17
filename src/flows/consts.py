@@ -60,6 +60,7 @@ class FlowActionChoices(models.TextChoices):
         "emit_flow_event_for_each",
         "Emit Flow Event For Each",
     )
+    CANCEL_EVENT = "cancel_event", "Cancel Event"
 
 
 # Map the comparison actions to their corresponding operator functions.
