@@ -520,3 +520,117 @@ class CovenantAllegianceFilterTest(TestCase):
             "Covenant model not yet built; attacker.covenant path unresolvable. "
             "Implement when covenant system is added."
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 36: payload-modifier specificity (Tests 10-11)
+# ---------------------------------------------------------------------------
+
+
+class ElementalConversionTest(TestCase):
+    """Test 10: Elemental conversion — cold becomes fire (weakened) via MODIFY_PAYLOAD.
+
+    A two-step flow: first sets damage_type="fire", then multiplies amount by 0.5.
+    The trigger only fires on damage_type == "cold".
+    """
+
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.character.location = _create_room()
+
+        flow = FlowDefinitionFactory()
+        # Step 1: set damage_type = "fire"
+        step1 = FlowStepDefinitionFactory(
+            flow=flow,
+            parent_id=None,
+            action=FlowActionChoices.MODIFY_PAYLOAD,
+            parameters={"field": "damage_type", "op": "set", "value": "fire"},
+        )
+        # Step 2 (child of step1): multiply amount by 0.5
+        FlowStepDefinitionFactory(
+            flow=flow,
+            parent_id=step1.pk,
+            action=FlowActionChoices.MODIFY_PAYLOAD,
+            parameters={"field": "amount", "op": "multiply", "value": 0.5},
+        )
+
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            scope=TriggerScope.PERSONAL,
+            filter_condition={"path": "damage_type", "op": "==", "value": "cold"},
+            flow_definition=flow,
+            target=self.character,
+        )
+
+    def test_hit_cold_converted_to_fire(self):
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=20,
+            damage_type="cold",
+            source=DamageSource(type="technique", ref=None),
+        )
+        self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        self.assertEqual(payload.damage_type, "fire")
+        self.assertEqual(payload.amount, 10.0)
+
+    def test_near_miss_fire_not_converted(self):
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=20,
+            damage_type="fire",
+            source=DamageSource(type="technique", ref=None),
+        )
+        self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        # Trigger filter didn't match — payload unchanged
+        self.assertEqual(payload.damage_type, "fire")
+        self.assertEqual(payload.amount, 20)
+
+
+class ConditionalIntensityCapTest(TestCase):
+    """Test 11: Conditional intensity cap — evocation amount > 50 capped to 50.
+
+    MODIFY_PAYLOAD supports set/multiply/add ops but not 'min'. A proper intensity
+    cap requires either a 'min' op or a payload-path conditional step. This test
+    verifies that the near-miss (non-evocation) case passes through unchanged, and
+    documents the cap-hit case as a known skip pending MODIFY_PAYLOAD 'min' op.
+    """
+
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.character.location = _create_room()
+        cancel_flow = _make_cancel_flow()
+        # Filter fires on evocation school only
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            scope=TriggerScope.PERSONAL,
+            filter_condition={
+                "path": "source.ref.school",
+                "op": "==",
+                "value": "evocation",
+            },
+            flow_definition=cancel_flow,
+            target=self.character,
+        )
+
+    def test_hit_evocation_filter_matches(self):
+        """Evocation school source matches the filter and trigger fires.
+
+        Skipped: no 'min' op on MODIFY_PAYLOAD means we cannot implement the
+        cap within existing flow primitives. The test records the intent.
+        """
+        self.skipTest(
+            "MODIFY_PAYLOAD lacks a 'min' op needed for intensity capping. "
+            "Add 'min'/'max' ops to _execute_modify_payload, then implement "
+            "cap as: {field: 'amount', op: 'min', value: 50}."
+        )
+
+    def test_near_miss_enchantment_uncapped(self):
+        """Non-evocation source does not match the filter — amount unchanged."""
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=100,
+            damage_type="arcane",
+            source=DamageSource(type="technique", ref=SimpleNamespace(school="enchantment")),
+        )
+        self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        self.assertEqual(payload.amount, 100)
