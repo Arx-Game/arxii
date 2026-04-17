@@ -228,9 +228,12 @@ install from `ConditionInstance` rows and dispatch through a per-owner
 `TriggerHandler` cached on the typeclass; filters are a JSON DSL (`==`, `!=`,
 `contains`, `has_property`, `in`, `>`/`<`); AE events dispatch ROOM-first
 then PERSONAL with cancellation propagation; flow authors get new action
-steps (`CANCEL_EVENT`, `MODIFY_PAYLOAD`, `DEAL_DAMAGE`, `REMOVE_CONDITION`,
-`PROMPT_PLAYER`); player prompts suspend via Twisted `Deferred` with no DB
-rows and resume via the `@reply` account command.
+steps (`CANCEL_EVENT`, `MODIFY_PAYLOAD`, `PROMPT_PLAYER`); player prompts
+suspend via Twisted `Deferred` with no DB rows and resume via the `@reply`
+account command. `DEAL_DAMAGE` / `REMOVE_CONDITION` flow steps were
+deferred — flows can still trigger those side effects today by emitting a
+flow event that calls the existing `apply_damage_to_participant` /
+`remove_condition` service functions.
 
 Plan: `docs/superpowers/plans/2026-04-17-reactive-layer-implementation.md`.
 Spec: `docs/superpowers/specs/2026-04-16-reactive-layer-design.md`.
