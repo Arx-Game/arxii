@@ -126,8 +126,31 @@ class TriggerHandler:
         flow_stack: Any,
         result: DispatchResult,
     ) -> None:
-        """Execute the trigger's flow definition. Stub — Task 16 wires this."""
-        return
+        """Execute the trigger's flow definition within the given FlowStack."""
+        from flows.flow_execution import FlowExecution  # noqa: PLC0415 — Evennia startup order
+        from flows.flow_stack import FlowStack  # noqa: PLC0415 — same reason
+        from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415 — same reason
+
+        flow_def = trigger.trigger_definition.flow_definition
+        if flow_stack is None:
+            flow_stack = FlowStack(
+                owner=self.owner,
+                originating_event=trigger.trigger_definition.event.name,
+            )
+        context = SceneDataManager()
+        execution = FlowExecution(
+            flow_definition=flow_def,
+            context=context,
+            flow_stack=flow_stack,
+            origin=trigger,
+            variable_mapping={
+                "payload": payload,
+                "owner": self.owner,
+                "trigger": trigger,
+            },
+            dispatch_result=result,
+        )
+        flow_stack.execute_flow(execution)
 
     def _usage_cap_reached(self, trigger: "Trigger") -> bool:
         """Usage-cap stub. Real implementation lands at Task 42 Test 24.

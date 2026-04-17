@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     # noinspection PyUnresolvedReferences
     from flows.flow_stack import FlowStack
     from flows.models import FlowDefinition, FlowStepDefinition
+    from flows.trigger_handler import DispatchResult
 
 
 class FlowExecution:
@@ -34,6 +35,8 @@ class FlowExecution:
         origin: object,
         variable_mapping: dict[str, object] | None = None,
         trigger_registry: TriggerRegistry | None = None,
+        *,
+        dispatch_result: "DispatchResult | None" = None,
     ) -> None:
         """Initialize a FlowExecution instance.
 
@@ -44,6 +47,8 @@ class FlowExecution:
             origin: Object that initiated the flow.
             variable_mapping: Initial mapping of variable names to values.
             trigger_registry: Registry used when emitting events.
+            dispatch_result: DispatchResult from the triggering dispatch call,
+                available to reactive flow steps (e.g. CANCEL_EVENT).
         """
         self.flow_definition = flow_definition
         self.context = context
@@ -53,18 +58,16 @@ class FlowExecution:
         self.stop_reason: str | None = None
         self.variable_mapping = variable_mapping or {}  # Maps flow variable names to their values
         self.trigger_registry = trigger_registry or flow_stack.trigger_registry
+        self.dispatch_result = dispatch_result
         self.steps: list[FlowStepDefinition] = list(flow_definition.steps.all())
         self.current_step = self._get_entry_step()
 
-    def _get_entry_step(self) -> "FlowStepDefinition":
-        """Finds and returns the entry step (the step with no parent)."""
+    def _get_entry_step(self) -> Optional["FlowStepDefinition"]:
+        """Finds and returns the entry step (the step with no parent), or None if no steps."""
         for step in self.steps:
             if step.parent is None:
                 return step
-        msg = f"No entry step found for FlowDefinition '{self.flow_definition.name}'."
-        raise RuntimeError(
-            msg,
-        )
+        return None
 
     def execute_current_step(self) -> None:
         """
