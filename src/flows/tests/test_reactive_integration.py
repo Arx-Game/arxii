@@ -20,11 +20,16 @@ from flows.constants import TriggerScope
 from flows.consts import FlowActionChoices
 from flows.events.names import EventNames
 from flows.events.payloads import (
+    ConditionPreApplyPayload,
     DamagePreApplyPayload,
     DamageSource,
 )
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.conditions.factories import (
+    ConditionCategoryFactory,
+    ConditionInstanceFactory,
+    ConditionStageFactory,
+    ConditionTemplateFactory,
     ReactiveConditionFactory,
 )
 
@@ -266,6 +271,179 @@ class WeaponTagFilterTest(TestCase):
             amount=10,
             damage_type="physical",
             source=_source_with_weapon_tags(["iron"]),
+        )
+        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        self.assertFalse(result.cancelled)
+        self.assertEqual(result.fired, [])
+
+
+# ---------------------------------------------------------------------------
+# Task 34: condition-specific protection (Tests 5-7)
+# ---------------------------------------------------------------------------
+
+
+class CharmImmunityAmuletTest(TestCase):
+    """Test 5: Charm-immunity amulet — cancels mind_control category conditions only."""
+
+    def setUp(self):
+        self.target = CharacterFactory()
+        self.target.location = _create_room()
+        cancel_flow = _make_cancel_flow()
+        # Filter: template.category.name == "mind_control"
+        ReactiveConditionFactory(
+            event_name=EventNames.CONDITION_PRE_APPLY,
+            scope=TriggerScope.PERSONAL,
+            filter_condition={
+                "path": "template.category.name",
+                "op": "==",
+                "value": "mind_control",
+            },
+            flow_definition=cancel_flow,
+            target=self.target,
+        )
+
+    def _dispatch(self, category_name: str):
+        category = ConditionCategoryFactory(name=category_name)
+        template = ConditionTemplateFactory(category=category)
+        payload = ConditionPreApplyPayload(
+            target=self.target,
+            template=template,
+            source=None,
+            stage=None,
+        )
+        return self.target.trigger_handler.dispatch(EventNames.CONDITION_PRE_APPLY, payload)
+
+    def test_hit_mind_control_cancels(self):
+        result = self._dispatch("mind_control")
+        self.assertTrue(result.cancelled)
+        self.assertTrue(len(result.fired) > 0)
+
+    def test_near_miss_buff_passes(self):
+        result = self._dispatch("buff")
+        self.assertFalse(result.cancelled)
+        self.assertEqual(result.fired, [])
+
+
+class CurseResistanceBySourceTest(TestCase):
+    """Test 6: Curse-resistance by source — blocks scar-sourced withering only."""
+
+    def setUp(self):
+        self.target = CharacterFactory()
+        self.target.location = _create_room()
+        cancel_flow = _make_cancel_flow()
+        # Filter: template.name == "withering" AND source.type == "scar"
+        ReactiveConditionFactory(
+            event_name=EventNames.CONDITION_PRE_APPLY,
+            scope=TriggerScope.PERSONAL,
+            filter_condition={
+                "and": [
+                    {"path": "template.name", "op": "==", "value": "withering"},
+                    {"path": "source.type", "op": "==", "value": "scar"},
+                ]
+            },
+            flow_definition=cancel_flow,
+            target=self.target,
+        )
+
+    def test_hit_scar_sourced_withering_cancelled(self):
+        template = ConditionTemplateFactory(name="withering")
+        source = DamageSource(type="scar", ref=None)
+        payload = ConditionPreApplyPayload(
+            target=self.target,
+            template=template,
+            source=source,
+            stage=None,
+        )
+        result = self.target.trigger_handler.dispatch(EventNames.CONDITION_PRE_APPLY, payload)
+        self.assertTrue(result.cancelled)
+
+    def test_near_miss_item_sourced_withering_passes(self):
+        template = ConditionTemplateFactory(name="withering")
+        source = DamageSource(type="item", ref=None)
+        payload = ConditionPreApplyPayload(
+            target=self.target,
+            template=template,
+            source=source,
+            stage=None,
+        )
+        result = self.target.trigger_handler.dispatch(EventNames.CONDITION_PRE_APPLY, payload)
+        self.assertFalse(result.cancelled)
+        self.assertEqual(result.fired, [])
+
+
+class StageSpecificVulnerabilityTest(TestCase):
+    """Test 7: Stage-specific vulnerability — trigger active only at the scoped stage."""
+
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.character.location = _create_room()
+
+    def test_hit_trigger_active_at_correct_stage(self):
+        """Trigger with source_stage set is active when condition is at that stage."""
+        template = ConditionTemplateFactory(has_progression=True)
+        stage = ConditionStageFactory(condition=template, stage_order=1, severity_threshold=3)
+        condition_instance = ConditionInstanceFactory(
+            target=self.character,
+            condition=template,
+            current_stage=stage,
+            severity=5,
+        )
+        cancel_flow = _make_cancel_flow()
+        from flows.factories import TriggerDefinitionFactory, TriggerFactory
+        from flows.models.events import Event
+
+        event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
+        trigger_def = TriggerDefinitionFactory(event=event, flow_definition=cancel_flow)
+        TriggerFactory(
+            trigger_definition=trigger_def,
+            obj=self.character,
+            source_condition=condition_instance,
+            source_stage=stage,
+            scope=TriggerScope.PERSONAL,
+            additional_filter_condition={},
+        )
+
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="physical",
+            source=DamageSource(type="character", ref=None),
+        )
+        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        self.assertTrue(result.cancelled)
+
+    def test_near_miss_trigger_inactive_at_different_stage(self):
+        """Stage-scoped trigger does NOT fire when condition is at a different stage."""
+        template = ConditionTemplateFactory(has_progression=True)
+        stage1 = ConditionStageFactory(condition=template, stage_order=1, severity_threshold=3)
+        stage2 = ConditionStageFactory(condition=template, stage_order=2, severity_threshold=6)
+        condition_instance = ConditionInstanceFactory(
+            target=self.character,
+            condition=template,
+            current_stage=stage2,
+            severity=7,
+        )
+        cancel_flow = _make_cancel_flow()
+        from flows.factories import TriggerDefinitionFactory, TriggerFactory
+        from flows.models.events import Event
+
+        event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
+        trigger_def = TriggerDefinitionFactory(event=event, flow_definition=cancel_flow)
+        # Trigger scoped to stage1 — should NOT fire because condition is at stage2
+        TriggerFactory(
+            trigger_definition=trigger_def,
+            obj=self.character,
+            source_condition=condition_instance,
+            source_stage=stage1,
+            scope=TriggerScope.PERSONAL,
+            additional_filter_condition={},
+        )
+
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="physical",
+            source=DamageSource(type="character", ref=None),
         )
         result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
         self.assertFalse(result.cancelled)
