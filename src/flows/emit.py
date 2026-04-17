@@ -29,14 +29,24 @@ def _dispatch(
     context on that stack (enforcing the recursion cap). Otherwise a
     fresh FlowStack is created for *target*.
 
+    Objects without a trigger_handler (plain ObjectDB without a reactive
+    typeclass) are silently skipped — they can have no triggers attached.
+
     Returns the stack that was used.
     """
+    handler = getattr(target, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+    if handler is None:
+        # No trigger infrastructure on this object — return a no-op stack
+        # so callers can still check was_cancelled() safely.
+        if parent_stack is not None:
+            return parent_stack
+        return FlowStack(owner=target, originating_event=event_name)
     if parent_stack is not None:
         with parent_stack.nested():
-            target.trigger_handler.dispatch(event_name, payload, flow_stack=parent_stack)
+            handler.dispatch(event_name, payload, flow_stack=parent_stack)
         return parent_stack
     stack = FlowStack(owner=target, originating_event=event_name)
-    target.trigger_handler.dispatch(event_name, payload, flow_stack=stack)
+    handler.dispatch(event_name, payload, flow_stack=stack)
     return stack
 
 

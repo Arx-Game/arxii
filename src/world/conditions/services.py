@@ -19,6 +19,14 @@ from django.db.models import Q, QuerySet, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
+from flows.emit import emit_event
+from flows.events.names import EventNames
+from flows.events.payloads import (
+    ConditionAppliedPayload,
+    ConditionPreApplyPayload,
+    ConditionRemovedPayload,
+    ConditionStageChangedPayload,
+)
 from world.checks.models import CheckType
 from world.conditions.constants import (
     ConditionInteractionOutcome,
@@ -531,7 +539,33 @@ def apply_condition(  # noqa: PLR0913
 
     Thin wrapper around _apply_single — builds a single-item context
     and delegates. For applying multiple conditions, use bulk_apply_conditions.
+
+    Emits reactive events:
+    - CONDITION_PRE_APPLY (cancellable)
+    - CONDITION_APPLIED (post-save, frozen)
     """
+    source = source_character or source_technique
+    pre_payload = ConditionPreApplyPayload(
+        target=target,
+        template=condition,
+        source=source,
+        stage=None,
+    )
+    stack = emit_event(
+        EventNames.CONDITION_PRE_APPLY,
+        pre_payload,
+        personal_target=target,
+        room=getattr(target, "location", None),  # noqa: GETATTR_LITERAL
+    )
+    if stack is not None and stack.was_cancelled():
+        return ApplyConditionResult(
+            success=False,
+            instance=None,
+            message="cancelled by trigger",
+            removed_conditions=[],
+            applied_conditions=[],
+        )
+
     ctx = _build_bulk_context([target], [condition])
     params = _ApplyConditionParams(
         target=target,
@@ -541,7 +575,21 @@ def apply_condition(  # noqa: PLR0913
         source_technique=source_technique,
         source_description=source_description,
     )
-    return _apply_single(target, condition, params, ctx)
+    result = _apply_single(target, condition, params, ctx)
+
+    if result.instance is not None:
+        emit_event(
+            EventNames.CONDITION_APPLIED,
+            ConditionAppliedPayload(
+                target=target,
+                instance=result.instance,
+                stage=result.instance.current_stage,
+            ),
+            personal_target=target,
+            room=getattr(target, "location", None),  # noqa: GETATTR_LITERAL
+        )
+
+    return result
 
 
 @transaction.atomic
@@ -570,6 +618,31 @@ def bulk_apply_conditions(  # noqa: PLR0913
 
     results: list[ApplyConditionResult] = []
     for target, template in applications:
+        source = source_character or source_technique
+        pre_payload = ConditionPreApplyPayload(
+            target=target,
+            template=template,
+            source=source,
+            stage=None,
+        )
+        stack = emit_event(
+            EventNames.CONDITION_PRE_APPLY,
+            pre_payload,
+            personal_target=target,
+            room=getattr(target, "location", None),  # noqa: GETATTR_LITERAL
+        )
+        if stack is not None and stack.was_cancelled():
+            results.append(
+                ApplyConditionResult(
+                    success=False,
+                    instance=None,
+                    message="cancelled by trigger",
+                    removed_conditions=[],
+                    applied_conditions=[],
+                )
+            )
+            continue
+
         params = _ApplyConditionParams(
             target=target,
             severity=severity,
@@ -579,6 +652,19 @@ def bulk_apply_conditions(  # noqa: PLR0913
             source_description=source_description,
         )
         result = _apply_single(target, template, params, ctx)
+
+        if result.instance is not None:
+            emit_event(
+                EventNames.CONDITION_APPLIED,
+                ConditionAppliedPayload(
+                    target=target,
+                    instance=result.instance,
+                    stage=result.instance.current_stage,
+                ),
+                personal_target=target,
+                room=getattr(target, "location", None),  # noqa: GETATTR_LITERAL
+            )
+
         results.append(result)
 
     return results
@@ -601,17 +687,45 @@ def remove_condition(
 
     Returns:
         True if condition was removed
+
+    Emits reactive events:
+    - CONDITION_REMOVED (post-delete, frozen)
     """
     instance = get_condition_instance(target, condition)
     if not instance:
         return False
 
+    instance_pk = instance.pk
+    source = instance.source_character or instance.source_technique
+
     if not remove_all_stacks and instance.stacks > 1:
         instance.stacks -= 1
         instance.save()
+        emit_event(
+            EventNames.CONDITION_REMOVED,
+            ConditionRemovedPayload(
+                target=target,
+                instance_id=instance_pk,
+                template=condition,
+                source=source,
+            ),
+            personal_target=target,
+            room=getattr(target, "location", None),  # noqa: GETATTR_LITERAL
+        )
         return True
 
     instance.delete()
+    emit_event(
+        EventNames.CONDITION_REMOVED,
+        ConditionRemovedPayload(
+            target=target,
+            instance_id=instance_pk,
+            template=condition,
+            source=source,
+        ),
+        personal_target=target,
+        room=getattr(target, "location", None),  # noqa: GETATTR_LITERAL
+    )
     return True
 
 
@@ -1347,6 +1461,19 @@ def advance_condition_severity(
         stage_changed = True
 
     instance.save(update_fields=["severity", "current_stage"])
+
+    if stage_changed:
+        emit_event(
+            EventNames.CONDITION_STAGE_CHANGED,
+            ConditionStageChangedPayload(
+                target=instance.target,
+                instance=instance,
+                old_stage=previous_stage,
+                new_stage=instance.current_stage,
+            ),
+            personal_target=instance.target,
+            room=getattr(instance.target, "location", None),  # noqa: GETATTR_LITERAL
+        )
 
     return SeverityAdvanceResult(
         previous_stage=previous_stage,
