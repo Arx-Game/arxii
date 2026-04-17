@@ -119,6 +119,7 @@ class FlowStepDefinition(SharedMemoryModel):
             FlowActionChoices.EMIT_FLOW_EVENT: self._execute_emit_flow_event,
             FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH: (self._execute_emit_flow_event_for_each),
             FlowActionChoices.CANCEL_EVENT: self._execute_cancel_event,
+            FlowActionChoices.MODIFY_PAYLOAD: self._execute_modify_payload,
         }
         handler = action_map.get(self.action)
         if handler:
@@ -472,6 +473,36 @@ class FlowStepDefinition(SharedMemoryModel):
             flow_execution.dispatch_result.cancelled = True
         if flow_execution.flow_stack is not None:
             flow_execution.flow_stack.mark_cancelled()
+        return flow_execution.get_next_child(self)
+
+    def _execute_modify_payload(
+        self,
+        flow_execution: "FlowExecution",
+    ) -> Optional["FlowStepDefinition"]:
+        """Mutate a field on the current payload dataclass.
+
+        Reads ``field``, ``op``, and ``value`` from step parameters. Ops are
+        ``set`` (replace), ``multiply``, and ``add``. POST events use frozen
+        dataclasses — ``setattr`` raises ``FrozenInstanceError``, which is the
+        desired behavior.
+        """
+        params = self._parameters_mapping()
+        payload = flow_execution.get_variable("payload")
+        field = params["field"]
+        op = params["op"]
+        value = params["value"]
+
+        current = getattr(payload, field)  # noqa: GETATTR_LITERAL — payload field by name
+        if op == "set":  # noqa: STRING_LITERAL — internal op protocol, not a model identifier
+            new_value = value
+        elif op == "multiply":  # noqa: STRING_LITERAL — internal op protocol, not a model identifier
+            new_value = current * value
+        elif op == "add":  # noqa: STRING_LITERAL — internal op protocol, not a model identifier
+            new_value = current + value
+        else:
+            msg = f"Unknown modify_payload op: {op}"
+            raise ValueError(msg)
+        setattr(payload, field, new_value)  # noqa: GETATTR_LITERAL — payload field by name
         return flow_execution.get_next_child(self)
 
     def __str__(self) -> str:
