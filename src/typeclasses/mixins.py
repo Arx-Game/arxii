@@ -1,7 +1,9 @@
+from functools import cached_property
 from typing import TYPE_CHECKING, Self, Union
 
 from flows.object_states.base_state import BaseState
 from flows.scene_data_manager import SceneDataManager
+from flows.trigger_handler import TriggerHandler
 from flows.trigger_registry import TriggerRegistry
 
 if TYPE_CHECKING:
@@ -35,6 +37,11 @@ class ObjectParent:
         context: "SceneDataManager",
     ) -> BaseState:
         return self.state_class(obj=self, context=context)
+
+    @cached_property
+    def trigger_handler(self: Union[Self, "DefaultObject"]) -> TriggerHandler:
+        """Populate-once cache of active triggers for this object."""
+        return TriggerHandler(owner=self)
 
     @property
     def trigger_registry(self: Union[Self, "DefaultObject"]) -> TriggerRegistry | None:
