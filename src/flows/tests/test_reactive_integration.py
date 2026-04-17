@@ -448,3 +448,75 @@ class StageSpecificVulnerabilityTest(TestCase):
         result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
         self.assertFalse(result.cancelled)
         self.assertEqual(result.fired, [])
+
+
+# ---------------------------------------------------------------------------
+# Task 35: cross-character specificity (Tests 8-9)
+# ---------------------------------------------------------------------------
+
+
+class BondedEnemyRetaliationTest(TestCase):
+    """Test 8: Bonded-enemy retaliation — fires only against specific bonded foes.
+
+    Uses self.bonded_enemies on the defender (a plain list attribute) and the
+    'in' operator to match the attacker's pk.
+    """
+
+    def setUp(self):
+        self.defender = CharacterFactory()
+        self.defender.location = _create_room()
+        self.bonded_attacker = CharacterFactory()
+        self.other_attacker = CharacterFactory()
+
+        # Install bonded_enemies list on defender for self-reference in filter
+        self.defender.bonded_enemies = [self.bonded_attacker.pk]
+
+        cancel_flow = _make_cancel_flow()
+        # Filter: source.ref.pk in self.bonded_enemies
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            scope=TriggerScope.PERSONAL,
+            filter_condition={
+                "path": "source.ref.pk",
+                "op": "in",
+                "value": "self.bonded_enemies",
+            },
+            flow_definition=cancel_flow,
+            target=self.defender,
+        )
+
+    def test_hit_bonded_enemy_fires(self):
+        payload = DamagePreApplyPayload(
+            target=self.defender,
+            amount=10,
+            damage_type="physical",
+            source=DamageSource(type="character", ref=self.bonded_attacker),
+        )
+        result = self.defender.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        self.assertTrue(result.cancelled)
+
+    def test_near_miss_unbound_attacker_passes(self):
+        payload = DamagePreApplyPayload(
+            target=self.defender,
+            amount=10,
+            damage_type="physical",
+            source=DamageSource(type="character", ref=self.other_attacker),
+        )
+        result = self.defender.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        self.assertFalse(result.cancelled)
+        self.assertEqual(result.fired, [])
+
+
+class CovenantAllegianceFilterTest(TestCase):
+    """Test 9: Covenant-allegiance filter — fires on outsider attackers, not intra-covenant.
+
+    Skipped: covenant relationship model does not yet exist.
+    Retaliation filter `attacker.covenant != self.covenant` requires a covenant
+    attribute on Character/ObjectDB which is not yet wired.
+    """
+
+    def test_covenant_filter_skipped(self):
+        self.skipTest(
+            "Covenant model not yet built; attacker.covenant path unresolvable. "
+            "Implement when covenant system is added."
+        )
