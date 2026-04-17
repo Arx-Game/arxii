@@ -20,6 +20,8 @@ ALLOWED_MIGRATIONS: set[str] = {
     "world/scenes/migrations/0014_populate_persona_character_sheet.py",
     # Data migration: backfills RosterEntry.character_sheet FK from character chain
     "world/roster/migrations/0003_populate_roster_entry_character_sheet.py",
+    # Data migration: seeds Event catalog (system configuration for reactive layer)
+    "flows/migrations/0002_mvp_events.py",
 }
 
 # Patterns that suggest seed data in migrations
