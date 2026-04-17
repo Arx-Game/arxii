@@ -18,6 +18,7 @@ from evennia import default_cmds
 
 from commands.account.account_info import CmdAccount
 from commands.account.character_switching import CmdCharacters, CmdIC
+from commands.account.prompt_reply import CmdPromptReply
 from commands.account.sheet import CmdSheet
 from commands.door import CmdLock, CmdUnlock
 from commands.evennia_overrides.builder import CmdDig, CmdLink, CmdOpen, CmdUnlink
@@ -108,6 +109,7 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         self.add(CmdAccount())
         self.add(CmdSheet())
         self.add(CmdPage())
+        self.add(CmdPromptReply())
 
 
 class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):
