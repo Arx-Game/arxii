@@ -1,22 +1,59 @@
-"""Reactive scars for perception events (Phase 10, Task 40, Tests 19-20).
+"""Reactive scars for magic and perception events (Phase 10, Tasks 40-41).
 
-Tests verify scar-decoration of examined output via the reactive layer.
-Both tests are skipped: ExaminedPayload is frozen (immutable), so a scar
-cannot mutate the result in-place. Implementing these tests requires either:
+Task 40 (Tests 19-20): Perception scars — skipped (ExaminedPayload frozen).
+Task 41 (Tests 21-22): Affinity/resonance/property layering.
 
-  1. Making ExaminedPayload mutable (remove frozen=True), OR
-  2. Wiring the EXAMINE_PRE event to a mutable pre-payload, having the scar
-     modify a staging dict before ExaminedPayload is constructed, OR
-  3. Adding a post-construction decoration hook that the trigger layer can
-     call on the result object.
+Tests 21-22 use SimpleNamespace stubs for the Technique ref because the real
+affinity path (technique.gift.resonances → affinity) crosses an M2M boundary
+that the filter DSL cannot traverse. The stub strategy mirrors Tasks 33-36.
 
-Until one of those design decisions is made, the tests are documented here
-so the gap is visible and the intent is preserved.
-
-See flows/events/payloads.py — ExaminedPayload is @dataclass(frozen=True).
+Test 22 is skipped: Technique has no properties M2M.
 """
 
+from types import SimpleNamespace
+
 from django.test import TestCase
+from evennia.objects.models import ObjectDB
+
+from evennia_extensions.factories import CharacterFactory
+from flows.constants import TriggerScope
+from flows.consts import FlowActionChoices
+from flows.events.names import EventNames
+from flows.events.payloads import DamagePreApplyPayload, DamageSource
+from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
+from world.conditions.factories import ReactiveConditionFactory
+
+
+def _create_room(key: str = "TestRoom") -> ObjectDB:
+    return ObjectDB.objects.create(
+        db_key=key,
+        db_typeclass_path="typeclasses.rooms.Room",
+    )
+
+
+def _make_cancel_flow():
+    """Return a FlowDefinition with a single CANCEL_EVENT step."""
+    flow = FlowDefinitionFactory()
+    FlowStepDefinitionFactory(
+        flow=flow,
+        parent_id=None,
+        action=FlowActionChoices.CANCEL_EVENT,
+        parameters={},
+    )
+    return flow
+
+
+def _source_technique_with_affinity(affinity_name: str):
+    """Return a DamageSource(type='technique') with stub ref.affinity attribute."""
+    ref = SimpleNamespace(affinity=affinity_name)
+    return DamageSource(type="technique", ref=ref)
+
+
+def _source_technique_with_resonance(resonance_name: str):
+    """Return a DamageSource(type='technique') with stub ref.resonance attribute."""
+    ref = SimpleNamespace(resonance=resonance_name)
+    return DamageSource(type="technique", ref=ref)
+
 
 # ---------------------------------------------------------------------------
 # Task 40: Examine / perception scars (Tests 19-20)
@@ -92,4 +129,134 @@ class SoulSightScarTest(TestCase):
             "Additionally, persona-type property filtering in the examine payload is "
             "not yet wired. Two design gaps must close before this test can run. "
             "See flows/events/payloads.py and Task 40 notes."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Task 41 (Tests 21-22): Affinity/resonance/property layering
+# ---------------------------------------------------------------------------
+
+
+class AffinityBroadVsResonanceNarrowTest(TestCase):
+    """Test 21: Affinity-broad vs resonance-narrow filter discrimination.
+
+    Two scars on the same character:
+      - A broad ward: blocks any technique whose ``source.ref.affinity == "abyssal"``.
+      - A narrow ward: blocks only when ``source.ref.resonance == "shadow"``.
+
+    The affinity filter is evaluated via filter path ``source.ref.affinity``.
+    The resonance filter is evaluated via filter path ``source.ref.resonance``.
+    Both use SimpleNamespace stubs because the real DB path (technique → gift →
+    resonances M2M → affinity) crosses an M2M that the filter DSL cannot traverse.
+    """
+
+    def setUp(self):
+        self.character = CharacterFactory()
+        self.character.location = _create_room("AffinityRoom21")
+
+        # Broad affinity ward: cancels any abyssal technique
+        self.broad_cancel = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            scope=TriggerScope.PERSONAL,
+            filter_condition={"path": "source.ref.affinity", "op": "==", "value": "abyssal"},
+            flow_definition=self.broad_cancel,
+            target=self.character,
+        )
+
+    def test_hit_affinity_broad_fires_on_abyssal(self):
+        """Abyssal affinity matches the broad ward — dispatch is cancelled."""
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="arcane",
+            source=_source_technique_with_affinity("abyssal"),
+        )
+        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        self.assertTrue(result.cancelled)
+        self.assertTrue(len(result.fired) > 0)
+
+    def test_near_miss_affinity_broad_misses_celestial(self):
+        """Celestial affinity does not match the abyssal ward — passes through."""
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="arcane",
+            source=_source_technique_with_affinity("celestial"),
+        )
+        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        self.assertFalse(result.cancelled)
+        self.assertEqual(result.fired, [])
+
+    def test_hit_resonance_narrow_fires_on_shadow(self):
+        """Resonance-narrow filter fires only when resonance == 'shadow'."""
+        # Add a resonance-narrow ward to the character
+        narrow_cancel = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            scope=TriggerScope.PERSONAL,
+            filter_condition={"path": "source.ref.resonance", "op": "==", "value": "shadow"},
+            flow_definition=narrow_cancel,
+            target=self.character,
+        )
+        # Reset handler so it picks up the new trigger
+        self.character.trigger_handler._populated = False
+
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="arcane",
+            source=_source_technique_with_resonance("shadow"),
+        )
+        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        self.assertTrue(result.cancelled)
+
+    def test_near_miss_resonance_narrow_misses_flame(self):
+        """Non-shadow resonance does not match the narrow ward."""
+        narrow_cancel = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            scope=TriggerScope.PERSONAL,
+            filter_condition={"path": "source.ref.resonance", "op": "==", "value": "shadow"},
+            flow_definition=narrow_cancel,
+            target=self.character,
+        )
+        self.character.trigger_handler._populated = False
+
+        payload = DamagePreApplyPayload(
+            target=self.character,
+            amount=10,
+            damage_type="arcane",
+            source=_source_technique_with_resonance("flame"),
+        )
+        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        # No affinity match (celestial) and no resonance match (flame != shadow)
+        self.assertFalse(result.cancelled)
+        self.assertEqual(result.fired, [])
+
+
+class PropertyTaggedTechniqueTest(TestCase):
+    """Test 22: Property-tagged technique — scar fires when technique carries a Property.
+
+    Skipped: Technique model has no ``properties`` M2M field. The ``has_property``
+    filter path ``source.ref.properties`` is unresolvable until a Technique → Property
+    M2M is added to ``world/magic/models.py``.
+
+    Intent: a scar with filter ``{path: 'source.ref', op: 'has_property', value: 'cursed'}``
+    should fire on techniques that carry the ``cursed`` Property tag, and NOT fire on
+    techniques without it. Implement when Technique gains a ``properties`` M2M.
+    """
+
+    def test_technique_with_property_fires_scar(self):
+        self.skipTest(
+            "Technique model has no 'properties' M2M field. "
+            "Add Technique.properties M2M to world.mechanics.Property, then implement "
+            "this test using has_property filter op. See world/magic/models.py:Technique."
+        )
+
+    def test_near_miss_technique_without_property_does_not_fire(self):
+        self.skipTest(
+            "Technique model has no 'properties' M2M field. "
+            "Add Technique.properties M2M to world.mechanics.Property, then implement "
+            "this test using has_property filter op. See world/magic/models.py:Technique."
         )
