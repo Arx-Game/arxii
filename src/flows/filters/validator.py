@@ -38,27 +38,33 @@ def validate_filter_schema(filter_spec: dict | None, *, event_name: str) -> None
         msg = f"Unknown event '{event_name}'"
         raise ValidationError(msg)
 
-    _walk(filter_spec, payload_cls)
+    _walk(filter_spec, payload_cls, event_name=event_name)
 
 
-def _walk(spec: dict, payload_cls: type) -> None:
+def _walk(spec: dict, payload_cls: type, *, event_name: str) -> None:
     """Recursively walk filter tree, validating leaf paths."""
-    if OP_AND in spec or OP_OR in spec:
-        for child in spec.get(OP_AND, spec.get(OP_OR, [])):
-            _walk(child, payload_cls)
+    if OP_AND in spec:
+        children = spec[OP_AND]
+    elif OP_OR in spec:
+        children = spec[OP_OR]
+    else:
+        children = None
+    if children is not None:
+        for child in children:
+            _walk(child, payload_cls, event_name=event_name)
         return
     if OP_NOT in spec:
-        _walk(spec[OP_NOT], payload_cls)
+        _walk(spec[OP_NOT], payload_cls, event_name=event_name)
         return
     path = spec.get(OP_PATH)
     if path is None:
         return
     if path.startswith(SELF_PREFIX):
         return
-    _check_path(path, payload_cls)
+    _check_path(path, payload_cls, event_name=event_name)
 
 
-def _check_path(path: str, payload_cls: type) -> None:
+def _check_path(path: str, payload_cls: type, *, event_name: str) -> None:
     """Check that first dotted part of path is a field in payload_cls.
 
     Deeper parts traverse runtime attributes (model instances). We don't
@@ -68,7 +74,8 @@ def _check_path(path: str, payload_cls: type) -> None:
     field_names = {f.name for f in dataclasses.fields(payload_cls)}
     if parts[0] not in field_names:
         msg = (
-            f"Filter path '{path}': '{parts[0]}' is not a field of "
-            f"{payload_cls.__name__} (known fields: {sorted(field_names)})"
+            f"Filter path '{path}' for event '{event_name}': '{parts[0]}' is not "
+            f"a field of {payload_cls.__name__} "
+            f"(known fields: {sorted(field_names)})"
         )
         raise ValidationError(msg)

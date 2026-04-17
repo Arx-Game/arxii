@@ -42,3 +42,20 @@ class FilterValidatorTests(TestCase):
         """self.* paths refer to handler owner, not payload; skipped."""
         f = {"path": "self.covenant", "op": "==", "value": "iron"}
         validate_filter_schema(f, event_name="damage_pre_apply")
+
+    def test_nested_or_validates_children(self) -> None:
+        """Invalid path in nested or clause should raise."""
+        f = {
+            "or": [
+                {"path": "damage_type", "op": "==", "value": "fire"},
+                {"path": "bogus_field", "op": "==", "value": "x"},
+            ]
+        }
+        with self.assertRaises(ValidationError):
+            validate_filter_schema(f, event_name="damage_pre_apply")
+
+    def test_not_validates_child(self) -> None:
+        """Invalid path inside not clause should raise."""
+        f = {"not": {"path": "bogus_field", "op": "==", "value": "x"}}
+        with self.assertRaises(ValidationError):
+            validate_filter_schema(f, event_name="damage_pre_apply")
