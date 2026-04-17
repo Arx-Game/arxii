@@ -37,6 +37,7 @@ class TriggerHandler:
         # Evennia startup, before the flows app registry is ready.
         from flows.models.triggers import Trigger  # noqa: PLC0415
 
+        self._by_event.clear()
         qs = Trigger.objects.filter(obj=self.owner).select_related(
             "trigger_definition__event",
             "trigger_definition__flow_definition",
