@@ -1,9 +1,11 @@
 from functools import cached_property
 from typing import cast
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from flows.constants import TriggerScope
 from flows.flow_event import FlowEvent
 from flows.helpers.logic import resolve_self_placeholders
 from flows.models.events import Event
@@ -86,6 +88,39 @@ class Trigger(SharedMemoryModel):
         null=True,
         help_text=("Optional JSON condition to further refine when this trigger activates."),
     )
+    source_condition = models.ForeignKey(
+        "conditions.ConditionInstance",
+        on_delete=models.CASCADE,
+        related_name="triggers",
+        help_text="Condition that installed this trigger. Required.",
+    )
+    source_stage = models.ForeignKey(
+        "conditions.ConditionStage",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="stage_triggers",
+        help_text="If set, active only while source_condition is at this stage.",
+    )
+    scope = models.CharField(
+        max_length=16,
+        choices=TriggerScope.choices,
+        help_text="Dispatch scope - PERSONAL (subject) or ROOM (location).",
+    )
+
+    def clean(self) -> None:
+        super().clean()
+        if self.source_stage and self.source_condition:
+            # ConditionStage and ConditionInstance both FK to ConditionTemplate
+            # via the `condition` field.
+            if self.source_stage.condition_id != self.source_condition.condition_id:
+                raise ValidationError(
+                    {
+                        "source_stage": (
+                            "source_stage must belong to source_condition's ConditionTemplate"
+                        ),
+                    }
+                )
 
     @cached_property
     def trigger_data_items(self) -> list["TriggerData"]:
