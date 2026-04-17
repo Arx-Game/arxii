@@ -80,3 +80,21 @@ class FilterEvaluatorTests(TestCase):
         payload = FakePayload(target=None, damage_type="fire", amount=10)
         self.assertTrue(evaluate_filter(None, payload, self_ref=None))
         self.assertTrue(evaluate_filter({}, payload, self_ref=None))
+
+    def test_self_placeholder_on_path(self) -> None:
+        owner = SimpleNamespace(covenant="iron")
+        payload = SimpleNamespace(attacker=SimpleNamespace(covenant="iron"))
+        f = {"path": "self.covenant", "op": "==", "value": "iron"}
+        self.assertTrue(evaluate_filter(f, payload, self_ref=owner))
+
+    def test_unknown_operator_raises(self) -> None:
+        payload = FakePayload(target=None, damage_type="fire", amount=10)
+        f = {"path": "damage_type", "op": "~=", "value": "fire"}
+        with self.assertRaises(FilterPathError):
+            evaluate_filter(f, payload, self_ref=None)
+
+    def test_has_property_missing_method_raises(self) -> None:
+        payload = SimpleNamespace(attacker=SimpleNamespace())
+        f = {"path": "attacker", "op": "has_property", "value": "anything"}
+        with self.assertRaises(FilterPathError):
+            evaluate_filter(f, payload, self_ref=None)
