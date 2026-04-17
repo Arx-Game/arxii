@@ -11,6 +11,7 @@ from collections.abc import Iterator
 import contextlib
 from typing import TYPE_CHECKING, Any
 
+from flows.consts import FlowState
 from flows.flow_execution import FlowExecution
 from flows.scene_data_manager import SceneDataManager
 from flows.trigger_registry import TriggerRegistry
@@ -133,7 +134,7 @@ class FlowStack:
 
         Each executed step is recorded in `step_history`.
         """
-        while flow_execution.current_step:
+        while flow_execution.current_step and flow_execution.state == FlowState.RUNNING:
             self.record_step_execution(flow_execution.current_step)
             flow_execution.execute_current_step()
 

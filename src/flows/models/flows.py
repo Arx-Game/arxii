@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING, Any, Optional, cast
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from flows.consts import ITEM_REF, OPERATOR_MAP, RESULT_VARIABLE_KEY, FlowActionChoices
+from flows.consts import ITEM_REF, OPERATOR_MAP, RESULT_VARIABLE_KEY, FlowActionChoices, FlowState
+from flows.execution.prompts import register_pending_prompt
 from flows.flow_event import FlowEvent
 from flows.helpers.logic import resolve_modifier
 
@@ -120,6 +121,7 @@ class FlowStepDefinition(SharedMemoryModel):
             FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH: (self._execute_emit_flow_event_for_each),
             FlowActionChoices.CANCEL_EVENT: self._execute_cancel_event,
             FlowActionChoices.MODIFY_PAYLOAD: self._execute_modify_payload,
+            FlowActionChoices.PROMPT_PLAYER: self._execute_prompt_player,
         }
         handler = action_map.get(self.action)
         if handler:
@@ -504,6 +506,45 @@ class FlowStepDefinition(SharedMemoryModel):
             raise ValueError(msg)
         setattr(payload, field, new_value)  # noqa: GETATTR_LITERAL — payload field by name
         return flow_execution.get_next_child(self)
+
+    def _execute_prompt_player(
+        self,
+        flow_execution: "FlowExecution",
+    ) -> Optional["FlowStepDefinition"]:
+        """Suspend the flow until the player responds to a prompt.
+
+        Registers a pending prompt for the account resolved from ``params["account"]``.
+        The returned Deferred fires when ``resolve_pending_prompt`` is called; the
+        ``_resume`` callback sets the result variable and resumes the flow.
+
+        The next step is pre-positioned as ``current_step`` so that when the
+        ``FlowStack.execute_flow`` loop restarts (after ``state`` is set back to
+        ``RUNNING``), it picks up at the correct place.
+        """
+        params = self._parameters_mapping()
+        account = flow_execution.resolve_flow_reference(params["account"])  # noqa: STRING_LITERAL — parameter key, not a model identifier
+        result_variable = params["result_variable"]  # noqa: STRING_LITERAL — parameter key, not a model identifier
+        default_answer = params.get("default_answer")
+
+        prompt_key = f"{flow_execution.flow_definition.pk}:{id(flow_execution)}:{self.pk}"
+
+        deferred = register_pending_prompt(
+            account_id=account.pk,
+            prompt_key=prompt_key,
+            default_answer=default_answer,
+        )
+
+        next_step = flow_execution.get_next_child(self)
+
+        def _resume(answer: object) -> None:
+            flow_execution.variable_mapping[result_variable] = answer
+            flow_execution.state = FlowState.RUNNING
+            flow_execution.flow_stack.execute_flow(flow_execution)
+
+        deferred.addCallback(_resume)
+
+        flow_execution.state = FlowState.SUSPENDED
+        return next_step
 
     def __str__(self) -> str:
         return f"{self.flow.name} - Step: {self.pk} ({self.action})"
