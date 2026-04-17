@@ -82,6 +82,46 @@ class ObjectParent:
             return state.get_display_name(looker_state, **kwargs)
         return super().get_display_name(looker, **kwargs)
 
+    def at_examined(self: Union[Self, "DefaultObject"], observer: "DefaultObject") -> bool:
+        """Called when *observer* examines *self*.
+
+        Emits EXAMINE_PRE (mutable — lets listeners veto/modify), then
+        EXAMINED (frozen — post-event). Returns False if a reactive trigger
+        cancelled the examine; callers should honour the return value.
+        """
+        from flows.emit import emit_event
+        from flows.events.names import EventNames
+        from flows.events.payloads import ExaminedPayload, ExaminePrePayload
+
+        pre = ExaminePrePayload(observer=observer, target=self)
+        stack = emit_event(
+            EventNames.EXAMINE_PRE,
+            pre,
+            personal_target=self,
+            room=self.location,
+        )
+        if stack is not None and stack.was_cancelled():
+            return False
+
+        post = ExaminedPayload(observer=observer, target=self, result=None)
+        emit_event(
+            EventNames.EXAMINED,
+            post,
+            personal_target=self,
+            room=self.location,
+        )
+        return True
+
+    def return_appearance(self, looker: "DefaultObject | None", **kwargs) -> str:
+        """Return description string, after running the examine hook.
+
+        If a reactive trigger cancels the examine, returns an empty string
+        so that the calling command shows nothing (or its own fallback).
+        """
+        if looker is not None and not self.at_examined(looker):
+            return ""
+        return super().return_appearance(looker, **kwargs)  # type: ignore[misc]
+
     def at_post_move(self, source_location, move_type="move", **kwargs):
         """Register or unregister triggers when moving between rooms."""
         try:
