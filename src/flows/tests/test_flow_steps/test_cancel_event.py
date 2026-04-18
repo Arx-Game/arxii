@@ -4,9 +4,9 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
+from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.emit import emit_event
-from flows.events.names import EventNames
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.conditions.factories import ReactiveConditionFactory
@@ -33,7 +33,7 @@ class CancelEventStepTests(TestCase):
             parameters={},
         )
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             flow_definition=flow,
             target=character,
         )
@@ -43,5 +43,5 @@ class CancelEventStepTests(TestCase):
             damage_type="fire",
             source=DamageSource(type="character", ref=None),
         )
-        stack = emit_event(EventNames.DAMAGE_PRE_APPLY, payload, location=room)
+        stack = emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=room)
         self.assertTrue(stack.was_cancelled())

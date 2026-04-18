@@ -22,8 +22,8 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
+from flows.constants import EventName
 from flows.consts import FlowActionChoices
-from flows.events.names import EventNames
 from flows.events.payloads import (
     ConditionAppliedPayload,
     ConditionPreApplyPayload,
@@ -122,7 +122,7 @@ class ConditionPreApplyEmissionTest(TestCase):
             svc_mod.emit_event = original
 
         names = [n for n, _ in captured]
-        self.assertIn(EventNames.CONDITION_PRE_APPLY, names)
+        self.assertIn(EventName.CONDITION_PRE_APPLY, names)
 
     def test_pre_apply_payload_correct(self) -> None:
         target = _target_in_room()
@@ -134,7 +134,7 @@ class ConditionPreApplyEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.CONDITION_PRE_APPLY:
+            if name == EventName.CONDITION_PRE_APPLY:
                 captured.append(payload)
             return original(name, payload, **kw)
 
@@ -160,7 +160,7 @@ class ConditionPreApplyEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def ordering(name, payload, **kw):
-            if name in (EventNames.CONDITION_PRE_APPLY, EventNames.CONDITION_APPLIED):
+            if name in (EventName.CONDITION_PRE_APPLY, EventName.CONDITION_APPLIED):
                 order.append(name)
             return original(name, payload, **kw)
 
@@ -170,11 +170,11 @@ class ConditionPreApplyEmissionTest(TestCase):
         finally:
             svc_mod.emit_event = original
 
-        self.assertIn(EventNames.CONDITION_PRE_APPLY, order)
-        self.assertIn(EventNames.CONDITION_APPLIED, order)
+        self.assertIn(EventName.CONDITION_PRE_APPLY, order)
+        self.assertIn(EventName.CONDITION_APPLIED, order)
         self.assertLess(
-            order.index(EventNames.CONDITION_PRE_APPLY),
-            order.index(EventNames.CONDITION_APPLIED),
+            order.index(EventName.CONDITION_PRE_APPLY),
+            order.index(EventName.CONDITION_APPLIED),
         )
 
     def test_applied_payload_has_instance(self) -> None:
@@ -187,7 +187,7 @@ class ConditionPreApplyEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.CONDITION_APPLIED:
+            if name == EventName.CONDITION_APPLIED:
                 captured.append(payload)
             return original(name, payload, **kw)
 
@@ -217,7 +217,7 @@ class ConditionPreApplyCancellationTest(TestCase):
         template = ConditionTemplateFactory()
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.CONDITION_PRE_APPLY,
+            event_name=EventName.CONDITION_PRE_APPLY,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=target,
@@ -232,7 +232,7 @@ class ConditionPreApplyCancellationTest(TestCase):
         template = ConditionTemplateFactory()
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.CONDITION_PRE_APPLY,
+            event_name=EventName.CONDITION_PRE_APPLY,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=target,
@@ -249,7 +249,7 @@ class ConditionPreApplyCancellationTest(TestCase):
         template = ConditionTemplateFactory()
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.CONDITION_PRE_APPLY,
+            event_name=EventName.CONDITION_PRE_APPLY,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=target,
@@ -281,7 +281,7 @@ class ConditionRemovedEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.CONDITION_REMOVED:
+            if name == EventName.CONDITION_REMOVED:
                 captured.append(payload)
             return original(name, payload, **kw)
 
@@ -308,7 +308,7 @@ class ConditionRemovedEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.CONDITION_REMOVED:
+            if name == EventName.CONDITION_REMOVED:
                 fired.append(True)
             return original(name, payload, **kw)
 
@@ -356,7 +356,7 @@ class ConditionStageChangedEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.CONDITION_STAGE_CHANGED:
+            if name == EventName.CONDITION_STAGE_CHANGED:
                 captured.append(payload)
             return original(name, payload, **kw)
 
@@ -381,7 +381,7 @@ class ConditionStageChangedEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.CONDITION_STAGE_CHANGED:
+            if name == EventName.CONDITION_STAGE_CHANGED:
                 fired.append(True)
             return original(name, payload, **kw)
 
@@ -404,7 +404,7 @@ class ConditionStageChangedEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.CONDITION_STAGE_CHANGED:
+            if name == EventName.CONDITION_STAGE_CHANGED:
                 captured.append(payload)
             return original(name, payload, **kw)
 
@@ -434,7 +434,7 @@ class BulkApplyConditionsCancellationTest(TestCase):
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.CONDITION_PRE_APPLY,
+            event_name=EventName.CONDITION_PRE_APPLY,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=target1,
@@ -479,7 +479,7 @@ class BystanderConditionReactionTest(TestCase):
         # the target. `source` starts as None in apply_condition.
         mark_flow = _make_set_field_flow("source", "BYSTANDER_SAW")
         ReactiveConditionFactory(
-            event_name=EventNames.CONDITION_PRE_APPLY,
+            event_name=EventName.CONDITION_PRE_APPLY,
             filter_condition=NOT_SELF_FILTER,
             flow_definition=mark_flow,
             target=self.watcher,
@@ -495,7 +495,7 @@ class BystanderConditionReactionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.CONDITION_PRE_APPLY:
+            if name == EventName.CONDITION_PRE_APPLY:
                 captured.append(payload)
             return original(name, payload, **kw)
 
@@ -519,7 +519,7 @@ class BystanderConditionReactionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.CONDITION_PRE_APPLY:
+            if name == EventName.CONDITION_PRE_APPLY:
                 captured.append(payload)
             return original(name, payload, **kw)
 

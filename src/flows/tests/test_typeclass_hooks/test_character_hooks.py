@@ -12,8 +12,8 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
+from flows.constants import EventName
 from flows.consts import FlowActionChoices
-from flows.events.names import EventNames
 from flows.events.payloads import AttackLandedPayload, MovePreDepartPayload
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.conditions.factories import ReactiveConditionFactory
@@ -75,7 +75,7 @@ class AtAttackedEmitsAttackLandedTests(TestCase):
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.ATTACK_LANDED,
+            event_name=EventName.ATTACK_LANDED,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=char,
@@ -97,7 +97,7 @@ class AtAttackedEmitsAttackLandedTests(TestCase):
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.ATTACK_LANDED,
+            event_name=EventName.ATTACK_LANDED,
             flow_definition=cancel_flow,
             target=room,
         )
@@ -128,7 +128,7 @@ class AtAttackedEmitsAttackLandedTests(TestCase):
         original = emit_mod.emit_event
 
         def capturing_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.ATTACK_LANDED:
+            if event_name == EventName.ATTACK_LANDED:
                 captured.append(payload)
             return original(event_name, payload, **kwargs)
 
@@ -176,7 +176,7 @@ class AtPreMoveEmitsMovePreDepartTests(TestCase):
         # Non-cancelling flow to confirm it fires without side effects
         sentinel_flow = _make_modify_flow("exit_used", "test_exit", op="set")
         ReactiveConditionFactory(
-            event_name=EventNames.MOVE_PRE_DEPART,
+            event_name=EventName.MOVE_PRE_DEPART,
             filter_condition=CHAR_SELF_FILTER,
             flow_definition=sentinel_flow,
             target=char,
@@ -202,7 +202,7 @@ class AtPreMoveEmitsMovePreDepartTests(TestCase):
         original = emit_mod.emit_event
 
         def capturing_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.MOVE_PRE_DEPART:
+            if event_name == EventName.MOVE_PRE_DEPART:
                 captured.append(payload)
             return original(event_name, payload, **kwargs)
 
@@ -231,7 +231,7 @@ class AtPreMoveCancelledByReactiveStackTests(TestCase):
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.MOVE_PRE_DEPART,
+            event_name=EventName.MOVE_PRE_DEPART,
             filter_condition=CHAR_SELF_FILTER,
             flow_definition=cancel_flow,
             target=char,
@@ -250,7 +250,7 @@ class AtPreMoveCancelledByReactiveStackTests(TestCase):
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.MOVE_PRE_DEPART,
+            event_name=EventName.MOVE_PRE_DEPART,
             flow_definition=cancel_flow,
             target=origin,
         )
@@ -299,4 +299,4 @@ class AtPreMoveSuperReturnsFalseTests(TestCase):
 
         self.assertFalse(result)
         # MOVE_PRE_DEPART should NOT have been emitted
-        self.assertNotIn(EventNames.MOVE_PRE_DEPART, captured_emits)
+        self.assertNotIn(EventName.MOVE_PRE_DEPART, captured_emits)

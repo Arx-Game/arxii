@@ -9,8 +9,8 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
+from flows.constants import EventName
 from flows.consts import FlowActionChoices
-from flows.events.names import EventNames
 from flows.events.payloads import ExaminedPayload, ExaminePrePayload
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.conditions.factories import ReactiveConditionFactory
@@ -85,7 +85,7 @@ class AtExaminedEmitsEventsTests(TestCase):
         original = emit_mod.emit_event
 
         def capturing_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.EXAMINE_PRE:
+            if event_name == EventName.EXAMINE_PRE:
                 captured.append(payload)
             return original(event_name, payload, **kwargs)
 
@@ -113,7 +113,7 @@ class AtExaminedEmitsEventsTests(TestCase):
         original = emit_mod.emit_event
 
         def capturing_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.EXAMINED:
+            if event_name == EventName.EXAMINED:
                 captured.append(payload)
             return original(event_name, payload, **kwargs)
 
@@ -150,9 +150,9 @@ class AtExaminedEmitsEventsTests(TestCase):
         finally:
             emit_mod.emit_event = original
 
-        self.assertIn(EventNames.EXAMINE_PRE, order)
-        self.assertIn(EventNames.EXAMINED, order)
-        self.assertLess(order.index(EventNames.EXAMINE_PRE), order.index(EventNames.EXAMINED))
+        self.assertIn(EventName.EXAMINE_PRE, order)
+        self.assertIn(EventName.EXAMINED, order)
+        self.assertLess(order.index(EventName.EXAMINE_PRE), order.index(EventName.EXAMINED))
 
     def test_self_targeted_trigger_fires_on_examine_pre(self) -> None:
         """A trigger on the examined object fires when at_examined is called."""
@@ -162,7 +162,7 @@ class AtExaminedEmitsEventsTests(TestCase):
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.EXAMINE_PRE,
+            event_name=EventName.EXAMINE_PRE,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=obj,
@@ -180,7 +180,7 @@ class AtExaminedEmitsEventsTests(TestCase):
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.EXAMINE_PRE,
+            event_name=EventName.EXAMINE_PRE,
             flow_definition=cancel_flow,
             target=room,
         )
@@ -205,7 +205,7 @@ class AtExaminedCancellationTests(TestCase):
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.EXAMINE_PRE,
+            event_name=EventName.EXAMINE_PRE,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=obj,
@@ -225,7 +225,7 @@ class AtExaminedCancellationTests(TestCase):
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.EXAMINE_PRE,
+            event_name=EventName.EXAMINE_PRE,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=obj,
@@ -236,7 +236,7 @@ class AtExaminedCancellationTests(TestCase):
         original = emit_mod.emit_event
 
         def capturing_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.EXAMINED:
+            if event_name == EventName.EXAMINED:
                 examined_fired.append(True)
             return original(event_name, payload, **kwargs)
 
@@ -261,7 +261,7 @@ class AtExaminedCancellationTests(TestCase):
         original = emit_mod.emit_event
 
         def counting_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.EXAMINED:
+            if event_name == EventName.EXAMINED:
                 examined_count[0] += 1
             return original(event_name, payload, **kwargs)
 
@@ -291,7 +291,7 @@ class ReturnAppearanceCancellationTests(TestCase):
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.EXAMINE_PRE,
+            event_name=EventName.EXAMINE_PRE,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=obj,

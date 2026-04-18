@@ -17,9 +17,9 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
+from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.emit import emit_event
-from flows.events.names import EventNames
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.conditions.factories import ReactiveConditionFactory
@@ -166,7 +166,7 @@ class AffinityBroadVsResonanceNarrowTest(TestCase):
         # Broad affinity ward: cancels any abyssal technique
         self.broad_cancel = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={
                 "and": [
                     SELF_FILTER,
@@ -184,7 +184,7 @@ class AffinityBroadVsResonanceNarrowTest(TestCase):
             damage_type="arcane",
             source=source,
         )
-        return emit_event(EventNames.DAMAGE_PRE_APPLY, payload, location=self.room)
+        return emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=self.room)
 
     def test_hit_affinity_broad_fires_on_abyssal(self):
         """Abyssal affinity matches the broad ward — dispatch is cancelled."""
@@ -201,7 +201,7 @@ class AffinityBroadVsResonanceNarrowTest(TestCase):
         # Add a resonance-narrow ward to the character
         narrow_cancel = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={
                 "and": [
                     SELF_FILTER,
@@ -220,7 +220,7 @@ class AffinityBroadVsResonanceNarrowTest(TestCase):
         """Non-shadow resonance does not match the narrow ward."""
         narrow_cancel = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={
                 "and": [
                     SELF_FILTER,

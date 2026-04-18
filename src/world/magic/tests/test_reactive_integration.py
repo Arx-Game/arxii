@@ -19,8 +19,8 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
+from flows.constants import EventName
 from flows.consts import FlowActionChoices
-from flows.events.names import EventNames
 from flows.events.payloads import (
     TechniqueAffectedPayload,
     TechniqueCastPayload,
@@ -110,7 +110,7 @@ class TechniquePreCastEmissionTest(TestCase):
             svc_mod.emit_event = original
 
         names = [n for n, _ in captured]
-        self.assertIn(EventNames.TECHNIQUE_PRE_CAST, names)
+        self.assertIn(EventName.TECHNIQUE_PRE_CAST, names)
 
     def test_pre_cast_payload_correct(self) -> None:
         captured: list[TechniquePreCastPayload] = []
@@ -120,7 +120,7 @@ class TechniquePreCastEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.TECHNIQUE_PRE_CAST:
+            if name == EventName.TECHNIQUE_PRE_CAST:
                 captured.append(payload)
             return original(name, payload, **kw)
 
@@ -148,7 +148,7 @@ class TechniquePreCastEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def ordering(name, payload, **kw):
-            if name in (EventNames.TECHNIQUE_PRE_CAST, EventNames.TECHNIQUE_CAST):
+            if name in (EventName.TECHNIQUE_PRE_CAST, EventName.TECHNIQUE_CAST):
                 order.append(name)
             return original(name, payload, **kw)
 
@@ -162,11 +162,11 @@ class TechniquePreCastEmissionTest(TestCase):
         finally:
             svc_mod.emit_event = original
 
-        self.assertIn(EventNames.TECHNIQUE_PRE_CAST, order)
-        self.assertIn(EventNames.TECHNIQUE_CAST, order)
+        self.assertIn(EventName.TECHNIQUE_PRE_CAST, order)
+        self.assertIn(EventName.TECHNIQUE_CAST, order)
         self.assertLess(
-            order.index(EventNames.TECHNIQUE_PRE_CAST),
-            order.index(EventNames.TECHNIQUE_CAST),
+            order.index(EventName.TECHNIQUE_PRE_CAST),
+            order.index(EventName.TECHNIQUE_CAST),
         )
 
     def test_cast_payload_has_result(self) -> None:
@@ -178,7 +178,7 @@ class TechniquePreCastEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.TECHNIQUE_CAST:
+            if name == EventName.TECHNIQUE_CAST:
                 captured.append(payload)
             return original(name, payload, **kw)
 
@@ -223,7 +223,7 @@ class TechniquePreCastCancellationTest(TestCase):
     def test_cancel_returns_not_confirmed(self) -> None:
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.TECHNIQUE_PRE_CAST,
+            event_name=EventName.TECHNIQUE_PRE_CAST,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=self.char,
@@ -242,7 +242,7 @@ class TechniquePreCastCancellationTest(TestCase):
     def test_cancel_does_not_deduct_anima(self) -> None:
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.TECHNIQUE_PRE_CAST,
+            event_name=EventName.TECHNIQUE_PRE_CAST,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=self.char,
@@ -261,7 +261,7 @@ class TechniquePreCastCancellationTest(TestCase):
     def test_technique_cast_not_emitted_on_cancel(self) -> None:
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.TECHNIQUE_PRE_CAST,
+            event_name=EventName.TECHNIQUE_PRE_CAST,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=self.char,
@@ -273,7 +273,7 @@ class TechniquePreCastCancellationTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.TECHNIQUE_CAST:
+            if name == EventName.TECHNIQUE_CAST:
                 cast_fired.append(True)
             return original(name, payload, **kw)
 
@@ -318,7 +318,7 @@ class TechniqueAffectedEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.TECHNIQUE_AFFECTED:
+            if name == EventName.TECHNIQUE_AFFECTED:
                 captured.append(payload)
             return original(name, payload, **kw)
 
@@ -343,7 +343,7 @@ class TechniqueAffectedEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.TECHNIQUE_AFFECTED:
+            if name == EventName.TECHNIQUE_AFFECTED:
                 captured.append(payload)
             return original(name, payload, **kw)
 
@@ -371,7 +371,7 @@ class TechniqueAffectedEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.TECHNIQUE_AFFECTED:
+            if name == EventName.TECHNIQUE_AFFECTED:
                 fired.append(True)
             return original(name, payload, **kw)
 
@@ -395,7 +395,7 @@ class TechniqueAffectedEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing(name, payload, **kw):
-            if name == EventNames.TECHNIQUE_AFFECTED:
+            if name == EventName.TECHNIQUE_AFFECTED:
                 captured.append(payload)
             return original(name, payload, **kw)
 

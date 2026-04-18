@@ -1,17 +1,15 @@
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from flows.events.names import EventNames
+from flows.constants import EventName
 from flows.factories import TriggerDefinitionFactory, TriggerFactory
-from flows.models.events import Event
 
 
 class TriggerFilterValidationTests(TestCase):
     def test_trigger_definition_unknown_path_rejected(self) -> None:
         """TriggerDefinition.clean() rejects filter with unknown path."""
-        event = Event.objects.get(name=EventNames.DAMAGE_APPLIED)
         trigger_def = TriggerDefinitionFactory.create(
-            event=event,
+            event_name=EventName.DAMAGE_APPLIED,
             base_filter_condition={"path": "bogus", "op": "==", "value": 1},
         )
         with self.assertRaises(ValidationError) as cm:
@@ -20,26 +18,23 @@ class TriggerFilterValidationTests(TestCase):
 
     def test_trigger_definition_known_path_accepted(self) -> None:
         """TriggerDefinition.clean() accepts filter with known path."""
-        event = Event.objects.get(name=EventNames.DAMAGE_APPLIED)
         trigger_def = TriggerDefinitionFactory.create(
-            event=event,
+            event_name=EventName.DAMAGE_APPLIED,
             base_filter_condition={"path": "damage_type", "op": "==", "value": "fire"},
         )
         trigger_def.full_clean()  # should not raise
 
     def test_trigger_definition_empty_condition_accepted(self) -> None:
         """TriggerDefinition.clean() accepts empty filter."""
-        event = Event.objects.get(name=EventNames.DAMAGE_APPLIED)
         trigger_def = TriggerDefinitionFactory.create(
-            event=event,
+            event_name=EventName.DAMAGE_APPLIED,
             base_filter_condition={},
         )
         trigger_def.full_clean()  # should not raise
 
     def test_trigger_unknown_path_rejected(self) -> None:
         """Trigger.clean() rejects filter with unknown path."""
-        event = Event.objects.get(name=EventNames.DAMAGE_APPLIED)
-        trigger_def = TriggerDefinitionFactory(event=event)
+        trigger_def = TriggerDefinitionFactory(event_name=EventName.DAMAGE_APPLIED)
         trigger = TriggerFactory(
             trigger_definition=trigger_def,
             additional_filter_condition={"path": "bogus", "op": "==", "value": 1},
@@ -50,8 +45,7 @@ class TriggerFilterValidationTests(TestCase):
 
     def test_trigger_known_path_accepted(self) -> None:
         """Trigger.clean() accepts filter with known path."""
-        event = Event.objects.get(name=EventNames.DAMAGE_APPLIED)
-        trigger_def = TriggerDefinitionFactory(event=event)
+        trigger_def = TriggerDefinitionFactory(event_name=EventName.DAMAGE_APPLIED)
         trigger = TriggerFactory(
             trigger_definition=trigger_def,
             additional_filter_condition={"path": "damage_type", "op": "==", "value": "fire"},
@@ -60,8 +54,7 @@ class TriggerFilterValidationTests(TestCase):
 
     def test_trigger_empty_condition_accepted(self) -> None:
         """Trigger.clean() accepts empty filter."""
-        event = Event.objects.get(name=EventNames.DAMAGE_APPLIED)
-        trigger_def = TriggerDefinitionFactory(event=event)
+        trigger_def = TriggerDefinitionFactory(event_name=EventName.DAMAGE_APPLIED)
         trigger = TriggerFactory(
             trigger_definition=trigger_def,
             additional_filter_condition={},
@@ -70,8 +63,7 @@ class TriggerFilterValidationTests(TestCase):
 
     def test_trigger_self_path_skipped(self) -> None:
         """Trigger.clean() skips validation of self.* paths."""
-        event = Event.objects.get(name=EventNames.DAMAGE_APPLIED)
-        trigger_def = TriggerDefinitionFactory(event=event)
+        trigger_def = TriggerDefinitionFactory(event_name=EventName.DAMAGE_APPLIED)
         trigger = TriggerFactory(
             trigger_definition=trigger_def,
             additional_filter_condition={"path": "self.unknown_attr", "op": "==", "value": 1},
@@ -80,8 +72,7 @@ class TriggerFilterValidationTests(TestCase):
 
     def test_trigger_nested_filter_with_and(self) -> None:
         """Trigger.clean() validates nested filters with 'and' operator."""
-        event = Event.objects.get(name=EventNames.DAMAGE_APPLIED)
-        trigger_def = TriggerDefinitionFactory(event=event)
+        trigger_def = TriggerDefinitionFactory(event_name=EventName.DAMAGE_APPLIED)
         trigger = TriggerFactory(
             trigger_definition=trigger_def,
             additional_filter_condition={
@@ -95,8 +86,7 @@ class TriggerFilterValidationTests(TestCase):
 
     def test_trigger_nested_filter_with_bad_path(self) -> None:
         """Trigger.clean() rejects nested filter with unknown path."""
-        event = Event.objects.get(name=EventNames.DAMAGE_APPLIED)
-        trigger_def = TriggerDefinitionFactory(event=event)
+        trigger_def = TriggerDefinitionFactory(event_name=EventName.DAMAGE_APPLIED)
         trigger = TriggerFactory(
             trigger_definition=trigger_def,
             additional_filter_condition={

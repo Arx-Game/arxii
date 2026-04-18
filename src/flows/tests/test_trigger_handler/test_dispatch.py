@@ -4,9 +4,9 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
+from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.emit import emit_event
-from flows.events.names import EventNames
 from flows.events.payloads import DamageAppliedPayload, DamageSource
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.conditions.factories import ReactiveConditionFactory
@@ -41,7 +41,7 @@ class DispatchTests(TestCase):
         room = _create_room()
         character.location = room
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_APPLIED,
+            event_name=EventName.DAMAGE_APPLIED,
             filter_condition={"path": "damage_type", "op": "==", "value": "fire"},
             target=character,
             flow_definition=_make_cancel_flow(),
@@ -53,7 +53,7 @@ class DispatchTests(TestCase):
             source=DamageSource(type="character", ref=None),
             hp_after=45,
         )
-        stack = emit_event(EventNames.DAMAGE_APPLIED, payload, location=room)
+        stack = emit_event(EventName.DAMAGE_APPLIED, payload, location=room)
         # Filter did not match → trigger did not fire → stack not cancelled.
         self.assertFalse(stack.was_cancelled())
 
@@ -62,7 +62,7 @@ class DispatchTests(TestCase):
         room = _create_room()
         character.location = room
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_APPLIED,
+            event_name=EventName.DAMAGE_APPLIED,
             filter_condition={"path": "damage_type", "op": "==", "value": "fire"},
             target=character,
             flow_definition=_make_cancel_flow(),
@@ -74,6 +74,6 @@ class DispatchTests(TestCase):
             source=DamageSource(type="character", ref=None),
             hp_after=45,
         )
-        stack = emit_event(EventNames.DAMAGE_APPLIED, payload, location=room)
+        stack = emit_event(EventName.DAMAGE_APPLIED, payload, location=room)
         # Filter matched → trigger fired → CANCEL_EVENT marked the stack cancelled.
         self.assertTrue(stack.was_cancelled())

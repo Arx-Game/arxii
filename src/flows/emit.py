@@ -27,7 +27,7 @@ def emit_event(
     """Dispatch ``event_name`` to every handler in ``location`` + contents.
 
     Args:
-        event_name: The event name, e.g. ``EventNames.DAMAGE_PRE_APPLY``.
+        event_name: The event name, e.g. ``EventName.DAMAGE_PRE_APPLY``.
         payload: A payload dataclass from ``flows.events.payloads``.
         location: The location whose ``trigger_handler`` and whose
             ``contents``' handlers are consulted.

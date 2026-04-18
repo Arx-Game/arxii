@@ -26,8 +26,8 @@ if TYPE_CHECKING:
 
     PerformCheckFn = Callable[..., CheckResult]
 
+from flows.constants import EventName
 from flows.emit import emit_event
-from flows.events.names import EventNames
 from flows.events.payloads import (
     AttackPreResolvePayload,
     CharacterIncapacitatedPayload,
@@ -611,7 +611,7 @@ def apply_damage_to_participant(
     )
     if room is not None:
         stack = emit_event(
-            EventNames.DAMAGE_PRE_APPLY,
+            EventName.DAMAGE_PRE_APPLY,
             pre_payload,
             location=room,
         )
@@ -659,7 +659,7 @@ def apply_damage_to_participant(
     )
     if room is not None:
         emit_event(
-            EventNames.DAMAGE_APPLIED,
+            EventName.DAMAGE_APPLIED,
             applied_payload,
             location=room,
         )
@@ -667,20 +667,20 @@ def apply_damage_to_participant(
         # --- Incapacitation / death gates ---
         if knockout_eligible:
             emit_event(
-                EventNames.CHARACTER_INCAPACITATED,
+                EventName.CHARACTER_INCAPACITATED,
                 CharacterIncapacitatedPayload(
                     character=character,
-                    source_event=EventNames.DAMAGE_PRE_APPLY,
+                    source_event=EventName.DAMAGE_PRE_APPLY,
                 ),
                 location=room,
             )
 
         if death_eligible or force_death:
             emit_event(
-                EventNames.CHARACTER_KILLED,
+                EventName.CHARACTER_KILLED,
                 CharacterKilledPayload(
                     character=character,
-                    source_event=EventNames.DAMAGE_PRE_APPLY,
+                    source_event=EventName.DAMAGE_PRE_APPLY,
                 ),
                 location=room,
             )
@@ -1047,7 +1047,7 @@ def resolve_npc_attack(
     )
     if room is not None:
         stack = emit_event(
-            EventNames.ATTACK_PRE_RESOLVE,
+            EventName.ATTACK_PRE_RESOLVE,
             pre_payload,
             location=room,
         )

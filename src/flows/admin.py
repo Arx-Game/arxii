@@ -3,7 +3,6 @@
 from django.contrib import admin
 
 from flows.models import (
-    Event,
     FlowDefinition,
     FlowStepDefinition,
     Trigger,
@@ -27,18 +26,12 @@ class FlowDefinitionAdmin(admin.ModelAdmin):
     inlines = [FlowStepDefinitionInline]
 
 
-@admin.register(Event)
-class EventAdmin(admin.ModelAdmin):
-    list_display = ["name", "label"]
-    search_fields = ["name", "label"]
-
-
 @admin.register(TriggerDefinition)
 class TriggerDefinitionAdmin(admin.ModelAdmin):
-    list_display = ["name", "event", "flow_definition", "priority"]
-    list_filter = ["event", "priority"]
+    list_display = ["name", "event_name", "flow_definition", "priority"]
+    list_filter = ["event_name", "priority"]
     search_fields = ["name"]
-    autocomplete_fields = ["event", "flow_definition"]
+    autocomplete_fields = ["flow_definition"]
 
 
 @admin.register(Trigger)

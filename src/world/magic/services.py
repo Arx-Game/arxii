@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 from django.utils import timezone
 
+from flows.constants import EventName
 from flows.emit import emit_event
-from flows.events.names import EventNames
 from flows.events.payloads import (
     TechniqueAffectedPayload,
     TechniqueCastPayload,
@@ -448,7 +448,7 @@ def use_technique(  # noqa: PLR0913, C901 — kw-only args are intentional, targ
     )
     if caster_room is not None:
         stack = emit_event(
-            EventNames.TECHNIQUE_PRE_CAST,
+            EventName.TECHNIQUE_PRE_CAST,
             pre_payload,
             location=caster_room,
         )
@@ -511,7 +511,7 @@ def use_technique(  # noqa: PLR0913, C901 — kw-only args are intentional, targ
     # --- TECHNIQUE_CAST (post-resolve, frozen) ---
     if caster_room is not None:
         emit_event(
-            EventNames.TECHNIQUE_CAST,
+            EventName.TECHNIQUE_CAST,
             TechniqueCastPayload(
                 caster=character,
                 technique=technique,
@@ -527,7 +527,7 @@ def use_technique(  # noqa: PLR0913, C901 — kw-only args are intentional, targ
         target_room = getattr(affected_target, "location", None)  # noqa: GETATTR_LITERAL
         if target_room is not None:
             emit_event(
-                EventNames.TECHNIQUE_AFFECTED,
+                EventName.TECHNIQUE_AFFECTED,
                 TechniqueAffectedPayload(
                     caster=character,
                     technique=technique,

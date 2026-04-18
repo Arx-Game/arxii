@@ -10,7 +10,6 @@ from flows.factories import (
     TriggerDefinitionFactory,
     TriggerFactory,
 )
-from flows.models.events import Event
 from world.conditions.constants import (
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
@@ -228,10 +227,9 @@ class _ReactiveConditionFactory:
         target=None,
         stage=None,
     ):
-        event = Event.objects.get(name=event_name)
         flow_def = flow_definition or FlowDefinitionFactory()
         trigger_def = TriggerDefinitionFactory(
-            event=event,
+            event_name=event_name,
             flow_definition=flow_def,
         )
         condition_kwargs = {}

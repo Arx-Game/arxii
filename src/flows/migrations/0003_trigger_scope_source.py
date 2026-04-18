@@ -24,7 +24,7 @@ def _noop(apps, schema_editor):
 class Migration(migrations.Migration):
     dependencies = [
         ("conditions", "0002_initial"),
-        ("flows", "0002_mvp_events"),
+        ("flows", "0001_initial"),
     ]
 
     operations = [

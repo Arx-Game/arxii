@@ -5,6 +5,7 @@ import factory.django as factory_django
 
 from evennia_extensions.factories import ObjectDBFactory
 from flows import models
+from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.flow_event import FlowEvent
 from flows.flow_execution import FlowExecution
@@ -47,22 +48,13 @@ class FlowStepDefinitionFactory(factory_django.DjangoModelFactory):
     parent_id = None
 
 
-class EventFactory(factory_django.DjangoModelFactory):
-    class Meta:
-        model = models.Event
-        django_get_or_create = ("name",)
-
-    name = factory.Sequence(lambda n: f"event_{n}")
-    label = factory.Sequence(lambda n: f"Event {n}")
-
-
 class TriggerDefinitionFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = models.TriggerDefinition
 
     name = factory.Sequence(lambda n: f"TriggerDef{n}")
     flow_definition = factory.SubFactory(FlowDefinitionFactory)
-    event = factory.SubFactory(EventFactory)
+    event_name = EventName.EXAMINED
     base_filter_condition = factory.LazyFunction(dict)
 
 

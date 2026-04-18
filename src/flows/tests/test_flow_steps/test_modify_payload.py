@@ -6,9 +6,9 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
+from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.emit import emit_event
-from flows.events.names import EventNames
 from flows.events.payloads import (
     DamageAppliedPayload,
     DamagePreApplyPayload,
@@ -39,7 +39,7 @@ class ModifyPayloadStepTests(TestCase):
             parameters={"field": "amount", "op": "multiply", "value": 2},
         )
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             flow_definition=flow,
             target=character,
             filter_condition={"path": "damage_type", "op": "==", "value": "fire"},
@@ -50,7 +50,7 @@ class ModifyPayloadStepTests(TestCase):
             damage_type="fire",
             source=DamageSource(type="character", ref=None),
         )
-        emit_event(EventNames.DAMAGE_PRE_APPLY, payload, location=room)
+        emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=room)
         self.assertEqual(payload.amount, 20)
 
     def test_modify_payload_set_op(self) -> None:
@@ -66,7 +66,7 @@ class ModifyPayloadStepTests(TestCase):
             parameters={"field": "amount", "op": "set", "value": 0},
         )
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             flow_definition=flow,
             target=character,
         )
@@ -76,7 +76,7 @@ class ModifyPayloadStepTests(TestCase):
             damage_type="fire",
             source=DamageSource(type="character", ref=None),
         )
-        emit_event(EventNames.DAMAGE_PRE_APPLY, payload, location=room)
+        emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=room)
         self.assertEqual(payload.amount, 0)
 
     def test_modify_payload_add_op(self) -> None:
@@ -92,7 +92,7 @@ class ModifyPayloadStepTests(TestCase):
             parameters={"field": "amount", "op": "add", "value": 5},
         )
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             flow_definition=flow,
             target=character,
         )
@@ -102,7 +102,7 @@ class ModifyPayloadStepTests(TestCase):
             damage_type="fire",
             source=DamageSource(type="character", ref=None),
         )
-        emit_event(EventNames.DAMAGE_PRE_APPLY, payload, location=room)
+        emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=room)
         self.assertEqual(payload.amount, 15)
 
     def test_modify_payload_rejects_frozen_post_event(self) -> None:
@@ -118,7 +118,7 @@ class ModifyPayloadStepTests(TestCase):
             parameters={"field": "amount_dealt", "op": "set", "value": 0},
         )
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_APPLIED,
+            event_name=EventName.DAMAGE_APPLIED,
             flow_definition=flow,
             target=character,
         )
@@ -130,4 +130,4 @@ class ModifyPayloadStepTests(TestCase):
             hp_after=45,
         )
         with self.assertRaises(dataclasses.FrozenInstanceError):
-            emit_event(EventNames.DAMAGE_APPLIED, payload, location=room)
+            emit_event(EventName.DAMAGE_APPLIED, payload, location=room)

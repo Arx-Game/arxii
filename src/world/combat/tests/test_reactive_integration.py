@@ -23,8 +23,8 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
+from flows.constants import EventName
 from flows.consts import FlowActionChoices
-from flows.events.names import EventNames
 from flows.events.payloads import (
     CharacterIncapacitatedPayload,
     CharacterKilledPayload,
@@ -129,7 +129,7 @@ class DamagePreApplyEmissionTest(TestCase):
         finally:
             svc_mod.emit_event = original
 
-        pre_events = [p for name, p in captured if name == EventNames.DAMAGE_PRE_APPLY]
+        pre_events = [p for name, p in captured if name == EventName.DAMAGE_PRE_APPLY]
         self.assertEqual(len(pre_events), 1)
         p = pre_events[0]
         self.assertIsInstance(p, DamagePreApplyPayload)
@@ -146,7 +146,7 @@ class DamagePreApplyEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.DAMAGE_PRE_APPLY:
+            if event_name == EventName.DAMAGE_PRE_APPLY:
                 captured.append(payload)
             return original(event_name, payload, **kwargs)
 
@@ -170,7 +170,7 @@ class DamagePreApplyEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.DAMAGE_PRE_APPLY:
+            if event_name == EventName.DAMAGE_PRE_APPLY:
                 captured.append(payload)
             return original(event_name, payload, **kwargs)
 
@@ -201,7 +201,7 @@ class DamagePreApplyCancellationTest(TestCase):
         cancel_flow = _make_cancel_flow()
 
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=character,
@@ -223,7 +223,7 @@ class DamagePreApplyCancellationTest(TestCase):
         cancel_flow = _make_cancel_flow()
 
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=character,
@@ -251,7 +251,7 @@ class DamageModifyPayloadTest(TestCase):
         # Modify: set amount to 5 even though we pass 10
         modify_flow = _make_set_amount_flow(5)
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition=SELF_FILTER,
             flow_definition=modify_flow,
             target=character,
@@ -282,7 +282,7 @@ class DamageAppliedEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.DAMAGE_APPLIED:
+            if event_name == EventName.DAMAGE_APPLIED:
                 captured.append(payload)
             return original(event_name, payload, **kwargs)
 
@@ -304,7 +304,7 @@ class DamageAppliedEmissionTest(TestCase):
         cancel_flow = _make_cancel_flow()
 
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=character,
@@ -317,7 +317,7 @@ class DamageAppliedEmissionTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.DAMAGE_APPLIED:
+            if event_name == EventName.DAMAGE_APPLIED:
                 captured_applied.append(payload)
             return original(event_name, payload, **kwargs)
 
@@ -349,7 +349,7 @@ class IncapacitationEventTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.CHARACTER_INCAPACITATED:
+            if event_name == EventName.CHARACTER_INCAPACITATED:
                 captured.append(payload)
             return original(event_name, payload, **kwargs)
 
@@ -373,7 +373,7 @@ class IncapacitationEventTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.CHARACTER_INCAPACITATED:
+            if event_name == EventName.CHARACTER_INCAPACITATED:
                 captured.append(payload)
             return original(event_name, payload, **kwargs)
 
@@ -405,7 +405,7 @@ class DeathEventTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.CHARACTER_KILLED:
+            if event_name == EventName.CHARACTER_KILLED:
                 captured.append(payload)
             return original(event_name, payload, **kwargs)
 
@@ -429,7 +429,7 @@ class DeathEventTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.CHARACTER_KILLED:
+            if event_name == EventName.CHARACTER_KILLED:
                 captured.append(payload)
             return original(event_name, payload, **kwargs)
 
@@ -450,7 +450,7 @@ class DeathEventTest(TestCase):
         original = svc_mod.emit_event
 
         def capturing_emit(event_name, payload, **kwargs):
-            if event_name == EventNames.CHARACTER_KILLED:
+            if event_name == EventName.CHARACTER_KILLED:
                 captured.append(payload)
             return original(event_name, payload, **kwargs)
 
@@ -517,7 +517,7 @@ class AttackPreResolveCancellationTest(TestCase):
         finally:
             svc_mod.emit_event = original
 
-        pre_events = [name for name, _ in captured if name == EventNames.ATTACK_PRE_RESOLVE]
+        pre_events = [name for name, _ in captured if name == EventName.ATTACK_PRE_RESOLVE]
         self.assertGreaterEqual(len(pre_events), 1)
 
     def test_attack_pre_resolve_cancellation_skips_damage(self) -> None:
@@ -530,7 +530,7 @@ class AttackPreResolveCancellationTest(TestCase):
         # on the character fires when the character is in the target list.
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.ATTACK_PRE_RESOLVE,
+            event_name=EventName.ATTACK_PRE_RESOLVE,
             filter_condition={"path": "targets", "op": "contains", "value": "self"},
             flow_definition=cancel_flow,
             target=character,
@@ -576,7 +576,7 @@ class TypeclassHookDualPathTest(TestCase):
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.ATTACK_LANDED,
+            event_name=EventName.ATTACK_LANDED,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=char,
@@ -604,7 +604,7 @@ class TypeclassHookDualPathTest(TestCase):
         finally:
             chars_mod.emit_event = original
 
-        self.assertIn(EventNames.ATTACK_LANDED, captured)
+        self.assertIn(EventName.ATTACK_LANDED, captured)
 
     def test_service_path_emits_damage_pre_apply_not_attack_landed(self) -> None:
         """apply_damage_to_participant emits DAMAGE_PRE_APPLY, not ATTACK_LANDED.
@@ -619,7 +619,7 @@ class TypeclassHookDualPathTest(TestCase):
         # Install a cancel scar on ATTACK_LANDED only
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.ATTACK_LANDED,
+            event_name=EventName.ATTACK_LANDED,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=character,
@@ -674,7 +674,7 @@ class DamageSourceDiscriminationScarVsWeaponTest(TestCase):
         """Install a ward that cancels ONLY when source.type == 'scar'."""
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={
                 "and": [
                     SELF_FILTER,
@@ -689,7 +689,7 @@ class DamageSourceDiscriminationScarVsWeaponTest(TestCase):
         """Install a ward that cancels ONLY when source.type == 'character'."""
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={
                 "and": [
                     SELF_FILTER,
@@ -723,7 +723,7 @@ class DamageSourceDiscriminationScarVsWeaponTest(TestCase):
             damage_type="physical",
             source=DamageSource(type="scar", ref=None),
         )
-        stack = emit_event(EventNames.DAMAGE_PRE_APPLY, payload, location=character.location)
+        stack = emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=character.location)
         self.assertTrue(stack.was_cancelled())
         # No service damage was applied
         vitals.refresh_from_db()
@@ -774,7 +774,7 @@ class DamageSourceDiscriminationScarVsWeaponTest(TestCase):
             damage_type="physical",
             source=DamageSource(type="scar", ref=None),
         )
-        stack = emit_event(EventNames.DAMAGE_PRE_APPLY, payload, location=character.location)
+        stack = emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=character.location)
         self.assertFalse(stack.was_cancelled())
         # Service path not invoked here, so vitals unchanged
         vitals.refresh_from_db()

@@ -33,15 +33,6 @@ class FlowStepDefinitionFactory:
     parameters: dict[str, Any]
     parent_id: int | None
 
-class EventFactory:
-    def __new__(cls, *args: Any, **kwargs: Any) -> models.Event: ...
-
-    class Meta:
-        model: type[models.Event]
-
-    name: str
-    label: str
-
 class TriggerDefinitionFactory:
     def __new__(cls, *args: Any, **kwargs: Any) -> models.TriggerDefinition: ...
 
@@ -50,7 +41,7 @@ class TriggerDefinitionFactory:
 
     name: str
     flow_definition: models.FlowDefinition
-    event: models.Event
+    event_name: str
 
 class TriggerFactory:
     def __new__(cls, *args: Any, **kwargs: Any) -> models.Trigger: ...

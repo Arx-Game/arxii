@@ -9,7 +9,7 @@ trigger handler from `Trigger` rows whose `obj` points at the item.
 from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory
-from flows.events.names import EventNames
+from flows.constants import EventName
 from flows.trigger_handler import TriggerHandler
 from world.conditions.factories import ReactiveConditionFactory
 
@@ -23,10 +23,10 @@ class ObjectOwnerTests(TestCase):
     def test_item_trigger_populates_from_db(self) -> None:
         item = ObjectDBFactory()
         trigger = ReactiveConditionFactory(
-            event_name=EventNames.EXAMINED,
+            event_name=EventName.EXAMINED,
             target=item,
         )
-        fetched = item.trigger_handler.triggers_for(EventNames.EXAMINED)
+        fetched = item.trigger_handler.triggers_for(EventName.EXAMINED)
         self.assertIn(trigger, fetched)
 
     def test_item_handler_cached(self) -> None:

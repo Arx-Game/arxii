@@ -51,13 +51,13 @@ class TriggerHandler:
 
         self._by_event.clear()
         qs = Trigger.objects.filter(obj=self.owner).select_related(
-            "trigger_definition__event",
+            "trigger_definition",
             "trigger_definition__flow_definition",
             "source_condition__condition",
             "source_stage",
         )
         for trigger in qs:
-            event_name = trigger.trigger_definition.event.name
+            event_name = trigger.trigger_definition.event_name
             self._by_event[event_name].append(trigger)
         self._populated = True
 
@@ -78,7 +78,7 @@ class TriggerHandler:
     def on_trigger_added(self, trigger: "Trigger") -> None:
         if not self._populated:
             return  # lazy — will populate on first use
-        event_name = trigger.trigger_definition.event.name
+        event_name = trigger.trigger_definition.event_name
         self._by_event[event_name].append(trigger)
 
     def on_trigger_removed(self, trigger_pk: int) -> None:

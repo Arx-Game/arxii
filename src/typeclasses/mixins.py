@@ -81,8 +81,8 @@ class ObjectParent:
         EXAMINED (frozen — post-event). Returns False if a reactive trigger
         cancelled the examine; callers should honour the return value.
         """
+        from flows.constants import EventName
         from flows.emit import emit_event
-        from flows.events.names import EventNames
         from flows.events.payloads import ExaminedPayload, ExaminePrePayload
 
         # For rooms, self is its own location; for characters/objects, use
@@ -90,7 +90,7 @@ class ObjectParent:
         location = self.location if self.location is not None else self
         pre = ExaminePrePayload(observer=observer, target=self)
         stack = emit_event(
-            EventNames.EXAMINE_PRE,
+            EventName.EXAMINE_PRE,
             pre,
             location=location,
         )
@@ -99,7 +99,7 @@ class ObjectParent:
 
         post = ExaminedPayload(observer=observer, target=self)
         emit_event(
-            EventNames.EXAMINED,
+            EventName.EXAMINED,
             post,
             location=location,
         )

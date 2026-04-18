@@ -1,13 +1,13 @@
 from django.test import TestCase
 
-from flows.events.names import EventNames
+from flows.constants import EventName
 
 
-class EventNamesTests(TestCase):
+class EventNameTests(TestCase):
     def test_combat_event_names_defined(self) -> None:
-        self.assertEqual(EventNames.ATTACK_PRE_RESOLVE, "attack_pre_resolve")
-        self.assertEqual(EventNames.DAMAGE_APPLIED, "damage_applied")
-        self.assertEqual(EventNames.CHARACTER_KILLED, "character_killed")
+        self.assertEqual(EventName.ATTACK_PRE_RESOLVE, "attack_pre_resolve")
+        self.assertEqual(EventName.DAMAGE_APPLIED, "damage_applied")
+        self.assertEqual(EventName.CHARACTER_KILLED, "character_killed")
 
     def test_all_mvp_events_enumerated(self) -> None:
         expected = {
@@ -30,4 +30,4 @@ class EventNamesTests(TestCase):
             "technique_cast",
             "technique_affected",
         }
-        self.assertEqual(set(EventNames.all()), expected)
+        self.assertEqual(set(EventName.values), expected)

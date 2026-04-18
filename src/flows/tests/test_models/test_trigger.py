@@ -17,7 +17,7 @@ class TestTrigger(TestCase):
     def setUp(self):
         self.context = SceneDataManagerFactory()
         self.trigger_def = TriggerDefinitionFactory(
-            event__name="test_event",
+            event_name="test_event",
             base_filter_condition={"foo": "bar"},
         )
         self.trigger = TriggerFactory(

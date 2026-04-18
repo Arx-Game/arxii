@@ -19,8 +19,8 @@ from django.db.models import Q, QuerySet, Sum
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
+from flows.constants import EventName
 from flows.emit import emit_event
-from flows.events.names import EventNames
 from flows.events.payloads import (
     ConditionAppliedPayload,
     ConditionPreApplyPayload,
@@ -554,7 +554,7 @@ def apply_condition(  # noqa: PLR0913
     )
     if target_location is not None:
         stack = emit_event(
-            EventNames.CONDITION_PRE_APPLY,
+            EventName.CONDITION_PRE_APPLY,
             pre_payload,
             location=target_location,
         )
@@ -580,7 +580,7 @@ def apply_condition(  # noqa: PLR0913
 
     if result.instance is not None and target_location is not None:
         emit_event(
-            EventNames.CONDITION_APPLIED,
+            EventName.CONDITION_APPLIED,
             ConditionAppliedPayload(
                 target=target,
                 instance=result.instance,
@@ -628,7 +628,7 @@ def bulk_apply_conditions(  # noqa: PLR0913
         )
         if target_location is not None:
             stack = emit_event(
-                EventNames.CONDITION_PRE_APPLY,
+                EventName.CONDITION_PRE_APPLY,
                 pre_payload,
                 location=target_location,
             )
@@ -656,7 +656,7 @@ def bulk_apply_conditions(  # noqa: PLR0913
 
         if result.instance is not None and target_location is not None:
             emit_event(
-                EventNames.CONDITION_APPLIED,
+                EventName.CONDITION_APPLIED,
                 ConditionAppliedPayload(
                     target=target,
                     instance=result.instance,
@@ -704,7 +704,7 @@ def remove_condition(
         instance.save()
         if target_location is not None:
             emit_event(
-                EventNames.CONDITION_REMOVED,
+                EventName.CONDITION_REMOVED,
                 ConditionRemovedPayload(
                     target=target,
                     instance_id=instance_pk,
@@ -718,7 +718,7 @@ def remove_condition(
     instance.delete()
     if target_location is not None:
         emit_event(
-            EventNames.CONDITION_REMOVED,
+            EventName.CONDITION_REMOVED,
             ConditionRemovedPayload(
                 target=target,
                 instance_id=instance_pk,
@@ -1467,7 +1467,7 @@ def advance_condition_severity(
         target_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL
         if target_location is not None:
             emit_event(
-                EventNames.CONDITION_STAGE_CHANGED,
+                EventName.CONDITION_STAGE_CHANGED,
                 ConditionStageChangedPayload(
                     target=instance.target,
                     instance=instance,

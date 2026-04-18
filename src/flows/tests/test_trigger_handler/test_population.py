@@ -2,7 +2,7 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
-from flows.events.names import EventNames
+from flows.constants import EventName
 from flows.trigger_handler import TriggerHandler
 from world.conditions.factories import ReactiveConditionFactory
 
@@ -11,10 +11,10 @@ class TriggerHandlerPopulationTests(TestCase):
     def test_populates_on_first_access(self) -> None:
         # Attach two reactive triggers to the same character via
         # ReactiveConditionFactory.
-        t1 = ReactiveConditionFactory(event_name=EventNames.DAMAGE_APPLIED)
+        t1 = ReactiveConditionFactory(event_name=EventName.DAMAGE_APPLIED)
         character = t1.obj  # Trigger.obj is the ObjectDB owner
         ReactiveConditionFactory(
-            event_name=EventNames.ATTACK_LANDED,
+            event_name=EventName.ATTACK_LANDED,
             target=character,
         )
 

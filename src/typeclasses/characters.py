@@ -15,8 +15,8 @@ from django.utils import timezone
 from evennia.objects.objects import DefaultCharacter
 
 from commands.utils import serialize_cmdset
+from flows.constants import EventName
 from flows.emit import emit_event
-from flows.events.names import EventNames
 from flows.events.payloads import AttackLandedPayload, MovePreDepartPayload
 from flows.object_states.character_state import CharacterState
 from flows.service_functions.serializers import build_room_state_payload
@@ -204,7 +204,7 @@ class Character(ObjectParent, DefaultCharacter):
             action=action,
         )
         emit_event(
-            EventNames.ATTACK_LANDED,
+            EventName.ATTACK_LANDED,
             payload,
             location=self.location,
         )
@@ -228,7 +228,7 @@ class Character(ObjectParent, DefaultCharacter):
             exit_used=kwargs.get("exit_used") or kwargs.get("move_type"),
         )
         stack = emit_event(
-            EventNames.MOVE_PRE_DEPART,
+            EventName.MOVE_PRE_DEPART,
             payload,
             location=origin,
         )

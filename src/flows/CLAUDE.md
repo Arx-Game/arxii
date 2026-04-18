@@ -6,8 +6,8 @@ Database-driven workflow engine that replaces hardcoded command logic. All game 
 
 ### `models/`
 - **`flows.py`**: `FlowDefinition`, `FlowStepDefinition`, `FlowStack` - database-defined workflows
-- **`triggers.py`**: `TriggerDefinition`, `Trigger` - event handlers that modify flows  
-- **`events.py`**: `Event`, `EventTrigger` - runtime events for flow modification
+- **`triggers.py`**: `TriggerDefinition` (with `event_name: EventName` choice), `Trigger` - event handlers that modify flows
+- **`constants.py`**: `EventName(TextChoices)` - canonical event-name choices for the reactive layer
 
 ### `object_states/`
 - **`base_state.py`**: `BaseState` - mutable wrapper for Evennia objects during flows

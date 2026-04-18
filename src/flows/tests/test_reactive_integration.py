@@ -24,9 +24,9 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
+from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.emit import emit_event
-from flows.events.names import EventNames
 from flows.events.payloads import (
     AttackPreResolvePayload,
     ConditionPreApplyPayload,
@@ -39,7 +39,6 @@ from flows.factories import (
     TriggerDefinitionFactory,
     TriggerFactory,
 )
-from flows.models.events import Event
 from world.conditions.factories import (
     ConditionCategoryFactory,
     ConditionInstanceFactory,
@@ -135,7 +134,7 @@ def _damage_payload(character, *, amount=10, damage_type="physical", source=None
 
 
 def _emit_damage(character, payload):
-    return emit_event(EventNames.DAMAGE_PRE_APPLY, payload, location=character.location)
+    return emit_event(EventName.DAMAGE_PRE_APPLY, payload, location=character.location)
 
 
 def _install_room_trigger(
@@ -150,8 +149,7 @@ def _install_room_trigger(
     Room-owned triggers need a ConditionInstance whose target is the room.
     Returns the Trigger row.
     """
-    event = Event.objects.get(name=event_name)
-    trigger_def = TriggerDefinitionFactory(event=event, flow_definition=flow_definition)
+    trigger_def = TriggerDefinitionFactory(event_name=event_name, flow_definition=flow_definition)
     room_condition = ConditionInstanceFactory(target=room)
     trigger = TriggerFactory(
         trigger_definition=trigger_def,
@@ -182,7 +180,7 @@ class AbyssalOnlyWardTest(TestCase):
         self.character.location = self.room
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={"path": "source.ref.affinity", "op": "==", "value": "abyssal"},
             flow_definition=cancel_flow,
             target=self.character,
@@ -214,7 +212,7 @@ class NotCelestialVulnerabilityTest(TestCase):
         self.character.location = self.room
         double_flow = _make_multiply_field_flow("amount", 2)
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={
                 "and": [
                     {"path": "damage_type", "op": "==", "value": "fire"},
@@ -253,7 +251,7 @@ class AttackerPropertyRequiredTest(TestCase):
         self.character.location = self.room
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={
                 "path": "source.ref",
                 "op": "has_property",
@@ -289,7 +287,7 @@ class WeaponTagFilterTest(TestCase):
         self.character.location = self.room
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={
                 "path": "source.ref.weapon.tags",
                 "op": "contains",
@@ -330,7 +328,7 @@ class CharmImmunityAmuletTest(TestCase):
         self.target.location = self.room
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.CONDITION_PRE_APPLY,
+            event_name=EventName.CONDITION_PRE_APPLY,
             filter_condition={
                 "path": "template.category.name",
                 "op": "==",
@@ -349,7 +347,7 @@ class CharmImmunityAmuletTest(TestCase):
             source=None,
             stage=None,
         )
-        return emit_event(EventNames.CONDITION_PRE_APPLY, payload, location=self.room)
+        return emit_event(EventName.CONDITION_PRE_APPLY, payload, location=self.room)
 
     def test_hit_mind_control_cancels(self):
         stack = self._dispatch("mind_control")
@@ -369,7 +367,7 @@ class CurseResistanceBySourceTest(TestCase):
         self.target.location = self.room
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.CONDITION_PRE_APPLY,
+            event_name=EventName.CONDITION_PRE_APPLY,
             filter_condition={
                 "and": [
                     {"path": "template.name", "op": "==", "value": "withering"},
@@ -386,7 +384,7 @@ class CurseResistanceBySourceTest(TestCase):
         payload = ConditionPreApplyPayload(
             target=self.target, template=template, source=source, stage=None
         )
-        stack = emit_event(EventNames.CONDITION_PRE_APPLY, payload, location=self.room)
+        stack = emit_event(EventName.CONDITION_PRE_APPLY, payload, location=self.room)
         self.assertTrue(stack.was_cancelled())
 
     def test_near_miss_item_sourced_withering_passes(self):
@@ -395,7 +393,7 @@ class CurseResistanceBySourceTest(TestCase):
         payload = ConditionPreApplyPayload(
             target=self.target, template=template, source=source, stage=None
         )
-        stack = emit_event(EventNames.CONDITION_PRE_APPLY, payload, location=self.room)
+        stack = emit_event(EventName.CONDITION_PRE_APPLY, payload, location=self.room)
         self.assertFalse(stack.was_cancelled())
 
 
@@ -418,8 +416,9 @@ class StageSpecificVulnerabilityTest(TestCase):
         )
         cancel_flow = _make_cancel_flow()
 
-        event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
-        trigger_def = TriggerDefinitionFactory(event=event, flow_definition=cancel_flow)
+        trigger_def = TriggerDefinitionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY, flow_definition=cancel_flow
+        )
         TriggerFactory(
             trigger_definition=trigger_def,
             obj=self.character,
@@ -443,8 +442,9 @@ class StageSpecificVulnerabilityTest(TestCase):
             severity=7,
         )
         cancel_flow = _make_cancel_flow()
-        event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
-        trigger_def = TriggerDefinitionFactory(event=event, flow_definition=cancel_flow)
+        trigger_def = TriggerDefinitionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY, flow_definition=cancel_flow
+        )
         TriggerFactory(
             trigger_definition=trigger_def,
             obj=self.character,
@@ -482,13 +482,13 @@ class CrossCharacterScarSpecificityTest(TestCase):
         cancel_flow = _make_cancel_flow()
         # Each character has a self-filtered scar that only fires on damage to them.
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=self.char_a,
         )
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=self.char_b,
@@ -548,7 +548,7 @@ class ElementalConversionTest(TestCase):
         )
 
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={"path": "damage_type", "op": "==", "value": "cold"},
             flow_definition=flow,
             target=self.character,
@@ -590,7 +590,7 @@ class ConditionalIntensityCapTest(TestCase):
         self.character.location = self.room
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={
                 "path": "source.ref.school",
                 "op": "==",
@@ -648,7 +648,7 @@ class AEBystanderTopologyTest(TestCase):
         # counter on the payload so we can count invocations.
         count_flow = _make_set_field_flow("witnessed_tag", "bystander_saw_ae")
         ReactiveConditionFactory(
-            event_name=EventNames.ATTACK_PRE_RESOLVE,
+            event_name=EventName.ATTACK_PRE_RESOLVE,
             filter_condition=None,
             flow_definition=count_flow,
             target=self.bystander,
@@ -665,7 +665,7 @@ class AEBystanderTopologyTest(TestCase):
         # AttackPreResolvePayload is mutable — tag attr for test observability
         payload.witnessed_tag = None
 
-        stack = emit_event(EventNames.ATTACK_PRE_RESOLVE, payload, location=self.room)
+        stack = emit_event(EventName.ATTACK_PRE_RESOLVE, payload, location=self.room)
 
         # Exactly one FlowStack returned from a single emission
         self.assertIsNotNone(stack)
@@ -691,7 +691,7 @@ class AESelfFilteredScarsTest(TestCase):
             char = CharacterFactory()
             char.location = self.room
             ReactiveConditionFactory(
-                event_name=EventNames.DAMAGE_PRE_APPLY,
+                event_name=EventName.DAMAGE_PRE_APPLY,
                 filter_condition=SELF_FILTER,
                 flow_definition=cancel_flow,
                 target=char,
@@ -736,9 +736,8 @@ class RoomWardCancelsBeforePersonalShieldTest(TestCase):
 
         # Room ward: priority 9, always cancels
         room_cancel_flow = _make_cancel_flow()
-        event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
         room_trigger_def = TriggerDefinitionFactory(
-            event=event, flow_definition=room_cancel_flow, priority=9
+            event_name=EventName.DAMAGE_PRE_APPLY, flow_definition=room_cancel_flow, priority=9
         )
         room_condition = ConditionInstanceFactory(target=self.room)
         TriggerFactory(
@@ -754,7 +753,9 @@ class RoomWardCancelsBeforePersonalShieldTest(TestCase):
         # Personal shield: priority 3, would MODIFY_PAYLOAD if reached
         self.shield_flow = _make_multiply_field_flow("amount", 0)
         shield_trigger_def = TriggerDefinitionFactory(
-            event=event, flow_definition=self.shield_flow, priority=3
+            event_name=EventName.DAMAGE_PRE_APPLY,
+            flow_definition=self.shield_flow,
+            priority=3,
         )
         shield_condition = ConditionInstanceFactory(target=self.char)
         TriggerFactory(
@@ -789,7 +790,7 @@ class PersonalShieldCancelsOnlyOneTargetTest(TestCase):
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=self.char_a,
@@ -832,8 +833,9 @@ class StageScopedTriggerStopsAfterAdvanceTest(TestCase):
         )
 
         cancel_flow = _make_cancel_flow()
-        event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
-        trigger_def = TriggerDefinitionFactory(event=event, flow_definition=cancel_flow)
+        trigger_def = TriggerDefinitionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY, flow_definition=cancel_flow
+        )
         TriggerFactory(
             trigger_definition=trigger_def,
             obj=self.character,
@@ -880,8 +882,9 @@ class ConditionRemovalCleansUpTriggerTest(TestCase):
         )
         cancel_flow = _make_cancel_flow()
 
-        event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
-        trigger_def = TriggerDefinitionFactory(event=event, flow_definition=cancel_flow)
+        trigger_def = TriggerDefinitionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY, flow_definition=cancel_flow
+        )
         TriggerFactory(
             trigger_definition=trigger_def,
             obj=self.character,
@@ -910,8 +913,9 @@ class ConditionRemovalCleansUpTriggerTest(TestCase):
             condition=template,
         )
         cancel_flow = _make_cancel_flow()
-        event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
-        trigger_def = TriggerDefinitionFactory(event=event, flow_definition=cancel_flow)
+        trigger_def = TriggerDefinitionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY, flow_definition=cancel_flow
+        )
         TriggerFactory(
             trigger_definition=trigger_def,
             obj=self.character,
@@ -941,10 +945,10 @@ class MultiSourceSameEventTest(TestCase):
         self.character.location = self.room
 
     def test_hit_both_sources_fire(self):
-        event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
-
         double_flow1 = _make_multiply_field_flow("amount", 2)
-        trigger_def1 = TriggerDefinitionFactory(event=event, flow_definition=double_flow1)
+        trigger_def1 = TriggerDefinitionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY, flow_definition=double_flow1
+        )
         instance1 = ConditionInstanceFactory(target=self.character)
         TriggerFactory(
             trigger_definition=trigger_def1,
@@ -955,7 +959,9 @@ class MultiSourceSameEventTest(TestCase):
         )
 
         double_flow2 = _make_multiply_field_flow("amount", 2)
-        trigger_def2 = TriggerDefinitionFactory(event=event, flow_definition=double_flow2)
+        trigger_def2 = TriggerDefinitionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY, flow_definition=double_flow2
+        )
         instance2 = ConditionInstanceFactory(target=self.character)
         TriggerFactory(
             trigger_definition=trigger_def2,
@@ -972,9 +978,10 @@ class MultiSourceSameEventTest(TestCase):
         self.assertEqual(payload.amount, 40)
 
     def test_near_miss_single_source_fires_once(self):
-        event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
         double_flow = _make_multiply_field_flow("amount", 2)
-        trigger_def = TriggerDefinitionFactory(event=event, flow_definition=double_flow)
+        trigger_def = TriggerDefinitionFactory(
+            event_name=EventName.DAMAGE_PRE_APPLY, flow_definition=double_flow
+        )
         instance = ConditionInstanceFactory(target=self.character)
         TriggerFactory(
             trigger_definition=trigger_def,
@@ -1017,7 +1024,7 @@ class BystanderReactionTest(TestCase):
         # Watcher's bystander trigger: MODIFY_PAYLOAD when someone ELSE is the target.
         mark_flow = _make_set_field_flow("damage_type", "witnessed")
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition=NOT_SELF_FILTER,
             flow_definition=mark_flow,
             target=self.watcher,
@@ -1055,7 +1062,7 @@ class AffinityLayeringTest(TestCase):
         source = DamageSource(type="technique", ref=ref)
         trigger_flow = _make_set_field_flow("damage_type", "resonant_storm")
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={
                 "and": [
                     {"path": "source.ref.affinity", "op": "==", "value": "storm"},
@@ -1074,7 +1081,7 @@ class AffinityLayeringTest(TestCase):
         source = DamageSource(type="technique", ref=ref)
         trigger_flow = _make_set_field_flow("damage_type", "resonant_storm")
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={
                 "and": [
                     {"path": "source.ref.affinity", "op": "==", "value": "storm"},
@@ -1101,7 +1108,7 @@ class PropertyLayeringTest(TestCase):
         """AND of two has_property conditions gates the trigger."""
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={
                 "and": [
                     {"path": "source.ref", "op": "has_property", "value": "undead"},
@@ -1124,7 +1131,7 @@ class PropertyLayeringTest(TestCase):
     def test_missing_property_does_not_fire(self):
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={
                 "and": [
                     {"path": "source.ref", "op": "has_property", "value": "undead"},
@@ -1161,7 +1168,7 @@ class RecursionCapRespectsFiltersTest(TestCase):
     def test_non_matching_filter_does_not_consume_cap(self):
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={"path": "source.type", "op": "==", "value": "scar"},
             flow_definition=cancel_flow,
             target=self.character,
@@ -1175,11 +1182,11 @@ class RecursionCapRespectsFiltersTest(TestCase):
         )
         stack = FlowStack(
             owner=self.character,
-            originating_event=EventNames.DAMAGE_PRE_APPLY,
+            originating_event=EventName.DAMAGE_PRE_APPLY,
             cap=2,
         )
         returned = emit_event(
-            EventNames.DAMAGE_PRE_APPLY,
+            EventName.DAMAGE_PRE_APPLY,
             payload,
             location=self.character.location,
             parent_stack=stack,
@@ -1192,7 +1199,7 @@ class RecursionCapRespectsFiltersTest(TestCase):
     def test_matching_filter_fires_and_updates_result(self):
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={"path": "source.type", "op": "==", "value": "scar"},
             flow_definition=cancel_flow,
             target=self.character,
@@ -1251,7 +1258,7 @@ class FilteredPlayerPromptTest(TestCase):
 
     def test_hit_filter_matches_trigger_fires(self):
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={"path": "source.type", "op": "==", "value": "scar"},
             flow_definition=self.scar_filter_flow,
             target=self.character,
@@ -1266,7 +1273,7 @@ class FilteredPlayerPromptTest(TestCase):
 
     def test_near_miss_filter_misses_trigger_does_not_fire(self):
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={"path": "source.type", "op": "==", "value": "scar"},
             flow_definition=self.scar_filter_flow,
             target=self.character,
@@ -1408,14 +1415,14 @@ class CombatDualPathTargetVsBystanderTest(TestCase):
 
         self.target_mark_flow = _make_set_field_flow("damage_type", "target_scar_fired")
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition=SELF_FILTER,
             flow_definition=self.target_mark_flow,
             target=self.target,
         )
         self.bystander_mark_flow = _make_multiply_field_flow("amount", 3)
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition=NOT_SELF_FILTER,
             flow_definition=self.bystander_mark_flow,
             target=self.bystander,
@@ -1439,7 +1446,7 @@ class CombatSourceDiscriminationTest(TestCase):
         self.character.location = self.room
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
+            event_name=EventName.DAMAGE_PRE_APPLY,
             filter_condition={"path": "source.type", "op": "==", "value": "technique"},
             flow_definition=cancel_flow,
             target=self.character,
