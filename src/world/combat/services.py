@@ -609,20 +609,20 @@ def apply_damage_to_participant(
         damage_type=damage_type,
         source=damage_source,
     )
-    stack = emit_event(
-        EventNames.DAMAGE_PRE_APPLY,
-        pre_payload,
-        personal_target=character,
-        room=room,
-    )
-    if stack is not None and stack.was_cancelled():
-        return ParticipantDamageResult(
-            damage_dealt=0,
-            health_after=vitals.health,
-            knockout_eligible=False,
-            death_eligible=False,
-            permanent_wound_eligible=False,
+    if room is not None:
+        stack = emit_event(
+            EventNames.DAMAGE_PRE_APPLY,
+            pre_payload,
+            location=room,
         )
+        if stack.was_cancelled():
+            return ParticipantDamageResult(
+                damage_dealt=0,
+                health_after=vitals.health,
+                knockout_eligible=False,
+                death_eligible=False,
+                permanent_wound_eligible=False,
+            )
 
     # Use the (possibly modified) amount from the payload
     effective_damage = pre_payload.amount
@@ -657,35 +657,33 @@ def apply_damage_to_participant(
         source=damage_source,
         hp_after=health_after,
     )
-    emit_event(
-        EventNames.DAMAGE_APPLIED,
-        applied_payload,
-        personal_target=character,
-        room=room,
-    )
-
-    # --- Incapacitation / death gates ---
-    if knockout_eligible:
+    if room is not None:
         emit_event(
-            EventNames.CHARACTER_INCAPACITATED,
-            CharacterIncapacitatedPayload(
-                character=character,
-                source_event=EventNames.DAMAGE_PRE_APPLY,
-            ),
-            personal_target=character,
-            room=room,
+            EventNames.DAMAGE_APPLIED,
+            applied_payload,
+            location=room,
         )
 
-    if death_eligible or force_death:
-        emit_event(
-            EventNames.CHARACTER_KILLED,
-            CharacterKilledPayload(
-                character=character,
-                source_event=EventNames.DAMAGE_PRE_APPLY,
-            ),
-            personal_target=character,
-            room=room,
-        )
+        # --- Incapacitation / death gates ---
+        if knockout_eligible:
+            emit_event(
+                EventNames.CHARACTER_INCAPACITATED,
+                CharacterIncapacitatedPayload(
+                    character=character,
+                    source_event=EventNames.DAMAGE_PRE_APPLY,
+                ),
+                location=room,
+            )
+
+        if death_eligible or force_death:
+            emit_event(
+                EventNames.CHARACTER_KILLED,
+                CharacterKilledPayload(
+                    character=character,
+                    source_event=EventNames.DAMAGE_PRE_APPLY,
+                ),
+                location=room,
+            )
 
     return ParticipantDamageResult(
         damage_dealt=effective_damage,
@@ -1047,25 +1045,25 @@ def resolve_npc_attack(
         weapon=None,
         action=opponent_action,
     )
-    stack = emit_event(
-        EventNames.ATTACK_PRE_RESOLVE,
-        pre_payload,
-        personal_target=character,
-        room=room,
-    )
-    if stack is not None and stack.was_cancelled():
-        return DefenseResult(
-            success_level=0,
-            damage_multiplier=0.0,
-            final_damage=0,
-            damage_result=ParticipantDamageResult(
-                damage_dealt=0,
-                health_after=0,
-                knockout_eligible=False,
-                death_eligible=False,
-                permanent_wound_eligible=False,
-            ),
+    if room is not None:
+        stack = emit_event(
+            EventNames.ATTACK_PRE_RESOLVE,
+            pre_payload,
+            location=room,
         )
+        if stack.was_cancelled():
+            return DefenseResult(
+                success_level=0,
+                damage_multiplier=0.0,
+                final_damage=0,
+                damage_result=ParticipantDamageResult(
+                    damage_dealt=0,
+                    health_after=0,
+                    knockout_eligible=False,
+                    death_eligible=False,
+                    permanent_wound_eligible=False,
+                ),
+            )
 
     result: CheckResult = perform_check_fn(character, check_type)
 
