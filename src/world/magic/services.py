@@ -397,7 +397,7 @@ def select_mishap_pool(control_deficit: int) -> ConsequencePool | None:
     return tier.consequence_pool if tier else None
 
 
-def use_technique(  # noqa: PLR0913 — kw-only args are intentional, targets is new for reactive layer
+def use_technique(  # noqa: PLR0913, C901 — kw-only args are intentional, targets is new for reactive layer
     *,
     character: ObjectDB,
     technique: Technique,
@@ -439,23 +439,24 @@ def use_technique(  # noqa: PLR0913 — kw-only args are intentional, targets is
 
     # --- TECHNIQUE_PRE_CAST (cancellable, before anima deduction) ---
     effective_targets = targets or []
+    caster_room = getattr(character, "location", None)  # noqa: GETATTR_LITERAL
     pre_payload = TechniquePreCastPayload(
         caster=character,
         technique=technique,
         targets=effective_targets,
         intensity=stats.intensity,
     )
-    stack = emit_event(
-        EventNames.TECHNIQUE_PRE_CAST,
-        pre_payload,
-        personal_target=character,
-        room=getattr(character, "location", None),  # noqa: GETATTR_LITERAL
-    )
-    if stack is not None and stack.was_cancelled():
-        return TechniqueUseResult(
-            anima_cost=cost,
-            confirmed=False,
+    if caster_room is not None:
+        stack = emit_event(
+            EventNames.TECHNIQUE_PRE_CAST,
+            pre_payload,
+            location=caster_room,
         )
+        if stack.was_cancelled():
+            return TechniqueUseResult(
+                anima_cost=cost,
+                confirmed=False,
+            )
 
     # Step 4: Deduct anima
     deficit = deduct_anima(character, cost.effective_cost)
@@ -508,33 +509,33 @@ def use_technique(  # noqa: PLR0913 — kw-only args are intentional, targets is
     )
 
     # --- TECHNIQUE_CAST (post-resolve, frozen) ---
-    caster_room = getattr(character, "location", None)  # noqa: GETATTR_LITERAL
-    emit_event(
-        EventNames.TECHNIQUE_CAST,
-        TechniqueCastPayload(
-            caster=character,
-            technique=technique,
-            targets=effective_targets,
-            intensity=stats.intensity,
-            result=resolution_result,
-        ),
-        personal_target=character,
-        room=caster_room,
-    )
+    if caster_room is not None:
+        emit_event(
+            EventNames.TECHNIQUE_CAST,
+            TechniqueCastPayload(
+                caster=character,
+                technique=technique,
+                targets=effective_targets,
+                intensity=stats.intensity,
+                result=resolution_result,
+            ),
+            location=caster_room,
+        )
 
     # --- TECHNIQUE_AFFECTED per target ---
     for affected_target in effective_targets:
-        emit_event(
-            EventNames.TECHNIQUE_AFFECTED,
-            TechniqueAffectedPayload(
-                caster=character,
-                technique=technique,
-                target=affected_target,
-                effect=resolution_result,
-            ),
-            personal_target=affected_target,
-            room=getattr(affected_target, "location", None),  # noqa: GETATTR_LITERAL
-        )
+        target_room = getattr(affected_target, "location", None)  # noqa: GETATTR_LITERAL
+        if target_room is not None:
+            emit_event(
+                EventNames.TECHNIQUE_AFFECTED,
+                TechniqueAffectedPayload(
+                    caster=character,
+                    technique=technique,
+                    target=affected_target,
+                    effect=resolution_result,
+                ),
+                location=target_room,
+            )
 
     return technique_result
 
