@@ -194,6 +194,8 @@ class Character(ObjectParent, DefaultCharacter):
         Emits ATTACK_LANDED and gives listeners a chance to react. Downstream
         damage application fires DAMAGE_PRE_APPLY separately (Task 28).
         """
+        if self.location is None:
+            return
         payload = AttackLandedPayload(
             attacker=attacker,
             target=self,
@@ -204,8 +206,7 @@ class Character(ObjectParent, DefaultCharacter):
         emit_event(
             EventNames.ATTACK_LANDED,
             payload,
-            personal_target=self,
-            room=self.location,
+            location=self.location,
         )
 
     def at_pre_move(self, destination, move_type="move", **kwargs):
@@ -218,6 +219,8 @@ class Character(ObjectParent, DefaultCharacter):
         result = super().at_pre_move(destination, move_type=move_type, **kwargs)
         if result is False:
             return False  # Evennia-side cancel; skip emission
+        if origin is None:
+            return True  # No location to dispatch from; allow the move.
         payload = MovePreDepartPayload(
             character=self,
             origin=origin,
@@ -227,10 +230,9 @@ class Character(ObjectParent, DefaultCharacter):
         stack = emit_event(
             EventNames.MOVE_PRE_DEPART,
             payload,
-            personal_target=self,
-            room=origin,
+            location=origin,
         )
-        if stack is not None and stack.was_cancelled():
+        if stack.was_cancelled():
             return False
         return True
 

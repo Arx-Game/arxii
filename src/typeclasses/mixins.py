@@ -93,22 +93,23 @@ class ObjectParent:
         from flows.events.names import EventNames
         from flows.events.payloads import ExaminedPayload, ExaminePrePayload
 
+        # For rooms, self is its own location; for characters/objects, use
+        # the containing room.
+        location = self.location if self.location is not None else self
         pre = ExaminePrePayload(observer=observer, target=self)
         stack = emit_event(
             EventNames.EXAMINE_PRE,
             pre,
-            personal_target=self,
-            room=self.location,
+            location=location,
         )
-        if stack is not None and stack.was_cancelled():
+        if stack.was_cancelled():
             return False
 
         post = ExaminedPayload(observer=observer, target=self, result=None)
         emit_event(
             EventNames.EXAMINED,
             post,
-            personal_target=self,
-            room=self.location,
+            location=location,
         )
         return True
 
