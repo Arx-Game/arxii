@@ -3,7 +3,7 @@
 Database-driven game logic engine. Two layers live here:
 
 1. **Flow execution** — `FlowDefinition` rows whose `FlowStepDefinition` children are walked by `FlowExecution`. Used for complex branching sequences (set context, evaluate, call service, emit). Today this layer is *infrastructure only* — no `FlowDefinition` rows ship with the codebase.
-2. **Reactive layer** *(Scope 5.5, branch `design/reactive-layer`)* — `Event` + `TriggerDefinition` + `Trigger` plus the per-owner `TriggerHandler`, the `emit_event` API, the JSON filter DSL, and the new flow action steps. This is the wedge that lets conditions, items, and techniques attach reactive behavior. Existing service functions emit events at damage, attack, move, examine, condition-lifecycle, and technique-cast moments.
+2. **Reactive layer** *(Scope 5.5, branch `design/reactive-layer`)* — `Event` + `TriggerDefinition` + `Trigger` plus the per-owner `TriggerHandler`, the `emit_event` API, the JSON filter DSL, and the new flow action steps. Dispatch is **unified**: a single location walk gathers every trigger in the room, priority-sorts them globally, and runs them on one `FlowStack`. Self-vs-target-vs-bystander semantics come from JSON filters, not a scope field. This is the wedge that lets conditions, items, and techniques attach reactive behavior. Existing service functions emit events at damage, attack, move, examine, condition-lifecycle, and technique-cast moments.
 
 **Source:** `src/flows/`
 
@@ -27,14 +27,16 @@ emit_event(
         source=damage_source,
         hp_after=character.combat_state.hp,
     ),
-    personal_target=character,
-    room=character.location,
+    character.location,
 )
 ```
 
-- ROOM dispatches first; if a ROOM-scope trigger calls `CANCEL_EVENT`, PERSONAL is skipped entirely.
-- Returns a `FlowStack`. Call `.was_cancelled()` to detect veto from a PRE-event.
+- Signature: `emit_event(event_name, payload, location, *, parent_stack=None)`. `location` is a Room — almost always the subject's current location.
+- **One location walk.** `emit_event` iterates `[location, *location.contents]`, calls `owner.trigger_handler.triggers_for(event_name)` on each owner, collects every matching trigger, and priority-sorts the combined list (descending) globally. There is no separate ROOM vs PERSONAL pass.
+- **Single FlowStack.** All triggers for the emission run synchronously on one `FlowStack`, in priority order. If any trigger calls `CANCEL_EVENT`, dispatch stops — no later trigger fires.
+- Returns the `FlowStack`. Call `.was_cancelled()` to detect veto from a PRE-event.
 - Pass `parent_stack=` when emitting from inside a flow so the recursion cap is enforced on the originating chain.
+- `EMIT_FLOW_EVENT` flow action steps route through this same function — there is one dispatch path for service functions, typeclass hooks, and flow-authored emits.
 
 ### Cancellable PRE events
 
@@ -46,15 +48,17 @@ PRE-event payloads are mutable dataclasses. `MODIFY_PAYLOAD` flow steps can amen
 
 - `obj` — the typeclass owner (Character / Room / Object) the trigger lives on
 - `trigger_definition` — the reusable template (event + flow + base filter + priority)
-- `source_condition` / `source_stage` — optional cascade source. When set, deleting the `ConditionInstance` cascades the row away. `source_stage` makes the trigger active only while the condition is at that stage.
-- `scope` — `PERSONAL` (delivered to `personal_target`) or `ROOM` (delivered to `room`)
-- `additional_filter_condition` — JSON DSL evaluated per dispatch; restricts which payloads match
+- `source_condition` — **required**. Every trigger must be scoped to a source `ConditionInstance` for provenance and cascade. Room-owned triggers use a pseudo-`ConditionInstance` whose target is the room.
+- `source_stage` — optional. Makes the trigger active only while the source condition is at that stage.
+- `additional_filter_condition` — JSON DSL evaluated per dispatch; restricts which payloads match. **This is how you express self-vs-target-vs-bystander semantics** — there is no `scope` field. See Filter Idioms below.
 
 Service functions install triggers from `ConditionTemplate.reactive_triggers` (M2M to `TriggerDefinition`) when `apply_condition` runs and call `handler.on_trigger_added(...)` to keep the cached handler in sync.
 
 ### TriggerHandler (per-owner cache)
 
-Installed as `cached_property` on Character/Room/Object via `ObjectParent`. First access populates from the DB once and joins event/flow/condition/stage in a single query. Subsequent dispatches are O(active triggers for event_name) with zero queries. Sync hooks (`on_trigger_added`, `on_trigger_removed`, `on_stage_changed`) keep the cache fresh — service functions must call them after persisting the row.
+Installed as `cached_property` on Character/Room/Object via `ObjectParent`. First access populates from the DB once and joins event/flow/condition/stage in a single query. Subsequent calls are O(active triggers for event_name) with zero queries.
+
+The handler is a **pure provider**: its sole public method is `triggers_for(event_name) -> list[Trigger]`. It does not dispatch. `emit_event` queries the handler on every owner in the location walk, concatenates results, priority-sorts globally, and dispatches itself. Sync hooks (`on_trigger_added`, `on_trigger_removed`, `on_stage_changed`) keep the cache fresh — service functions must call them after persisting the row.
 
 ### Filter DSL
 
@@ -70,7 +74,37 @@ JSON shape, evaluated against the event payload:
 {"path": "attacker", "op": "==", "value": "self"}  # self-ref to handler owner
 ```
 
-Supported ops: `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `has_property`. Logical combinators: `and`, `or`, `not`. Values prefixed with `self.` (or the literal `"self"`) resolve against the trigger's owner.
+Supported ops: `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `has_property`. Logical combinators: `and`, `or`, `not`. Values prefixed with `self.` (or the literal `"self"` alone) resolve against the trigger's owner (`trigger.obj`).
+
+### Filter Idioms
+
+Since dispatch is unified (every trigger in the room is collected on every emission), filters are how you scope a trigger's effective audience. Three common patterns:
+
+**Self-only (`scope=SELF` replacement).** Fires only when the trigger owner *is* the payload target. Use for reactive wards, "I take damage" scars, personal defenses:
+
+```python
+{"path": "target", "op": "==", "value": "self"}
+```
+
+Example: a fire-resistance scar on the caster should fire when the caster is attacked, not when a bystander is. The evaluator resolves bare `"self"` to `trigger.obj`, which is the caster.
+
+**Bystander-only (not-self).** Fires on every owner in the room *except* the target. Use for ally reactions, witness effects, crowd observations:
+
+```python
+{"path": "target", "op": "!=", "value": "self"}
+```
+
+Example: an ally with a "Defend the Weak" reactive trigger watches someone else get hit and counterattacks — but doesn't fire when the ally themselves is the target (that's a different trigger).
+
+**Room-wide (`scope=ROOM`/`scope=ANY` replacement).** Omit the target filter entirely. Fires on every owner the location walk reaches — the room itself, every character, every object:
+
+```python
+{}  # or any filter that doesn't constrain `target`
+```
+
+Example: a room aura that reacts to *any* technique being cast in the room, regardless of caster or target.
+
+Combine with other predicates (`damage_type`, `source.ref.affinity`, `has_property`) as needed. Because dispatch is synchronous and priority-ordered, a high-priority self-filtered trigger can cancel the event before any bystander-filtered trigger runs.
 
 ### Player prompts (Twisted Deferred, no DB rows)
 
@@ -78,7 +112,7 @@ Supported ops: `==`, `!=`, `<`, `<=`, `>`, `>=`, `in`, `contains`, `has_property
 
 ### AE topology
 
-For area-of-effect events, the caller emits PERSONAL once per target plus ROOM once. Each PERSONAL dispatch gets its own `FlowStack` so recursion caps don't leak between targets. ROOM cancellation propagates to suppress *all* subsequent PERSONAL dispatches in that emission.
+Area-of-effect events carry a `targets: list` field on the payload (e.g. `AttackPreResolvePayload.targets`) and emit **once** — the single unified dispatch walks the location, runs every trigger on one `FlowStack` in priority order, and stops on cancellation. A self-filtered trigger on one target can cancel the whole AE event if it runs at high enough priority; reactive flows that need per-target behavior should inspect the payload's `targets` list themselves.
 
 ### Damage source discrimination
 
@@ -98,26 +132,28 @@ For area-of-effect events, the caller emits PERSONAL once per target plus ROOM o
 
 All names live in `flows.events.names.EventNames`; payload dataclasses in `flows.events.payloads`; mapping in `PAYLOAD_FOR_EVENT`.
 
-| Event | Payload | Scope | Cancellable |
-|-------|---------|-------|-------------|
-| `attack_pre_resolve` | `AttackPreResolvePayload` | ROOM + PERSONAL | yes |
-| `attack_landed` | `AttackLandedPayload` | PERSONAL (target) | no |
-| `attack_missed` | `AttackMissedPayload` | PERSONAL (target) | no |
-| `damage_pre_apply` | `DamagePreApplyPayload` | PERSONAL (target) | yes (mutable amount) |
-| `damage_applied` | `DamageAppliedPayload` | PERSONAL (target) + ROOM | no |
-| `character_incapacitated` | `CharacterIncapacitatedPayload` | PERSONAL + ROOM | gate (see below) |
-| `character_killed` | `CharacterKilledPayload` | PERSONAL + ROOM | gate (see below) |
-| `move_pre_depart` | `MovePreDepartPayload` | PERSONAL + ROOM (origin) | yes |
-| `moved` | `MovedPayload` | PERSONAL + ROOM (destination) | no |
-| `examine_pre` | `ExaminePrePayload` | PERSONAL (target) | yes |
-| `examined` | `ExaminedPayload` | PERSONAL (target) | no (frozen — pending follow-up) |
-| `condition_pre_apply` | `ConditionPreApplyPayload` | PERSONAL (target) | yes |
-| `condition_applied` | `ConditionAppliedPayload` | PERSONAL (target) | no |
-| `condition_stage_changed` | `ConditionStageChangedPayload` | PERSONAL (target) | no |
-| `condition_removed` | `ConditionRemovedPayload` | PERSONAL (target) | no |
-| `technique_pre_cast` | `TechniquePreCastPayload` | PERSONAL (caster) | yes |
-| `technique_cast` | `TechniqueCastPayload` | PERSONAL (caster) + ROOM | no |
-| `technique_affected` | `TechniqueAffectedPayload` | PERSONAL (each target) | no |
+| Event | Payload | Location | Cancellable |
+|-------|---------|----------|-------------|
+| `attack_pre_resolve` | `AttackPreResolvePayload` | room of attacker | yes |
+| `attack_landed` | `AttackLandedPayload` | room of target | no |
+| `attack_missed` | `AttackMissedPayload` | room of target | no |
+| `damage_pre_apply` | `DamagePreApplyPayload` | room of target | yes (mutable amount) |
+| `damage_applied` | `DamageAppliedPayload` | room of target | no |
+| `character_incapacitated` | `CharacterIncapacitatedPayload` | room of target | gate (see below) |
+| `character_killed` | `CharacterKilledPayload` | room of target | gate (see below) |
+| `move_pre_depart` | `MovePreDepartPayload` | origin room | yes |
+| `moved` | `MovedPayload` | destination room | no |
+| `examine_pre` | `ExaminePrePayload` | room of target | yes |
+| `examined` | `ExaminedPayload` | room of target | no (frozen — pending follow-up) |
+| `condition_pre_apply` | `ConditionPreApplyPayload` | room of target | yes |
+| `condition_applied` | `ConditionAppliedPayload` | room of target | no |
+| `condition_stage_changed` | `ConditionStageChangedPayload` | room of target | no |
+| `condition_removed` | `ConditionRemovedPayload` | room of target | no |
+| `technique_pre_cast` | `TechniquePreCastPayload` | room of caster | yes |
+| `technique_cast` | `TechniqueCastPayload` | room of caster | no |
+| `technique_affected` | `TechniqueAffectedPayload` | room of caster | no |
+
+The "Location" column is the room passed to `emit_event`. Dispatch walks that room plus its contents — so a single emission reaches the room, the subject, and every other character/object colocated with them. Payloads that carry multiple targets (`AttackPreResolvePayload.targets: list`, `TechniqueAffectedPayload`) still emit once; per-target behavior is a filter concern.
 
 `character_incapacitated` and `character_killed` fire only when the combat service detects `knockout_eligible` / `death_eligible` on the participant (or when `force_death=True` is passed). They are not raw "HP <= 0" emissions.
 
@@ -129,9 +165,11 @@ Defined in `flows.consts.FlowActionChoices`. The reactive-layer additions are:
 
 | Action | Purpose |
 |--------|---------|
-| `CANCEL_EVENT` | Mark the current `DispatchResult` as cancelled — calling service function should bail |
+| `CANCEL_EVENT` | Mark the current `FlowStack` as cancelled — `emit_event` stops processing remaining triggers and the calling service function should bail |
 | `MODIFY_PAYLOAD` | Mutate a field on the (mutable) PRE-event payload — e.g. `set min: 0` clamps damage |
 | `PROMPT_PLAYER` | Suspend flow, register a Deferred, resume when player replies via `@reply` |
+| `EMIT_FLOW_EVENT` | Emit an event from inside a flow. Routes through `emit_event()` — the same single unified dispatch path used by service functions and typeclass hooks. Pass `parent_stack=` so the recursion cap follows the originating chain |
+| `EMIT_FLOW_EVENT_FOR_EACH` | Variant that emits once per item in a context list. Each emission goes through `emit_event()`; each gets its own `FlowStack` so per-item cancellation doesn't leak |
 
 Two action steps were **deferred** during Scope 5.5:
 
@@ -158,7 +196,7 @@ These can be added later without breaking existing trigger content.
 |-------|---------|------------|
 | `Event` | Catalog row matching an `EventNames` constant | `name`, `description` |
 | `TriggerDefinition` | Reusable template (event + flow + base filter + priority) | `name`, `event`, `flow_definition`, `base_filter_condition`, `priority` |
-| `Trigger` | Installed instance on a typeclass owner | `obj`, `trigger_definition`, `source_condition`, `source_stage`, `scope`, `additional_filter_condition`, `priority` |
+| `Trigger` | Installed instance on a typeclass owner | `obj`, `trigger_definition`, `source_condition` (required), `source_stage`, `additional_filter_condition`, `priority` |
 | `TriggerData` | Per-trigger runtime data (e.g. usage counters — fields pending) | `trigger`, `key`, `value` |
 
 ---
