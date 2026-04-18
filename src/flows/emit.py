@@ -20,10 +20,9 @@ logger = logging.getLogger(__name__)
 def emit_event(
     event_name: str,
     payload: Any,
-    location: Any = None,
+    location: Any,
     *,
     parent_stack: FlowStack | None = None,
-    **_legacy_kwargs: Any,
 ) -> FlowStack:
     """Dispatch ``event_name`` to every handler in ``location`` + contents.
 
@@ -40,10 +39,6 @@ def emit_event(
         The FlowStack used for the dispatch. Callers check
         ``stack.was_cancelled()`` to decide whether to suppress the
         default behaviour (skip damage apply, abort movement, etc.).
-
-    ``**_legacy_kwargs`` transitionally swallows the old
-    ``personal_target=`` / ``room=`` kwargs still used by unrewritten
-    callsites. Phase 3 removes those callsites; this shim goes with them.
     """
     stack = parent_stack or FlowStack(owner=location, originating_event=event_name)
 

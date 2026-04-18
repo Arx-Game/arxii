@@ -5,6 +5,8 @@ gets its own fresh FlowStack so the recursion cap is enforced per-target,
 not shared across the whole AE fan-out.
 """
 
+import unittest
+
 from django.test import TestCase
 
 from evennia_extensions.factories import CharacterFactory
@@ -12,6 +14,15 @@ from flows.emit import emit_event
 from flows.events.names import EventNames
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from world.conditions.factories import ReactiveConditionFactory
+
+_SKIP_REASON = (
+    "Rewritten in unified-dispatch Phase 5 "
+    "(docs/superpowers/plans/2026-04-17-reactive-unified-dispatch.md)"
+)
+
+
+def setUpModule() -> None:
+    raise unittest.SkipTest(_SKIP_REASON)
 
 
 class AETopologyTests(TestCase):
