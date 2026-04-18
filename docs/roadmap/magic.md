@@ -220,21 +220,39 @@ What was built:
 Decoupling: Standalone. Does NOT depend on Scope 6 (Soulfray recovery). Shipped on
 the `magical-scars` branch.
 
-**Scope #5.5 — Reactive Foundations (TODO — CRITICAL FOLLOW-UP):**
+**Scope #5.5 — Reactive Foundations (DONE — branch `design/reactive-layer`):**
 
-> **Roadmap blind spot acknowledgment.** The flows/triggers system in `src/flows/`
-> is a fully-implemented reactive layer — `Event`, `TriggerDefinition`, `Trigger`,
-> `TriggerRegistry`, `FlowDefinition`, `FlowExecution` all exist with passing
-> integration tests. But it has **no content**: no events are emitted at most
-> reactive moments, no FlowDefinitions or TriggerDefinitions live in the database,
-> and no system declares triggers to attach. This means the entire architectural
-> answer to "something happens when X" — curses, environmental hazards, item
-> reactions, divine wrath, allergies, contact effects, observer reactions —
-> currently *cannot be authored at all*. This is a foundational gap that was
-> not previously called out in any roadmap doc, and it blocks the witchiest
-> magical scars (the Scope 5 ones where the world reacts to you), most
-> interesting cursed item designs, environmental hazards, and a long tail of
-> reactive gameplay across every domain.
+Shipped the reactive layer wedge: events are now emitted at damage, attack,
+move, examine, condition-lifecycle, and technique-cast moments; triggers
+install from `ConditionInstance` rows and are served by a per-owner
+`TriggerHandler` cached on the typeclass. Dispatch is **unified** —
+`emit_event(event_name, payload, location)` performs one location walk,
+calls `triggers_for(event_name)` on every owner reached, priority-sorts
+the combined list globally (descending), and dispatches synchronously on
+one `FlowStack`, stopping on cancellation. There is no `scope` field and
+no ROOM-vs-PERSONAL split; self-vs-target-vs-bystander semantics come
+from JSON filters (`{"path": "target", "op": "==", "value": "self"}` and
+friends — the evaluator resolves bare `"self"` to the trigger owner).
+Filters are a JSON DSL (`==`, `!=`, `contains`, `has_property`, `in`,
+`>`/`<`); AE payloads carry a `targets: list` and emit once through the
+same path; flow authors get new action steps (`CANCEL_EVENT`,
+`MODIFY_PAYLOAD`, `PROMPT_PLAYER`, plus `EMIT_FLOW_EVENT` that also
+routes through `emit_event`); player prompts suspend via Twisted
+`Deferred` with no DB rows and resume via the `@reply` account command.
+`DEAL_DAMAGE` / `REMOVE_CONDITION` flow steps were deferred — flows can
+still trigger those side effects today by emitting a flow event that
+calls the existing `apply_damage_to_participant` / `remove_condition`
+service functions.
+
+Plan: `docs/superpowers/plans/2026-04-17-reactive-layer-implementation.md`.
+Spec: `docs/superpowers/specs/2026-04-16-reactive-layer-design.md`.
+Key new modules: `flows/trigger_handler.py`, `flows/emit.py`,
+`flows/events/`, `flows/filters/`, `flows/execution/prompts.py`,
+`world/combat/damage_source.py`. 29 integration tests cover damage-source
+discrimination, cross-character filters, AE topology, stage cascades,
+cancellation tiers, and async prompt resolution; 10 are authored-but-skipped
+pending follow-up infrastructure (covenant relationships, Property M2M on
+Technique, trigger usage-cap fields, mutable `ExaminedPayload`).
 
 Scope 5.5 is the deliberate "light up flows/triggers" PR. It must follow Scope 5
 **sooner rather than later** — magical scars without reactive side effects are

@@ -1,12 +1,14 @@
 from functools import cached_property
 from typing import cast
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from flows.constants import EventName
+from flows.filters.validator import validate_filter_schema
 from flows.flow_event import FlowEvent
 from flows.helpers.logic import resolve_self_placeholders
-from flows.models.events import Event
 from flows.models.flows import FlowDefinition
 
 
@@ -14,25 +16,24 @@ class TriggerDefinition(SharedMemoryModel):
     """Reusable template describing when to launch another flow.
 
     ``base_filter_condition`` allows simple equality checks against event data to
-    decide if the trigger should fire. For example, given a ``glance`` event::
+    decide if the trigger should fire. For example, given an ``examined`` event::
 
         TriggerDefinition(
-            name="on glance at me",
-            event=Event.objects.get(name="glance"),
+            name="on examine at me",
+            event_name=EventName.EXAMINED,
             flow_definition=response_flow,
             base_filter_condition={"target": 5},
         )
 
-    A trigger based on this definition will only activate when the ``glance``
+    A trigger based on this definition will only activate when the ``examined``
     event's ``target`` equals ``5`` (the object's primary key).
     """
 
     name = models.CharField(max_length=255, unique=True)
-    event = models.ForeignKey(
-        Event,
-        on_delete=models.CASCADE,
-        db_column="event_id",
-        help_text="The event this trigger listens for.",
+    event_name = models.CharField(
+        max_length=64,
+        choices=EventName.choices,
+        help_text="The event name this trigger listens for.",
     )
     flow_definition = models.ForeignKey(
         FlowDefinition,
@@ -54,12 +55,20 @@ class TriggerDefinition(SharedMemoryModel):
         help_text="Higher priority triggers fire first.",
     )
 
+    def clean(self) -> None:
+        super().clean()
+        if self.base_filter_condition:
+            validate_filter_schema(
+                self.base_filter_condition,
+                event_name=self.event_name,
+            )
+
     def matches_event(self, event: FlowEvent, obj: object = None) -> bool:
         conditions = resolve_self_placeholders(
             cast(dict[str, object] | None, self.base_filter_condition),
             obj,
         )
-        return self.event.name == event.event_type and event.matches_conditions(
+        return self.event_name == event.event_type and event.matches_conditions(
             conditions,
         )
 
@@ -86,6 +95,39 @@ class Trigger(SharedMemoryModel):
         null=True,
         help_text=("Optional JSON condition to further refine when this trigger activates."),
     )
+    source_condition = models.ForeignKey(
+        "conditions.ConditionInstance",
+        on_delete=models.CASCADE,
+        related_name="triggers",
+        help_text="Condition that installed this trigger. Required.",
+    )
+    source_stage = models.ForeignKey(
+        "conditions.ConditionStage",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="stage_triggers",
+        help_text="If set, active only while source_condition is at this stage.",
+    )
+
+    def clean(self) -> None:
+        super().clean()
+        if self.source_stage and self.source_condition:
+            # ConditionStage and ConditionInstance both FK to ConditionTemplate
+            # via the `condition` field.
+            if self.source_stage.condition_id != self.source_condition.condition_id:
+                raise ValidationError(
+                    {
+                        "source_stage": (
+                            "source_stage must belong to source_condition's ConditionTemplate"
+                        ),
+                    }
+                )
+        if self.additional_filter_condition:
+            validate_filter_schema(
+                self.additional_filter_condition,
+                event_name=self.trigger_definition.event_name,
+            )
 
     @cached_property
     def trigger_data_items(self) -> list["TriggerData"]:

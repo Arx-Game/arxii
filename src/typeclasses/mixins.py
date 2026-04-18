@@ -1,8 +1,9 @@
+from functools import cached_property
 from typing import TYPE_CHECKING, Self, Union
 
 from flows.object_states.base_state import BaseState
 from flows.scene_data_manager import SceneDataManager
-from flows.trigger_registry import TriggerRegistry
+from flows.trigger_handler import TriggerHandler
 
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
@@ -36,12 +37,10 @@ class ObjectParent:
     ) -> BaseState:
         return self.state_class(obj=self, context=context)
 
-    @property
-    def trigger_registry(self: Union[Self, "DefaultObject"]) -> TriggerRegistry | None:
-        """Return the trigger registry from our containing location."""
-        if self.location:
-            return self.location.trigger_registry
-        return None
+    @cached_property
+    def trigger_handler(self: Union[Self, "DefaultObject"]) -> TriggerHandler:
+        """Populate-once cache of active triggers for this object."""
+        return TriggerHandler(owner=self)
 
     @property
     def scene_data(self: Union[Self, "DefaultObject"]):
@@ -75,21 +74,43 @@ class ObjectParent:
             return state.get_display_name(looker_state, **kwargs)
         return super().get_display_name(looker, **kwargs)
 
-    def at_post_move(self, source_location, move_type="move", **kwargs):
-        """Register or unregister triggers when moving between rooms."""
-        try:
-            old_registry = source_location.trigger_registry
-        except AttributeError:
-            old_registry = None
+    def at_examined(self: Union[Self, "DefaultObject"], observer: "DefaultObject") -> bool:
+        """Called when *observer* examines *self*.
 
-        new_registry = self.trigger_registry
+        Emits EXAMINE_PRE (mutable — lets listeners veto/modify), then
+        EXAMINED (frozen — post-event). Returns False if a reactive trigger
+        cancelled the examine; callers should honour the return value.
+        """
+        from flows.constants import EventName
+        from flows.emit import emit_event
+        from flows.events.payloads import ExaminedPayload, ExaminePrePayload
 
-        if old_registry:
-            for trigger in self.triggers.all():
-                old_registry.unregister_trigger(trigger)
+        # For rooms, self is its own location; for characters/objects, use
+        # the containing room.
+        location = self.location if self.location is not None else self
+        pre = ExaminePrePayload(observer=observer, target=self)
+        stack = emit_event(
+            EventName.EXAMINE_PRE,
+            pre,
+            location=location,
+        )
+        if stack.was_cancelled():
+            return False
 
-        if new_registry:
-            for trigger in self.triggers.all():
-                new_registry.register_trigger(trigger)
+        post = ExaminedPayload(observer=observer, target=self)
+        emit_event(
+            EventName.EXAMINED,
+            post,
+            location=location,
+        )
+        return True
 
-        super().at_post_move(source_location, move_type=move_type, **kwargs)
+    def return_appearance(self, looker: "DefaultObject | None", **kwargs) -> str:
+        """Return description string, after running the examine hook.
+
+        If a reactive trigger cancels the examine, returns an empty string
+        so that the calling command shows nothing (or its own fallback).
+        """
+        if looker is not None and not self.at_examined(looker):
+            return ""
+        return super().return_appearance(looker, **kwargs)  # type: ignore[misc]

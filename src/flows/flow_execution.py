@@ -4,12 +4,12 @@ from typing import TYPE_CHECKING, Optional, cast
 from flows.consts import FlowState
 from flows.object_states.base_state import BaseState
 from flows.scene_data_manager import SceneDataManager
-from flows.trigger_registry import TriggerRegistry
 
 if TYPE_CHECKING:
     # noinspection PyUnresolvedReferences
     from flows.flow_stack import FlowStack
     from flows.models import FlowDefinition, FlowStepDefinition
+    from flows.trigger_handler import DispatchResult
 
 
 class FlowExecution:
@@ -33,7 +33,8 @@ class FlowExecution:
         flow_stack: "FlowStack",
         origin: object,
         variable_mapping: dict[str, object] | None = None,
-        trigger_registry: TriggerRegistry | None = None,
+        *,
+        dispatch_result: "DispatchResult | None" = None,
     ) -> None:
         """Initialize a FlowExecution instance.
 
@@ -43,7 +44,8 @@ class FlowExecution:
             flow_stack: FlowStack orchestrating nested flows.
             origin: Object that initiated the flow.
             variable_mapping: Initial mapping of variable names to values.
-            trigger_registry: Registry used when emitting events.
+            dispatch_result: DispatchResult from the triggering dispatch call,
+                available to reactive flow steps (e.g. CANCEL_EVENT).
         """
         self.flow_definition = flow_definition
         self.context = context
@@ -52,19 +54,16 @@ class FlowExecution:
         self.state: FlowState = FlowState.RUNNING
         self.stop_reason: str | None = None
         self.variable_mapping = variable_mapping or {}  # Maps flow variable names to their values
-        self.trigger_registry = trigger_registry or flow_stack.trigger_registry
+        self.dispatch_result = dispatch_result
         self.steps: list[FlowStepDefinition] = list(flow_definition.steps.all())
         self.current_step = self._get_entry_step()
 
-    def _get_entry_step(self) -> "FlowStepDefinition":
-        """Finds and returns the entry step (the step with no parent)."""
+    def _get_entry_step(self) -> Optional["FlowStepDefinition"]:
+        """Finds and returns the entry step (the step with no parent), or None if no steps."""
         for step in self.steps:
             if step.parent is None:
                 return step
-        msg = f"No entry step found for FlowDefinition '{self.flow_definition.name}'."
-        raise RuntimeError(
-            msg,
-        )
+        return None
 
     def execute_current_step(self) -> None:
         """
@@ -177,7 +176,3 @@ class FlowExecution:
     def execution_key(self) -> str:
         """Return a unique key for this execution based on the definition and origin."""
         return f"{self.flow_definition.pk}:{self.origin!s}"
-
-    def get_trigger_registry(self) -> TriggerRegistry | None:
-        """Return the TriggerRegistry for the current execution."""
-        return self.trigger_registry

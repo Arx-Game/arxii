@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from django.test import TestCase
 
@@ -82,7 +82,7 @@ class TestEvilNameFlow(TestCase):
         fx = FlowExecutionFactory(
             flow_definition=look_flow,
             variable_mapping={"room": room},
-            flow_stack=FlowStack(trigger_registry=MagicMock()),
+            flow_stack=FlowStack(),
         )
         for obj in (room, good, evil, viewer):
             fx.context.initialize_state_for_object(obj)

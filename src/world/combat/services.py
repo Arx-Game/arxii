@@ -26,6 +26,15 @@ if TYPE_CHECKING:
 
     PerformCheckFn = Callable[..., CheckResult]
 
+from flows.constants import EventName
+from flows.emit import emit_event
+from flows.events.payloads import (
+    AttackPreResolvePayload,
+    CharacterIncapacitatedPayload,
+    CharacterKilledPayload,
+    DamageAppliedPayload,
+    DamagePreApplyPayload,
+)
 from world.combat.constants import (
     DEFENSE_CRITICAL_MULTIPLIER,
     DEFENSE_FULL_MULTIPLIER,
@@ -46,6 +55,7 @@ from world.combat.constants import (
     TargetingMode,
     TargetSelection,
 )
+from world.combat.damage_source import classify_source
 from world.combat.models import (
     BossPhase,
     CombatEncounter,
@@ -568,11 +578,19 @@ def apply_damage_to_participant(
     damage: int,
     *,
     force_death: bool = False,
+    damage_type: str = "physical",
+    source: object | None = None,
 ) -> ParticipantDamageResult:
     """Apply damage to a PC via their CharacterVitals.
 
     Does NOT roll for knockout/death/wounds — only reports eligibility.
     The caller is responsible for acting on the result.
+
+    Emits reactive events:
+    - DAMAGE_PRE_APPLY (cancellable, mutable amount)
+    - DAMAGE_APPLIED (post-save, frozen)
+    - CHARACTER_INCAPACITATED (if knockout_eligible)
+    - CHARACTER_KILLED (if death_eligible or force_death)
     """
     from world.vitals.models import CharacterVitals  # noqa: PLC0415
 
@@ -580,7 +598,36 @@ def apply_damage_to_participant(
         character_sheet=participant.character_sheet,
     )
 
-    vitals.health -= damage
+    character = participant.character_sheet.character
+    room = character.location
+    damage_source = classify_source(source)
+
+    # --- DAMAGE_PRE_APPLY (cancellable, amount may be modified) ---
+    pre_payload = DamagePreApplyPayload(
+        target=character,
+        amount=damage,
+        damage_type=damage_type,
+        source=damage_source,
+    )
+    if room is not None:
+        stack = emit_event(
+            EventName.DAMAGE_PRE_APPLY,
+            pre_payload,
+            location=room,
+        )
+        if stack.was_cancelled():
+            return ParticipantDamageResult(
+                damage_dealt=0,
+                health_after=vitals.health,
+                knockout_eligible=False,
+                death_eligible=False,
+                permanent_wound_eligible=False,
+            )
+
+    # Use the (possibly modified) amount from the payload
+    effective_damage = pre_payload.amount
+
+    vitals.health -= effective_damage
     health_after = vitals.health
 
     if vitals.max_health > 0:
@@ -592,7 +639,7 @@ def apply_damage_to_participant(
         health_pct <= KNOCKOUT_HEALTH_THRESHOLD and health_after > DEATH_HEALTH_THRESHOLD
     )
     death_eligible = health_after <= DEATH_HEALTH_THRESHOLD
-    permanent_wound_eligible = damage > (vitals.max_health * PERMANENT_WOUND_THRESHOLD)
+    permanent_wound_eligible = effective_damage > (vitals.max_health * PERMANENT_WOUND_THRESHOLD)
 
     update_fields = ["health"]
     if force_death:
@@ -602,8 +649,44 @@ def apply_damage_to_participant(
 
     vitals.save(update_fields=update_fields)
 
+    # --- DAMAGE_APPLIED (post-save, frozen) ---
+    applied_payload = DamageAppliedPayload(
+        target=character,
+        amount_dealt=effective_damage,
+        damage_type=pre_payload.damage_type,
+        source=damage_source,
+        hp_after=health_after,
+    )
+    if room is not None:
+        emit_event(
+            EventName.DAMAGE_APPLIED,
+            applied_payload,
+            location=room,
+        )
+
+        # --- Incapacitation / death gates ---
+        if knockout_eligible:
+            emit_event(
+                EventName.CHARACTER_INCAPACITATED,
+                CharacterIncapacitatedPayload(
+                    character=character,
+                    source_event=EventName.DAMAGE_PRE_APPLY,
+                ),
+                location=room,
+            )
+
+        if death_eligible or force_death:
+            emit_event(
+                EventName.CHARACTER_KILLED,
+                CharacterKilledPayload(
+                    character=character,
+                    source_event=EventName.DAMAGE_PRE_APPLY,
+                ),
+                location=room,
+            )
+
     return ParticipantDamageResult(
-        damage_dealt=damage,
+        damage_dealt=effective_damage,
         health_after=health_after,
         knockout_eligible=knockout_eligible,
         death_eligible=death_eligible,
@@ -953,13 +1036,47 @@ def resolve_npc_attack(
         from world.checks.services import perform_check as perform_check_fn  # noqa: PLC0415
 
     character = participant.character_sheet.character
+    room = character.location
+
+    # --- ATTACK_PRE_RESOLVE (cancellable) ---
+    pre_payload = AttackPreResolvePayload(
+        attacker=opponent_action.opponent,
+        targets=[character],
+        weapon=None,
+        action=opponent_action,
+    )
+    if room is not None:
+        stack = emit_event(
+            EventName.ATTACK_PRE_RESOLVE,
+            pre_payload,
+            location=room,
+        )
+        if stack.was_cancelled():
+            return DefenseResult(
+                success_level=0,
+                damage_multiplier=0.0,
+                final_damage=0,
+                damage_result=ParticipantDamageResult(
+                    damage_dealt=0,
+                    health_after=0,
+                    knockout_eligible=False,
+                    death_eligible=False,
+                    permanent_wound_eligible=False,
+                ),
+            )
+
     result: CheckResult = perform_check_fn(character, check_type)
 
     multiplier = _damage_multiplier_for_success(result.success_level)
     base_damage = opponent_action.threat_entry.base_damage
     final_damage = math.floor(base_damage * multiplier)
 
-    damage_result = apply_damage_to_participant(participant, final_damage)
+    damage_result = apply_damage_to_participant(
+        participant,
+        final_damage,
+        damage_type=opponent_action.threat_entry.attack_category,
+        source=opponent_action.opponent,
+    )
 
     return DefenseResult(
         success_level=result.success_level,
@@ -1186,6 +1303,8 @@ def _resolve_npc_action(
             dmg_result = apply_damage_to_participant(
                 target_participant,
                 npc_action.threat_entry.base_damage,
+                damage_type=npc_action.threat_entry.attack_category,
+                source=opponent,
             )
         outcome.damage_results.append(dmg_result)
 

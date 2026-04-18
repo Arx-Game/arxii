@@ -12,7 +12,6 @@ from evennia.objects.objects import DefaultRoom
 from evennia_extensions.models import RoomProfile
 from flows.object_states.room_state import RoomState
 from flows.scene_data_manager import SceneDataManager
-from flows.trigger_registry import TriggerRegistry
 from typeclasses.mixins import ObjectParent
 from world.scenes.models import Scene
 
@@ -41,11 +40,6 @@ class Room(ObjectParent, DefaultRoom):
         from evennia_extensions.data_handlers import RoomItemDataHandler
 
         return RoomItemDataHandler(self)
-
-    @cached_property
-    def trigger_registry(self) -> TriggerRegistry:
-        """Return the TriggerRegistry associated with this room."""
-        return TriggerRegistry()
 
     @cached_property
     def scene_data(self) -> SceneDataManager:

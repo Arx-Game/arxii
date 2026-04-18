@@ -5,7 +5,8 @@ from typing import TYPE_CHECKING, Any, Optional, cast
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from flows.consts import ITEM_REF, OPERATOR_MAP, RESULT_VARIABLE_KEY, FlowActionChoices
+from flows.consts import ITEM_REF, OPERATOR_MAP, RESULT_VARIABLE_KEY, FlowActionChoices, FlowState
+from flows.execution.prompts import register_pending_prompt
 from flows.flow_event import FlowEvent
 from flows.helpers.logic import resolve_modifier
 
@@ -20,6 +21,24 @@ CONDITIONAL_ACTIONS = {
     FlowActionChoices.EVALUATE_LESS_THAN_OR_EQUALS,
     FlowActionChoices.EVALUATE_GREATER_THAN_OR_EQUALS,
 }
+
+
+def _resolve_emit_location(flow_execution: "FlowExecution") -> Any:
+    """Pick the location to dispatch an EMIT_FLOW_EVENT to.
+
+    When the owning FlowStack is rooted on a room, dispatch to the room.
+    Otherwise, dispatch to the owner's ``location`` (e.g., the room a
+    character is in). Returns ``None`` when no dispatchable location can
+    be resolved — callers should skip the emit in that case.
+    """
+    owner = getattr(flow_execution.flow_stack, "owner", None)  # noqa: GETATTR_LITERAL
+    if owner is None:
+        return None
+    from evennia.objects.objects import DefaultRoom  # noqa: PLC0415 — Evennia import at runtime
+
+    if isinstance(owner, DefaultRoom):
+        return owner
+    return getattr(owner, "location", None)  # noqa: GETATTR_LITERAL
 
 
 class FlowDefinition(SharedMemoryModel):
@@ -118,6 +137,9 @@ class FlowStepDefinition(SharedMemoryModel):
             FlowActionChoices.CALL_SERVICE_FUNCTION: (self._execute_call_service_function),
             FlowActionChoices.EMIT_FLOW_EVENT: self._execute_emit_flow_event,
             FlowActionChoices.EMIT_FLOW_EVENT_FOR_EACH: (self._execute_emit_flow_event_for_each),
+            FlowActionChoices.CANCEL_EVENT: self._execute_cancel_event,
+            FlowActionChoices.MODIFY_PAYLOAD: self._execute_modify_payload,
+            FlowActionChoices.PROMPT_PLAYER: self._execute_prompt_player,
         }
         handler = action_map.get(self.action)
         if handler:
@@ -401,7 +423,16 @@ class FlowStepDefinition(SharedMemoryModel):
     def _execute_emit_flow_event(
         self, flow_execution: "FlowExecution"
     ) -> Optional["FlowStepDefinition"]:
-        """Create and dispatch a :class:`FlowEvent`."""
+        """Dispatch the event through the unified ``emit_event`` pipeline.
+
+        Creates a :class:`FlowEvent` shim for context traversal and stores
+        it under ``variable_name`` so downstream steps can read it from
+        ``scene_data.flow_events``. Then dispatches to the resolved
+        location via ``emit_event``; if the resulting stack is cancelled
+        execution halts.
+        """
+        from flows.emit import emit_event  # noqa: PLC0415 — Evennia startup
+
         params = self._parameters_mapping()
         event_type = params.get("event_type", self.variable_name)
         event_data = params.get("data", {})
@@ -410,20 +441,26 @@ class FlowStepDefinition(SharedMemoryModel):
         }
         flow_event = FlowEvent(event_type, source=flow_execution, data=resolved_data)
         flow_execution.context.store_flow_event(self.variable_name, flow_event)
-        trigger_registry = flow_execution.get_trigger_registry()
-        trigger_registry.process_event(
-            flow_event,
-            flow_execution.flow_stack,
-            flow_execution.context,
+
+        location = _resolve_emit_location(flow_execution)
+        if location is None:
+            return flow_execution.get_next_child(self)
+
+        nested_stack = emit_event(
+            event_type,
+            resolved_data,
+            location=location,
+            parent_stack=flow_execution.flow_stack,
         )
-        if flow_event.stop_propagation:
+        if nested_stack.was_cancelled():
             return None
         return flow_execution.get_next_child(self)
 
     def _execute_emit_flow_event_for_each(
         self, flow_execution: "FlowExecution"
     ) -> Optional["FlowStepDefinition"]:
-        """Emit an event for every item in an iterable."""
+        """Emit an event for every item in an iterable via ``emit_event``."""
+        from flows.emit import emit_event  # noqa: PLC0415 — Evennia startup
 
         params = self._parameters_mapping()
         iterable_ref = params.get("iterable")
@@ -436,6 +473,7 @@ class FlowStepDefinition(SharedMemoryModel):
         item_key = params.get("item_key", "item")
         next_step = flow_execution.get_next_child(self)
         items: list[Any] = list(iterable) if isinstance(iterable, Iterable) else []
+        location = _resolve_emit_location(flow_execution)
         for idx, item in enumerate(items):
             data = {
                 key: (item if val == ITEM_REF else flow_execution.resolve_flow_reference(val))
@@ -446,14 +484,103 @@ class FlowStepDefinition(SharedMemoryModel):
             flow_event = FlowEvent(event_type, source=flow_execution, data=data)
             context_key = f"{self.variable_name}_{idx}"
             flow_execution.context.store_flow_event(context_key, flow_event)
-            trigger_registry = flow_execution.get_trigger_registry()
-            trigger_registry.process_event(
-                flow_event,
-                flow_execution.flow_stack,
-                flow_execution.context,
+
+            if location is None:
+                continue
+            nested_stack = emit_event(
+                event_type,
+                data,
+                location=location,
+                parent_stack=flow_execution.flow_stack,
             )
-            if flow_event.stop_propagation:
+            if nested_stack.was_cancelled():
                 return None
+        return next_step
+
+    def _execute_cancel_event(
+        self,
+        flow_execution: "FlowExecution",
+    ) -> Optional["FlowStepDefinition"]:
+        """Set DispatchResult.cancelled=True and mark the FlowStack cancelled.
+
+        Emission sites check ``flow_stack.was_cancelled()`` after dispatch to
+        decide whether to suppress the default behavior (e.g., skip damage).
+        The dispatch loop in TriggerHandler also reads ``result.cancelled``
+        and stops walking further triggers.
+        """
+        if flow_execution.dispatch_result is not None:
+            flow_execution.dispatch_result.cancelled = True
+        if flow_execution.flow_stack is not None:
+            flow_execution.flow_stack.mark_cancelled()
+        return flow_execution.get_next_child(self)
+
+    def _execute_modify_payload(
+        self,
+        flow_execution: "FlowExecution",
+    ) -> Optional["FlowStepDefinition"]:
+        """Mutate a field on the current payload dataclass.
+
+        Reads ``field``, ``op``, and ``value`` from step parameters. Ops are
+        ``set`` (replace), ``multiply``, and ``add``. POST events use frozen
+        dataclasses — ``setattr`` raises ``FrozenInstanceError``, which is the
+        desired behavior.
+        """
+        params = self._parameters_mapping()
+        payload = flow_execution.get_variable("payload")
+        field = params["field"]
+        op = params["op"]
+        value = params["value"]
+
+        current = getattr(payload, field)  # noqa: GETATTR_LITERAL — payload field by name
+        if op == "set":  # noqa: STRING_LITERAL — internal op protocol, not a model identifier
+            new_value = value
+        elif op == "multiply":  # noqa: STRING_LITERAL — internal op protocol, not a model identifier
+            new_value = current * value
+        elif op == "add":  # noqa: STRING_LITERAL — internal op protocol, not a model identifier
+            new_value = current + value
+        else:
+            msg = f"Unknown modify_payload op: {op}"
+            raise ValueError(msg)
+        setattr(payload, field, new_value)  # noqa: GETATTR_LITERAL — payload field by name
+        return flow_execution.get_next_child(self)
+
+    def _execute_prompt_player(
+        self,
+        flow_execution: "FlowExecution",
+    ) -> Optional["FlowStepDefinition"]:
+        """Suspend the flow until the player responds to a prompt.
+
+        Registers a pending prompt for the account resolved from ``params["account"]``.
+        The returned Deferred fires when ``resolve_pending_prompt`` is called; the
+        ``_resume`` callback sets the result variable and resumes the flow.
+
+        The next step is pre-positioned as ``current_step`` so that when the
+        ``FlowStack.execute_flow`` loop restarts (after ``state`` is set back to
+        ``RUNNING``), it picks up at the correct place.
+        """
+        params = self._parameters_mapping()
+        account = flow_execution.resolve_flow_reference(params["account"])  # noqa: STRING_LITERAL — parameter key, not a model identifier
+        result_variable = params["result_variable"]  # noqa: STRING_LITERAL — parameter key, not a model identifier
+        default_answer = params.get("default_answer")
+
+        prompt_key = f"{flow_execution.flow_definition.pk}:{id(flow_execution)}:{self.pk}"
+
+        deferred = register_pending_prompt(
+            account_id=account.pk,
+            prompt_key=prompt_key,
+            default_answer=default_answer,
+        )
+
+        next_step = flow_execution.get_next_child(self)
+
+        def _resume(answer: object) -> None:
+            flow_execution.variable_mapping[result_variable] = answer
+            flow_execution.state = FlowState.RUNNING
+            flow_execution.flow_stack.execute_flow(flow_execution)
+
+        deferred.addCallback(_resume)
+
+        flow_execution.state = FlowState.SUSPENDED
         return next_step
 
     def __str__(self) -> str:

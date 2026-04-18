@@ -5,6 +5,11 @@ Factories for conditions app tests.
 import factory
 from factory.django import DjangoModelFactory
 
+from flows.factories import (
+    FlowDefinitionFactory,
+    TriggerDefinitionFactory,
+    TriggerFactory,
+)
 from world.conditions.constants import (
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
@@ -198,3 +203,49 @@ class ConditionInstanceFactory(DjangoModelFactory):
     source_technique = None
     source_description = ""
     is_suppressed = False
+
+
+class _ReactiveConditionFactory:
+    """Helper that composes Event + TriggerDefinition + ConditionInstance + Trigger.
+
+    Not a DjangoModelFactory — this is a callable composition wrapper.
+    Callers invoke ``ReactiveConditionFactory(event_name=...)`` mimicking the
+    DjangoModelFactory API.
+
+    Use ``target=...`` to attach the reactive condition to an existing ObjectDB
+    (Character, room, item). If omitted, the underlying ConditionInstanceFactory
+    creates a throwaway ObjectDB.
+    """
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        event_name: str,
+        filter_condition: dict | None = None,
+        flow_definition=None,
+        target=None,
+        stage=None,
+    ):
+        flow_def = flow_definition or FlowDefinitionFactory()
+        trigger_def = TriggerDefinitionFactory(
+            event_name=event_name,
+            flow_definition=flow_def,
+        )
+        condition_kwargs = {}
+        if target is not None:
+            condition_kwargs["target"] = target
+        condition = ConditionInstanceFactory(**condition_kwargs)
+        return TriggerFactory(
+            trigger_definition=trigger_def,
+            obj=condition.target,
+            source_condition=condition,
+            source_stage=stage,
+            additional_filter_condition=filter_condition,
+        )
+
+    def __call__(self, **kwargs):
+        return self.create(**kwargs)
+
+
+ReactiveConditionFactory = _ReactiveConditionFactory()
