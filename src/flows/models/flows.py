@@ -23,6 +23,24 @@ CONDITIONAL_ACTIONS = {
 }
 
 
+def _resolve_emit_location(flow_execution: "FlowExecution") -> Any:
+    """Pick the location to dispatch an EMIT_FLOW_EVENT to.
+
+    When the owning FlowStack is rooted on a room, dispatch to the room.
+    Otherwise, dispatch to the owner's ``location`` (e.g., the room a
+    character is in). Returns ``None`` when no dispatchable location can
+    be resolved — callers should skip the emit in that case.
+    """
+    owner = getattr(flow_execution.flow_stack, "owner", None)  # noqa: GETATTR_LITERAL
+    if owner is None:
+        return None
+    from evennia.objects.objects import DefaultRoom  # noqa: PLC0415 — Evennia import at runtime
+
+    if isinstance(owner, DefaultRoom):
+        return owner
+    return getattr(owner, "location", None)  # noqa: GETATTR_LITERAL
+
+
 class FlowDefinition(SharedMemoryModel):
     """Represents a reusable definition for a flow, consisting of multiple steps."""
 
@@ -405,7 +423,16 @@ class FlowStepDefinition(SharedMemoryModel):
     def _execute_emit_flow_event(
         self, flow_execution: "FlowExecution"
     ) -> Optional["FlowStepDefinition"]:
-        """Create and dispatch a :class:`FlowEvent`."""
+        """Dispatch the event through the unified ``emit_event`` pipeline.
+
+        Creates a :class:`FlowEvent` shim for context traversal and stores
+        it under ``variable_name`` so downstream steps can read it from
+        ``scene_data.flow_events``. Then dispatches to the resolved
+        location via ``emit_event``; if the resulting stack is cancelled
+        execution halts.
+        """
+        from flows.emit import emit_event  # noqa: PLC0415 — Evennia startup
+
         params = self._parameters_mapping()
         event_type = params.get("event_type", self.variable_name)
         event_data = params.get("data", {})
@@ -414,20 +441,26 @@ class FlowStepDefinition(SharedMemoryModel):
         }
         flow_event = FlowEvent(event_type, source=flow_execution, data=resolved_data)
         flow_execution.context.store_flow_event(self.variable_name, flow_event)
-        trigger_registry = flow_execution.get_trigger_registry()
-        trigger_registry.process_event(
-            flow_event,
-            flow_execution.flow_stack,
-            flow_execution.context,
+
+        location = _resolve_emit_location(flow_execution)
+        if location is None:
+            return flow_execution.get_next_child(self)
+
+        nested_stack = emit_event(
+            event_type,
+            resolved_data,
+            location=location,
+            parent_stack=flow_execution.flow_stack,
         )
-        if flow_event.stop_propagation:
+        if nested_stack.was_cancelled():
             return None
         return flow_execution.get_next_child(self)
 
     def _execute_emit_flow_event_for_each(
         self, flow_execution: "FlowExecution"
     ) -> Optional["FlowStepDefinition"]:
-        """Emit an event for every item in an iterable."""
+        """Emit an event for every item in an iterable via ``emit_event``."""
+        from flows.emit import emit_event  # noqa: PLC0415 — Evennia startup
 
         params = self._parameters_mapping()
         iterable_ref = params.get("iterable")
@@ -440,6 +473,7 @@ class FlowStepDefinition(SharedMemoryModel):
         item_key = params.get("item_key", "item")
         next_step = flow_execution.get_next_child(self)
         items: list[Any] = list(iterable) if isinstance(iterable, Iterable) else []
+        location = _resolve_emit_location(flow_execution)
         for idx, item in enumerate(items):
             data = {
                 key: (item if val == ITEM_REF else flow_execution.resolve_flow_reference(val))
@@ -450,13 +484,16 @@ class FlowStepDefinition(SharedMemoryModel):
             flow_event = FlowEvent(event_type, source=flow_execution, data=data)
             context_key = f"{self.variable_name}_{idx}"
             flow_execution.context.store_flow_event(context_key, flow_event)
-            trigger_registry = flow_execution.get_trigger_registry()
-            trigger_registry.process_event(
-                flow_event,
-                flow_execution.flow_stack,
-                flow_execution.context,
+
+            if location is None:
+                continue
+            nested_stack = emit_event(
+                event_type,
+                data,
+                location=location,
+                parent_stack=flow_execution.flow_stack,
             )
-            if flow_event.stop_propagation:
+            if nested_stack.was_cancelled():
                 return None
         return next_step
 
