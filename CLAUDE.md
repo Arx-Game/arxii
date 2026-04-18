@@ -221,19 +221,24 @@ This is slower (~3 minutes) but catches an entire class of bugs that `--keepdb` 
 
 **Never rely on Evennia defaults in service functions.** When calling `create_object`, always either pass explicit `home=`, `location=`, etc., or pass `nohome=True` / `nolocation=True`. The implicit fallback to `settings.DEFAULT_HOME` (Limbo #2) only works when Evennia's initial setup has run — CI test DBs do not run initial setup, so FK violations fire before any graceful fallback. Same caution for `DEFAULT_SCRIPT_HOME`, Account #1 references, and anything else that assumes "Evennia will figure out the default."
 
-**Wrapper scripts for repetitive approval-prompting commands.** `.claude/scripts/` is a whitelisted directory: one allowlist entry (`Bash(bash .claude/scripts/*)`) covers every script in it, so any invocation of `bash .claude/scripts/<anything> ...` auto-approves. When a repetitive write-style command (tee to a file, redirect to a log, etc.) keeps triggering per-path approval prompts, stop iterating on the raw command — write a safe wrapper in `.claude/scripts/` and use it from then on. The wrapper should: validate its inputs (reject path traversal, absolute paths, etc.), do the one thing it's for, and preserve exit codes via `set -o pipefail` / `PIPESTATUS`. Document the wrapper in this file and in any friction-note memory so it gets reused.
-
-**Scratch workspace for test output.** When you need to capture test output to a file to read back (long runs, stderr dumps, greps of large output), use the existing wrapper:
+**Use `just` for task runners, not raw `bash`/`python`.** The repo has a `justfile` at the root with recipes for common dev tasks (test, lint, manage, etc.). `just` is pinned in `mise.toml` and covered by a single `Bash(just:*)` allowlist entry, so any recipe invocation auto-approves.
 
 ```bash
-bash .claude/scripts/arx-test-scratch.sh <filename> <arx test args...>
-# e.g.
-bash .claude/scripts/arx-test-scratch.sh flows.txt flows --keepdb
+just                        # list recipes
+just test flows --keepdb    # arx test pass-through
+just test-scratch name args # capture output to .claude/scratch/<name>
+just regression             # full no-keepdb regression run
+just lint                   # ruff check
+just manage migrate flows   # arx manage pass-through
 ```
 
-It combines stdout+stderr, tees to `.claude/scratch/<filename>`, and exits with the test's own exit code. Then `Read` the file normally — `.claude/scratch/` is inside the working directory so reads don't prompt, and the whole `.claude` tree is gitignored.
+Prefer `just <recipe>` over:
+- Raw `bash <script>`, `python <script>`, `sh <script>` — these invoke "can do anything" interpreters and trigger per-command approval every time. Never give `Bash(bash:*)` blanket approval.
+- Direct `bash .claude/scripts/<name>.sh` — still works (covered by `Bash(bash .claude/scripts/*)`) but use the just recipe if one exists so all invocation forms converge on one canonical form.
 
-Do NOT fall back to `tee` pipelines directly (each new path triggers a fresh approval), and do NOT use `/tmp/...`, `$TMPDIR`, or `%TEMP%` paths (also prompt every time). Files in `.claude/scratch/` are never preserved; delete freely. Propagate this convention into subagent prompts when you dispatch them.
+**When no recipe exists:** add one to `justfile` rather than running raw scripts or accumulating per-path allowlist entries. Wrappers in `.claude/scripts/` that need input validation (path traversal, etc.) still live there and are called from justfile recipes — `set -o pipefail` / `PIPESTATUS` preserves exit codes. Document new recipes in this section.
+
+**Scratch workspace.** Test output capture: `just test-scratch <filename> <arx test args...>` (wraps `.claude/scripts/arx-test-scratch.sh`). Files land in `.claude/scratch/<filename>`, which is inside the working directory so `Read` works without prompts, and the whole `.claude/` tree is gitignored. Do NOT use `/tmp/...`, `$TMPDIR`, or `%TEMP%` paths. Propagate the `just test-scratch` convention into subagent prompts when you dispatch them.
 
 ### Proactive Quality Checks
 
