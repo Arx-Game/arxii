@@ -1,4 +1,10 @@
-"""Integration tests for reactive event emission in condition services (Task 30).
+"""Integration tests for reactive event emission in condition services.
+
+All scenarios exercise the unified-dispatch model: ``emit_event(name, payload,
+location)`` gathers triggers from the room and its contents, sorts by priority
+desc, and dispatches on a single FlowStack. Self-targeting is expressed as a
+filter (``SELF_FILTER``) rather than an old PERSONAL scope; bystander semantics
+use ``NOT_SELF_FILTER``.
 
 Tests verify:
 - CONDITION_PRE_APPLY emitted with correct payload
@@ -9,9 +15,8 @@ Tests verify:
 - CONDITION_STAGE_CHANGED emitted only when stage actually changes
 - CONDITION_STAGE_CHANGED NOT emitted when amount doesn't cross threshold
 - bulk_apply_conditions per-item cancellation skips that item
+- Bystander observer reacts to OTHER characters being afflicted
 """
-
-import unittest
 
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
@@ -40,19 +45,13 @@ from world.conditions.services import (
     remove_condition,
 )
 
-_SKIP_REASON = (
-    "Rewritten in unified-dispatch Phase 5 "
-    "(docs/superpowers/plans/2026-04-17-reactive-unified-dispatch.md)"
-)
-
-
-def setUpModule() -> None:
-    raise unittest.SkipTest(_SKIP_REASON)
-
-
 # ---------------------------------------------------------------------------
-# Helpers
+# Module-level helpers
 # ---------------------------------------------------------------------------
+
+
+SELF_FILTER = {"path": "target", "op": "==", "value": "self"}
+NOT_SELF_FILTER = {"path": "target", "op": "!=", "value": "self"}
 
 
 def _create_room(key: str = "TestRoom") -> ObjectDB:
@@ -74,16 +73,29 @@ def _make_cancel_flow():
     return flow
 
 
-def _target_in_room():
+def _make_set_field_flow(field: str, value):
+    """Return a FlowDefinition that sets payload.<field> to value."""
+    flow = FlowDefinitionFactory()
+    FlowStepDefinitionFactory(
+        flow=flow,
+        parent_id=None,
+        action=FlowActionChoices.MODIFY_PAYLOAD,
+        parameters={"field": field, "op": "set", "value": value},
+    )
+    return flow
+
+
+def _target_in_room(room=None):
     """Return a Character in a room, for use as apply_condition target."""
-    room = _create_room()
+    if room is None:
+        room = _create_room()
     char = CharacterFactory()
     char.location = room
     return char
 
 
 # ---------------------------------------------------------------------------
-# Task 30: CONDITION_PRE_APPLY / CONDITION_APPLIED emission
+# CONDITION_PRE_APPLY / CONDITION_APPLIED emission
 # ---------------------------------------------------------------------------
 
 
@@ -98,9 +110,12 @@ class ConditionPreApplyEmissionTest(TestCase):
         import world.conditions.services as svc_mod
 
         original = svc_mod.emit_event
-        svc_mod.emit_event = lambda name, payload, **kw: captured.append(
-            (name, payload)
-        ) or original(name, payload, **kw)  # type: ignore[assignment]
+
+        def capturing(name, payload, **kw):
+            captured.append((name, payload))
+            return original(name, payload, **kw)
+
+        svc_mod.emit_event = capturing
         try:
             apply_condition(target, template)
         finally:
@@ -158,7 +173,8 @@ class ConditionPreApplyEmissionTest(TestCase):
         self.assertIn(EventNames.CONDITION_PRE_APPLY, order)
         self.assertIn(EventNames.CONDITION_APPLIED, order)
         self.assertLess(
-            order.index(EventNames.CONDITION_PRE_APPLY), order.index(EventNames.CONDITION_APPLIED)
+            order.index(EventNames.CONDITION_PRE_APPLY),
+            order.index(EventNames.CONDITION_APPLIED),
         )
 
     def test_applied_payload_has_instance(self) -> None:
@@ -189,7 +205,7 @@ class ConditionPreApplyEmissionTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Task 30: PRE cancellation
+# PRE cancellation
 # ---------------------------------------------------------------------------
 
 
@@ -202,9 +218,9 @@ class ConditionPreApplyCancellationTest(TestCase):
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.CONDITION_PRE_APPLY,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=target,
-            scope=TriggerScope.PERSONAL,
         )
 
         result = apply_condition(target, template)
@@ -217,9 +233,9 @@ class ConditionPreApplyCancellationTest(TestCase):
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.CONDITION_PRE_APPLY,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=target,
-            scope=TriggerScope.PERSONAL,
         )
         before = ConditionInstance.objects.filter(target=target, condition=template).count()
 
@@ -234,9 +250,9 @@ class ConditionPreApplyCancellationTest(TestCase):
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.CONDITION_PRE_APPLY,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=target,
-            scope=TriggerScope.PERSONAL,
         )
 
         result = apply_condition(target, template)
@@ -245,7 +261,7 @@ class ConditionPreApplyCancellationTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Task 30: CONDITION_REMOVED emission
+# CONDITION_REMOVED emission
 # ---------------------------------------------------------------------------
 
 
@@ -307,7 +323,7 @@ class ConditionRemovedEmissionTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Task 30: CONDITION_STAGE_CHANGED emission
+# CONDITION_STAGE_CHANGED emission
 # ---------------------------------------------------------------------------
 
 
@@ -404,7 +420,7 @@ class ConditionStageChangedEmissionTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Task 30: bulk_apply_conditions cancellation
+# bulk_apply_conditions cancellation
 # ---------------------------------------------------------------------------
 
 
@@ -419,9 +435,9 @@ class BulkApplyConditionsCancellationTest(TestCase):
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.CONDITION_PRE_APPLY,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=target1,
-            scope=TriggerScope.PERSONAL,
         )
 
         bulk_apply_conditions(
@@ -435,3 +451,84 @@ class BulkApplyConditionsCancellationTest(TestCase):
         self.assertTrue(
             ConditionInstance.objects.filter(target=target2, condition=template).exists()
         )
+
+
+# ---------------------------------------------------------------------------
+# Bystander reaction — unified dispatch lets observers react to OTHER chars
+# ---------------------------------------------------------------------------
+
+
+class BystanderConditionReactionTest(TestCase):
+    """A bystander in the same room reacts when OTHER characters are afflicted.
+
+    Under unified dispatch, CONDITION_PRE_APPLY is emitted at the target's
+    room. Triggers owned by the target fire (self-filter), AND triggers owned
+    by other room-mates can fire (no target filter, or ``target != self``).
+
+    This replaces the old ROOM-scope tests (removed with the scope field) and
+    exercises the filter DSL's target-discrimination semantics.
+    """
+
+    def setUp(self):
+        self.room = _create_room("BystanderRoom")
+        self.watcher = _target_in_room(self.room)
+        self.subject = _target_in_room(self.room)
+
+        # Watcher's bystander trigger: MODIFY_PAYLOAD on the mutable pre-apply
+        # payload — set the `source` field to a sentinel when someone ELSE is
+        # the target. `source` starts as None in apply_condition.
+        mark_flow = _make_set_field_flow("source", "BYSTANDER_SAW")
+        ReactiveConditionFactory(
+            event_name=EventNames.CONDITION_PRE_APPLY,
+            filter_condition=NOT_SELF_FILTER,
+            flow_definition=mark_flow,
+            target=self.watcher,
+        )
+
+    def test_bystander_reacts_when_subject_afflicted(self):
+        """Condition applied to subject → watcher's bystander trigger fires."""
+        template = ConditionTemplateFactory()
+        captured: list[ConditionPreApplyPayload] = []
+
+        import world.conditions.services as svc_mod
+
+        original = svc_mod.emit_event
+
+        def capturing(name, payload, **kw):
+            if name == EventNames.CONDITION_PRE_APPLY:
+                captured.append(payload)
+            return original(name, payload, **kw)
+
+        svc_mod.emit_event = capturing
+        try:
+            apply_condition(self.subject, template)
+        finally:
+            svc_mod.emit_event = original
+
+        # Bystander trigger ran on the pre-apply payload and wrote the sentinel
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0].source, "BYSTANDER_SAW")
+
+    def test_bystander_does_not_react_to_own_affliction(self):
+        """Condition applied to watcher → watcher's NOT_SELF filter rejects."""
+        template = ConditionTemplateFactory()
+        captured: list[ConditionPreApplyPayload] = []
+
+        import world.conditions.services as svc_mod
+
+        original = svc_mod.emit_event
+
+        def capturing(name, payload, **kw):
+            if name == EventNames.CONDITION_PRE_APPLY:
+                captured.append(payload)
+            return original(name, payload, **kw)
+
+        svc_mod.emit_event = capturing
+        try:
+            apply_condition(self.watcher, template)
+        finally:
+            svc_mod.emit_event = original
+
+        # Watcher IS the target — NOT_SELF_FILTER rejects, source stays None
+        self.assertEqual(len(captured), 1)
+        self.assertIsNone(captured[0].source)
