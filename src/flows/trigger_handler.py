@@ -1,16 +1,14 @@
-"""Populate-once trigger handler for typeclass owners.
+"""Populate-once trigger provider for typeclass owners.
 
-Replaces the old flows.trigger_registry.TriggerRegistry. Installed as a
-cached_property on Character, Room, Object. Populates from Trigger rows
-on first access, stays synced via explicit sync hooks.
+Installed as a ``cached_property`` on Character, Room, Object. Populates
+from ``Trigger`` rows on first access, stays synced via explicit sync
+hooks. Dispatch itself lives in ``flows.emit.emit_event`` — this handler
+is a pure provider that exposes ``triggers_for(event_name)``.
 """
 
 from collections import defaultdict
 import logging
 from typing import TYPE_CHECKING, Any
-
-from flows.filters.errors import FilterPathError
-from flows.filters.evaluator import evaluate_filter
 
 if TYPE_CHECKING:
     from flows.models.triggers import Trigger
@@ -19,6 +17,13 @@ logger = logging.getLogger(__name__)
 
 
 class DispatchResult:
+    """Result container for a single dispatch walk.
+
+    Preserved across the unified-dispatch rewrite so flow steps that
+    consult ``execution.dispatch_result`` still have a type to reference.
+    A later task may relocate this to ``flows.emit``.
+    """
+
     def __init__(self) -> None:
         self.cancelled = False
         self.fired: list[int] = []  # Trigger pks that fired
@@ -33,6 +38,13 @@ class TriggerHandler:
         self._populated = False
 
     def _populate(self) -> None:
+        # Ownerless handlers (e.g., a bare provider with no associated typeclass)
+        # have no DB rows to fetch — short-circuit so unit tests can construct
+        # a TriggerHandler without hitting the ORM.
+        if self.owner is None:
+            self._populated = True
+            return
+
         # Deferred import: this module is imported by typeclasses during
         # Evennia startup, before the flows app registry is ready.
         from flows.models.triggers import Trigger  # noqa: PLC0415
@@ -81,83 +93,3 @@ class TriggerHandler:
         # This hook exists so future subclasses (line-of-sight rooms) can
         # maintain additional indexes.
         return
-
-    # ---- dispatch ----
-
-    def dispatch(
-        self,
-        event_name: str,
-        payload: Any,
-        *,
-        flow_stack: Any = None,
-    ) -> DispatchResult:
-        """Walk active triggers for event_name, evaluate filters, execute flows."""
-        result = DispatchResult()
-        for trigger in sorted(
-            self.triggers_for(event_name),
-            key=lambda t: -t.priority,
-        ):
-            if self._usage_cap_reached(trigger):
-                continue
-            try:
-                matched = evaluate_filter(
-                    trigger.additional_filter_condition,
-                    payload,
-                    self_ref=self.owner,
-                )
-            except FilterPathError:
-                logger.warning(
-                    "FilterPathError on trigger %s during dispatch of %s",
-                    trigger.pk,
-                    event_name,
-                )
-                continue
-            if not matched:
-                continue
-            result.fired.append(trigger.pk)
-            self._execute_flow(trigger, payload, flow_stack, result)
-            if result.cancelled:
-                break
-        return result
-
-    def _execute_flow(
-        self,
-        trigger: "Trigger",
-        payload: Any,
-        flow_stack: Any,
-        result: DispatchResult,
-    ) -> None:
-        """Execute the trigger's flow definition within the given FlowStack."""
-        from flows.flow_execution import FlowExecution  # noqa: PLC0415 — Evennia startup order
-        from flows.flow_stack import FlowStack  # noqa: PLC0415 — same reason
-        from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415 — same reason
-
-        flow_def = trigger.trigger_definition.flow_definition
-        if flow_stack is None:
-            flow_stack = FlowStack(
-                owner=self.owner,
-                originating_event=trigger.trigger_definition.event.name,
-            )
-        context = SceneDataManager()
-        execution = FlowExecution(
-            flow_definition=flow_def,
-            context=context,
-            flow_stack=flow_stack,
-            origin=trigger,
-            variable_mapping={
-                "payload": payload,
-                "owner": self.owner,
-                "trigger": trigger,
-            },
-            dispatch_result=result,
-        )
-        flow_stack.execute_flow(execution)
-
-    def _usage_cap_reached(self, trigger: "Trigger") -> bool:
-        """Usage-cap stub. Real implementation lands at Task 42 Test 24.
-
-        Spec § Integration test 24 (Usage cap is pre-filter) requires that
-        TriggerData.max_uses_per_scene is consulted BEFORE filter evaluation.
-        For now: return False.
-        """
-        return False
