@@ -45,7 +45,7 @@ class FlowEventTriggerIntegrationTests(TestCase):
         fx = FlowExecutionFactory(
             flow_definition=look_flow,
             variable_mapping={"caller": caller, "target": target},
-            flow_stack=FlowStack(trigger_registry=room.trigger_registry),
+            flow_stack=FlowStack(),
             origin=caller,
         )
         for obj in (room, caller, target):
@@ -116,7 +116,7 @@ class FlowEventTriggerIntegrationTests(TestCase):
         fx = FlowExecutionFactory(
             flow_definition=look_flow,
             variable_mapping={"caller": caller, "target": target},
-            flow_stack=FlowStack(trigger_registry=room.trigger_registry),
+            flow_stack=FlowStack(),
             origin=caller,
         )
         for obj in (room, caller, target):

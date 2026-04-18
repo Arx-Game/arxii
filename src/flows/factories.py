@@ -10,7 +10,6 @@ from flows.flow_event import FlowEvent
 from flows.flow_execution import FlowExecution
 from flows.flow_stack import FlowStack
 from flows.scene_data_manager import SceneDataManager
-from flows.trigger_registry import TriggerRegistry
 
 
 class FlowDefinitionFactory(factory_django.DjangoModelFactory):
@@ -91,8 +90,6 @@ class FlowStackFactory(factory.Factory):
 
     class Meta:
         model = FlowStack
-
-    trigger_registry = factory.LazyFunction(TriggerRegistry)
 
 
 class FlowExecutionFactory(factory.Factory):

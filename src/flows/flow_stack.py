@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 from flows.consts import FlowState
 from flows.flow_execution import FlowExecution
 from flows.scene_data_manager import SceneDataManager
-from flows.trigger_registry import TriggerRegistry
 
 if TYPE_CHECKING:
     from flows.models.flows import FlowDefinition
@@ -39,7 +38,6 @@ class FlowStack:
 
     def __init__(
         self,
-        trigger_registry: TriggerRegistry | None = None,
         *,
         owner: Any = None,
         originating_event: str | None = None,
@@ -48,7 +46,6 @@ class FlowStack:
         """Initialize the FlowStack.
 
         Args:
-            trigger_registry: Registry used when propagating flow events.
             owner: The object (character, room, etc.) that owns this stack.
             originating_event: Name of the event that initiated this stack.
             cap: Maximum nesting depth before FlowStackCapExceeded is raised.
@@ -58,7 +55,6 @@ class FlowStack:
         self.execution_mapping: defaultdict[str, list[FlowExecution]] = defaultdict(
             list,
         )
-        self.trigger_registry = trigger_registry
         self.owner = owner
         self.originating_event = originating_event
         self.cap = cap
@@ -121,7 +117,6 @@ class FlowStack:
             self,
             origin,
             variable_mapping=variable_mapping,
-            trigger_registry=self.trigger_registry,
         )
         execution_key = flow_execution.execution_key()
 

@@ -73,8 +73,6 @@ class FlowStackFactory:
     class Meta:
         model: type[FlowStack]
 
-    trigger_registry: Any
-
 class FlowExecutionFactory:
     def __new__(cls, **kwargs: Any) -> Self: ...
     def __call__(

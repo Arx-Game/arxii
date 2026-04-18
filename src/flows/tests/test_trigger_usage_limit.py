@@ -65,7 +65,7 @@ class TriggerUsageLimitTests(TestCase):
         registry.register_trigger(trigger)
 
         context = SceneDataManagerFactory()
-        stack = FlowStack(trigger_registry=registry)
+        stack = FlowStack()
         for obj in (room, viewer, target):
             context.initialize_state_for_object(obj)
 
@@ -132,7 +132,7 @@ class TriggerUsageLimitTests(TestCase):
         registry.register_trigger(trigger)
 
         context = SceneDataManagerFactory()
-        stack = FlowStack(trigger_registry=registry)
+        stack = FlowStack()
         for obj in (room, viewer, target):
             context.initialize_state_for_object(obj)
 
@@ -199,7 +199,7 @@ class TriggerUsageLimitTests(TestCase):
         registry.register_trigger(trigger)
 
         context = SceneDataManagerFactory()
-        stack = FlowStack(trigger_registry=registry)
+        stack = FlowStack()
         for obj in (room, viewer, target):
             context.initialize_state_for_object(obj)
 

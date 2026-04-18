@@ -315,7 +315,7 @@ class FlowStepDefinitionTests(TestCase):
             parameters={"data": {"key": "value"}},
         )
 
-        fx = self.get_flow_execution(flow_stack=FlowStack(trigger_registry=MagicMock()))
+        fx = self.get_flow_execution(flow_stack=FlowStack())
 
         next_step = step.execute(fx)
 

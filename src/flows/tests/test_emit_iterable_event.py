@@ -1,5 +1,3 @@
-from unittest.mock import MagicMock
-
 from django.test import TestCase
 
 from flows.consts import FlowActionChoices
@@ -28,7 +26,7 @@ class TestEmitFlowEventForEach(TestCase):
         fx = FlowExecutionFactory(
             flow_definition=flow_def,
             variable_mapping={"items": [1, 2]},
-            flow_stack=FlowStack(trigger_registry=MagicMock()),
+            flow_stack=FlowStack(),
         )
 
         fx.flow_stack.execute_flow(fx)
