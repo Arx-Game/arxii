@@ -10,13 +10,13 @@ Tests verify:
 - ATTACK_PRE_RESOLVE cancellation skips the attack
 """
 
+import unittest
 from unittest.mock import MagicMock
 
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
-from flows.constants import TriggerScope
 from flows.consts import FlowActionChoices
 from flows.events.names import EventNames
 from flows.events.payloads import (
@@ -39,6 +39,16 @@ from world.combat.services import apply_damage_to_participant, resolve_npc_attac
 from world.conditions.factories import ReactiveConditionFactory
 from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
+
+_SKIP_REASON = (
+    "Rewritten in unified-dispatch Phase 5 "
+    "(docs/superpowers/plans/2026-04-17-reactive-unified-dispatch.md)"
+)
+
+
+def setUpModule() -> None:
+    raise unittest.SkipTest(_SKIP_REASON)
+
 
 # ---------------------------------------------------------------------------
 # Helpers

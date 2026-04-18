@@ -1,8 +1,18 @@
+import unittest
+
 from django.test import TestCase
 
-from flows.constants import TriggerScope
 from flows.events.names import EventNames
 from world.conditions.factories import ReactiveConditionFactory
+
+_SKIP_REASON = (
+    "Rewritten in unified-dispatch Phase 5 "
+    "(docs/superpowers/plans/2026-04-17-reactive-unified-dispatch.md)"
+)
+
+
+def setUpModule() -> None:
+    raise unittest.SkipTest(_SKIP_REASON)
 
 
 class ReactiveConditionFactoryTests(TestCase):

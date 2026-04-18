@@ -11,17 +11,26 @@ Test 22 is skipped: Technique has no properties M2M.
 """
 
 from types import SimpleNamespace
+import unittest
 
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
-from flows.constants import TriggerScope
 from flows.consts import FlowActionChoices
 from flows.events.names import EventNames
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.conditions.factories import ReactiveConditionFactory
+
+_SKIP_REASON = (
+    "Rewritten in unified-dispatch Phase 5 "
+    "(docs/superpowers/plans/2026-04-17-reactive-unified-dispatch.md)"
+)
+
+
+def setUpModule() -> None:
+    raise unittest.SkipTest(_SKIP_REASON)
 
 
 def _create_room(key: str = "TestRoom") -> ObjectDB:

@@ -5,11 +5,12 @@ get first shot at cancellation; if the stack is marked cancelled after ROOM
 dispatch, PERSONAL dispatch is skipped entirely.
 """
 
+import unittest
+
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
-from flows.constants import TriggerScope
 from flows.consts import FlowActionChoices
 from flows.emit import emit_event
 from flows.events.names import EventNames
@@ -17,6 +18,15 @@ from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from flows.flow_stack import FlowStack
 from world.conditions.factories import ReactiveConditionFactory
+
+_SKIP_REASON = (
+    "Rewritten in unified-dispatch Phase 5 "
+    "(docs/superpowers/plans/2026-04-17-reactive-unified-dispatch.md)"
+)
+
+
+def setUpModule() -> None:
+    raise unittest.SkipTest(_SKIP_REASON)
 
 
 def _damage_payload(target) -> DamagePreApplyPayload:

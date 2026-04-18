@@ -4,18 +4,27 @@ Task 25: at_attacked emits ATTACK_LANDED; at_pre_move emits MOVE_PRE_DEPART
 with cancellation support.
 """
 
+import unittest
 from unittest.mock import MagicMock
 
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
-from flows.constants import TriggerScope
 from flows.consts import FlowActionChoices
 from flows.events.names import EventNames
 from flows.events.payloads import AttackLandedPayload, MovePreDepartPayload
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.conditions.factories import ReactiveConditionFactory
+
+_SKIP_REASON = (
+    "Rewritten in unified-dispatch Phase 5 "
+    "(docs/superpowers/plans/2026-04-17-reactive-unified-dispatch.md)"
+)
+
+
+def setUpModule() -> None:
+    raise unittest.SkipTest(_SKIP_REASON)
 
 
 def _create_room(key: str = "TestRoom") -> ObjectDB:

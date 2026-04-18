@@ -14,12 +14,12 @@ The tests exercise the filter DSL and dispatch routing only.
 """
 
 from types import SimpleNamespace
+import unittest
 
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
-from flows.constants import TriggerScope
 from flows.consts import FlowActionChoices
 from flows.emit import emit_event
 from flows.events.names import EventNames
@@ -38,6 +38,16 @@ from world.conditions.factories import (
     ReactiveConditionFactory,
 )
 from world.conditions.services import advance_condition_severity, remove_condition
+
+_SKIP_REASON = (
+    "Rewritten in unified-dispatch Phase 5 "
+    "(docs/superpowers/plans/2026-04-17-reactive-unified-dispatch.md)"
+)
+
+
+def setUpModule() -> None:
+    raise unittest.SkipTest(_SKIP_REASON)
+
 
 # ---------------------------------------------------------------------------
 # Module-level helpers

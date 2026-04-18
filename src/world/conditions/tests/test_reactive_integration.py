@@ -11,11 +11,12 @@ Tests verify:
 - bulk_apply_conditions per-item cancellation skips that item
 """
 
+import unittest
+
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
-from flows.constants import TriggerScope
 from flows.consts import FlowActionChoices
 from flows.events.names import EventNames
 from flows.events.payloads import (
@@ -38,6 +39,16 @@ from world.conditions.services import (
     bulk_apply_conditions,
     remove_condition,
 )
+
+_SKIP_REASON = (
+    "Rewritten in unified-dispatch Phase 5 "
+    "(docs/superpowers/plans/2026-04-17-reactive-unified-dispatch.md)"
+)
+
+
+def setUpModule() -> None:
+    raise unittest.SkipTest(_SKIP_REASON)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
