@@ -6,7 +6,8 @@ Supports:
 - {"or": [<filter>, ...]}
 - {"not": <filter>}
 
-`value` may be "self.<dotted>" to reference the handler owner.
+`value` may be "self" (the handler owner) or "self.<dotted>" to walk
+attributes of the handler owner.
 """
 
 from typing import Any
@@ -31,6 +32,10 @@ OP_GE = ">="
 OP_IN = "in"
 OP_CONTAINS = "contains"
 OP_HAS_PROPERTY = "has_property"
+
+# Filter DSL self-reference token and dotted prefix
+SELF_TOKEN = "self"  # noqa: S105 — DSL token, not a credential
+SELF_PREFIX = "self."
 
 
 def evaluate_filter(
@@ -89,16 +94,17 @@ def _apply_operator(op: str, resolved: Any, value: Any, path: str) -> bool:
 
 
 def _resolve_path(path: str, payload: Any, *, self_ref: Any) -> Any:
-    self_prefix = "self."
-    if path.startswith(self_prefix):
-        return _walk_dotted(self_ref, path[len(self_prefix) :])
+    if path.startswith(SELF_PREFIX):
+        return _walk_dotted(self_ref, path[len(SELF_PREFIX) :])
     return _walk_dotted(payload, path)
 
 
 def _resolve_value(raw: Any, *, self_ref: Any) -> Any:
-    self_prefix = "self."
-    if isinstance(raw, str) and raw.startswith(self_prefix):
-        return _walk_dotted(self_ref, raw[len(self_prefix) :])
+    if isinstance(raw, str):
+        if raw == SELF_TOKEN:
+            return self_ref
+        if raw.startswith(SELF_PREFIX):
+            return _walk_dotted(self_ref, raw[len(SELF_PREFIX) :])
     return raw
 
 

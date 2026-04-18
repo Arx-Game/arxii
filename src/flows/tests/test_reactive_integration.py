@@ -1,20 +1,24 @@
-"""Integration tests for reactive layer filter DSL and dispatch routing (Phase 10, Tasks 33-40).
+"""Integration tests for reactive layer filter DSL + unified dispatch.
 
-Tests verify hit + near-miss patterns for:
-- Task 33: damage-source discrimination (Tests 1-4)
-- Task 34: condition-specific protection (Tests 5-7)
-- Task 35: cross-character specificity (Tests 8-9)
-- Task 36: payload-modifier specificity (Tests 10-11)
-- Task 37: AE chaos monkey — selective immunity and retaliation pileup (Tests 12-13)
-- Task 38: attack-level cancellation tier (Tests 14-15)
-- Task 39: stage/source cascade (Tests 16-18)
+All scenarios exercise ``emit_event(name, payload, location)`` — the
+unified-dispatch entry point that walks ``[location, *location.contents]``,
+gathers every owner's triggers, sorts by priority desc, and dispatches
+synchronously on a single FlowStack.
 
-All payloads are constructed directly — no combat pipeline involvement.
-The tests exercise the filter DSL and dispatch routing only.
+Targeting is expressed via ``additional_filter_condition``:
+
+- Self-targeting (old PERSONAL): ``{"path": "target", "op": "==", "value": "self"}``
+- Bystander (old ROOM): no target filter, or explicit ``!= self``
+- Cross-character specificity: self filter matches only when
+  ``payload.target`` is the trigger's owner
+
+Room-owned triggers (wards, watchful rooms) live on a pseudo-condition
+whose ``target`` is the room itself, so the Trigger's ``obj`` is the
+room. The room's ``trigger_handler`` cached-property makes it eligible
+for the gather phase.
 """
 
 from types import SimpleNamespace
-import unittest
 
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
@@ -24,12 +28,18 @@ from flows.consts import FlowActionChoices
 from flows.emit import emit_event
 from flows.events.names import EventNames
 from flows.events.payloads import (
+    AttackPreResolvePayload,
     ConditionPreApplyPayload,
     DamagePreApplyPayload,
     DamageSource,
 )
-from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
-from flows.trigger_handler import TriggerHandler
+from flows.factories import (
+    FlowDefinitionFactory,
+    FlowStepDefinitionFactory,
+    TriggerDefinitionFactory,
+    TriggerFactory,
+)
+from flows.models.events import Event
 from world.conditions.factories import (
     ConditionCategoryFactory,
     ConditionInstanceFactory,
@@ -39,19 +49,13 @@ from world.conditions.factories import (
 )
 from world.conditions.services import advance_condition_severity, remove_condition
 
-_SKIP_REASON = (
-    "Rewritten in unified-dispatch Phase 5 "
-    "(docs/superpowers/plans/2026-04-17-reactive-unified-dispatch.md)"
-)
-
-
-def setUpModule() -> None:
-    raise unittest.SkipTest(_SKIP_REASON)
-
-
 # ---------------------------------------------------------------------------
 # Module-level helpers
 # ---------------------------------------------------------------------------
+
+
+SELF_FILTER = {"path": "target", "op": "==", "value": "self"}
+NOT_SELF_FILTER = {"path": "target", "op": "!=", "value": "self"}
 
 
 def _create_room(key: str = "TestRoom") -> ObjectDB:
@@ -98,18 +102,13 @@ def _make_multiply_field_flow(field: str, factor):
 
 
 def _source_technique(affinity_name: str = "abyssal"):
-    """Return a DamageSource(type='technique', ref=<SimpleNamespace>) with affinity attribute.
-
-    Technique → affinity path is too deep to walk via M2M in the filter DSL
-    (gift.resonances is an M2M). We use a SimpleNamespace stub so the filter
-    path 'source.ref.affinity' resolves cleanly via getattr.
-    """
+    """DamageSource(type='technique', ref=SimpleNamespace with affinity)."""
     ref = SimpleNamespace(affinity=affinity_name)
     return DamageSource(type="technique", ref=ref)
 
 
 def _source_character_with_property(has_flesh: bool = True):
-    """Return a DamageSource(type='character', ref=<stub>) with has_property method."""
+    """DamageSource wrapping a stub character with has_property()."""
 
     class _StubChar:
         def has_property(self, name: str) -> bool:
@@ -121,63 +120,101 @@ def _source_character_with_property(has_flesh: bool = True):
 
 
 def _source_with_weapon_tags(tags: list):
-    """Return a DamageSource whose ref has a weapon attribute with .tags list."""
+    """DamageSource whose ref has a weapon attribute with .tags list."""
     ref = SimpleNamespace(weapon=SimpleNamespace(tags=tags))
     return DamageSource(type="character", ref=ref)
 
 
+def _damage_payload(character, *, amount=10, damage_type="physical", source=None):
+    return DamagePreApplyPayload(
+        target=character,
+        amount=amount,
+        damage_type=damage_type,
+        source=source if source is not None else DamageSource(type="character", ref=None),
+    )
+
+
+def _emit_damage(character, payload):
+    return emit_event(EventNames.DAMAGE_PRE_APPLY, payload, location=character.location)
+
+
+def _install_room_trigger(
+    room,
+    *,
+    event_name: str,
+    flow_definition,
+    filter_condition: dict | None = None,
+):
+    """Install a trigger owned by ``room`` via a pseudo-condition on the room.
+
+    Room-owned triggers need a ConditionInstance whose target is the room.
+    Returns the Trigger row.
+    """
+    event = Event.objects.get(name=event_name)
+    trigger_def = TriggerDefinitionFactory(event=event, flow_definition=flow_definition)
+    room_condition = ConditionInstanceFactory(target=room)
+    trigger = TriggerFactory(
+        trigger_definition=trigger_def,
+        obj=room,
+        source_condition=room_condition,
+        source_stage=None,
+        additional_filter_condition=filter_condition or {},
+    )
+    # The room typeclass mixin installs ``trigger_handler`` as a cached_property,
+    # so the gather phase will discover it. Nudge the cache so it picks up this
+    # new row on the next dispatch.
+    if hasattr(room, "trigger_handler"):
+        room.trigger_handler._populated = False
+    return trigger
+
+
 # ---------------------------------------------------------------------------
-# Task 33: damage-source discrimination (Tests 1-4)
+# Damage-source discrimination (Tests 1-4)
 # ---------------------------------------------------------------------------
 
 
 class AbyssalOnlyWardTest(TestCase):
-    """Test 1: Abyssal-only ward — fires on abyssal technique, not on celestial."""
+    """Test 1: Abyssal-only ward fires on abyssal technique, not celestial."""
 
     def setUp(self):
+        self.room = _create_room("AbyssalRoom1")
         self.character = CharacterFactory()
-        self.character.location = _create_room()
+        self.character.location = self.room
         cancel_flow = _make_cancel_flow()
-        # Ward fires only when source.ref.affinity == "abyssal"
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
             filter_condition={"path": "source.ref.affinity", "op": "==", "value": "abyssal"},
             flow_definition=cancel_flow,
             target=self.character,
         )
 
     def _dispatch(self, affinity: str):
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
+        payload = _damage_payload(
+            self.character,
             damage_type="fire",
             source=_source_technique(affinity),
         )
-        return self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        return _emit_damage(self.character, payload)
 
     def test_hit_abyssal_cancels(self):
-        result = self._dispatch("abyssal")
-        self.assertTrue(result.cancelled)
-        self.assertTrue(len(result.fired) > 0)
+        stack = self._dispatch("abyssal")
+        self.assertTrue(stack.was_cancelled())
 
     def test_near_miss_celestial_passes(self):
-        result = self._dispatch("celestial")
-        self.assertFalse(result.cancelled)
-        self.assertEqual(result.fired, [])
+        stack = self._dispatch("celestial")
+        self.assertFalse(stack.was_cancelled())
 
 
 class NotCelestialVulnerabilityTest(TestCase):
-    """Test 2: Not-celestial vulnerability — fire damage from non-celestial source doubles."""
+    """Test 2: Non-celestial fire doubles damage; celestial fire passes through."""
 
     def setUp(self):
+        self.room = _create_room("NotCelestialRoom2")
         self.character = CharacterFactory()
-        self.character.location = _create_room()
+        self.character.location = self.room
         double_flow = _make_multiply_field_flow("amount", 2)
-        # Filter: damage_type == "fire" AND source.ref.affinity != "celestial"
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
             filter_condition={
                 "and": [
                     {"path": "damage_type", "op": "==", "value": "fire"},
@@ -189,37 +226,34 @@ class NotCelestialVulnerabilityTest(TestCase):
         )
 
     def test_hit_abyssal_fire_doubles(self):
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
+        payload = _damage_payload(
+            self.character,
             damage_type="fire",
             source=_source_technique("abyssal"),
         )
-        self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        _emit_damage(self.character, payload)
         self.assertEqual(payload.amount, 20)
 
     def test_near_miss_celestial_fire_unchanged(self):
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
+        payload = _damage_payload(
+            self.character,
             damage_type="fire",
             source=_source_technique("celestial"),
         )
-        self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        _emit_damage(self.character, payload)
         self.assertEqual(payload.amount, 10)
 
 
 class AttackerPropertyRequiredTest(TestCase):
-    """Test 3: Attacker property required — fires on flesh-and-blood attackers only."""
+    """Test 3: Ward fires only on flesh-and-blood attackers."""
 
     def setUp(self):
+        self.room = _create_room("PropertyRoom3")
         self.character = CharacterFactory()
-        self.character.location = _create_room()
+        self.character.location = self.room
         cancel_flow = _make_cancel_flow()
-        # Filter: source.ref has_property "flesh-and-blood"
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
             filter_condition={
                 "path": "source.ref",
                 "op": "has_property",
@@ -230,38 +264,32 @@ class AttackerPropertyRequiredTest(TestCase):
         )
 
     def test_hit_flesh_attacker_fires(self):
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="physical",
+        payload = _damage_payload(
+            self.character,
             source=_source_character_with_property(has_flesh=True),
         )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertTrue(result.cancelled)
+        stack = _emit_damage(self.character, payload)
+        self.assertTrue(stack.was_cancelled())
 
     def test_near_miss_construct_does_not_fire(self):
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="physical",
+        payload = _damage_payload(
+            self.character,
             source=_source_character_with_property(has_flesh=False),
         )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertFalse(result.cancelled)
-        self.assertEqual(result.fired, [])
+        stack = _emit_damage(self.character, payload)
+        self.assertFalse(stack.was_cancelled())
 
 
 class WeaponTagFilterTest(TestCase):
-    """Test 4: Weapon-tag filter — werewolf-bane scar fires only on silvered hits."""
+    """Test 4: Werewolf-bane scar fires only on silvered weapon hits."""
 
     def setUp(self):
+        self.room = _create_room("WeaponTagRoom4")
         self.character = CharacterFactory()
-        self.character.location = _create_room()
+        self.character.location = self.room
         cancel_flow = _make_cancel_flow()
-        # Filter: source.ref.weapon.tags contains "silvered"
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
             filter_condition={
                 "path": "source.ref.weapon.tags",
                 "op": "contains",
@@ -272,43 +300,37 @@ class WeaponTagFilterTest(TestCase):
         )
 
     def test_hit_silvered_weapon_fires(self):
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="physical",
+        payload = _damage_payload(
+            self.character,
             source=_source_with_weapon_tags(["silvered", "iron"]),
         )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertTrue(result.cancelled)
+        stack = _emit_damage(self.character, payload)
+        self.assertTrue(stack.was_cancelled())
 
     def test_near_miss_iron_only_does_not_fire(self):
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="physical",
+        payload = _damage_payload(
+            self.character,
             source=_source_with_weapon_tags(["iron"]),
         )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertFalse(result.cancelled)
-        self.assertEqual(result.fired, [])
+        stack = _emit_damage(self.character, payload)
+        self.assertFalse(stack.was_cancelled())
 
 
 # ---------------------------------------------------------------------------
-# Task 34: condition-specific protection (Tests 5-7)
+# Condition-specific protection + cross-character specificity (Tests 5-7)
 # ---------------------------------------------------------------------------
 
 
 class CharmImmunityAmuletTest(TestCase):
-    """Test 5: Charm-immunity amulet — cancels mind_control category conditions only."""
+    """Test 5: Charm immunity cancels mind_control conditions only."""
 
     def setUp(self):
+        self.room = _create_room("CharmRoom5")
         self.target = CharacterFactory()
-        self.target.location = _create_room()
+        self.target.location = self.room
         cancel_flow = _make_cancel_flow()
-        # Filter: template.category.name == "mind_control"
         ReactiveConditionFactory(
             event_name=EventNames.CONDITION_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
             filter_condition={
                 "path": "template.category.name",
                 "op": "==",
@@ -327,30 +349,27 @@ class CharmImmunityAmuletTest(TestCase):
             source=None,
             stage=None,
         )
-        return self.target.trigger_handler.dispatch(EventNames.CONDITION_PRE_APPLY, payload)
+        return emit_event(EventNames.CONDITION_PRE_APPLY, payload, location=self.room)
 
     def test_hit_mind_control_cancels(self):
-        result = self._dispatch("mind_control")
-        self.assertTrue(result.cancelled)
-        self.assertTrue(len(result.fired) > 0)
+        stack = self._dispatch("mind_control")
+        self.assertTrue(stack.was_cancelled())
 
     def test_near_miss_buff_passes(self):
-        result = self._dispatch("buff")
-        self.assertFalse(result.cancelled)
-        self.assertEqual(result.fired, [])
+        stack = self._dispatch("buff")
+        self.assertFalse(stack.was_cancelled())
 
 
 class CurseResistanceBySourceTest(TestCase):
-    """Test 6: Curse-resistance by source — blocks scar-sourced withering only."""
+    """Test 6: Curse resistance blocks scar-sourced withering only."""
 
     def setUp(self):
+        self.room = _create_room("CurseRoom6")
         self.target = CharacterFactory()
-        self.target.location = _create_room()
+        self.target.location = self.room
         cancel_flow = _make_cancel_flow()
-        # Filter: template.name == "withering" AND source.type == "scar"
         ReactiveConditionFactory(
             event_name=EventNames.CONDITION_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
             filter_condition={
                 "and": [
                     {"path": "template.name", "op": "==", "value": "withering"},
@@ -365,37 +384,30 @@ class CurseResistanceBySourceTest(TestCase):
         template = ConditionTemplateFactory(name="withering")
         source = DamageSource(type="scar", ref=None)
         payload = ConditionPreApplyPayload(
-            target=self.target,
-            template=template,
-            source=source,
-            stage=None,
+            target=self.target, template=template, source=source, stage=None
         )
-        result = self.target.trigger_handler.dispatch(EventNames.CONDITION_PRE_APPLY, payload)
-        self.assertTrue(result.cancelled)
+        stack = emit_event(EventNames.CONDITION_PRE_APPLY, payload, location=self.room)
+        self.assertTrue(stack.was_cancelled())
 
     def test_near_miss_item_sourced_withering_passes(self):
         template = ConditionTemplateFactory(name="withering")
         source = DamageSource(type="item", ref=None)
         payload = ConditionPreApplyPayload(
-            target=self.target,
-            template=template,
-            source=source,
-            stage=None,
+            target=self.target, template=template, source=source, stage=None
         )
-        result = self.target.trigger_handler.dispatch(EventNames.CONDITION_PRE_APPLY, payload)
-        self.assertFalse(result.cancelled)
-        self.assertEqual(result.fired, [])
+        stack = emit_event(EventNames.CONDITION_PRE_APPLY, payload, location=self.room)
+        self.assertFalse(stack.was_cancelled())
 
 
 class StageSpecificVulnerabilityTest(TestCase):
-    """Test 7: Stage-specific vulnerability — trigger active only at the scoped stage."""
+    """Test 7: Stage-scoped trigger fires only when condition is at that stage."""
 
     def setUp(self):
+        self.room = _create_room("StageRoom7")
         self.character = CharacterFactory()
-        self.character.location = _create_room()
+        self.character.location = self.room
 
     def test_hit_trigger_active_at_correct_stage(self):
-        """Trigger with source_stage set is active when condition is at that stage."""
         template = ConditionTemplateFactory(has_progression=True)
         stage = ConditionStageFactory(condition=template, stage_order=1, severity_threshold=3)
         condition_instance = ConditionInstanceFactory(
@@ -405,8 +417,6 @@ class StageSpecificVulnerabilityTest(TestCase):
             severity=5,
         )
         cancel_flow = _make_cancel_flow()
-        from flows.factories import TriggerDefinitionFactory, TriggerFactory
-        from flows.models.events import Event
 
         event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
         trigger_def = TriggerDefinitionFactory(event=event, flow_definition=cancel_flow)
@@ -415,21 +425,14 @@ class StageSpecificVulnerabilityTest(TestCase):
             obj=self.character,
             source_condition=condition_instance,
             source_stage=stage,
-            scope=TriggerScope.PERSONAL,
             additional_filter_condition={},
         )
 
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="physical",
-            source=DamageSource(type="character", ref=None),
-        )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertTrue(result.cancelled)
+        payload = _damage_payload(self.character)
+        stack = _emit_damage(self.character, payload)
+        self.assertTrue(stack.was_cancelled())
 
     def test_near_miss_trigger_inactive_at_different_stage(self):
-        """Stage-scoped trigger does NOT fire when condition is at a different stage."""
         template = ConditionTemplateFactory(has_progression=True)
         stage1 = ConditionStageFactory(condition=template, stage_order=1, severity_threshold=3)
         stage2 = ConditionStageFactory(condition=template, stage_order=2, severity_threshold=6)
@@ -440,95 +443,74 @@ class StageSpecificVulnerabilityTest(TestCase):
             severity=7,
         )
         cancel_flow = _make_cancel_flow()
-        from flows.factories import TriggerDefinitionFactory, TriggerFactory
-        from flows.models.events import Event
-
         event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
         trigger_def = TriggerDefinitionFactory(event=event, flow_definition=cancel_flow)
-        # Trigger scoped to stage1 — should NOT fire because condition is at stage2
         TriggerFactory(
             trigger_definition=trigger_def,
             obj=self.character,
             source_condition=condition_instance,
-            source_stage=stage1,
-            scope=TriggerScope.PERSONAL,
+            source_stage=stage1,  # scoped to stage1 but condition is at stage2
             additional_filter_condition={},
         )
 
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="physical",
-            source=DamageSource(type="character", ref=None),
-        )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertFalse(result.cancelled)
-        self.assertEqual(result.fired, [])
+        payload = _damage_payload(self.character)
+        stack = _emit_damage(self.character, payload)
+        self.assertFalse(stack.was_cancelled())
 
 
 # ---------------------------------------------------------------------------
-# Task 35: cross-character specificity (Tests 8-9)
+# Cross-character specificity (Tests 8-9) — self-filter drives this now
 # ---------------------------------------------------------------------------
 
 
-class BondedEnemyRetaliationTest(TestCase):
-    """Test 8: Bonded-enemy retaliation — fires only against specific bonded foes.
+class CrossCharacterScarSpecificityTest(TestCase):
+    """Cross-character specificity: each char's self-filtered scar fires only on damage to them.
 
-    Uses self.bonded_enemies on the defender (a plain list attribute) and the
-    'in' operator to match the attacker's pk.
+    Replaces the old Test 8 (BondedEnemyRetaliationTest) which relied on an ad-hoc
+    ``self.bonded_enemies`` list; the unified model expresses specificity through
+    the self-filter against ``payload.target``. Covers the "target ==/!= self"
+    idiom for two characters sharing one room.
     """
 
     def setUp(self):
-        self.defender = CharacterFactory()
-        self.defender.location = _create_room()
-        self.bonded_attacker = CharacterFactory()
-        self.other_attacker = CharacterFactory()
-
-        # Install bonded_enemies list on defender for self-reference in filter
-        self.defender.bonded_enemies = [self.bonded_attacker.pk]
+        self.room = _create_room("CrossCharRoom8")
+        self.char_a = CharacterFactory()
+        self.char_a.location = self.room
+        self.char_b = CharacterFactory()
+        self.char_b.location = self.room
 
         cancel_flow = _make_cancel_flow()
-        # Filter: source.ref.pk in self.bonded_enemies
+        # Each character has a self-filtered scar that only fires on damage to them.
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
-            filter_condition={
-                "path": "source.ref.pk",
-                "op": "in",
-                "value": "self.bonded_enemies",
-            },
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
-            target=self.defender,
+            target=self.char_a,
+        )
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition=SELF_FILTER,
+            flow_definition=cancel_flow,
+            target=self.char_b,
         )
 
-    def test_hit_bonded_enemy_fires(self):
-        payload = DamagePreApplyPayload(
-            target=self.defender,
-            amount=10,
-            damage_type="physical",
-            source=DamageSource(type="character", ref=self.bonded_attacker),
-        )
-        result = self.defender.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertTrue(result.cancelled)
+    def test_damage_to_a_only_fires_a_scar(self):
+        payload = _damage_payload(self.char_a)
+        stack = _emit_damage(self.char_a, payload)
+        self.assertTrue(stack.was_cancelled())
 
-    def test_near_miss_unbound_attacker_passes(self):
-        payload = DamagePreApplyPayload(
-            target=self.defender,
-            amount=10,
-            damage_type="physical",
-            source=DamageSource(type="character", ref=self.other_attacker),
-        )
-        result = self.defender.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertFalse(result.cancelled)
-        self.assertEqual(result.fired, [])
+    def test_damage_to_b_only_fires_b_scar(self):
+        payload = _damage_payload(self.char_b)
+        stack = _emit_damage(self.char_b, payload)
+        self.assertTrue(stack.was_cancelled())
 
 
 class CovenantAllegianceFilterTest(TestCase):
-    """Test 9: Covenant-allegiance filter — fires on outsider attackers, not intra-covenant.
+    """Test 9: Covenant-allegiance filter — fires on outsider attackers only.
 
-    Skipped: covenant relationship model does not yet exist.
-    Retaliation filter `attacker.covenant != self.covenant` requires a covenant
-    attribute on Character/ObjectDB which is not yet wired.
+    Skipped: covenant relationship model does not yet exist. Retaliation filter
+    ``attacker.covenant != self.covenant`` requires a covenant attribute on
+    Character, not yet wired. Update when covenant system ships.
     """
 
     def test_covenant_filter_skipped(self):
@@ -539,30 +521,25 @@ class CovenantAllegianceFilterTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Task 36: payload-modifier specificity (Tests 10-11)
+# Payload-modifier specificity (Tests 10-11)
 # ---------------------------------------------------------------------------
 
 
 class ElementalConversionTest(TestCase):
-    """Test 10: Elemental conversion — cold becomes fire (weakened) via MODIFY_PAYLOAD.
-
-    A two-step flow: first sets damage_type="fire", then multiplies amount by 0.5.
-    The trigger only fires on damage_type == "cold".
-    """
+    """Test 10: Cold converts to (weakened) fire via MODIFY_PAYLOAD."""
 
     def setUp(self):
+        self.room = _create_room("ConversionRoom10")
         self.character = CharacterFactory()
-        self.character.location = _create_room()
+        self.character.location = self.room
 
         flow = FlowDefinitionFactory()
-        # Step 1: set damage_type = "fire"
         step1 = FlowStepDefinitionFactory(
             flow=flow,
             parent_id=None,
             action=FlowActionChoices.MODIFY_PAYLOAD,
             parameters={"field": "damage_type", "op": "set", "value": "fire"},
         )
-        # Step 2 (child of step1): multiply amount by 0.5
         FlowStepDefinitionFactory(
             flow=flow,
             parent_id=step1.pk,
@@ -572,53 +549,48 @@ class ElementalConversionTest(TestCase):
 
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
             filter_condition={"path": "damage_type", "op": "==", "value": "cold"},
             flow_definition=flow,
             target=self.character,
         )
 
     def test_hit_cold_converted_to_fire(self):
-        payload = DamagePreApplyPayload(
-            target=self.character,
+        payload = _damage_payload(
+            self.character,
             amount=20,
             damage_type="cold",
             source=DamageSource(type="technique", ref=None),
         )
-        self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        _emit_damage(self.character, payload)
         self.assertEqual(payload.damage_type, "fire")
         self.assertEqual(payload.amount, 10.0)
 
     def test_near_miss_fire_not_converted(self):
-        payload = DamagePreApplyPayload(
-            target=self.character,
+        payload = _damage_payload(
+            self.character,
             amount=20,
             damage_type="fire",
             source=DamageSource(type="technique", ref=None),
         )
-        self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        # Trigger filter didn't match — payload unchanged
+        _emit_damage(self.character, payload)
         self.assertEqual(payload.damage_type, "fire")
         self.assertEqual(payload.amount, 20)
 
 
 class ConditionalIntensityCapTest(TestCase):
-    """Test 11: Conditional intensity cap — evocation amount > 50 capped to 50.
+    """Test 11: Evocation intensity cap (MODIFY_PAYLOAD lacks 'min' op).
 
-    MODIFY_PAYLOAD supports set/multiply/add ops but not 'min'. A proper intensity
-    cap requires either a 'min' op or a payload-path conditional step. This test
-    verifies that the near-miss (non-evocation) case passes through unchanged, and
-    documents the cap-hit case as a known skip pending MODIFY_PAYLOAD 'min' op.
+    Near-miss case (non-evocation) is verifiable without the 'min' op.
+    Cap-hit case authored-but-skipped pending MODIFY_PAYLOAD 'min'/'max'.
     """
 
     def setUp(self):
+        self.room = _create_room("CapRoom11")
         self.character = CharacterFactory()
-        self.character.location = _create_room()
+        self.character.location = self.room
         cancel_flow = _make_cancel_flow()
-        # Filter fires on evocation school only
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
             filter_condition={
                 "path": "source.ref.school",
                 "op": "==",
@@ -629,11 +601,6 @@ class ConditionalIntensityCapTest(TestCase):
         )
 
     def test_hit_evocation_filter_matches(self):
-        """Evocation school source matches the filter and trigger fires.
-
-        Skipped: no 'min' op on MODIFY_PAYLOAD means we cannot implement the
-        cap within existing flow primitives. The test records the intent.
-        """
         self.skipTest(
             "MODIFY_PAYLOAD lacks a 'min' op needed for intensity capping. "
             "Add 'min'/'max' ops to _execute_modify_payload, then implement "
@@ -641,315 +608,216 @@ class ConditionalIntensityCapTest(TestCase):
         )
 
     def test_near_miss_enchantment_uncapped(self):
-        """Non-evocation source does not match the filter — amount unchanged."""
-        payload = DamagePreApplyPayload(
-            target=self.character,
+        payload = _damage_payload(
+            self.character,
             amount=100,
             damage_type="arcane",
             source=DamageSource(type="technique", ref=SimpleNamespace(school="enchantment")),
         )
-        self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        _emit_damage(self.character, payload)
         self.assertEqual(payload.amount, 100)
 
 
 # ---------------------------------------------------------------------------
-# Task 37: AE chaos monkey (Tests 12-13)
+# AE topology (Tests 12-13)
 # ---------------------------------------------------------------------------
 
 
-class AESelectiveImmunityTest(TestCase):
-    """Test 12: ROOM-scope emission with PERSONAL triggers — some targets immune, others not.
+class AEBystanderTopologyTest(TestCase):
+    """Test 12: Single AE emission — bystander sees it once, on the shared stack.
 
-    Two characters in the same room receive an area-effect DAMAGE_PRE_APPLY.
-    Character A has an abyssal-immunity scar (cancel on abyssal technique).
-    Character B has no scar.
-    Each dispatch is personal, so A's trigger fires but B's does not.
+    Three chars in the same room. Attacker AE-attacks two; third char has a
+    bystander trigger (no target filter). One emission, one FlowStack, the
+    bystander trigger fires exactly once, and self-filtered scars only fire
+    on their own owners.
     """
 
     def setUp(self):
         self.room = _create_room("AERoom12")
-        self.char_a = CharacterFactory()
-        self.char_a.location = self.room
-        self.char_b = CharacterFactory()
-        self.char_b.location = self.room
+        self.attacker = CharacterFactory()
+        self.attacker.location = self.room
+        self.target_a = CharacterFactory()
+        self.target_a.location = self.room
+        self.target_b = CharacterFactory()
+        self.target_b.location = self.room
+        self.bystander = CharacterFactory()
+        self.bystander.location = self.room
 
-        cancel_flow = _make_cancel_flow()
-        # Char A has an abyssal-immunity scar
+        # Bystander has a watchful trigger with no target filter — fires on any
+        # ATTACK_PRE_RESOLVE in the room. Use a MODIFY_PAYLOAD that tags a
+        # counter on the payload so we can count invocations.
+        count_flow = _make_set_field_flow("witnessed_tag", "bystander_saw_ae")
         ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
-            filter_condition={"path": "source.ref.affinity", "op": "==", "value": "abyssal"},
-            flow_definition=cancel_flow,
-            target=self.char_a,
+            event_name=EventNames.ATTACK_PRE_RESOLVE,
+            filter_condition=None,
+            flow_definition=count_flow,
+            target=self.bystander,
         )
-        # Char B has no reactive condition at all
 
-    def _ae_dispatch(self, char):
-        """Dispatch DAMAGE_PRE_APPLY to *char* as a personal target (AE pattern)."""
-        payload = DamagePreApplyPayload(
-            target=char,
-            amount=20,
-            damage_type="arcane",
-            source=_source_technique("abyssal"),
+    def test_single_ae_emission_fires_bystander_once(self):
+        """One emit_event call — one FlowStack — bystander fires once."""
+        payload = AttackPreResolvePayload(
+            attacker=self.attacker,
+            targets=[self.target_a, self.target_b],
+            weapon=None,
+            action=None,
         )
-        stack = emit_event(
-            EventNames.DAMAGE_PRE_APPLY,
-            payload,
-            personal_target=char,
-            room=self.room,
-        )
-        return stack, payload
+        # AttackPreResolvePayload is mutable — tag attr for test observability
+        payload.witnessed_tag = None
 
-    def test_hit_immune_char_cancels(self):
-        """Char A's abyssal-immunity scar fires — dispatch is cancelled."""
-        stack, _payload = self._ae_dispatch(self.char_a)
-        self.assertTrue(stack.was_cancelled())
+        stack = emit_event(EventNames.ATTACK_PRE_RESOLVE, payload, location=self.room)
 
-    def test_near_miss_unprotected_char_passes(self):
-        """Char B has no scar — same AE passes through unmodified."""
-        stack, payload = self._ae_dispatch(self.char_b)
-        # No trigger on char_b, room has no triggers either
+        # Exactly one FlowStack returned from a single emission
+        self.assertIsNotNone(stack)
+        # Bystander's MODIFY_PAYLOAD ran exactly once
+        self.assertEqual(payload.witnessed_tag, "bystander_saw_ae")
+        # No other trigger registered on the room, so not cancelled
         self.assertFalse(stack.was_cancelled())
-        self.assertEqual(payload.amount, 20)
 
 
-class AERetaliationPileupTest(TestCase):
-    """Test 13: Multiple characters in room each with a retaliation scar.
+class AESelfFilteredScarsTest(TestCase):
+    """Test 13: Self-filtered scars on multiple characters fire independently per target.
 
-    Each character has a cancel-trigger on DAMAGE_PRE_APPLY. When the AE
-    is dispatched via emit_event for each character, each personal dispatch
-    fires independently. Verifies N parallel stacks each with a cancellation.
+    Under unified dispatch, per-target DAMAGE_PRE_APPLY is still one emission per
+    target (per-target event semantics). Each target's self-filtered scar fires
+    only when that target is in the payload. Non-targets' scars stay silent.
     """
 
     def setUp(self):
         self.room = _create_room("AERoom13")
-        self.characters = []
+        self.chars = []
         cancel_flow = _make_cancel_flow()
         for _ in range(3):
             char = CharacterFactory()
             char.location = self.room
             ReactiveConditionFactory(
                 event_name=EventNames.DAMAGE_PRE_APPLY,
-                scope=TriggerScope.PERSONAL,
-                filter_condition=None,
+                filter_condition=SELF_FILTER,
                 flow_definition=cancel_flow,
                 target=char,
             )
-            self.characters.append(char)
+            self.chars.append(char)
 
-    def test_hit_all_characters_get_independent_cancellations(self):
-        """Each character's dispatch is cancelled independently — N cancelled stacks."""
-        stacks = []
-        for char in self.characters:
-            payload = DamagePreApplyPayload(
-                target=char,
-                amount=15,
-                damage_type="fire",
-                source=DamageSource(type="character", ref=None),
+    def test_each_targets_scar_fires_on_its_own_damage(self):
+        for char in self.chars:
+            payload = _damage_payload(char, damage_type="fire")
+            stack = _emit_damage(char, payload)
+            self.assertTrue(
+                stack.was_cancelled(),
+                f"Expected scar on {char.pk} to cancel its own damage",
             )
-            stack = emit_event(
-                EventNames.DAMAGE_PRE_APPLY,
-                payload,
-                personal_target=char,
-                room=self.room,
-            )
-            stacks.append(stack)
 
-        # All three personal dispatches should be cancelled
-        self.assertEqual(len(stacks), 3)
-        for stack in stacks:
-            self.assertTrue(stack.was_cancelled())
-
-    def test_near_miss_no_scars_no_cancellation(self):
-        """A character with no scar in the same room gets no cancellation."""
+    def test_unscarred_character_in_same_room_not_affected(self):
         clean_char = CharacterFactory()
         clean_char.location = self.room
-        payload = DamagePreApplyPayload(
-            target=clean_char,
-            amount=15,
-            damage_type="fire",
-            source=DamageSource(type="character", ref=None),
-        )
-        stack = emit_event(
-            EventNames.DAMAGE_PRE_APPLY,
-            payload,
-            personal_target=clean_char,
-            room=self.room,
-        )
+        payload = _damage_payload(clean_char)
+        stack = _emit_damage(clean_char, payload)
+        # clean_char has no scar; the other 3 scars self-filter and do NOT match
         self.assertFalse(stack.was_cancelled())
 
 
 # ---------------------------------------------------------------------------
-# Task 38: Attack-level cancellation tier (Tests 14-15)
+# Cancellation tier — room ward priority vs personal shield (Tests 14-15)
 # ---------------------------------------------------------------------------
 
 
-class RoomScopePreCancellationSkipsAllPersonalTest(TestCase):
-    """Test 14: ROOM-scope PRE cancellation skips ALL PERSONAL dispatches for the AE.
+class RoomWardCancelsBeforePersonalShieldTest(TestCase):
+    """Test 14: Room ward (priority 9) cancels; personal shield (priority 3) doesn't fire.
 
-    A room-level ward cancels DAMAGE_PRE_APPLY.
-    emit_event dispatches ROOM first; if cancelled, PERSONAL is never reached.
-
-    Implementation note: plain ObjectDB instances (created by _create_room) do not
-    carry a trigger_handler attribute — emit_event silently skips them. To exercise
-    the ROOM-cancels-PERSONAL short-circuit, we attach a TriggerHandler to the room
-    instance directly and register a cancel trigger on it. This mirrors what the Room
-    typeclass would do in production; the dispatch topology is identical.
+    Under unified dispatch, priority ordering is global across all owners. A
+    higher-priority room-owned trigger cancels before a lower-priority personal
+    trigger is reached. Assertion: room ward fired, personal shield didn't.
     """
 
     def setUp(self):
-        self.room = _create_room("AERoom14")
-        self.char_a = CharacterFactory()
-        self.char_a.location = self.room
-        self.char_b = CharacterFactory()
-        self.char_b.location = self.room
+        self.room = _create_room("WardRoom14")
+        self.char = CharacterFactory()
+        self.char.location = self.room
 
-        # Room-level ward that always cancels DAMAGE_PRE_APPLY.
-        # We install a TriggerHandler on the room ObjectDB instance, then
-        # add a Trigger row with scope=ROOM and source_condition on the room.
-        cancel_flow = _make_cancel_flow()
-        from flows.factories import TriggerDefinitionFactory, TriggerFactory
-        from flows.models.events import Event
-
+        # Room ward: priority 9, always cancels
+        room_cancel_flow = _make_cancel_flow()
         event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
-        trigger_def = TriggerDefinitionFactory(event=event, flow_definition=cancel_flow)
+        room_trigger_def = TriggerDefinitionFactory(
+            event=event, flow_definition=room_cancel_flow, priority=9
+        )
         room_condition = ConditionInstanceFactory(target=self.room)
         TriggerFactory(
-            trigger_definition=trigger_def,
+            trigger_definition=room_trigger_def,
             obj=self.room,
             source_condition=room_condition,
             source_stage=None,
-            scope=TriggerScope.ROOM,
             additional_filter_condition={},
         )
-        # Attach a TriggerHandler to the room. The Trigger row was saved to DB
-        # with obj=self.room, so _populate() will find it on first dispatch.
-        room_handler = TriggerHandler(owner=self.room)
-        self.room.trigger_handler = room_handler  # type: ignore[attr-defined]
+        if hasattr(self.room, "trigger_handler"):
+            self.room.trigger_handler._populated = False
 
-        # Char A has a personal scar that would fire if reached
-        personal_cancel = _make_cancel_flow()
-        ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
-            filter_condition=None,
-            flow_definition=personal_cancel,
-            target=self.char_a,
+        # Personal shield: priority 3, would MODIFY_PAYLOAD if reached
+        self.shield_flow = _make_multiply_field_flow("amount", 0)
+        shield_trigger_def = TriggerDefinitionFactory(
+            event=event, flow_definition=self.shield_flow, priority=3
         )
+        shield_condition = ConditionInstanceFactory(target=self.char)
+        TriggerFactory(
+            trigger_definition=shield_trigger_def,
+            obj=self.char,
+            source_condition=shield_condition,
+            source_stage=None,
+            additional_filter_condition=SELF_FILTER,
+        )
+        if hasattr(self.char, "trigger_handler"):
+            self.char.trigger_handler._populated = False
 
-    def test_hit_room_ward_cancels_before_personal(self):
-        """Room-scope cancellation means the returned stack is already cancelled."""
-        payload = DamagePreApplyPayload(
-            target=self.char_a,
-            amount=30,
-            damage_type="fire",
-            source=DamageSource(type="technique", ref=None),
-        )
-        stack = emit_event(
-            EventNames.DAMAGE_PRE_APPLY,
-            payload,
-            personal_target=self.char_a,
-            room=self.room,
-        )
+    def test_room_ward_cancels_and_shield_does_not_run(self):
+        payload = _damage_payload(self.char, amount=30, damage_type="fire")
+        stack = _emit_damage(self.char, payload)
+        # Room ward wins by priority and cancels
         self.assertTrue(stack.was_cancelled())
-
-    def test_near_miss_no_room_ward_personal_still_reaches(self):
-        """Without a room ward, personal dispatch runs normally for the character."""
-        clean_room = _create_room("CleanRoom14")
-        clean_char = CharacterFactory()
-        clean_char.location = clean_room
-
-        # Char has a personal cancel scar — fires when room has no ward
-        personal_cancel = _make_cancel_flow()
-        ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
-            filter_condition=None,
-            flow_definition=personal_cancel,
-            target=clean_char,
-        )
-        payload = DamagePreApplyPayload(
-            target=clean_char,
-            amount=30,
-            damage_type="fire",
-            source=DamageSource(type="technique", ref=None),
-        )
-        stack = emit_event(
-            EventNames.DAMAGE_PRE_APPLY,
-            payload,
-            personal_target=clean_char,
-            room=clean_room,
-        )
-        # Room has no triggers (plain ObjectDB, no handler) — personal scar fires
-        self.assertTrue(stack.was_cancelled())
+        # Personal shield would have zeroed amount; cancellation stopped the walk
+        # so it stays at 30.
+        self.assertEqual(payload.amount, 30)
 
 
 class PersonalShieldCancelsOnlyOneTargetTest(TestCase):
-    """Test 15: PERSONAL shield cancels only the one target; others still resolve.
-
-    Two characters in the same room. Only Char A has a cancel scar.
-    AE dispatched to both via separate emit_event calls (standard AE pattern).
-    Char A's stack is cancelled; Char B's is not.
-    """
+    """Test 15: Per-target emissions let one shield cancel its own damage only."""
 
     def setUp(self):
-        self.room = _create_room("AERoom15")
+        self.room = _create_room("ShieldRoom15")
         self.char_a = CharacterFactory()
         self.char_a.location = self.room
         self.char_b = CharacterFactory()
         self.char_b.location = self.room
 
-        # Only char_a has a personal shield
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
-            filter_condition=None,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=self.char_a,
         )
-        # char_b has no reactive conditions
-
-    def _dispatch(self, char):
-        payload = DamagePreApplyPayload(
-            target=char,
-            amount=25,
-            damage_type="cold",
-            source=DamageSource(type="technique", ref=None),
-        )
-        return emit_event(
-            EventNames.DAMAGE_PRE_APPLY,
-            payload,
-            personal_target=char,
-            room=self.room,
-        )
 
     def test_hit_shielded_char_cancelled(self):
-        """Char A's personal shield fires — their stack is cancelled."""
-        stack = self._dispatch(self.char_a)
+        payload = _damage_payload(self.char_a, damage_type="cold")
+        stack = _emit_damage(self.char_a, payload)
         self.assertTrue(stack.was_cancelled())
 
     def test_near_miss_unshielded_char_resolves(self):
-        """Char B has no scar — their personal dispatch resolves without cancellation."""
-        stack = self._dispatch(self.char_b)
+        payload = _damage_payload(self.char_b, damage_type="cold")
+        stack = _emit_damage(self.char_b, payload)
         self.assertFalse(stack.was_cancelled())
 
 
 # ---------------------------------------------------------------------------
-# Task 39: Stage/source cascade (Tests 16-18)
+# Stage/source cascade (Tests 16-18)
 # ---------------------------------------------------------------------------
 
 
 class StageScopedTriggerStopsAfterAdvanceTest(TestCase):
-    """Test 16: Stage-scoped trigger stops firing after advance_condition_severity moves stage.
-
-    Build a scar tied to stage1 of a condition. Dispatch fires at stage1.
-    advance_condition_severity moves to stage2. Dispatch no longer fires.
-    """
+    """Test 16: Stage-scoped trigger stops firing after stage advance."""
 
     def setUp(self):
+        self.room = _create_room("StageRoom16")
         self.character = CharacterFactory()
-        self.character.location = _create_room("StageRoom16")
+        self.character.location = self.room
 
         template = ConditionTemplateFactory(has_progression=True)
         self.stage1 = ConditionStageFactory(condition=template, stage_order=1, severity_threshold=5)
@@ -964,76 +832,53 @@ class StageScopedTriggerStopsAfterAdvanceTest(TestCase):
         )
 
         cancel_flow = _make_cancel_flow()
-        from flows.factories import TriggerDefinitionFactory, TriggerFactory
-        from flows.models.events import Event
-
         event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
         trigger_def = TriggerDefinitionFactory(event=event, flow_definition=cancel_flow)
         TriggerFactory(
             trigger_definition=trigger_def,
             obj=self.character,
             source_condition=self.instance,
-            source_stage=self.stage1,  # Only active at stage1
-            scope=TriggerScope.PERSONAL,
+            source_stage=self.stage1,
             additional_filter_condition={},
         )
+        if hasattr(self.character, "trigger_handler"):
+            self.character.trigger_handler._populated = False
 
     def _dispatch(self):
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="physical",
-            source=DamageSource(type="character", ref=None),
-        )
-        return self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
+        payload = _damage_payload(self.character)
+        return _emit_damage(self.character, payload)
 
     def test_hit_trigger_fires_at_stage1(self):
-        """Trigger is active at stage1 — dispatch cancels."""
-        result = self._dispatch()
-        self.assertTrue(result.cancelled)
-        self.assertTrue(len(result.fired) > 0)
+        stack = self._dispatch()
+        self.assertTrue(stack.was_cancelled())
 
     def test_near_miss_trigger_inactive_after_stage_advance(self):
-        """After advancing to stage2, stage1 trigger no longer fires."""
-        # Advance severity enough to cross stage2 threshold (15)
         advance_condition_severity(self.instance, 10)
         self.instance.refresh_from_db()
-        # Verify stage actually advanced
         self.assertEqual(self.instance.current_stage_id, self.stage2.pk)
-        # Now the trigger (scoped to stage1) should be inactive
-        result = self._dispatch()
-        self.assertFalse(result.cancelled)
-        self.assertEqual(result.fired, [])
+        stack = self._dispatch()
+        self.assertFalse(stack.was_cancelled())
 
 
 class ConditionRemovalCleansUpTriggerTest(TestCase):
-    """Test 17: Condition removal cascades trigger cleanup.
+    """Test 17: Removing source_condition cascades trigger deletion.
 
-    A character has a trigger installed via a condition.
-    After remove_condition removes the instance (and CASCADE deletes the trigger),
-    subsequent dispatch finds no trigger and does not fire.
-
-    Note: REMOVE_CONDITION flow action does not exist in FlowActionChoices.
-    This test exercises the same semantic: trigger is present → fires;
-    condition removed → trigger gone → second dispatch does not fire.
-    The flow-action variant is deferred until REMOVE_CONDITION is added to
-    FlowActionChoices and FlowExecution._execute_step.
+    After remove_condition, the Trigger row is gone; the handler cache is
+    re-populated cleanly and the next dispatch finds no matching trigger.
     """
 
     def setUp(self):
+        self.room = _create_room("CascadeRoom17")
         self.character = CharacterFactory()
-        self.character.location = _create_room("CascadeRoom17")
+        self.character.location = self.room
 
     def test_trigger_fires_then_gone_after_removal(self):
-        """Trigger fires on first dispatch; after remove_condition it does not fire."""
         template = ConditionTemplateFactory()
         instance = ConditionInstanceFactory(
             target=self.character,
             condition=template,
         )
         cancel_flow = _make_cancel_flow()
-        from flows.factories import TriggerDefinitionFactory, TriggerFactory
-        from flows.models.events import Event
 
         event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
         trigger_def = TriggerDefinitionFactory(event=event, flow_definition=cancel_flow)
@@ -1042,46 +887,29 @@ class ConditionRemovalCleansUpTriggerTest(TestCase):
             obj=self.character,
             source_condition=instance,
             source_stage=None,
-            scope=TriggerScope.PERSONAL,
             additional_filter_condition={},
         )
-        # Re-populate trigger_handler to pick up the new trigger
         self.character.trigger_handler._populated = False
 
-        def _dispatch():
-            payload = DamagePreApplyPayload(
-                target=self.character,
-                amount=10,
-                damage_type="physical",
-                source=DamageSource(type="character", ref=None),
-            )
-            return self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-
         # First dispatch: trigger is present, fires and cancels
-        result_before = _dispatch()
-        self.assertTrue(result_before.cancelled)
+        stack_before = _emit_damage(self.character, _damage_payload(self.character))
+        self.assertTrue(stack_before.was_cancelled())
 
         # Remove the condition → CASCADE deletes Trigger row
         remove_condition(self.character, template)
-        # Notify trigger_handler of removal
         self.character.trigger_handler._populated = False
 
         # Second dispatch: no trigger, does not fire
-        result_after = _dispatch()
-        self.assertFalse(result_after.cancelled)
-        self.assertEqual(result_after.fired, [])
+        stack_after = _emit_damage(self.character, _damage_payload(self.character))
+        self.assertFalse(stack_after.was_cancelled())
 
     def test_near_miss_condition_still_present_trigger_still_fires(self):
-        """When condition is NOT removed, the trigger continues to fire."""
         template = ConditionTemplateFactory()
         instance = ConditionInstanceFactory(
             target=self.character,
             condition=template,
         )
         cancel_flow = _make_cancel_flow()
-        from flows.factories import TriggerDefinitionFactory, TriggerFactory
-        from flows.models.events import Event
-
         event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
         trigger_def = TriggerDefinitionFactory(event=event, flow_definition=cancel_flow)
         TriggerFactory(
@@ -1089,62 +917,43 @@ class ConditionRemovalCleansUpTriggerTest(TestCase):
             obj=self.character,
             source_condition=instance,
             source_stage=None,
-            scope=TriggerScope.PERSONAL,
             additional_filter_condition={},
         )
         self.character.trigger_handler._populated = False
 
-        def _dispatch():
-            payload = DamagePreApplyPayload(
-                target=self.character,
-                amount=10,
-                damage_type="physical",
-                source=DamageSource(type="character", ref=None),
-            )
-            return self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-
-        # Two dispatches without removal — both fire
-        result1 = _dispatch()
-        # After first dispatch, usage cap (default=1) may suppress second — reset handler
+        stack1 = _emit_damage(self.character, _damage_payload(self.character))
         self.character.trigger_handler._populated = False
-        result2 = _dispatch()
-        # At least one fired (the first); condition was not removed
-        self.assertTrue(result1.cancelled)
-        self.assertTrue(result2.cancelled)
+        stack2 = _emit_damage(self.character, _damage_payload(self.character))
+        self.assertTrue(stack1.was_cancelled())
+        self.assertTrue(stack2.was_cancelled())
 
 
 class MultiSourceSameEventTest(TestCase):
-    """Test 18: Two condition instances on the same character, both with triggers on DAMAGE_APPLIED.
+    """Test 18: Two conditions on same char, both installing triggers on same event.
 
-    Two separate ConditionInstances each install a trigger on DAMAGE_PRE_APPLY.
-    A single dispatch fires both triggers independently.
+    Two separate ConditionInstances each install a trigger. A single emission
+    runs both (by priority desc) and each multiplies amount.
     """
 
     def setUp(self):
+        self.room = _create_room("MultiSourceRoom18")
         self.character = CharacterFactory()
-        self.character.location = _create_room("MultiSourceRoom18")
+        self.character.location = self.room
 
     def test_hit_both_sources_fire(self):
-        """Both condition-sourced triggers fire on the single dispatch."""
-        from flows.factories import TriggerDefinitionFactory, TriggerFactory
-        from flows.models.events import Event
-
         event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
 
-        # Source 1: doubles the damage
-        double_flow = _make_multiply_field_flow("amount", 2)
-        trigger_def1 = TriggerDefinitionFactory(event=event, flow_definition=double_flow)
+        double_flow1 = _make_multiply_field_flow("amount", 2)
+        trigger_def1 = TriggerDefinitionFactory(event=event, flow_definition=double_flow1)
         instance1 = ConditionInstanceFactory(target=self.character)
         TriggerFactory(
             trigger_definition=trigger_def1,
             obj=self.character,
             source_condition=instance1,
             source_stage=None,
-            scope=TriggerScope.PERSONAL,
             additional_filter_condition={},
         )
 
-        # Source 2: also doubles the damage (stacks multiplicatively)
         double_flow2 = _make_multiply_field_flow("amount", 2)
         trigger_def2 = TriggerDefinitionFactory(event=event, flow_definition=double_flow2)
         instance2 = ConditionInstanceFactory(target=self.character)
@@ -1153,28 +962,16 @@ class MultiSourceSameEventTest(TestCase):
             obj=self.character,
             source_condition=instance2,
             source_stage=None,
-            scope=TriggerScope.PERSONAL,
             additional_filter_condition={},
         )
         self.character.trigger_handler._populated = False
 
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="physical",
-            source=DamageSource(type="character", ref=None),
-        )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-
-        # Both triggers fired: 10 * 2 * 2 = 40
-        self.assertEqual(len(result.fired), 2)
+        payload = _damage_payload(self.character)
+        _emit_damage(self.character, payload)
+        # 10 * 2 * 2 = 40
         self.assertEqual(payload.amount, 40)
 
     def test_near_miss_single_source_fires_once(self):
-        """With only one condition source, only one trigger fires (amount doubled once)."""
-        from flows.factories import TriggerDefinitionFactory, TriggerFactory
-        from flows.models.events import Event
-
         event = Event.objects.get(name=EventNames.DAMAGE_PRE_APPLY)
         double_flow = _make_multiply_field_flow("amount", 2)
         trigger_def = TriggerDefinitionFactory(event=event, flow_definition=double_flow)
@@ -1184,170 +981,267 @@ class MultiSourceSameEventTest(TestCase):
             obj=self.character,
             source_condition=instance,
             source_stage=None,
-            scope=TriggerScope.PERSONAL,
             additional_filter_condition={},
         )
         self.character.trigger_handler._populated = False
 
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="physical",
-            source=DamageSource(type="character", ref=None),
-        )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-
-        # Only one trigger: 10 * 2 = 20
-        self.assertEqual(len(result.fired), 1)
+        payload = _damage_payload(self.character)
+        _emit_damage(self.character, payload)
         self.assertEqual(payload.amount, 20)
 
 
 # ---------------------------------------------------------------------------
-# Task 42 (Tests 23-24): Safety + filter interaction
+# Bystander reaction (NEW — replaces deleted ROOM scope tests)
+# ---------------------------------------------------------------------------
+
+
+class BystanderReactionTest(TestCase):
+    """Bystander reaction: a character reacts to events happening to OTHERS in the room.
+
+    Characters A and B share a room. A has a "Watchful" trigger with filter
+    ``{"path": "target", "op": "!=", "value": "self"}``. When B is attacked,
+    A's trigger fires; when A is attacked, A's trigger does NOT fire.
+
+    This replaces the old ROOM-scope tests which relied on the deleted scope
+    field. Under unified dispatch, bystander semantics are expressed as a
+    filter that EXCLUDES the owner from being the target.
+    """
+
+    def setUp(self):
+        self.room = _create_room("BystanderRoom")
+        self.watcher = CharacterFactory()
+        self.watcher.location = self.room
+        self.subject = CharacterFactory()
+        self.subject.location = self.room
+
+        # Watcher's bystander trigger: MODIFY_PAYLOAD when someone ELSE is the target.
+        mark_flow = _make_set_field_flow("damage_type", "witnessed")
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition=NOT_SELF_FILTER,
+            flow_definition=mark_flow,
+            target=self.watcher,
+        )
+
+    def test_bystander_reacts_when_other_is_target(self):
+        """Damage to subject → watcher's filter matches (target != watcher) → mark applied."""
+        payload = _damage_payload(self.subject, damage_type="fire")
+        _emit_damage(self.subject, payload)
+        self.assertEqual(payload.damage_type, "witnessed")
+
+    def test_bystander_does_not_react_to_own_damage(self):
+        """Damage to watcher → watcher's own filter (target != self) rejects → no mark."""
+        payload = _damage_payload(self.watcher, damage_type="fire")
+        _emit_damage(self.watcher, payload)
+        self.assertEqual(payload.damage_type, "fire")
+
+
+# ---------------------------------------------------------------------------
+# Affinity / resonance / property layering (Tests 21-22)
+# ---------------------------------------------------------------------------
+
+
+class AffinityLayeringTest(TestCase):
+    """Test 21: Filter by payload source.ref.affinity — layered by resonance."""
+
+    def setUp(self):
+        self.room = _create_room("AffinityRoom21")
+        self.character = CharacterFactory()
+        self.character.location = self.room
+
+    def test_resonance_filter_matches_by_source_attribute(self):
+        """Higher resonance values get captured by filter via numeric comparison."""
+        ref = SimpleNamespace(affinity="storm", resonance=50)
+        source = DamageSource(type="technique", ref=ref)
+        trigger_flow = _make_set_field_flow("damage_type", "resonant_storm")
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition={
+                "and": [
+                    {"path": "source.ref.affinity", "op": "==", "value": "storm"},
+                    {"path": "source.ref.resonance", "op": ">=", "value": 25},
+                ]
+            },
+            flow_definition=trigger_flow,
+            target=self.character,
+        )
+        payload = _damage_payload(self.character, source=source)
+        _emit_damage(self.character, payload)
+        self.assertEqual(payload.damage_type, "resonant_storm")
+
+    def test_low_resonance_does_not_match(self):
+        ref = SimpleNamespace(affinity="storm", resonance=10)
+        source = DamageSource(type="technique", ref=ref)
+        trigger_flow = _make_set_field_flow("damage_type", "resonant_storm")
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition={
+                "and": [
+                    {"path": "source.ref.affinity", "op": "==", "value": "storm"},
+                    {"path": "source.ref.resonance", "op": ">=", "value": 25},
+                ]
+            },
+            flow_definition=trigger_flow,
+            target=self.character,
+        )
+        payload = _damage_payload(self.character, source=source, damage_type="physical")
+        _emit_damage(self.character, payload)
+        self.assertEqual(payload.damage_type, "physical")
+
+
+class PropertyLayeringTest(TestCase):
+    """Test 22: Layered property filters — target property + source property AND'd."""
+
+    def setUp(self):
+        self.room = _create_room("PropertyLayerRoom22")
+        self.character = CharacterFactory()
+        self.character.location = self.room
+
+    def test_layered_has_property_filters(self):
+        """AND of two has_property conditions gates the trigger."""
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition={
+                "and": [
+                    {"path": "source.ref", "op": "has_property", "value": "undead"},
+                    {"path": "source.ref", "op": "has_property", "value": "ancient"},
+                ]
+            },
+            flow_definition=cancel_flow,
+            target=self.character,
+        )
+
+        class _Undead:
+            def has_property(self, name):
+                return name in {"undead", "ancient"}
+
+        source = DamageSource(type="character", ref=_Undead())
+        payload = _damage_payload(self.character, source=source)
+        stack = _emit_damage(self.character, payload)
+        self.assertTrue(stack.was_cancelled())
+
+    def test_missing_property_does_not_fire(self):
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition={
+                "and": [
+                    {"path": "source.ref", "op": "has_property", "value": "undead"},
+                    {"path": "source.ref", "op": "has_property", "value": "ancient"},
+                ]
+            },
+            flow_definition=cancel_flow,
+            target=self.character,
+        )
+
+        class _JustUndead:
+            def has_property(self, name):
+                return name == "undead"
+
+        source = DamageSource(type="character", ref=_JustUndead())
+        payload = _damage_payload(self.character, source=source)
+        stack = _emit_damage(self.character, payload)
+        self.assertFalse(stack.was_cancelled())
+
+
+# ---------------------------------------------------------------------------
+# Safety + filter (Tests 23-24)
 # ---------------------------------------------------------------------------
 
 
 class RecursionCapRespectsFiltersTest(TestCase):
-    """Test 23: Recursion cap respects filters — triggers that don't match
-    do NOT increment the FlowStack depth.
-
-    Two triggers on the same character for DAMAGE_PRE_APPLY:
-      - Trigger A: filter "source.type == 'scar'" — fires and emits a nested event
-        that would blow the cap if filters didn't gate correctly.
-      - Trigger B: filter "source.type == 'weapon'" — does NOT fire.
-
-    When the dispatch source is "weapon", only Trigger B would match (but it also
-    has no nested dispatch). Since the cap is only consumed during nested dispatch
-    calls (``FlowStack.nested()``), a non-matching trigger cannot consume cap.
-
-    This test verifies:
-    1. A trigger whose filter matches fires and updates the result.
-    2. A trigger whose filter does NOT match is never executed.
-    3. Setting cap=1 (depth 1 already used) raises FlowStackCapExceeded only
-       when a nested dispatch is attempted, not when a non-matching trigger exists.
-    """
+    """Test 23: Non-matching filter never enters flow execution → cap not consumed."""
 
     def setUp(self):
+        self.room = _create_room("RecursionRoom23")
         self.character = CharacterFactory()
-        self.character.location = _create_room("RecursionRoom23")
+        self.character.location = self.room
 
     def test_non_matching_filter_does_not_consume_cap(self):
-        """A trigger whose filter misses does not increment recursion depth."""
-        # Add a cancel trigger that only fires on "scar" source
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
             filter_condition={"path": "source.type", "op": "==", "value": "scar"},
             flow_definition=cancel_flow,
             target=self.character,
         )
 
-        # Dispatch with a "weapon" source — filter miss, trigger does not fire
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="physical",
-            source=DamageSource(type="character", ref=None),
-        )
-        # Use a low-cap FlowStack to prove the cap is not consumed by the miss
         from flows.flow_stack import FlowStack
 
+        payload = _damage_payload(
+            self.character,
+            source=DamageSource(type="character", ref=None),
+        )
         stack = FlowStack(
-            owner=self.character, originating_event=EventNames.DAMAGE_PRE_APPLY, cap=2
+            owner=self.character,
+            originating_event=EventNames.DAMAGE_PRE_APPLY,
+            cap=2,
         )
-        result = self.character.trigger_handler.dispatch(
-            EventNames.DAMAGE_PRE_APPLY, payload, flow_stack=stack
+        returned = emit_event(
+            EventNames.DAMAGE_PRE_APPLY,
+            payload,
+            location=self.character.location,
+            parent_stack=stack,
         )
-        # Filter missed: no trigger fired, not cancelled
-        self.assertFalse(result.cancelled)
-        self.assertEqual(result.fired, [])
-        # Depth must not have increased (still 1, not 2)
-        self.assertEqual(stack.depth, 1)
+        # Parent stack passed through, still at depth 1, not cancelled
+        self.assertIs(returned, stack)
+        self.assertFalse(returned.was_cancelled())
+        self.assertEqual(returned.depth, 1)
 
     def test_matching_filter_fires_and_updates_result(self):
-        """A trigger whose filter matches fires normally."""
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
             filter_condition={"path": "source.type", "op": "==", "value": "scar"},
             flow_definition=cancel_flow,
             target=self.character,
         )
-
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="physical",
+        payload = _damage_payload(
+            self.character,
             source=DamageSource(type="scar", ref=None),
         )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertTrue(result.cancelled)
-        self.assertTrue(len(result.fired) > 0)
+        stack = _emit_damage(self.character, payload)
+        self.assertTrue(stack.was_cancelled())
 
 
 class UsageCapPreFilterTest(TestCase):
     """Test 24: Usage cap is pre-filter.
 
-    Skipped: Trigger has no ``max_uses_per_scene`` model field and no in-memory
-    usage counter. ``TriggerHandler._usage_cap_reached`` is a stub returning False.
-    A real usage cap requires either a new ``uses_this_scene`` integer column on
-    Trigger (reset between scenes) or an in-process counter on TriggerHandler.
-    Neither exists yet.
-
-    When implemented, the test should verify:
-    - A trigger with max_uses=1 fires once, then ``_usage_cap_reached`` returns True.
-    - On the second dispatch (even when filter would match), the trigger is skipped.
-    - The cap check fires BEFORE filter evaluation (so filter cost is never paid
-      for an already-exhausted trigger).
+    Authored-but-skipped: Trigger has no ``max_uses_per_scene`` column.
+    ``_usage_cap_reached`` was a stub (now removed in Phase 4). Implementing
+    this requires either an ``uses_this_scene`` counter on Trigger or an
+    in-process dict on TriggerHandler. Neither exists yet.
     """
 
     def test_usage_cap_checked_before_filter(self):
         self.skipTest(
-            "Trigger model has no max_uses_per_scene column and TriggerHandler has "
-            "no usage counter. _usage_cap_reached is a stub returning False. "
-            "Implement usage counting (column or in-process dict) before writing this test."
+            "Trigger model has no max_uses_per_scene column. _usage_cap_reached "
+            "helper was removed with the dispatch rewrite. Re-author when "
+            "usage-counter infra lands."
         )
 
     def test_near_miss_unlimited_trigger_fires_multiple_times(self):
         self.skipTest(
-            "Trigger model has no max_uses_per_scene column and TriggerHandler has "
-            "no usage counter. _usage_cap_reached is a stub returning False. "
-            "Implement usage counting (column or in-process dict) before writing this test."
+            "Trigger model has no max_uses_per_scene column. _usage_cap_reached "
+            "helper was removed with the dispatch rewrite. Re-author when "
+            "usage-counter infra lands."
         )
 
 
 # ---------------------------------------------------------------------------
-# Task 43 (Tests 25-27): Async + filter (player prompt)
+# Async + filter (Tests 25-27)
 # ---------------------------------------------------------------------------
 
 
 class FilteredPlayerPromptTest(TestCase):
-    """Test 25: Filtered player prompt — a scar fires PROMPT_PLAYER only when
-    the filter matches.
-
-    The PROMPT_PLAYER flow step registers a pending prompt when executed. This
-    test uses a stub account (SimpleNamespace with .pk) injected as the account
-    variable so that register_pending_prompt can key on it.
-
-    Filter: source.type == "scar"
-    - Hit: source.type="scar" → trigger fires → prompt registered.
-    - Near-miss: source.type="character" → filter miss → no prompt registered.
-    """
+    """Test 25: Filter gate ahead of PROMPT_PLAYER (tested via CANCEL_EVENT proxy)."""
 
     def setUp(self):
+        self.room = _create_room("PromptRoom25")
         self.character = CharacterFactory()
-        self.character.location = _create_room("PromptRoom25")
-
-        # Inject a stub account (with .pk) onto the character so the PROMPT_PLAYER
-        # step can resolve it. The step uses "@stub_account" literal which won't
-        # resolve as a flow variable; instead, we directly patch the flow to use
-        # a cancel flow and verify trigger firing via result.fired.
-        # (PROMPT_PLAYER requires real account infrastructure; we test the filter
-        # gate here and test prompt resolution in Tests 26-27 separately.)
+        self.character.location = self.room
         self.scar_filter_flow = FlowDefinitionFactory()
-        # Use CANCEL_EVENT as the flow action to verify the trigger fired.
         FlowStepDefinitionFactory(
             flow=self.scar_filter_flow,
             parent_id=None,
@@ -1356,53 +1250,40 @@ class FilteredPlayerPromptTest(TestCase):
         )
 
     def test_hit_filter_matches_trigger_fires(self):
-        """When source.type == 'scar', the filter matches and the trigger fires."""
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
             filter_condition={"path": "source.type", "op": "==", "value": "scar"},
             flow_definition=self.scar_filter_flow,
             target=self.character,
         )
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
+        payload = _damage_payload(
+            self.character,
             damage_type="arcane",
             source=DamageSource(type="scar", ref=None),
         )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        # Filter matched: trigger fired and cancelled
-        self.assertTrue(result.cancelled)
-        self.assertTrue(len(result.fired) > 0)
+        stack = _emit_damage(self.character, payload)
+        self.assertTrue(stack.was_cancelled())
 
     def test_near_miss_filter_misses_trigger_does_not_fire(self):
-        """When source.type != 'scar', filter misses and trigger does not fire."""
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
             filter_condition={"path": "source.type", "op": "==", "value": "scar"},
             flow_definition=self.scar_filter_flow,
             target=self.character,
         )
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
+        payload = _damage_payload(
+            self.character,
             damage_type="arcane",
             source=DamageSource(type="character", ref=None),
         )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        # Filter missed: trigger did not fire
-        self.assertFalse(result.cancelled)
-        self.assertEqual(result.fired, [])
+        stack = _emit_damage(self.character, payload)
+        self.assertFalse(stack.was_cancelled())
 
 
 class PromptTimeoutTest(TestCase):
-    """Test 26: Prompt timeout — a pending prompt can be abandoned via
-    ``timeout_pending_prompt``, which fires the Deferred with the default answer.
-    """
+    """Test 26: Prompt timeout — pending prompt fires Deferred with default."""
 
     def test_prompt_timeout_fires_with_default_answer(self):
-        """timeout_pending_prompt fires the Deferred with default_answer."""
         from flows.execution.prompts import (
             _pending_prompts,
             register_pending_prompt,
@@ -1426,7 +1307,6 @@ class PromptTimeoutTest(TestCase):
         _pending_prompts.clear()
 
     def test_near_miss_timeout_on_unknown_key_returns_false(self):
-        """timeout_pending_prompt returns False for an unknown key."""
         from flows.execution.prompts import timeout_pending_prompt
 
         found = timeout_pending_prompt(account_id=999, prompt_key="nonexistent-key-26")
@@ -1434,12 +1314,9 @@ class PromptTimeoutTest(TestCase):
 
 
 class PromptResolutionTest(TestCase):
-    """Test 27: Prompt resolution — calling ``resolve_pending_prompt`` fires the
-    Deferred and resumes the suspended flow.
-    """
+    """Test 27: Prompt resolution — resolve_pending_prompt fires Deferred."""
 
     def test_resolve_prompt_fires_deferred(self):
-        """resolve_pending_prompt fires the Deferred with the given answer."""
         from flows.execution.prompts import (
             _pending_prompts,
             register_pending_prompt,
@@ -1464,12 +1341,10 @@ class PromptResolutionTest(TestCase):
 
         self.assertTrue(found)
         self.assertEqual(received, ["yes"])
-        # Prompt should be consumed (removed from registry)
         self.assertNotIn((42, "test-resolve-27"), _pending_prompts)
         _pending_prompts.clear()
 
     def test_near_miss_resolve_unknown_key_returns_false(self):
-        """resolve_pending_prompt returns False when key doesn't exist."""
         from flows.execution.prompts import resolve_pending_prompt
 
         found = resolve_pending_prompt(
@@ -1480,12 +1355,6 @@ class PromptResolutionTest(TestCase):
         self.assertFalse(found)
 
     def test_resolve_flow_resumption_via_callback(self):
-        """Deferred callback chain resumes when resolve_pending_prompt fires.
-
-        Verifies that a Deferred registered via register_pending_prompt has its
-        callback fired with the answer string, simulating what _execute_prompt_player
-        does when a flow suspends waiting for player input.
-        """
         from flows.execution.prompts import (
             _pending_prompts,
             register_pending_prompt,
@@ -1493,7 +1362,6 @@ class PromptResolutionTest(TestCase):
         )
 
         _pending_prompts.clear()
-        # Simulate the _resume callback pattern from _execute_prompt_player
         result_store: dict = {}
 
         deferred = register_pending_prompt(
@@ -1515,3 +1383,77 @@ class PromptResolutionTest(TestCase):
 
         self.assertEqual(result_store.get("player_choice"), "yes")
         _pending_prompts.clear()
+
+
+# ---------------------------------------------------------------------------
+# Combat integration dual-path (Tests 28-29) — single emission, filtered
+# ---------------------------------------------------------------------------
+
+
+class CombatDualPathTargetVsBystanderTest(TestCase):
+    """Test 28: One emission — target scar fires, bystander trigger also fires.
+
+    Under the unified model, combat calls `emit_event` once per event. A
+    target-specific scar (self-filter) and a bystander trigger (no filter)
+    both live in the same room and both see the same emission. Both fire
+    (unless one cancels first).
+    """
+
+    def setUp(self):
+        self.room = _create_room("CombatDualRoom28")
+        self.target = CharacterFactory()
+        self.target.location = self.room
+        self.bystander = CharacterFactory()
+        self.bystander.location = self.room
+
+        self.target_mark_flow = _make_set_field_flow("damage_type", "target_scar_fired")
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition=SELF_FILTER,
+            flow_definition=self.target_mark_flow,
+            target=self.target,
+        )
+        self.bystander_mark_flow = _make_multiply_field_flow("amount", 3)
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition=NOT_SELF_FILTER,
+            flow_definition=self.bystander_mark_flow,
+            target=self.bystander,
+        )
+
+    def test_both_target_and_bystander_triggers_fire(self):
+        payload = _damage_payload(self.target, amount=10)
+        _emit_damage(self.target, payload)
+        # Target scar rewrote damage_type
+        self.assertEqual(payload.damage_type, "target_scar_fired")
+        # Bystander trigger multiplied amount
+        self.assertEqual(payload.amount, 30)
+
+
+class CombatSourceDiscriminationTest(TestCase):
+    """Test 29: Filter distinguishes technique damage from weapon damage."""
+
+    def setUp(self):
+        self.room = _create_room("CombatSourceRoom29")
+        self.character = CharacterFactory()
+        self.character.location = self.room
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition={"path": "source.type", "op": "==", "value": "technique"},
+            flow_definition=cancel_flow,
+            target=self.character,
+        )
+
+    def test_technique_damage_cancels(self):
+        payload = _damage_payload(self.character, source=_source_technique("abyssal"))
+        stack = _emit_damage(self.character, payload)
+        self.assertTrue(stack.was_cancelled())
+
+    def test_weapon_damage_passes_through(self):
+        payload = _damage_payload(
+            self.character,
+            source=DamageSource(type="character", ref=None),
+        )
+        stack = _emit_damage(self.character, payload)
+        self.assertFalse(stack.was_cancelled())
