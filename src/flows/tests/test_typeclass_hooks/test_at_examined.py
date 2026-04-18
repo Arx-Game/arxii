@@ -1,9 +1,9 @@
 """Tests for the at_examined hook on ObjectParent and return_appearance wiring.
 
-Task 26: at_examined emits EXAMINE_PRE/EXAMINED with cancellation support.
+Unified dispatch: ``at_examined`` emits EXAMINE_PRE (with cancellation support)
+then EXAMINED, both via ``emit_event(name, payload, location=...)``. Self-
+targeting is expressed via ``SELF_FILTER`` rather than a scope kwarg.
 """
-
-import unittest
 
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
@@ -15,14 +15,12 @@ from flows.events.payloads import ExaminedPayload, ExaminePrePayload
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.conditions.factories import ReactiveConditionFactory
 
-_SKIP_REASON = (
-    "Rewritten in unified-dispatch Phase 5 "
-    "(docs/superpowers/plans/2026-04-17-reactive-unified-dispatch.md)"
-)
+# ---------------------------------------------------------------------------
+# Module-level helpers
+# ---------------------------------------------------------------------------
 
 
-def setUpModule() -> None:
-    raise unittest.SkipTest(_SKIP_REASON)
+SELF_FILTER = {"path": "target", "op": "==", "value": "self"}
 
 
 def _create_room(key: str = "TestRoom") -> ObjectDB:
@@ -156,8 +154,8 @@ class AtExaminedEmitsEventsTests(TestCase):
         self.assertIn(EventNames.EXAMINED, order)
         self.assertLess(order.index(EventNames.EXAMINE_PRE), order.index(EventNames.EXAMINED))
 
-    def test_personal_trigger_fires_on_examine_pre(self) -> None:
-        """A PERSONAL-scoped ReactiveCondition fires when at_examined is called."""
+    def test_self_targeted_trigger_fires_on_examine_pre(self) -> None:
+        """A trigger on the examined object fires when at_examined is called."""
         room = _create_room()
         obj = _create_object(location=room)
         observer = CharacterFactory()
@@ -165,9 +163,9 @@ class AtExaminedEmitsEventsTests(TestCase):
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.EXAMINE_PRE,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=obj,
-            scope=TriggerScope.PERSONAL,
         )
 
         # Returns False because the cancel flow fired
@@ -175,7 +173,7 @@ class AtExaminedEmitsEventsTests(TestCase):
         self.assertFalse(result)
 
     def test_room_trigger_fires_on_examine_pre(self) -> None:
-        """A ROOM-scoped ReactiveCondition fires when at_examined is called."""
+        """A trigger on the room fires when at_examined is called."""
         room = _create_room()
         obj = _create_object(location=room)
         observer = CharacterFactory()
@@ -185,7 +183,6 @@ class AtExaminedEmitsEventsTests(TestCase):
             event_name=EventNames.EXAMINE_PRE,
             flow_definition=cancel_flow,
             target=room,
-            scope=TriggerScope.ROOM,
         )
 
         result = obj.at_examined(observer)
@@ -209,9 +206,9 @@ class AtExaminedCancellationTests(TestCase):
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.EXAMINE_PRE,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=obj,
-            scope=TriggerScope.PERSONAL,
         )
 
         result = obj.at_examined(observer)
@@ -229,9 +226,9 @@ class AtExaminedCancellationTests(TestCase):
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.EXAMINE_PRE,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=obj,
-            scope=TriggerScope.PERSONAL,
         )
 
         import flows.emit as emit_mod
@@ -295,9 +292,9 @@ class ReturnAppearanceCancellationTests(TestCase):
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.EXAMINE_PRE,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=obj,
-            scope=TriggerScope.PERSONAL,
         )
 
         result = obj.return_appearance(observer)

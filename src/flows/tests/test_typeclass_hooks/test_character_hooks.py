@@ -1,10 +1,11 @@
 """Tests for Character typeclass hooks: at_attacked and at_pre_move.
 
-Task 25: at_attacked emits ATTACK_LANDED; at_pre_move emits MOVE_PRE_DEPART
-with cancellation support.
+Unified dispatch: the hooks call ``emit_event(name, payload, location=...)``
+and reactive triggers on the location or its contents get one shared
+FlowStack. Self-targeting is expressed via ``SELF_FILTER`` rather than a
+scope kwarg.
 """
 
-import unittest
 from unittest.mock import MagicMock
 
 from django.test import TestCase
@@ -17,14 +18,13 @@ from flows.events.payloads import AttackLandedPayload, MovePreDepartPayload
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.conditions.factories import ReactiveConditionFactory
 
-_SKIP_REASON = (
-    "Rewritten in unified-dispatch Phase 5 "
-    "(docs/superpowers/plans/2026-04-17-reactive-unified-dispatch.md)"
-)
+# ---------------------------------------------------------------------------
+# Module-level helpers
+# ---------------------------------------------------------------------------
 
 
-def setUpModule() -> None:
-    raise unittest.SkipTest(_SKIP_REASON)
+SELF_FILTER = {"path": "target", "op": "==", "value": "self"}
+CHAR_SELF_FILTER = {"path": "character", "op": "==", "value": "self"}
 
 
 def _create_room(key: str = "TestRoom") -> ObjectDB:
@@ -47,7 +47,7 @@ def _make_cancel_flow() -> object:
     return flow
 
 
-def _make_modify_flow(field: str, value: int, op: str = "set") -> object:
+def _make_modify_flow(field: str, value, op: str = "set") -> object:
     """Return a FlowDefinition with a single MODIFY_PAYLOAD step."""
     flow = FlowDefinitionFactory()
     FlowStepDefinitionFactory(
@@ -65,24 +65,20 @@ def _make_modify_flow(field: str, value: int, op: str = "set") -> object:
 
 
 class AtAttackedEmitsAttackLandedTests(TestCase):
-    """at_attacked emits ATTACK_LANDED to personal_target and room."""
+    """at_attacked emits ATTACK_LANDED at self.location."""
 
-    def test_personal_trigger_fires_on_at_attacked(self) -> None:
-        """A PERSONAL-scoped ReactiveCondition fires when at_attacked is called."""
+    def test_self_targeted_trigger_fires_on_at_attacked(self) -> None:
+        """A trigger on the defender fires when at_attacked is called."""
         char = CharacterFactory()
         room = _create_room()
         char.location = room
 
-        # Sentinel: we'll detect the trigger ran by having it mutate a mutable
-        # payload field — but AttackLandedPayload is frozen, so instead we
-        # verify via a ReactiveCondition that fires without error and check
-        # the emit_event return value is non-None (trigger ran).
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.ATTACK_LANDED,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=char,
-            scope=TriggerScope.PERSONAL,
         )
 
         attacker = CharacterFactory()
@@ -90,11 +86,11 @@ class AtAttackedEmitsAttackLandedTests(TestCase):
         damage_result = MagicMock()
         action = MagicMock()
 
-        # Should not raise; the PERSONAL cancel flow fired
+        # Should not raise; the cancel flow fired on the unified stack
         char.at_attacked(attacker, weapon, damage_result, action)
 
     def test_room_trigger_fires_on_at_attacked(self) -> None:
-        """A ROOM-scoped ReactiveCondition fires when at_attacked is called."""
+        """A trigger attached to the room fires when at_attacked is called."""
         char = CharacterFactory()
         room = _create_room()
         char.location = room
@@ -104,7 +100,6 @@ class AtAttackedEmitsAttackLandedTests(TestCase):
             event_name=EventNames.ATTACK_LANDED,
             flow_definition=cancel_flow,
             target=room,
-            scope=TriggerScope.ROOM,
         )
 
         attacker = CharacterFactory()
@@ -112,7 +107,7 @@ class AtAttackedEmitsAttackLandedTests(TestCase):
         damage_result = MagicMock()
         action = MagicMock()
 
-        # Should not raise; the ROOM cancel flow fired
+        # Should not raise; the room trigger fired
         char.at_attacked(attacker, weapon, damage_result, action)
 
     def test_at_attacked_payload_fields(self) -> None:
@@ -127,7 +122,6 @@ class AtAttackedEmitsAttackLandedTests(TestCase):
         damage_result = MagicMock(name="dmg")
         action = MagicMock(name="act")
 
-        # Patch emit_event on the characters module (where it was imported into)
         import flows.emit as emit_mod
         import typeclasses.characters as chars_mod
 
@@ -159,7 +153,7 @@ class AtAttackedEmitsAttackLandedTests(TestCase):
 
 
 class AtPreMoveEmitsMovePreDepartTests(TestCase):
-    """at_pre_move emits MOVE_PRE_DEPART."""
+    """at_pre_move emits MOVE_PRE_DEPART at the origin location."""
 
     def test_pre_move_emits_event_and_returns_true(self) -> None:
         """at_pre_move returns True when no trigger cancels."""
@@ -172,26 +166,20 @@ class AtPreMoveEmitsMovePreDepartTests(TestCase):
 
         self.assertTrue(result)
 
-    def test_personal_trigger_fires_on_at_pre_move(self) -> None:
-        """A PERSONAL-scoped ReactiveCondition fires when at_pre_move is called."""
+    def test_self_targeted_trigger_fires_on_at_pre_move(self) -> None:
+        """A trigger on the moving character fires when at_pre_move is called."""
         char = CharacterFactory()
         origin = _create_room("Origin")
         destination = _create_room("Destination")
         char.location = origin
 
         # Non-cancelling flow to confirm it fires without side effects
-        sentinel_flow = FlowDefinitionFactory()
-        FlowStepDefinitionFactory(
-            flow=sentinel_flow,
-            parent_id=None,
-            action=FlowActionChoices.MODIFY_PAYLOAD,
-            parameters={"field": "exit_used", "op": "set", "value": "test_exit"},
-        )
+        sentinel_flow = _make_modify_flow("exit_used", "test_exit", op="set")
         ReactiveConditionFactory(
             event_name=EventNames.MOVE_PRE_DEPART,
+            filter_condition=CHAR_SELF_FILTER,
             flow_definition=sentinel_flow,
             target=char,
-            scope=TriggerScope.PERSONAL,
         )
 
         result = char.at_pre_move(destination)
@@ -235,7 +223,7 @@ class AtPreMoveCancelledByReactiveStackTests(TestCase):
     """at_pre_move returns False when the reactive stack cancels."""
 
     def test_cancel_event_on_move_pre_depart_returns_false(self) -> None:
-        """When a ReactiveCondition cancels MOVE_PRE_DEPART, at_pre_move returns False."""
+        """When a reactive trigger cancels MOVE_PRE_DEPART, at_pre_move returns False."""
         char = CharacterFactory()
         origin = _create_room("Origin")
         destination = _create_room("Destination")
@@ -244,9 +232,9 @@ class AtPreMoveCancelledByReactiveStackTests(TestCase):
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.MOVE_PRE_DEPART,
+            filter_condition=CHAR_SELF_FILTER,
             flow_definition=cancel_flow,
             target=char,
-            scope=TriggerScope.PERSONAL,
         )
 
         result = char.at_pre_move(destination)
@@ -254,7 +242,7 @@ class AtPreMoveCancelledByReactiveStackTests(TestCase):
         self.assertFalse(result)
 
     def test_room_cancel_on_move_pre_depart_returns_false(self) -> None:
-        """When a ROOM-scoped trigger cancels MOVE_PRE_DEPART, at_pre_move returns False."""
+        """When a room-attached trigger cancels MOVE_PRE_DEPART, at_pre_move returns False."""
         char = CharacterFactory()
         origin = _create_room("Origin")
         destination = _create_room("Destination")
@@ -265,7 +253,6 @@ class AtPreMoveCancelledByReactiveStackTests(TestCase):
             event_name=EventNames.MOVE_PRE_DEPART,
             flow_definition=cancel_flow,
             target=origin,
-            scope=TriggerScope.ROOM,
         )
 
         result = char.at_pre_move(destination)
