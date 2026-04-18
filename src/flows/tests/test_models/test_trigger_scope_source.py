@@ -1,7 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from flows.constants import TriggerScope
 from flows.factories import TriggerDefinitionFactory, TriggerFactory
 from world.conditions.factories import ConditionInstanceFactory, ConditionStageFactory
 
@@ -13,7 +12,6 @@ class TriggerScopeSourceTests(TestCase):
             t = TriggerFactory.build(
                 trigger_definition=trigger_def,
                 source_condition=None,
-                scope=TriggerScope.PERSONAL,
             )
             t.full_clean()
 
@@ -21,7 +19,6 @@ class TriggerScopeSourceTests(TestCase):
         condition = ConditionInstanceFactory()
         trigger = TriggerFactory(
             source_condition=condition,
-            scope=TriggerScope.PERSONAL,
         )
         trigger_pk = trigger.pk
         condition.delete()
@@ -36,15 +33,5 @@ class TriggerScopeSourceTests(TestCase):
             t = TriggerFactory.build(
                 source_condition=condition,
                 source_stage=other_stage,
-                scope=TriggerScope.PERSONAL,
-            )
-            t.full_clean()
-
-    def test_scope_choices_only_personal_or_room(self) -> None:
-        condition = ConditionInstanceFactory()
-        with self.assertRaises(ValidationError):
-            t = TriggerFactory.build(
-                source_condition=condition,
-                scope="GLOBAL",
             )
             t.full_clean()

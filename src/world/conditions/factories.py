@@ -5,7 +5,6 @@ Factories for conditions app tests.
 import factory
 from factory.django import DjangoModelFactory
 
-from flows.constants import TriggerScope
 from flows.factories import (
     FlowDefinitionFactory,
     TriggerDefinitionFactory,
@@ -220,11 +219,10 @@ class _ReactiveConditionFactory:
     """
 
     @classmethod
-    def create(  # noqa: PLR0913 — keyword-only composition API
+    def create(
         cls,
         *,
         event_name: str,
-        scope: str = TriggerScope.PERSONAL,
         filter_condition: dict | None = None,
         flow_definition=None,
         target=None,
@@ -245,7 +243,6 @@ class _ReactiveConditionFactory:
             obj=condition.target,
             source_condition=condition,
             source_stage=stage,
-            scope=scope,
             additional_filter_condition=filter_condition,
         )
 

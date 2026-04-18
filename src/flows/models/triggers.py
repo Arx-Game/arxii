@@ -5,7 +5,6 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from flows.constants import TriggerScope
 from flows.filters.validator import validate_filter_schema
 from flows.flow_event import FlowEvent
 from flows.helpers.logic import resolve_self_placeholders
@@ -110,11 +109,6 @@ class Trigger(SharedMemoryModel):
         blank=True,
         related_name="stage_triggers",
         help_text="If set, active only while source_condition is at this stage.",
-    )
-    scope = models.CharField(
-        max_length=16,
-        choices=TriggerScope.choices,
-        help_text="Dispatch scope - PERSONAL (subject) or ROOM (location).",
     )
 
     def clean(self) -> None:

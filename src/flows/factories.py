@@ -5,7 +5,6 @@ import factory.django as factory_django
 
 from evennia_extensions.factories import ObjectDBFactory
 from flows import models
-from flows.constants import TriggerScope
 from flows.consts import FlowActionChoices
 from flows.flow_event import FlowEvent
 from flows.flow_execution import FlowExecution
@@ -79,7 +78,6 @@ class TriggerFactory(factory_django.DjangoModelFactory):
         "world.conditions.factories.ConditionInstanceFactory",
     )
     source_stage = None
-    scope = TriggerScope.PERSONAL
 
 
 # SceneDataManager is not a model, but we can provide a helper for tests
