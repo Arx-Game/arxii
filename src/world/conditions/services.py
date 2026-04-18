@@ -545,26 +545,27 @@ def apply_condition(  # noqa: PLR0913
     - CONDITION_APPLIED (post-save, frozen)
     """
     source = source_character or source_technique
+    target_location = getattr(target, "location", None)  # noqa: GETATTR_LITERAL
     pre_payload = ConditionPreApplyPayload(
         target=target,
         template=condition,
         source=source,
         stage=None,
     )
-    stack = emit_event(
-        EventNames.CONDITION_PRE_APPLY,
-        pre_payload,
-        personal_target=target,
-        room=getattr(target, "location", None),  # noqa: GETATTR_LITERAL
-    )
-    if stack is not None and stack.was_cancelled():
-        return ApplyConditionResult(
-            success=False,
-            instance=None,
-            message="cancelled by trigger",
-            removed_conditions=[],
-            applied_conditions=[],
+    if target_location is not None:
+        stack = emit_event(
+            EventNames.CONDITION_PRE_APPLY,
+            pre_payload,
+            location=target_location,
         )
+        if stack.was_cancelled():
+            return ApplyConditionResult(
+                success=False,
+                instance=None,
+                message="cancelled by trigger",
+                removed_conditions=[],
+                applied_conditions=[],
+            )
 
     ctx = _build_bulk_context([target], [condition])
     params = _ApplyConditionParams(
@@ -577,7 +578,7 @@ def apply_condition(  # noqa: PLR0913
     )
     result = _apply_single(target, condition, params, ctx)
 
-    if result.instance is not None:
+    if result.instance is not None and target_location is not None:
         emit_event(
             EventNames.CONDITION_APPLIED,
             ConditionAppliedPayload(
@@ -585,8 +586,7 @@ def apply_condition(  # noqa: PLR0913
                 instance=result.instance,
                 stage=result.instance.current_stage,
             ),
-            personal_target=target,
-            room=getattr(target, "location", None),  # noqa: GETATTR_LITERAL
+            location=target_location,
         )
 
     return result
@@ -619,29 +619,30 @@ def bulk_apply_conditions(  # noqa: PLR0913
     results: list[ApplyConditionResult] = []
     for target, template in applications:
         source = source_character or source_technique
+        target_location = getattr(target, "location", None)  # noqa: GETATTR_LITERAL
         pre_payload = ConditionPreApplyPayload(
             target=target,
             template=template,
             source=source,
             stage=None,
         )
-        stack = emit_event(
-            EventNames.CONDITION_PRE_APPLY,
-            pre_payload,
-            personal_target=target,
-            room=getattr(target, "location", None),  # noqa: GETATTR_LITERAL
-        )
-        if stack is not None and stack.was_cancelled():
-            results.append(
-                ApplyConditionResult(
-                    success=False,
-                    instance=None,
-                    message="cancelled by trigger",
-                    removed_conditions=[],
-                    applied_conditions=[],
-                )
+        if target_location is not None:
+            stack = emit_event(
+                EventNames.CONDITION_PRE_APPLY,
+                pre_payload,
+                location=target_location,
             )
-            continue
+            if stack.was_cancelled():
+                results.append(
+                    ApplyConditionResult(
+                        success=False,
+                        instance=None,
+                        message="cancelled by trigger",
+                        removed_conditions=[],
+                        applied_conditions=[],
+                    )
+                )
+                continue
 
         params = _ApplyConditionParams(
             target=target,
@@ -653,7 +654,7 @@ def bulk_apply_conditions(  # noqa: PLR0913
         )
         result = _apply_single(target, template, params, ctx)
 
-        if result.instance is not None:
+        if result.instance is not None and target_location is not None:
             emit_event(
                 EventNames.CONDITION_APPLIED,
                 ConditionAppliedPayload(
@@ -661,8 +662,7 @@ def bulk_apply_conditions(  # noqa: PLR0913
                     instance=result.instance,
                     stage=result.instance.current_stage,
                 ),
-                personal_target=target,
-                room=getattr(target, "location", None),  # noqa: GETATTR_LITERAL
+                location=target_location,
             )
 
         results.append(result)
@@ -697,10 +697,26 @@ def remove_condition(
 
     instance_pk = instance.pk
     source = instance.source_character or instance.source_technique
+    target_location = getattr(target, "location", None)  # noqa: GETATTR_LITERAL
 
     if not remove_all_stacks and instance.stacks > 1:
         instance.stacks -= 1
         instance.save()
+        if target_location is not None:
+            emit_event(
+                EventNames.CONDITION_REMOVED,
+                ConditionRemovedPayload(
+                    target=target,
+                    instance_id=instance_pk,
+                    template=condition,
+                    source=source,
+                ),
+                location=target_location,
+            )
+        return True
+
+    instance.delete()
+    if target_location is not None:
         emit_event(
             EventNames.CONDITION_REMOVED,
             ConditionRemovedPayload(
@@ -709,23 +725,8 @@ def remove_condition(
                 template=condition,
                 source=source,
             ),
-            personal_target=target,
-            room=getattr(target, "location", None),  # noqa: GETATTR_LITERAL
+            location=target_location,
         )
-        return True
-
-    instance.delete()
-    emit_event(
-        EventNames.CONDITION_REMOVED,
-        ConditionRemovedPayload(
-            target=target,
-            instance_id=instance_pk,
-            template=condition,
-            source=source,
-        ),
-        personal_target=target,
-        room=getattr(target, "location", None),  # noqa: GETATTR_LITERAL
-    )
     return True
 
 
@@ -1463,17 +1464,18 @@ def advance_condition_severity(
     instance.save(update_fields=["severity", "current_stage"])
 
     if stage_changed:
-        emit_event(
-            EventNames.CONDITION_STAGE_CHANGED,
-            ConditionStageChangedPayload(
-                target=instance.target,
-                instance=instance,
-                old_stage=previous_stage,
-                new_stage=instance.current_stage,
-            ),
-            personal_target=instance.target,
-            room=getattr(instance.target, "location", None),  # noqa: GETATTR_LITERAL
-        )
+        target_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL
+        if target_location is not None:
+            emit_event(
+                EventNames.CONDITION_STAGE_CHANGED,
+                ConditionStageChangedPayload(
+                    target=instance.target,
+                    instance=instance,
+                    old_stage=previous_stage,
+                    new_stage=instance.current_stage,
+                ),
+                location=target_location,
+            )
 
     return SeverityAdvanceResult(
         previous_stage=previous_stage,
