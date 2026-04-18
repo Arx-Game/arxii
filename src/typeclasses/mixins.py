@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Self, Union
 from flows.object_states.base_state import BaseState
 from flows.scene_data_manager import SceneDataManager
 from flows.trigger_handler import TriggerHandler
-from flows.trigger_registry import TriggerRegistry
 
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
@@ -42,13 +41,6 @@ class ObjectParent:
     def trigger_handler(self: Union[Self, "DefaultObject"]) -> TriggerHandler:
         """Populate-once cache of active triggers for this object."""
         return TriggerHandler(owner=self)
-
-    @property
-    def trigger_registry(self: Union[Self, "DefaultObject"]) -> TriggerRegistry | None:
-        """Return the trigger registry from our containing location."""
-        if self.location:
-            return self.location.trigger_registry
-        return None
 
     @property
     def scene_data(self: Union[Self, "DefaultObject"]):
@@ -122,22 +114,3 @@ class ObjectParent:
         if looker is not None and not self.at_examined(looker):
             return ""
         return super().return_appearance(looker, **kwargs)  # type: ignore[misc]
-
-    def at_post_move(self, source_location, move_type="move", **kwargs):
-        """Register or unregister triggers when moving between rooms."""
-        try:
-            old_registry = source_location.trigger_registry
-        except AttributeError:
-            old_registry = None
-
-        new_registry = self.trigger_registry
-
-        if old_registry:
-            for trigger in self.triggers.all():
-                old_registry.unregister_trigger(trigger)
-
-        if new_registry:
-            for trigger in self.triggers.all():
-                new_registry.register_trigger(trigger)
-
-        super().at_post_move(source_location, move_type=move_type, **kwargs)
