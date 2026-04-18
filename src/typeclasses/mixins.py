@@ -97,7 +97,7 @@ class ObjectParent:
         if stack.was_cancelled():
             return False
 
-        post = ExaminedPayload(observer=observer, target=self, result=None)
+        post = ExaminedPayload(observer=observer, target=self)
         emit_event(
             EventNames.EXAMINED,
             post,

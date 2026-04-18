@@ -8,11 +8,33 @@ identity map guarantees cheap attribute walks; re-fetching by pk would
 defeat the cache.
 """
 
-from dataclasses import dataclass
-from typing import Any, Literal
+from __future__ import annotations
 
-# Forward-typed as Any to avoid circular imports.
-# Real types resolve at attribute-access time via identity-mapped instances.
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from typeclasses.characters import Character
+    from typeclasses.exits import Exit
+    from typeclasses.rooms import Room
+    from world.combat.models import (
+        CombatOpponent,
+        CombatOpponentAction,
+        CombatRoundAction,
+    )
+    from world.combat.types import (
+        DefenseResult,
+        OpponentDamageResult,
+        ParticipantDamageResult,
+    )
+    from world.conditions.models import (
+        ConditionInstance,
+        ConditionStage,
+        ConditionTemplate,
+    )
+    from world.magic.models import Technique
 
 
 @dataclass
@@ -20,7 +42,10 @@ class DamageSource:
     """Discriminated union identifying what inflicted damage."""
 
     type: Literal["character", "technique", "scar", "environment", "item"]
-    ref: Any  # Character | Technique | ConditionInstance | Room | ObjectDB
+    # Known refs: Character | Technique | ConditionInstance | Room | ObjectDB | None.
+    # The "item" fallback path in damage_source.classify_source accepts any object
+    # (including raw strings like "fire trap"), so the runtime type is broader.
+    ref: object | None
 
 
 # ---- Combat ----
@@ -31,36 +56,37 @@ class AttackPreResolvePayload:
     """Cancellable pre-resolve payload. Covers AE and single-target attacks.
 
     ``targets`` is always a list. Single-target callers pass ``[character]``.
+    Attacker may be a PC (``Character``) or an NPC (``CombatOpponent``).
     """
 
-    attacker: Any
-    targets: list  # list[Character]
-    weapon: Any
-    action: Any  # CombatAction
+    attacker: Character | CombatOpponent
+    targets: list[Character]
+    weapon: ObjectDB | None
+    action: CombatRoundAction | CombatOpponentAction
 
 
 @dataclass(frozen=True)
 class AttackLandedPayload:
-    attacker: Any
-    target: Any
-    weapon: Any
-    damage_result: Any
-    action: Any
+    attacker: Character | CombatOpponent
+    target: Character
+    weapon: ObjectDB | None
+    damage_result: OpponentDamageResult | ParticipantDamageResult | DefenseResult | None
+    action: CombatRoundAction | CombatOpponentAction | None
 
 
 @dataclass(frozen=True)
 class AttackMissedPayload:
-    attacker: Any
-    target: Any
-    weapon: Any
-    action: Any
+    attacker: Character | CombatOpponent
+    target: Character
+    weapon: ObjectDB | None
+    action: CombatRoundAction | CombatOpponentAction | None
 
 
 @dataclass
 class DamagePreApplyPayload:
     """PERSONAL scope, cancellable. Mutable so scars can modify damage."""
 
-    target: Any
+    target: Character
     amount: int
     damage_type: str
     source: DamageSource
@@ -68,7 +94,7 @@ class DamagePreApplyPayload:
 
 @dataclass(frozen=True)
 class DamageAppliedPayload:
-    target: Any
+    target: Character
     amount_dealt: int
     damage_type: str
     source: DamageSource
@@ -77,13 +103,13 @@ class DamageAppliedPayload:
 
 @dataclass(frozen=True)
 class CharacterIncapacitatedPayload:
-    character: Any
-    source_event: str | None  # EventNames value that led to incapacitation
+    character: Character
+    source_event: str | None  # EventName value that led to incapacitation
 
 
 @dataclass(frozen=True)
 class CharacterKilledPayload:
-    character: Any
+    character: Character
     source_event: str | None
 
 
@@ -92,18 +118,18 @@ class CharacterKilledPayload:
 
 @dataclass
 class MovePreDepartPayload:
-    character: Any
-    origin: Any
-    destination: Any
-    exit_used: Any
+    character: Character
+    origin: Room | None
+    destination: Room | None
+    exit_used: Exit | str | None
 
 
 @dataclass(frozen=True)
 class MovedPayload:
-    character: Any
-    origin: Any
-    destination: Any
-    exit_used: Any
+    character: Character
+    origin: Room | None
+    destination: Room | None
+    exit_used: Exit | str | None
 
 
 # ---- Perception ----
@@ -111,15 +137,14 @@ class MovedPayload:
 
 @dataclass
 class ExaminePrePayload:
-    observer: Any
-    target: Any
+    observer: Character
+    target: ObjectDB
 
 
 @dataclass(frozen=True)
 class ExaminedPayload:
-    observer: Any
-    target: Any
-    result: Any  # ExamineResult object - holds description, sections, etc.
+    observer: Character
+    target: ObjectDB
 
 
 # ---- Conditions ----
@@ -127,33 +152,33 @@ class ExaminedPayload:
 
 @dataclass
 class ConditionPreApplyPayload:
-    target: Any
-    template: Any  # ConditionTemplate
-    source: Any
-    stage: Any  # ConditionStage | None
+    target: ObjectDB
+    template: ConditionTemplate
+    source: Character | Technique | DamageSource | None
+    stage: ConditionStage | None
 
 
 @dataclass(frozen=True)
 class ConditionAppliedPayload:
-    target: Any
-    instance: Any  # ConditionInstance
-    stage: Any
+    target: ObjectDB
+    instance: ConditionInstance
+    stage: ConditionStage | None
 
 
 @dataclass(frozen=True)
 class ConditionStageChangedPayload:
-    target: Any
-    instance: Any
-    old_stage: Any
-    new_stage: Any
+    target: ObjectDB
+    instance: ConditionInstance
+    old_stage: ConditionStage | None
+    new_stage: ConditionStage | None
 
 
 @dataclass(frozen=True)
 class ConditionRemovedPayload:
-    target: Any
+    target: ObjectDB
     instance_id: int
-    template: Any
-    source: Any
+    template: ConditionTemplate
+    source: Character | Technique | DamageSource | None
 
 
 # ---- Techniques ----
@@ -161,27 +186,29 @@ class ConditionRemovedPayload:
 
 @dataclass
 class TechniquePreCastPayload:
-    caster: Any
-    technique: Any
-    targets: list  # list[Character or ObjectDB]
+    caster: Character
+    technique: Technique
+    targets: list[Character | ObjectDB]
     intensity: int
 
 
 @dataclass(frozen=True)
 class TechniqueCastPayload:
-    caster: Any
-    technique: Any
-    targets: list
+    caster: Character
+    technique: Technique
+    targets: list[Character | ObjectDB]
     intensity: int
-    result: Any
+    # `result` is the return of a caller-provided ``resolve_fn: Callable[..., Any]``;
+    # its shape is defined by the caller, not this layer. Intentionally opaque.
+    result: object
 
 
 @dataclass(frozen=True)
 class TechniqueAffectedPayload:
-    caster: Any
-    technique: Any
-    target: Any
-    effect: Any
+    caster: Character
+    technique: Technique
+    target: Character | ObjectDB
+    effect: object
 
 
 PAYLOAD_FOR_EVENT: dict[str, type] = {
