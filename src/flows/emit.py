@@ -1,89 +1,106 @@
-"""Event emission entry point for the reactive layer.
+"""Unified event emission for the reactive layer.
 
-Creates fresh FlowStacks for each PERSONAL dispatch (AE topology),
-a single FlowStack for ROOM dispatch. When a parent_stack is given
-(nested emission from within a flow), reuse it so recursion cap is
-enforced on the originating chain.
-
-Dispatch order (Task 24): ROOM first, then PERSONAL.
-Room-scoped triggers (wards, environmental effects) get first shot at
-cancellation; if the shared stack is marked cancelled after ROOM
-dispatch, PERSONAL dispatch is skipped entirely.
+Dispatches ``event_name`` to every ``trigger_handler`` reachable from
+``location``: the location itself and every object in its ``contents``.
+Triggers from every owner are gathered into one list, sorted globally
+by priority descending, and walked synchronously on a single FlowStack.
+Cancellation stops the walk.
 """
 
+import logging
 from typing import Any
 
+from flows.filters.errors import FilterPathError
+from flows.filters.evaluator import evaluate_filter
 from flows.flow_stack import FlowStack
 
-
-def _dispatch(
-    target: Any,
-    event_name: str,
-    payload: Any,
-    *,
-    parent_stack: FlowStack | None,
-) -> FlowStack:
-    """Dispatch *event_name* to *target*'s trigger_handler.
-
-    If *parent_stack* is provided the dispatch runs inside a nested()
-    context on that stack (enforcing the recursion cap). Otherwise a
-    fresh FlowStack is created for *target*.
-
-    Objects without a trigger_handler (plain ObjectDB without a reactive
-    typeclass) are silently skipped — they can have no triggers attached.
-
-    Returns the stack that was used.
-    """
-    handler = getattr(target, "trigger_handler", None)  # noqa: GETATTR_LITERAL
-    if handler is None:
-        # No trigger infrastructure on this object — return a no-op stack
-        # so callers can still check was_cancelled() safely.
-        if parent_stack is not None:
-            return parent_stack
-        return FlowStack(owner=target, originating_event=event_name)
-    if parent_stack is not None:
-        with parent_stack.nested():
-            handler.dispatch(event_name, payload, flow_stack=parent_stack)
-        return parent_stack
-    stack = FlowStack(owner=target, originating_event=event_name)
-    handler.dispatch(event_name, payload, flow_stack=stack)
-    return stack
+logger = logging.getLogger(__name__)
 
 
 def emit_event(
     event_name: str,
     payload: Any,
+    location: Any = None,
     *,
-    personal_target: Any = None,
-    room: Any = None,
     parent_stack: FlowStack | None = None,
-) -> FlowStack | None:
-    """Dispatch event to ROOM and/or PERSONAL handlers.
+    **_legacy_kwargs: Any,
+) -> FlowStack:
+    """Dispatch ``event_name`` to every handler in ``location`` + contents.
 
-    ROOM dispatches first so that environmental/ward triggers can veto
-    the event before personal handlers run. If the ROOM stack is
-    cancelled after dispatch, PERSONAL dispatch is skipped.
+    Args:
+        event_name: The event name, e.g. ``EventNames.DAMAGE_PRE_APPLY``.
+        payload: A payload dataclass from ``flows.events.payloads``.
+        location: The location whose ``trigger_handler`` and whose
+            ``contents``' handlers are consulted.
+        parent_stack: When supplied (nested emission from within a
+            running flow) the same FlowStack is reused so the recursion
+            cap is enforced on the originating chain.
 
-    Returns the stack used for the last dispatch that actually ran
-    (PERSONAL if it ran, ROOM if PERSONAL was skipped, None if neither
-    scope was supplied).
+    Returns:
+        The FlowStack used for the dispatch. Callers check
+        ``stack.was_cancelled()`` to decide whether to suppress the
+        default behaviour (skip damage apply, abort movement, etc.).
 
-    When *parent_stack* is given (nested emission from within a flow)
-    both scopes reuse it so the recursion cap is enforced on the
-    originating chain.
+    ``**_legacy_kwargs`` transitionally swallows the old
+    ``personal_target=`` / ``room=`` kwargs still used by unrewritten
+    callsites. Phase 3 removes those callsites; this shim goes with them.
     """
-    result_stack: FlowStack | None = None
+    stack = parent_stack or FlowStack(owner=location, originating_event=event_name)
 
-    # --- ROOM FIRST ---
-    if room is not None:
-        stack = _dispatch(room, event_name, payload, parent_stack=parent_stack)
-        result_stack = stack
+    owners: list[Any] = [location]
+    contents = getattr(location, "contents", None) or []  # noqa: GETATTR_LITERAL
+    owners.extend(contents)
+
+    gathered: list[Any] = []
+    for owner in owners:
+        handler = getattr(owner, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+        if handler is None:
+            continue
+        gathered.extend(handler.triggers_for(event_name))
+
+    gathered.sort(key=lambda t: -t.priority)
+
+    for trigger in gathered:
+        try:
+            matched = evaluate_filter(
+                trigger.additional_filter_condition,
+                payload,
+                self_ref=trigger.obj,
+            )
+        except FilterPathError:
+            logger.warning(
+                "FilterPathError on trigger %s during dispatch of %s",
+                trigger.pk,
+                event_name,
+            )
+            continue
+        if not matched:
+            continue
+        _execute_flow(trigger, payload, stack)
         if stack.was_cancelled():
-            return stack
+            break
 
-    # --- PERSONAL SECOND (skipped if ROOM cancelled) ---
-    if personal_target is not None:
-        stack = _dispatch(personal_target, event_name, payload, parent_stack=parent_stack)
-        result_stack = stack
+    return stack
 
-    return result_stack
+
+def _execute_flow(trigger: Any, payload: Any, stack: FlowStack) -> None:
+    """Execute ``trigger``'s flow definition on ``stack``."""
+    from flows.flow_execution import FlowExecution  # noqa: PLC0415 — Evennia startup
+    from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415 — same reason
+    from flows.trigger_handler import DispatchResult  # noqa: PLC0415 — same reason
+
+    flow_def = trigger.trigger_definition.flow_definition
+    context = SceneDataManager()
+    execution = FlowExecution(
+        flow_definition=flow_def,
+        context=context,
+        flow_stack=stack,
+        origin=trigger,
+        variable_mapping={
+            "payload": payload,
+            "owner": trigger.obj,
+            "trigger": trigger,
+        },
+        dispatch_result=DispatchResult(),
+    )
+    stack.execute_flow(execution)
