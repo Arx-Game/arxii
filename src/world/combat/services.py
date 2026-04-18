@@ -1043,7 +1043,7 @@ def resolve_npc_attack(
     # --- ATTACK_PRE_RESOLVE (cancellable) ---
     pre_payload = AttackPreResolvePayload(
         attacker=opponent_action.opponent,
-        target_or_targets=character,
+        targets=[character],
         weapon=None,
         action=opponent_action,
     )

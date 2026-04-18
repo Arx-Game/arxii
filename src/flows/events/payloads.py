@@ -28,10 +28,13 @@ class DamageSource:
 
 @dataclass
 class AttackPreResolvePayload:
-    """ROOM scope, cancellable. Covers AE and single-target attacks."""
+    """Cancellable pre-resolve payload. Covers AE and single-target attacks.
+
+    ``targets`` is always a list. Single-target callers pass ``[character]``.
+    """
 
     attacker: Any
-    target_or_targets: Any  # Character or list[Character]
+    targets: list  # list[Character]
     weapon: Any
     action: Any  # CombatAction
 
