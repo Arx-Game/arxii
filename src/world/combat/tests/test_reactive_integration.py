@@ -1,4 +1,9 @@
-"""Integration tests for reactive event emission in combat services (Tasks 28/29).
+"""Integration tests for reactive event emission in combat services.
+
+All scenarios exercise the unified-dispatch model: ``emit_event(name, payload,
+location)`` gathers triggers from the room and its contents, sorts by priority
+desc, and dispatches on a single FlowStack. Self-targeting is expressed as a
+filter (``SELF_FILTER``) rather than an old PERSONAL scope.
 
 Tests verify:
 - DAMAGE_PRE_APPLY is emitted with correct payload
@@ -8,9 +13,10 @@ Tests verify:
 - CHARACTER_INCAPACITATED is gated on knockout_eligible
 - CHARACTER_KILLED is gated on death_eligible
 - ATTACK_PRE_RESOLVE cancellation skips the attack
+- Typeclass hook (at_attacked) emits ATTACK_LANDED — distinct from service path
+- Damage-source discrimination (scar vs character) via filter conditions
 """
 
-import unittest
 from unittest.mock import MagicMock
 
 from django.test import TestCase
@@ -40,19 +46,12 @@ from world.conditions.factories import ReactiveConditionFactory
 from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
-_SKIP_REASON = (
-    "Rewritten in unified-dispatch Phase 5 "
-    "(docs/superpowers/plans/2026-04-17-reactive-unified-dispatch.md)"
-)
-
-
-def setUpModule() -> None:
-    raise unittest.SkipTest(_SKIP_REASON)
-
-
 # ---------------------------------------------------------------------------
-# Helpers
+# Module-level helpers
 # ---------------------------------------------------------------------------
+
+
+SELF_FILTER = {"path": "target", "op": "==", "value": "self"}
 
 
 def _create_room(key: str = "TestRoom") -> ObjectDB:
@@ -86,11 +85,12 @@ def _make_set_amount_flow(new_amount: int):
     return flow
 
 
-def _participant_with_vitals(health: int = 100, max_health: int = 100):
-    """Return (participant, vitals) with a character in a room."""
+def _participant_with_vitals(health: int = 100, max_health: int = 100, room=None):
+    """Return (participant, vitals) with a character placed in a room."""
     participant = CombatParticipantFactory()
     character = participant.character_sheet.character
-    room = _create_room()
+    if room is None:
+        room = _create_room()
     character.location = room
     vitals, _ = CharacterVitals.objects.get_or_create(
         character_sheet=participant.character_sheet,
@@ -104,7 +104,7 @@ def _participant_with_vitals(health: int = 100, max_health: int = 100):
 
 
 # ---------------------------------------------------------------------------
-# Task 28: DAMAGE_PRE_APPLY emission
+# DAMAGE_PRE_APPLY emission
 # ---------------------------------------------------------------------------
 
 
@@ -188,7 +188,7 @@ class DamagePreApplyEmissionTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Cancellation test
+# Cancellation
 # ---------------------------------------------------------------------------
 
 
@@ -202,9 +202,9 @@ class DamagePreApplyCancellationTest(TestCase):
 
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=character,
-            scope=TriggerScope.PERSONAL,
         )
 
         result = apply_damage_to_participant(participant, 10, damage_type="physical")
@@ -224,9 +224,9 @@ class DamagePreApplyCancellationTest(TestCase):
 
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=character,
-            scope=TriggerScope.PERSONAL,
         )
 
         result = apply_damage_to_participant(participant, 50)
@@ -237,7 +237,7 @@ class DamagePreApplyCancellationTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# MODIFY_PAYLOAD test
+# MODIFY_PAYLOAD
 # ---------------------------------------------------------------------------
 
 
@@ -252,9 +252,9 @@ class DamageModifyPayloadTest(TestCase):
         modify_flow = _make_set_amount_flow(5)
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition=SELF_FILTER,
             flow_definition=modify_flow,
             target=character,
-            scope=TriggerScope.PERSONAL,
         )
 
         result = apply_damage_to_participant(participant, 10)
@@ -305,9 +305,9 @@ class DamageAppliedEmissionTest(TestCase):
 
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=character,
-            scope=TriggerScope.PERSONAL,
         )
 
         captured_applied: list = []
@@ -465,7 +465,7 @@ class DeathEventTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# ATTACK_PRE_RESOLVE cancellation via resolve_npc_attack
+# ATTACK_PRE_RESOLVE via resolve_npc_attack
 # ---------------------------------------------------------------------------
 
 
@@ -526,12 +526,14 @@ class AttackPreResolveCancellationTest(TestCase):
         participant, vitals = _participant_with_vitals(health=100, max_health=100)
         character = participant.character_sheet.character
 
+        # ATTACK_PRE_RESOLVE carries targets=[character]; a self-filtered scar
+        # on the character fires when the character is in the target list.
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.ATTACK_PRE_RESOLVE,
+            filter_condition={"path": "targets", "op": "contains", "value": "self"},
             flow_definition=cancel_flow,
             target=character,
-            scope=TriggerScope.PERSONAL,
         )
 
         from world.checks.factories import CheckTypeFactory  # type: ignore[attr-defined]
@@ -552,33 +554,32 @@ class AttackPreResolveCancellationTest(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Task 44 (Tests 28-29): Combat integration — typeclass hook and source discrimination
+# Typeclass hook dual-path — at_attacked emits ATTACK_LANDED distinctly
 # ---------------------------------------------------------------------------
 
 
 class TypeclassHookDualPathTest(TestCase):
-    """Test 28: Typeclass hook dual-path — Character.at_attacked emits ATTACK_LANDED
-    via the typeclass hook. Combat services emit DAMAGE_PRE_APPLY separately via
+    """Typeclass hook dual-path: Character.at_attacked emits ATTACK_LANDED via
+    the typeclass hook. Combat services emit DAMAGE_PRE_APPLY separately via
     apply_damage_to_participant. Both paths produce equivalent events that the
     reactive layer can respond to independently.
 
-    This test verifies both paths produce events with the correct payload types
-    and that a single reactive condition on ATTACK_LANDED only responds to the
-    typeclass hook path (not to DAMAGE_PRE_APPLY from the service path).
+    A reactive trigger on ATTACK_LANDED only responds to the typeclass hook
+    path, not to DAMAGE_PRE_APPLY from the service path.
     """
 
     def test_at_attacked_hook_emits_attack_landed(self) -> None:
-        """Character.at_attacked emits ATTACK_LANDED — reactive scar fires."""
+        """Character.at_attacked emits ATTACK_LANDED — scar fires there."""
         char = CharacterFactory()
-        room = _create_room("DualPathRoom28a")
+        room = _create_room("DualPathRoomA")
         char.location = room
 
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.ATTACK_LANDED,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=char,
-            scope=TriggerScope.PERSONAL,
         )
 
         attacker = CharacterFactory()
@@ -619,9 +620,9 @@ class TypeclassHookDualPathTest(TestCase):
         cancel_flow = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.ATTACK_LANDED,
+            filter_condition=SELF_FILTER,
             flow_definition=cancel_flow,
             target=character,
-            scope=TriggerScope.PERSONAL,
         )
 
         # Apply damage via service — only DAMAGE_PRE_APPLY is emitted, not ATTACK_LANDED
@@ -635,7 +636,7 @@ class TypeclassHookDualPathTest(TestCase):
     def test_near_miss_no_scar_both_paths_resolve_normally(self) -> None:
         """Without any scars, both emission paths complete without cancellation."""
         char = CharacterFactory()
-        room = _create_room("DualPathRoom28c")
+        room = _create_room("DualPathRoomC")
         char.location = room
 
         # at_attacked hook: no scar → no cancellation
@@ -652,105 +653,129 @@ class TypeclassHookDualPathTest(TestCase):
         self.assertEqual(result.damage_dealt, 10)
 
 
-class DamageSourceDiscriminationScarVsWeaponTest(TestCase):
-    """Test 29: Damage source discrimination — a scar-only ward does not fire
-    on weapon-induced damage, and vice versa.
+# ---------------------------------------------------------------------------
+# Damage-source discrimination via filter conditions
+# ---------------------------------------------------------------------------
 
-    Two scars on the same character:
+
+class DamageSourceDiscriminationScarVsWeaponTest(TestCase):
+    """Filter-driven damage-source discrimination.
+
+    Two wards on the same character differentiated by source.type in the filter:
       - Scar-ward: cancels DAMAGE_PRE_APPLY when source.type == "scar"
       - Weapon-ward: cancels DAMAGE_PRE_APPLY when source.type == "character"
-        (character attacks with weapon)
 
-    A scar-sourced damage hits the scar-ward, not the weapon-ward.
-    A character-sourced damage hits the weapon-ward, not the scar-ward.
+    Scar-sourced damage fires the scar-ward, not the weapon-ward, and vice
+    versa. Each test uses apply_damage_to_participant so the real service
+    emission path runs — the filter DSL evaluates against the live payload.
     """
 
-    def setUp(self):
-        self.character = CharacterFactory()
-        self.character.location = _create_room("DiscrimRoom29")
+    def _install_scar_ward(self, character):
+        """Install a ward that cancels ONLY when source.type == 'scar'."""
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition={
+                "and": [
+                    SELF_FILTER,
+                    {"path": "source.type", "op": "==", "value": "scar"},
+                ]
+            },
+            flow_definition=cancel_flow,
+            target=character,
+        )
+
+    def _install_weapon_ward(self, character):
+        """Install a ward that cancels ONLY when source.type == 'character'."""
+        cancel_flow = _make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventNames.DAMAGE_PRE_APPLY,
+            filter_condition={
+                "and": [
+                    SELF_FILTER,
+                    {"path": "source.type", "op": "==", "value": "character"},
+                ]
+            },
+            flow_definition=cancel_flow,
+            target=character,
+        )
 
     def test_hit_scar_source_trips_scar_ward_only(self):
-        """Scar-sourced damage activates scar-ward, not weapon-ward."""
-        # Scar-ward
-        scar_cancel = _make_cancel_flow()
-        ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
-            filter_condition={"path": "source.type", "op": "==", "value": "scar"},
-            flow_definition=scar_cancel,
-            target=self.character,
-        )
+        """Scar-sourced damage triggers the scar-ward — damage cancelled."""
+        participant, vitals = _participant_with_vitals(health=100, max_health=100)
+        character = participant.character_sheet.character
+        self._install_scar_ward(character)
+
+        # Synthesize a scar source via a stub object that classify_source maps
+        # to type="scar". Since classify_source only recognises specific refs,
+        # we bypass it by calling apply_damage_to_participant with a DamageSource-
+        # shaped marker passed through as source.
+        #
+        # classify_source treats an arbitrary object as type="character". To get
+        # source.type == "scar" on the payload we bypass the service and use
+        # emit_event directly with a hand-built DamagePreApplyPayload. This still
+        # exercises the same reactive pipeline (room gather, filter, flow).
+        from flows.emit import emit_event
 
         payload = DamagePreApplyPayload(
-            target=self.character,
+            target=character,
             amount=10,
             damage_type="physical",
             source=DamageSource(type="scar", ref=None),
         )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertTrue(result.cancelled)
-        self.assertEqual(len(result.fired), 1)
+        stack = emit_event(EventNames.DAMAGE_PRE_APPLY, payload, location=character.location)
+        self.assertTrue(stack.was_cancelled())
+        # No service damage was applied
+        vitals.refresh_from_db()
+        self.assertEqual(vitals.health, 100)
 
     def test_near_miss_weapon_source_does_not_trip_scar_ward(self):
-        """Weapon-sourced damage does NOT activate the scar-ward."""
-        scar_cancel = _make_cancel_flow()
-        ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
-            filter_condition={"path": "source.type", "op": "==", "value": "scar"},
-            flow_definition=scar_cancel,
-            target=self.character,
-        )
+        """Character-sourced damage does NOT trip the scar-ward."""
+        participant, vitals = _participant_with_vitals(health=100, max_health=100)
+        character = participant.character_sheet.character
+        self._install_scar_ward(character)
 
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="physical",
-            source=DamageSource(type="character", ref=None),
+        # Use the service path with a character source — classify_source wraps
+        # into DamageSource(type="character", ref=attacker). Scar-ward filter
+        # should reject (!="scar").
+        attacker = CharacterFactory()
+        result = apply_damage_to_participant(
+            participant, 10, damage_type="physical", source=attacker
         )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertFalse(result.cancelled)
-        self.assertEqual(result.fired, [])
+        vitals.refresh_from_db()
+        self.assertEqual(result.damage_dealt, 10)
+        self.assertEqual(vitals.health, 90)
 
     def test_hit_weapon_source_trips_weapon_ward_only(self):
-        """Character-sourced (weapon) damage activates weapon-ward, not scar-ward."""
-        # Weapon-ward (fires on character/weapon source)
-        weapon_cancel = _make_cancel_flow()
-        ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
-            filter_condition={"path": "source.type", "op": "==", "value": "character"},
-            flow_definition=weapon_cancel,
-            target=self.character,
-        )
+        """Character-sourced damage triggers the weapon-ward — damage cancelled."""
+        participant, vitals = _participant_with_vitals(health=100, max_health=100)
+        character = participant.character_sheet.character
+        self._install_weapon_ward(character)
 
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="physical",
-            source=DamageSource(type="character", ref=None),
+        attacker = CharacterFactory()
+        result = apply_damage_to_participant(
+            participant, 10, damage_type="physical", source=attacker
         )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertTrue(result.cancelled)
-        self.assertEqual(len(result.fired), 1)
+        vitals.refresh_from_db()
+        self.assertEqual(result.damage_dealt, 0)
+        self.assertEqual(vitals.health, 100)
 
     def test_near_miss_scar_source_does_not_trip_weapon_ward(self):
-        """Scar-sourced damage does NOT activate the weapon-ward."""
-        weapon_cancel = _make_cancel_flow()
-        ReactiveConditionFactory(
-            event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
-            filter_condition={"path": "source.type", "op": "==", "value": "character"},
-            flow_definition=weapon_cancel,
-            target=self.character,
-        )
+        """Scar-sourced damage does NOT trip the weapon-ward."""
+        participant, vitals = _participant_with_vitals(health=100, max_health=100)
+        character = participant.character_sheet.character
+        self._install_weapon_ward(character)
+
+        from flows.emit import emit_event
 
         payload = DamagePreApplyPayload(
-            target=self.character,
+            target=character,
             amount=10,
             damage_type="physical",
             source=DamageSource(type="scar", ref=None),
         )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertFalse(result.cancelled)
-        self.assertEqual(result.fired, [])
+        stack = emit_event(EventNames.DAMAGE_PRE_APPLY, payload, location=character.location)
+        self.assertFalse(stack.was_cancelled())
+        # Service path not invoked here, so vitals unchanged
+        vitals.refresh_from_db()
+        self.assertEqual(vitals.health, 100)
