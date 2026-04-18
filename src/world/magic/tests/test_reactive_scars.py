@@ -1,36 +1,35 @@
-"""Reactive scars for magic and perception events (Phase 10, Tasks 40-41).
+"""Reactive scars for magic and perception events.
 
-Task 40 (Tests 19-20): Perception scars — skipped (ExaminedPayload frozen).
-Task 41 (Tests 21-22): Affinity/resonance/property layering.
+All scenarios exercise the unified-dispatch model: ``emit_event(name, payload,
+location)`` gathers triggers from the room and its contents, sorts by priority
+desc, and dispatches on a single FlowStack. Self-targeting is expressed as a
+filter (``SELF_FILTER``) rather than an old PERSONAL scope.
 
-Tests 21-22 use SimpleNamespace stubs for the Technique ref because the real
-affinity path (technique.gift.resonances → affinity) crosses an M2M boundary
-that the filter DSL cannot traverse. The stub strategy mirrors Tasks 33-36.
-
-Test 22 is skipped: Technique has no properties M2M.
+Tests use SimpleNamespace stubs for the Technique ref because the real affinity
+path (technique.gift.resonances → affinity) crosses an M2M boundary that the
+filter DSL cannot traverse. Tests that require frozen-payload mutation or
+schema additions remain skipped with explanatory notes.
 """
 
 from types import SimpleNamespace
-import unittest
 
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
 from flows.consts import FlowActionChoices
+from flows.emit import emit_event
 from flows.events.names import EventNames
 from flows.events.payloads import DamagePreApplyPayload, DamageSource
 from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
 from world.conditions.factories import ReactiveConditionFactory
 
-_SKIP_REASON = (
-    "Rewritten in unified-dispatch Phase 5 "
-    "(docs/superpowers/plans/2026-04-17-reactive-unified-dispatch.md)"
-)
+# ---------------------------------------------------------------------------
+# Module-level helpers
+# ---------------------------------------------------------------------------
 
 
-def setUpModule() -> None:
-    raise unittest.SkipTest(_SKIP_REASON)
+SELF_FILTER = {"path": "target", "op": "==", "value": "self"}
 
 
 def _create_room(key: str = "TestRoom") -> ObjectDB:
@@ -65,12 +64,12 @@ def _source_technique_with_resonance(resonance_name: str):
 
 
 # ---------------------------------------------------------------------------
-# Task 40: Examine / perception scars (Tests 19-20)
+# Examine / perception scars (Mage Sight, Soul Sight)
 # ---------------------------------------------------------------------------
 
 
 class MageSightScarTest(TestCase):
-    """Test 19: "Mage Sight" scar appends scar description to at_examined output
+    """ "Mage Sight" scar appends scar description to at_examined output
     ONLY for targets with abyssal affinity.
 
     Skipped: ExaminedPayload is @dataclass(frozen=True) in flows/events/payloads.py.
@@ -78,7 +77,7 @@ class MageSightScarTest(TestCase):
     a mutable payload or a dedicated pre-examine decoration hook to append content.
 
     Design follow-up: Either unfreeze ExaminedPayload (allowing post-hoc decoration)
-    or model Mage Sight as a EXAMINE_PRE handler that annotates the observer's
+    or model Mage Sight as an EXAMINE_PRE handler that annotates the observer's
     perception context before ExaminedPayload is constructed. Until then, the full
     end-to-end test cannot be written.
 
@@ -91,26 +90,26 @@ class MageSightScarTest(TestCase):
     def test_mage_sight_appends_to_abyssal_target(self):
         self.skipTest(
             "ExaminedPayload is frozen=True; reactive scars cannot mutate the result. "
-            "Design follow-up needed: unfreeze ExaminedPayload or add a EXAMINE_PRE "
-            "decoration hook. See flows/events/payloads.py and Task 40 notes."
+            "Design follow-up needed: unfreeze ExaminedPayload or add an EXAMINE_PRE "
+            "decoration hook. See flows/events/payloads.py."
         )
 
     def test_near_miss_non_abyssal_target_unchanged(self):
         self.skipTest(
             "ExaminedPayload is frozen=True; reactive scars cannot mutate the result. "
-            "Design follow-up needed: unfreeze ExaminedPayload or add a EXAMINE_PRE "
-            "decoration hook. See flows/events/payloads.py and Task 40 notes."
+            "Design follow-up needed: unfreeze ExaminedPayload or add an EXAMINE_PRE "
+            "decoration hook. See flows/events/payloads.py."
         )
 
 
 class SoulSightScarTest(TestCase):
-    """Test 20: "Soul Sight" scar reveals true identity only when target has
+    """ "Soul Sight" scar reveals true identity only when target has
     the specific persona-type property.
 
-    Skipped: Same design gap as Test 19. ExaminedPayload is frozen=True, preventing
-    scar mutation of the result. Additionally, the persona-type property system
-    (linking Properties from world/mechanics to characters) is not yet wired into
-    the examine pipeline's payload construction.
+    Skipped: Same design gap as MageSightScarTest. ExaminedPayload is frozen=True,
+    preventing scar mutation of the result. Additionally, the persona-type property
+    system (linking Properties from world/mechanics to characters) is not yet wired
+    into the examine pipeline's payload construction.
 
     Design follow-up: Two preconditions required before implementing:
       1. ExaminedPayload must be mutable (or a pre-examine hook must exist).
@@ -129,7 +128,7 @@ class SoulSightScarTest(TestCase):
             "ExaminedPayload is frozen=True; reactive scars cannot mutate the result. "
             "Additionally, persona-type property filtering in the examine payload is "
             "not yet wired. Two design gaps must close before this test can run. "
-            "See flows/events/payloads.py and Task 40 notes."
+            "See flows/events/payloads.py."
         )
 
     def test_near_miss_unmasked_target_unchanged(self):
@@ -137,17 +136,17 @@ class SoulSightScarTest(TestCase):
             "ExaminedPayload is frozen=True; reactive scars cannot mutate the result. "
             "Additionally, persona-type property filtering in the examine payload is "
             "not yet wired. Two design gaps must close before this test can run. "
-            "See flows/events/payloads.py and Task 40 notes."
+            "See flows/events/payloads.py."
         )
 
 
 # ---------------------------------------------------------------------------
-# Task 41 (Tests 21-22): Affinity/resonance/property layering
+# Affinity/resonance layering
 # ---------------------------------------------------------------------------
 
 
 class AffinityBroadVsResonanceNarrowTest(TestCase):
-    """Test 21: Affinity-broad vs resonance-narrow filter discrimination.
+    """Affinity-broad vs resonance-narrow filter discrimination.
 
     Two scars on the same character:
       - A broad ward: blocks any technique whose ``source.ref.affinity == "abyssal"``.
@@ -160,42 +159,42 @@ class AffinityBroadVsResonanceNarrowTest(TestCase):
     """
 
     def setUp(self):
+        self.room = _create_room("AffinityRoom")
         self.character = CharacterFactory()
-        self.character.location = _create_room("AffinityRoom21")
+        self.character.location = self.room
 
         # Broad affinity ward: cancels any abyssal technique
         self.broad_cancel = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
-            filter_condition={"path": "source.ref.affinity", "op": "==", "value": "abyssal"},
+            filter_condition={
+                "and": [
+                    SELF_FILTER,
+                    {"path": "source.ref.affinity", "op": "==", "value": "abyssal"},
+                ]
+            },
             flow_definition=self.broad_cancel,
             target=self.character,
         )
 
-    def test_hit_affinity_broad_fires_on_abyssal(self):
-        """Abyssal affinity matches the broad ward — dispatch is cancelled."""
+    def _emit(self, source):
         payload = DamagePreApplyPayload(
             target=self.character,
             amount=10,
             damage_type="arcane",
-            source=_source_technique_with_affinity("abyssal"),
+            source=source,
         )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertTrue(result.cancelled)
-        self.assertTrue(len(result.fired) > 0)
+        return emit_event(EventNames.DAMAGE_PRE_APPLY, payload, location=self.room)
+
+    def test_hit_affinity_broad_fires_on_abyssal(self):
+        """Abyssal affinity matches the broad ward — dispatch is cancelled."""
+        stack = self._emit(_source_technique_with_affinity("abyssal"))
+        self.assertTrue(stack.was_cancelled())
 
     def test_near_miss_affinity_broad_misses_celestial(self):
         """Celestial affinity does not match the abyssal ward — passes through."""
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="arcane",
-            source=_source_technique_with_affinity("celestial"),
-        )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertFalse(result.cancelled)
-        self.assertEqual(result.fired, [])
+        stack = self._emit(_source_technique_with_affinity("celestial"))
+        self.assertFalse(stack.was_cancelled())
 
     def test_hit_resonance_narrow_fires_on_shadow(self):
         """Resonance-narrow filter fires only when resonance == 'shadow'."""
@@ -203,49 +202,44 @@ class AffinityBroadVsResonanceNarrowTest(TestCase):
         narrow_cancel = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
-            filter_condition={"path": "source.ref.resonance", "op": "==", "value": "shadow"},
+            filter_condition={
+                "and": [
+                    SELF_FILTER,
+                    {"path": "source.ref.resonance", "op": "==", "value": "shadow"},
+                ]
+            },
             flow_definition=narrow_cancel,
             target=self.character,
         )
-        # Reset handler so it picks up the new trigger
         self.character.trigger_handler._populated = False
 
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="arcane",
-            source=_source_technique_with_resonance("shadow"),
-        )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        self.assertTrue(result.cancelled)
+        stack = self._emit(_source_technique_with_resonance("shadow"))
+        self.assertTrue(stack.was_cancelled())
 
     def test_near_miss_resonance_narrow_misses_flame(self):
         """Non-shadow resonance does not match the narrow ward."""
         narrow_cancel = _make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventNames.DAMAGE_PRE_APPLY,
-            scope=TriggerScope.PERSONAL,
-            filter_condition={"path": "source.ref.resonance", "op": "==", "value": "shadow"},
+            filter_condition={
+                "and": [
+                    SELF_FILTER,
+                    {"path": "source.ref.resonance", "op": "==", "value": "shadow"},
+                ]
+            },
             flow_definition=narrow_cancel,
             target=self.character,
         )
         self.character.trigger_handler._populated = False
 
-        payload = DamagePreApplyPayload(
-            target=self.character,
-            amount=10,
-            damage_type="arcane",
-            source=_source_technique_with_resonance("flame"),
-        )
-        result = self.character.trigger_handler.dispatch(EventNames.DAMAGE_PRE_APPLY, payload)
-        # No affinity match (celestial) and no resonance match (flame != shadow)
-        self.assertFalse(result.cancelled)
-        self.assertEqual(result.fired, [])
+        stack = self._emit(_source_technique_with_resonance("flame"))
+        # The stub ref has no `affinity`, so the broad ward's path is unresolved;
+        # the narrow ward's resonance is "flame" != "shadow" → no match.
+        self.assertFalse(stack.was_cancelled())
 
 
 class PropertyTaggedTechniqueTest(TestCase):
-    """Test 22: Property-tagged technique — scar fires when technique carries a Property.
+    """Property-tagged technique — scar fires when technique carries a Property.
 
     Skipped: Technique model has no ``properties`` M2M field. The ``has_property``
     filter path ``source.ref.properties`` is unresolvable until a Technique → Property
