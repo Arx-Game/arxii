@@ -1046,3 +1046,28 @@ def staff_clear_alteration(
     pending.resolved_at = timezone.now()
     pending.notes = notes
     pending.save()
+
+
+def _typeclass_path_in_registry(path: str, registry: tuple[str, ...]) -> bool:
+    """Return True iff ``path`` (or any of its MRO base paths) is in ``registry``.
+
+    Honors typeclass inheritance per Spec A §2.1 lines 138-141: a registered
+    base typeclass admits all subclasses (e.g. registering Sword admits
+    LongSword). Used by Thread.clean() to validate ITEM-kind targets against
+    THREADWEAVING_ITEM_TYPECLASSES.
+
+    Empty registry rejects everything — callers explicitly want "no items
+    registered" to mean "no items eligible".
+    """
+    if not registry:
+        return False
+    if path in registry:
+        return True
+    from evennia.utils.utils import class_from_module  # noqa: PLC0415
+
+    cls = class_from_module(path)
+    for base in cls.__mro__[1:]:
+        base_path = f"{base.__module__}.{base.__qualname__}"
+        if base_path in registry:
+            return True
+    return False

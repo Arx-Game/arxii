@@ -46,6 +46,7 @@ from world.magic.models import (
     TechniqueCapabilityGrant,
     TechniqueOutcomeModifier,
     TechniqueStyle,
+    Thread,
     ThreadPullCost,
     ThreadPullEffect,
     ThreadXPLockedLevel,
@@ -55,6 +56,7 @@ from world.magic.types import (
     ResonanceScope,
     ResonanceStrength,
 )
+from world.traits.factories import TraitFactory
 
 
 class EffectTypeFactory(factory.django.DjangoModelFactory):
@@ -627,3 +629,30 @@ class RitualComponentRequirementFactory(factory.django.DjangoModelFactory):
     item_template = factory.SubFactory("world.items.factories.ItemTemplateFactory")
     quantity = 1
     min_quality_tier = None
+
+
+# =============================================================================
+# Resonance Pivot Spec A — Phase 4 Thread Factories
+# =============================================================================
+
+
+class ThreadFactory(factory.django.DjangoModelFactory):
+    """Factory for Thread.
+
+    Defaults to TRAIT-kind (the simplest discriminator with no typeclass-registry
+    coupling). Override target_kind + the matching target_* FK for other shapes.
+
+    NOTE: this factory intentionally does NOT call full_clean(). DB-level
+    CheckConstraints catch shape errors at write time; clean() is opt-in via
+    tests that exercise validation explicitly.
+    """
+
+    class Meta:
+        model = Thread
+
+    owner = factory.SubFactory(CharacterSheetFactory)
+    resonance = factory.SubFactory(ResonanceFactory)
+    target_kind = TargetKind.TRAIT
+    target_trait = factory.SubFactory(TraitFactory)
+    level = 0
+    developed_points = 0

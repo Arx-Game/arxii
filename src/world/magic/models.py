@@ -2092,4 +2092,299 @@ class RitualComponentRequirement(SharedMemoryModel):
         return f"{self.ritual.name} needs {self.quantity}x {self.item_template_id}"
 
 
+# =============================================================================
+# Resonance Pivot Spec A — Phase 4 Thread Model
+# =============================================================================
+
+
+class Thread(SharedMemoryModel):
+    """Per-character thread anchored to a trait/technique/item/room/relationship.
+
+    Discriminator + typed-FK pattern (Spec A §2.1 lines 83-151). Exactly one
+    target_* column is populated, matching ``target_kind``. Three layers of
+    enforcement:
+
+    - ``clean()`` raises ValidationError on missing / mismatched targets and on
+      ITEM-kind targets whose typeclass isn't in THREADWEAVING_ITEM_TYPECLASSES.
+    - Per-kind CheckConstraints mirror the "exactly one target_* set, matching
+      target_kind" rule at the DB layer (so misuse via .objects.create() also
+      fails).
+    - Per-kind partial UniqueConstraints prevent duplicate threads within the
+      same (owner, resonance, target_kind, target_*) combination, while still
+      allowing — for example — an ITEM thread and a ROOM thread on the same
+      ObjectDB.
+    """
+
+    owner = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.PROTECT,
+        related_name="threads",
+        help_text="Character who owns this thread.",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        related_name="threads",
+        help_text="Resonance this thread channels.",
+    )
+    target_kind = models.CharField(
+        max_length=32,
+        choices=TargetKind.choices,
+        help_text="Discriminator selecting which target_* FK is populated.",
+    )
+
+    name = models.CharField(max_length=120, blank=True)
+    description = models.TextField(blank=True)
+
+    developed_points = models.PositiveIntegerField(
+        default=0,
+        help_text="Permanent points; advances level via ThreadLevelUnlock entries.",
+    )
+    level = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Current level on the internal scale (multiples of 10).",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    target_trait = models.ForeignKey(
+        "traits.Trait",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=TRAIT; null otherwise.",
+    )
+    target_technique = models.ForeignKey(
+        "magic.Technique",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=TECHNIQUE; null otherwise.",
+    )
+    target_object = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind in (ITEM, ROOM); null otherwise.",
+    )
+    target_relationship_track = models.ForeignKey(
+        "relationships.RelationshipTrackProgress",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=RELATIONSHIP_TRACK; null otherwise.",
+    )
+    target_capstone = models.ForeignKey(
+        "relationships.RelationshipCapstone",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=RELATIONSHIP_CAPSTONE; null otherwise.",
+    )
+
+    class Meta:
+        constraints = [
+            # ---- Per-kind partial UniqueConstraints (one per TargetKind) ---------
+            models.UniqueConstraint(
+                fields=["owner", "resonance", "target_trait"],
+                condition=models.Q(target_kind=TargetKind.TRAIT),
+                name="uniq_thread_trait",
+            ),
+            models.UniqueConstraint(
+                fields=["owner", "resonance", "target_technique"],
+                condition=models.Q(target_kind=TargetKind.TECHNIQUE),
+                name="uniq_thread_technique",
+            ),
+            models.UniqueConstraint(
+                fields=["owner", "resonance", "target_object"],
+                condition=models.Q(target_kind=TargetKind.ITEM),
+                name="uniq_thread_item",
+            ),
+            models.UniqueConstraint(
+                fields=["owner", "resonance", "target_object"],
+                condition=models.Q(target_kind=TargetKind.ROOM),
+                name="uniq_thread_room",
+            ),
+            models.UniqueConstraint(
+                fields=["owner", "resonance", "target_relationship_track"],
+                condition=models.Q(target_kind=TargetKind.RELATIONSHIP_TRACK),
+                name="uniq_thread_rel_track",
+            ),
+            models.UniqueConstraint(
+                fields=["owner", "resonance", "target_capstone"],
+                condition=models.Q(target_kind=TargetKind.RELATIONSHIP_CAPSTONE),
+                name="uniq_thread_rel_capstone",
+            ),
+            # ---- Per-kind CheckConstraints (exactly one target_* set) -----------
+            models.CheckConstraint(
+                name="thread_trait_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.TRAIT)
+                    | (
+                        models.Q(target_trait__isnull=False)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=True)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="thread_technique_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.TECHNIQUE)
+                    | (
+                        models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=False)
+                        & models.Q(target_object__isnull=True)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="thread_item_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.ITEM)
+                    | (
+                        models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=False)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="thread_room_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.ROOM)
+                    | (
+                        models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=False)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="thread_rel_track_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.RELATIONSHIP_TRACK)
+                    | (
+                        models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=True)
+                        & models.Q(target_relationship_track__isnull=False)
+                        & models.Q(target_capstone__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="thread_rel_capstone_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.RELATIONSHIP_CAPSTONE)
+                    | (
+                        models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=True)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=False)
+                    )
+                ),
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Thread<{self.target_kind}> for {self.owner_id} ({self.resonance_id})"
+
+    @property
+    def target(self) -> models.Model | None:
+        """Return the populated FK object, picked by target_kind."""
+        match self.target_kind:
+            case TargetKind.TRAIT:
+                return self.target_trait
+            case TargetKind.TECHNIQUE:
+                return self.target_technique
+            case TargetKind.ITEM | TargetKind.ROOM:
+                return self.target_object
+            case TargetKind.RELATIONSHIP_TRACK:
+                return self.target_relationship_track
+            case TargetKind.RELATIONSHIP_CAPSTONE:
+                return self.target_capstone
+        return None
+
+    def clean(self) -> None:
+        """Validate exactly-one-target rule + ITEM typeclass registry membership.
+
+        DB constraints catch the same shape errors at write time; ``clean()``
+        is the user-facing error path (forms / serializers / tests calling
+        ``full_clean()``).
+        """
+        # Map target_kind -> (expected_field_name, list_of_other_field_names)
+        kind_to_field: dict[str, str] = {
+            TargetKind.TRAIT: "target_trait",
+            TargetKind.TECHNIQUE: "target_technique",
+            TargetKind.ITEM: "target_object",
+            TargetKind.ROOM: "target_object",
+            TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
+            TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
+        }
+        all_target_fields = (
+            "target_trait",
+            "target_technique",
+            "target_object",
+            "target_relationship_track",
+            "target_capstone",
+        )
+
+        expected_field = kind_to_field.get(self.target_kind)
+        if expected_field is None:
+            raise ValidationError(
+                {"target_kind": f"Unknown target_kind: {self.target_kind!r}."},
+            )
+
+        if getattr(self, expected_field) is None:
+            raise ValidationError(
+                {expected_field: f"target_kind={self.target_kind} requires {expected_field}."},
+            )
+
+        for field_name in all_target_fields:
+            if field_name == expected_field:
+                continue
+            if getattr(self, field_name) is not None:
+                raise ValidationError(
+                    {
+                        field_name: (
+                            f"target_kind={self.target_kind} requires {field_name} to be null."
+                        ),
+                    },
+                )
+
+        # ITEM-kind: validate the target_object's typeclass is in the
+        # THREADWEAVING_ITEM_TYPECLASSES registry (subclass-aware).
+        if self.target_kind == TargetKind.ITEM:
+            from world.magic.constants import THREADWEAVING_ITEM_TYPECLASSES  # noqa: PLC0415
+            from world.magic.services import _typeclass_path_in_registry  # noqa: PLC0415
+
+            tc_path = self.target_object.db_typeclass_path
+            if not _typeclass_path_in_registry(tc_path, THREADWEAVING_ITEM_TYPECLASSES):
+                raise ValidationError(
+                    {
+                        "target_object": (
+                            f"Typeclass {tc_path!r} is not in "
+                            "THREADWEAVING_ITEM_TYPECLASSES registry."
+                        ),
+                    },
+                )
+
+
 from world.magic.audere import AudereThreshold  # noqa: F401, E402

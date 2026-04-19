@@ -33,6 +33,7 @@ from world.magic.models import (
     TechniqueCapabilityGrant,
     TechniqueOutcomeModifier,
     TechniqueStyle,
+    Thread,
     ThreadPullCost,
     ThreadPullEffect,
     ThreadXPLockedLevel,
@@ -422,3 +423,21 @@ class RitualComponentRequirementAdmin(admin.ModelAdmin):
     autocomplete_fields = ["ritual", "item_template"]
     raw_id_fields = ["min_quality_tier"]
     list_select_related = ["ritual", "item_template", "min_quality_tier"]
+
+
+@admin.register(Thread)
+class ThreadAdmin(admin.ModelAdmin):
+    list_display = ["id", "owner", "resonance", "target_kind", "level", "developed_points"]
+    list_filter = ["target_kind", "resonance"]
+    search_fields = ["owner__character__db_key", "resonance__name", "name"]
+    autocomplete_fields = ["resonance"]
+    raw_id_fields = [
+        "owner",
+        "target_trait",
+        "target_technique",
+        "target_object",
+        "target_relationship_track",
+        "target_capstone",
+    ]
+    list_select_related = ["owner", "resonance"]
+    readonly_fields = ["created_at", "updated_at"]
