@@ -2,9 +2,10 @@
 
 **Status:** draft, in active brainstorming
 **Date:** 2026-04-18
-**Scope:** Spec A of a three-spec resonance-pivot decomposition. Sibling specs B and C
-(Relational Resilience / Soul Tether / Ritual Capstones; and Resonance Gain Surfaces)
-are referenced here but authored separately.
+**Scope:** Spec A of a four-spec resonance-pivot decomposition. Sibling specs B
+(Relational Resilience / Soul Tether / Ritual Capstones), C (Resonance Gain
+Surfaces), and D (Rituals + Ritual-Grade Items) are referenced here but authored
+separately.
 
 ---
 
@@ -348,7 +349,10 @@ Purely for UI aggregation on the "Who I Am" page. Optional, no mechanical effect
   values, so a player can simultaneously have an ITEM thread on object X and a (very
   unusual) ROOM thread on the same object X without colliding. In practice ObjectDB
   has one typeclass and only one of those reads as valid, but the constraint is
-  per-discriminator anyway.
+  per-discriminator anyway. **Note:** Capstone *threads* still get their own partial
+  unique (`target_capstone` keyed to `target_kind="RELATIONSHIP_CAPSTONE"`) even
+  though capstone *unlocks* are inherited from the parent track per §6.5 — unlock
+  inheritance and thread uniqueness are independent concerns.
 
 ---
 
@@ -1077,6 +1081,11 @@ discriminator-aware shape).
 - `ThreadFactory` (new) — discriminator-aware traits (`as_trait_thread`,
   `as_item_thread`, `as_room_thread`, `as_technique_thread`, `as_track_thread`,
   `as_capstone_thread`) to set the right FK and `target_kind` together
+
+**Implementation note:** The Mage Scars rename in Step 4 has zero overlap with
+Steps 1–3 and the rest of Spec A's data-layer work. The implementation plan
+should split it into its own commit/PR for cleaner review — bundling it here
+is purely for spec organization.
 
 ### 7.4 Service-layer migrations
 
