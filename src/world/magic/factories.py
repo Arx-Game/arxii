@@ -36,6 +36,7 @@ from world.magic.models import (
     TechniqueOutcomeModifier,
     TechniqueStyle,
     ThreadPullCost,
+    ThreadXPLockedLevel,
     Tradition,
 )
 from world.magic.types import (
@@ -510,3 +511,14 @@ class ThreadPullCostFactory(factory.django.DjangoModelFactory):
     resonance_cost = 1
     anima_per_thread = 1
     label = "soft"
+
+
+class ThreadXPLockedLevelFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadXPLockedLevel — XP-locked level boundaries."""
+
+    class Meta:
+        model = ThreadXPLockedLevel
+        django_get_or_create = ("level",)
+
+    level = 20
+    xp_cost = 200

@@ -1744,4 +1744,17 @@ class ThreadPullCost(SharedMemoryModel):
         return f"Tier {self.tier} ({self.label})"
 
 
+class ThreadXPLockedLevel(SharedMemoryModel):
+    """XP-locked boundary on the internal level scale. Mirrors skills XP locks."""
+
+    level = models.PositiveSmallIntegerField(unique=True)
+    xp_cost = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ("level",)
+
+    def __str__(self) -> str:
+        return f"Lvl {self.level} (XP {self.xp_cost})"
+
+
 from world.magic.audere import AudereThreshold  # noqa: F401, E402

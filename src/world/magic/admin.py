@@ -31,6 +31,7 @@ from world.magic.models import (
     TechniqueOutcomeModifier,
     TechniqueStyle,
     ThreadPullCost,
+    ThreadXPLockedLevel,
     Tradition,
 )
 
@@ -357,3 +358,9 @@ class TechniqueOutcomeModifierAdmin(admin.ModelAdmin):
 class ThreadPullCostAdmin(admin.ModelAdmin):
     list_display = ["tier", "label", "resonance_cost", "anima_per_thread"]
     ordering = ["tier"]
+
+
+@admin.register(ThreadXPLockedLevel)
+class ThreadXPLockedLevelAdmin(admin.ModelAdmin):
+    list_display = ["level", "xp_cost"]
+    ordering = ["level"]
