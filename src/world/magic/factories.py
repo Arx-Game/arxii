@@ -35,6 +35,7 @@ from world.magic.models import (
     TechniqueCapabilityGrant,
     TechniqueOutcomeModifier,
     TechniqueStyle,
+    ThreadPullCost,
     Tradition,
 )
 from world.magic.types import (
@@ -491,3 +492,21 @@ class MagicalAlterationEventFactory(factory.django.DjangoModelFactory):
 
     character = factory.SubFactory(CharacterSheetFactory)
     alteration_template = factory.SubFactory(MagicalAlterationTemplateFactory)
+
+
+# =============================================================================
+# Resonance Pivot Spec A — Phase 3 Lookup Factories
+# =============================================================================
+
+
+class ThreadPullCostFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadPullCost — per-tier pull cost lookup."""
+
+    class Meta:
+        model = ThreadPullCost
+        django_get_or_create = ("tier",)
+
+    tier = 1
+    resonance_cost = 1
+    anima_per_thread = 1
+    label = "soft"

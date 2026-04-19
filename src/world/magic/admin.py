@@ -30,6 +30,7 @@ from world.magic.models import (
     TechniqueCapabilityGrant,
     TechniqueOutcomeModifier,
     TechniqueStyle,
+    ThreadPullCost,
     Tradition,
 )
 
@@ -350,3 +351,9 @@ class MishapPoolTierAdmin(admin.ModelAdmin):
 @admin.register(TechniqueOutcomeModifier)
 class TechniqueOutcomeModifierAdmin(admin.ModelAdmin):
     list_display = ["outcome", "modifier_value"]
+
+
+@admin.register(ThreadPullCost)
+class ThreadPullCostAdmin(admin.ModelAdmin):
+    list_display = ["tier", "label", "resonance_cost", "anima_per_thread"]
+    ordering = ["tier"]

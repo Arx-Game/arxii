@@ -1718,4 +1718,30 @@ class MagicalAlterationEvent(SharedMemoryModel):
         )
 
 
+# =============================================================================
+# Resonance Pivot Spec A — Phase 3 Lookup Tables
+# =============================================================================
+
+
+class ThreadPullCost(SharedMemoryModel):
+    """Per-tier pull cost. Three rows at launch (tier 1/2/3).
+
+    Pull-cost tuning surface — see Spec A §2.1 / §5.4 step 2. Per-tier
+    numbers (resonance_cost, anima_per_thread) live here as data; the
+    cost-formula shape lives in spend_resonance_for_pull. Edit values
+    here for per-tier tweaks; edit the service for shape changes.
+    """
+
+    tier = models.PositiveSmallIntegerField(unique=True)
+    resonance_cost = models.PositiveSmallIntegerField()
+    anima_per_thread = models.PositiveSmallIntegerField()
+    label = models.CharField(max_length=32)
+
+    class Meta:
+        ordering = ("tier",)
+
+    def __str__(self) -> str:
+        return f"Tier {self.tier} ({self.label})"
+
+
 from world.magic.audere import AudereThreshold  # noqa: F401, E402
