@@ -18,6 +18,7 @@ from world.magic.models import (
     EffectType,
     Facet,
     Gift,
+    ImbuingProseTemplate,
     IntensityTier,
     MishapPoolTier,
     Motif,
@@ -380,3 +381,12 @@ class ThreadPullEffectAdmin(admin.ModelAdmin):
     search_fields = ["resonance__name", "narrative_snippet"]
     autocomplete_fields = ["resonance", "capability_grant"]
     list_select_related = ["resonance", "capability_grant"]
+
+
+@admin.register(ImbuingProseTemplate)
+class ImbuingProseTemplateAdmin(admin.ModelAdmin):
+    list_display = ["resonance", "target_kind"]
+    list_filter = ["target_kind"]
+    search_fields = ["resonance__name", "prose"]
+    autocomplete_fields = ["resonance"]
+    list_select_related = ["resonance"]

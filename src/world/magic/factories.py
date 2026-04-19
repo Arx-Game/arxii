@@ -27,6 +27,7 @@ from world.magic.models import (
     EffectType,
     Facet,
     Gift,
+    ImbuingProseTemplate,
     IntensityTier,
     MagicalAlterationEvent,
     MagicalAlterationTemplate,
@@ -578,3 +579,14 @@ class ThreadPullEffectFactory(factory.django.DjangoModelFactory):
             flat_bonus_amount=None,
             narrative_snippet="A whisper at the edge of hearing.",
         )
+
+
+class ImbuingProseTemplateFactory(factory.django.DjangoModelFactory):
+    """Factory for ImbuingProseTemplate — authored fallback prose templates."""
+
+    class Meta:
+        model = ImbuingProseTemplate
+
+    resonance = factory.SubFactory(ResonanceFactory)
+    target_kind = TargetKind.TRAIT
+    prose = "default prose"

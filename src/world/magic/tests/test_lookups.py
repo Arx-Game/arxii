@@ -8,8 +8,10 @@ from django.core.exceptions import ValidationError
 from django.db.utils import IntegrityError
 from django.test import TestCase
 
-from world.magic.constants import EffectKind, VitalBonusTarget
+from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget
 from world.magic.factories import (
+    ImbuingProseTemplateFactory,
+    ResonanceFactory,
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
     ThreadXPLockedLevelFactory,
@@ -92,3 +94,15 @@ class ThreadPullEffectCleanTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             eff.clean()
+
+
+class ImbuingProseTemplateTests(TestCase):
+    def test_unique_together_resonance_and_target_kind(self):
+        res = ResonanceFactory()
+        ImbuingProseTemplateFactory(resonance=res, target_kind=TargetKind.TRAIT, prose="X")
+        with self.assertRaises(IntegrityError):
+            ImbuingProseTemplateFactory(resonance=res, target_kind=TargetKind.TRAIT, prose="Y")
+
+    def test_universal_fallback_row_allowed(self):
+        ImbuingProseTemplateFactory(resonance=None, target_kind=None, prose="universal")
+        # No exception raised.

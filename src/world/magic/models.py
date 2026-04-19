@@ -1947,4 +1947,36 @@ class ThreadPullEffect(SharedMemoryModel):
             raise ValidationError({"capability_grant": "Must be null for this effect_kind."})
 
 
+class ImbuingProseTemplate(SharedMemoryModel):
+    """Authored fallback prose for imbuing flow templates.
+
+    Lookup keyed (resonance, target_kind). Either field nullable; the row
+    where both are NULL is the universal fallback used when no more-specific
+    template matches. Spec A §4.3.
+    """
+
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="imbuing_prose",
+    )
+    target_kind = models.CharField(
+        max_length=32,
+        choices=TargetKind.choices,
+        null=True,
+        blank=True,
+    )
+    prose = models.TextField()
+
+    class Meta:
+        unique_together = (("resonance", "target_kind"),)
+
+    def __str__(self) -> str:
+        res = self.resonance.name if self.resonance else "*"
+        tk = self.target_kind or "*"
+        return f"ImbuingProse({res} / {tk})"
+
+
 from world.magic.audere import AudereThreshold  # noqa: F401, E402
