@@ -32,7 +32,7 @@ rename.
   authoring pipeline for ritual-flavored capstones like Ritual of Devotion / Ritual of
   Betrayal / Accepting a Soul Tether).
 - **Spec C** — Resonance gain surfaces: social scenes, peer endorsement, environment/outfit
-  tagging, and anything that *writes* to `ResonancePool.balance`. Spec A exposes the
+  tagging, and anything that *writes* to `CharacterResonance.balance`. Spec A exposes the
   service function interface Spec C will call; Spec A does not author any gain sites.
 
 ### Consequences that fall out of the pivot
@@ -43,10 +43,13 @@ rename.
    in the relationships app's tracks; `is_soul_tether` migrates to `CharacterRelationship`.
 2. **Satellite magic models deleted.** `ThreadType`, `ThreadJournal`, `ThreadResonance`,
    and `CharacterResonanceTotal` go away. Rationale below.
-3. **Resonance semantics change.** `CharacterResonance` no longer stores a rank/level;
-   a new `ResonancePool` model stores per-character per-resonance currency balance.
-   `CharacterResonance` continues to identify which resonances a character has
-   personally developed (identity list), separate from pool balance.
+3. **Resonance semantics change.** `CharacterResonance` collapses identity and
+   currency into one model. The old rank/level semantics are dropped; the row now
+   carries `balance` (spendable currency) and `lifetime_earned` (monotonic audit)
+   in addition to identifying which resonances a character has personally
+   developed. A separate `ResonancePool` model was considered and rejected — it
+   would key identically on `(character, resonance)` and need to stay in lockstep
+   with CharacterResonance, which is bad-smell parallel modeling. See §2.2.
 4. **ThreadWeaving unlock family.** A new authored catalog of unlocks gates which
    categories/instances a character can weave threads into, with Path-based in-band
    pricing and out-of-Path penalties. Taught by Gift-specific teachers.
@@ -146,19 +149,6 @@ project; retirement flows through an explicit service, not cascades.
 **Helper:** `Thread.target` property returns the populated FK object, picked by
 `target_kind`. Django ORM `select_related("target_trait", "target_technique",
 "target_object", ...)` works natively because each FK column is real.
-
-#### `ResonancePool`
-
-```
-character        FK CharacterSheet
-resonance        FK Resonance
-balance          PositiveIntegerField default=0   # no cap — see economy decisions
-lifetime_earned  PositiveIntegerField default=0   # audit/metrics, never decremented
-class Meta: unique_together = (character, resonance)
-```
-
-Balance is the spendable currency. `lifetime_earned` supports analytics and potential
-retro-unlocks. Rows are created lazily when a character first earns that resonance.
 
 #### `ThreadPullCost` (lookup, SharedMemoryModel)
 
@@ -402,22 +392,53 @@ Eligibility check when a player attempts to weave a new thread on an anchor:
   magical quality ("the weight of debts owed," "a shared dream we both remember").
   Distinct from journals; a one-line identity for the bond.
 
-#### `CharacterResonance` — structural keep, semantic shift
+#### `CharacterResonance` — identity + currency, unified
 
-Continues to track which resonances a character has personally developed; "developed"
-post-pivot means "the player has explicitly claimed this resonance as part of their
-identity," typically established at character creation or through a developmental
-moment in play (Spec C will author when CharacterResonance rows are created). This
-is distinct from `ResonancePool` rows, which are created lazily on first earn —
-a player can earn resonance into a pool they never personally claimed (e.g., a
-brief identity moment that didn't stick). The identity list governs what shows on
-the character sheet's resonance section; the pool list governs what currency is
-available to spend.
+CharacterResonance becomes the single per-character per-resonance row. It is both
+the identity anchor (the row's existence = "this character is associated with
+this resonance") and the currency bucket (the row carries spendable balance and
+monotonic lifetime).
 
-Its former "level" / numerical-rank semantics are dropped. If post-pivot the
-distinction between CharacterResonance and `ResonancePool.lifetime_earned > 0`
-proves too thin to justify two models, collapse into a simpler M2M on
-CharacterSheet (see §8.5 follow-up).
+```
+character_sheet  FK CharacterSheet      on_delete=CASCADE
+resonance        FK Resonance           on_delete=PROTECT
+balance          PositiveIntegerField default=0   # spendable; no cap
+lifetime_earned  PositiveIntegerField default=0   # audit/metrics, never decremented
+claimed_at       DateTimeField auto_now_add=True
+flavor_text      TextField blank                  # player-authored manifestation
+class Meta: unique_together = (character_sheet, resonance)
+```
+
+Field changes from the existing model:
+- **Add** `balance`, `lifetime_earned`, `claimed_at` (the merged-in pool fields).
+- **Drop** `scope`, `strength`, `is_active`, `created_at` — the old `is_active`
+  flag was the only field with consumers (`_apply_magical_scars`); post-merge,
+  row existence replaces the flag (deleting the row is the deactivation path).
+  `scope`, `strength`, and the old `created_at` had no code reading them
+  (serializer-only), and are dropped. `claimed_at` replaces `created_at` with
+  clearer naming.
+- **Re-FK** `character` (was `FK ObjectDB`) → `character_sheet` (FK CharacterSheet).
+  Aligns with the project rule "Avoid direct FKs to ObjectDB" and matches every
+  other per-character model in this spec.
+
+Rows are created either:
+- explicitly at character creation / through a Spec C identity moment
+  (with `balance=0`, `lifetime_earned=0`), OR
+- lazily on first `grant_resonance` call (the row is the bucket — the bucket
+  *is* the identity).
+
+The semantic shift from the prior spec draft: there is no longer a distinction
+between "claimed identity without earned currency" and "earned currency without
+claimed identity" — earning currency *is* claiming the identity. Chargen and
+Spec C author rows-with-zero-balance to express claim-without-earn; the inverse
+(currency-without-claim) is impossible by construction.
+
+Mage Scars (`world/mechanics/effect_handlers.py::_apply_magical_scars`) updates
+its origin-derivation query: previously `CharacterResonance.objects.filter(
+character=character, is_active=True).order_by("-pk").first()`, now
+`character.resonances.most_recently_earned()` (handler method that picks the
+row with the highest `lifetime_earned`, ties broken by `-pk`). The `is_active`
+filter is dropped because row existence replaces it.
 
 #### `JournalEntry` gains `related_threads` M2M to `Thread`
 
@@ -489,7 +510,7 @@ effective_cap(thread) = min(path_cap(thread.owner), anchor_cap(thread))
 The spend service uses `effective_cap`. The My Threads page surfaces both
 component values so players see *which* gate is the active one ("path-locked"
 vs. "anchor-locked").
-- `ResonancePool.balance ≥ 0` — enforced at spend sites.
+- `CharacterResonance.balance ≥ 0` — enforced at spend sites.
 - `Thread` uniqueness: one thread per (owner, target, resonance) triple, via partial
   unique indexes keyed to `target_kind`. Six partial uniques in total — one per
   `target_kind` value, each constraining the matching `target_*` FK column. ITEM
@@ -518,17 +539,18 @@ def grant_resonance(
     amount: int,
     source: str,           # short audit label, e.g. "social_scene_endorsement"
     source_ref: int | None = None,   # optional FK pk to the originating event
-) -> ResonancePool:
+) -> CharacterResonance:
     """
-    Atomically grant `amount` of `resonance` to `character`'s pool.
-    Creates the ResonancePool row lazily if it doesn't exist.
+    Atomically grant `amount` of `resonance` to `character`'s row.
+    Creates the CharacterResonance row lazily if it doesn't exist
+    (earning currency claims the identity — see §2.2).
     Increments both `balance` and `lifetime_earned`.
     Emits a `ResonanceGranted` event.
     """
 ```
 
-`ResonancePool.balance` has no cap (decision from Q13). The pool grows freely; the
-strategic tension is over allocation, not over hitting a ceiling.
+`CharacterResonance.balance` has no cap (decision from Q13). The balance grows freely;
+the strategic tension is over allocation, not over hitting a ceiling.
 
 ### 3.2 Spend interface
 
@@ -551,7 +573,7 @@ def spend_resonance_for_imbuing(
 
     Validates:
       - character owns thread
-      - pool.balance >= amount
+      - character_resonance.balance >= amount
       - thread.level < effective_cap(thread)   (per §2.4)
       - amount > 0
 
@@ -568,8 +590,9 @@ def spend_resonance_for_imbuing(
       thread.developed_points -= cost
 
     Atomic (single transaction, in-memory mutation of the SharedMemoryModel
-    instances): decrements pool.balance, increments thread.developed_points,
-    advances thread.level as far as the bucket and gates allow.
+    instances): decrements character_resonance.balance, increments
+    thread.developed_points, advances thread.level as far as the bucket and
+    gates allow.
 
     Returns a ThreadImbueResult dataclass with:
         - resonance_spent: int
@@ -633,8 +656,9 @@ def spend_resonance_for_pull(
     action_context: ActionContext,      # for anchor-involvement validation
 ) -> ResonancePullResult:
     """
-    Atomically debit the pool for the chosen tier's `resonance_cost`,
-    plus `anima_per_thread * (len(threads) - 1)` anima from the character's
+    Atomically debit the matching CharacterResonance row's `balance` for
+    the chosen tier's `resonance_cost`, plus
+    `anima_per_thread * (len(threads) - 1)` anima from the character's
     `CharacterAnima` row (the first thread is "free" beyond the resonance cost).
     Validates:
       - all threads owned by `character`
@@ -642,7 +666,7 @@ def spend_resonance_for_pull(
       - anchor-involvement per §5.2 (system check for non-relationship anchors;
         player-asserted for relationship anchors — caller passes the assertion
         through `action_context`)
-      - pool.balance and CharacterAnima.current sufficient
+      - character_resonance.balance and CharacterAnima.current sufficient
     Returns a structured ResonancePullResult dataclass (defined in
     `world/magic/types.py`) with:
         - resonance_spent: int
@@ -657,7 +681,7 @@ def spend_resonance_for_pull(
 ```
 
 Both spend functions run in a single Django transaction and mutate the
-SharedMemoryModel-cached `ResonancePool` and `CharacterAnima` instances
+SharedMemoryModel-cached `CharacterResonance` and `CharacterAnima` instances
 in-memory before saving. Because Evennia runs as a single process and
 all spend paths route through the same identity-mapped instances, no
 row-level locking (`select_for_update`) is needed — concurrent spend
@@ -680,16 +704,17 @@ model is introduced for anima.
 ### 3.3 Allocation is player-driven
 
 There's no automatic allocation of incoming resonance to specific threads. Resonance
-accumulates in the pool; the player decides via Imbuing rituals which threads to spend
-on. This makes specialization a deliberate choice (lean hard into one resonance →
-develop fewer threads more deeply, or spread → many shallow threads).
+accumulates as `CharacterResonance.balance`; the player decides via Imbuing rituals
+which threads to spend on. This makes specialization a deliberate choice (lean hard
+into one resonance → develop fewer threads more deeply, or spread → many shallow
+threads).
 
 The dashboard surfaces decision-support (which threads are imbue-ready, which are
 near an XP-locked boundary, which are at effective_cap) but never auto-spends.
 
 ### 3.4 Lifetime metrics
 
-`ResonancePool.lifetime_earned` is monotonically incremented and never debited. Useful
+`CharacterResonance.lifetime_earned` is monotonically incremented and never debited. Useful
 for:
 
 - Achievements ("earned 1000 lifetime Celestial resonance")
@@ -699,21 +724,24 @@ for:
 ### 3.5 Concurrency model
 
 All spends and grants run in single Django transactions and mutate the
-SharedMemoryModel-cached `ResonancePool` / `CharacterAnima` instances
+SharedMemoryModel-cached `CharacterResonance` / `CharacterAnima` instances
 in-memory before saving. Single-process Evennia + identity-mapped instances
 means concurrent reads/writes converge on the same Python object and
 serialize naturally on the GIL — no row-level locks (`select_for_update`)
 needed. See §3.2 for the full rationale and the conditions under which
 locks would need to come back.
 
-### 3.6 Resonance Pool service helpers
+### 3.6 CharacterResonance service helpers
 
 ```python
-def get_or_create_pool(character, resonance) -> ResonancePool: ...
+def get_or_create_character_resonance(
+    character, resonance
+) -> CharacterResonance: ...
 
 def imbue_ready_threads(character) -> list[Thread]:
-    """Threads whose pool.balance > 0 and whose level < effective_cap —
-       i.e. threads the player could productively imbue right now."""
+    """Threads whose matching character_resonance.balance > 0 and whose
+       level < effective_cap — i.e. threads the player could productively
+       imbue right now."""
 
 def near_xp_lock_threads(
     character, within: int = 100
@@ -735,7 +763,7 @@ These power the My Threads page. None mutate.
 ### 3.7 Caching and character handlers
 
 Pull resolution is on the hot path of every action with thread involvement.
-Per-action queries against `Thread`, `ResonancePool`, and the lookup tables
+Per-action queries against `Thread`, `CharacterResonance`, and the lookup tables
 would grind the system to a halt; caching is required, not optional.
 
 Two tiers of caching, both following established project conventions.
@@ -784,10 +812,17 @@ established pattern (`character.traits` → `TraitHandler`, etc.).
     `cross_thread_xp_lock`, `update_thread_narrative`, and any future
     mutation; clears the `@cached_property` slots
 
-- **`character.resonance_pools`** → `CharacterResonancePoolHandler`
-  - `.balance(resonance)` — returns `int` from cached pool dict
-  - `.lifetime(resonance)` — same
-  - `.get_or_create(resonance)` — returns the SharedMemoryModel instance
+- **`character.resonances`** → `CharacterResonanceHandler`
+  - `.balance(resonance)` — returns `int` from the cached `{resonance:
+    CharacterResonance}` dict (0 if no row exists yet)
+  - `.lifetime(resonance)` — same shape, returns `lifetime_earned`
+  - `.get_or_create(resonance)` — returns the SharedMemoryModel instance,
+    creating with balance=0/lifetime_earned=0 if absent
+  - `.most_recently_earned()` — returns the row with the highest
+    `lifetime_earned` (ties broken by `-pk`); used by Mage Scars
+    `_apply_magical_scars` to derive origin (affinity, resonance)
+  - `.all()` — list of `CharacterResonance` rows for the character;
+    used by the character-sheet "Who I Am" identity surface
   - `.invalidate()` — called by `grant_resonance`,
     `spend_resonance_for_imbuing`, `spend_resonance_for_pull`
 
@@ -803,7 +838,7 @@ thread × per tier × per stacking pass. With caching:
   handler caches.
 - Every subsequent action: zero queries on the read path. Pull commit
   issues `UPDATE` statements only for the rows that actually changed
-  (the pool, anima, thread).
+  (the character_resonance, anima, thread).
 
 Combat in particular hits damage-reduction subscribers per
 `DamagePreApply` event; the `passive_vital_bonuses` cache is what
@@ -1005,7 +1040,10 @@ POST   /api/magic/threads/                       weave a new thread (gated by
                                                   the strategic spend is Imbuing)
 DELETE /api/magic/threads/{id}/                  soft retire (kept for history)
 
-GET    /api/magic/resonance-pools/               own pool balances + lifetime
+GET    /api/magic/character-resonances/          own per-resonance balance +
+                                                  lifetime_earned (the existing
+                                                  CharacterResonance endpoint,
+                                                  reshaped per §2.2)
 
 POST   /api/magic/rituals/perform/               body: {ritual_id, kwargs,
                                                         components: [item_ids]}
@@ -1086,13 +1124,13 @@ and the list of threads to pull:
    - All pulled threads share the chosen resonance.
    - For non-relationship anchors: anchor is involved (per 5.2).
    - For relationship anchors: player has asserted involvement (no system check).
-   - Pool balance >= ThreadPullCost(tier).resonance_cost.
+   - character_resonance.balance >= ThreadPullCost(tier).resonance_cost.
    - CharacterAnima.current >= ThreadPullCost(tier).anima_per_thread *
      max(0, len(threads) - 1).
 
 2. Atomically debit (single transaction, in-memory mutation of the
-   SharedMemoryModel-cached pool and anima instances):
-   - ResonancePool.balance -= ThreadPullCost(tier).resonance_cost
+   SharedMemoryModel-cached character_resonance and anima instances):
+   - CharacterResonance.balance -= ThreadPullCost(tier).resonance_cost
    - CharacterAnima.current -= anima_total
 
 3. For each pulled thread:
@@ -1398,7 +1436,6 @@ schema migration with no data steps.
 In `world/magic`:
 - `Thread` (new model — replaces old Thread completely; includes
   `name`/`description`/`developed_points`/`level`)
-- `ResonancePool`
 - `ThreadPullCost` (lookup, SharedMemoryModel)
 - `ThreadXPLockedLevel` (lookup, SharedMemoryModel)
 - `ThreadLevelUnlock` (per-thread record of XP-lock crossings)
@@ -1436,10 +1473,35 @@ The actual migration order applied is therefore: Step 2 (delete-old) → Step 1
 (create-new + add fields elsewhere) → Step 3 (CharacterResonance trim) → Step 4
 (rename strings).
 
-#### Step 3 — Adjust `CharacterResonance`
+#### Step 3 — Reshape `CharacterResonance` (identity + currency merge)
 
-Drop any `level` field (if present); the model continues to exist as the
-identity-list of resonances a character has personally developed.
+The existing `CharacterResonance` model is reshaped per §2.2 in a single
+schema migration:
+- **Add fields**: `balance` (PositiveIntegerField default=0), `lifetime_earned`
+  (PositiveIntegerField default=0), `claimed_at` (DateTimeField auto_now_add).
+- **Drop fields**: `scope`, `strength`, `is_active`, `created_at` (no consumers
+  for the first three; `claimed_at` replaces `created_at`).
+- **Re-FK**: `character` (was FK ObjectDB) → `character_sheet` (FK CharacterSheet,
+  on_delete=CASCADE). Aligns with project rule against direct ObjectDB FKs.
+- **Update `unique_together`**: `(character_sheet, resonance)`.
+- **Update related_name**: `resonances` (read from CharacterSheet).
+
+Knock-on edits in the same migration / commit:
+- `_apply_magical_scars` in `world/mechanics/effect_handlers.py` switches from
+  `CharacterResonance.objects.filter(character=character, is_active=True)
+  .order_by("-pk").first()` → `character.resonances.most_recently_earned()`.
+- `CharacterResonanceSerializer` and `CharacterResonanceViewSet` in
+  `world/magic/serializers.py` / `views.py` drop the dropped fields from
+  `Meta.fields` and add `balance`, `lifetime_earned`, `claimed_at`.
+- `CharacterResonanceFactory` in `world/magic/factories.py` updates field
+  defaults; the `is_active=True` kwarg used in
+  `integration_tests/pipeline/test_alteration_pipeline.py` is removed
+  (existence of the row is the activation signal post-merge).
+- `CharacterResonanceAdmin` in `world/magic/admin.py` updates
+  `list_display` / `fields`.
+
+No `RunPython` data step — the dev DB is disposable per CLAUDE.md, and there
+is no production data to preserve.
 
 #### Step 4 — Mage Scars rename
 
@@ -1488,7 +1550,10 @@ discriminator-aware shape).
   rituals
 - `ImbuingProseTemplateFactory` — flexible by (resonance, target_kind), plus a
   catch-all fallback row trait
-- `ResonancePoolFactory` — flexible balance/lifetime
+- `CharacterResonanceFactory` — existing factory, updated for the merged shape:
+  flexible `balance` / `lifetime_earned`, drops the removed `scope` / `strength`
+  / `is_active` kwargs. Add traits `with_balance(amount)` and `claimed_only`
+  (balance=0, lifetime_earned=0) for chargen-style identity claims.
 - `ThreadFactory` (new) — discriminator-aware traits (`as_trait_thread`,
   `as_item_thread`, `as_room_thread`, `as_technique_thread`, `as_track_thread`,
   `as_capstone_thread`) to set the right FK and `target_kind` together
@@ -1543,8 +1608,11 @@ Handler classes in `world/magic/handlers.py`:
 - `CharacterThreadHandler` — exposed via `character.threads`. See §3.7
   for full method list. Mutation methods on `Thread` go through the
   service functions, which call `.invalidate()` after writes.
-- `CharacterResonancePoolHandler` — exposed via `character.resonance_pools`.
+- `CharacterResonanceHandler` — exposed via `character.resonances`.
   See §3.7 for method list. Same invalidation pattern as the thread handler.
+  Replaces the prior draft's `CharacterResonancePoolHandler` /
+  `character.resonance_pools` since `CharacterResonance` is now the single
+  identity+currency model (§2.2).
 
 Both handlers wire onto the existing `Character` typeclass alongside the
 established handlers (`character.traits`, etc.) — no new typeclass machinery,
@@ -1608,9 +1676,14 @@ Service functions to remove (tied to deleted models):
   - **handler caching** — `character.threads.all()` issues one query then
     serves repeats from the cache; `weave_thread` / `spend_resonance_for_imbuing`
     invalidate the cache so the next read sees the mutation; same for
-    `character.resonance_pools.balance(resonance)` after `grant_resonance` /
+    `character.resonances.balance(resonance)` after `grant_resonance` /
     `spend_resonance_for_pull`. Includes a "no queries on the hot path"
     assertion using `assertNumQueries(0)` after warmup
+  - **CharacterResonance merged shape** — `grant_resonance` creates the row
+    on first call (lazy) and increments both `balance` and `lifetime_earned`
+    on subsequent calls; `most_recently_earned()` picks the row with the
+    highest `lifetime_earned`; `_apply_magical_scars` derives origin
+    `(affinity, resonance)` from that row (no `is_active` filter)
   - pull anchor-involvement (system-checked for non-relationship, asserted for
     relationship; commit re-validation when anchor falls out of play)
   - ritual dispatch — both the SERVICE path (Imbuing) AND the FLOW path (a sample
@@ -1674,7 +1747,10 @@ Inheriting from Spec A:
 
 - `grant_resonance(character, resonance, amount, source, source_ref)` service
   function is the universal entry point for awarding resonance.
-- `ResonancePool` model has `lifetime_earned` for cumulative tracking.
+- `CharacterResonance` model carries `balance` (spendable) and
+  `lifetime_earned` (cumulative tracking) on the same row that identifies
+  the character's resonance affiliation. Earning currency lazily creates
+  the row — see §2.2 for the identity-claims-via-earning semantics.
 
 Spec C owns:
 
@@ -1746,6 +1822,3 @@ Spec D owns:
   feel out-of-Path threads should *also* mechanically underperform (in addition to
   emergent irrelevance), add a Path-aware modifier in pull resolution. Not planned
   for Spec A launch.
-- **CharacterResonance collapse.** If post-pivot CharacterResonance has no role
-  beyond "identity list of which resonances a character has developed," collapse
-  into a simpler M2M on CharacterSheet. Followup, not blocking.
