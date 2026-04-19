@@ -263,21 +263,17 @@ you author is exactly what fires.
 **`clean()` enforces payload/effect_kind alignment**: exactly one of
 `flat_bonus_amount`, `intensity_bump_amount`, `vital_bonus_amount`,
 `capability_grant` must be populated, matching `effect_kind`; for
-`VITAL_BONUS`, `vital_target` is required AND `tier` must be 0; for
-`NARRATIVE_ONLY`, all numeric payloads must be null and
-`narrative_snippet` must be non-blank. Database `CheckConstraint`s
-mirror this.
+`VITAL_BONUS`, `vital_target` is required; for `NARRATIVE_ONLY`, all
+numeric payloads must be null and `narrative_snippet` must be non-blank.
+Database `CheckConstraint`s mirror this.
 
-**Why VITAL_BONUS is tier-0 only:** vital bonuses are durable passives that
-scale with thread level, not per-action paid spends. A per-action
-MAX_HEALTH bump is incoherent (an offensive action gets +max_health…
-why? what happens after?), and a per-action damage-reduction pull would
-ride a duration model the action layer doesn't yet have. The natural
-investment lever for vital pools is the thread's level itself: imbue
-the thread higher → its tier-0 VITAL_BONUS scales linearly per §5.4.
-If playtest later wants short-lived defensive boosts, that's a separate
-TEMP_BUFFER concept introduced as new infrastructure, not retrofit onto
-the pull system.
+**VITAL_BONUS is allowed at any tier.** Tier-0 rows are passive (always
+on while the anchor is in scope); tier 1+ rows are pulled and persist
+under the standard pull-duration model (see §3.8). The earlier draft
+restricted VITAL_BONUS to tier-0 only to avoid the snap-back-instakill
+problem (a one-shot MAX_HEALTH boost expiring mid-fight could put the
+character below 0 HP); the duration model in §3.8 plus clamp-not-injure
+expiry semantics resolve that without restricting authoring.
 
 **Why VITAL_BONUS exists in Spec A:** Spec B (Relational Resilience + Soul Tether)
 needs to express "this thread grants +N max_health" and "this thread reduces
@@ -381,6 +377,89 @@ Eligibility check when a player attempts to weave a new thread on an anchor:
   anchor.properties)` exists
 - RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE →
   `CharacterThreadWeavingUnlock(unlock__unlock_track=anchor.track_type)` exists
+
+#### `CombatPull` and `CombatPullResolvedEffect` (live in `world/combat`)
+
+A committed pull declared during a combat round. Persists the resolved
+effects so the round resolver can apply them to every action of the
+participant, and so a `DamagePreApply` subscriber can read VITAL_BONUS
+contributions without re-running pull resolution. Cleared when the
+encounter advances past `round_number` (see §3.8).
+
+```
+CombatPull
+  participant      FK CombatParticipant on_delete=CASCADE
+  encounter        FK CombatEncounter   on_delete=CASCADE
+  round_number     PositiveIntegerField              # encounter.round_number
+                                                     #   when committed
+  resonance        FK Resonance         on_delete=PROTECT
+  tier             PositiveSmallIntegerField         # 1, 2, or 3 (tier-0 is
+                                                     #   passive, not pulled — §3.8)
+  threads          M2M Thread                        # the threads pulled
+  resonance_spent  PositiveIntegerField              # audit
+  anima_spent      PositiveIntegerField              # audit
+  committed_at     DateTimeField auto_now_add=True
+  class Meta:
+    unique_together = (participant, round_number)    # one pull per round
+                                                     #   per participant
+```
+
+The resolved per-effect snapshot is stored in a child table — one row
+per scaled effect — rather than a JSONField, per the project's
+"no JSONField" rule:
+
+```
+CombatPullResolvedEffect
+  pull                FK CombatPull on_delete=CASCADE  related_name="resolved_effects"
+  kind                CharField choices                # FLAT_BONUS | INTENSITY_BUMP |
+                                                       #   VITAL_BONUS | CAPABILITY_GRANT |
+                                                       #   NARRATIVE_ONLY (mirrors
+                                                       #   ThreadPullEffect.effect_kind)
+  authored_value      IntegerField null=True           # the row's authored amount
+                                                       #   (null for non-numeric kinds)
+  level_multiplier    PositiveSmallIntegerField        # max(1, source_thread.level // 10)
+                                                       #   from §5.4
+  scaled_value        IntegerField null=True           # authored_value × level_multiplier
+                                                       #   (null for non-numeric kinds)
+  vital_target        CharField choices null=True      # populated for VITAL_BONUS only
+                                                       #   (MAX_HEALTH | DAMAGE_TAKEN_REDUCTION)
+  source_thread       FK Thread on_delete=PROTECT      # which thread contributed this
+  source_thread_level PositiveSmallIntegerField        # thread.level at commit
+                                                       #   (frozen — thread can imbue
+                                                       #    higher mid-round without
+                                                       #    re-scaling the pull)
+  source_tier         PositiveSmallIntegerField        # the tier this row applies at
+                                                       #   (0..pull.tier per §5.4)
+  granted_capability  FK Capability null=True          # populated for CAPABILITY_GRANT only
+  narrative_snippet   TextField blank                  # captured from
+                                                       #   ThreadPullEffect.narrative_snippet
+                                                       #   so display text doesn't drift
+                                                       #   if authoring changes mid-round
+```
+
+The deliberate choice to freeze a snapshot at commit rather than
+re-derive at apply-time:
+
+- The pull's effects must not change if the underlying `ThreadPullEffect`
+  or `Thread.level` rows are edited mid-round (rare, but possible during
+  staff authoring or imbuing between actions).
+- Read paths (round resolver, `DamagePreApply` subscriber) stay query-free
+  beyond the initial fetch — the rows carry everything they need.
+- Expiry is a single cascading delete (CombatPull → resolved effects),
+  followed by `recompute_max_health_with_threads` for the participant
+  to apply clamp-not-injure.
+
+`source_thread`, `granted_capability`, and `vital_target` keep proper FK /
+enum integrity. `clean()` enforces the same payload alignment as
+ThreadPullEffect — exactly one of `scaled_value` / `granted_capability` /
+`narrative_snippet` populated per `kind`.
+
+**Why a model and not in-memory only:** the encounter outlives a single
+request. The DECLARING → RESOLVING → next-round transition can span
+multiple HTTP calls (or websocket events) and a server restart mid-encounter
+would otherwise lose all committed pulls. The identity-mapped
+SharedMemoryModel cache means reads still don't hit the database after
+warm-up.
 
 ### 2.2 Modified existing models
 
@@ -844,6 +923,103 @@ Combat in particular hits damage-reduction subscribers per
 `DamagePreApply` event; the `passive_vital_bonuses` cache is what
 keeps that subscriber from being a query-per-hit disaster.
 
+### 3.8 Pull duration and expiry
+
+A pull's effects last from commit until the pulling participant's next
+turn comes around — long enough to feel like a real investment, short
+enough that pulling is a per-round decision, not a per-action cantrip.
+Tier 0 stays passive (always-on while the anchor is in scope, no spend);
+tiers 1–3 are pulls and follow the duration model below.
+
+**Lifetime by context:**
+
+| Context | Pull lifetime | State storage |
+|---------|---------------|---------------|
+| Combat | Round N — declared/edited during DECLARING phase, applies during RESOLVING, expires when the encounter advances to round N+1 | `CombatPull` row (§2.1), keyed unique on `(participant, round_number)` |
+| Mission / Challenge with rounds | Same — borrow the round semantics; the round-aware system (Mission stage, Challenge resolution) is the unit of expiry | Same `CombatPull` model is reused if the round-aware system runs through combat infrastructure; otherwise a parallel scope-keyed model is added when that system lands. Spec A wires the combat case only. |
+| Pure RP / no rounds | Ephemeral — resolves during the action, no persistence | None — `spend_resonance_for_pull` returns the resolved effects, the action layer applies them once, nothing carries forward |
+
+**Edit-until-commit (combat):**
+
+Players don't always know which threads to pull until they've decided
+their actions for the round — pulled threads constrain which resonance
+matters, which drives action choice. So the pull declaration is a
+*draft* during DECLARING, not an immediate commit:
+
+1. **Phase: DECLARING.** The player opens the pull UI, selects a
+   resonance, picks threads, picks a tier. Live preview via
+   `/api/magic/thread-pull-preview/` (§5.6) shows resolved effects.
+   This is **client-side draft state only** — Redux slice on the
+   frontend, no server write. The player can change selections freely
+   while ranking their three actions (primary/secondary/tertiary)
+   for the round.
+2. **Commit.** When the player commits their action declarations for
+   the round, the pull commits in the same atomic API call:
+   `spend_resonance_for_pull(...)` debits the resonance/anima and
+   writes the `CombatPull` row + `CombatPullResolvedEffect` children.
+   `unique_together=(participant, round_number)` enforces "one pull
+   per round per participant" at the database layer; an attempted
+   second commit in the same round is rejected.
+3. **Phase: RESOLVING.** The round resolver applies the committed
+   pull's effects to every action of the participant for that round.
+   `FLAT_BONUS`, `INTENSITY_BUMP`, `CAPABILITY_GRANT`, and
+   `NARRATIVE_ONLY` rows feed the action resolver per §5.8;
+   `VITAL_BONUS` rows route per §5.8 (max-health recompute,
+   damage-pre-apply subscriber) and remain in effect until expiry.
+4. **Round advance.** When `start_next_round(encounter)`
+   (`world/combat/services.py:248`) increments `encounter.round_number`,
+   it also calls `expire_pulls_for_round(encounter)` (§7.4) which
+   deletes every `CombatPull` row with `round_number < new round_number`
+   for the encounter. The cascading delete drops the
+   `CombatPullResolvedEffect` children with it.
+
+**Clamp-not-injure expiry semantics.** When a pull's `VITAL_BONUS`
+contribution to `MAX_HEALTH` expires, the snap-back must not retroactively
+"injure" the character. If a participant pulled +20 max_health, took 15
+damage during the round (current=85, max=100), and the pull then expires:
+naive recomputation drops max to 80; current of 85 would imply an
+overflow. The recompute service therefore clamps current to the new
+max rather than reducing it below: `current_health = min(current_health,
+new_max_health)`. If the character is already at or below the new max,
+nothing changes. The character can never *die* from a pull expiring,
+only stop being supernaturally bolstered. `apply_damage_reduction_from_threads`
+(the `DamagePreApply` subscriber) reads from the *currently active*
+pulls and passive contributions only — once a pull's row is deleted,
+its DR no longer applies to subsequent damage events.
+
+**Why a model and not in-memory only:** see §2.1 — the encounter outlives
+a single request, the DECLARING → RESOLVING → next-round transition can
+span multiple HTTP calls (or websocket events), and a server restart
+mid-encounter would otherwise lose all committed pulls.
+
+**Why edit-until-commit and not commit-on-each-edit:**
+- Players need to iterate ("which threads do I pull?" depends on
+  "which resonance is most relevant?" depends on "which actions am
+  I declaring?"). Per-edit commits would double-debit anima or
+  require a refund pipeline — strictly worse than client-side draft.
+- The `CombatPull` row is the *audit* artifact; it should reflect
+  what the player actually committed, not their false starts.
+- Identity-mapped reads in DECLARING are zero-query (per §3.7), so
+  the live preview is fast even with frequent edits.
+
+**Multi-participant timing.** Combat is simultaneous-round, not
+initiative-ordered: every participant declares for round N during
+DECLARING, then RESOLVING resolves all declared actions together,
+then `start_next_round` advances. So "until the puller's next turn"
+collapses to "until the next round" — there's no per-actor turn
+ordering inside a round. If the project ever adds initiative-ordered
+combat, the same model works: expire pulls when the participant's
+next turn begins (turn_index + 1), keyed on a turn cursor instead of
+round number. Spec A doesn't ship that; the round-keyed implementation
+is sufficient for the simultaneous model in `world/combat`.
+
+**Out-of-combat Situations (Mission / Challenge).** When Spec D's
+Mission/Situation work introduces rounds outside combat, this model
+generalizes by scoping `CombatPull` to the round-aware container
+(currently `CombatEncounter`). The fields generalize cleanly:
+`encounter` → `scope_object`, `round_number` stays. Spec A wires
+the combat case only; the generalization is a Spec D concern.
+
 ---
 
 ## 4. UX, API, and Ritual Foundation
@@ -1155,12 +1331,26 @@ and the list of threads to pull:
    involved in the action (passive layer fires regardless of pulls). Same
    `min_thread_level` filter and level-scaling apply.
 
-5. Resolve and apply effects per stacking rules (5.5).
+5. Persist the committed pull (combat-context only, per §3.8):
+   - Create one `CombatPull` row keyed `(participant, round_number)` with
+     `resonance`, `tier`, M2M to the pulled threads, and audit
+     `resonance_spent` / `anima_spent`.
+   - For each `(effect_row, scaled_amount, source_thread, source_tier)`
+     tuple from steps 3–4, create a `CombatPullResolvedEffect` child row
+     freezing the snapshot (kind, authored_value, level_multiplier,
+     scaled_value, vital_target, source_thread_level, narrative_snippet).
+   - In non-combat (pure RP) contexts there is no `CombatPull` row;
+     the resolved effects are returned to the caller and applied
+     ephemerally for that single action.
 
-6. Emit ThreadsPulled event with full audit payload (including per-effect
+6. Resolve and apply effects per stacking rules (5.5). For combat-context
+   pulls, "apply" extends across every action declared by the participant
+   for the round, until expiry per §3.8.
+
+7. Emit ThreadsPulled event with full audit payload (including per-effect
    scaled amounts and source thread IDs for transparency in scene logs).
 
-7. Return ResonancePullResult dataclass to the action resolver, which applies
+8. Return ResonancePullResult dataclass to the action resolver, which applies
    the effects to the action's check / intensity / capabilities at pre-roll time.
 ```
 
@@ -1176,15 +1366,21 @@ from §5.4):
   IntensityTier. The pull preview displays the effective (capped) outcome so
   players never spend anima for intensity past the cap; they can downsize their
   pull or shift to other resonances.
-- **VITAL_BONUS** — tier-0 only (per §2.1). Sum the scaled amounts **per
-  `vital_target`** across all the character's threads whose anchors are
-  passively in scope. Effects with different `vital_target`s do not stack
-  with each other (a `MAX_HEALTH` row and a `DAMAGE_TAKEN_REDUCTION` row
-  are independent contributions to two different consumers). For `MAX_HEALTH`,
-  the sum is added to the character's
-  `vitals.max_health` recomputation. For `DAMAGE_TAKEN_REDUCTION`, the sum
-  is supplied to combat's `DamagePreApply.modify_amount` subscriber. No cap
-  in Spec A; Spec B owns any per-stat ceilings if playtest demands them.
+- **VITAL_BONUS** — sum the scaled amounts **per `vital_target`** across
+  two contribution sources: (a) tier-0 passive rows on every thread of
+  the character whose anchor is passively in scope, and (b) tier 1+ rows
+  from any active `CombatPull` for the character (per §3.8 duration
+  semantics). Both sources sum into the same per-`vital_target` total —
+  passive and pulled VITAL_BONUS stack additively. Effects with different
+  `vital_target`s do not stack with each other (a `MAX_HEALTH` row and a
+  `DAMAGE_TAKEN_REDUCTION` row are independent contributions to two
+  different consumers). For `MAX_HEALTH`, the sum is added to the
+  character's `vitals.max_health` recomputation; clamp-not-injure semantics
+  on pull expiry per §3.8. For `DAMAGE_TAKEN_REDUCTION`, the sum is
+  supplied to combat's `DamagePreApply.modify_amount` subscriber, which
+  re-reads the active-pull + passive sum on every event so a mid-round
+  pull commit is reflected on subsequent damage. No cap in Spec A;
+  Spec B owns any per-stat ceilings if playtest demands them.
 - **CAPABILITY_GRANT** — union. All granted capabilities are available for this
   action. Capabilities are categorical, not numerical; granting the same capability
   twice is a no-op. **`min_thread_level` is the gating mechanism for capability
@@ -1262,30 +1458,40 @@ The action resolver (existing/future check/action machinery) receives the
   rendering.
 
 `VITAL_BONUS` effects do NOT route through the action resolver — they target
-character-level vital pools, not per-action checks. Routing per `vital_target`:
+character-level vital pools, not per-action checks. Routing per `vital_target`,
+with both contribution sources from §5.5 folded together:
 
 - **`MAX_HEALTH`** — `vitals.recompute_max_health(character)` is the canonical
   recomputation entry point (already invoked when stats change). Spec A adds
-  one new addend source: `sum(scaled_amount for VITAL_BONUS rows with
-  vital_target=MAX_HEALTH on every active passive thread for this character)`.
-  "Active passive" means tier-0 ThreadPullEffect rows on threads whose anchor
-  is currently in scope — for relationship anchors that means the relationship
-  exists; for trait anchors that means the trait exists; etc. `recompute_max_health`
-  is invoked when a thread is woven, imbued, retired, or its anchor's
-  involvement-state changes (the thread-mutation service functions emit the
-  recompute call; no Django signals).
+  two thread-derived addend sources: (a) `sum(scaled_amount for tier-0
+  VITAL_BONUS rows with vital_target=MAX_HEALTH on every active-passive thread)`,
+  and (b) `sum(scaled_value for CombatPullResolvedEffect rows with
+  vital_target=MAX_HEALTH belonging to any active CombatPull for this
+  character)`. "Active passive" means tier-0 ThreadPullEffect rows on threads
+  whose anchor is currently in scope — for relationship anchors that means
+  the relationship exists; for trait anchors that means the trait exists;
+  etc. `recompute_max_health` is invoked when a thread is woven, imbued,
+  retired, its anchor's involvement-state changes, *and* when a `CombatPull`
+  is created or expired (the thread-mutation services and the round-advance
+  service emit the recompute call; no Django signals). Pull expiry uses the
+  clamp-not-injure rule from §3.8.
 - **`DAMAGE_TAKEN_REDUCTION`** — a subscriber registers against combat's
   existing `DamagePreApply` event and uses the `modify_amount` hook (already
   used by combat's reactive system; see `src/world/combat/tests/
   test_reactive_integration.py::DamageModifyPayloadTest`). On the
-  damage-pre-apply event, the subscriber computes the active-passive sum for
-  the target character and reduces incoming damage by that amount (clamped
-  at 0). No new event types; no combat-system changes; the integration is
-  purely subscribing to an existing reactive hook.
+  damage-pre-apply event, the subscriber computes (passive tier-0 sum +
+  active-pull sum) for the target character and reduces incoming damage
+  by the total (clamped at 0). The active-pull contribution comes from
+  `CombatPullResolvedEffect` rows belonging to any `CombatPull` of the
+  participant in the encounter's current round. No new event types; no
+  combat-system changes; the integration is purely subscribing to an
+  existing reactive hook.
 
-Spec A authors **zero** VITAL_BONUS rows — these routes exist as installed
-plumbing for Spec B (Relational Resilience). The implementation plan should
-include a smoke-test row authored only in tests to prove the wiring.
+Spec A authors **zero** VITAL_BONUS rows itself — these routes exist as
+installed plumbing for Spec B (Relational Resilience). The implementation
+plan should include smoke-test rows authored only in tests to prove the
+wiring at both tier 0 (passive) and tier 1+ (pulled) so the duration
+semantics are exercised.
 
 The action resolver's API contract for receiving pull results is a downstream
 consumer concern — Spec A delivers the dataclass; the resolver knows how to apply
@@ -1440,14 +1646,22 @@ In `world/magic`:
 - `ThreadXPLockedLevel` (lookup, SharedMemoryModel)
 - `ThreadLevelUnlock` (per-thread record of XP-lock crossings)
 - `ThreadPullEffect` (lookup, SharedMemoryModel; includes `min_thread_level`,
-  `VITAL_BONUS` effect_kind constrained to tier=0 only, `vital_target`,
-  `vital_bonus_amount`)
+  `VITAL_BONUS` effect_kind allowed at any tier with `vital_target` and
+  `vital_bonus_amount` columns; tier-0 rows are passive, tier 1+ rows are
+  pulled and persist per §3.8)
 - `ThreadWeavingUnlock` (lookup, SharedMemoryModel)
 - `CharacterThreadWeavingUnlock` (purchase record)
 - `ThreadWeavingTeachingOffer`
 - `Ritual` (registry, SharedMemoryModel)
 - `RitualComponentRequirement` (join, SharedMemoryModel)
 - `ImbuingProseTemplate` (lookup, SharedMemoryModel)
+
+In `world/combat`:
+- `CombatPull` (per §2.1; persists a committed pull for the duration of a
+  combat round; `unique_together=(participant, round_number)`)
+- `CombatPullResolvedEffect` (per §2.1; child rows freezing the resolved
+  effect snapshot, replacing what would otherwise be a JSONField — keeps
+  the project's no-JSONField rule)
 
 In `world/relationships`:
 - Add fields to `CharacterRelationship`: `is_soul_tether`, `soul_tether_role`,
@@ -1573,6 +1787,21 @@ Service functions to add in `world/magic/services.py`:
 - `cross_thread_xp_lock(character, thread, boundary_level)` — pays XP for
   the next XP-locked boundary; called by the My Threads "Unlock Lv N" CTA
 - `spend_resonance_for_pull(character, resonance, tier, threads, action_context)`
+  — atomic pull commit: validates and debits per §5.4 steps 1–4, then
+  branches on `action_context.combat_encounter`:
+  - **Combat context** (`action_context.combat_encounter` is not None):
+    creates the `CombatPull` row keyed
+    `(participant=action_context.participant, round_number=encounter.round_number)`
+    plus its `CombatPullResolvedEffect` children (per §5.4 step 5),
+    invalidates the participant's `CharacterCombatPullHandler` cache,
+    and triggers `recompute_max_health_with_threads(character)` so any
+    `MAX_HEALTH` contribution flows through immediately.
+  - **Ephemeral context** (no `combat_encounter`): no row written; the
+    returned `ResonancePullResult` carries the resolved effects for
+    the action layer to apply once.
+
+  Same `unique_together=(participant, round_number)` enforcement at the
+  database layer guarantees one combat pull per round per participant.
 - `weave_thread(character, target_kind, target, resonance, *, name="", description="")`
   — eligibility check (CharacterThreadWeavingUnlock for the anchor's
   kind+target) + Thread row creation; no resonance cost (weaving is free,
@@ -1593,16 +1822,33 @@ Service functions to add in `world/magic/services.py`:
   page
 - `recompute_max_health_with_threads(character)` — wrapper that calls
   `vitals.recompute_max_health` with thread-derived MAX_HEALTH VITAL_BONUS
-  contributions folded in (sourced from
-  `character.threads.passive_vital_bonuses(MAX_HEALTH)`). Invoked from
-  the thread mutation services (weave/imbue/retire) and from any
-  anchor-state change that would alter which threads are passively
-  contributing.
+  contributions folded in. Sums two sources: (a)
+  `character.threads.passive_vital_bonuses(MAX_HEALTH)` for tier-0 passive,
+  and (b) `character.active_pull_vital_bonuses(MAX_HEALTH)` for any
+  currently-active `CombatPull` (handler method on the new
+  `CharacterCombatPullHandler`, see below). Invoked from the thread
+  mutation services (weave/imbue/retire), from any anchor-state change
+  that would alter which threads are passively contributing, and from
+  `commit_combat_pull` / `expire_pulls_for_round` so pull-driven changes
+  flow through the same recompute. Pull expiry uses the §3.8
+  clamp-not-injure rule: `current_health = min(current_health,
+  new_max_health)` — current never gets pushed below its existing value
+  by a max reduction.
 - `apply_damage_reduction_from_threads(character, incoming_damage)` — the
-  subscriber body for combat's `DamagePreApply.modify_amount` hook; reads
-  `character.threads.passive_vital_bonuses(DAMAGE_TAKEN_REDUCTION)` and
+  subscriber body for combat's `DamagePreApply.modify_amount` hook;
+  reads (`character.threads.passive_vital_bonuses(DAMAGE_TAKEN_REDUCTION)`
+  + `character.active_pull_vital_bonuses(DAMAGE_TAKEN_REDUCTION)`) and
   reduces incoming damage by the sum (clamped at 0). Cache hit on every
   call after the first per scene.
+- `expire_pulls_for_round(encounter)` — called from
+  `world/combat/services.py:248` (`start_next_round`) immediately after
+  `enc.round_number += 1`. Deletes every `CombatPull` row in the encounter
+  with `round_number < enc.round_number` (cascading-deletes the
+  resolved-effect children). Then for each affected participant, calls
+  `recompute_max_health_with_threads(participant.character)` so any
+  expiring `MAX_HEALTH` pulls trigger the clamp-not-injure recompute.
+  Invalidates `CharacterCombatPullHandler` caches for affected
+  participants. Side-effect-free for participants without active pulls.
 
 Handler classes in `world/magic/handlers.py`:
 - `CharacterThreadHandler` — exposed via `character.threads`. See §3.7
@@ -1614,9 +1860,25 @@ Handler classes in `world/magic/handlers.py`:
   `character.resonance_pools` since `CharacterResonance` is now the single
   identity+currency model (§2.2).
 
-Both handlers wire onto the existing `Character` typeclass alongside the
-established handlers (`character.traits`, etc.) — no new typeclass machinery,
-just added handler attributes.
+Handler class in `world/combat/handlers.py`:
+- `CharacterCombatPullHandler` — exposed via `character.combat_pulls`.
+  Methods:
+  - `.active()` — returns the participant's currently-active `CombatPull`
+    rows (one per encounter the character participates in;
+    typically zero or one). Cached on first access.
+  - `.active_for_encounter(encounter)` — narrowed lookup; the typical
+    "this character's pull this round" caller.
+  - `.active_pull_vital_bonuses(vital_target)` — sum of `scaled_value`
+    across `CombatPullResolvedEffect` rows belonging to the active pulls,
+    filtered by `vital_target`. Used by
+    `recompute_max_health_with_threads` and
+    `apply_damage_reduction_from_threads`.
+  - `.invalidate()` — called by `commit_combat_pull` and
+    `expire_pulls_for_round` after mutations.
+
+All three handlers wire onto the existing `Character` typeclass alongside
+the established handlers (`character.traits`, etc.) — no new typeclass
+machinery, just added handler attributes.
 
 Dataclasses in `world/magic/types.py`:
 - `ResonancePullResult(resonance_spent: int, anima_spent: int,
@@ -1665,14 +1927,48 @@ Service functions to remove (tied to deleted models):
     authored +2 FLAT_BONUS produce contributions of +2/+4/+6 (sum = +12);
     `min_thread_level` correctly filters effects below the gate (a level-2
     thread doesn't trigger a `min_thread_level=30` row)
-  - **VITAL_BONUS routing** — a tier-0 VITAL_BONUS row with
-    `vital_target=MAX_HEALTH` increases `vitals.max_health` after weaving;
-    a tier-0 VITAL_BONUS row with `vital_target=DAMAGE_TAKEN_REDUCTION`
-    reduces damage in a `DamagePreApply` flow (smoke test using a sample
-    authored row, not real Spec B authoring)
-  - **VITAL_BONUS tier-0 enforcement** — `clean()` rejects a `VITAL_BONUS`
-    row authored with `tier > 0`; database `CheckConstraint` rejects the
-    same at the row level
+  - **VITAL_BONUS routing — passive (tier 0)** — a tier-0 VITAL_BONUS
+    row with `vital_target=MAX_HEALTH` increases `vitals.max_health` after
+    weaving; a tier-0 VITAL_BONUS row with
+    `vital_target=DAMAGE_TAKEN_REDUCTION` reduces damage in a
+    `DamagePreApply` flow (smoke test using a sample authored row, not
+    real Spec B authoring)
+  - **VITAL_BONUS routing — pulled (tier 1+)** — a tier-1 VITAL_BONUS
+    row with `vital_target=MAX_HEALTH` is committed via `CombatPull`
+    during DECLARING and increases `vitals.max_health` for the
+    participant immediately; a tier-1 `DAMAGE_TAKEN_REDUCTION` row
+    reduces damage in `DamagePreApply` events that fire during the
+    same round
+  - **Pull persistence across actions in a round** — the participant
+    declares two actions for the round; both apply the committed pull's
+    `FLAT_BONUS` / `INTENSITY_BUMP` / `CAPABILITY_GRANT` contributions
+    without re-debiting resonance/anima
+  - **Pull expiry on round advance** — `start_next_round(encounter)`
+    increments `round_number`, which triggers `expire_pulls_for_round`;
+    the previous round's `CombatPull` row is deleted (and its
+    `CombatPullResolvedEffect` children cascade); subsequent damage
+    events no longer apply the pull's DR; subsequent
+    `recompute_max_health` no longer includes the pull's MAX_HEALTH
+    contribution
+  - **Clamp-not-injure on MAX_HEALTH pull expiry** — participant has
+    base max=100 and pulls a tier-1 +20 MAX_HEALTH so max=120; takes 25
+    damage so current=95; round advances and pull expires; current
+    stays at 95 (clamped via `min(current, new_max=100)` = 95), not
+    forced down to 95-25=70 or any retroactive injury. Repeat with
+    the pull persisting at 0 damage taken: current=120, expiry, new
+    max=100, current clamped to 100 — no death, no overflow.
+  - **Edit-until-commit behavior** — exercises the API contract: a
+    preview call (`/api/magic/thread-pull-preview/`) returns resolved
+    effects without any server write (asserted via
+    `assertNumQueries(<n>)` for read-only paths and the absence of a
+    `CombatPull` row); only the commit path (action declarations
+    submitted with the pull payload) writes the row; a second commit
+    in the same round for the same participant is rejected by the
+    `unique_together` constraint
+  - **VITAL_BONUS at any tier** — `clean()` permits VITAL_BONUS rows
+    at tiers 0, 1, 2, and 3; `vital_target` is required at all tiers;
+    the prior "tier-0 only" constraint is gone (regression guard
+    against re-introducing it)
   - **handler caching** — `character.threads.all()` issues one query then
     serves repeats from the cache; `weave_thread` / `spend_resonance_for_imbuing`
     invalidate the cache so the next read sees the mutation; same for
@@ -1708,28 +2004,38 @@ Inheriting from Spec A:
 - `Ritual` model and `PerformRitualAction` are usable for authoring Soul Tether
   and other ritual-flavored capstone moments.
 - **`ThreadPullEffect.VITAL_BONUS` effect_kind with `vital_target` enum**
-  (`MAX_HEALTH`, `DAMAGE_TAKEN_REDUCTION`) is installed and wired,
-  **constrained to tier=0 (passive)**: `MAX_HEALTH` rows feed
-  `vitals.recompute_max_health`; `DAMAGE_TAKEN_REDUCTION` rows feed combat's
-  `DamagePreApply.modify_amount` subscriber. Spec B authors resilience as
-  tier-0 VITAL_BONUS rows on relationship-anchored ThreadPullEffects —
-  no schema changes required. The investment lever is the thread's level
-  itself: tier-0 VITAL_BONUS scales linearly with `thread.level` per §5.4,
-  so a level-3 relationship thread with an authored "+5 max_health" row
-  contributes +15. Combine with `min_thread_level` for graduated unlocks
-  (small bonus from the start, larger bonus only after the thread is
-  imbued past a threshold). Per-action paid-pull VITAL_BONUS is explicitly
-  disallowed (§2.1 rationale) — durability is a passive, not a one-shot.
+  (`MAX_HEALTH`, `DAMAGE_TAKEN_REDUCTION`) is installed and wired at
+  **all tiers**: `MAX_HEALTH` rows feed `vitals.recompute_max_health`;
+  `DAMAGE_TAKEN_REDUCTION` rows feed combat's
+  `DamagePreApply.modify_amount` subscriber. Tier-0 rows are passive
+  (always-on while the anchor is in scope), tier 1+ rows are pulled
+  and persist for the round per §3.8 (pull-duration semantics with
+  clamp-not-injure expiry). Spec B can therefore author resilience as
+  *either*: (a) tier-0 always-on flavors of belonging (you are *more
+  durable* because of this bond), or (b) tier 1+ committed pulls
+  (you *channel* the bond at the start of a round to draw on its
+  protective resonance). Both are first-class. The investment lever
+  is still the thread's level: VITAL_BONUS scales linearly with
+  `thread.level` per §5.4, so a level-3 relationship thread with an
+  authored "+5 max_health" tier-0 row contributes +15 passively;
+  the same row at tier 1 would contribute +15 for the round when
+  pulled. Combine with `min_thread_level` for graduated unlocks
+  (small bonus from the start, larger bonus only after the thread
+  is imbued past a threshold). The earlier draft restricted
+  VITAL_BONUS to tier-0 to avoid the snap-back-instakill problem;
+  the §3.8 duration model + clamp-not-injure expiry resolve that
+  without restricting authoring.
 
 Spec B owns:
 
 - Aggregate relational-resilience formula expressed as authored VITAL_BONUS
-  rows on relationship-anchored ThreadPullEffects, gated by `min_thread_level`
-  for the meaningful tiers (modest tier-0 passive, larger gated bonuses at
-  higher thread levels). Existing `CharacterRelationship.mechanical_bonus =
-  cube_root(developed_value)` may still play a role for the always-on
-  ungated baseline, but the *meaningful* survivability (the part the user
-  flagged as needing to be xp/resonance-gated) lives on threads.
+  rows on relationship-anchored ThreadPullEffects, with the tier choice
+  carrying narrative meaning (passive presence vs. active channeling)
+  and gated by `min_thread_level` for the meaningful values. Existing
+  `CharacterRelationship.mechanical_bonus = cube_root(developed_value)`
+  may still play a role for the always-on ungated baseline, but the
+  *meaningful* survivability (the part the user flagged as needing to
+  be xp/resonance-gated) lives on threads.
 - Soul Tether grounding scaling formula (depth × caster tier; vulnerability of
   Abyssal-side and burden of Sineater-side).
 - Soul Tether break consequences and societal-gating expression (some societies
