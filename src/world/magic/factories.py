@@ -10,6 +10,7 @@ from world.magic.constants import (
     CantripArchetype,
     EffectKind,
     PendingAlterationStatus,
+    RitualExecutionKind,
     TargetKind,
     VitalBonusTarget,
 )
@@ -38,6 +39,8 @@ from world.magic.models import (
     PendingAlteration,
     Resonance,
     Restriction,
+    Ritual,
+    RitualComponentRequirement,
     SoulfrayConfig,
     Technique,
     TechniqueCapabilityGrant,
@@ -590,3 +593,37 @@ class ImbuingProseTemplateFactory(factory.django.DjangoModelFactory):
     resonance = factory.SubFactory(ResonanceFactory)
     target_kind = TargetKind.TRAIT
     prose = "default prose"
+
+
+class RitualFactory(factory.django.DjangoModelFactory):
+    """Factory for Ritual.
+
+    Defaults to a SERVICE-kind ritual with a placeholder dotted path so the
+    default factory build passes clean(). Override execution_kind / flow /
+    service_function_path for other shapes.
+    """
+
+    class Meta:
+        model = Ritual
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Ritual {n}")
+    description = factory.Faker("paragraph")
+    hedge_accessible = False
+    glimpse_eligible = False
+    narrative_prose = factory.Faker("paragraph")
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.magic.services.placeholder_ritual"
+    flow = None
+
+
+class RitualComponentRequirementFactory(factory.django.DjangoModelFactory):
+    """Factory for RitualComponentRequirement."""
+
+    class Meta:
+        model = RitualComponentRequirement
+
+    ritual = factory.SubFactory(RitualFactory)
+    item_template = factory.SubFactory("world.items.factories.ItemTemplateFactory")
+    quantity = 1
+    min_quality_tier = None

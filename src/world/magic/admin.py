@@ -26,6 +26,8 @@ from world.magic.models import (
     Reincarnation,
     Resonance,
     Restriction,
+    Ritual,
+    RitualComponentRequirement,
     SoulfrayConfig,
     Technique,
     TechniqueCapabilityGrant,
@@ -390,3 +392,33 @@ class ImbuingProseTemplateAdmin(admin.ModelAdmin):
     search_fields = ["resonance__name", "prose"]
     autocomplete_fields = ["resonance"]
     list_select_related = ["resonance"]
+
+
+class RitualComponentRequirementInline(admin.TabularInline):
+    model = RitualComponentRequirement
+    extra = 0
+    autocomplete_fields = ["item_template"]
+    raw_id_fields = ["min_quality_tier"]
+
+
+@admin.register(Ritual)
+class RitualAdmin(admin.ModelAdmin):
+    list_display = [
+        "name",
+        "execution_kind",
+        "hedge_accessible",
+        "glimpse_eligible",
+    ]
+    list_filter = ["execution_kind", "hedge_accessible", "glimpse_eligible"]
+    search_fields = ["name", "description"]
+    autocomplete_fields = ["flow", "site_property"]
+    inlines = [RitualComponentRequirementInline]
+
+
+@admin.register(RitualComponentRequirement)
+class RitualComponentRequirementAdmin(admin.ModelAdmin):
+    list_display = ["ritual", "item_template", "quantity", "min_quality_tier"]
+    list_filter = ["ritual"]
+    autocomplete_fields = ["ritual", "item_template"]
+    raw_id_fields = ["min_quality_tier"]
+    list_select_related = ["ritual", "item_template", "min_quality_tier"]

@@ -8,10 +8,17 @@ from django.core.exceptions import ValidationError
 from django.db.utils import IntegrityError
 from django.test import TestCase
 
-from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget
+from flows.factories import FlowDefinitionFactory
+from world.magic.constants import (
+    EffectKind,
+    RitualExecutionKind,
+    TargetKind,
+    VitalBonusTarget,
+)
 from world.magic.factories import (
     ImbuingProseTemplateFactory,
     ResonanceFactory,
+    RitualFactory,
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
     ThreadXPLockedLevelFactory,
@@ -106,3 +113,33 @@ class ImbuingProseTemplateTests(TestCase):
     def test_universal_fallback_row_allowed(self):
         ImbuingProseTemplateFactory(resonance=None, target_kind=None, prose="universal")
         # No exception raised.
+
+
+class RitualCleanTests(TestCase):
+    def test_service_kind_requires_service_function_path(self):
+        r = RitualFactory.build(
+            execution_kind=RitualExecutionKind.SERVICE,
+            service_function_path="",
+            flow=None,
+        )
+        with self.assertRaises(ValidationError):
+            r.clean()
+
+    def test_flow_kind_requires_flow(self):
+        r = RitualFactory.build(
+            execution_kind=RitualExecutionKind.FLOW,
+            service_function_path="",
+            flow=None,
+        )
+        with self.assertRaises(ValidationError):
+            r.clean()
+
+    def test_service_kind_rejects_flow_fk(self):
+        flow = FlowDefinitionFactory()
+        r = RitualFactory.build(
+            execution_kind=RitualExecutionKind.SERVICE,
+            service_function_path="x.y.z",
+            flow=flow,
+        )
+        with self.assertRaises(ValidationError):
+            r.clean()
