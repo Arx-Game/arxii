@@ -159,7 +159,27 @@ anima_per_thread PositiveSmallIntegerField          # flat per extra thread
 label            CharField                          # "soft", "hard", "max"
 ```
 
-Staff-tunable. Three rows at launch.
+**Pull-cost tuning surface — expected to change in playtest.** Three
+rows at launch (one per tier). This is the single canonical source of
+truth for pull pricing, deliberately split out as data so staff can
+tweak without code changes. Likely playtest churn:
+
+- **Per-tier resonance prices** (the `1 / 3 / 6` curve) — pure data
+  edit. Change row values via admin or factory; no code touched.
+- **Per-extra-thread anima cost** — pure data edit, same as above.
+- **Cost formula shape** (e.g. "flat anima regardless of thread count"
+  vs. current "per extra thread"; "scaled resonance per thread" vs.
+  current "flat per tier") — *not* expressed in this table. The
+  formula lives in `spend_resonance_for_pull` (§7.4) and is computed
+  in §5.4 step 2. Change the formula there if the shape needs to
+  shift; the table values stay as the per-tier knobs the new shape
+  reads from. Both the model docstring and the service docstring
+  should explicitly call out this split so the next person tweaking
+  prices knows where each kind of change lives.
+
+The implementation should land model + service docstrings that say
+literally "Pull-cost tuning surface — see Spec A §2.1 / §5.4 step 2"
+and link both directions, so a future tweak isn't a search exercise.
 
 #### `ThreadXPLockedLevel` (lookup, SharedMemoryModel)
 
@@ -797,6 +817,18 @@ def spend_resonance_for_pull(
     the chosen tier's `resonance_cost`, plus
     `anima_per_thread * (len(threads) - 1)` anima from the character's
     `CharacterAnima` row (the first thread is "free" beyond the resonance cost).
+
+    PULL-COST TUNING SURFACE (expected to churn in playtest):
+      - Per-tier numbers (resonance_cost, anima_per_thread) live in
+        ThreadPullCost rows — see Spec A §2.1 ThreadPullCost. Change
+        values via admin / factory; no code edit needed.
+      - Cost formula shape (currently "flat resonance per tier" +
+        "anima_per_thread × max(0, n_threads − 1)") is implemented in
+        Spec A §5.4 steps 1 & 2. If the shape shifts (flat anima per
+        pull, scaled resonance per thread, etc.) edit both step 1
+        validation AND step 2 debit together — do NOT add a third
+        recomputation site.
+
     Validates:
       - all threads owned by `character`
       - all threads share `resonance`
@@ -1419,11 +1451,27 @@ and the list of threads to pull:
    - character_resonance.balance >= ThreadPullCost(tier).resonance_cost.
    - CharacterAnima.current >= ThreadPullCost(tier).anima_per_thread *
      max(0, len(threads) - 1).
+   # ── Pull-cost formula (TUNING KNOB — see §2.1 ThreadPullCost) ──
+   # Resonance cost: flat per-tier (one ThreadPullCost row per tier).
+   # Anima cost: anima_per_thread × max(0, n_threads − 1)
+   #   (i.e. the first thread is free beyond the resonance cost; each
+   #    additional thread costs the row's anima_per_thread).
+   # Per-tier numbers are pure data in ThreadPullCost rows — change via
+   #   admin / factory.
+   # Formula shape (e.g. "first thread free", scaling, cap) is
+   #   expressed here in this validation block AND in step 2's debit
+   #   block — change both together if the shape shifts.
 
 2. Atomically debit (single transaction, in-memory mutation of the
    SharedMemoryModel-cached character_resonance and anima instances):
    - CharacterResonance.balance -= ThreadPullCost(tier).resonance_cost
    - CharacterAnima.current -= anima_total
+   # ── See step 1 cost-formula comment. anima_total uses the same
+   #    anima_per_thread × max(0, n_threads − 1) formula; if the
+   #    formula shifts (flat per pull, scaled per thread, etc.), edit
+   #    the validation in step 1 AND this debit together to keep them
+   #    consistent. The single-call-site discipline is intentional —
+   #    do NOT introduce a third place that recomputes pull cost.
 
 3. For each pulled thread:
    For each effect_tier in 0..tier:
@@ -1874,8 +1922,10 @@ discriminator-aware shape).
 
 - `ThreadPullCostFactory` — three preset rows: `tier=1` (resonance_cost=1),
   `tier=2` (resonance_cost=3), `tier=3` (resonance_cost=6), each with a matching
-  `anima_per_thread` value (staff-tunable defaults — exact anima numbers are an
-  authoring decision at seed time, not encoded in this spec)
+  `anima_per_thread` value. **Staff-tunable defaults — exact numbers are
+  expected to churn during playtest.** The factory is the data home; the
+  cost-formula shape lives in `spend_resonance_for_pull` per Spec A
+  §5.4. See §2.1 ThreadPullCost for the full tuning-surface callout.
 - `ThreadXPLockedLevelFactory` — preset rows at internal levels 20, 30, 40,
   50… with placeholder xp_costs (parallels skill XP-lock authoring)
 - `ThreadLevelUnlockFactory` — per-thread record of an XP-lock crossing;
