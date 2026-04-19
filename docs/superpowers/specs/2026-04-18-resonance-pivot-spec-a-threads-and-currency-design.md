@@ -1071,6 +1071,60 @@ next turn begins (turn_index + 1), keyed on a turn cursor instead of
 round number. Spec A doesn't ship that; the round-keyed implementation
 is sufficient for the simultaneous model in `world/combat`.
 
+**Ephemeral pulls (RP / no rounds).** Outside any round-aware system —
+free RP scenes, social pose exchanges, one-off social/mental checks —
+there is no DECLARING/RESOLVING phase to anchor a persisted pull to.
+The pull commits as part of the action submission itself and applies
+to that one action only:
+
+1. **Preview (optional but recommended).** The same
+   `/api/magic/thread-pull-preview/` endpoint (§5.6) works regardless
+   of context — pure read, no commit. The player's UI calls it as
+   they tweak thread selection; resolved effects are returned for
+   display. Same caching benefits (§3.7) apply.
+2. **Commit.** Whatever endpoint the action layer exposes for
+   submitting an RP/social action accepts an optional pull payload
+   (`{resonance_id, tier, thread_ids}`). When present,
+   `spend_resonance_for_pull(...)` runs in the same transaction as
+   the action's resolution: validates, debits resonance/anima,
+   resolves effects, and returns the `ResonancePullResult` to the
+   action resolver. **No `CombatPull` row is written** — there is
+   no combat encounter, no round number, nothing to key the row to.
+3. **Apply once.** The action resolver applies the resolved effects
+   to *this action only* per §5.8. The pull does not carry forward
+   to subsequent actions; if the player wants the same bonus on
+   their next pose, they pull again (and pay again).
+
+**VITAL_BONUS in ephemeral context.** Defensive bonuses
+(`MAX_HEALTH`, `DAMAGE_TAKEN_REDUCTION`) have no consumer outside
+combat — there is no `DamagePreApply` event to subscribe to, and
+ad-hoc max-health bumps for one social pose make no sense. The
+spec resolves this with **visible no-op + inactive flag**:
+
+- The preview API marks any VITAL_BONUS row in its `resolved_effects`
+  list with `inactive: true` and `inactive_reason:
+  "requires combat context"` when the action_context is non-combat
+  (see §5.6 schema addendum below). `scaled_value` is reported as 0
+  for those rows so the player sees no spurious "+20 max_health" in
+  what should be a pure-RP preview.
+- Commit still succeeds if the player goes through with it — the
+  resonance/anima cost is paid in full, but VITAL_BONUS effects
+  no-op. This is a deliberate design call: hard-rejection would be
+  paternalistic and surprising; silent no-op without preview
+  signalling would be a footgun. Visible no-op trusts the player
+  while protecting the common case.
+- The frontend UI is expected to use the inactive flag to grey out
+  or hide VITAL_BONUS-only threads during RP-context pull selection,
+  so the question rarely comes up in practice.
+
+**Why no model for ephemeral pulls.** YAGNI — there is no audit
+requirement, no carry-over, no concurrent-read need. The
+`ThreadsPulled` audit event (§5.3) still fires and lands in the
+event log for staff review of any pull (combat or RP). Without a
+round number or scope object to key against, persisting an
+"ephemeral pull" row would just be a stale log of single-action
+spends — strictly worse than the audit event we already emit.
+
 **Out-of-combat Situations (Mission / Challenge).** When Spec D's
 Mission/Situation work introduces rounds outside combat, this model
 generalizes by scoping `CombatPull` to the round-aware container
@@ -1465,7 +1519,12 @@ Body: {
   thread_ids: [int],
   action_context: {                    # action this pull would attach to
     action_kind: str,
-    anchors_in_play: [...]             # for relationship-pull validation
+    anchors_in_play: [...],            # for relationship-pull validation
+    combat_encounter_id?: int          # present iff this pull would attach
+                                       #   to a combat round; absent for RP /
+                                       #   non-round actions (drives
+                                       #   inactive flagging on VITAL_BONUS
+                                       #   rows — see §3.8)
   }
 }
 Response: {
@@ -1480,11 +1539,20 @@ Response: {
       authored_value,                  # raw value on the authored row
       level_multiplier,                # source thread's display level (×1, ×2…)
       scaled_value,                    # authored × level_multiplier
-      vital_target,                     # populated for VITAL_BONUS only
+                                       #   (0 when inactive — see below)
+      vital_target,                    # populated for VITAL_BONUS only
       source_thread_id,
       source_thread_level,             # internal level (10/20/30…)
       source_tier,
-      narrative_snippet?
+      narrative_snippet?,
+      inactive: bool,                  # true when the effect would resolve
+                                       #   but has no consumer in this
+                                       #   action_context — currently only
+                                       #   VITAL_BONUS rows in non-combat
+                                       #   context (no DamagePreApply hook,
+                                       #   no max_health relevance per §3.8)
+      inactive_reason?: str            # human-readable reason, e.g.
+                                       #   "requires combat context"
     }
   ],
   capped_intensity: bool,              # warns if INTENSITY_BUMP hit cap
@@ -1493,7 +1561,9 @@ Response: {
 
 Pure read-only. No state mutation. The player's UI calls this whenever a tier or
 thread selection changes; the player commits via the action endpoint that triggers
-the actual debit.
+the actual debit. Same endpoint serves both combat and RP — the
+`combat_encounter_id` presence is the only context-discriminator;
+the resolver does the rest.
 
 ### 5.7 Failure handling
 
@@ -1860,7 +1930,13 @@ Service functions to add in `world/magic/services.py`:
     `MAX_HEALTH` contribution flows through immediately.
   - **Ephemeral context** (no `combat_encounter`): no row written; the
     returned `ResonancePullResult` carries the resolved effects for
-    the action layer to apply once.
+    the action layer to apply once. VITAL_BONUS rows are flagged
+    `inactive=True` with `scaled_value=0` in the result (see §3.8 —
+    no combat DR consumer, no max-health relevance for a single
+    social pose); the cost is still paid in full since the player
+    explicitly chose to commit after seeing the preview's inactive
+    flag. `ThreadsPulled` event fires the same way as combat for
+    audit.
 
   Same `unique_together=(participant, round_number)` enforcement at the
   database layer guarantees one combat pull per round per participant.
@@ -2031,6 +2107,27 @@ Service functions to remove (tied to deleted models):
     at tiers 0, 1, 2, and 3; `vital_target` is required at all tiers;
     the prior "tier-0 only" constraint is gone (regression guard
     against re-introducing it)
+  - **Ephemeral pull (RP / no rounds)** — `spend_resonance_for_pull`
+    called with an `action_context` lacking a `combat_encounter`:
+    debits resonance/anima, returns a populated `ResonancePullResult`,
+    writes **zero** `CombatPull` rows (assert via
+    `CombatPull.objects.count() == 0`), and emits a `ThreadsPulled`
+    event for audit. A second ephemeral pull in the same scene
+    succeeds (no `unique_together` constraint applies — that's
+    combat-only)
+  - **VITAL_BONUS in ephemeral context** — pulling a tier-1
+    `MAX_HEALTH` VITAL_BONUS row in an ephemeral context: the
+    returned `ResolvedPullEffect` carries `inactive=True`,
+    `inactive_reason="requires combat context"`, and `scaled_value=0`;
+    the character's `vitals.max_health` is unchanged before and
+    after; resonance/anima costs are still debited as paid. Same
+    assertion for `DAMAGE_TAKEN_REDUCTION` rows.
+  - **Preview API context discrimination** — calling the preview
+    endpoint with `combat_encounter_id` set returns VITAL_BONUS rows
+    with `inactive=False` and the real `scaled_value`; calling
+    without it returns the same rows with `inactive=True` and
+    `scaled_value=0` (proves the preview is the trustworthy
+    pre-commit signal for the player)
   - **handler caching** — `character.threads.all()` issues one query then
     serves repeats from the cache; `weave_thread` / `spend_resonance_for_imbuing`
     invalidate the cache so the next read sees the mutation; same for
