@@ -9,6 +9,7 @@ from django.db.utils import IntegrityError
 from django.test import TestCase
 
 from flows.factories import FlowDefinitionFactory
+from world.conditions.factories import CapabilityTypeFactory
 from world.magic.constants import (
     EffectKind,
     RitualExecutionKind,
@@ -23,7 +24,7 @@ from world.magic.factories import (
     ThreadPullEffectFactory,
     ThreadXPLockedLevelFactory,
 )
-from world.magic.models import ThreadPullCost, ThreadXPLockedLevel
+from world.magic.models import ThreadPullCost, ThreadPullEffect, ThreadXPLockedLevel
 
 
 class ThreadPullCostModelTests(TestCase):
@@ -102,6 +103,87 @@ class ThreadPullEffectCleanTests(TestCase):
         with self.assertRaises(ValidationError):
             eff.clean()
 
+    def test_capability_grant_requires_capability(self):
+        eff = ThreadPullEffectFactory.build(
+            effect_kind=EffectKind.CAPABILITY_GRANT,
+            flat_bonus_amount=None,
+            capability_grant=None,
+        )
+        with self.assertRaises(ValidationError):
+            eff.clean()
+
+    def test_capability_grant_with_capability_passes(self):
+        cap = CapabilityTypeFactory()
+        eff = ThreadPullEffectFactory.build(
+            effect_kind=EffectKind.CAPABILITY_GRANT,
+            flat_bonus_amount=None,
+            capability_grant=cap,
+        )
+        eff.clean()  # no exception
+
+    def test_capability_grant_rejects_numeric_payloads(self):
+        cap = CapabilityTypeFactory()
+        eff = ThreadPullEffectFactory.build(
+            effect_kind=EffectKind.CAPABILITY_GRANT,
+            flat_bonus_amount=2,
+            capability_grant=cap,
+        )
+        with self.assertRaises(ValidationError):
+            eff.clean()
+
+    def test_intensity_bump_requires_amount(self):
+        eff = ThreadPullEffectFactory.build(
+            effect_kind=EffectKind.INTENSITY_BUMP,
+            flat_bonus_amount=None,
+            intensity_bump_amount=None,
+        )
+        with self.assertRaises(ValidationError):
+            eff.clean()
+
+    def test_intensity_bump_with_amount_passes(self):
+        eff = ThreadPullEffectFactory.build(
+            effect_kind=EffectKind.INTENSITY_BUMP,
+            flat_bonus_amount=None,
+            intensity_bump_amount=1,
+        )
+        eff.clean()  # no exception
+
+
+class ThreadPullEffectFactoryTraitTests(TestCase):
+    def test_factory_traits_produce_valid_effects(self):
+        """Smoke-test all 5 traits — catches stale field references early."""
+        for trait in (
+            "as_flat_bonus",
+            "as_intensity_bump",
+            "as_vital_bonus",
+            "as_capability_grant",
+            "as_narrative_only",
+        ):
+            with self.subTest(trait=trait):
+                eff = ThreadPullEffectFactory(**{trait: True})
+                eff.full_clean()  # should not raise
+
+
+class ThreadPullEffectUniquenessTests(TestCase):
+    def test_lookup_key_collision(self):
+        """Two rows with the same (target_kind, resonance, tier, min_thread_level) collide."""
+        res = ResonanceFactory()
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TRAIT,
+            resonance=res,
+            tier=1,
+            min_thread_level=0,
+        )
+        with self.assertRaises(IntegrityError):
+            ThreadPullEffect.objects.create(
+                target_kind=TargetKind.TRAIT,
+                resonance=res,
+                tier=1,
+                min_thread_level=0,
+                effect_kind=EffectKind.FLAT_BONUS,
+                flat_bonus_amount=1,
+            )
+
 
 class ImbuingProseTemplateTests(TestCase):
     def test_unique_together_resonance_and_target_kind(self):
@@ -139,6 +221,33 @@ class RitualCleanTests(TestCase):
         r = RitualFactory.build(
             execution_kind=RitualExecutionKind.SERVICE,
             service_function_path="x.y.z",
+            flow=flow,
+        )
+        with self.assertRaises(ValidationError):
+            r.clean()
+
+    def test_service_kind_with_path_passes(self):
+        r = RitualFactory.build(
+            execution_kind=RitualExecutionKind.SERVICE,
+            service_function_path="x.y.z",
+            flow=None,
+        )
+        r.clean()  # no exception
+
+    def test_flow_kind_with_flow_fk_passes(self):
+        flow = FlowDefinitionFactory()
+        r = RitualFactory.build(
+            execution_kind=RitualExecutionKind.FLOW,
+            service_function_path="",
+            flow=flow,
+        )
+        r.clean()  # no exception
+
+    def test_flow_kind_rejects_nonempty_service_path(self):
+        flow = FlowDefinitionFactory()
+        r = RitualFactory.build(
+            execution_kind=RitualExecutionKind.FLOW,
+            service_function_path="some.path",
             flow=flow,
         )
         with self.assertRaises(ValidationError):

@@ -19,6 +19,7 @@ model with a discriminator + typed FKs is reintroduced in Phase 4.
 
 from decimal import Decimal
 from functools import cached_property
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -41,6 +42,9 @@ from world.magic.types import (
     ResonanceScope,
     ResonanceStrength,
 )
+
+if TYPE_CHECKING:
+    from world.conditions.models import CapabilityType
 
 
 class EffectTypeManager(NaturalKeyManager):
@@ -1807,6 +1811,10 @@ class ThreadPullEffect(SharedMemoryModel):
             models.Index(fields=["target_kind", "resonance", "tier"]),
         ]
         constraints = [
+            models.UniqueConstraint(
+                fields=["target_kind", "resonance", "tier", "min_thread_level"],
+                name="threadpulleffect_lookup_key",
+            ),
             # FLAT_BONUS: requires flat_bonus_amount, forbids other payloads.
             models.CheckConstraint(
                 check=(
@@ -1937,7 +1945,7 @@ class ThreadPullEffect(SharedMemoryModel):
     def _require_only(
         name: str,
         numeric_fields: dict[str, int | None],
-        capability: object,
+        capability: "CapabilityType | None",
     ) -> None:
         if numeric_fields[name] is None:
             raise ValidationError({name: f"{name} required for this effect_kind."})
@@ -2015,6 +2023,25 @@ class Ritual(SharedMemoryModel):
         related_name="ritual_sites",
     )
 
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (
+                        models.Q(execution_kind="SERVICE")
+                        & ~models.Q(service_function_path="")
+                        & models.Q(flow__isnull=True)
+                    )
+                    | (
+                        models.Q(execution_kind="FLOW")
+                        & models.Q(service_function_path="")
+                        & models.Q(flow__isnull=False)
+                    )
+                ),
+                name="ritual_execution_payload",
+            ),
+        ]
+
     def __str__(self) -> str:
         return self.name
 
@@ -2042,7 +2069,7 @@ class RitualComponentRequirement(SharedMemoryModel):
     """
 
     ritual = models.ForeignKey(
-        Ritual,
+        "magic.Ritual",
         on_delete=models.CASCADE,
         related_name="requirements",
     )
