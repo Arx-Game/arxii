@@ -47,6 +47,7 @@ from world.magic.models import (
     TechniqueOutcomeModifier,
     TechniqueStyle,
     Thread,
+    ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
     ThreadXPLockedLevel,
@@ -656,3 +657,14 @@ class ThreadFactory(factory.django.DjangoModelFactory):
     target_trait = factory.SubFactory(TraitFactory)
     level = 0
     developed_points = 0
+
+
+class ThreadLevelUnlockFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadLevelUnlock — per-thread level-unlock receipt."""
+
+    class Meta:
+        model = ThreadLevelUnlock
+
+    thread = factory.SubFactory(ThreadFactory)
+    unlocked_level = 20
+    xp_spent = 200

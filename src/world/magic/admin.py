@@ -34,6 +34,7 @@ from world.magic.models import (
     TechniqueOutcomeModifier,
     TechniqueStyle,
     Thread,
+    ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
     ThreadXPLockedLevel,
@@ -425,6 +426,12 @@ class RitualComponentRequirementAdmin(admin.ModelAdmin):
     list_select_related = ["ritual", "item_template", "min_quality_tier"]
 
 
+class ThreadLevelUnlockInline(admin.TabularInline):
+    model = ThreadLevelUnlock
+    extra = 0
+    readonly_fields = ["acquired_at"]
+
+
 @admin.register(Thread)
 class ThreadAdmin(admin.ModelAdmin):
     list_display = ["id", "owner", "resonance", "target_kind", "level", "developed_points"]
@@ -441,3 +448,13 @@ class ThreadAdmin(admin.ModelAdmin):
     ]
     list_select_related = ["owner", "resonance"]
     readonly_fields = ["created_at", "updated_at"]
+    inlines = [ThreadLevelUnlockInline]
+
+
+@admin.register(ThreadLevelUnlock)
+class ThreadLevelUnlockAdmin(admin.ModelAdmin):
+    list_display = ["thread", "unlocked_level", "xp_spent", "acquired_at"]
+    list_filter = ["unlocked_level"]
+    search_fields = ["thread__owner__character__db_key"]
+    readonly_fields = ["acquired_at"]
+    raw_id_fields = ["thread"]

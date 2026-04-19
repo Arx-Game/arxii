@@ -22,6 +22,7 @@ from world.magic.constants import TargetKind
 from world.magic.factories import (
     ResonanceFactory,
     ThreadFactory,
+    ThreadLevelUnlockFactory,
 )
 from world.magic.models import Thread
 from world.traits.factories import TraitFactory
@@ -140,3 +141,17 @@ class ThreadPartialUniqueTests(TestCase):
             target_object=obj,
             target_trait=None,
         )
+
+
+class ThreadLevelUnlockTests(TestCase):
+    def test_same_thread_same_level_collides(self) -> None:
+        thread = ThreadFactory()
+        ThreadLevelUnlockFactory(thread=thread, unlocked_level=20, xp_spent=200)
+        with self.assertRaises(IntegrityError):
+            ThreadLevelUnlockFactory(thread=thread, unlocked_level=20, xp_spent=200)
+
+    def test_different_levels_coexist(self) -> None:
+        thread = ThreadFactory()
+        ThreadLevelUnlockFactory(thread=thread, unlocked_level=20)
+        ThreadLevelUnlockFactory(thread=thread, unlocked_level=30)
+        self.assertEqual(thread.level_unlocks.count(), 2)

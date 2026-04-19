@@ -2387,4 +2387,35 @@ class Thread(SharedMemoryModel):
                 )
 
 
+class ThreadLevelUnlock(SharedMemoryModel):
+    """Per-thread level-unlock receipt.
+
+    Records that ``thread`` paid ``xp_spent`` to unlock ``unlocked_level`` on the
+    internal level scale (multiples of 10). Spec A §2.1 lines 200-206. Pairs
+    with ThreadXPLockedLevel (the global price list); a row here represents one
+    ownership instance of one boundary on one thread.
+    """
+
+    thread = models.ForeignKey(
+        Thread,
+        on_delete=models.PROTECT,
+        related_name="level_unlocks",
+        help_text="Thread that purchased this level unlock.",
+    )
+    unlocked_level = models.PositiveSmallIntegerField(
+        help_text="Level boundary unlocked (matches ThreadXPLockedLevel.level).",
+    )
+    xp_spent = models.PositiveIntegerField(
+        help_text="XP actually spent at unlock time (snapshot of price list).",
+    )
+    acquired_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = (("thread", "unlocked_level"),)
+        ordering = ("thread", "unlocked_level")
+
+    def __str__(self) -> str:
+        return f"Thread {self.thread_id} -> lvl {self.unlocked_level}"
+
+
 from world.magic.audere import AudereThreshold  # noqa: F401, E402
