@@ -9,7 +9,8 @@ The magic system for Arx II. Power flows from identity and connection.
 - **Resonance**: Style tags that define magical identity - proper domain models with FK to Affinity and optional ModifierTarget link
 - **Motif**: Character-level magical aesthetic containing resonances and facets
 - **Facet**: Hierarchical imagery/symbolism (Spider, Silk, Fire) assigned to resonances
-- **Threads**: Magical manifestation of relationships
+- **Threads**: Magical manifestation of relationships (legacy 5-axis model removed in
+  Phase 2 of the resonance pivot; new thread model lands in Phase 4)
 
 ## Models
 
@@ -56,10 +57,10 @@ system. Anima rituals are set up post-CG. CharacterAnimaRitual references Resona
 - `MotifResonanceAssociation` - Links resonances to facets in a motif
 
 ### Thread System
-- `ThreadType` - Types of relationships (Lover, Ally, Rival, etc.)
-- `Thread` - Magical connection between two characters
-- `ThreadJournal` - IC records of thread evolution
-- `ThreadResonance` - Resonances attached to threads
+The legacy 5-axis Thread family (`Thread`, `ThreadType`, `ThreadJournal`,
+`ThreadResonance`) was deleted in Phase 2 of the resonance pivot. Phase 4 will
+re-introduce a `Thread` model on the same `magic_thread` table name with a
+discriminator + typed FK design. Until then, no thread models exist in this app.
 
 **Note:** Affinity and Resonance are proper domain models in this app, each with an
 optional OneToOne FK back to ModifierTarget for modifier system integration.
@@ -71,6 +72,10 @@ The following models have been removed and replaced:
 - `CharacterPower` - Replaced by `CharacterTechnique`
 - `AnimaRitualType` - Replaced by freeform stat+skill+resonance system
 - `ResonanceAssociation` - Replaced by hierarchical `Facet` model
+- `Thread`, `ThreadType`, `ThreadJournal`, `ThreadResonance` - Legacy 5-axis
+  thread family; Phase 4 of the resonance pivot reuses the table for a new model
+- `CharacterResonanceTotal` - Aura recompute now reads `CharacterModifier` rows
+  whose target category is `resonance` directly (no denormalized aggregate)
 
 ## Design Docs
 

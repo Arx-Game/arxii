@@ -23,10 +23,6 @@ from world.magic.views import (
     RestrictionViewSet,
     TechniqueStyleViewSet,
     TechniqueViewSet,
-    ThreadJournalViewSet,
-    ThreadResonanceViewSet,
-    ThreadTypeViewSet,
-    ThreadViewSet,
 )
 
 app_name = "magic"
@@ -34,8 +30,9 @@ app_name = "magic"
 router = DefaultRouter()
 
 # Lookup tables (read-only)
-# Note: affinities and resonances are now in mechanics app as ModifierTarget
-router.register("thread-types", ThreadTypeViewSet, basename="thread-type")
+# Note: affinities and resonances are now in mechanics app as ModifierTarget.
+# The legacy 5-axis Thread family was removed in Phase 2 of the resonance pivot;
+# the new thread routes land in Phase 4.
 router.register("styles", TechniqueStyleViewSet, basename="technique-style")
 router.register("effect-types", EffectTypeViewSet, basename="effect-type")
 router.register("restrictions", RestrictionViewSet, basename="restriction")
@@ -54,11 +51,6 @@ router.register(
     "character-anima-rituals", CharacterAnimaRitualViewSet, basename="character-anima-ritual"
 )
 router.register("character-facets", CharacterFacetViewSet, basename="character-facet")
-
-# Threads (relationships)
-router.register("threads", ThreadViewSet, basename="thread")
-router.register("thread-journals", ThreadJournalViewSet, basename="thread-journal")
-router.register("thread-resonances", ThreadResonanceViewSet, basename="thread-resonance")
 
 # Alterations
 router.register(

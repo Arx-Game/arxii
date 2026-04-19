@@ -4,8 +4,36 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import AffinityFactory, ResonanceFactory
-from world.magic.models import CharacterAffinityTotal, CharacterResonanceTotal
+from world.magic.models import CharacterAffinityTotal
 from world.magic.services import get_aura_percentages
+from world.mechanics.constants import RESONANCE_CATEGORY_NAME
+from world.mechanics.factories import (
+    CharacterModifierFactory,
+    ModifierCategoryFactory,
+    ModifierTargetFactory,
+)
+
+
+def _create_resonance_modifier(character_sheet, resonance, value):
+    """Create a CharacterModifier row that contributes to the resonance recompute path.
+
+    The aura recompute scans CharacterModifier rows whose target's category is
+    `resonance` and whose target points back at a Resonance via `target_resonance`.
+    The source itself is irrelevant to the aura calculation, so we use the default
+    DistinctionModifierSource from CharacterModifierFactory and override target
+    + value to point at the resonance under test.
+    """
+    category = ModifierCategoryFactory(name=RESONANCE_CATEGORY_NAME)
+    target = ModifierTargetFactory(
+        name=resonance.name,
+        category=category,
+        target_resonance=resonance,
+    )
+    return CharacterModifierFactory(
+        character=character_sheet,
+        value=value,
+        target=target,
+    )
 
 
 class GetAuraPercentagesTests(TestCase):
@@ -79,16 +107,9 @@ class GetAuraPercentagesTests(TestCase):
         self.assertEqual(result.abyssal, 20.0)
 
     def test_resonance_contributes_to_affiliated_affinity(self):
-        """Resonance totals contribute to their affiliated affinity."""
-        # Create a resonance with an affiliated affinity
+        """Resonance modifier rows contribute to their affiliated affinity."""
         shadows = ResonanceFactory(name="Shadows", affinity=self.abyssal_affinity)
-
-        # Add resonance total
-        CharacterResonanceTotal.objects.create(
-            character=self.character_sheet,
-            resonance=shadows,
-            total=100,
-        )
+        _create_resonance_modifier(self.character_sheet, shadows, 100)
 
         result = get_aura_percentages(self.character_sheet)
         self.assertEqual(result.abyssal, 100.0)
@@ -96,21 +117,15 @@ class GetAuraPercentagesTests(TestCase):
         self.assertEqual(result.primal, 0.0)
 
     def test_affinity_and_resonance_combined(self):
-        """Affinity totals and resonance contributions combine correctly."""
-        # Direct affinity total
+        """Affinity totals and resonance modifiers combine correctly."""
         CharacterAffinityTotal.objects.create(
             character=self.character_sheet,
             affinity=self.celestial_affinity,
             total=50,
         )
 
-        # Resonance contributing to abyssal
         shadows = ResonanceFactory(name="DarkShadows", affinity=self.abyssal_affinity)
-        CharacterResonanceTotal.objects.create(
-            character=self.character_sheet,
-            resonance=shadows,
-            total=50,
-        )
+        _create_resonance_modifier(self.character_sheet, shadows, 50)
 
         result = get_aura_percentages(self.character_sheet)
         self.assertEqual(result.celestial, 50.0)
@@ -118,21 +133,12 @@ class GetAuraPercentagesTests(TestCase):
         self.assertEqual(result.primal, 0.0)
 
     def test_multiple_resonances_same_affinity(self):
-        """Multiple resonances with same affiliated affinity stack."""
-        # Two resonances both affiliated with celestial
+        """Multiple resonance modifiers with same affiliated affinity stack."""
         light = ResonanceFactory(name="Light", affinity=self.celestial_affinity)
         hope = ResonanceFactory(name="Hope", affinity=self.celestial_affinity)
 
-        CharacterResonanceTotal.objects.create(
-            character=self.character_sheet,
-            resonance=light,
-            total=30,
-        )
-        CharacterResonanceTotal.objects.create(
-            character=self.character_sheet,
-            resonance=hope,
-            total=70,
-        )
+        _create_resonance_modifier(self.character_sheet, light, 30)
+        _create_resonance_modifier(self.character_sheet, hope, 70)
 
         result = get_aura_percentages(self.character_sheet)
         self.assertEqual(result.celestial, 100.0)

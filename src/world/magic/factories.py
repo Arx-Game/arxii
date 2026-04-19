@@ -35,10 +35,6 @@ from world.magic.models import (
     TechniqueCapabilityGrant,
     TechniqueOutcomeModifier,
     TechniqueStyle,
-    Thread,
-    ThreadJournal,
-    ThreadResonance,
-    ThreadType,
     Tradition,
 )
 from world.magic.types import (
@@ -306,55 +302,6 @@ class AnimaRitualPerformanceFactory(factory.django.DjangoModelFactory):
     target_character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     was_successful = True
     anima_recovered = factory.LazyAttribute(lambda o: 5 if o.was_successful else None)
-
-
-# =============================================================================
-# Phase 4: Threads Factories
-# =============================================================================
-
-
-class ThreadTypeFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = ThreadType
-        django_get_or_create = ("slug",)
-
-    name = factory.Sequence(lambda n: f"Thread Type {n}")
-    slug = factory.Sequence(lambda n: f"thread-type-{n}")
-    description = factory.LazyAttribute(lambda o: f"The {o.name} relationship.")
-    admin_notes = ""
-
-
-class ThreadFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = Thread
-
-    initiator = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
-    receiver = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
-    romantic = 0
-    trust = 0
-    rivalry = 0
-    protective = 0
-    enmity = 0
-    is_soul_tether = False
-
-
-class ThreadJournalFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = ThreadJournal
-
-    thread = factory.SubFactory(ThreadFactory)
-    author = factory.LazyAttribute(lambda o: o.thread.initiator)
-    content = "A moment that defined our connection."
-
-
-class ThreadResonanceFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = ThreadResonance
-
-    thread = factory.SubFactory(ThreadFactory)
-    resonance = factory.SubFactory(ResonanceFactory)
-    strength = ResonanceStrength.MODERATE
-    flavor_text = ""
 
 
 # =============================================================================

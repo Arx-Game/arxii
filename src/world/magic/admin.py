@@ -30,10 +30,6 @@ from world.magic.models import (
     TechniqueCapabilityGrant,
     TechniqueOutcomeModifier,
     TechniqueStyle,
-    Thread,
-    ThreadJournal,
-    ThreadResonance,
-    ThreadType,
     Tradition,
 )
 
@@ -242,60 +238,6 @@ class AnimaRitualPerformanceAdmin(admin.ModelAdmin):
     ]
     list_filter = ["was_successful", "performed_at"]
     date_hierarchy = "performed_at"
-
-
-@admin.register(ThreadType)
-class ThreadTypeAdmin(admin.ModelAdmin):
-    list_display = [
-        "name",
-        "slug",
-        "romantic_threshold",
-        "trust_threshold",
-        "rivalry_threshold",
-        "protective_threshold",
-        "enmity_threshold",
-    ]
-    search_fields = ["name", "slug", "description"]
-    prepopulated_fields = {"slug": ("name",)}
-    autocomplete_fields = ["grants_resonance"]
-
-
-class ThreadResonanceInline(admin.TabularInline):
-    model = ThreadResonance
-    extra = 0
-    autocomplete_fields = ["resonance"]
-
-
-class ThreadJournalInline(admin.TabularInline):
-    model = ThreadJournal
-    extra = 0
-    readonly_fields = ["created_at"]
-    fields = ["author", "content", "created_at"]
-
-
-@admin.register(Thread)
-class ThreadAdmin(admin.ModelAdmin):
-    list_display = [
-        "initiator",
-        "receiver",
-        "romantic",
-        "trust",
-        "rivalry",
-        "protective",
-        "enmity",
-        "is_soul_tether",
-    ]
-    list_filter = ["is_soul_tether", "created_at"]
-    search_fields = ["initiator__db_key", "receiver__db_key"]
-    inlines = [ThreadResonanceInline, ThreadJournalInline]
-
-
-@admin.register(ThreadJournal)
-class ThreadJournalAdmin(admin.ModelAdmin):
-    list_display = ["thread", "author", "created_at"]
-    list_filter = ["created_at"]
-    search_fields = ["thread__initiator__db_key", "thread__receiver__db_key"]
-    readonly_fields = ["created_at"]
 
 
 class MotifResonanceInline(admin.TabularInline):

@@ -31,10 +31,6 @@ from world.magic.models import (
     Restriction,
     Technique,
     TechniqueStyle,
-    Thread,
-    ThreadJournal,
-    ThreadResonance,
-    ThreadType,
 )
 
 # =============================================================================
@@ -63,39 +59,6 @@ class ResonanceSerializer(serializers.ModelSerializer):
         ):
             return obj.modifier_target.codex_entry.id
         return None
-
-
-class ThreadTypeSerializer(serializers.ModelSerializer):
-    """Serializer for ThreadType lookup records."""
-
-    grants_resonance_name = serializers.CharField(
-        source="grants_resonance.name",
-        read_only=True,
-        allow_null=True,
-    )
-    grants_resonance_detail = ResonanceSerializer(
-        source="grants_resonance",
-        read_only=True,
-        allow_null=True,
-    )
-
-    class Meta:
-        model = ThreadType
-        fields = [
-            "id",
-            "name",
-            "slug",
-            "description",
-            "romantic_threshold",
-            "trust_threshold",
-            "rivalry_threshold",
-            "protective_threshold",
-            "enmity_threshold",
-            "grants_resonance",
-            "grants_resonance_name",
-            "grants_resonance_detail",
-        ]
-        read_only_fields = fields
 
 
 class TechniqueStyleSerializer(serializers.ModelSerializer):
@@ -460,137 +423,6 @@ class CharacterAnimaRitualSerializer(serializers.ModelSerializer):
         if obj.specialization:
             return obj.specialization.name
         return None
-
-
-# =============================================================================
-# Thread (Relationship) Serializers
-# =============================================================================
-
-
-class ThreadResonanceSerializer(serializers.ModelSerializer):
-    """Serializer for ThreadResonance records."""
-
-    resonance_name = serializers.CharField(
-        source="resonance.name",
-        read_only=True,
-    )
-    resonance_detail = ResonanceSerializer(source="resonance", read_only=True)
-
-    class Meta:
-        model = ThreadResonance
-        fields = [
-            "id",
-            "thread",
-            "resonance",
-            "resonance_name",
-            "resonance_detail",
-            "strength",
-            "flavor_text",
-            "created_at",
-        ]
-        read_only_fields = ["id", "created_at"]
-
-
-class ThreadJournalSerializer(serializers.ModelSerializer):
-    """Serializer for ThreadJournal records."""
-
-    author_name = serializers.CharField(
-        source="author.db_key",
-        read_only=True,
-        allow_null=True,
-    )
-
-    class Meta:
-        model = ThreadJournal
-        fields = [
-            "id",
-            "thread",
-            "author",
-            "author_name",
-            "content",
-            "romantic_change",
-            "trust_change",
-            "rivalry_change",
-            "protective_change",
-            "enmity_change",
-            "created_at",
-        ]
-        read_only_fields = ["id", "created_at"]
-
-
-class ThreadSerializer(serializers.ModelSerializer):
-    """Serializer for Thread records."""
-
-    initiator_name = serializers.CharField(
-        source="initiator.db_key",
-        read_only=True,
-    )
-    receiver_name = serializers.CharField(
-        source="receiver.db_key",
-        read_only=True,
-    )
-    matching_types = serializers.SerializerMethodField()
-    resonances = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Thread
-        fields = [
-            "id",
-            "initiator",
-            "initiator_name",
-            "receiver",
-            "receiver_name",
-            "romantic",
-            "trust",
-            "rivalry",
-            "protective",
-            "enmity",
-            "is_soul_tether",
-            "matching_types",
-            "resonances",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = ["id", "matching_types", "created_at", "updated_at"]
-
-    def get_matching_types(self, obj: Thread) -> list[dict]:
-        """Return the thread types this thread qualifies for."""
-        return ThreadTypeSerializer(obj.get_matching_types(), many=True).data
-
-    def get_resonances(self, obj: Thread) -> list[dict]:
-        """Get resonances using cached property."""
-        return ThreadResonanceSerializer(obj.cached_resonances, many=True).data
-
-
-class ThreadListSerializer(serializers.ModelSerializer):
-    """Lightweight serializer for Thread list views."""
-
-    initiator_name = serializers.CharField(
-        source="initiator.db_key",
-        read_only=True,
-    )
-    receiver_name = serializers.CharField(
-        source="receiver.db_key",
-        read_only=True,
-    )
-
-    class Meta:
-        model = Thread
-        fields = [
-            "id",
-            "initiator",
-            "initiator_name",
-            "receiver",
-            "receiver_name",
-            "romantic",
-            "trust",
-            "rivalry",
-            "protective",
-            "enmity",
-            "is_soul_tether",
-            "updated_at",
-        ]
-        read_only_fields = fields
 
 
 # =============================================================================

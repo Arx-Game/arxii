@@ -2,13 +2,15 @@
 API views for the magic system.
 
 This module provides ViewSets for:
-- Lookup tables (read-only): ThreadType, TechniqueStyle, EffectType, Restriction, Facet
+- Lookup tables (read-only): TechniqueStyle, EffectType, Restriction, Facet
 - CG CRUD: Gift, Technique
 - Character magic data: Aura, Gifts, Anima, Rituals
-- Threads (relationships): Thread, ThreadJournal, ThreadResonance
+
+Note: The legacy 5-axis Thread family (Thread/ThreadType/ThreadJournal/ThreadResonance)
+was removed in Phase 2 of the resonance pivot. The new thread model lands in Phase 4.
 """
 
-from django.db.models import Count, Prefetch, Q
+from django.db.models import Count, Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -37,10 +39,6 @@ from world.magic.models import (
     Restriction,
     Technique,
     TechniqueStyle,
-    Thread,
-    ThreadJournal,
-    ThreadResonance,
-    ThreadType,
 )
 from world.magic.serializers import (
     AlterationResolutionSerializer,
@@ -62,11 +60,6 @@ from world.magic.serializers import (
     RestrictionSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
-    ThreadJournalSerializer,
-    ThreadListSerializer,
-    ThreadResonanceSerializer,
-    ThreadSerializer,
-    ThreadTypeSerializer,
 )
 from world.magic.services import get_library_entries, resolve_pending_alteration
 from world.stories.pagination import StandardResultsSetPagination
@@ -74,24 +67,6 @@ from world.stories.pagination import StandardResultsSetPagination
 # =============================================================================
 # Lookup Table ViewSets (Read-Only)
 # =============================================================================
-
-
-class ThreadTypeViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet for ThreadType lookup records.
-
-    Provides read-only access to relationship types that emerge
-    based on thread axis thresholds.
-    """
-
-    queryset = ThreadType.objects.select_related(
-        "grants_resonance",
-        "grants_resonance__affinity",
-        "grants_resonance__modifier_target__codex_entry",
-    ).order_by("name")
-    serializer_class = ThreadTypeSerializer
-    permission_classes = [IsAuthenticated]
-    pagination_class = None  # ~17 thread types
 
 
 class TechniqueStyleViewSet(viewsets.ReadOnlyModelViewSet):
@@ -413,104 +388,6 @@ class CharacterAnimaRitualViewSet(viewsets.ModelViewSet):
         if user.is_staff:
             return queryset
         return queryset.filter(character__character__db_account=user)
-
-
-# =============================================================================
-# Thread (Relationship) ViewSets
-# =============================================================================
-
-
-class ThreadViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for Thread records.
-
-    Manages magical connections between characters. Users can only
-    access threads involving characters they own.
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        """Filter to threads involving characters owned by the current user."""
-        user = self.request.user
-        queryset = Thread.objects.select_related(
-            "initiator",
-            "receiver",
-        ).prefetch_related(
-            Prefetch(
-                "resonances",
-                queryset=ThreadResonance.objects.select_related(
-                    "resonance", "resonance__affinity", "resonance__modifier_target__codex_entry"
-                ),
-                to_attr="cached_resonances",
-            ),
-        )
-        if user.is_staff:
-            return queryset
-        # TODO: db_account filtering may not work correctly - character ownership
-        # should go through roster once that integration is complete.
-        # See: https://github.com/Arx-Game/arxii/pull/XXX for discussion
-        return queryset.filter(Q(initiator__db_account=user) | Q(receiver__db_account=user))
-
-    def get_serializer_class(self):
-        """Use lightweight serializer for list, full serializer for detail."""
-        if self.action == "list":
-            return ThreadListSerializer
-        return ThreadSerializer
-
-
-class ThreadJournalViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for ThreadJournal records.
-
-    Manages IC-visible journal entries on threads.
-    """
-
-    serializer_class = ThreadJournalSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        """Filter to journals on threads the user can access."""
-        user = self.request.user
-        queryset = ThreadJournal.objects.select_related(
-            "thread__initiator",
-            "thread__receiver",
-            "author",
-        )
-        if user.is_staff:
-            return queryset
-        # TODO: db_account filtering may not work correctly - see ThreadViewSet
-        return queryset.filter(
-            Q(thread__initiator__db_account=user) | Q(thread__receiver__db_account=user)
-        )
-
-
-class ThreadResonanceViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for ThreadResonance records.
-
-    Manages resonances attached to threads.
-    """
-
-    serializer_class = ThreadResonanceSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        """Filter to resonances on threads the user can access."""
-        user = self.request.user
-        queryset = ThreadResonance.objects.select_related(
-            "thread__initiator",
-            "thread__receiver",
-            "resonance",
-            "resonance__affinity",
-            "resonance__modifier_target__codex_entry",
-        )
-        if user.is_staff:
-            return queryset
-        # TODO: db_account filtering may not work correctly - see ThreadViewSet
-        return queryset.filter(
-            Q(thread__initiator__db_account=user) | Q(thread__receiver__db_account=user)
-        )
 
 
 # =============================================================================
