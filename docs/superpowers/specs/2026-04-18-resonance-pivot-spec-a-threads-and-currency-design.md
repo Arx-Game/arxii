@@ -238,7 +238,7 @@ vital_target             CharField choices null=True   # required for VITAL_BONU
                           # MAX_HEALTH | DAMAGE_TAKEN_REDUCTION | future enum values
                           # (e.g. MAX_ANIMA, DAMAGE_DEALT_BONUS) — added as
                           # downstream specs need them. Authored constants live
-                          # in world/magic/constants.py StatBonusTarget.
+                          # in world/magic/constants.py VitalBonusTarget.
 capability_grant        FK Capability        null=True
 
 # Optional inline prose for ANY effect_kind. Substituted into the action's
