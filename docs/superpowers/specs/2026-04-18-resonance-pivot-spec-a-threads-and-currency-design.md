@@ -88,8 +88,27 @@ resonance                 FK Resonance
 target_kind               CharField choices:
                             TRAIT | TECHNIQUE | ITEM | ROOM |
                             RELATIONSHIP_TRACK | RELATIONSHIP_CAPSTONE
+
+# Player-authored narrative — optional but UI-encouraged
+name                      CharField max_length=120 blank=True
+                          # If blank at render time, defaults to
+                          # "{Resonance} thread on {anchor display name}".
+                          # Not unique — players can have two "Promise" threads
+                          # on different anchors.
+description               TextField blank=True
+                          # Player's prose: why I'm good at this, what this
+                          # bond means, the story behind the imbuement.
+
+# Progression — mirrors the skills system
 developed_points          PositiveIntegerField default=0
+                          # Bucket of unspent progress toward the next level,
+                          # earned by spending resonance via Imbuing. Decrements
+                          # when a level increments.
 level                     PositiveSmallIntegerField default=0
+                          # Current thread level. Internal scale matches skills
+                          # (10, 20, 30... — see §3.2 / §5.5 for resolution).
+                          # Capped per §2.4.
+
 created_at, updated_at
 
 # Typed target FKs — exactly one populated, keyed by target_kind
@@ -152,17 +171,44 @@ label            CharField                          # "soft", "hard", "max"
 
 Staff-tunable. Three rows at launch.
 
-#### `ThreadLevelThreshold` (lookup, SharedMemoryModel)
+#### `ThreadXPLockedLevel` (lookup, SharedMemoryModel)
 
 ```
-level                PositiveSmallIntegerField unique   # 1..max
-developments_needed  PositiveSmallIntegerField          # cumulative devs to qualify
-resonance_cost       PositiveSmallIntegerField          # resonance to click level up
+level     PositiveSmallIntegerField unique   # 20, 30, 40, ... (every 10, internal scale)
+xp_cost   PositiveIntegerField               # XP required to cross this boundary
 ```
 
-The development-threshold gate. A player's thread accumulates `developed_points`
-passively from RP/interaction; at each threshold the level does not tick up until they
-spend the row's `resonance_cost` from the matching `ResonancePool`.
+The set of internal levels at which thread advancement is XP-locked, mirroring
+the skills system. Internal scale matches skills: every multiple of 10 is a
+boundary (internal 20 = display 2, internal 30 = display 3, etc.). At an
+XP-locked level the character must additionally spend XP (per this row) to
+permit the thread to advance into that level. Between XP-locked levels,
+advancement is paid for purely with resonance via `developed_points`.
+
+#### `ThreadLevelUnlock` (per-thread record)
+
+```
+thread          FK Thread on_delete=PROTECT
+unlocked_level  PositiveSmallIntegerField    # which boundary the player has crossed
+xp_spent        PositiveIntegerField         # actual XP paid (audit)
+acquired_at     DateTimeField auto_now_add=True
+class Meta: unique_together = (thread, unlocked_level)
+```
+
+Records that the character has paid the XP cost for a specific thread to be
+permitted to cross a specific XP-locked level. Without this row, accumulating
+`developed_points` past the boundary is rejected by the spend service.
+
+#### Thread development cost formula
+
+Identical structure to skills: between XP-locked boundaries, the resonance cost
+to advance from level N → N+1 is `(N - 9) × 100` developed_points. The
+`developed_points` bucket on `Thread` is filled by spending resonance via the
+Imbuing ritual (Imbuing converts pool resonance into developed_points at a
+1:1 ratio at launch — staff-tunable). When the bucket reaches the cost of
+the next level, the level ticks up and the bucket decrements by that cost
+(overflow carries). At an XP-locked boundary, the level cannot tick up
+unless a `ThreadLevelUnlock(thread, unlocked_level=boundary)` row exists.
 
 #### `ThreadPullEffect` (authored templates, SharedMemoryModel)
 
@@ -170,20 +216,36 @@ spend the row's `resonance_cost` from the matching `ResonancePool`.
 target_kind        CharField choices (same 6 as Thread.target_kind)
 resonance          FK Resonance null=True      # null = default fallback for target_kind
 tier               PositiveSmallIntegerField   # 0, 1, 2, 3 — see tier-0 = passive note
+min_thread_level   PositiveSmallIntegerField default=0
+                                                # Authored gate on the thread's level.
+                                                # Effect applies only when
+                                                # thread.level >= min_thread_level.
+                                                # Internal scale: 0, 10, 20, 30...
+                                                # Lets authors back-load powerful
+                                                # effects behind investment without
+                                                # adding a separate "tier 4+" axis.
 effect_kind        CharField choices:
-                     FLAT_BONUS | INTENSITY_BUMP | CAPABILITY_GRANT | NARRATIVE_ONLY
+                     FLAT_BONUS | INTENSITY_BUMP | STAT_BONUS |
+                     CAPABILITY_GRANT | NARRATIVE_ONLY
 
 # Typed payload — no JSON. Resolver reads the field matching effect_kind.
 flat_bonus_amount       SmallIntegerField   null=True
 intensity_bump_amount   SmallIntegerField   null=True
+stat_bonus_amount       SmallIntegerField   null=True
+stat_target             CharField choices null=True   # required for STAT_BONUS
+                          # MAX_HEALTH | DAMAGE_TAKEN_REDUCTION | future enum values
+                          # (e.g. MAX_ANIMA, DAMAGE_DEALT_BONUS) — added as
+                          # downstream specs need them. Authored constants live
+                          # in world/magic/constants.py StatBonusTarget.
 capability_grant        FK Capability        null=True
 
 # Optional inline prose for ANY effect_kind. Substituted into the action's
 # narrative output when this row applies. Replaces the prior ThreadNarrativeTag
 # model (which was a separate lookup just to hang a string on a row — overkill).
 # A NARRATIVE_ONLY row's snippet IS its entire effect. Snippets on FLAT_BONUS,
-# INTENSITY_BUMP, and CAPABILITY_GRANT rows are also collected and rendered
-# alongside the mechanical payload — the snippet is additive, not exclusive.
+# INTENSITY_BUMP, STAT_BONUS, and CAPABILITY_GRANT rows are also collected and
+# rendered alongside the mechanical payload — the snippet is additive, not
+# exclusive.
 narrative_snippet       TextField   blank=True
 ```
 
@@ -194,8 +256,27 @@ paid tiers (1, 2, 3); tier 0 is implicit-zero.
 
 Resolution order when an action lands: for each thread whose anchor is involved,
 find ThreadPullEffect rows matching `(target_kind=thread.target_kind, tier in
-0..chosen_tier)`, preferring rows with the matching resonance and falling back to
-`resonance=NULL`. Apply every matching row's effect and substitute its snippet.
+0..chosen_tier, min_thread_level <= thread.level)`, preferring rows with the
+matching resonance and falling back to `resonance=NULL`. Apply every matching row's
+effect (scaled per §5.4) and substitute its snippet.
+
+**`clean()` enforces payload/effect_kind alignment**: exactly one of
+`flat_bonus_amount`, `intensity_bump_amount`, `stat_bonus_amount`,
+`capability_grant` must be populated, matching `effect_kind`; for
+`STAT_BONUS`, `stat_target` is required; for `NARRATIVE_ONLY`, all numeric
+payloads must be null and `narrative_snippet` must be non-blank. Database
+`CheckConstraint`s mirror this.
+
+**Why STAT_BONUS exists in Spec A:** Spec B (Relational Resilience + Soul Tether)
+needs to express "this thread grants +N max_health" and "this thread reduces
+incoming damage by N." Rather than retrofit the schema later, STAT_BONUS is
+introduced now with `MAX_HEALTH` and `DAMAGE_TAKEN_REDUCTION` as the launch
+enum values. Spec A authors **no** `STAT_BONUS` rows itself; the column and
+enum exist so Spec B's authoring lands as data, not migration. Resolution at
+runtime uses existing infrastructure: `MAX_HEALTH` is folded into
+`vitals.recompute_max_health()` as a thread-derived addend; `DAMAGE_TAKEN_REDUCTION`
+is applied by a subscriber to combat's existing `DamagePreApply.modify_amount`
+hook (see §5.8).
 
 **Field-name note:** `target_kind` is used uniformly across `Thread`,
 `ThreadPullEffect`, and `ThreadWeavingUnlock`. Avoid the synonym `target_type` to
@@ -331,16 +412,61 @@ Purely for UI aggregation on the "Who I Am" page. Optional, no mechanical effect
 
 ### 2.4 Constraint summary
 
-- `Thread.level ≤ anchor_cap(target_kind, target)` — enforced in `clean()`.
-  Anchor cap rules (see economy section):
-    - TRAIT: cap = the character's current trait value for that Trait
-    - TECHNIQUE: cap = number of related Techniques the character knows under the
-      parent Gift (placeholder; may shift to Gift-level once Gifts get levels)
-    - ITEM: cap = item's magical significance tier (staff-authored on ItemTemplate /
-      ItemInstance)
-    - ROOM: cap = room's magical significance tier (staff-authored on RoomProfile)
-    - RELATIONSHIP_TRACK: cap = current tier index on the track
-    - RELATIONSHIP_CAPSTONE: cap = 10 (high; capstones are rare and earned)
+- `Thread.level ≤ effective_cap(thread)` — enforced in `clean()` and at every
+  spend site (§3.2). All caps share a **common internal scale matching skills**
+  (10/20/30…), so the math composes uniformly.
+
+#### Anchor cap rules (per `target_kind`)
+
+The `compute_anchor_cap(thread)` helper normalizes each anchor's "how much
+investment can this carry?" to the common scale:
+
+  - **TRAIT** — `cap = CharacterTraitValue.value` for that Trait. Trait/skill
+    internal values are already 1–100 on the same scale; no conversion needed.
+  - **TECHNIQUE** — `cap = Technique.level × 10`. Techniques are 1–5 internal
+    today; multiplying by 10 lands them on the common scale (level-3 technique
+    → cap of 30, matching a level-3 skill). When the Technique system gains a
+    finer-grained level, the multiplier adjusts; the formula stays.
+  - **RELATIONSHIP_TRACK** — `cap = RelationshipTrackProgress.tier_index × 10`.
+    Tracks are tier-driven (1–N); multiplier matches the technique normalization.
+    If `tier_index` exposes a finer internal value in the future, drop the
+    multiplier accordingly.
+  - **RELATIONSHIP_CAPSTONE** — `cap = path_stage × 10` (path-derived). Capstones
+    are rare and earned; the path stage is the only meaningful gate beyond the
+    fact of having earned the capstone at all.
+  - **ITEM** — TBD (deferred to Spec D). Spec D's ritual-grade item authoring
+    introduces "magical significance" as a first-class concept; the cap formula
+    lands there. Until Spec D ships, the spend service rejects ITEM-anchored
+    Imbuing with `AnchorCapNotImplemented`. Threads may still be woven on items
+    (free) and pulled (existing tier-0/1/2/3 mechanics work because effects are
+    authored, not derived from level), but level is pinned at 0.
+  - **ROOM** — TBD (deferred to Spec D), same rationale and behavior as ITEM.
+
+#### Path cap (universal ceiling)
+
+Independently of the anchor cap, every thread is also capped by the character's
+current Path stage:
+
+```
+path_cap = (latest CharacterPathHistory entry's path.stage) × 10
+         (defaults to 10 if the character has no path history yet —
+          a level-1 character can carry a level-10 thread at most)
+```
+
+Path stages are 1, 2, 3, … in the existing `classes.Path` model; Stage-1
+characters are capped at thread level 10, Stage-2 at 20, etc. This guarantees
+no thread can outpace the character's structural maturity even if the anchor
+itself (e.g., a high-tier trait inherited from CG) would permit higher.
+
+#### Effective cap
+
+```
+effective_cap(thread) = min(path_cap(thread.owner), anchor_cap(thread))
+```
+
+The spend service uses `effective_cap`. The My Threads page surfaces both
+component values so players see *which* gate is the active one ("path-locked"
+vs. "anchor-locked").
 - `ResonancePool.balance ≥ 0` — enforced at spend sites.
 - `Thread` uniqueness: one thread per (owner, target, resonance) triple, via partial
   unique indexes keyed to `target_kind`. Six partial uniques in total — one per
@@ -386,30 +512,93 @@ strategic tension is over allocation, not over hitting a ceiling.
 
 Two distinct spend paths:
 
-#### Threshold spend (level-up via Imbuing ritual)
+#### Imbue spend (development-point bucket fill via Imbuing ritual)
 
 ```python
-def spend_resonance_for_threshold(
+def spend_resonance_for_imbuing(
     character: CharacterSheet,
     thread: Thread,
-) -> Thread:
+    amount: int,                 # resonance to convert into developed_points
+) -> ThreadImbueResult:
     """
-    Cross the next ThreadLevelThreshold for `thread`.
+    Convert `amount` of resonance from the matching pool into
+    `amount` developed_points on `thread` (1:1 at launch — staff-tunable
+    via a single config row). Then advance `thread.level` greedily as
+    long as the bucket affords the next level's cost AND the level isn't
+    blocked by an XP-locked boundary.
+
     Validates:
       - character owns thread
-      - developed_points >= threshold's developments_needed
-      - pool.balance >= threshold's resonance_cost
-      - thread.level + 1 <= anchor_cap(thread.target_kind, thread.target)
-        (per §2.4 anchor cap rules — TRAIT cap = current trait value, etc.)
-    Atomic (select_for_update on the pool row): decrements balance,
-    increments thread.level. Emits a `ThreadImbued` event.
-    Raises `ResonanceInsufficient`, `ThresholdNotReached`, or `AnchorCapExceeded`
-    on failure.
+      - pool.balance >= amount
+      - thread.level < effective_cap(thread)   (per §2.4)
+      - amount > 0
+
+    Within the greedy advancement loop, for each candidate next level N+1:
+      cost = (N - 9) * 100        (skill-system formula; same shape)
+      if developed_points < cost:
+          stop — bucket holds remainder
+      if (N + 1) % 10 == 0:       # crossing an XP-locked boundary
+          if not ThreadLevelUnlock(thread, unlocked_level=N+1).exists():
+              stop — XP gate not paid; bucket holds remainder
+      if (N + 1) > effective_cap(thread):
+          stop — capped; bucket holds remainder
+      thread.level = N + 1
+      thread.developed_points -= cost
+
+    Atomic (select_for_update on the pool row + the thread row):
+    decrements pool.balance, increments thread.developed_points,
+    advances thread.level as far as the bucket and gates allow.
+
+    Returns a ThreadImbueResult dataclass with:
+        - resonance_spent: int
+        - developed_points_added: int
+        - levels_gained: int
+        - new_level: int
+        - new_developed_points: int
+        - blocked_by: Literal[
+              "NONE", "XP_LOCK", "ANCHOR_CAP", "PATH_CAP", "INSUFFICIENT_BUCKET"
+          ]
+    Emits a `ThreadImbued` event.
+    Raises `ResonanceInsufficient`, `AnchorCapExceeded`, `PathCapExceeded`,
+    or `InvalidImbueAmount` on failure.
     """
 ```
 
 This is the function `Ritual("Rite of Imbuing")` dispatches to. Called only via
 `PerformRitualAction`, never directly from the My Threads page.
+
+#### Cross XP-locked boundary (separate spend)
+
+```python
+def cross_thread_xp_lock(
+    character: CharacterSheet,
+    thread: Thread,
+    boundary_level: int,         # the XP-locked level being unlocked, e.g. 20
+) -> ThreadLevelUnlock:
+    """
+    Pay XP to permit `thread` to advance into `boundary_level`.
+
+    Validates:
+      - character owns thread
+      - boundary_level matches a ThreadXPLockedLevel row
+      - boundary_level == thread.level + (some increment that the bucket
+        could currently reach)  — UI prevents pre-paying boundaries the
+        thread has no near-term shot at, but the service only enforces
+        "boundary_level > thread.level" (no double-unlock; idempotency
+        via unique_together on ThreadLevelUnlock)
+      - character.xp_balance >= ThreadXPLockedLevel.xp_cost
+      - boundary_level <= effective_cap(thread)
+
+    Atomic: decrements XP, creates ThreadLevelUnlock row.
+    Emits a `ThreadXPLockUnlocked` event.
+    Raises `XPInsufficient` or `AnchorCapExceeded` on failure.
+    """
+```
+
+This is the function the "Unlock next tier" UI button calls (separate from
+the Imbuing ritual flow). Players unlock a boundary *before* attempting to
+imbue past it; in practice the UI surfaces the unlock as the next-step CTA
+when a thread's bucket is approaching the boundary.
 
 #### Pull spend (in-action amplification)
 
@@ -436,7 +625,11 @@ def spend_resonance_for_pull(
     `world/magic/types.py`) with:
         - resonance_spent: int
         - anima_spent: int
-        - resolved_effects: list[ThreadPullEffect]   # for the action layer to apply
+        - resolved_effects: list[ResolvedPullEffect]
+            # Each ResolvedPullEffect carries the source ThreadPullEffect plus
+            # `level_multiplier`, `scaled_value`, and source-thread metadata
+            # so the action layer can apply the per-effect scaled outcome
+            # without re-deriving it from the raw row.
     Emits a `ThreadsPulled` event.
     """
 ```
@@ -457,8 +650,8 @@ accumulates in the pool; the player decides via Imbuing rituals which threads to
 on. This makes specialization a deliberate choice (lean hard into one resonance →
 develop fewer threads more deeply, or spread → many shallow threads).
 
-The dashboard surfaces decision-support (which thresholds are reachable, which threads
-are close to a threshold) but never auto-spends.
+The dashboard surfaces decision-support (which threads are imbue-ready, which are
+near an XP-locked boundary, which are at effective_cap) but never auto-spends.
 
 ### 3.4 Lifetime metrics
 
@@ -481,12 +674,24 @@ Primal grant.
 
 ```python
 def get_or_create_pool(character, resonance) -> ResonancePool: ...
-def affordable_thresholds(character) -> list[tuple[Thread, ThreadLevelThreshold]]:
-    """Threads where pool.balance >= next threshold's cost AND
-       developed_points >= developments_needed."""
-def near_threshold_threads(character, within: int = 3) -> list[Thread]:
-    """Threads within `within` developments of their next threshold —
-       UI hint surface."""
+
+def imbue_ready_threads(character) -> list[Thread]:
+    """Threads whose pool.balance > 0 and whose level < effective_cap —
+       i.e. threads the player could productively imbue right now."""
+
+def near_xp_lock_threads(
+    character, within: int = 100
+) -> list[ThreadXPLockProspect]:
+    """Threads whose developed_points are within `within` of crossing
+       the next XP-locked boundary AND that boundary isn't already
+       unlocked. UI hint surface — the 'Unlock next tier' CTA appears
+       on these. ThreadXPLockProspect is a small dataclass:
+         (thread, boundary_level, xp_cost, dev_points_to_boundary)."""
+
+def threads_blocked_by_cap(character) -> list[Thread]:
+    """Threads at effective_cap — no more imbuing helps until either
+       the anchor advances (e.g., underlying trait improves) or the
+       character's path stage increases. UI shows 'capped' badge."""
 ```
 
 These power the My Threads page. None mutate.
@@ -604,7 +809,7 @@ Ritual(
     hedge_accessible=False,
     glimpse_eligible=False,
     execution_kind=SERVICE,
-    service_function_path="world.magic.services.imbue_resonance_into_thread",
+    service_function_path="world.magic.services.spend_resonance_for_imbuing",
     site_property=None,    # any room works; the site-bonus mechanism for
                            # matching properties is deferred to Spec D's
                            # broader ritual-site-bonus design (see §8.3)
@@ -642,22 +847,38 @@ Layout:
   is hungry" indicator.
 - **Threads list**, default-grouped by resonance (toggle to anchor type — see Q16).
   Each row:
-  - Anchor name + kind icon
-  - Resonance tag + level
-  - `developed_points` progress bar to next threshold
-  - State-aware action button:
-    - "Begin Imbuing Ritual" — if affordable and at threshold (links to in-game
-      ritual flow)
+  - Player-authored `name` (defaulted to "{Resonance} thread on {anchor}" if
+    blank) + anchor name + kind icon
+  - Resonance tag + display level (`level / 10`, e.g. internal 30 → "Lv 3")
+  - Player-authored `description` collapsed by default; "✎" affordance to
+    edit in place
+  - `developed_points` progress bar — fill = `developed_points / next-level cost`,
+    plus a tick mark on the bar at the position of the next XP-locked boundary
+    (so the player can see "I'm 60 dev points away from needing to spend XP")
+  - Cap badges: shows `effective_cap` and which gate is active
+    ("Path-locked at 30" or "Anchor-locked at 50")
+  - State-aware action button (one CTA at a time, prioritized in this order):
     - "Find a Teacher" — if anchor kind isn't unlocked (links to teaching-offer
       discovery filtered to that anchor type)
-    - No button — if developing toward next threshold
-  - Pull-tier cost preview (informational only; pulls happen in action UI)
+    - "Unlock Lv N" — if `developed_points` is within sight of an XP-locked
+      boundary AND the player has enough XP for it (calls
+      `cross_thread_xp_lock`)
+    - "Begin Imbuing Ritual" — if pool has spendable balance and the thread
+      is below `effective_cap` (links to in-game ritual flow which calls
+      `spend_resonance_for_imbuing`)
+    - "Capped" badge — if at `effective_cap`, with hover text explaining the
+      gate (path stage / anchor value / Spec D pending for ITEM/ROOM)
+  - Pull-tier cost preview (informational only; pulls happen in action UI),
+    annotated with "scales with thread level (Lv {n} = ×{n} multiplier)" so
+    players see the level investment paying off
   - Anchor link (jumps to relationship/item/room/technique detail)
 - **Relationship-anchored threads also appear inside the relationship page itself**
   as a sidebar card with the same affordances.
 
-The page never mutates threads directly. All level-ups route through
-`PerformRitualAction("Rite of Imbuing", thread_id=N)`.
+The page never mutates threads directly except for in-place edits to `name` and
+`description` (pure narrative, no mechanical effect). All level-ups route
+through `PerformRitualAction("Rite of Imbuing", thread_id=N, amount=X)`;
+all XP-lock crossings route through `cross_thread_xp_lock`.
 
 ### 4.5 API surface
 
@@ -763,16 +984,30 @@ and the list of threads to pull:
 3. For each pulled thread:
    For each effect_tier in 0..tier:
      Find ThreadPullEffect rows matching:
-       (target_kind=thread.target_kind, tier=effect_tier)
+       (target_kind=thread.target_kind, tier=effect_tier,
+        min_thread_level <= thread.level)
        preferring resonance match, falling back to resonance=NULL
-     Add matched rows to the active effect list.
+     For each matched row, scale its authored amount by the thread's
+     display level (`scaled = authored × max(1, thread.level // 10)`).
+     The level-scaling rule is **linear** and applies to all numeric
+     effect_kinds (FLAT_BONUS, INTENSITY_BUMP, STAT_BONUS).
+     CAPABILITY_GRANT and NARRATIVE_ONLY do not scale (granting a
+     capability is binary; a narrative snippet is text). For
+     CAPABILITY_GRANT, `min_thread_level` is the gating mechanism
+     instead of scaling.
+     A thread at level 0 (just-woven, never imbued) applies effects at
+     ×1 baseline so freshly-woven threads still feel like something.
+     Add (effect_row, scaled_amount, source_thread) tuples to the active
+     effect list.
 
 4. Also collect tier-0 effects from any non-pulled threads whose anchors are
-   involved in the action (passive layer fires regardless of pulls).
+   involved in the action (passive layer fires regardless of pulls). Same
+   `min_thread_level` filter and level-scaling apply.
 
 5. Resolve and apply effects per stacking rules (5.5).
 
-6. Emit ThreadsPulled event with full audit payload.
+6. Emit ThreadsPulled event with full audit payload (including per-effect
+   scaled amounts and source thread IDs for transparency in scene logs).
 
 7. Return ResonancePullResult dataclass to the action resolver, which applies
    the effects to the action's check / intensity / capabilities at pre-roll time.
@@ -780,21 +1015,34 @@ and the list of threads to pull:
 
 ### 5.5 Stacking rules by effect_kind
 
-When multiple effects apply to the same action:
+When multiple effects apply to the same action (after per-effect level-scaling
+from §5.4):
 
-- **FLAT_BONUS** — sum. Three threads contributing +2 each = +6. No cap (designer
+- **FLAT_BONUS** — sum the **scaled** amounts. Three level-3 threads each
+  authoring +2 = three contributions of +6 = +18 total. No cap (designer
   authoring restraint is the throttle).
-- **INTENSITY_BUMP** — sum, capped at the system's highest IntensityTier. The pull
-  preview displays the effective (capped) outcome so players never spend anima for
-  intensity past the cap; they can downsize their pull or shift to other resonances.
+- **INTENSITY_BUMP** — sum the scaled amounts, capped at the system's highest
+  IntensityTier. The pull preview displays the effective (capped) outcome so
+  players never spend anima for intensity past the cap; they can downsize their
+  pull or shift to other resonances.
+- **STAT_BONUS** — sum the scaled amounts **per `stat_target`**. Effects with
+  different `stat_target`s do not stack with each other (a `MAX_HEALTH` row
+  and a `DAMAGE_TAKEN_REDUCTION` row are independent contributions to two
+  different consumers). For `MAX_HEALTH`, the sum is added to the character's
+  `vitals.max_health` recomputation. For `DAMAGE_TAKEN_REDUCTION`, the sum
+  is supplied to combat's `DamagePreApply.modify_amount` subscriber. No cap
+  in Spec A; Spec B owns any per-stat ceilings if playtest demands them.
 - **CAPABILITY_GRANT** — union. All granted capabilities are available for this
   action. Capabilities are categorical, not numerical; granting the same capability
-  twice is a no-op.
+  twice is a no-op. **`min_thread_level` is the gating mechanism for capability
+  power tiering** — author "minor capability X at min_thread_level=10, full
+  capability X at min_thread_level=30" if you want graduated unlocks.
 - **NARRATIVE_ONLY** — collect all `narrative_snippet` strings; the action's
   narrative output presents them all (deduplicated, in pull order).
 
 The user's principle: stacking should feel good. Sum-and-union is the rule;
-take-highest creates "wasted anima" traps and is rejected.
+take-highest creates "wasted anima" traps and is rejected. Level investment
+must matter — that's why all numeric effects scale linearly with thread level.
 
 ### 5.6 Pre-commitment preview API
 
@@ -814,7 +1062,19 @@ Response: {
   anima_cost: int,
   affordable: bool,                    # pool/anima sufficient
   resolved_effects: [
-    {kind, value, source_thread_id, source_tier, narrative_snippet?}
+    {
+      kind,                            # FLAT_BONUS | INTENSITY_BUMP |
+                                       #   STAT_BONUS | CAPABILITY_GRANT |
+                                       #   NARRATIVE_ONLY
+      authored_value,                  # raw value on the authored row
+      level_multiplier,                # source thread's display level (×1, ×2…)
+      scaled_value,                    # authored × level_multiplier
+      stat_target,                     # populated for STAT_BONUS only
+      source_thread_id,
+      source_thread_level,             # internal level (10/20/30…)
+      source_tier,
+      narrative_snippet?
+    }
   ],
   capped_intensity: bool,              # warns if INTENSITY_BUMP hit cap
 }
@@ -841,12 +1101,38 @@ the actual debit.
 The action resolver (existing/future check/action machinery) receives the
 `ResonancePullResult` and applies effects pre-roll:
 
-- `FLAT_BONUS` is added to the check's modifier total.
-- `INTENSITY_BUMP` is added to the action's effective intensity tier.
+- `FLAT_BONUS` (scaled) is added to the check's modifier total.
+- `INTENSITY_BUMP` (scaled) is added to the action's effective intensity tier.
 - `CAPABILITY_GRANT` capabilities are added to the action's capability set for the
   duration of the resolution.
 - `narrative_snippet`s are appended to the action's narrative output buffer for
   rendering.
+
+`STAT_BONUS` effects do NOT route through the action resolver — they target
+character-level stats, not per-action checks. Routing per `stat_target`:
+
+- **`MAX_HEALTH`** — `vitals.recompute_max_health(character)` is the canonical
+  recomputation entry point (already invoked when stats change). Spec A adds
+  one new addend source: `sum(scaled_amount for STAT_BONUS rows with
+  stat_target=MAX_HEALTH on every active passive thread for this character)`.
+  "Active passive" means tier-0 ThreadPullEffect rows on threads whose anchor
+  is currently in scope — for relationship anchors that means the relationship
+  exists; for trait anchors that means the trait exists; etc. `recompute_max_health`
+  is invoked when a thread is woven, imbued, retired, or its anchor's
+  involvement-state changes (the thread-mutation service functions emit the
+  recompute call; no Django signals).
+- **`DAMAGE_TAKEN_REDUCTION`** — a subscriber registers against combat's
+  existing `DamagePreApply` event and uses the `modify_amount` hook (already
+  used by combat's reactive system; see `src/world/combat/tests/
+  test_reactive_integration.py::DamageModifyPayloadTest`). On the
+  damage-pre-apply event, the subscriber computes the active-passive sum for
+  the target character and reduces incoming damage by that amount (clamped
+  at 0). No new event types; no combat-system changes; the integration is
+  purely subscribing to an existing reactive hook.
+
+Spec A authors **zero** STAT_BONUS rows — these routes exist as installed
+plumbing for Spec B (Relational Resilience). The implementation plan should
+include a smoke-test row authored only in tests to prove the wiring.
 
 The action resolver's API contract for receiving pull results is a downstream
 consumer concern — Spec A delivers the dataclass; the resolver knows how to apply
@@ -995,11 +1281,14 @@ schema migration with no data steps.
 #### Step 1 — Add new models
 
 In `world/magic`:
-- `Thread` (new model — replaces old Thread completely)
+- `Thread` (new model — replaces old Thread completely; includes
+  `name`/`description`/`developed_points`/`level`)
 - `ResonancePool`
 - `ThreadPullCost` (lookup, SharedMemoryModel)
-- `ThreadLevelThreshold` (lookup, SharedMemoryModel)
-- `ThreadPullEffect` (lookup, SharedMemoryModel)
+- `ThreadXPLockedLevel` (lookup, SharedMemoryModel)
+- `ThreadLevelUnlock` (per-thread record of XP-lock crossings)
+- `ThreadPullEffect` (lookup, SharedMemoryModel; includes `min_thread_level`,
+  `STAT_BONUS` effect_kind, `stat_target`, `stat_bonus_amount`)
 - `ThreadWeavingUnlock` (lookup, SharedMemoryModel)
 - `CharacterThreadWeavingUnlock` (purchase record)
 - `ThreadWeavingTeachingOffer`
@@ -1063,8 +1352,14 @@ discriminator-aware shape).
   `tier=2` (resonance_cost=3), `tier=3` (resonance_cost=6), each with a matching
   `anima_per_thread` value (staff-tunable defaults — exact anima numbers are an
   authoring decision at seed time, not encoded in this spec)
-- `ThreadLevelThresholdFactory` — preset thresholds at level 1..N
-- `ThreadPullEffectFactory` — flexible factory for authoring sample effects per test
+- `ThreadXPLockedLevelFactory` — preset rows at internal levels 20, 30, 40,
+  50… with placeholder xp_costs (parallels skill XP-lock authoring)
+- `ThreadLevelUnlockFactory` — per-thread record of an XP-lock crossing;
+  flexible by (thread, unlocked_level)
+- `ThreadPullEffectFactory` — flexible factory for authoring sample effects per
+  test, with traits `as_flat_bonus`, `as_intensity_bump`, `as_capability_grant`,
+  `as_narrative_only`, and `as_stat_bonus(stat_target=...)` to exercise the
+  STAT_BONUS payload schema for Spec B's eventual authoring
 - `ThreadWeavingUnlockFactory` — flexible factory for authoring sample unlocks per
   test, with traits for in-Path / out-of-Path examples and discriminator-aware
   traits (`as_trait_unlock`, `as_gift_unlock`, `as_item_unlock`, `as_room_unlock`,
@@ -1091,21 +1386,51 @@ is purely for spec organization.
 
 Service functions to add in `world/magic/services.py`:
 - `grant_resonance(character, resonance, amount, source, source_ref=None)`
-- `spend_resonance_for_threshold(character, thread)`
+- `spend_resonance_for_imbuing(character, thread, amount)` — bucket-fill +
+  greedy advancement; the Imbuing-ritual dispatch target (called by
+  `PerformRitualAction("Rite of Imbuing", thread_id, amount)`)
+- `cross_thread_xp_lock(character, thread, boundary_level)` — pays XP for
+  the next XP-locked boundary; called by the My Threads "Unlock Lv N" CTA
 - `spend_resonance_for_pull(character, resonance, tier, threads, action_context)`
-- `imbue_resonance_into_thread(actor, thread_id)` — the Imbuing-ritual dispatch target
-- `weave_thread(character, target_kind, target, resonance)` — eligibility check
-  (CharacterThreadWeavingUnlock for the anchor's kind+target) + Thread row creation;
-  no resonance cost (weaving is free, Imbuing carries the strategic spend)
+- `weave_thread(character, target_kind, target, resonance, *, name="", description="")`
+  — eligibility check (CharacterThreadWeavingUnlock for the anchor's
+  kind+target) + Thread row creation; no resonance cost (weaving is free,
+  Imbuing carries the strategic spend); accepts optional name/description
+- `update_thread_narrative(thread, *, name=None, description=None)` — pure
+  narrative edit, no mechanical effect; used by the My Threads in-place edit
 - `accept_thread_weaving_unlock(learner, offer)` — mirrors codex teaching-acceptance;
   creates the `CharacterThreadWeavingUnlock` row
 - `compute_thread_weaving_xp_cost(unlock, learner)` — Path-multiplier resolver
-- `compute_anchor_cap(thread)` — returns the §2.4 cap for a Thread's anchor;
-  used by `spend_resonance_for_threshold` and surfaced on the My Threads page
+- `compute_anchor_cap(thread)` — returns the §2.4 anchor cap for a Thread,
+  with per-`target_kind` normalization to the common scale (TRAIT direct,
+  TECHNIQUE × 10, etc.). Raises `AnchorCapNotImplemented` for ITEM/ROOM
+  pending Spec D.
+- `compute_path_cap(character)` — `path_stage × 10`, defaulting to 10 for
+  characters with no path history yet
+- `compute_effective_cap(thread)` — `min(compute_path_cap(owner),
+  compute_anchor_cap(thread))`; used by both spend services and the My Threads
+  page
+- `recompute_max_health_with_threads(character)` — wrapper that calls
+  `vitals.recompute_max_health` with thread-derived MAX_HEALTH STAT_BONUS
+  contributions folded in. Invoked from the thread mutation services
+  (weave/imbue/retire) and from any anchor-state change that would alter
+  which threads are passively contributing.
+- `apply_damage_reduction_from_threads(character, incoming_damage)` — the
+  subscriber body for combat's `DamagePreApply.modify_amount` hook; sums
+  active-passive STAT_BONUS rows with `stat_target=DAMAGE_TAKEN_REDUCTION`
+  for the target and reduces incoming damage by the sum (clamped at 0).
 
 Dataclasses in `world/magic/types.py`:
 - `ResonancePullResult(resonance_spent: int, anima_spent: int,
-   resolved_effects: list[ThreadPullEffect])`
+   resolved_effects: list[ResolvedPullEffect])`
+- `ResolvedPullEffect(...)` — per-effect record carrying `kind`,
+  `authored_value`, `level_multiplier`, `scaled_value`, `stat_target`,
+  `source_thread`, `source_thread_level`, `source_tier`, `narrative_snippet`
+- `ThreadImbueResult(resonance_spent: int, developed_points_added: int,
+   levels_gained: int, new_level: int, new_developed_points: int,
+   blocked_by: str)` — return shape for `spend_resonance_for_imbuing`
+- `ThreadXPLockProspect(thread, boundary_level: int, xp_cost: int,
+   dev_points_to_boundary: int)` — return shape for `near_xp_lock_threads`
 - `ActionContext(...)` — at minimum carries `anchors_in_play` (for non-relationship
   involvement check) and `asserted_relationship_anchors` (player declarations);
   exact shape coordinates with the action-system work
@@ -1120,11 +1445,33 @@ Service functions to remove (tied to deleted models):
   models are deleted (alongside their factories).
 - New tests cover:
   - thread weaving eligibility (per anchor kind, including typeclass-inheritance
-    walk for ITEM)
-  - threshold spend (success, insufficient resonance, threshold not reached,
-    anchor cap exceeded)
-  - pull cost + stacking (FLAT_BONUS sum, INTENSITY_BUMP cap, CAPABILITY_GRANT
-    union, NARRATIVE_ONLY collection, mixed-kind snippet collection)
+    walk for ITEM); name/description optional; default-name rendering when blank
+  - bucket-fill imbue spend (success at sub-boundary level, no XP needed;
+    success crossing a boundary that has a `ThreadLevelUnlock`; rejection
+    at an unlocked boundary; greedy multi-level advancement when bucket
+    overflows; insufficient resonance; anchor cap exceeded; path cap exceeded;
+    `blocked_by` field correctly set per case)
+  - XP-lock crossing (`cross_thread_xp_lock`): success, insufficient XP,
+    boundary already crossed (idempotency), boundary above effective_cap
+  - cap normalization (`compute_anchor_cap`):
+    TRAIT cap = trait_value (no multiplier), TECHNIQUE cap = level × 10,
+    RELATIONSHIP_TRACK cap = tier_index × 10, RELATIONSHIP_CAPSTONE cap =
+    path_stage × 10, ITEM/ROOM raise `AnchorCapNotImplemented`
+  - `compute_path_cap`: stage 0 → 10, stage N → N × 10, no path history → 10
+  - `compute_effective_cap`: chooses the tighter of path/anchor; surfaces
+    which gate is active
+  - pull cost + stacking (FLAT_BONUS sum-of-scaled, INTENSITY_BUMP cap,
+    CAPABILITY_GRANT union, NARRATIVE_ONLY collection, mixed-kind snippet
+    collection)
+  - **level-scaling** — three threads at levels 10/20/30 each with the same
+    authored +2 FLAT_BONUS produce contributions of +2/+4/+6 (sum = +12);
+    `min_thread_level` correctly filters effects below the gate (a level-2
+    thread doesn't trigger a `min_thread_level=30` row)
+  - **STAT_BONUS routing** — a tier-0 STAT_BONUS row with
+    `stat_target=MAX_HEALTH` increases `vitals.max_health` after weaving;
+    a tier-0 STAT_BONUS row with `stat_target=DAMAGE_TAKEN_REDUCTION`
+    reduces damage in a `DamagePreApply` flow (smoke test using a sample
+    authored row, not real Spec B authoring)
   - pull anchor-involvement (system-checked for non-relationship, asserted for
     relationship; commit re-validation when anchor falls out of play)
   - ritual dispatch — both the SERVICE path (Imbuing) AND the FLOW path (a sample
@@ -1133,6 +1480,8 @@ Service functions to remove (tied to deleted models):
   - `CharacterThreadWeavingUnlock` purchase + idempotency (same offer twice
     rejected)
   - in-Path / out-of-Path / Path-neutral cost paths in `computed_xp_cost`
+  - `update_thread_narrative` round-trip (name/description edits persist;
+    no level/cap changes)
 
 ---
 
@@ -1146,12 +1495,26 @@ Inheriting from Spec A:
   fields exist and are settable but have no mechanical effect yet.
 - `Ritual` model and `PerformRitualAction` are usable for authoring Soul Tether
   and other ritual-flavored capstone moments.
+- **`ThreadPullEffect.STAT_BONUS` effect_kind with `stat_target` enum**
+  (`MAX_HEALTH`, `DAMAGE_TAKEN_REDUCTION`) is installed and wired:
+  `MAX_HEALTH` rows feed `vitals.recompute_max_health`;
+  `DAMAGE_TAKEN_REDUCTION` rows feed combat's `DamagePreApply.modify_amount`
+  subscriber. Spec B authors resilience as STAT_BONUS rows on
+  relationship-anchored ThreadPullEffects — no schema changes required.
+  Most relationships should remain ungated (no STAT_BONUS rows authored on
+  them); the meaningful survival bonuses sit behind thread-level gating
+  via `min_thread_level`, so XP/resonance investment is what actually
+  trades for resilience.
 
 Spec B owns:
 
-- Aggregate relational-resilience formula (using existing
-  `CharacterRelationship.mechanical_bonus = cube_root(developed_value)` as a starting
-  point; deciding which `ModifierTarget` entries it adjusts).
+- Aggregate relational-resilience formula expressed as authored STAT_BONUS
+  rows on relationship-anchored ThreadPullEffects, gated by `min_thread_level`
+  for the meaningful tiers (modest tier-0 passive, larger gated bonuses at
+  higher thread levels). Existing `CharacterRelationship.mechanical_bonus =
+  cube_root(developed_value)` may still play a role for the always-on
+  ungated baseline, but the *meaningful* survivability (the part the user
+  flagged as needing to be xp/resonance-gated) lives on threads.
 - Soul Tether grounding scaling formula (depth × caster tier; vulnerability of
   Abyssal-side and burden of Sineater-side).
 - Soul Tether break consequences and societal-gating expression (some societies
@@ -1159,6 +1522,9 @@ Spec B owns:
 - The Ritual Capstone authoring pipeline (Capstones can optionally point to a
   Ritual; rituals like Ritual of Devotion / Ritual of Betrayal / Accepting a Soul
   Tether are authored as Ritual rows + companion FlowDefinitions).
+- Any new `stat_target` enum values Spec B needs beyond `MAX_HEALTH` and
+  `DAMAGE_TAKEN_REDUCTION` (e.g. `MAX_ANIMA`, type-specific resistances).
+  These are additive enum values, not schema changes.
 
 ### 8.2 Handoff to Spec C (Resonance Gain Surfaces)
 
@@ -1190,6 +1556,12 @@ Spec D owns:
 
 - Ritual-grade item authoring — the ItemTemplate provenance system that makes
   "a Liar's Promise" authorable as an item with creation requirements.
+- **ITEM and ROOM anchor-cap formulas** — Spec D's "magical significance"
+  authoring (on ItemTemplate / ItemInstance / RoomProfile) is the natural
+  source for these caps. Spec A's `compute_anchor_cap` implementation raises
+  `AnchorCapNotImplemented` for ITEM and ROOM; Spec D extends it with the
+  appropriate normalized formula (matching the common × 10 scale used by
+  TECHNIQUE / RELATIONSHIP_TRACK so the math composes uniformly).
 - Hedge-magic rules for Quiescent characters (when hedge_accessible rituals are
   attemptable, what they can do, what they cost a Quiescent).
 - Glimpse-triggering integration (when does a glimpse_eligible ritual actually
@@ -1207,11 +1579,11 @@ Spec D owns:
   teaching-discovery surface to include ThreadWeaving offers within Spec A or defer
   to a broader teaching-discovery refactor. Lean: extend within Spec A's frontend
   work for the "Find a Teacher" button to land somewhere useful.
-- **TECHNIQUE-anchor cap is a placeholder.** §2.4 caps TECHNIQUE-anchored thread
-  level at "number of related Techniques the character knows under the parent Gift,"
-  which is a working stand-in. When the Gift system gains its own level/rank
-  mechanic, swap to a Gift-level-derived cap. Track this so the cap formula gets
-  revisited rather than ossified.
+- **TECHNIQUE-anchor cap multiplier may need revisiting.** §2.4 caps
+  TECHNIQUE-anchored thread level at `Technique.level × 10`. Techniques are
+  1–5 today; if the Technique system gains finer-grained levels (1–100,
+  matching skills), drop the multiplier. The formula stays; the multiplier
+  is the only thing that floats with the underlying scale.
 - **Ritual site-property bonus mechanism.** Both Ritual and PerformRitualAction
   declare `site_property` and an "apply site-property bonus if room property
   matches" step, but the bonus's actual mechanic (XP-cost reduction? extra
