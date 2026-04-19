@@ -27,7 +27,14 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.magic.constants import AlterationTier, CantripArchetype, PendingAlterationStatus
+from world.magic.constants import (
+    AlterationTier,
+    CantripArchetype,
+    EffectKind,
+    PendingAlterationStatus,
+    TargetKind,
+    VitalBonusTarget,
+)
 from world.magic.types import (
     AffinityType,
     ResonanceScope,
@@ -1755,6 +1762,189 @@ class ThreadXPLockedLevel(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Lvl {self.level} (XP {self.xp_cost})"
+
+
+class ThreadPullEffect(SharedMemoryModel):
+    """Authored pull-effect template.
+
+    Tier 0 is passive (always-on while anchor is in scope); tiers 1-3 are
+    paid pulls. Lookup row keyed (target_kind, resonance, tier, min_thread_level).
+    Payload columns are mutually exclusive per effect_kind; clean() enforces
+    the legal combinations and DB CheckConstraints mirror the validation.
+    """
+
+    target_kind = models.CharField(max_length=32, choices=TargetKind.choices)
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        related_name="pull_effects",
+    )
+    tier = models.PositiveSmallIntegerField()  # 0..3
+    min_thread_level = models.PositiveSmallIntegerField(default=0)
+    effect_kind = models.CharField(max_length=32, choices=EffectKind.choices)
+
+    flat_bonus_amount = models.SmallIntegerField(null=True, blank=True)
+    intensity_bump_amount = models.SmallIntegerField(null=True, blank=True)
+    vital_bonus_amount = models.SmallIntegerField(null=True, blank=True)
+    vital_target = models.CharField(
+        max_length=32,
+        choices=VitalBonusTarget.choices,
+        null=True,
+        blank=True,
+    )
+    capability_grant = models.ForeignKey(
+        "conditions.CapabilityType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="thread_pull_effects",
+    )
+    narrative_snippet = models.TextField(blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["target_kind", "resonance", "tier"]),
+        ]
+        constraints = [
+            # FLAT_BONUS: requires flat_bonus_amount, forbids other payloads.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(effect_kind="FLAT_BONUS")
+                    | (
+                        models.Q(flat_bonus_amount__isnull=False)
+                        & models.Q(intensity_bump_amount__isnull=True)
+                        & models.Q(vital_bonus_amount__isnull=True)
+                        & models.Q(vital_target__isnull=True)
+                        & models.Q(capability_grant__isnull=True)
+                    )
+                ),
+                name="threadpulleffect_flat_bonus_payload",
+            ),
+            # INTENSITY_BUMP: requires intensity_bump_amount, forbids others.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(effect_kind="INTENSITY_BUMP")
+                    | (
+                        models.Q(intensity_bump_amount__isnull=False)
+                        & models.Q(flat_bonus_amount__isnull=True)
+                        & models.Q(vital_bonus_amount__isnull=True)
+                        & models.Q(vital_target__isnull=True)
+                        & models.Q(capability_grant__isnull=True)
+                    )
+                ),
+                name="threadpulleffect_intensity_bump_payload",
+            ),
+            # VITAL_BONUS: requires vital_bonus_amount + vital_target, forbids others.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(effect_kind="VITAL_BONUS")
+                    | (
+                        models.Q(vital_bonus_amount__isnull=False)
+                        & models.Q(vital_target__isnull=False)
+                        & models.Q(flat_bonus_amount__isnull=True)
+                        & models.Q(intensity_bump_amount__isnull=True)
+                        & models.Q(capability_grant__isnull=True)
+                    )
+                ),
+                name="threadpulleffect_vital_bonus_payload",
+            ),
+            # CAPABILITY_GRANT: requires capability_grant FK, forbids numeric payloads.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(effect_kind="CAPABILITY_GRANT")
+                    | (
+                        models.Q(capability_grant__isnull=False)
+                        & models.Q(flat_bonus_amount__isnull=True)
+                        & models.Q(intensity_bump_amount__isnull=True)
+                        & models.Q(vital_bonus_amount__isnull=True)
+                        & models.Q(vital_target__isnull=True)
+                    )
+                ),
+                name="threadpulleffect_capability_grant_payload",
+            ),
+            # NARRATIVE_ONLY: requires non-empty snippet, forbids all other payloads.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(effect_kind="NARRATIVE_ONLY")
+                    | (
+                        ~models.Q(narrative_snippet="")
+                        & models.Q(flat_bonus_amount__isnull=True)
+                        & models.Q(intensity_bump_amount__isnull=True)
+                        & models.Q(vital_bonus_amount__isnull=True)
+                        & models.Q(vital_target__isnull=True)
+                        & models.Q(capability_grant__isnull=True)
+                    )
+                ),
+                name="threadpulleffect_narrative_only_payload",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"PullEffect(t={self.target_kind} res={self.resonance_id} "
+            f"tier={self.tier} kind={self.effect_kind})"
+        )
+
+    def clean(self) -> None:
+        super().clean()
+        numeric_fields: dict[str, int | None] = {
+            "flat_bonus_amount": self.flat_bonus_amount,
+            "intensity_bump_amount": self.intensity_bump_amount,
+            "vital_bonus_amount": self.vital_bonus_amount,
+        }
+        validators = {
+            EffectKind.FLAT_BONUS: self._clean_flat_bonus,
+            EffectKind.INTENSITY_BUMP: self._clean_intensity_bump,
+            EffectKind.VITAL_BONUS: self._clean_vital_bonus,
+            EffectKind.CAPABILITY_GRANT: self._clean_capability_grant,
+            EffectKind.NARRATIVE_ONLY: self._clean_narrative_only,
+        }
+        validator = validators.get(self.effect_kind)
+        if validator is not None:
+            validator(numeric_fields)
+
+    def _clean_flat_bonus(self, numeric_fields: dict[str, int | None]) -> None:
+        self._require_only("flat_bonus_amount", numeric_fields, self.capability_grant)
+
+    def _clean_intensity_bump(self, numeric_fields: dict[str, int | None]) -> None:
+        self._require_only("intensity_bump_amount", numeric_fields, self.capability_grant)
+
+    def _clean_vital_bonus(self, numeric_fields: dict[str, int | None]) -> None:
+        self._require_only("vital_bonus_amount", numeric_fields, self.capability_grant)
+        if not self.vital_target:
+            raise ValidationError({"vital_target": "VITAL_BONUS requires vital_target."})
+
+    def _clean_capability_grant(self, numeric_fields: dict[str, int | None]) -> None:
+        if self.capability_grant is None:
+            raise ValidationError(
+                {"capability_grant": "CAPABILITY_GRANT requires capability_grant."}
+            )
+        for name, val in numeric_fields.items():
+            if val is not None:
+                raise ValidationError({name: "Must be null for CAPABILITY_GRANT."})
+
+    def _clean_narrative_only(self, numeric_fields: dict[str, int | None]) -> None:
+        if not self.narrative_snippet.strip():
+            raise ValidationError({"narrative_snippet": "NARRATIVE_ONLY requires snippet."})
+        if self.capability_grant is not None:
+            raise ValidationError({"capability_grant": "Must be null for NARRATIVE_ONLY."})
+        for name, val in numeric_fields.items():
+            if val is not None:
+                raise ValidationError({name: "Must be null for NARRATIVE_ONLY."})
+
+    @staticmethod
+    def _require_only(
+        name: str,
+        numeric_fields: dict[str, int | None],
+        capability: object,
+    ) -> None:
+        if numeric_fields[name] is None:
+            raise ValidationError({name: f"{name} required for this effect_kind."})
+        for other, val in numeric_fields.items():
+            if other != name and val is not None:
+                raise ValidationError({other: "Must be null for this effect_kind."})
+        if capability is not None:
+            raise ValidationError({"capability_grant": "Must be null for this effect_kind."})
 
 
 from world.magic.audere import AudereThreshold  # noqa: F401, E402

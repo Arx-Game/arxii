@@ -31,6 +31,7 @@ from world.magic.models import (
     TechniqueOutcomeModifier,
     TechniqueStyle,
     ThreadPullCost,
+    ThreadPullEffect,
     ThreadXPLockedLevel,
     Tradition,
 )
@@ -364,3 +365,18 @@ class ThreadPullCostAdmin(admin.ModelAdmin):
 class ThreadXPLockedLevelAdmin(admin.ModelAdmin):
     list_display = ["level", "xp_cost"]
     ordering = ["level"]
+
+
+@admin.register(ThreadPullEffect)
+class ThreadPullEffectAdmin(admin.ModelAdmin):
+    list_display = [
+        "target_kind",
+        "resonance",
+        "tier",
+        "min_thread_level",
+        "effect_kind",
+    ]
+    list_filter = ["target_kind", "tier", "effect_kind"]
+    search_fields = ["resonance__name", "narrative_snippet"]
+    autocomplete_fields = ["resonance", "capability_grant"]
+    list_select_related = ["resonance", "capability_grant"]

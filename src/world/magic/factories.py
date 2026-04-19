@@ -5,7 +5,14 @@ import factory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.magic.audere import AudereThreshold
-from world.magic.constants import AlterationTier, CantripArchetype, PendingAlterationStatus
+from world.magic.constants import (
+    AlterationTier,
+    CantripArchetype,
+    EffectKind,
+    PendingAlterationStatus,
+    TargetKind,
+    VitalBonusTarget,
+)
 from world.magic.models import (
     Affinity,
     AnimaRitualPerformance,
@@ -36,6 +43,7 @@ from world.magic.models import (
     TechniqueOutcomeModifier,
     TechniqueStyle,
     ThreadPullCost,
+    ThreadPullEffect,
     ThreadXPLockedLevel,
     Tradition,
 )
@@ -522,3 +530,51 @@ class ThreadXPLockedLevelFactory(factory.django.DjangoModelFactory):
 
     level = 20
     xp_cost = 200
+
+
+class ThreadPullEffectFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadPullEffect — authored pull-effect templates.
+
+    Defaults to a tier-0 FLAT_BONUS for a fresh resonance. Use traits
+    (as_intensity_bump, as_vital_bonus, as_capability_grant,
+    as_narrative_only) to switch payload shape.
+    """
+
+    class Meta:
+        model = ThreadPullEffect
+
+    target_kind = TargetKind.TRAIT
+    resonance = factory.SubFactory(ResonanceFactory)
+    tier = 0
+    min_thread_level = 0
+    effect_kind = EffectKind.FLAT_BONUS
+    flat_bonus_amount = 1
+
+    class Params:
+        as_flat_bonus = factory.Trait(
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=2,
+        )
+        as_intensity_bump = factory.Trait(
+            effect_kind=EffectKind.INTENSITY_BUMP,
+            intensity_bump_amount=1,
+            flat_bonus_amount=None,
+        )
+        as_vital_bonus = factory.Trait(
+            effect_kind=EffectKind.VITAL_BONUS,
+            flat_bonus_amount=None,
+            vital_bonus_amount=5,
+            vital_target=VitalBonusTarget.MAX_HEALTH,
+        )
+        as_capability_grant = factory.Trait(
+            effect_kind=EffectKind.CAPABILITY_GRANT,
+            flat_bonus_amount=None,
+            capability_grant=factory.SubFactory(
+                "world.conditions.factories.CapabilityTypeFactory",
+            ),
+        )
+        as_narrative_only = factory.Trait(
+            effect_kind=EffectKind.NARRATIVE_ONLY,
+            flat_bonus_amount=None,
+            narrative_snippet="A whisper at the edge of hearing.",
+        )

@@ -4,11 +4,14 @@ Covers ThreadPullCost, ThreadXPLockedLevel, ThreadPullEffect,
 ImbuingProseTemplate, and Ritual / RitualComponentRequirement.
 """
 
+from django.core.exceptions import ValidationError
 from django.db.utils import IntegrityError
 from django.test import TestCase
 
+from world.magic.constants import EffectKind, VitalBonusTarget
 from world.magic.factories import (
     ThreadPullCostFactory,
+    ThreadPullEffectFactory,
     ThreadXPLockedLevelFactory,
 )
 from world.magic.models import ThreadPullCost, ThreadXPLockedLevel
@@ -42,3 +45,50 @@ class ThreadXPLockedLevelModelTests(TestCase):
         ThreadXPLockedLevelFactory(level=20)
         with self.assertRaises(IntegrityError):
             ThreadXPLockedLevel.objects.create(level=20, xp_cost=999)
+
+
+class ThreadPullEffectCleanTests(TestCase):
+    def test_flat_bonus_requires_flat_bonus_amount(self):
+        eff = ThreadPullEffectFactory.build(
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=None,
+        )
+        with self.assertRaises(ValidationError):
+            eff.clean()
+
+    def test_flat_bonus_rejects_other_payloads(self):
+        eff = ThreadPullEffectFactory.build(
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=2,
+            intensity_bump_amount=1,
+        )
+        with self.assertRaises(ValidationError):
+            eff.clean()
+
+    def test_vital_bonus_requires_vital_target(self):
+        eff = ThreadPullEffectFactory.build(
+            effect_kind=EffectKind.VITAL_BONUS,
+            flat_bonus_amount=None,
+            vital_bonus_amount=5,
+            vital_target=None,
+        )
+        with self.assertRaises(ValidationError):
+            eff.clean()
+
+    def test_vital_bonus_with_target_passes(self):
+        eff = ThreadPullEffectFactory.build(
+            effect_kind=EffectKind.VITAL_BONUS,
+            flat_bonus_amount=None,
+            vital_bonus_amount=5,
+            vital_target=VitalBonusTarget.MAX_HEALTH,
+        )
+        eff.clean()  # no exception
+
+    def test_narrative_only_requires_snippet_and_no_numeric_payload(self):
+        eff = ThreadPullEffectFactory.build(
+            effect_kind=EffectKind.NARRATIVE_ONLY,
+            flat_bonus_amount=None,
+            narrative_snippet="",
+        )
+        with self.assertRaises(ValidationError):
+            eff.clean()
