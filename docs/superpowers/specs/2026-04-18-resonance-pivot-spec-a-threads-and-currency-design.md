@@ -1226,6 +1226,10 @@ POST   /api/magic/rituals/perform/               body: {ritual_id, kwargs,
                                                   invokes PerformRitualAction
                                                   Imbuing uses kwargs={thread_id}
 
+POST   /api/magic/thread-pull-preview/           pre-commit pull preview;
+                                                  read-only; full request /
+                                                  response shape in §5.6
+
 GET    /api/magic/teaching-offers/               extends codex teaching-offer
                                                   discovery surface (Q17 lean)
                                                   filterable by anchor type
