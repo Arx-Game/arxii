@@ -227,14 +227,14 @@ min_thread_level   PositiveSmallIntegerField default=0
                                                 # effects behind investment without
                                                 # adding a separate "tier 4+" axis.
 effect_kind        CharField choices:
-                     FLAT_BONUS | INTENSITY_BUMP | STAT_BONUS |
+                     FLAT_BONUS | INTENSITY_BUMP | VITAL_BONUS |
                      CAPABILITY_GRANT | NARRATIVE_ONLY
 
 # Typed payload — no JSON. Resolver reads the field matching effect_kind.
 flat_bonus_amount       SmallIntegerField   null=True
 intensity_bump_amount   SmallIntegerField   null=True
-stat_bonus_amount       SmallIntegerField   null=True
-stat_target             CharField choices null=True   # required for STAT_BONUS
+vital_bonus_amount       SmallIntegerField   null=True
+vital_target             CharField choices null=True   # required for VITAL_BONUS
                           # MAX_HEALTH | DAMAGE_TAKEN_REDUCTION | future enum values
                           # (e.g. MAX_ANIMA, DAMAGE_DEALT_BONUS) — added as
                           # downstream specs need them. Authored constants live
@@ -245,7 +245,7 @@ capability_grant        FK Capability        null=True
 # narrative output when this row applies. Replaces the prior ThreadNarrativeTag
 # model (which was a separate lookup just to hang a string on a row — overkill).
 # A NARRATIVE_ONLY row's snippet IS its entire effect. Snippets on FLAT_BONUS,
-# INTENSITY_BUMP, STAT_BONUS, and CAPABILITY_GRANT rows are also collected and
+# INTENSITY_BUMP, VITAL_BONUS, and CAPABILITY_GRANT rows are also collected and
 # rendered alongside the mechanical payload — the snippet is additive, not
 # exclusive.
 narrative_snippet       TextField   blank=True
@@ -271,17 +271,29 @@ duplication cheap. The benefit is no surprise behavior at runtime — what
 you author is exactly what fires.
 
 **`clean()` enforces payload/effect_kind alignment**: exactly one of
-`flat_bonus_amount`, `intensity_bump_amount`, `stat_bonus_amount`,
+`flat_bonus_amount`, `intensity_bump_amount`, `vital_bonus_amount`,
 `capability_grant` must be populated, matching `effect_kind`; for
-`STAT_BONUS`, `stat_target` is required; for `NARRATIVE_ONLY`, all numeric
-payloads must be null and `narrative_snippet` must be non-blank. Database
-`CheckConstraint`s mirror this.
+`VITAL_BONUS`, `vital_target` is required AND `tier` must be 0; for
+`NARRATIVE_ONLY`, all numeric payloads must be null and
+`narrative_snippet` must be non-blank. Database `CheckConstraint`s
+mirror this.
 
-**Why STAT_BONUS exists in Spec A:** Spec B (Relational Resilience + Soul Tether)
+**Why VITAL_BONUS is tier-0 only:** vital bonuses are durable passives that
+scale with thread level, not per-action paid spends. A per-action
+MAX_HEALTH bump is incoherent (an offensive action gets +max_health…
+why? what happens after?), and a per-action damage-reduction pull would
+ride a duration model the action layer doesn't yet have. The natural
+investment lever for vital pools is the thread's level itself: imbue
+the thread higher → its tier-0 VITAL_BONUS scales linearly per §5.4.
+If playtest later wants short-lived defensive boosts, that's a separate
+TEMP_BUFFER concept introduced as new infrastructure, not retrofit onto
+the pull system.
+
+**Why VITAL_BONUS exists in Spec A:** Spec B (Relational Resilience + Soul Tether)
 needs to express "this thread grants +N max_health" and "this thread reduces
-incoming damage by N." Rather than retrofit the schema later, STAT_BONUS is
+incoming damage by N." Rather than retrofit the schema later, VITAL_BONUS is
 introduced now with `MAX_HEALTH` and `DAMAGE_TAKEN_REDUCTION` as the launch
-enum values. Spec A authors **no** `STAT_BONUS` rows itself; the column and
+enum values. Spec A authors **no** `VITAL_BONUS` rows itself; the column and
 enum exist so Spec B's authoring lands as data, not migration. Resolution at
 runtime uses existing infrastructure: `MAX_HEALTH` is folded into
 `vitals.recompute_max_health()` as a thread-derived addend; `DAMAGE_TAKEN_REDUCTION`
@@ -555,8 +567,8 @@ def spend_resonance_for_imbuing(
       thread.level = N + 1
       thread.developed_points -= cost
 
-    Atomic (select_for_update on the pool row + the thread row):
-    decrements pool.balance, increments thread.developed_points,
+    Atomic (single transaction, in-memory mutation of the SharedMemoryModel
+    instances): decrements pool.balance, increments thread.developed_points,
     advances thread.level as far as the bucket and gates allow.
 
     Returns a ThreadImbueResult dataclass with:
@@ -644,10 +656,22 @@ def spend_resonance_for_pull(
     """
 ```
 
-Both spend functions wrap the relevant ResonancePool row in `select_for_update()` so
-two simultaneous spends from the same pool serialize. The pull spend additionally
-locks the `CharacterAnima` row for the same reason. This matters for pulls in
-overlapping turns (multi-actor scenes).
+Both spend functions run in a single Django transaction and mutate the
+SharedMemoryModel-cached `ResonancePool` and `CharacterAnima` instances
+in-memory before saving. Because Evennia runs as a single process and
+all spend paths route through the same identity-mapped instances, no
+row-level locking (`select_for_update`) is needed — concurrent spend
+calls from different actors in overlapping turns serialize naturally
+on the GIL and the in-memory state is the source of truth.
+
+This is consistent with the project-wide "Trust the Identity Map"
+principle (see CLAUDE.md): SharedMemoryModel instances are the canonical
+Python objects for these rows; once loaded, every reader/writer in the
+process sees the same instance. We would only need `select_for_update`
+if (a) writes happened via raw queryset `.update()` calls bypassing the
+identity map, or (b) the project moved to a multi-process worker model.
+Neither applies. If either becomes true later, lock semantics get
+revisited then.
 
 **Dependency note:** `CharacterAnima` (current/maximum) is the existing magic-system
 anima model in `world/magic/models.py`. Spec A reuses it directly — no new pool
@@ -674,11 +698,13 @@ for:
 
 ### 3.5 Concurrency model
 
-All spends use `select_for_update()` on the ResonancePool row; grants use atomic
-transactions but don't need to lock (only one writer matters per row at a time, and
-gains are commutative). The pessimistic lock is at the row level (per character per
-resonance), so a character pulling on Celestial doesn't block a different character's
-Primal grant.
+All spends and grants run in single Django transactions and mutate the
+SharedMemoryModel-cached `ResonancePool` / `CharacterAnima` instances
+in-memory before saving. Single-process Evennia + identity-mapped instances
+means concurrent reads/writes converge on the same Python object and
+serialize naturally on the GIL — no row-level locks (`select_for_update`)
+needed. See §3.2 for the full rationale and the conditions under which
+locks would need to come back.
 
 ### 3.6 Resonance Pool service helpers
 
@@ -705,6 +731,83 @@ def threads_blocked_by_cap(character) -> list[Thread]:
 ```
 
 These power the My Threads page. None mutate.
+
+### 3.7 Caching and character handlers
+
+Pull resolution is on the hot path of every action with thread involvement.
+Per-action queries against `Thread`, `ResonancePool`, and the lookup tables
+would grind the system to a halt; caching is required, not optional.
+
+Two tiers of caching, both following established project conventions.
+
+#### Lookup-table caching (free via SharedMemoryModel)
+
+Every config/lookup model in this spec uses `SharedMemoryModel` (project
+default) and rides the Evennia identity map. After the first read, all
+rows are persistent Python objects — subsequent reads are pure dict
+lookups, no SQL. Models in this category:
+
+- `ThreadPullCost` (3 rows)
+- `ThreadPullEffect` (authored content; expected order ~10²–10³ rows)
+- `ThreadXPLockedLevel` (~10 rows)
+- `ThreadWeavingUnlock` (authored content; expected order ~10²)
+- `ImbuingProseTemplate` (authored content; expected order ~10¹–10²)
+- `Ritual`, `RitualComponentRequirement` (authored content)
+- `Resonance`, `Affinity` (existing — already SharedMemoryModel)
+
+The pull-resolution algorithm (§5.4) walks these in-memory dictionaries
+indexed by `(target_kind, resonance, tier)` — no per-action queries.
+Index helpers on the Effect lookup model preload the
+`(target_kind, resonance, tier) → list[ThreadPullEffect]` map at first
+access via `@cached_property` on a manager method, populated from the
+identity-mapped queryset.
+
+#### Per-character handlers (mirror existing pattern)
+
+Per-character data hangs off character handlers, matching the project's
+established pattern (`character.traits` → `TraitHandler`, etc.).
+
+- **`character.threads`** → `CharacterThreadHandler`
+  - `.all()` — `Thread.objects.filter(owner=...).select_related(resonance,
+    target_trait, target_technique, target_object,
+    target_relationship_track, target_capstone)` cached as a list on first
+    access via `@cached_property`
+  - `.by_resonance(resonance)` — filtered view, cached per resonance
+  - `.with_anchor_involved(action_context)` — returns the threads whose
+    anchors are in scope for an action (per §5.2 rules); used by both
+    pull resolution and tier-0 passive collection
+  - `.passive_vital_bonuses(vital_target)` — sum of scaled VITAL_BONUS
+    contributions for `MAX_HEALTH` recomputation and `DAMAGE_TAKEN_REDUCTION`
+    subscription (called from outside the action loop, but still wants the
+    cache for hot-loop combat)
+  - `.invalidate()` — called by `weave_thread`, `spend_resonance_for_imbuing`,
+    `cross_thread_xp_lock`, `update_thread_narrative`, and any future
+    mutation; clears the `@cached_property` slots
+
+- **`character.resonance_pools`** → `CharacterResonancePoolHandler`
+  - `.balance(resonance)` — returns `int` from cached pool dict
+  - `.lifetime(resonance)` — same
+  - `.get_or_create(resonance)` — returns the SharedMemoryModel instance
+  - `.invalidate()` — called by `grant_resonance`,
+    `spend_resonance_for_imbuing`, `spend_resonance_for_pull`
+
+Both handlers follow the project's "mutation invalidates the cache, reads
+trust the cache" rule. Service functions are the only callers that
+mutate; they always invalidate after mutation.
+
+#### Why this matters
+
+A naïve implementation of pull resolution would issue queries per
+thread × per tier × per stacking pass. With caching:
+- First action of the scene: ~3-5 queries to warm the per-character
+  handler caches.
+- Every subsequent action: zero queries on the read path. Pull commit
+  issues `UPDATE` statements only for the rows that actually changed
+  (the pool, anima, thread).
+
+Combat in particular hits damage-reduction subscribers per
+`DamagePreApply` event; the `passive_vital_bonuses` cache is what
+keeps that subscriber from being a query-per-hit disaster.
 
 ---
 
@@ -987,7 +1090,8 @@ and the list of threads to pull:
    - CharacterAnima.current >= ThreadPullCost(tier).anima_per_thread *
      max(0, len(threads) - 1).
 
-2. Atomically debit (select_for_update on pool and CharacterAnima rows):
+2. Atomically debit (single transaction, in-memory mutation of the
+   SharedMemoryModel-cached pool and anima instances):
    - ResonancePool.balance -= ThreadPullCost(tier).resonance_cost
    - CharacterAnima.current -= anima_total
 
@@ -999,7 +1103,7 @@ and the list of threads to pull:
      For each matched row, scale its authored amount by the thread's
      display level (`scaled = authored × max(1, thread.level // 10)`).
      The level-scaling rule is **linear** and applies to all numeric
-     effect_kinds (FLAT_BONUS, INTENSITY_BUMP, STAT_BONUS).
+     effect_kinds (FLAT_BONUS, INTENSITY_BUMP, VITAL_BONUS).
      CAPABILITY_GRANT and NARRATIVE_ONLY do not scale (granting a
      capability is binary; a narrative snippet is text). For
      CAPABILITY_GRANT, `min_thread_level` is the gating mechanism
@@ -1034,10 +1138,12 @@ from §5.4):
   IntensityTier. The pull preview displays the effective (capped) outcome so
   players never spend anima for intensity past the cap; they can downsize their
   pull or shift to other resonances.
-- **STAT_BONUS** — sum the scaled amounts **per `stat_target`**. Effects with
-  different `stat_target`s do not stack with each other (a `MAX_HEALTH` row
-  and a `DAMAGE_TAKEN_REDUCTION` row are independent contributions to two
-  different consumers). For `MAX_HEALTH`, the sum is added to the character's
+- **VITAL_BONUS** — tier-0 only (per §2.1). Sum the scaled amounts **per
+  `vital_target`** across all the character's threads whose anchors are
+  passively in scope. Effects with different `vital_target`s do not stack
+  with each other (a `MAX_HEALTH` row and a `DAMAGE_TAKEN_REDUCTION` row
+  are independent contributions to two different consumers). For `MAX_HEALTH`,
+  the sum is added to the character's
   `vitals.max_health` recomputation. For `DAMAGE_TAKEN_REDUCTION`, the sum
   is supplied to combat's `DamagePreApply.modify_amount` subscriber. No cap
   in Spec A; Spec B owns any per-stat ceilings if playtest demands them.
@@ -1073,12 +1179,12 @@ Response: {
   resolved_effects: [
     {
       kind,                            # FLAT_BONUS | INTENSITY_BUMP |
-                                       #   STAT_BONUS | CAPABILITY_GRANT |
+                                       #   VITAL_BONUS | CAPABILITY_GRANT |
                                        #   NARRATIVE_ONLY
       authored_value,                  # raw value on the authored row
       level_multiplier,                # source thread's display level (×1, ×2…)
       scaled_value,                    # authored × level_multiplier
-      stat_target,                     # populated for STAT_BONUS only
+      vital_target,                     # populated for VITAL_BONUS only
       source_thread_id,
       source_thread_level,             # internal level (10/20/30…)
       source_tier,
@@ -1117,13 +1223,13 @@ The action resolver (existing/future check/action machinery) receives the
 - `narrative_snippet`s are appended to the action's narrative output buffer for
   rendering.
 
-`STAT_BONUS` effects do NOT route through the action resolver — they target
-character-level stats, not per-action checks. Routing per `stat_target`:
+`VITAL_BONUS` effects do NOT route through the action resolver — they target
+character-level vital pools, not per-action checks. Routing per `vital_target`:
 
 - **`MAX_HEALTH`** — `vitals.recompute_max_health(character)` is the canonical
   recomputation entry point (already invoked when stats change). Spec A adds
-  one new addend source: `sum(scaled_amount for STAT_BONUS rows with
-  stat_target=MAX_HEALTH on every active passive thread for this character)`.
+  one new addend source: `sum(scaled_amount for VITAL_BONUS rows with
+  vital_target=MAX_HEALTH on every active passive thread for this character)`.
   "Active passive" means tier-0 ThreadPullEffect rows on threads whose anchor
   is currently in scope — for relationship anchors that means the relationship
   exists; for trait anchors that means the trait exists; etc. `recompute_max_health`
@@ -1139,7 +1245,7 @@ character-level stats, not per-action checks. Routing per `stat_target`:
   at 0). No new event types; no combat-system changes; the integration is
   purely subscribing to an existing reactive hook.
 
-Spec A authors **zero** STAT_BONUS rows — these routes exist as installed
+Spec A authors **zero** VITAL_BONUS rows — these routes exist as installed
 plumbing for Spec B (Relational Resilience). The implementation plan should
 include a smoke-test row authored only in tests to prove the wiring.
 
@@ -1297,7 +1403,8 @@ In `world/magic`:
 - `ThreadXPLockedLevel` (lookup, SharedMemoryModel)
 - `ThreadLevelUnlock` (per-thread record of XP-lock crossings)
 - `ThreadPullEffect` (lookup, SharedMemoryModel; includes `min_thread_level`,
-  `STAT_BONUS` effect_kind, `stat_target`, `stat_bonus_amount`)
+  `VITAL_BONUS` effect_kind constrained to tier=0 only, `vital_target`,
+  `vital_bonus_amount`)
 - `ThreadWeavingUnlock` (lookup, SharedMemoryModel)
 - `CharacterThreadWeavingUnlock` (purchase record)
 - `ThreadWeavingTeachingOffer`
@@ -1367,8 +1474,8 @@ discriminator-aware shape).
   flexible by (thread, unlocked_level)
 - `ThreadPullEffectFactory` — flexible factory for authoring sample effects per
   test, with traits `as_flat_bonus`, `as_intensity_bump`, `as_capability_grant`,
-  `as_narrative_only`, and `as_stat_bonus(stat_target=...)` to exercise the
-  STAT_BONUS payload schema for Spec B's eventual authoring
+  `as_narrative_only`, and `as_vital_bonus(vital_target=...)` to exercise the
+  VITAL_BONUS payload schema for Spec B's eventual authoring
 - `ThreadWeavingUnlockFactory` — flexible factory for authoring sample unlocks per
   test, with traits for in-Path / out-of-Path examples and discriminator-aware
   traits (`as_trait_unlock`, `as_gift_unlock`, `as_item_unlock`, `as_room_unlock`,
@@ -1420,20 +1527,34 @@ Service functions to add in `world/magic/services.py`:
   compute_anchor_cap(thread))`; used by both spend services and the My Threads
   page
 - `recompute_max_health_with_threads(character)` — wrapper that calls
-  `vitals.recompute_max_health` with thread-derived MAX_HEALTH STAT_BONUS
-  contributions folded in. Invoked from the thread mutation services
-  (weave/imbue/retire) and from any anchor-state change that would alter
-  which threads are passively contributing.
+  `vitals.recompute_max_health` with thread-derived MAX_HEALTH VITAL_BONUS
+  contributions folded in (sourced from
+  `character.threads.passive_vital_bonuses(MAX_HEALTH)`). Invoked from
+  the thread mutation services (weave/imbue/retire) and from any
+  anchor-state change that would alter which threads are passively
+  contributing.
 - `apply_damage_reduction_from_threads(character, incoming_damage)` — the
-  subscriber body for combat's `DamagePreApply.modify_amount` hook; sums
-  active-passive STAT_BONUS rows with `stat_target=DAMAGE_TAKEN_REDUCTION`
-  for the target and reduces incoming damage by the sum (clamped at 0).
+  subscriber body for combat's `DamagePreApply.modify_amount` hook; reads
+  `character.threads.passive_vital_bonuses(DAMAGE_TAKEN_REDUCTION)` and
+  reduces incoming damage by the sum (clamped at 0). Cache hit on every
+  call after the first per scene.
+
+Handler classes in `world/magic/handlers.py`:
+- `CharacterThreadHandler` — exposed via `character.threads`. See §3.7
+  for full method list. Mutation methods on `Thread` go through the
+  service functions, which call `.invalidate()` after writes.
+- `CharacterResonancePoolHandler` — exposed via `character.resonance_pools`.
+  See §3.7 for method list. Same invalidation pattern as the thread handler.
+
+Both handlers wire onto the existing `Character` typeclass alongside the
+established handlers (`character.traits`, etc.) — no new typeclass machinery,
+just added handler attributes.
 
 Dataclasses in `world/magic/types.py`:
 - `ResonancePullResult(resonance_spent: int, anima_spent: int,
    resolved_effects: list[ResolvedPullEffect])`
 - `ResolvedPullEffect(...)` — per-effect record carrying `kind`,
-  `authored_value`, `level_multiplier`, `scaled_value`, `stat_target`,
+  `authored_value`, `level_multiplier`, `scaled_value`, `vital_target`,
   `source_thread`, `source_thread_level`, `source_tier`, `narrative_snippet`
 - `ThreadImbueResult(resonance_spent: int, developed_points_added: int,
    levels_gained: int, new_level: int, new_developed_points: int,
@@ -1476,11 +1597,20 @@ Service functions to remove (tied to deleted models):
     authored +2 FLAT_BONUS produce contributions of +2/+4/+6 (sum = +12);
     `min_thread_level` correctly filters effects below the gate (a level-2
     thread doesn't trigger a `min_thread_level=30` row)
-  - **STAT_BONUS routing** — a tier-0 STAT_BONUS row with
-    `stat_target=MAX_HEALTH` increases `vitals.max_health` after weaving;
-    a tier-0 STAT_BONUS row with `stat_target=DAMAGE_TAKEN_REDUCTION`
+  - **VITAL_BONUS routing** — a tier-0 VITAL_BONUS row with
+    `vital_target=MAX_HEALTH` increases `vitals.max_health` after weaving;
+    a tier-0 VITAL_BONUS row with `vital_target=DAMAGE_TAKEN_REDUCTION`
     reduces damage in a `DamagePreApply` flow (smoke test using a sample
     authored row, not real Spec B authoring)
+  - **VITAL_BONUS tier-0 enforcement** — `clean()` rejects a `VITAL_BONUS`
+    row authored with `tier > 0`; database `CheckConstraint` rejects the
+    same at the row level
+  - **handler caching** — `character.threads.all()` issues one query then
+    serves repeats from the cache; `weave_thread` / `spend_resonance_for_imbuing`
+    invalidate the cache so the next read sees the mutation; same for
+    `character.resonance_pools.balance(resonance)` after `grant_resonance` /
+    `spend_resonance_for_pull`. Includes a "no queries on the hot path"
+    assertion using `assertNumQueries(0)` after warmup
   - pull anchor-involvement (system-checked for non-relationship, asserted for
     relationship; commit re-validation when anchor falls out of play)
   - ritual dispatch — both the SERVICE path (Imbuing) AND the FLOW path (a sample
@@ -1504,20 +1634,23 @@ Inheriting from Spec A:
   fields exist and are settable but have no mechanical effect yet.
 - `Ritual` model and `PerformRitualAction` are usable for authoring Soul Tether
   and other ritual-flavored capstone moments.
-- **`ThreadPullEffect.STAT_BONUS` effect_kind with `stat_target` enum**
-  (`MAX_HEALTH`, `DAMAGE_TAKEN_REDUCTION`) is installed and wired:
-  `MAX_HEALTH` rows feed `vitals.recompute_max_health`;
-  `DAMAGE_TAKEN_REDUCTION` rows feed combat's `DamagePreApply.modify_amount`
-  subscriber. Spec B authors resilience as STAT_BONUS rows on
-  relationship-anchored ThreadPullEffects — no schema changes required.
-  Most relationships should remain ungated (no STAT_BONUS rows authored on
-  them); the meaningful survival bonuses sit behind thread-level gating
-  via `min_thread_level`, so XP/resonance investment is what actually
-  trades for resilience.
+- **`ThreadPullEffect.VITAL_BONUS` effect_kind with `vital_target` enum**
+  (`MAX_HEALTH`, `DAMAGE_TAKEN_REDUCTION`) is installed and wired,
+  **constrained to tier=0 (passive)**: `MAX_HEALTH` rows feed
+  `vitals.recompute_max_health`; `DAMAGE_TAKEN_REDUCTION` rows feed combat's
+  `DamagePreApply.modify_amount` subscriber. Spec B authors resilience as
+  tier-0 VITAL_BONUS rows on relationship-anchored ThreadPullEffects —
+  no schema changes required. The investment lever is the thread's level
+  itself: tier-0 VITAL_BONUS scales linearly with `thread.level` per §5.4,
+  so a level-3 relationship thread with an authored "+5 max_health" row
+  contributes +15. Combine with `min_thread_level` for graduated unlocks
+  (small bonus from the start, larger bonus only after the thread is
+  imbued past a threshold). Per-action paid-pull VITAL_BONUS is explicitly
+  disallowed (§2.1 rationale) — durability is a passive, not a one-shot.
 
 Spec B owns:
 
-- Aggregate relational-resilience formula expressed as authored STAT_BONUS
+- Aggregate relational-resilience formula expressed as authored VITAL_BONUS
   rows on relationship-anchored ThreadPullEffects, gated by `min_thread_level`
   for the meaningful tiers (modest tier-0 passive, larger gated bonuses at
   higher thread levels). Existing `CharacterRelationship.mechanical_bonus =
@@ -1531,7 +1664,7 @@ Spec B owns:
 - The Ritual Capstone authoring pipeline (Capstones can optionally point to a
   Ritual; rituals like Ritual of Devotion / Ritual of Betrayal / Accepting a Soul
   Tether are authored as Ritual rows + companion FlowDefinitions).
-- Any new `stat_target` enum values Spec B needs beyond `MAX_HEALTH` and
+- Any new `vital_target` enum values Spec B needs beyond `MAX_HEALTH` and
   `DAMAGE_TAKEN_REDUCTION` (e.g. `MAX_ANIMA`, type-specific resistances).
   These are additive enum values, not schema changes.
 
