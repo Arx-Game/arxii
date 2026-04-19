@@ -297,8 +297,6 @@ granularity — there's no uniform "scope" enum; the right FK is the right granu
 
 ```
 ThreadWeavingUnlock
-  name                    CharField unique         # "ThreadWeaving for Seduction"
-  description             TextField
   target_kind             CharField choices        # same as Thread.target_kind minus
                                                     #   RELATIONSHIP_CAPSTONE
                                                     #   (subordinate to track unlock)
@@ -326,6 +324,66 @@ ThreadWeavingUnlock
   paths                   M2M Path                 # which Paths treat as in-band
   out_of_path_multiplier  DecimalField default=2.0
 ```
+
+**No `name` or `description` columns.** YAGNI — every authored unlock
+maps cleanly to "ThreadWeaving: <target>" derived from the discriminator
+FK (`unlock_trait.name`, `unlock_gift.name`, etc.); the
+`ThreadWeavingTeachingOffer.pitch` carries the per-teacher narrative
+flavor when an unlock is being offered. A derived `__str__` /
+`display_name` property on the model produces the label for admin and
+API surfaces:
+
+```python
+@property
+def display_name(self) -> str:
+    if self.target_kind == TargetKind.TRAIT:
+        return f"ThreadWeaving: {self.unlock_trait.name}"
+    if self.target_kind == TargetKind.TECHNIQUE:
+        return f"ThreadWeaving: Gift of {self.unlock_gift.name}"
+    if self.target_kind == TargetKind.ITEM:
+        return f"ThreadWeaving: {self.unlock_item_typeclass_path.rsplit('.', 1)[-1]}"
+    if self.target_kind == TargetKind.ROOM:
+        return f"ThreadWeaving: {self.unlock_room_property.name} spaces"
+    if self.target_kind == TargetKind.RELATIONSHIP_TRACK:
+        return f"ThreadWeaving: {self.unlock_track.name} bonds"
+```
+
+**Uniqueness via per-discriminator partial unique constraints** (PostgreSQL
+partial indexes, already an established pattern in this codebase):
+
+```python
+class Meta:
+    constraints = [
+        UniqueConstraint(
+            fields=["unlock_trait"],
+            condition=Q(target_kind="TRAIT"),
+            name="unique_threadweaving_unlock_trait",
+        ),
+        UniqueConstraint(
+            fields=["unlock_gift"],
+            condition=Q(target_kind="TECHNIQUE"),
+            name="unique_threadweaving_unlock_gift",
+        ),
+        UniqueConstraint(
+            fields=["unlock_item_typeclass_path"],
+            condition=Q(target_kind="ITEM"),
+            name="unique_threadweaving_unlock_item",
+        ),
+        UniqueConstraint(
+            fields=["unlock_room_property"],
+            condition=Q(target_kind="ROOM"),
+            name="unique_threadweaving_unlock_room",
+        ),
+        UniqueConstraint(
+            fields=["unlock_track"],
+            condition=Q(target_kind="RELATIONSHIP_TRACK"),
+            name="unique_threadweaving_unlock_track",
+        ),
+    ]
+```
+
+This guarantees one unlock per anchor (one Strength unlock, one Sword
+unlock, etc.) without needing a contrived `name` to enforce it.
 
 Granularity by target_kind:
 
@@ -1991,6 +2049,14 @@ Service functions to remove (tied to deleted models):
   - `is_soul_tether` flag round-trip on CharacterRelationship
   - `CharacterThreadWeavingUnlock` purchase + idempotency (same offer twice
     rejected)
+  - `ThreadWeavingUnlock` per-discriminator partial unique constraint —
+    two TRAIT-kind unlocks for the same Trait raise IntegrityError; two
+    TRAIT-kind unlocks for *different* Traits coexist; an ITEM-kind
+    unlock and a TRAIT-kind unlock pointing at unrelated targets coexist
+    (cross-discriminator independence)
+  - `ThreadWeavingUnlock.display_name` derives correctly per
+    `target_kind` from the populated discriminator FK (one assertion per
+    target_kind variant)
   - in-Path / out-of-Path / Path-neutral cost paths in `computed_xp_cost`
   - `update_thread_narrative` round-trip (name/description edits persist;
     no level/cap changes)
