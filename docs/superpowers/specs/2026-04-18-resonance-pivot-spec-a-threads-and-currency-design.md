@@ -214,7 +214,9 @@ unless a `ThreadLevelUnlock(thread, unlocked_level=boundary)` row exists.
 
 ```
 target_kind        CharField choices (same 6 as Thread.target_kind)
-resonance          FK Resonance null=True      # null = default fallback for target_kind
+resonance          FK Resonance                # required; matches the pulled
+                                                # thread's resonance exactly at
+                                                # lookup time (no fallback)
 tier               PositiveSmallIntegerField   # 0, 1, 2, 3 — see tier-0 = passive note
 min_thread_level   PositiveSmallIntegerField default=0
                                                 # Authored gate on the thread's level.
@@ -255,10 +257,18 @@ tier N additionally apply effects at tiers 1..N. `ThreadPullCost` has rows only 
 paid tiers (1, 2, 3); tier 0 is implicit-zero.
 
 Resolution order when an action lands: for each thread whose anchor is involved,
-find ThreadPullEffect rows matching `(target_kind=thread.target_kind, tier in
-0..chosen_tier, min_thread_level <= thread.level)`, preferring rows with the
-matching resonance and falling back to `resonance=NULL`. Apply every matching row's
-effect (scaled per §5.4) and substitute its snippet.
+find ThreadPullEffect rows matching `(target_kind=thread.target_kind,
+resonance=thread.resonance, tier in 0..chosen_tier,
+min_thread_level <= thread.level)`. The resonance match is exact — no fallback
+row exists. If a (target_kind, resonance, tier) triple has no authored row,
+that combination simply produces no effect at that tier. Apply every matching
+row's effect (scaled per §5.4) and substitute its snippet.
+
+**Authoring expectation:** every (target_kind, resonance) pair that should
+have meaningful pull behavior needs explicit ThreadPullEffect rows authored
+for it. Factories and admin bulk-create patterns make per-resonance
+duplication cheap. The benefit is no surprise behavior at runtime — what
+you author is exactly what fires.
 
 **`clean()` enforces payload/effect_kind alignment**: exactly one of
 `flat_bonus_amount`, `intensity_bump_amount`, `stat_bonus_amount`,
@@ -984,9 +994,8 @@ and the list of threads to pull:
 3. For each pulled thread:
    For each effect_tier in 0..tier:
      Find ThreadPullEffect rows matching:
-       (target_kind=thread.target_kind, tier=effect_tier,
-        min_thread_level <= thread.level)
-       preferring resonance match, falling back to resonance=NULL
+       (target_kind=thread.target_kind, resonance=thread.resonance,
+        tier=effect_tier, min_thread_level <= thread.level)
      For each matched row, scale its authored amount by the thread's
      display level (`scaled = authored × max(1, thread.level // 10)`).
      The level-scaling rule is **linear** and applies to all numeric
