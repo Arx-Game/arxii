@@ -2073,15 +2073,29 @@ Dataclasses in `world/magic/types.py`:
    resolved_effects: list[ResolvedPullEffect])`
 - `ResolvedPullEffect(...)` — per-effect record carrying `kind`,
   `authored_value`, `level_multiplier`, `scaled_value`, `vital_target`,
-  `source_thread`, `source_thread_level`, `source_tier`, `narrative_snippet`
+  `source_thread`, `source_thread_level`, `source_tier`, `narrative_snippet`,
+  `inactive: bool` (true when the effect is suppressed in the current
+  context — e.g., VITAL_BONUS in an ephemeral RP pull), and
+  `inactive_reason: str | None` (human-readable explanation matching the
+  preview API's `inactive_reason` field, so combat log lines can reuse the
+  same wording the player saw in the preview)
 - `ThreadImbueResult(resonance_spent: int, developed_points_added: int,
    levels_gained: int, new_level: int, new_developed_points: int,
    blocked_by: str)` — return shape for `spend_resonance_for_imbuing`
 - `ThreadXPLockProspect(thread, boundary_level: int, xp_cost: int,
    dev_points_to_boundary: int)` — return shape for `near_xp_lock_threads`
-- `ActionContext(...)` — at minimum carries `anchors_in_play` (for non-relationship
-  involvement check) and `asserted_relationship_anchors` (player declarations);
-  exact shape coordinates with the action-system work
+- `ActionContext(...)` — at minimum carries:
+  - `anchors_in_play` (for non-relationship involvement check)
+  - `asserted_relationship_anchors` (player declarations)
+  - `combat_encounter: CombatEncounter | None` — present when the action is
+    being taken inside a combat round; absent for ephemeral RP pulls. This
+    is the discriminator the spend service branches on (§7.4) and that
+    drives the `combat_encounter_id` field on the preview API (§5.6).
+  - `participant: CombatParticipant | None` — the acting character's
+    participant row when `combat_encounter` is set; needed so
+    `CombatPull.participant` can be written without a second lookup
+  Exact shape coordinates with the action-system work, but these four
+  fields are load-bearing for Spec A and must be present.
 
 Service functions to remove (tied to deleted models):
 - Anything that mutates the old Thread's 5-axis fields
@@ -2160,8 +2174,10 @@ Service functions to remove (tied to deleted models):
   - **Ephemeral pull (RP / no rounds)** — `spend_resonance_for_pull`
     called with an `action_context` lacking a `combat_encounter`:
     debits resonance/anima, returns a populated `ResonancePullResult`,
-    writes **zero** `CombatPull` rows (assert via
-    `CombatPull.objects.count() == 0`), and emits a `ThreadsPulled`
+    writes **zero** new `CombatPull` rows (assert via a count delta
+    around the call: `count_after - count_before == 0`, not an
+    absolute `count() == 0` — the test DB may carry CombatPull rows
+    from setup or other test cases), and emits a `ThreadsPulled`
     event for audit. A second ephemeral pull in the same scene
     succeeds (no `unique_together` constraint applies — that's
     combat-only)
