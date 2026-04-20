@@ -110,7 +110,7 @@ armor bonuses + woven magical thread protection. Magical power is the dominant f
 - Hit > 50% of total health: chance of permanent wounds/scars
 - Below 20% health: chance of knockout per hit, increased by high fatigue/collapse risk
 - 0% health: chance of death per hit, high chance of permanent wounds/scars
-- Magical damage at 0%: chance of magical scars (Soulfray-related)
+- Magical damage at 0%: chance of mage scars (Soulfray-related)
 - All threshold checks modified by roll modifiers as usual
 
 **Audere triggers:** Health is the primary Audere domain — risk of character loss is the

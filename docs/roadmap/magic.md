@@ -255,7 +255,7 @@ pending follow-up infrastructure (covenant relationships, Property M2M on
 Technique, trigger usage-cap fields, mutable `ExaminedPayload`).
 
 Scope 5.5 is the deliberate "light up flows/triggers" PR. It must follow Scope 5
-**sooner rather than later** — magical scars without reactive side effects are
+**sooner rather than later** — mage scars without reactive side effects are
 half a feature, and every later system that wants reactive behavior is blocked
 on the same plumbing. This is the wedge that turns paper architecture into
 real infrastructure.

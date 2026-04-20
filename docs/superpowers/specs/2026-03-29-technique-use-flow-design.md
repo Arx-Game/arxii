@@ -145,7 +145,7 @@ If there was an anima deficit (from Step 3/4), apply a condition:
 - Applied deterministically — not a random consequence, but a guaranteed result
   of the resource math
 - The condition carries mechanical effects (stat penalties, ongoing damage, etc.)
-  and can evolve into permanent magical scars at high severity
+  and can evolve into permanent mage scars at high severity
 
 This uses the existing `ConsequenceEffect` APPLY_CONDITION handler.
 
@@ -240,7 +240,7 @@ technique or EffectType.
 - Audere Majora and tier-crossing
 
 ### Scope #3: Negative Consequence Types
-- Magical scar condition templates and their mechanical effects
+- Mage scar condition templates and their mechanical effects
 - Abyssal corruption as a long-term consequence of overuse
 - New ConsequenceEffect types if needed (or use APPLY_CONDITION with
   specific templates)
@@ -260,7 +260,7 @@ accumulate Soulfray stages over subsequent rounds of deficit use.
 - Soulfray is a Condition with multiple severity stages
 - Each round of deficit casting increments the stage
 - Early stages: penalties, pain, visible strain (non-lethal, narrative flavor)
-- Middle stages: serious mechanical penalties, magical scarring risk
+- Middle stages: serious mechanical penalties, mage scarring risk
 - Late stages: approaching lethal territory, explicit death risk warnings
 - The progression is a runway, not a cliff — players see themselves moving
   through stages and can make informed choices about whether to keep pushing
@@ -322,7 +322,7 @@ Mishap consequences have two tiers of danger based on anima state:
   effects. The character is strained but safe. These are consequences of
   imprecision, not existential danger.
 - **With anima deficit** (overburning): Lethal consequences enter the mishap pool.
-  Severe magical injuries, magical scarring, and at extreme Soulfray stages,
+  Severe magical injuries, mage scarring, and at extreme Soulfray stages,
   character death risk. The combination of loss of control AND life force drain
   is what makes magic truly dangerous.
 

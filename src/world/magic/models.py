@@ -1494,12 +1494,16 @@ class TechniqueOutcomeModifier(SharedMemoryModel):
 
 
 class MagicalAlterationTemplate(SharedMemoryModel):
-    """Magic-specific metadata layered on top of a ConditionTemplate.
+    """Template for a Mage Scar (permanent magical alteration).
 
-    A magical alteration IS a condition — runtime effects (check modifiers,
-    capability effects, resistance, properties, descriptions) live on the
-    OneToOne'd ConditionTemplate. This table adds authoring slots, tier
-    classification, and origin context.
+    Mage-specific metadata layered on top of a ConditionTemplate. A Mage
+    Scar IS a condition — runtime effects (check modifiers, capability
+    effects, resistance, properties, descriptions) live on the OneToOne'd
+    ConditionTemplate. This table adds authoring slots, tier classification,
+    and origin context.
+
+    Note: the class and table names retain the "MagicalAlteration" prefix
+    for database stability; the player-facing label is "Mage Scar".
     """
 
     condition_template = models.OneToOneField(
@@ -1575,12 +1579,16 @@ class MagicalAlterationTemplate(SharedMemoryModel):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        verbose_name = "mage scar"
+        verbose_name_plural = "mage scars"
+
     def __str__(self) -> str:
         return f"{self.condition_template.name} (Tier {self.tier})"
 
 
 class PendingAlteration(SharedMemoryModel):
-    """A magical alteration owed to a character, awaiting resolution.
+    """A Mage Scar owed to a character, awaiting resolution.
 
     Created by the MAGICAL_SCARS effect handler. Blocks progression
     spending until resolved via library browse or author-from-scratch.
@@ -1657,12 +1665,14 @@ class PendingAlteration(SharedMemoryModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        verbose_name = "pending mage scar"
+        verbose_name_plural = "pending mage scars"
         indexes = [
             models.Index(fields=["character", "status"], name="magic_pendi_charact_4fea0a_idx"),
         ]
 
     def __str__(self) -> str:
-        return f"Pending Tier {self.tier} alteration for {self.character} ({self.status})"
+        return f"Pending Tier {self.tier} mage scar for {self.character} ({self.status})"
 
 
 class MagicalAlterationEvent(SharedMemoryModel):

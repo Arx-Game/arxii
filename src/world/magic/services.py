@@ -1043,7 +1043,7 @@ def resolve_pending_alteration(  # noqa: PLR0913 — kw-only resolution fields a
 
 
 def _get_or_create_alteration_category() -> ConditionCategory:
-    """Get or create the ConditionCategory for magical alterations."""
+    """Get or create the ConditionCategory for Mage Scars."""
     from world.conditions.models import ConditionCategory  # noqa: PLC0415
 
     cat, _ = ConditionCategory.objects.get_or_create(
@@ -1054,7 +1054,7 @@ def _get_or_create_alteration_category() -> ConditionCategory:
 
 
 def has_pending_alterations(character: CharacterSheet) -> bool:
-    """Check if this character has any unresolved magical alterations."""
+    """Check if this character has any unresolved Mage Scars."""
     return PendingAlteration.objects.filter(
         character=character,
         status=PendingAlterationStatus.OPEN,

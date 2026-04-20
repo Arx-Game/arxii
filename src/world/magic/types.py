@@ -149,10 +149,10 @@ class ThreadXPLockProspect:
 
 class AlterationGateError(Exception):
     """Raised when a character tries to spend advancement points while
-    having unresolved magical alterations."""
+    having unresolved Mage Scars."""
 
     user_message = (
-        "You have an unresolved magical alteration. "
+        "You have an unresolved Mage Scar. "
         "Visit the alteration screen to resolve it before "
         "spending advancement points."
     )
@@ -162,8 +162,7 @@ class AlterationResolutionError(Exception):
     """Raised when condition application fails during alteration resolution."""
 
     user_message = (
-        "The magical alteration could not be applied due to a "
-        "condition interaction. Please contact staff."
+        "The Mage Scar could not be applied due to a condition interaction. Please contact staff."
     )
 
 

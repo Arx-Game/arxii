@@ -1427,7 +1427,7 @@ class SoulfrayProgressionTests(PipelineTestMixin, TestCase):
             weight=1,
         )
         cls.magical_scars_template = ConditionTemplateFactory(
-            name="Magical Scars",
+            name="Mage Scars",
         )
         ConsequenceEffectFactory(
             consequence=cls.soulfray2_failure,

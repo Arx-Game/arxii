@@ -442,7 +442,7 @@ class PendingAlterationViewSet(
     RetrieveModelMixin,
     GenericViewSet,
 ):
-    """ViewSet for pending magical alterations.
+    """ViewSet for pending Mage Scars.
 
     list: Returns the authenticated player's open pending alterations.
     retrieve: Returns a single pending alteration.

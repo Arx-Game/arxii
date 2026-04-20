@@ -367,7 +367,7 @@ class MagicContent:
         pool = ConsequencePoolFactory(name="Soulfray Stage 1 Consequences (Alteration Test)")
 
         # Consequence whose effect fires MAGICAL_SCARS with severity=2 → tier MARKED
-        magical_scars_consequence = ConsequenceFactory(label="Magical Scars (alteration test)")
+        magical_scars_consequence = ConsequenceFactory(label="Mage Scars (alteration test)")
         ConsequenceEffectFactory(
             consequence=magical_scars_consequence,
             effect_type=CheckEffectType.MAGICAL_SCARS,

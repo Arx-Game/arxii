@@ -110,7 +110,7 @@ item reactions, divine wrath, allergies, contact effects, observer reactions —
 This gap was not previously called out in any roadmap doc and blocks reactive
 features across every gameplay domain. It is scheduled to be addressed as
 [Magic Scope #5.5 (Reactive Foundations)](magic.md), sequenced immediately after
-Magic Scope #5. Magical scars are the wedge consumer; the resulting plumbing is
+Magic Scope #5. Mage scars are the wedge consumer; the resulting plumbing is
 cross-cutting infrastructure that combat, items, environments, and missions all
 inherit. **This work needs to follow Scope 5 sooner rather than later.**
 
