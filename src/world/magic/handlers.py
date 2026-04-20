@@ -51,6 +51,26 @@ class CharacterThreadHandler:
         """Return threads filtered to a single resonance."""
         return [t for t in self._all if t.resonance_id == resonance.pk]
 
+    def with_anchor_involved(self, action_context: object) -> list[Thread]:
+        """Return threads whose anchor is in scope for the given action.
+
+        Spec §3.7 lines 974–976. Implementation is deferred to Phase 13's
+        VITAL_BONUS routing work, which lands the action-context plumbing
+        needed to decide "anchor in scope" outside the pull pipeline.
+        """
+        msg = "Phase 13: with_anchor_involved awaits VITAL_BONUS routing."
+        raise NotImplementedError(msg)
+
+    def passive_vital_bonuses(self, vital_target: str) -> int:
+        """Sum tier-0 VITAL_BONUS scaled values across in-scope threads.
+
+        Spec §3.7 lines 977–979. Implementation is deferred to Phase 13,
+        which adds passive VITAL_BONUS aggregation alongside max-health
+        recompute.
+        """
+        msg = "Phase 13: passive_vital_bonuses awaits VITAL_BONUS routing."
+        raise NotImplementedError(msg)
+
     def invalidate(self) -> None:
         """Clear the cached thread list. Called by mutation services."""
         self.__dict__.pop("_all", None)
