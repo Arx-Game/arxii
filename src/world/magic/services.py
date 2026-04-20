@@ -31,6 +31,7 @@ from world.magic.exceptions import (
     AnchorCapNotImplemented,
     InvalidImbueAmount,
     ResonanceInsufficient,
+    XPInsufficient,
 )
 from world.magic.models import (
     CharacterAnima,
@@ -42,6 +43,7 @@ from world.magic.models import (
     SoulfrayConfig,
     Thread,
     ThreadLevelUnlock,
+    ThreadXPLockedLevel,
 )
 from world.magic.types import (
     AffinityType,
@@ -1292,4 +1294,69 @@ def spend_resonance_for_imbuing(  # noqa: C901 — sequential guards + greedy lo
         new_level=thread.level,
         new_developed_points=thread.developed_points,
         blocked_by=blocked_by,  # type: ignore[arg-type]
+    )
+
+
+@transaction.atomic
+def cross_thread_xp_lock(
+    character_sheet: CharacterSheet,
+    thread: Thread,
+    boundary_level: int,
+) -> ThreadLevelUnlock:
+    """Pay XP to unlock an XP-locked level boundary on a thread.
+
+    Idempotent: if the unlock row already exists, returns it without spending XP.
+    Spec A §3.2 lines 774-797.
+
+    Args:
+        character_sheet: Character paying XP (must own thread).
+        thread: Thread to unlock the boundary on.
+        boundary_level: XP-locked boundary level (must exist in ThreadXPLockedLevel).
+
+    Returns:
+        ThreadLevelUnlock instance (new or existing).
+
+    Raises:
+        InvalidImbueAmount: If ownership fails, boundary <= thread.level, or no price row.
+        AnchorCapExceeded: If boundary_level > effective cap.
+        XPInsufficient: If the account lacks sufficient XP.
+    """
+    from world.progression.services.awards import get_or_create_xp_tracker  # noqa: PLC0415
+
+    if thread.owner_id != character_sheet.pk:
+        msg = "Character does not own thread."
+        raise InvalidImbueAmount(msg)
+    if boundary_level <= thread.level:
+        msg = "Boundary level must be above thread.level."
+        raise InvalidImbueAmount(msg)
+    if boundary_level > compute_effective_cap(thread):
+        msg = "Boundary level exceeds effective cap."
+        raise AnchorCapExceeded(msg)
+
+    locked = ThreadXPLockedLevel.objects.filter(level=boundary_level).first()
+    if locked is None:
+        msg = "No XP lock defined for this boundary level."
+        raise InvalidImbueAmount(msg)
+
+    # Idempotency: if unlock row already exists, return it (no-op).
+    existing = ThreadLevelUnlock.objects.filter(
+        thread=thread,
+        unlocked_level=boundary_level,
+    ).first()
+    if existing is not None:
+        return existing
+
+    # Spend XP.
+    account = character_sheet.character.account
+    xp_tracker = get_or_create_xp_tracker(account)
+    if xp_tracker.current_available < locked.xp_cost:
+        msg = "Need " + str(locked.xp_cost) + " XP, have " + str(xp_tracker.current_available) + "."
+        raise XPInsufficient(msg)
+    xp_tracker.total_spent += locked.xp_cost
+    xp_tracker.save(update_fields=["total_spent"])
+
+    return ThreadLevelUnlock.objects.create(
+        thread=thread,
+        unlocked_level=boundary_level,
+        xp_spent=locked.xp_cost,
     )
