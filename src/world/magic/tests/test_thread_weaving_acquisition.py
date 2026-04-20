@@ -14,6 +14,7 @@ from evennia_extensions.factories import AccountFactory
 from world.action_points.factories import ActionPointPoolFactory
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
+from world.character_sheets.models import CharacterSheet
 from world.classes.factories import PathFactory
 from world.magic.exceptions import XPInsufficient
 from world.magic.factories import (
@@ -27,20 +28,11 @@ from world.progression.models import ExperiencePointsData, XPTransaction
 from world.roster.factories import RosterTenureFactory
 
 
-def _seed_xp(learner: object, amount: int) -> ExperiencePointsData:
-    """Attach an AccountDB to learner.character and seed its XP tracker.
-
-    Uses the Evennia M2M pattern: set .account on the in-memory instance AND
-    call account.characters.add() so both directions of the M2M are populated.
-    """
-    from evennia.objects.models import ObjectDB
-
+def _seed_xp(learner: CharacterSheet, amount: int) -> ExperiencePointsData:
+    """Attach an AccountDB to learner.character and seed its XP tracker."""
     account = AccountFactory()
-    character = learner.character  # type: ignore[union-attr]
-    # Set on the in-memory instance (Evennia typeclass caching layer)
+    character = learner.character
     character.account = account
-    # Persist via the M2M relation on the AccountDB side
-    ObjectDB.objects.filter(pk=character.pk).update()
     account.characters.add(character)
     xp_tracker, _ = ExperiencePointsData.objects.get_or_create(
         account=account,
