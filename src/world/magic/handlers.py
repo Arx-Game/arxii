@@ -55,11 +55,13 @@ class CharacterThreadHandler:
     def with_anchor_involved(self, action_context: object) -> list[Thread]:
         """Return threads whose anchor is in scope for the given action.
 
-        Spec §3.7 lines 974–976. Implementation is deferred to Phase 13's
-        VITAL_BONUS routing work, which lands the action-context plumbing
-        needed to decide "anchor in scope" outside the pull pipeline.
+        Spec §3.7 lines 974–976. Implementation is deferred to a future phase
+        that lands the action-context plumbing needed to decide "anchor in
+        scope" outside the pull pipeline. Passive VITAL_BONUS routing (Phase
+        13) does not need this because all Thread typed FKs use
+        ``on_delete=PROTECT`` — see ``passive_vital_bonuses`` for details.
         """
-        msg = "Phase 13: with_anchor_involved awaits VITAL_BONUS routing."
+        msg = "with_anchor_involved awaits action-context plumbing in a future phase."
         raise NotImplementedError(msg)
 
     def passive_vital_bonuses(self, vital_target: str) -> int:
