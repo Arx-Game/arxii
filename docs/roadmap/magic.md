@@ -58,7 +58,19 @@ Known effect categories (will expand as combat develops):
 Some abilities cross categories (poison touch = attack + subtle assassination tool) and will need the restriction/tag system to express.
 
 ## What Exists
-- **Models:** CharacterAura, CharacterResonance, Gift, CharacterGift, Technique, CharacterTechnique, TechniqueStyle, EffectType, Restriction, IntensityTier, CharacterAnima, CharacterAnimaRitual, AnimaRitualPerformance, Motif, MotifResonance, MotifResonanceAssociation, Facet, CharacterFacet, Thread, ThreadType, ThreadJournal, ThreadResonance, Tradition, CharacterTradition, CharacterAffinityTotal, CharacterResonanceTotal, Reincarnation, Cantrip, **TechniqueCapabilityGrant**
+- **Models:** CharacterAura, CharacterResonance (reshaped per Spec A §2.2 —
+  balance + lifetime_earned), Gift, CharacterGift, Technique,
+  CharacterTechnique, TechniqueStyle, EffectType, Restriction, IntensityTier,
+  CharacterAnima, CharacterAnimaRitual, AnimaRitualPerformance, Motif,
+  MotifResonance, MotifResonanceAssociation, Facet, CharacterFacet,
+  **Thread** (new discriminator + typed-FK design, Spec A §2.1),
+  **ThreadPullCost**, **ThreadXPLockedLevel**, **ThreadLevelUnlock**,
+  **ThreadPullEffect**, **ThreadWeavingUnlock**, **CharacterThreadWeavingUnlock**,
+  **ThreadWeavingTeachingOffer**, **Ritual**, **RitualComponentRequirement**,
+  **ImbuingProseTemplate**, Tradition, CharacterTradition,
+  CharacterAffinityTotal, Reincarnation, Cantrip, **TechniqueCapabilityGrant**.
+  CombatPull / CombatPullResolvedEffect live in `world/combat` but are
+  part of the Spec A surface.
 - **Capability integration:** TechniqueCapabilityGrant links Techniques to CapabilityTypes (from conditions app) with `base_value + (intensity_multiplier * intensity)` formula. This feeds into the mechanics app's action generation pipeline — when a character has a Technique that grants a Capability, the system can match it against Properties on Challenges to surface available approaches
 - **Cantrip-technique alignment** — cantrip templates produce real Techniques with intensity/control at CG finalization
 - **APIs:** Full viewsets and serializers
@@ -219,6 +231,106 @@ What was built:
 
 Decoupling: Standalone. Does NOT depend on Scope 6 (Soulfray recovery). Shipped on
 the `magical-scars` branch.
+
+**Resonance Pivot — Spec A (Threads + Currency + Rituals + Mage Scars rename) — DONE:**
+
+**Spec:** `docs/superpowers/specs/2026-04-18-resonance-pivot-spec-a-threads-and-currency-design.md`
+**Plan:** `docs/superpowers/plans/2026-04-19-resonance-pivot-spec-a-threads-and-currency.md`
+
+This is the first of a four-spec resonance pivot (A, B, C, D). Spec A
+pivots Resonance from a passive rank to a per-resonance **currency** that
+gets earned from identity-expressive RP, spent to develop **Threads**
+(anchors to specific traits/techniques/items/rooms/relationship-tracks/
+relationship-capstones), and spent again to **pull** on those threads
+during actions for authored mechanical payoff.
+
+What was built (Phases 0–17, 19 phases total counting Phase 18 — this
+completion note):
+
+- **Legacy 5-axis Thread family deleted.** `magic.Thread` (old),
+  `ThreadType`, `ThreadJournal`, `ThreadResonance`, and
+  `CharacterResonanceTotal` removed. `is_soul_tether` migrated to
+  `CharacterRelationship`. Journaling preserved via relationships-app
+  writeups plus a new `JournalEntry.related_threads` M2M for
+  non-relationship threads.
+- **New `Thread` model.** Discriminator (`target_kind`) + five typed FK
+  columns (`target_trait`, `target_technique`, `target_object`,
+  `target_relationship_track`, `target_capstone`) — exactly one populated,
+  matching the discriminator. All FKs are PROTECT. Triple-layer integrity:
+  `clean()`, per-kind CheckConstraints, per-kind partial UniqueConstraints.
+  `retired_at` provides soft-retire.
+- **CharacterResonance reshaped (Spec §2.2).** Collapsed identity +
+  currency into one model. `balance` (spendable, no cap) and
+  `lifetime_earned` (monotonic audit) replaced the old
+  `scope`/`strength`/`is_active` shape; row existence now replaces
+  `is_active`. Re-FK'd from ObjectDB → CharacterSheet.
+- **Resonance economy services.** `grant_resonance` (lazy-create row on
+  earn; Spec C will author the gain surfaces), `spend_resonance_for_imbuing`
+  (greedy advancement through `developed_points` → `level`; stops at
+  XP-lock boundaries and effective cap), `spend_resonance_for_pull`
+  (combat and ephemeral paths, §3.8 duration model),
+  `preview_resonance_pull` (read-only wire preview),
+  `resolve_pull_effects` (runtime resolver), `cross_thread_xp_lock`
+  (pays XP at a boundary), `weave_thread` (create Thread after unlock
+  check), `update_thread_narrative`, `imbue_ready_threads` /
+  `near_xp_lock_threads` / `threads_blocked_by_cap` (UI hints),
+  `compute_thread_weaving_xp_cost`, `accept_thread_weaving_unlock`
+  (records purchase with Path-aware pricing), plus `recompute_max_health_with_threads`
+  and `apply_damage_reduction_from_threads` for VITAL_BONUS routing.
+- **Pull-cost / XP-lock / Effect / Ritual authored catalogs.**
+  `ThreadPullCost` (per-tier data knobs; formula lives in the service),
+  `ThreadXPLockedLevel` (boundary price list), `ThreadPullEffect`
+  (authored template keyed (`target_kind`, `resonance`, `tier`,
+  `min_thread_level`); effect_kind chooses the payload column —
+  `FLAT_BONUS` / `INTENSITY_BUMP` / `VITAL_BONUS` with `vital_target` /
+  `CAPABILITY_GRANT` / `NARRATIVE_ONLY`), `ImbuingProseTemplate` (fallback
+  prose), `Ritual` + `RitualComponentRequirement` (SERVICE or FLOW
+  dispatch, component consumption).
+- **ThreadWeaving acquisition family.** `ThreadWeavingUnlock` (authored
+  catalog; discriminator + typed FKs; per-kind partial unique +
+  CheckConstraints), `CharacterThreadWeavingUnlock` (per-character
+  purchase; unique per (character, unlock); captures Path-multiplied
+  `xp_spent`), `ThreadWeavingTeachingOffer` (teacher offer; mirrors
+  CodexTeachingOffer).
+- **CombatPull / CombatPullResolvedEffect.** Live in `world/combat`.
+  Persist committed pulls across round transitions and request boundaries.
+  Resolved effects are a frozen child-table snapshot (no JSONField);
+  mid-round authoring edits can't retroactively alter a committed pull.
+  One pull per participant per round (unique_together).
+- **VITAL_BONUS routing.** Tier-0 VITAL_BONUS rows are passive (always
+  on while the anchor exists — enforced automatically by Thread's
+  PROTECT FKs, see `CharacterThreadHandler.passive_vital_bonuses`
+  docstring). Tier 1+ VITAL_BONUS rows persist under the standard
+  pull-duration model. MAX_HEALTH folds into `recompute_max_health_with_threads`
+  as an addend; DAMAGE_TAKEN_REDUCTION applies on the combat
+  `DamagePreApply` hook. Pull expiry uses clamp-not-injure semantics
+  (current HP clamps to the new max; it never injures).
+- **PerformRitualAction with dual dispatch.** Actions-layer wrapper that
+  validates components, then dispatches either via a registered service
+  path (Imbuing being the first) or via FlowDefinition. Enforces
+  component consumption atomically.
+- **API surface (Spec §4.5).** ThreadViewSet (GET/POST/DELETE, soft-retire
+  on DELETE; CRUD gated on thread ownership via `character_sheet_id`),
+  ThreadPullPreviewView (POST `/thread-pull-preview/`),
+  RitualPerformView (POST `/rituals/perform/`, resolves primitive kwargs
+  → model instances), ThreadWeavingTeachingOfferViewSet (GET), reshaped
+  CharacterResonanceViewSet.
+- **Per-character handlers (Spec §3.7).** `character.threads`
+  (`CharacterThreadHandler` — cached thread list with passive
+  VITAL_BONUS aggregation), `character.resonances`
+  (`CharacterResonanceHandler` — cached `{resonance_pk: row}` dict;
+  `balance(resonance)`, `lifetime(resonance)`, `get_or_create`,
+  `most_recently_earned` for Mage Scars origin derivation),
+  `character.combat_pulls` (`CharacterCombatPullHandler` in
+  `world/combat` — active pulls + `active_pull_vital_bonuses`).
+- **Mage Scars rename (§7.2).** Display-only — class names and table
+  names unchanged; verbose_names + CLI strings + docs updated.
+
+Not in Spec A (authored separately): Spec B (Relational Resilience,
+Soul Tether, Ritual Capstones), Spec C (Resonance gain surfaces — the
+sites that call `grant_resonance`), Spec D (Ritual-grade items + ITEM /
+ROOM anchor cap formulas — Imbuing against ITEM/ROOM currently raises
+`AnchorCapNotImplemented`).
 
 **Scope #5.5 — Reactive Foundations (DONE — branch `design/reactive-layer`):**
 
