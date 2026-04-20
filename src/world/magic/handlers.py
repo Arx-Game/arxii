@@ -11,7 +11,8 @@ from __future__ import annotations
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from world.magic.models import CharacterResonance, Thread
+from world.magic.constants import EffectKind
+from world.magic.models import CharacterResonance, Thread, ThreadPullEffect
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character
@@ -62,14 +63,36 @@ class CharacterThreadHandler:
         raise NotImplementedError(msg)
 
     def passive_vital_bonuses(self, vital_target: str) -> int:
-        """Sum tier-0 VITAL_BONUS scaled values across in-scope threads.
+        """Sum tier-0 VITAL_BONUS scaled values across the character's threads.
 
-        Spec §3.7 lines 977–979. Implementation is deferred to Phase 13,
-        which adds passive VITAL_BONUS aggregation alongside max-health
-        recompute.
+        Spec §3.7 lines 977–979, §5.5 lines 1533–1547, §5.8 lines 1640–1657.
+
+        Aggregates passive (tier-0) VITAL_BONUS rows for every thread the
+        character owns, filtered by ``vital_target``. Scaling uses the same
+        formula as active pulls: ``level_multiplier = max(1, thread.level // 10)``
+        times the authored ``vital_bonus_amount``. ``min_thread_level``
+        filters rows that require a higher thread investment.
+
+        Passive contributions do not check anchor-in-scope: tier-0 VITAL_BONUS
+        rows exist as always-on passive layers per §3.8. Pulled (tier 1+)
+        contributions live on ``CharacterCombatPullHandler`` instead.
         """
-        msg = "Phase 13: passive_vital_bonuses awaits VITAL_BONUS routing."
-        raise NotImplementedError(msg)
+        total = 0
+        for t in self._all:
+            multiplier = max(1, t.level // 10)
+            rows = ThreadPullEffect.objects.filter(
+                target_kind=t.target_kind,
+                resonance_id=t.resonance_id,
+                tier=0,
+                effect_kind=EffectKind.VITAL_BONUS,
+                vital_target=vital_target,
+                min_thread_level__lte=t.level,
+            )
+            for row in rows:
+                if row.vital_bonus_amount is None:
+                    continue
+                total += row.vital_bonus_amount * multiplier
+        return total
 
     def invalidate(self) -> None:
         """Clear the cached thread list. Called by mutation services."""

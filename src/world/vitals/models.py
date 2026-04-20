@@ -40,7 +40,18 @@ class CharacterVitals(SharedMemoryModel):
     )
     max_health = models.PositiveIntegerField(
         default=0,
-        help_text="Maximum health points. Recalculated when stats change.",
+        help_text=(
+            "Maximum health points. Derived as base_max_health + thread-derived "
+            "VITAL_BONUS MAX_HEALTH addend by recompute_max_health."
+        ),
+    )
+    base_max_health = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Baseline max health before thread-derived VITAL_BONUS addends. "
+            "Set by the character-creation / stat pipeline; recompute_max_health "
+            "derives max_health = base_max_health + thread_addend."
+        ),
     )
     dying_final_round = models.BooleanField(
         default=False,

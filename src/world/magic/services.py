@@ -26,6 +26,7 @@ from world.magic.constants import (
     EffectKind,
     PendingAlterationStatus,
     TargetKind,
+    VitalBonusTarget,
 )
 from world.magic.exceptions import (
     AnchorCapExceeded,
@@ -1699,7 +1700,7 @@ def _persist_combat_pull(  # noqa: PLR0913
 
 
 @transaction.atomic
-def spend_resonance_for_pull(
+def spend_resonance_for_pull(  # noqa: C901 — sequential guards + combat/ephemeral branches, complexity is inherent
     character_sheet: CharacterSheet,
     resonance: ResonanceModel,
     tier: int,
@@ -1803,6 +1804,12 @@ def spend_resonance_for_pull(
     character_sheet.character.resonances.invalidate()
     character_sheet.character.combat_pulls.invalidate()
 
+    # Spec §5.8 + §7.4: commit_combat_pull feeds into the same recompute
+    # that round-advance uses, so MAX_HEALTH pulls flow through immediately.
+    # Ephemeral RP pulls have no max-health consumer (§3.8), so skip.
+    if in_combat:
+        recompute_max_health_with_threads(character_sheet)
+
     # Phase 12-future: emit ThreadsPulled audit event when the event class
     # exists (spec §5.4 step 7). Currently a no-op.
 
@@ -1811,3 +1818,61 @@ def spend_resonance_for_pull(
         anima_spent=anima_total,
         resolved_effects=resolved,
     )
+
+
+# =============================================================================
+# Phase 13 — VITAL_BONUS routing (Spec A §3.8, §5.5, §5.8, §7.4)
+# =============================================================================
+
+
+def recompute_max_health_with_threads(character_sheet: CharacterSheet) -> int:
+    """Recompute max_health folding in thread-derived VITAL_BONUS addends.
+
+    Spec A §5.8 lines 1644–1657 + §7.4 lines 2011–2024. Sums two
+    contribution sources and delegates to ``vitals.recompute_max_health``:
+
+    - passive tier-0 VITAL_BONUS rows on every owned thread
+      (via ``character.threads.passive_vital_bonuses(MAX_HEALTH)``)
+    - active-pull tier 1+ contributions from any live ``CombatPull``
+      (via ``character.combat_pulls.active_pull_vital_bonuses(MAX_HEALTH)``)
+
+    Clamp-not-injure semantics (§3.8) live in ``recompute_max_health`` itself:
+    when a pull expires and this is called from ``expire_pulls_for_round``,
+    the new max may drop below the character's current health. Current is
+    clamped to the new max — it never gets *pushed below* its existing
+    value, so pull expiry cannot retroactively injure.
+
+    Returns the new max_health value.
+    """
+    from world.vitals.services import recompute_max_health  # noqa: PLC0415
+
+    character = character_sheet.character
+    passive = character.threads.passive_vital_bonuses(VitalBonusTarget.MAX_HEALTH)
+    pulled = character.combat_pulls.active_pull_vital_bonuses(VitalBonusTarget.MAX_HEALTH)
+    return recompute_max_health(character_sheet, thread_addend=passive + pulled)
+
+
+def apply_damage_reduction_from_threads(
+    character: ObjectDB,
+    incoming_damage: int,
+) -> int:
+    """Reduce incoming damage by thread-derived DAMAGE_TAKEN_REDUCTION.
+
+    Spec A §5.8 lines 1658–1668 + §7.4 lines 2025–2030. Reads passive tier-0
+    + active-pull tier 1+ DAMAGE_TAKEN_REDUCTION contributions and returns
+    ``max(0, incoming_damage - total)``. Called inline from combat's
+    damage pipeline (``apply_damage_to_participant``) between
+    ``DAMAGE_PRE_APPLY`` event modification and the actual vitals debit.
+
+    We call this directly from the service rather than registering as a
+    flow subscriber: the flow/event system in this codebase routes through
+    FlowDefinition DB rows and can't invoke arbitrary Python functions as
+    subscribers (see Phase 13 Open Item 3). Thread DR is a read-only
+    Python computation over per-character handler caches; inlining it is
+    both simpler and cheaper than building subscriber infrastructure.
+    """
+    passive = character.threads.passive_vital_bonuses(VitalBonusTarget.DAMAGE_TAKEN_REDUCTION)
+    pulled = character.combat_pulls.active_pull_vital_bonuses(
+        VitalBonusTarget.DAMAGE_TAKEN_REDUCTION,
+    )
+    return max(0, incoming_damage - (passive + pulled))
