@@ -12,12 +12,18 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="characterrelationship",
             name="is_soul_tether",
-            field=models.BooleanField(default=False),
+            field=models.BooleanField(
+                default=False,
+                help_text="Whether this relationship is a soul-tether bond (Spec B mechanics).",
+            ),
         ),
         migrations.AddField(
             model_name="characterrelationship",
             name="magical_flavor",
-            field=models.TextField(blank=True),
+            field=models.TextField(
+                blank=True,
+                help_text="Player-authored descriptor of the bond's magical quality.",
+            ),
         ),
         migrations.AddField(
             model_name="characterrelationship",
@@ -25,6 +31,7 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 blank=True,
                 choices=[("ABYSSAL", "Abyssal Side"), ("SINEATER", "Sineater Side")],
+                help_text="Soul-tether role (ABYSSAL or SINEATER); empty when not a tether.",
                 max_length=16,
             ),
         ),

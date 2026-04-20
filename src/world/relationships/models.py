@@ -323,13 +323,20 @@ class CharacterRelationship(SharedMemoryModel):
 
     # Soul-tether fields (Spec A §2.2 — migrated from old Thread concept).
     # Spec B will own the soul-tether mechanics; these fields are storage only.
-    is_soul_tether = models.BooleanField(default=False)
+    is_soul_tether = models.BooleanField(
+        default=False,
+        help_text="Whether this relationship is a soul-tether bond (Spec B mechanics).",
+    )
     soul_tether_role = models.CharField(
         max_length=16,
         choices=SoulTetherRole.choices,
         blank=True,
+        help_text="Soul-tether role (ABYSSAL or SINEATER); empty when not a tether.",
     )
-    magical_flavor = models.TextField(blank=True)
+    magical_flavor = models.TextField(
+        blank=True,
+        help_text="Player-authored descriptor of the bond's magical quality.",
+    )
 
     class Meta:
         constraints = [
