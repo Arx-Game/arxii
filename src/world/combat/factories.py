@@ -19,12 +19,15 @@ from world.combat.models import (
     CombatEncounter,
     CombatOpponent,
     CombatParticipant,
+    CombatPull,
+    CombatPullResolvedEffect,
     ComboDefinition,
     ComboLearning,
     ComboSlot,
     ThreatPool,
     ThreatPoolEntry,
 )
+from world.magic.constants import EffectKind
 
 
 class CombatEncounterFactory(factory_django.DjangoModelFactory):
@@ -141,3 +144,56 @@ class ComboLearningFactory(factory_django.DjangoModelFactory):
     combo = factory.SubFactory(ComboDefinitionFactory)
     character_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     learned_via = ComboLearningMethod.TRAINING
+
+
+# =============================================================================
+# Resonance Pivot Spec A — Phase 6: CombatPull + CombatPullResolvedEffect
+# =============================================================================
+
+
+class CombatPullFactory(factory_django.DjangoModelFactory):
+    """Factory for CombatPull.
+
+    Encounter defaults to ``participant.encounter`` so the unique_together
+    constraint (participant, round_number) is satisfied without callers having
+    to supply it. Override ``encounter=...`` if you need a mismatched pair
+    (services/tests should normally not).
+    """
+
+    class Meta:
+        model = CombatPull
+
+    participant = factory.SubFactory(CombatParticipantFactory)
+    encounter = factory.SelfAttribute("participant.encounter")
+    round_number = 1
+    resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
+    tier = 1
+    resonance_spent = 1
+    anima_spent = 1
+
+
+class CombatPullResolvedEffectFactory(factory_django.DjangoModelFactory):
+    """Factory for CombatPullResolvedEffect (default: FLAT_BONUS shape).
+
+    Defaults satisfy clean() and DB CheckConstraints out-of-the-box. Override
+    ``kind`` plus the matching payload fields to test other shapes; mirror the
+    ThreadPullEffectFactory trait pattern in tests if needed.
+
+    NOTE: this factory does NOT call full_clean(); kind/payload alignment is
+    enforced at the DB layer via CheckConstraints (matches ThreadFactory style).
+    """
+
+    class Meta:
+        model = CombatPullResolvedEffect
+
+    pull = factory.SubFactory(CombatPullFactory)
+    source_thread = factory.SubFactory("world.magic.factories.ThreadFactory")
+    kind = EffectKind.FLAT_BONUS
+    authored_value = 2
+    level_multiplier = 2
+    scaled_value = 4
+    vital_target = None
+    source_thread_level = 2
+    source_tier = 1
+    granted_capability = None
+    narrative_snippet = ""
