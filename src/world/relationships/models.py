@@ -11,6 +11,7 @@ from django.db import models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.magic.constants import SoulTetherRole
 from world.relationships.constants import (
     DECAY_DAYS,
     FirstImpressionColoring,
@@ -319,6 +320,16 @@ class CharacterRelationship(SharedMemoryModel):
         auto_now=True,
         help_text="When this relationship was last modified",
     )
+
+    # Soul-tether fields (Spec A §2.2 — migrated from old Thread concept).
+    # Spec B will own the soul-tether mechanics; these fields are storage only.
+    is_soul_tether = models.BooleanField(default=False)
+    soul_tether_role = models.CharField(
+        max_length=16,
+        choices=SoulTetherRole.choices,
+        blank=True,
+    )
+    magical_flavor = models.TextField(blank=True)
 
     class Meta:
         constraints = [
