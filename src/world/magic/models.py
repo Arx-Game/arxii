@@ -2140,6 +2140,14 @@ class Thread(SharedMemoryModel):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    retired_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Set when owner soft-retires this thread; retired threads are "
+            "excluded from list/detail views and from all pull / passive paths."
+        ),
+    )
 
     target_trait = models.ForeignKey(
         "traits.Trait",

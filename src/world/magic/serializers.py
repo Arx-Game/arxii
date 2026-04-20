@@ -10,7 +10,8 @@ Affinities and Resonances are proper domain models in the magic app.
 from rest_framework import serializers
 
 from world.conditions.models import DamageType
-from world.magic.constants import ALTERATION_TIER_CAPS
+from world.items.models import ItemInstance
+from world.magic.constants import ALTERATION_TIER_CAPS, TargetKind
 from world.magic.models import (
     Cantrip,
     CharacterAnima,
@@ -29,8 +30,11 @@ from world.magic.models import (
     PendingAlteration,
     Resonance,
     Restriction,
+    Ritual,
     Technique,
     TechniqueStyle,
+    Thread,
+    ThreadWeavingTeachingOffer,
 )
 
 # =============================================================================
@@ -667,3 +671,289 @@ class AlterationResolutionSerializer(serializers.Serializer):
         if errors:
             raise serializers.ValidationError(errors)
         return attrs
+
+
+# =============================================================================
+# Resonance Pivot Spec A — Phase 16 API serializers (§4.5, §5.6)
+# =============================================================================
+
+
+class ThreadSerializer(serializers.ModelSerializer):
+    """Serializer for Thread records (Spec A §4.5).
+
+    Read: returns level / developed_points / resonance detail for display.
+    Write: accepts target_kind + target_id + resonance to weave a new thread;
+    target_id is resolved to the typed FK via ``create`` which delegates to
+    ``weave_thread``. ``character_sheet`` is inferred from ``request.user``.
+    """
+
+    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
+    target_id = serializers.IntegerField(write_only=True, required=True)
+    name = serializers.CharField(required=False, allow_blank=True, default="")
+    description = serializers.CharField(required=False, allow_blank=True, default="")
+
+    class Meta:
+        model = Thread
+        fields = [
+            "id",
+            "owner",
+            "resonance",
+            "resonance_name",
+            "target_kind",
+            "target_id",
+            "name",
+            "description",
+            "level",
+            "developed_points",
+            "retired_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "owner",
+            "level",
+            "developed_points",
+            "retired_at",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate_target_kind(self, value: str) -> str:
+        """Ensure the discriminator is a valid TargetKind."""
+        if value not in TargetKind.values:
+            msg = f"Unknown target_kind: {value!r}."
+            raise serializers.ValidationError(msg)
+        return value
+
+    def validate(self, attrs: dict) -> dict:
+        """Resolve target_id → a target model instance matching target_kind."""
+        target_kind = attrs.get("target_kind")
+        target_id = attrs.get("target_id")
+        if target_kind is None or target_id is None:
+            return attrs
+        attrs["_target"] = self._resolve_target(target_kind, target_id)
+        return attrs
+
+    @staticmethod
+    def _resolve_target(target_kind: str, target_id: int) -> object:
+        """Look up the target model instance for a given (target_kind, target_id)."""
+        # In-function imports avoid app-boot circular deps (magic ↔ traits ↔ relationships).
+        from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+        from world.magic.models import Technique as TechniqueModel  # noqa: PLC0415
+        from world.relationships.models import (  # noqa: PLC0415
+            RelationshipCapstone,
+            RelationshipTrackProgress,
+        )
+        from world.traits.models import Trait  # noqa: PLC0415
+
+        model_map: dict[str, type] = {
+            TargetKind.TRAIT: Trait,
+            TargetKind.TECHNIQUE: TechniqueModel,
+            TargetKind.ITEM: ObjectDB,
+            TargetKind.ROOM: ObjectDB,
+            TargetKind.RELATIONSHIP_TRACK: RelationshipTrackProgress,
+            TargetKind.RELATIONSHIP_CAPSTONE: RelationshipCapstone,
+        }
+        model = model_map.get(target_kind)
+        if model is None:
+            msg = f"Unsupported target_kind: {target_kind!r}."
+            raise serializers.ValidationError(msg)
+        try:
+            return model.objects.get(pk=target_id)
+        except model.DoesNotExist as exc:
+            msg = f"{target_kind} target with id={target_id} does not exist."
+            raise serializers.ValidationError(msg) from exc
+
+    def create(self, validated_data: dict) -> Thread:
+        """Delegate thread creation to ``weave_thread``."""
+        from world.magic.exceptions import WeavingUnlockMissing  # noqa: PLC0415
+        from world.magic.services import weave_thread  # noqa: PLC0415
+
+        character_sheet = self.context["character_sheet"]
+        target = validated_data.pop("_target")
+        validated_data.pop("target_id", None)
+
+        try:
+            return weave_thread(
+                character_sheet=character_sheet,
+                target_kind=validated_data["target_kind"],
+                target=target,
+                resonance=validated_data["resonance"],
+                name=validated_data.get("name", ""),
+                description=validated_data.get("description", ""),
+            )
+        except WeavingUnlockMissing as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+
+
+class RitualSerializer(serializers.ModelSerializer):
+    """Serializer for Ritual records (Spec A §4.5)."""
+
+    class Meta:
+        model = Ritual
+        fields = [
+            "id",
+            "name",
+            "description",
+            "hedge_accessible",
+            "glimpse_eligible",
+            "narrative_prose",
+            "execution_kind",
+            "site_property",
+        ]
+        read_only_fields = fields
+
+
+class ThreadWeavingTeachingOfferSerializer(serializers.ModelSerializer):
+    """Serializer for ThreadWeavingTeachingOffer records (Spec A §4.5)."""
+
+    unlock_target_kind = serializers.CharField(source="unlock.target_kind", read_only=True)
+    unlock_display_name = serializers.CharField(source="unlock.display_name", read_only=True)
+    unlock_xp_cost = serializers.IntegerField(source="unlock.xp_cost", read_only=True)
+
+    class Meta:
+        model = ThreadWeavingTeachingOffer
+        fields = [
+            "id",
+            "teacher",
+            "unlock",
+            "unlock_target_kind",
+            "unlock_display_name",
+            "unlock_xp_cost",
+            "pitch",
+            "gold_cost",
+        ]
+        read_only_fields = fields
+
+
+# ---------------------------------------------------------------------------
+# Thread-pull preview (Spec A §5.6)
+# ---------------------------------------------------------------------------
+
+
+class PullActionContextSerializer(serializers.Serializer):
+    """Wire shape for the optional ``action_context`` block in a pull preview.
+
+    Only ``combat_encounter_id`` is consumed by the preview path — the rest
+    of the fields are accepted for forward-compatibility with the eventual
+    authoring UI (the pre-commit preview doesn't care about action_kind
+    or anchors_in_play; the full commit path validates those).
+    """
+
+    action_kind = serializers.CharField(required=False, allow_blank=True)
+    anchors_in_play = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
+    combat_encounter_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class ThreadPullPreviewRequestSerializer(serializers.Serializer):
+    """Request serializer for POST /api/magic/thread-pull-preview/."""
+
+    resonance_id = serializers.IntegerField(required=True)
+    tier = serializers.IntegerField(required=True, min_value=1, max_value=3)
+    thread_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+    )
+    action_context = PullActionContextSerializer(required=False)
+
+
+class ResolvedPullEffectSerializer(serializers.Serializer):
+    """Wire shape for a single ResolvedPullEffect row."""
+
+    kind = serializers.CharField()
+    authored_value = serializers.IntegerField(allow_null=True)
+    level_multiplier = serializers.IntegerField()
+    scaled_value = serializers.IntegerField()
+    vital_target = serializers.CharField(allow_null=True)
+    source_thread_id = serializers.SerializerMethodField()
+    source_thread_level = serializers.IntegerField()
+    source_tier = serializers.IntegerField()
+    narrative_snippet = serializers.CharField()
+    inactive = serializers.BooleanField()
+    inactive_reason = serializers.CharField(allow_null=True)
+
+    def get_source_thread_id(self, obj) -> int:
+        """Expose the source thread's PK (the dataclass carries the Thread instance)."""
+        return obj.source_thread.pk
+
+
+class ThreadPullPreviewResponseSerializer(serializers.Serializer):
+    """Response serializer for POST /api/magic/thread-pull-preview/."""
+
+    resonance_cost = serializers.IntegerField()
+    anima_cost = serializers.IntegerField()
+    affordable = serializers.BooleanField()
+    resolved_effects = ResolvedPullEffectSerializer(many=True)
+    capped_intensity = serializers.BooleanField()
+
+
+# ---------------------------------------------------------------------------
+# Ritual perform (Spec A §4.5)
+# ---------------------------------------------------------------------------
+
+
+_SAFE_KWARG_TYPES: tuple[type, ...] = (int, str, bool)
+
+
+class RitualPerformRequestSerializer(serializers.Serializer):
+    """Request serializer for POST /api/magic/rituals/perform/.
+
+    ``kwargs`` carries ritual-specific parameters forwarded to the dispatched
+    service function or flow. To keep the surface safe we only accept
+    primitive values (``int | str | bool | None``) — authored rituals are
+    internally controlled and know how to resolve any model references from
+    those primitive keys.
+    """
+
+    ritual_id = serializers.PrimaryKeyRelatedField(
+        queryset=Ritual.objects.all(),
+        required=True,
+    )
+    kwargs = serializers.DictField(
+        child=serializers.JSONField(allow_null=True),
+        required=False,
+        default=dict,
+    )
+    components = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
+
+    def validate_kwargs(self, value: dict) -> dict:
+        """Restrict kwargs values to primitive types (int | str | bool | None)."""
+        for key, val in value.items():
+            if not isinstance(key, str):
+                msg = "Ritual kwargs keys must be strings."
+                raise serializers.ValidationError(msg)
+            if val is None:
+                continue
+            if not isinstance(val, _SAFE_KWARG_TYPES):
+                msg = f"Ritual kwargs[{key!r}] must be a primitive (int, str, bool, or null)."
+                raise serializers.ValidationError(msg)
+        return value
+
+    def validate_components(self, value: list[int]) -> list[ItemInstance]:
+        """Resolve component PKs to ItemInstances owned by the actor."""
+        if not value:
+            return []
+        actor = self.context.get("actor")
+        instances = list(ItemInstance.objects.filter(pk__in=value).select_related("quality_tier"))
+        found_pks = {inst.pk for inst in instances}
+        missing = set(value) - found_pks
+        if missing:
+            msg = f"ItemInstance(s) not found: {sorted(missing)}."
+            raise serializers.ValidationError(msg)
+        if actor is not None:
+            owner_account = actor.character.db_account_id
+            for inst in instances:
+                if inst.owner_id is not None and inst.owner_id != owner_account:
+                    msg = f"ItemInstance {inst.pk} is not owned by the actor."
+                    raise serializers.ValidationError(msg)
+        return instances

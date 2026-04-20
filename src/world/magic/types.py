@@ -243,3 +243,21 @@ class ResonancePullResult:
     resonance_spent: int
     anima_spent: int
     resolved_effects: list[ResolvedPullEffect]
+
+
+@dataclass(frozen=True)
+class PullPreviewResult:
+    """Read-only preview of a resonance pull (Spec A §5.6).
+
+    Returned by ``preview_resonance_pull`` for the pre-commit UI. Contains
+    everything the client needs to render the pull panel without mutating
+    any state. ``capped_intensity`` is True when the summed INTENSITY_BUMP
+    across ``resolved_effects`` would exceed the highest authored
+    IntensityTier threshold.
+    """
+
+    resonance_cost: int
+    anima_cost: int
+    affordable: bool
+    resolved_effects: list[ResolvedPullEffect]
+    capped_intensity: bool

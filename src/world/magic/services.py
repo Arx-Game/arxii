@@ -62,6 +62,7 @@ from world.magic.types import (
     MishapResult,
     PendingAlterationResult,
     PullActionContext,
+    PullPreviewResult,
     ResolvedPullEffect,
     ResonancePullResult,
     RuntimeTechniqueStats,
@@ -89,6 +90,7 @@ if TYPE_CHECKING:
     from actions.models.action_templates import ConsequencePool
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import CheckResult
+    from world.combat.models import CombatEncounter
     from world.conditions.models import ConditionCategory, DamageType
     from world.magic.models import (
         Affinity,
@@ -1496,7 +1498,7 @@ def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
     Spec A §3.6.
     """
     threads = list(
-        Thread.objects.filter(owner=character_sheet).select_related(
+        Thread.objects.filter(owner=character_sheet, retired_at__isnull=True).select_related(
             "resonance__affinity",
             "target_trait",
             "target_technique",
@@ -1529,7 +1531,7 @@ def near_xp_lock_threads(
 
     Only boundaries that aren't already unlocked are included. Spec A §3.6.
     """
-    threads = list(Thread.objects.filter(owner=character_sheet))
+    threads = list(Thread.objects.filter(owner=character_sheet, retired_at__isnull=True))
     if not threads:
         return []
     next_boundaries = {((t.level // 10) + 1) * 10 for t in threads}
@@ -1569,7 +1571,7 @@ def threads_blocked_by_cap(character_sheet: CharacterSheet) -> list[Thread]:
 
     Spec A §3.6.
     """
-    threads = list(Thread.objects.filter(owner=character_sheet))
+    threads = list(Thread.objects.filter(owner=character_sheet, retired_at__isnull=True))
     path_cap = compute_path_cap(character_sheet)
     return [t for t in threads if t.level >= min(path_cap, compute_anchor_cap(t))]
 
@@ -1604,7 +1606,7 @@ def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:
     return False
 
 
-def _resolve_pull_effects(
+def resolve_pull_effects(
     threads: list[Thread],
     tier: int,
     *,
@@ -1649,6 +1651,90 @@ def _resolve_pull_effects(
                     )
                 )
     return resolved
+
+
+def preview_resonance_pull(
+    character_sheet: CharacterSheet,
+    resonance: ResonanceModel,
+    tier: int,
+    threads: list[Thread],
+    *,
+    combat_encounter: CombatEncounter | None = None,
+) -> PullPreviewResult:
+    """Read-only preview of a resonance pull (Spec A §5.6).
+
+    Validates ownership + same-resonance + non-empty threads, computes the
+    tier's resonance / anima cost, reads current balances WITHOUT locking or
+    debiting, and resolves per-thread effects across tiers 0..tier using the
+    same helper that the commit path uses. Never mutates state.
+
+    ``combat_encounter`` controls the VITAL_BONUS ``inactive`` flag per
+    §3.8 + §7.4. ``capped_intensity`` is True when the summed
+    INTENSITY_BUMP across resolved effects would exceed the highest
+    authored IntensityTier threshold.
+
+    Args:
+        character_sheet: Character whose balances the preview reads.
+        resonance: Resonance the pull would channel (must match every
+            thread).
+        tier: 1..3, the pull intensity tier.
+        threads: Non-empty list of owned threads matching ``resonance``.
+        combat_encounter: Provided for combat-context previews; ``None``
+            for ephemeral / RP previews.
+
+    Returns:
+        PullPreviewResult with resonance_cost, anima_cost, affordable,
+        resolved_effects, capped_intensity.
+
+    Raises:
+        InvalidImbueAmount: empty threads, ownership / resonance mismatch.
+    """
+    if not threads:
+        msg = "Must pull at least one thread."
+        raise InvalidImbueAmount(msg)
+
+    for t in threads:
+        if t.owner_id != character_sheet.pk:
+            msg = "Thread not owned by character."
+            raise InvalidImbueAmount(msg)
+        if t.resonance_id != resonance.pk:
+            msg = "Thread does not share the chosen resonance."
+            raise InvalidImbueAmount(msg)
+
+    cost = ThreadPullCost.objects.get(tier=tier)
+    n_threads = len(threads)
+    anima_cost = cost.anima_per_thread * max(0, n_threads - 1)
+
+    # Balances — no locks, no debit.
+    cr = CharacterResonance.objects.filter(
+        character_sheet=character_sheet,
+        resonance=resonance,
+    ).first()
+    balance = cr.balance if cr else 0
+    anima = CharacterAnima.objects.filter(character=character_sheet.character).first()
+    current_anima = anima.current if anima else 0
+
+    affordable = balance >= cost.resonance_cost and current_anima >= anima_cost
+
+    in_combat = combat_encounter is not None
+    resolved = resolve_pull_effects(threads, tier, in_combat=in_combat)
+
+    # Cap detection: sum all INTENSITY_BUMP scaled_values, compare against
+    # highest IntensityTier.threshold. If no IntensityTier row exists we
+    # cannot detect the cap — return False (defensive).
+    total_intensity_bump = sum(
+        r.scaled_value for r in resolved if r.kind == EffectKind.INTENSITY_BUMP
+    )
+    highest_tier = IntensityTier.objects.order_by("-threshold").first()
+    capped_intensity = highest_tier is not None and total_intensity_bump > highest_tier.threshold
+
+    return PullPreviewResult(
+        resonance_cost=cost.resonance_cost,
+        anima_cost=anima_cost,
+        affordable=affordable,
+        resolved_effects=resolved,
+        capped_intensity=capped_intensity,
+    )
 
 
 def _persist_combat_pull(  # noqa: PLR0913
@@ -1773,7 +1859,7 @@ def spend_resonance_for_pull(  # noqa: C901 — sequential guards + combat/ephem
         raise ResonanceInsufficient(msg)
 
     in_combat = action_context.combat_encounter is not None
-    resolved = _resolve_pull_effects(threads, tier, in_combat=in_combat)
+    resolved = resolve_pull_effects(threads, tier, in_combat=in_combat)
 
     # Persist combat pull FIRST so the unique-key check fires before any
     # debit hits the DB. This keeps the in-memory cr / anima instances

@@ -7,6 +7,7 @@ filtered by category. Use /api/mechanics/modifier-types/?category=affinity
 or /api/mechanics/modifier-types/?category=resonance instead.
 """
 
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from world.magic.views import (
@@ -21,8 +22,12 @@ from world.magic.views import (
     GiftViewSet,
     PendingAlterationViewSet,
     RestrictionViewSet,
+    RitualPerformView,
     TechniqueStyleViewSet,
     TechniqueViewSet,
+    ThreadPullPreviewView,
+    ThreadViewSet,
+    ThreadWeavingTeachingOfferViewSet,
 )
 
 app_name = "magic"
@@ -31,8 +36,6 @@ router = DefaultRouter()
 
 # Lookup tables (read-only)
 # Note: affinities and resonances are now in mechanics app as ModifierTarget.
-# The legacy 5-axis Thread family was removed in Phase 2 of the resonance pivot;
-# the new thread routes land in Phase 4.
 router.register("styles", TechniqueStyleViewSet, basename="technique-style")
 router.register("effect-types", EffectTypeViewSet, basename="effect-type")
 router.register("restrictions", RestrictionViewSet, basename="restriction")
@@ -59,4 +62,24 @@ router.register(
     basename="pending-alteration",
 )
 
-urlpatterns = router.urls
+# Resonance Pivot Spec A §4.5 — Thread / Ritual / Teaching offer surface
+router.register("threads", ThreadViewSet, basename="thread")
+router.register(
+    "teaching-offers",
+    ThreadWeavingTeachingOfferViewSet,
+    basename="thread-weaving-teaching-offer",
+)
+
+urlpatterns = [
+    *router.urls,
+    path(
+        "thread-pull-preview/",
+        ThreadPullPreviewView.as_view(),
+        name="thread-pull-preview",
+    ),
+    path(
+        "rituals/perform/",
+        RitualPerformView.as_view(),
+        name="ritual-perform",
+    ),
+]

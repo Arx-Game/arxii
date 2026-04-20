@@ -34,7 +34,7 @@ class CharacterThreadHandler:
     def _all(self) -> list[Thread]:
         sheet = self.character.sheet_data
         return list(
-            Thread.objects.filter(owner=sheet).select_related(
+            Thread.objects.filter(owner=sheet, retired_at__isnull=True).select_related(
                 "resonance__affinity",
                 "target_trait",
                 "target_technique",
