@@ -623,6 +623,23 @@ class RitualFactory(factory.django.DjangoModelFactory):
     flow = None
 
 
+class ImbuingRitualFactory(RitualFactory):
+    """Seed factory for the canonical 'Rite of Imbuing' ritual.
+
+    Uses django_get_or_create so repeated calls in tests return the same row.
+    Spec A §4.3 lines 1270-1286.
+    """
+
+    class Meta:
+        model = Ritual
+        django_get_or_create = ("name",)
+
+    name = "Rite of Imbuing"
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.magic.services.spend_resonance_for_imbuing"
+    flow = None
+
+
 class RitualComponentRequirementFactory(factory.django.DjangoModelFactory):
     """Factory for RitualComponentRequirement."""
 
