@@ -24,7 +24,8 @@ from world.magic.factories import (
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
 )
-from world.magic.services import spend_resonance_for_pull
+from world.magic.models import CharacterAnima, CharacterResonance
+from world.magic.services import _anchor_in_action, spend_resonance_for_pull
 from world.magic.types import PullActionContext
 
 
@@ -119,8 +120,6 @@ class SpendResonanceForPullCombatTests(TestCase):
         cr.refresh_from_db()
         self.assertEqual(cr.balance, 8)  # 10 − 2
         # Two threads → max(0, 2−1) × 1 = 1 anima.
-        from world.magic.models import CharacterAnima
-
         anima = CharacterAnima.objects.get(character=self.sheet.character)
         self.assertEqual(anima.current, 9)
 
@@ -148,6 +147,15 @@ class SpendResonanceForPullCombatTests(TestCase):
                 threads=[thread],
                 action_context=ctx,
             )
+        # The second call's unique-key violation fires inside
+        # _persist_combat_pull, BEFORE the balance debit runs. So no
+        # second debit should have hit the DB — balance must stay at 8.
+        cr = CharacterResonance.objects.get(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+        )
+        cr.refresh_from_db()
+        self.assertEqual(cr.balance, 8)
 
     def test_anchor_not_in_action_rejected(self) -> None:
         thread = self._make_thread()
@@ -252,8 +260,6 @@ class SpendResonanceForPullCombatTests(TestCase):
     def test_insufficient_anima_rejected_for_multi_thread(self) -> None:
         # Make anima 0 so multi-thread pull (which needs anima_per_thread × (n-1))
         # fails even though balance is fine.
-        from world.magic.models import CharacterAnima
-
         anima = CharacterAnima.objects.get(character=self.sheet.character)
         anima.current = 0
         anima.save(update_fields=["current"])
@@ -413,24 +419,18 @@ class AnchorInActionTests(TestCase):
     """Direct coverage of `_anchor_in_action`'s typed-FK matching."""
 
     def test_relationship_track_always_in_action(self) -> None:
-        from world.magic.services import _anchor_in_action
-
         sheet = CharacterSheetFactory()
         thread = ThreadFactory(owner=sheet, as_track_thread=True)
         ctx = PullActionContext(combat_encounter=None, participant=None)
         self.assertTrue(_anchor_in_action(thread, ctx))
 
     def test_capstone_always_in_action(self) -> None:
-        from world.magic.services import _anchor_in_action
-
         sheet = CharacterSheetFactory()
         thread = ThreadFactory(owner=sheet, as_capstone_thread=True)
         ctx = PullActionContext(combat_encounter=None, participant=None)
         self.assertTrue(_anchor_in_action(thread, ctx))
 
     def test_trait_matched_by_involved_traits(self) -> None:
-        from world.magic.services import _anchor_in_action
-
         sheet = CharacterSheetFactory()
         thread = ThreadFactory(owner=sheet)
         self.assertEqual(thread.target_kind, TargetKind.TRAIT)
@@ -440,8 +440,6 @@ class AnchorInActionTests(TestCase):
         self.assertFalse(_anchor_in_action(thread, ctx_out))
 
     def test_technique_matched_by_involved_techniques(self) -> None:
-        from world.magic.services import _anchor_in_action
-
         sheet = CharacterSheetFactory()
         thread = ThreadFactory(owner=sheet, as_technique_thread=True)
         ctx_in = PullActionContext(involved_techniques=(thread.target_technique_id,))

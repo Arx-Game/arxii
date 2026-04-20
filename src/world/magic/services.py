@@ -1669,10 +1669,13 @@ def _persist_combat_pull(  # noqa: PLR0913
     )
 
     encounter = ctx.combat_encounter
+    participant = ctx.participant
+    assert encounter is not None  # noqa: S101 — caller branched on this
+    assert participant is not None  # noqa: S101 — paired with encounter
     pull = CombatPull.objects.create(
-        participant=ctx.participant,
+        participant=participant,
         encounter=encounter,
-        round_number=encounter.round_number,  # type: ignore[union-attr]
+        round_number=encounter.round_number,
         resonance=resonance,
         tier=tier,
         resonance_spent=resonance_cost,
@@ -1745,7 +1748,11 @@ def spend_resonance_for_pull(
             msg = "Thread anchor is not involved in this action."
             raise InvalidImbueAmount(msg)
 
-    cr = CharacterResonance.objects.get(
+    # select_for_update on cr + anima so concurrent ephemeral pulls cannot
+    # both pass the balance check against an unlocked read and double-spend.
+    # The combat path is also gated by the (participant, round_number) unique
+    # key, but ephemeral pulls have no DB-level uniqueness constraint.
+    cr = CharacterResonance.objects.select_for_update().get(
         character_sheet=character_sheet,
         resonance=resonance,
     )
@@ -1755,21 +1762,21 @@ def spend_resonance_for_pull(
 
     # Anima cost: per-spec §5.4 lines 1452–1458, anima_per_thread × max(0, n-1).
     anima_total = cost.anima_per_thread * max(0, n_threads - 1)
-    anima = CharacterAnima.objects.get(character=character_sheet.character)
+    anima = CharacterAnima.objects.select_for_update().get(
+        character=character_sheet.character,
+    )
     if anima.current < anima_total:
         msg = "Insufficient anima for this pull."
         raise ResonanceInsufficient(msg)
 
-    # Atomic debit (mutates SharedMemoryModel-cached instances in place).
-    cr.balance -= cost.resonance_cost
-    cr.save(update_fields=["balance"])
-    if anima_total:
-        anima.current -= anima_total
-        anima.save(update_fields=["current"])
-
     in_combat = action_context.combat_encounter is not None
     resolved = _resolve_pull_effects(threads, tier, in_combat=in_combat)
 
+    # Persist combat pull FIRST so the unique-key check fires before any
+    # debit hits the DB. This keeps the in-memory cr / anima instances
+    # consistent with the DB on failure — if persist raises IntegrityError,
+    # no balance was mutated and the SharedMemoryModel cache stays correct.
+    # The select_for_update locks above are still held through this INSERT.
     if in_combat:
         _persist_combat_pull(
             ctx=action_context,
@@ -1782,6 +1789,14 @@ def spend_resonance_for_pull(
         )
         # Phase 13 will call recompute_max_health_with_threads here so any
         # MAX_HEALTH contribution flows through immediately.
+
+    # Debit only after persistence succeeded (mutates SharedMemoryModel-cached
+    # instances in place).
+    cr.balance -= cost.resonance_cost
+    cr.save(update_fields=["balance"])
+    if anima_total:
+        anima.current -= anima_total
+        anima.save(update_fields=["current"])
 
     # Invalidate the per-character handler caches so the next read picks
     # up the new balance and (for combat) the new active CombatPull row.
