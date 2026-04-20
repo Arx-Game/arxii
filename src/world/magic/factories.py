@@ -50,6 +50,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
+    ThreadWeavingUnlock,
     ThreadXPLockedLevel,
     Tradition,
 )
@@ -668,3 +669,29 @@ class ThreadLevelUnlockFactory(factory.django.DjangoModelFactory):
     thread = factory.SubFactory(ThreadFactory)
     unlocked_level = 20
     xp_spent = 200
+
+
+# =============================================================================
+# Resonance Pivot Spec A — Phase 5 ThreadWeaving Factories
+# =============================================================================
+
+
+class ThreadWeavingUnlockFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadWeavingUnlock — authored unlock catalog.
+
+    Defaults to TRAIT-kind (the simplest discriminator with no typeclass-registry
+    coupling). Override target_kind + the matching unlock_* field for other shapes.
+    Pass ``unlock_trait=None`` explicitly when switching to another kind so the
+    factory's default doesn't populate the wrong column.
+
+    NOTE: this factory intentionally does NOT call full_clean(). DB-level
+    CheckConstraints catch shape errors at write time; clean() is opt-in via
+    tests that exercise validation explicitly.
+    """
+
+    class Meta:
+        model = ThreadWeavingUnlock
+
+    target_kind = TargetKind.TRAIT
+    unlock_trait = factory.SubFactory(TraitFactory)
+    xp_cost = 100

@@ -37,6 +37,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
+    ThreadWeavingUnlock,
     ThreadXPLockedLevel,
     Tradition,
 )
@@ -458,3 +459,23 @@ class ThreadLevelUnlockAdmin(admin.ModelAdmin):
     search_fields = ["thread__owner__character__db_key"]
     readonly_fields = ["acquired_at"]
     raw_id_fields = ["thread"]
+
+
+@admin.register(ThreadWeavingUnlock)
+class ThreadWeavingUnlockAdmin(admin.ModelAdmin):
+    list_display = ["id", "target_kind", "display_name", "xp_cost", "out_of_path_multiplier"]
+    list_filter = ["target_kind"]
+    search_fields = [
+        "unlock_trait__name",
+        "unlock_gift__name",
+        "unlock_item_typeclass_path",
+        "unlock_room_property__name",
+        "unlock_track__name",
+    ]
+    raw_id_fields = [
+        "unlock_trait",
+        "unlock_gift",
+        "unlock_room_property",
+        "unlock_track",
+    ]
+    filter_horizontal = ["paths"]
