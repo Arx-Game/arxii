@@ -42,6 +42,13 @@ class JournalEntry(SharedMemoryModel):
         blank=True,
     )
 
+    # Related threads (Spec A §2.2)
+    related_threads = models.ManyToManyField(
+        "magic.Thread",
+        blank=True,
+        related_name="related_journal_entries",
+    )
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     edited_at = models.DateTimeField(null=True, blank=True)
