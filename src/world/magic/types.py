@@ -7,7 +7,8 @@ from django.db import models
 
 if TYPE_CHECKING:
     from world.checks.types import CheckResult
-    from world.conditions.models import ConditionInstance
+    from world.combat.models import CombatEncounter, CombatParticipant
+    from world.conditions.models import CapabilityType, ConditionInstance
     from world.magic.models import (
         MagicalAlterationEvent,
         MagicalAlterationTemplate,
@@ -183,3 +184,62 @@ class AlterationResolutionResult:
     template: MagicalAlterationTemplate
     condition_instance: ConditionInstance
     event: MagicalAlterationEvent
+
+
+# =============================================================================
+# Resonance Pivot Spec A — Phase 12: Pull service result types
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class PullActionContext:
+    """Context describing the action the pull would attach to (Spec A §5.4).
+
+    Combat-context pulls supply both ``combat_encounter`` and ``participant``;
+    ephemeral (RP) pulls leave both ``None``. The ``involved_*`` tuples carry
+    the typed-FK pks that describe which anchors the action engages, so
+    ``_anchor_in_action`` can avoid introspecting the action graph from inside
+    the service layer (caller is responsible for populating them).
+
+    Distinct from ``actions.types.ActionContext`` — that dataclass is the
+    generic action-resolver context with totally different fields.
+    """
+
+    combat_encounter: CombatEncounter | None = None
+    participant: CombatParticipant | None = None
+    involved_traits: tuple[int, ...] = ()
+    involved_techniques: tuple[int, ...] = ()
+    involved_objects: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class ResolvedPullEffect:
+    """One resolved pull effect (per-thread × per-tier; Spec A §5.4 step 3).
+
+    ``inactive`` flags VITAL_BONUS rows in ephemeral context — the cost is
+    still paid in full but ``scaled_value`` is zeroed since there is no
+    combat consumer for the bonus. ``inactive_reason`` carries the player-
+    facing explanation.
+    """
+
+    kind: str
+    authored_value: int | None
+    level_multiplier: int
+    scaled_value: int
+    vital_target: str | None
+    source_thread: Thread
+    source_thread_level: int
+    source_tier: int
+    granted_capability: CapabilityType | None
+    narrative_snippet: str
+    inactive: bool = False
+    inactive_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class ResonancePullResult:
+    """Result of ``spend_resonance_for_pull`` (Spec A §5.4 step 8)."""
+
+    resonance_spent: int
+    anima_spent: int
+    resolved_effects: list[ResolvedPullEffect]

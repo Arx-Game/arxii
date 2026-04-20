@@ -23,6 +23,7 @@ from world.magic.constants import (
     ALTERATION_TIER_CAPS,
     MIN_ALTERATION_DESCRIPTION_LENGTH,
     AlterationTier,
+    EffectKind,
     PendingAlterationStatus,
     TargetKind,
 )
@@ -45,6 +46,8 @@ from world.magic.models import (
     SoulfrayConfig,
     Thread,
     ThreadLevelUnlock,
+    ThreadPullCost,
+    ThreadPullEffect,
     ThreadXPLockedLevel,
 )
 from world.magic.types import (
@@ -55,6 +58,9 @@ from world.magic.types import (
     AuraPercentages,
     MishapResult,
     PendingAlterationResult,
+    PullActionContext,
+    ResolvedPullEffect,
+    ResonancePullResult,
     RuntimeTechniqueStats,
     SoulfrayResult,
     SoulfrayWarning,
@@ -1563,3 +1569,230 @@ def threads_blocked_by_cap(character_sheet: CharacterSheet) -> list[Thread]:
     threads = list(Thread.objects.filter(owner=character_sheet))
     path_cap = compute_path_cap(character_sheet)
     return [t for t in threads if t.level >= min(path_cap, compute_anchor_cap(t))]
+
+
+# =============================================================================
+# Phase 12 — spend_resonance_for_pull (Spec A §5.4 + §7.4)
+# =============================================================================
+
+
+# Always-in-action target kinds: relationship anchors are the player's assertion
+# of involvement; the system never validates them per Spec §5.4 line 1450.
+_ALWAYS_IN_ACTION_KINDS = frozenset(
+    {TargetKind.RELATIONSHIP_TRACK, TargetKind.RELATIONSHIP_CAPSTONE}
+)
+
+
+def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:
+    """Return True iff ``thread``'s anchor is involved in the action (Spec A §5.2).
+
+    Relationship anchors are always considered in-action (player asserts
+    involvement). Other kinds are matched against the explicit ``involved_*``
+    tuples on the context — the caller is responsible for populating those.
+    """
+    if thread.target_kind in _ALWAYS_IN_ACTION_KINDS:
+        return True
+    if thread.target_kind == TargetKind.TRAIT:
+        return thread.target_trait_id in ctx.involved_traits
+    if thread.target_kind == TargetKind.TECHNIQUE:
+        return thread.target_technique_id in ctx.involved_techniques
+    if thread.target_kind in (TargetKind.ITEM, TargetKind.ROOM):
+        return thread.target_object_id in ctx.involved_objects
+    return False
+
+
+def _resolve_pull_effects(
+    threads: list[Thread],
+    tier: int,
+    *,
+    in_combat: bool,
+) -> list[ResolvedPullEffect]:
+    """Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.
+
+    Implements Spec A §5.4 step 3. VITAL_BONUS rows in non-combat (ephemeral)
+    context are flagged ``inactive`` with ``scaled_value=0`` per spec §7.4
+    lines 1981–1989; the caller still pays full cost.
+    """
+    resolved: list[ResolvedPullEffect] = []
+    for t in threads:
+        multiplier = max(1, t.level // 10)
+        for effect_tier in range(tier + 1):
+            rows = ThreadPullEffect.objects.filter(
+                target_kind=t.target_kind,
+                resonance=t.resonance,
+                tier=effect_tier,
+                min_thread_level__lte=t.level,
+            )
+            for row in rows:
+                authored = (
+                    row.flat_bonus_amount or row.intensity_bump_amount or row.vital_bonus_amount
+                )
+                base_scaled = (authored or 0) * multiplier
+                inactive = row.effect_kind == EffectKind.VITAL_BONUS and not in_combat
+                resolved.append(
+                    ResolvedPullEffect(
+                        kind=row.effect_kind,
+                        authored_value=authored,
+                        level_multiplier=multiplier,
+                        scaled_value=0 if inactive else base_scaled,
+                        vital_target=row.vital_target,
+                        source_thread=t,
+                        source_thread_level=t.level,
+                        source_tier=effect_tier,
+                        granted_capability=row.capability_grant,
+                        narrative_snippet=row.narrative_snippet,
+                        inactive=inactive,
+                        inactive_reason=("requires combat context" if inactive else None),
+                    )
+                )
+    return resolved
+
+
+def _persist_combat_pull(  # noqa: PLR0913
+    *,
+    ctx: PullActionContext,
+    resonance: ResonanceModel,
+    tier: int,
+    threads: list[Thread],
+    resolved: list[ResolvedPullEffect],
+    resonance_cost: int,
+    anima_total: int,
+) -> None:
+    """Write the CombatPull + CombatPullResolvedEffect rows for a combat pull.
+
+    Combat-context only; the caller branches on ``ctx.combat_encounter is not
+    None`` before invoking this.
+    """
+    from world.combat.models import (  # noqa: PLC0415
+        CombatPull,
+        CombatPullResolvedEffect,
+    )
+
+    encounter = ctx.combat_encounter
+    pull = CombatPull.objects.create(
+        participant=ctx.participant,
+        encounter=encounter,
+        round_number=encounter.round_number,  # type: ignore[union-attr]
+        resonance=resonance,
+        tier=tier,
+        resonance_spent=resonance_cost,
+        anima_spent=anima_total,
+    )
+    pull.threads.set(threads)
+    for r in resolved:
+        CombatPullResolvedEffect.objects.create(
+            pull=pull,
+            kind=r.kind,
+            authored_value=r.authored_value,
+            level_multiplier=r.level_multiplier,
+            scaled_value=r.scaled_value,
+            vital_target=r.vital_target,
+            source_thread=r.source_thread,
+            source_thread_level=r.source_thread_level,
+            source_tier=r.source_tier,
+            granted_capability=r.granted_capability,
+            narrative_snippet=r.narrative_snippet,
+        )
+
+
+@transaction.atomic
+def spend_resonance_for_pull(
+    character_sheet: CharacterSheet,
+    resonance: ResonanceModel,
+    tier: int,
+    threads: list[Thread],
+    action_context: PullActionContext,
+) -> ResonancePullResult:
+    """Atomic pull commit (Spec A §5.4 + §7.4).
+
+    Validates ownership, resonance match, and anchor involvement; debits the
+    per-tier resonance cost + anima total; resolves per-thread effects across
+    tiers 0..tier; and either persists a ``CombatPull`` (combat context) or
+    returns the resolved effects ephemerally (RP context). VITAL_BONUS rows
+    are flagged ``inactive`` in ephemeral context with ``scaled_value=0`` —
+    full cost is still paid (Spec §7.4 lines 1981–1989).
+
+    Args:
+        character_sheet: Character paying the cost.
+        resonance: Resonance shared by every pulled thread.
+        tier: 1..3, the pull intensity tier.
+        threads: Non-empty list of owned threads matching ``resonance``.
+        action_context: PullActionContext describing the action.
+
+    Returns:
+        ResonancePullResult with resonance_spent, anima_spent, resolved_effects.
+
+    Raises:
+        InvalidImbueAmount: empty threads, ownership / resonance mismatch, or
+            an anchor that is not in-action.
+        ResonanceInsufficient: balance below cost or insufficient anima.
+    """
+    if not threads:
+        msg = "Must pull at least one thread."
+        raise InvalidImbueAmount(msg)
+
+    cost = ThreadPullCost.objects.get(tier=tier)
+    n_threads = len(threads)
+
+    for t in threads:
+        if t.owner_id != character_sheet.pk:
+            msg = "Thread not owned by character."
+            raise InvalidImbueAmount(msg)
+        if t.resonance_id != resonance.pk:
+            msg = "Thread does not share the chosen resonance."
+            raise InvalidImbueAmount(msg)
+        if not _anchor_in_action(t, action_context):
+            msg = "Thread anchor is not involved in this action."
+            raise InvalidImbueAmount(msg)
+
+    cr = CharacterResonance.objects.get(
+        character_sheet=character_sheet,
+        resonance=resonance,
+    )
+    if cr.balance < cost.resonance_cost:
+        msg = "Need " + str(cost.resonance_cost) + " resonance, have " + str(cr.balance) + "."
+        raise ResonanceInsufficient(msg)
+
+    # Anima cost: per-spec §5.4 lines 1452–1458, anima_per_thread × max(0, n-1).
+    anima_total = cost.anima_per_thread * max(0, n_threads - 1)
+    anima = CharacterAnima.objects.get(character=character_sheet.character)
+    if anima.current < anima_total:
+        msg = "Insufficient anima for this pull."
+        raise ResonanceInsufficient(msg)
+
+    # Atomic debit (mutates SharedMemoryModel-cached instances in place).
+    cr.balance -= cost.resonance_cost
+    cr.save(update_fields=["balance"])
+    if anima_total:
+        anima.current -= anima_total
+        anima.save(update_fields=["current"])
+
+    in_combat = action_context.combat_encounter is not None
+    resolved = _resolve_pull_effects(threads, tier, in_combat=in_combat)
+
+    if in_combat:
+        _persist_combat_pull(
+            ctx=action_context,
+            resonance=resonance,
+            tier=tier,
+            threads=threads,
+            resolved=resolved,
+            resonance_cost=cost.resonance_cost,
+            anima_total=anima_total,
+        )
+        # Phase 13 will call recompute_max_health_with_threads here so any
+        # MAX_HEALTH contribution flows through immediately.
+
+    # Invalidate the per-character handler caches so the next read picks
+    # up the new balance and (for combat) the new active CombatPull row.
+    character_sheet.character.resonances.invalidate()
+    character_sheet.character.combat_pulls.invalidate()
+
+    # Phase 12-future: emit ThreadsPulled audit event when the event class
+    # exists (spec §5.4 step 7). Currently a no-op.
+
+    return ResonancePullResult(
+        resonance_spent=cost.resonance_cost,
+        anima_spent=anima_total,
+        resolved_effects=resolved,
+    )
