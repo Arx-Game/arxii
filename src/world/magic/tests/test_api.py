@@ -120,6 +120,7 @@ class ThreadViewSetTests(APITestCase):
             "resonance": self.resonance.pk,
             "target_kind": TargetKind.TRAIT,
             "target_id": trait.pk,
+            "character_sheet_id": self.sheet.pk,
             "name": "Bound to Steel",
         }
         response = self.client.post(
@@ -145,6 +146,39 @@ class ThreadViewSetTests(APITestCase):
                 "resonance": self.resonance.pk,
                 "target_kind": TargetKind.TRAIT,
                 "target_id": trait.pk,
+                "character_sheet_id": self.sheet.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_rejects_foreign_character_sheet_id(self) -> None:
+        """An account cannot weave threads for another account's sheet."""
+        trait = TraitFactory()
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.TRAIT,
+                "target_id": trait.pk,
+                "character_sheet_id": self.other_sheet.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_requires_character_sheet_id(self) -> None:
+        """Accounts with zero owned sheets get a clean 400, not a 500."""
+        empty_account = AccountFactory(username="thread_empty")
+        self.client.force_authenticate(user=empty_account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.TRAIT,
+                "target_id": TraitFactory().pk,
+                # No character_sheet_id — required field, expect 400.
             },
             format="json",
         )
@@ -217,6 +251,7 @@ class ThreadPullPreviewTests(APITestCase):
         response = self.client.post(
             reverse("magic:thread-pull-preview"),
             {
+                "character_sheet_id": self.sheet.pk,
                 "resonance_id": self.resonance.pk,
                 "tier": 1,
                 "thread_ids": [self.thread.pk],
@@ -241,6 +276,7 @@ class ThreadPullPreviewTests(APITestCase):
         response = self.client.post(
             reverse("magic:thread-pull-preview"),
             {
+                "character_sheet_id": self.sheet.pk,
                 "resonance_id": self.resonance.pk,
                 "tier": 1,
                 "thread_ids": [foreign.pk],
@@ -254,6 +290,7 @@ class ThreadPullPreviewTests(APITestCase):
         response = self.client.post(
             reverse("magic:thread-pull-preview"),
             {
+                "character_sheet_id": self.sheet.pk,
                 "resonance_id": self.resonance.pk,
                 "tier": 9,  # > max_value=3
                 "thread_ids": [self.thread.pk],
@@ -279,6 +316,7 @@ class ThreadPullPreviewTests(APITestCase):
         response = self.client.post(
             reverse("magic:thread-pull-preview"),
             {
+                "character_sheet_id": self.sheet.pk,
                 "resonance_id": self.resonance.pk,
                 "tier": 1,
                 "thread_ids": [self.thread.pk],
@@ -294,6 +332,7 @@ class ThreadPullPreviewTests(APITestCase):
         self.client.post(
             reverse("magic:thread-pull-preview"),
             {
+                "character_sheet_id": self.sheet.pk,
                 "resonance_id": self.resonance.pk,
                 "tier": 1,
                 "thread_ids": [self.thread.pk],
@@ -328,6 +367,7 @@ class ThreadPullPreviewTests(APITestCase):
         response = self.client.post(
             reverse("magic:thread-pull-preview"),
             {
+                "character_sheet_id": self.sheet.pk,
                 "resonance_id": self.resonance.pk,
                 "tier": 1,
                 "thread_ids": [self.thread.pk],
@@ -343,6 +383,41 @@ class ThreadPullPreviewTests(APITestCase):
         self.assertTrue(vital_rows[0]["inactive"])
         self.assertEqual(vital_rows[0]["scaled_value"], 0)
         self.assertTrue(vital_rows[0]["inactive_reason"])
+
+    def test_preview_rejects_foreign_character_sheet_id(self) -> None:
+        """An account cannot preview pulls for another account's sheet."""
+        foreign_account = AccountFactory(username="preview_foreign")
+        foreign_character = CharacterFactory(db_key="PreviewForeign")
+        foreign_sheet = CharacterSheetFactory(character=foreign_character)
+        _link_account_to_sheet(foreign_account, foreign_character, foreign_sheet)
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-pull-preview"),
+            {
+                "character_sheet_id": foreign_sheet.pk,
+                "resonance_id": self.resonance.pk,
+                "tier": 1,
+                "thread_ids": [self.thread.pk],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_preview_requires_character_sheet_id(self) -> None:
+        """Accounts with zero owned sheets get a clean 400, not a 500."""
+        empty_account = AccountFactory(username="preview_empty")
+        self.client.force_authenticate(user=empty_account)
+        response = self.client.post(
+            reverse("magic:thread-pull-preview"),
+            {
+                # No character_sheet_id — required field, expect 400.
+                "resonance_id": self.resonance.pk,
+                "tier": 1,
+                "thread_ids": [self.thread.pk],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 class RitualPerformViewTests(APITestCase):
@@ -388,6 +463,7 @@ class RitualPerformViewTests(APITestCase):
         response = self.client.post(
             reverse("magic:ritual-perform"),
             {
+                "character_sheet_id": self.sheet.pk,
                 "ritual_id": self.ritual.pk,
                 "kwargs": {"thread_id": self.thread.pk, "amount": 5},
                 "components": [],
@@ -405,6 +481,7 @@ class RitualPerformViewTests(APITestCase):
         response = self.client.post(
             reverse("magic:ritual-perform"),
             {
+                "character_sheet_id": self.sheet.pk,
                 "ritual_id": self.ritual.pk,
                 "kwargs": {"amount": 5},
                 "components": [],
@@ -424,6 +501,7 @@ class RitualPerformViewTests(APITestCase):
         response = self.client.post(
             reverse("magic:ritual-perform"),
             {
+                "character_sheet_id": self.sheet.pk,
                 "ritual_id": self.ritual.pk,
                 "kwargs": {"thread_id": foreign.pk, "amount": 5},
             },
@@ -437,6 +515,7 @@ class RitualPerformViewTests(APITestCase):
         response = self.client.post(
             reverse("magic:ritual-perform"),
             {
+                "character_sheet_id": self.sheet.pk,
                 "ritual_id": self.ritual.pk,
                 "kwargs": {"thread_id": self.thread.pk, "amount": -1},
             },
@@ -450,8 +529,42 @@ class RitualPerformViewTests(APITestCase):
         response = self.client.post(
             reverse("magic:ritual-perform"),
             {
+                "character_sheet_id": self.sheet.pk,
                 "ritual_id": self.ritual.pk,
                 "kwargs": {"thread_id": self.thread.pk, "extra": [1, 2, 3]},
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_ritual_rejects_foreign_character_sheet_id(self) -> None:
+        """An account cannot dispatch rituals using another account's sheet."""
+        foreign_account = AccountFactory(username="ritual_foreign")
+        foreign_character = CharacterFactory(db_key="RitualForeign")
+        foreign_sheet = CharacterSheetFactory(character=foreign_character)
+        _link_account_to_sheet(foreign_account, foreign_character, foreign_sheet)
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:ritual-perform"),
+            {
+                "character_sheet_id": foreign_sheet.pk,
+                "ritual_id": self.ritual.pk,
+                "kwargs": {"thread_id": self.thread.pk, "amount": 5},
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_ritual_requires_character_sheet_id(self) -> None:
+        """Accounts with zero owned sheets get a clean 400, not a 500."""
+        empty_account = AccountFactory(username="ritual_empty")
+        self.client.force_authenticate(user=empty_account)
+        response = self.client.post(
+            reverse("magic:ritual-perform"),
+            {
+                # No character_sheet_id — required field, expect 400.
+                "ritual_id": self.ritual.pk,
+                "kwargs": {"thread_id": self.thread.pk, "amount": 5},
             },
             format="json",
         )

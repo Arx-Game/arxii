@@ -9,6 +9,7 @@ Affinities and Resonances are proper domain models in the magic app.
 
 from rest_framework import serializers
 
+from world.character_sheets.models import CharacterSheet
 from world.conditions.models import DamageType
 from world.items.models import ItemInstance
 from world.magic.constants import ALTERATION_TIER_CAPS, TargetKind
@@ -36,6 +37,36 @@ from world.magic.models import (
     Thread,
     ThreadWeavingTeachingOffer,
 )
+from world.roster.models import RosterEntry
+
+# Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
+_ERR_CHARACTER_SHEET_NOT_OWNED = "character_sheet_id does not belong to the requesting account."
+_ERR_CHARACTER_SHEET_NOT_FOUND = "CharacterSheet not found."
+
+
+def _resolve_account_sheet(sheet_id: int, request) -> CharacterSheet:
+    """Resolve ``sheet_id`` to a CharacterSheet owned by ``request.user``.
+
+    Staff bypass the ownership check. Raises ``serializers.ValidationError``
+    on lookup miss or ownership violation.
+    """
+    try:
+        sheet = CharacterSheet.objects.get(pk=sheet_id)
+    except CharacterSheet.DoesNotExist as exc:
+        raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+
+    user = request.user if request is not None else None
+    if user is not None and user.is_staff:
+        return sheet
+
+    if user is None:
+        raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_OWNED)
+
+    owned_ids = set(RosterEntry.objects.for_account(user).character_ids())
+    if sheet.pk not in owned_ids:
+        raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_OWNED)
+    return sheet
+
 
 # =============================================================================
 # Lookup Table Serializers (Read-Only)
@@ -682,13 +713,16 @@ class ThreadSerializer(serializers.ModelSerializer):
     """Serializer for Thread records (Spec A §4.5).
 
     Read: returns level / developed_points / resonance detail for display.
-    Write: accepts target_kind + target_id + resonance to weave a new thread;
-    target_id is resolved to the typed FK via ``create`` which delegates to
-    ``weave_thread``. ``character_sheet`` is inferred from ``request.user``.
+    Write: accepts target_kind + target_id + resonance + character_sheet_id to
+    weave a new thread; target_id is resolved to the typed FK via ``create``
+    which delegates to ``weave_thread``. ``character_sheet_id`` must identify
+    a CharacterSheet on an active roster tenure belonging to the requesting
+    account (staff may pass any sheet).
     """
 
     resonance_name = serializers.CharField(source="resonance.name", read_only=True)
     target_id = serializers.IntegerField(write_only=True, required=True)
+    character_sheet_id = serializers.IntegerField(write_only=True, required=True)
     name = serializers.CharField(required=False, allow_blank=True, default="")
     description = serializers.CharField(required=False, allow_blank=True, default="")
 
@@ -701,6 +735,7 @@ class ThreadSerializer(serializers.ModelSerializer):
             "resonance_name",
             "target_kind",
             "target_id",
+            "character_sheet_id",
             "name",
             "description",
             "level",
@@ -725,6 +760,11 @@ class ThreadSerializer(serializers.ModelSerializer):
             msg = f"Unknown target_kind: {value!r}."
             raise serializers.ValidationError(msg)
         return value
+
+    def validate_character_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve + ownership-check the caller-supplied character_sheet_id."""
+        request = self.context.get("request")
+        return _resolve_account_sheet(value, request)
 
     def validate(self, attrs: dict) -> dict:
         """Resolve target_id → a target model instance matching target_kind."""
@@ -771,7 +811,9 @@ class ThreadSerializer(serializers.ModelSerializer):
         from world.magic.exceptions import WeavingUnlockMissing  # noqa: PLC0415
         from world.magic.services import weave_thread  # noqa: PLC0415
 
-        character_sheet = self.context["character_sheet"]
+        # character_sheet_id was replaced by the CharacterSheet instance in
+        # validate_character_sheet_id — pop it before building kwargs.
+        character_sheet = validated_data.pop("character_sheet_id")
         target = validated_data.pop("_target")
         validated_data.pop("target_id", None)
 
@@ -852,8 +894,13 @@ class PullActionContextSerializer(serializers.Serializer):
 
 
 class ThreadPullPreviewRequestSerializer(serializers.Serializer):
-    """Request serializer for POST /api/magic/thread-pull-preview/."""
+    """Request serializer for POST /api/magic/thread-pull-preview/.
 
+    ``character_sheet_id`` is required and must identify a CharacterSheet the
+    requesting account owns (staff may pass any sheet).
+    """
+
+    character_sheet_id = serializers.IntegerField(required=True)
     resonance_id = serializers.IntegerField(required=True)
     tier = serializers.IntegerField(required=True, min_value=1, max_value=3)
     thread_ids = serializers.ListField(
@@ -861,6 +908,11 @@ class ThreadPullPreviewRequestSerializer(serializers.Serializer):
         allow_empty=False,
     )
     action_context = PullActionContextSerializer(required=False)
+
+    def validate_character_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve + ownership-check the caller-supplied character_sheet_id."""
+        request = self.context.get("request")
+        return _resolve_account_sheet(value, request)
 
 
 class ResolvedPullEffectSerializer(serializers.Serializer):
@@ -911,6 +963,7 @@ class RitualPerformRequestSerializer(serializers.Serializer):
     those primitive keys.
     """
 
+    character_sheet_id = serializers.IntegerField(required=True)
     ritual_id = serializers.PrimaryKeyRelatedField(
         queryset=Ritual.objects.all(),
         required=True,
@@ -926,6 +979,11 @@ class RitualPerformRequestSerializer(serializers.Serializer):
         default=list,
     )
 
+    def validate_character_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve + ownership-check the caller-supplied character_sheet_id."""
+        request = self.context.get("request")
+        return _resolve_account_sheet(value, request)
+
     def validate_kwargs(self, value: dict) -> dict:
         """Restrict kwargs values to primitive types (int | str | bool | None)."""
         for key, val in value.items():
@@ -940,20 +998,25 @@ class RitualPerformRequestSerializer(serializers.Serializer):
         return value
 
     def validate_components(self, value: list[int]) -> list[ItemInstance]:
-        """Resolve component PKs to ItemInstances owned by the actor."""
+        """Resolve component PKs to ItemInstances; ownership checked in validate()."""
         if not value:
             return []
-        actor = self.context.get("actor")
         instances = list(ItemInstance.objects.filter(pk__in=value).select_related("quality_tier"))
         found_pks = {inst.pk for inst in instances}
         missing = set(value) - found_pks
         if missing:
             msg = f"ItemInstance(s) not found: {sorted(missing)}."
             raise serializers.ValidationError(msg)
-        if actor is not None:
+        return instances
+
+    def validate(self, attrs: dict) -> dict:
+        """Cross-field validation: ensure components belong to the acting sheet."""
+        actor = attrs.get("character_sheet_id")
+        instances = attrs.get("components") or []
+        if actor is not None and instances:
             owner_account = actor.character.db_account_id
             for inst in instances:
                 if inst.owner_id is not None and inst.owner_id != owner_account:
                     msg = f"ItemInstance {inst.pk} is not owned by the actor."
                     raise serializers.ValidationError(msg)
-        return instances
+        return attrs

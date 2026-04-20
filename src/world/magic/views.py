@@ -98,7 +98,6 @@ from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
 
 # Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
-_ERR_NO_CHARACTER = "No active character found for this account."
 _ERR_THREAD_NOT_FOUND = "Thread not found or not owned by the actor."
 _ERR_RESONANCE_NOT_FOUND = "Resonance not found."
 _ERR_IMBUING_REQUIRES_THREAD = "Imbuing ritual requires thread_id in kwargs (int)."
@@ -555,23 +554,14 @@ class PendingAlterationViewSet(
 # =============================================================================
 
 
-def _account_character_sheet(user: AccountDB) -> CharacterSheet | None:
-    """Return the requesting account's active CharacterSheet, or None.
-
-    Mirrors the pattern used in combat.views.CombatEncounterViewSet.join — we
-    resolve via the account's active roster tenure(s). Returns the first sheet
-    found; callers that need an explicit persona selection should provide one.
-    """
-    character_ids = RosterEntry.objects.for_account(user).character_ids()
-    return CharacterSheet.objects.filter(character_id__in=character_ids).first()
-
-
 class ThreadViewSet(viewsets.ModelViewSet):
     """ViewSet for Thread records (Spec A §4.5).
 
     list / retrieve: returns threads the requesting account owns (staff can
     see all), excluding soft-retired rows.
-    create: delegates to the serializer, which calls ``weave_thread``.
+    create: delegates to the serializer, which calls ``weave_thread``. The
+    caller MUST supply ``character_sheet_id`` identifying which owned sheet
+    to weave the thread for — no implicit first-sheet selection.
     destroy: soft-retire — sets ``retired_at`` rather than deleting the row,
     so historical references remain.
     """
@@ -603,25 +593,6 @@ class ThreadViewSet(viewsets.ModelViewSet):
         ).character_ids()
         return qs.filter(owner_id__in=character_ids)
 
-    def get_serializer_context(self) -> dict:
-        """Inject the caller's CharacterSheet so ThreadSerializer.create can use it."""
-        context = super().get_serializer_context()
-        user = self.request.user
-        if user.is_authenticated and not user.is_anonymous:
-            sheet = _account_character_sheet(cast(AccountDB, user))
-            context["character_sheet"] = sheet
-        return context
-
-    def create(self, request: Request, *args, **kwargs) -> Response:
-        """Require a resolvable character sheet before delegating to the serializer."""
-        sheet = self.get_serializer_context().get("character_sheet")
-        if sheet is None:
-            return Response(
-                {"detail": _ERR_NO_CHARACTER},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        return super().create(request, *args, **kwargs)
-
     def destroy(self, request: Request, *args, **kwargs) -> Response:
         """Soft-retire the thread by stamping ``retired_at`` instead of deleting.
 
@@ -649,16 +620,13 @@ class ThreadPullPreviewView(APIView):
 
     def post(self, request: Request) -> Response:
         """Run the preview and return its wire representation."""
-        sheet = _account_character_sheet(cast(AccountDB, request.user))
-        if sheet is None:
-            return Response(
-                {"detail": _ERR_NO_CHARACTER},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        serializer = ThreadPullPreviewRequestSerializer(data=request.data)
+        serializer = ThreadPullPreviewRequestSerializer(
+            data=request.data,
+            context={"request": request},
+        )
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        sheet: CharacterSheet = data["character_sheet_id"]
 
         resonance = get_object_or_404(Resonance, pk=data["resonance_id"])
 
@@ -719,19 +687,13 @@ class RitualPerformView(APIView):
 
     def post(self, request: Request) -> Response:
         """Validate, resolve, and dispatch the ritual; return a result payload."""
-        sheet = _account_character_sheet(cast(AccountDB, request.user))
-        if sheet is None:
-            return Response(
-                {"detail": _ERR_NO_CHARACTER},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         serializer = RitualPerformRequestSerializer(
             data=request.data,
-            context={"actor": sheet},
+            context={"request": request},
         )
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
+        sheet: CharacterSheet = data["character_sheet_id"]
 
         ritual = data["ritual_id"]
         kwargs: dict = dict(data.get("kwargs") or {})
