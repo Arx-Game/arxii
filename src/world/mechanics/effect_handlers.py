@@ -310,10 +310,10 @@ def _apply_magical_scars(
 ) -> AppliedEffect:
     """Create a PendingAlteration the player must later resolve.
 
-    Does NOT apply any condition directly. The character's own active resonance
-    provides the origin affinity and resonance — the scar marks come from their
-    magical essence. If the character has no sheet or no active resonance, the
-    handler skips gracefully and returns applied=False.
+    Does NOT apply any condition directly. The character's most-recently-earned
+    resonance provides the origin affinity and resonance — the scar marks come
+    from their magical essence. If the character has no sheet or no resonance
+    rows, the handler skips gracefully and returns applied=False.
     """
     from world.magic.services import create_pending_alteration  # noqa: PLC0415
 

@@ -33,21 +33,6 @@ class AffinityType(models.TextChoices):
     ABYSSAL = "abyssal", "Abyssal"
 
 
-class ResonanceScope(models.TextChoices):
-    """How a resonance attachment affects targets."""
-
-    SELF = "self", "Self Only"
-    AREA = "area", "Area Effect"
-
-
-class ResonanceStrength(models.TextChoices):
-    """The strength of a resonance attachment."""
-
-    MINOR = "minor", "Minor"
-    MODERATE = "moderate", "Moderate"
-    MAJOR = "major", "Major"
-
-
 class AnimaRitualCategory(models.TextChoices):
     """Categories of anima recovery rituals."""
 
