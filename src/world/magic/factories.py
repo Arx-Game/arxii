@@ -56,10 +56,6 @@ from world.magic.models import (
     ThreadXPLockedLevel,
     Tradition,
 )
-from world.magic.types import (
-    ResonanceScope,
-    ResonanceStrength,
-)
 from world.traits.factories import TraitFactory
 
 
@@ -169,13 +165,17 @@ class CharacterAuraFactory(factory.django.DjangoModelFactory):
 class CharacterResonanceFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterResonance
+        django_get_or_create = ("character_sheet", "resonance")
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
     resonance = factory.SubFactory(ResonanceFactory)
-    scope = ResonanceScope.SELF
-    strength = ResonanceStrength.MODERATE
+    balance = 0
+    lifetime_earned = 0
     flavor_text = ""
-    is_active = True
+
+    class Params:
+        with_balance = factory.Trait(balance=10, lifetime_earned=10)
+        claimed_only = factory.Trait(balance=0, lifetime_earned=0)
 
 
 # =============================================================================

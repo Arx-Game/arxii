@@ -305,13 +305,16 @@ class CharacterResonanceViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filter to characters owned by the current user."""
         user = self.request.user
+        queryset = CharacterResonance.objects.select_related(
+            "character_sheet",
+            "character_sheet__character",
+            "resonance",
+            "resonance__affinity",
+            "resonance__modifier_target__codex_entry",
+        )
         if user.is_staff:
-            return CharacterResonance.objects.select_related(
-                "resonance", "resonance__affinity", "resonance__modifier_target__codex_entry"
-            ).all()
-        return CharacterResonance.objects.select_related(
-            "resonance", "resonance__affinity", "resonance__modifier_target__codex_entry"
-        ).filter(character__db_account=user)
+            return queryset
+        return queryset.filter(character_sheet__character__db_account=user)
 
 
 class CharacterGiftViewSet(viewsets.ModelViewSet):

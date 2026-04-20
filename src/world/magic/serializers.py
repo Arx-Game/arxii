@@ -326,32 +326,21 @@ class CharacterResonanceSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     resonance_detail = ResonanceSerializer(source="resonance", read_only=True)
-    scope_display = serializers.CharField(
-        source="get_scope_display",
-        read_only=True,
-    )
-    strength_display = serializers.CharField(
-        source="get_strength_display",
-        read_only=True,
-    )
 
     class Meta:
         model = CharacterResonance
         fields = [
             "id",
-            "character",
+            "character_sheet",
             "resonance",
             "resonance_name",
             "resonance_detail",
-            "scope",
-            "scope_display",
-            "strength",
-            "strength_display",
+            "balance",
+            "lifetime_earned",
+            "claimed_at",
             "flavor_text",
-            "is_active",
-            "created_at",
         ]
-        read_only_fields = ["id", "created_at"]
+        read_only_fields = ["id", "claimed_at"]
 
 
 class CharacterGiftSerializer(serializers.ModelSerializer):

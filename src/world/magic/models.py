@@ -40,8 +40,6 @@ from world.magic.constants import (
 )
 from world.magic.types import (
     AffinityType,
-    ResonanceScope,
-    ResonanceStrength,
 )
 
 if TYPE_CHECKING:
@@ -309,19 +307,18 @@ class CharacterAura(SharedMemoryModel):
 
 
 class CharacterResonance(SharedMemoryModel):
-    """
-    A resonance attached to a character.
+    """Per-character per-resonance row.
 
-    Personal resonances come from heritage, personality, or development.
-    They stack with resonances from equipment, environment, and powers.
-    Resonances are proper Resonance model instances.
+    Identity (the row exists = "this character is associated with this
+    resonance") and currency bucket (`balance` is spendable, `lifetime_earned`
+    is monotonic). See Resonance Pivot Spec A §2.2.
     """
 
-    character = models.ForeignKey(
-        ObjectDB,
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="resonances",
-        help_text="The character this resonance is attached to.",
+        help_text="The character sheet this resonance is attached to.",
     )
     resonance = models.ForeignKey(
         Resonance,
@@ -329,35 +326,30 @@ class CharacterResonance(SharedMemoryModel):
         related_name="character_resonances",
         help_text="The resonance type.",
     )
-    scope = models.CharField(
-        max_length=20,
-        choices=ResonanceScope.choices,
-        default=ResonanceScope.SELF,
-        help_text="Whether this resonance affects only the character or an area.",
+    balance = models.PositiveIntegerField(
+        default=0,
+        help_text="Spendable resonance currency.",
     )
-    strength = models.CharField(
-        max_length=20,
-        choices=ResonanceStrength.choices,
-        default=ResonanceStrength.MODERATE,
-        help_text="The strength of this resonance attachment.",
+    lifetime_earned = models.PositiveIntegerField(
+        default=0,
+        help_text="Monotonic total of resonance earned (never decremented).",
+    )
+    claimed_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this resonance row was created (claimed by the character).",
     )
     flavor_text = models.TextField(
         blank=True,
         help_text="Optional player-defined description of how this resonance manifests.",
     )
-    is_active = models.BooleanField(
-        default=True,
-        help_text="Whether this resonance is currently active.",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ["character", "resonance"]
+        unique_together = (("character_sheet", "resonance"),)
         verbose_name = "Character Resonance"
         verbose_name_plural = "Character Resonances"
 
     def __str__(self) -> str:
-        return f"{self.resonance.name} on {self.character}"
+        return f"{self.resonance.name} on {self.character_sheet}"
 
 
 class GiftManager(NaturalKeyManager):

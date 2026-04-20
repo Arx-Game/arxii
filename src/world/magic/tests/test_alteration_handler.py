@@ -23,11 +23,10 @@ class ApplyMagicalScarsHandlerTests(TestCase):
         cls.affinity = AffinityFactory(name="Abyssal")
         cls.resonance = ResonanceFactory(name="Shadow", affinity=cls.affinity)
         cls.sheet = CharacterSheetFactory()
-        # Give the character an active resonance so origin can be derived.
+        # Give the character a resonance so origin can be derived.
         cls.char_resonance = CharacterResonanceFactory(
-            character=cls.sheet.character,
+            character_sheet=cls.sheet,
             resonance=cls.resonance,
-            is_active=True,
         )
 
     def _make_effect(self, severity=1):

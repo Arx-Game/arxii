@@ -31,8 +31,6 @@ from world.magic.models import (
 )
 from world.magic.types import (
     AffinityType,
-    ResonanceScope,
-    ResonanceStrength,
 )
 
 # Note: Power, CharacterPower, IntensityTier, and AnimaRitualType have been
@@ -88,17 +86,15 @@ class CharacterAuraModelTests(TestCase):
 
 
 class CharacterResonanceModelTests(TestCase):
-    """Tests for the CharacterResonance model."""
+    """Tests for the CharacterResonance model (post Spec A §2.2 merge)."""
 
     @classmethod
     def setUpTestData(cls):
-        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory()
         cls.shadows = ResonanceFactory(name="Shadows")
         cls.char_resonance = CharacterResonance.objects.create(
-            character=cls.character,
+            character_sheet=cls.sheet,
             resonance=cls.shadows,
-            scope=ResonanceScope.SELF,
-            strength=ResonanceStrength.MODERATE,
             flavor_text="A shadowy presence lingers around them.",
         )
 
@@ -106,28 +102,24 @@ class CharacterResonanceModelTests(TestCase):
         """Test string representation."""
         result = str(self.char_resonance)
         self.assertIn("Shadows", result)
-        self.assertIn(str(self.character), result)
+        self.assertIn(str(self.sheet), result)
 
     def test_character_resonance_unique_together(self):
         """Test that a character can't have duplicate resonances."""
         with self.assertRaises(IntegrityError):
             CharacterResonance.objects.create(
-                character=self.character,
+                character_sheet=self.sheet,
                 resonance=self.shadows,
-                scope=ResonanceScope.SELF,
-                strength=ResonanceStrength.MAJOR,
             )
 
     def test_character_can_have_multiple_resonances(self):
         """Test that a character can have multiple different resonances."""
         majesty = ResonanceFactory(name="Majesty")
         CharacterResonance.objects.create(
-            character=self.character,
+            character_sheet=self.sheet,
             resonance=majesty,
-            scope=ResonanceScope.AREA,
-            strength=ResonanceStrength.MINOR,
         )
-        self.assertEqual(self.character.resonances.count(), 2)
+        self.assertEqual(self.sheet.resonances.count(), 2)
 
 
 # =============================================================================

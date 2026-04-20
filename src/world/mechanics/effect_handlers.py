@@ -275,20 +275,28 @@ def _severity_to_tier(severity: int) -> int:
 def _derive_alteration_origin(
     character: "ObjectDB",
 ) -> "tuple[Affinity | None, Resonance | None]":
-    """Derive origin affinity and resonance from the character's active resonances.
+    """Derive origin affinity and resonance from the character's resonances.
 
-    Picks the first active CharacterResonance attached to the character's ObjectDB.
-    Returns (None, None) if the character has no active resonances — callers must
-    handle this case by skipping pending alteration creation.
+    Picks the most recently earned CharacterResonance for the character's
+    sheet. Returns (None, None) if the character has no sheet or no
+    resonance rows — callers must handle this case by skipping pending
+    alteration creation.
+
+    Phase 12 will replace this direct ORM query with a handler method
+    `sheet.resonances.most_recently_earned()`.
     """
     from world.magic.models import CharacterResonance  # noqa: PLC0415
 
-    # Pick most recently acquired active resonance as the alteration origin.
-    # When multiple exist, newest (highest pk) is used deterministically.
+    try:
+        sheet = character.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return None, None
+    if sheet is None:
+        return None, None
     char_res = (
-        CharacterResonance.objects.filter(character=character, is_active=True)
+        CharacterResonance.objects.filter(character_sheet=sheet)
         .select_related("resonance__affinity")
-        .order_by("-pk")
+        .order_by("-lifetime_earned", "-pk")
         .first()
     )
     if char_res is None:
@@ -325,9 +333,9 @@ def _apply_magical_scars(
     if affinity is None or resonance is None:
         return AppliedEffect(
             effect_type=EffectType.MAGICAL_SCARS,
-            description="Target has no active resonance — cannot determine alteration origin",
+            description="Target has no resonance — cannot determine alteration origin",
             applied=False,
-            skip_reason="No active CharacterResonance found",
+            skip_reason="No CharacterResonance found",
         )
 
     severity = effect.condition_severity or 1

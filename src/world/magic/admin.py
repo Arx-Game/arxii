@@ -161,11 +161,21 @@ class CharacterAuraAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterResonance)
 class CharacterResonanceAdmin(admin.ModelAdmin):
-    list_display = ["character", "resonance", "scope", "strength", "is_active"]
-    list_filter = ["scope", "strength", "is_active"]
-    search_fields = ["character__db_key", "resonance__name"]
+    list_display = [
+        "character_sheet",
+        "resonance",
+        "balance",
+        "lifetime_earned",
+        "claimed_at",
+    ]
+    search_fields = ["character_sheet__character__db_key", "resonance__name"]
     autocomplete_fields = ["resonance"]
-    list_select_related = ["character", "resonance", "resonance__affinity"]
+    list_select_related = [
+        "character_sheet",
+        "character_sheet__character",
+        "resonance",
+        "resonance__affinity",
+    ]
 
 
 @admin.register(Gift)
