@@ -24,7 +24,9 @@ from world.magic.constants import (
     MIN_ALTERATION_DESCRIPTION_LENGTH,
     AlterationTier,
     PendingAlterationStatus,
+    TargetKind,
 )
+from world.magic.exceptions import AnchorCapNotImplemented
 from world.magic.models import (
     CharacterAnima,
     IntensityTier,
@@ -69,6 +71,7 @@ if TYPE_CHECKING:
         Affinity,
         Resonance as ResonanceModel,
         Technique,
+        Thread,
     )
     from world.mechanics.models import ModifierTarget
     from world.scenes.models import Scene
@@ -1071,3 +1074,81 @@ def _typeclass_path_in_registry(path: str, registry: tuple[str, ...]) -> bool:
         if base_path in registry:
             return True
     return False
+
+
+# =============================================================================
+# Resonance Pivot Spec A — Phase 10: Cap helpers (§2.4)
+# =============================================================================
+
+
+def _current_path_stage(character_sheet: CharacterSheet) -> int:
+    """Return the stage of the most-recently-selected Path; 1 if none.
+
+    Navigates CharacterSheet → ObjectDB (character) → path_history (reverse FK
+    on CharacterPathHistory), ordered by -selected_at. Returns path.stage as int.
+    """
+    history = (
+        character_sheet.character.path_history.select_related("path")
+        .order_by("-selected_at")
+        .first()
+    )
+    if history is None:
+        return 1
+    return int(history.path.stage)
+
+
+def compute_anchor_cap(thread: Thread) -> int:
+    """Return the anchor-side cap for this thread (Spec A §2.4).
+
+    Rules per target_kind:
+    - TRAIT: CharacterTraitValue.value for (owner's ObjectDB, target_trait).
+      CharacterTraitValue.character is a FK to ObjectDB, so we navigate
+      thread.owner.character (CharacterSheet → ObjectDB) for the lookup.
+    - TECHNIQUE: target_technique.level × 10
+    - RELATIONSHIP_TRACK: current tier_number of RelationshipTrackProgress × 10.
+      Uses RelationshipTrackProgress.current_tier (property returning the
+      highest RelationshipTier whose point_threshold ≤ developed_points);
+      defaults to 0 if no tier reached.
+    - RELATIONSHIP_CAPSTONE: character's current path stage × 10 (same
+      formula as path cap; capstone threads are gated by the mage's growth).
+    - ITEM / ROOM: not yet implemented — raises AnchorCapNotImplemented.
+    """
+    match thread.target_kind:
+        case TargetKind.TRAIT:
+            value = (
+                thread.target_trait.character_values.filter(character=thread.owner.character)
+                .values_list("value", flat=True)
+                .first()
+            )
+            return int(value or 0)
+        case TargetKind.TECHNIQUE:
+            return int(thread.target_technique.level * 10)
+        case TargetKind.RELATIONSHIP_TRACK:
+            # current_tier returns the highest RelationshipTier unlocked by
+            # developed_points, or None if the relationship hasn't reached any
+            # tier threshold yet.
+            tier = thread.target_relationship_track.current_tier
+            tier_number = tier.tier_number if tier is not None else 0
+            return int(tier_number * 10)
+        case TargetKind.RELATIONSHIP_CAPSTONE:
+            stage = _current_path_stage(thread.owner)
+            return int(stage * 10)
+        case TargetKind.ITEM | TargetKind.ROOM:
+            msg = thread.target_kind + " anchor cap awaits Spec D."
+            raise AnchorCapNotImplemented(msg)
+    return 0
+
+
+def compute_path_cap(character_sheet: CharacterSheet) -> int:
+    """Return the path-side cap for a character (Spec A §2.4).
+
+    = max(current_path_stage, 1) × 10.  Minimum is 10 so stage-0 characters
+    still have a non-zero cap.
+    """
+    stage = _current_path_stage(character_sheet)
+    return max(stage, 1) * 10
+
+
+def compute_effective_cap(thread: Thread) -> int:
+    """Return min(path cap, anchor cap) — the binding limit on this thread (Spec A §2.4)."""
+    return min(compute_path_cap(thread.owner), compute_anchor_cap(thread))

@@ -646,6 +646,21 @@ class ThreadFactory(factory.django.DjangoModelFactory):
     Defaults to TRAIT-kind (the simplest discriminator with no typeclass-registry
     coupling). Override target_kind + the matching target_* FK for other shapes.
 
+    Convenience post-gen params (Phase 10, Spec A §2.4 cap-helper tests):
+    - as_trait_thread=True  → keep TRAIT kind; use with _trait_value=<int>
+    - _trait_value=<int>    → set CharacterTraitValue.value for (owner, target_trait)
+    - as_technique_thread=True → switch to TECHNIQUE kind; use with _technique_level=<int>
+    - _technique_level=<int>   → set target_technique.level (saved in place)
+    - as_track_thread=True  → switch to RELATIONSHIP_TRACK kind
+    - _track_tier_index=<int>  → create a RelationshipTier with that tier_number on the
+                                 progress.track; set developed_points >= threshold so
+                                 current_tier returns that tier
+    - as_capstone_thread=True  → switch to RELATIONSHIP_CAPSTONE kind
+    - _path_stage=<int>        → add a CharacterPathHistory row for thread.owner with
+                                 a Path of that stage (applies to capstone + effective cap)
+    - as_item_thread=True   → switch to ITEM kind (raises AnchorCapNotImplemented)
+    - as_room_thread=True   → switch to ROOM kind (raises AnchorCapNotImplemented)
+
     NOTE: this factory intentionally does NOT call full_clean(). DB-level
     CheckConstraints catch shape errors at write time; clean() is opt-in via
     tests that exercise validation explicitly.
@@ -660,6 +675,157 @@ class ThreadFactory(factory.django.DjangoModelFactory):
     target_trait = factory.SubFactory(TraitFactory)
     level = 0
     developed_points = 0
+
+    @factory.post_generation  # type: ignore[misc]
+    def as_trait_thread(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """No-op: TRAIT is already the default kind. Exists for test readability."""
+
+    @factory.post_generation  # type: ignore[misc]
+    def _trait_value(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """Set CharacterTraitValue.value for (owner.character, target_trait)."""
+        if not create or extracted is None:
+            return
+        from world.traits.models import CharacterTraitValue
+
+        CharacterTraitValue.objects.update_or_create(
+            character=self.owner.character,
+            trait=self.target_trait,
+            defaults={"value": int(extracted)},  # type: ignore[arg-type]
+        )
+
+    @factory.post_generation  # type: ignore[misc]
+    def as_technique_thread(
+        self: "Thread", create: bool, extracted: object, **kwargs: object
+    ) -> None:
+        """Switch to TECHNIQUE kind: create a Technique, clear target_trait."""
+        if not create or not extracted:
+            return
+        tech = TechniqueFactory(level=1)
+        Thread.objects.filter(pk=self.pk).update(
+            target_kind=TargetKind.TECHNIQUE,
+            target_technique=tech,
+            target_trait=None,
+        )
+        self.target_kind = TargetKind.TECHNIQUE
+        self.target_technique = tech
+        self.target_trait = None  # type: ignore[assignment]
+
+    @factory.post_generation  # type: ignore[misc]
+    def _technique_level(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """Set target_technique.level (after as_technique_thread has run)."""
+        if not create or extracted is None:
+            return
+        if self.target_technique is not None:
+            self.target_technique.level = int(extracted)  # type: ignore[arg-type]
+            self.target_technique.save(update_fields=["level"])
+
+    @factory.post_generation  # type: ignore[misc]
+    def as_track_thread(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """Switch to RELATIONSHIP_TRACK kind: create a RelationshipTrackProgress."""
+        if not create or not extracted:
+            return
+        from world.relationships.factories import RelationshipTrackProgressFactory
+
+        progress = RelationshipTrackProgressFactory()
+        Thread.objects.filter(pk=self.pk).update(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            target_relationship_track=progress,
+            target_trait=None,
+        )
+        self.target_kind = TargetKind.RELATIONSHIP_TRACK
+        self.target_relationship_track = progress
+        self.target_trait = None  # type: ignore[assignment]
+
+    @factory.post_generation  # type: ignore[misc]
+    def _track_tier_index(
+        self: "Thread", create: bool, extracted: object, **kwargs: object
+    ) -> None:
+        """Create a RelationshipTier with tier_number=extracted on the progress track.
+
+        Sets developed_points on the progress so that current_tier returns the
+        newly created tier (developed_points = tier.point_threshold).
+        """
+        if not create or extracted is None:
+            return
+        if self.target_relationship_track is None:
+            return
+        tier_number = int(extracted)  # type: ignore[arg-type]
+        from world.relationships.factories import RelationshipTierFactory
+
+        progress = self.target_relationship_track
+        tier = RelationshipTierFactory(
+            track=progress.track,
+            tier_number=tier_number,
+            point_threshold=tier_number * 10,
+        )
+        # Set developed_points so current_tier resolves to this tier.
+        progress.developed_points = tier.point_threshold
+        progress.save(update_fields=["developed_points"])
+
+    @factory.post_generation  # type: ignore[misc]
+    def as_capstone_thread(
+        self: "Thread", create: bool, extracted: object, **kwargs: object
+    ) -> None:
+        """Switch to RELATIONSHIP_CAPSTONE kind: create a RelationshipCapstone."""
+        if not create or not extracted:
+            return
+        from world.relationships.factories import RelationshipCapstoneFactory
+
+        capstone = RelationshipCapstoneFactory()
+        Thread.objects.filter(pk=self.pk).update(
+            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+            target_capstone=capstone,
+            target_trait=None,
+        )
+        self.target_kind = TargetKind.RELATIONSHIP_CAPSTONE
+        self.target_capstone = capstone
+        self.target_trait = None  # type: ignore[assignment]
+
+    @factory.post_generation  # type: ignore[misc]
+    def _path_stage(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """Add a CharacterPathHistory row for thread.owner with a Path of the given stage."""
+        if not create or extracted is None:
+            return
+        stage = int(extracted)  # type: ignore[arg-type]
+        from world.classes.factories import PathFactory
+        from world.progression.models.paths import CharacterPathHistory
+
+        path = PathFactory(stage=stage)
+        CharacterPathHistory.objects.create(character=self.owner.character, path=path)
+
+    @factory.post_generation  # type: ignore[misc]
+    def as_item_thread(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """Switch to ITEM kind: create an ObjectDB."""
+        if not create or not extracted:
+            return
+        from evennia_extensions.factories import ObjectDBFactory
+
+        obj = ObjectDBFactory()
+        Thread.objects.filter(pk=self.pk).update(
+            target_kind=TargetKind.ITEM,
+            target_object=obj,
+            target_trait=None,
+        )
+        self.target_kind = TargetKind.ITEM
+        self.target_object = obj
+        self.target_trait = None  # type: ignore[assignment]
+
+    @factory.post_generation  # type: ignore[misc]
+    def as_room_thread(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """Switch to ROOM kind: create an ObjectDB."""
+        if not create or not extracted:
+            return
+        from evennia_extensions.factories import ObjectDBFactory
+
+        obj = ObjectDBFactory()
+        Thread.objects.filter(pk=self.pk).update(
+            target_kind=TargetKind.ROOM,
+            target_object=obj,
+            target_trait=None,
+        )
+        self.target_kind = TargetKind.ROOM
+        self.target_object = obj
+        self.target_trait = None  # type: ignore[assignment]
 
 
 class ThreadLevelUnlockFactory(factory.django.DjangoModelFactory):
