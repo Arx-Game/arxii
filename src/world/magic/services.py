@@ -27,8 +27,10 @@ from world.magic.constants import (
     TargetKind,
 )
 from world.magic.exceptions import (
+    AnchorCapExceeded,
     AnchorCapNotImplemented,
     InvalidImbueAmount,
+    ResonanceInsufficient,
 )
 from world.magic.models import (
     CharacterAnima,
@@ -39,6 +41,7 @@ from world.magic.models import (
     PendingAlteration,
     SoulfrayConfig,
     Thread,
+    ThreadLevelUnlock,
 )
 from world.magic.types import (
     AffinityType,
@@ -52,6 +55,7 @@ from world.magic.types import (
     SoulfrayResult,
     SoulfrayWarning,
     TechniqueUseResult,
+    ThreadImbueResult,
 )
 from world.mechanics.constants import (
     RESONANCE_CATEGORY_NAME,
@@ -1199,3 +1203,93 @@ def grant_resonance(
     cr.lifetime_earned += amount
     cr.save(update_fields=["balance", "lifetime_earned"])
     return cr
+
+
+@transaction.atomic
+def spend_resonance_for_imbuing(  # noqa: C901 — sequential guards + greedy loop, complexity is inherent
+    character_sheet: CharacterSheet,
+    thread: Thread,
+    amount: int,
+) -> ThreadImbueResult:
+    """Deduct resonance balance and greedily advance thread level.
+
+    Spec A §3.2. Cost formula: max((current_level - 9) * 100, 1) dp per level.
+    Sub-10 levels each cost 1 dp. Advancement continues until the bucket is
+    exhausted, the next level hits an XP-lock gate, or the effective cap is
+    reached.
+
+    Args:
+        character_sheet: Character performing the imbuing.
+        thread: Thread to advance (must be owned by character_sheet).
+        amount: Resonance balance to spend (0 = drain existing bucket only).
+
+    Returns:
+        ThreadImbueResult dataclass.
+
+    Raises:
+        InvalidImbueAmount: If amount < 0 or thread.owner != character_sheet.
+        AnchorCapExceeded: If thread is already at effective cap.
+        ResonanceInsufficient: If balance < amount.
+    """
+    if amount < 0:
+        msg = "Imbue amount must be non-negative."
+        raise InvalidImbueAmount(msg)
+    if thread.owner_id != character_sheet.pk:
+        msg = "Character does not own thread."
+        raise InvalidImbueAmount(msg)
+    cap = compute_effective_cap(thread)
+    if thread.level >= cap:
+        msg = "Thread already at effective cap."
+        raise AnchorCapExceeded(msg)
+
+    cr = CharacterResonance.objects.get(
+        character_sheet=character_sheet,
+        resonance=thread.resonance,
+    )
+    if amount and cr.balance < amount:
+        msg = "Need " + str(amount) + ", have " + str(cr.balance) + "."
+        raise ResonanceInsufficient(msg)
+
+    starting_level = thread.level
+    if amount:
+        cr.balance -= amount
+        thread.developed_points += amount
+
+    blocked_by: str = "NONE"
+    while True:
+        n = thread.level
+        next_level = n + 1
+        cost = max((n - 9) * 100, 1)  # sub-10 levels cost 1 dp each
+        if thread.developed_points < cost:
+            if amount == 0:
+                blocked_by = "INSUFFICIENT_BUCKET"
+            break
+        if next_level % 10 == 0:
+            unlocked = ThreadLevelUnlock.objects.filter(
+                thread=thread,
+                unlocked_level=next_level,
+            ).exists()
+            if not unlocked:
+                blocked_by = "XP_LOCK"
+                break
+        if next_level > cap:
+            blocked_by = (
+                "PATH_CAP"
+                if compute_path_cap(character_sheet) < compute_anchor_cap(thread)
+                else "ANCHOR_CAP"
+            )
+            break
+        thread.level = next_level
+        thread.developed_points -= cost
+
+    cr.save(update_fields=["balance"])
+    thread.save(update_fields=["level", "developed_points"])
+
+    return ThreadImbueResult(
+        resonance_spent=amount,
+        developed_points_added=amount,
+        levels_gained=thread.level - starting_level,
+        new_level=thread.level,
+        new_developed_points=thread.developed_points,
+        blocked_by=blocked_by,  # type: ignore[arg-type]
+    )
