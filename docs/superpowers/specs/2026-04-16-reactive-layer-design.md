@@ -7,7 +7,7 @@ techniques can install reactive effects — the "walking on holy ground burns
 you," "the thorn-scar retaliates when struck," "the ward cancels incoming
 abyssal fire" gameplay that Arx 1 players expect from magic and curses.
 
-Scope 5 established that magical scars are `ConditionTemplate` rows with
+Scope 5 established that mage scars are `ConditionTemplate` rows with
 passive effects. Scope 5.5 gives those same conditions a reactive surface:
 a `TriggerDefinition` M2M on `ConditionTemplate` plus the dispatcher,
 handler cache, and flow-execution plumbing required to actually fire them.

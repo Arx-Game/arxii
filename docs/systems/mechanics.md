@@ -114,16 +114,20 @@ from world.mechanics.services import create_distinction_modifiers, delete_distin
 
 # When a CharacterDistinction is granted: create ModifierSource + CharacterModifier per effect
 modifiers = create_distinction_modifiers(character_distinction)
-# Also updates CharacterResonanceTotal for resonance-targeting effects
+# Resonance-targeting effects are covered by the CharacterModifier rows themselves;
+# no denormalized resonance total is maintained.
 
 # When a CharacterDistinction is removed: cascade-delete all modifiers
 count = delete_distinction_modifiers(character_distinction)
-# Also subtracts from CharacterResonanceTotal
 
 # When rank changes: recalculate modifier values
 update_distinction_rank(character_distinction)
-# Also adjusts CharacterResonanceTotal by the difference
 ```
+
+The aura percentage calculation in `magic.services.get_aura_percentages()` reads
+`CharacterModifier` rows whose `target` falls in the `resonance` category directly.
+The legacy `CharacterResonanceTotal` denormalized aggregate was removed in the
+Spec A pivot — there is no sync step to keep in lockstep.
 
 ---
 
@@ -165,7 +169,7 @@ update_distinction_rank(character_distinction)
 ## Integration Points
 
 - **Distinctions**: Primary modifier source. `create_distinction_modifiers()` is called when a `CharacterDistinction` is created; `delete_distinction_modifiers()` on removal; `update_distinction_rank()` on rank change.
-- **Magic**: Resonance-targeting effects call `add_resonance_total()` to keep `CharacterResonanceTotal` in sync.
+- **Magic**: Aura percentages in `magic.services.get_aura_percentages()` read `CharacterModifier` rows whose `target` is in the `resonance` category directly — no denormalized aggregate to sync.
 - **Action Points**: `ActionPointPool._get_ap_modifier()` uses string-based lookup for AP modifier targets (pending target FK when AP system is built).
 - **Progression**: Development rate modifiers use string-based lookup (pending target FK when progression system is built).
 - **Equipment** (future): Will follow the same `ModifierSource` pattern with equipment-specific FK fields.

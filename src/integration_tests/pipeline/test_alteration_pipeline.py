@@ -38,7 +38,7 @@ from world.magic.types import AlterationGateError, AlterationResolutionResult
 
 
 def _make_character_with_resonance(name: str) -> tuple:
-    """Create a social character and give them an active CharacterResonance.
+    """Create a social character and give them a CharacterResonance row.
 
     Returns (character, sheet, affinity, resonance).
     CharacterResonance is required for create_pending_alteration to work
@@ -51,7 +51,7 @@ def _make_character_with_resonance(name: str) -> tuple:
     sheet = CharacterSheet.objects.get(character=character)
     affinity = AffinityFactory(name=f"Primal ({name})")
     resonance = ResonanceFactory(name=f"Ember ({name})", affinity=affinity)
-    CharacterResonanceFactory(character=character, resonance=resonance, is_active=True)
+    CharacterResonanceFactory(character_sheet=sheet, resonance=resonance)
     return character, sheet, affinity, resonance
 
 
@@ -415,10 +415,10 @@ class AlterationFullPipelineTests(TestCase):
         cls.character = character
         cls.sheet = CharacterSheet.objects.get(character=character)
 
-        # Active resonance so _apply_magical_scars can derive origin
+        # Resonance row so _apply_magical_scars can derive origin
         affinity = AffinityFactory(name="Primal (pipeline test)")
         resonance = ResonanceFactory(name="Ember (pipeline test)", affinity=affinity)
-        CharacterResonanceFactory(character=character, resonance=resonance, is_active=True)
+        CharacterResonanceFactory(character_sheet=cls.sheet, resonance=resonance)
         cls.affinity = affinity
         cls.resonance = resonance
 

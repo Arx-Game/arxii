@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from django.db import models
 
 if TYPE_CHECKING:
     from world.checks.types import CheckResult
-    from world.conditions.models import ConditionInstance
+    from world.combat.models import CombatEncounter, CombatParticipant
+    from world.conditions.models import CapabilityType, ConditionInstance
     from world.magic.models import (
         MagicalAlterationEvent,
         MagicalAlterationTemplate,
         PendingAlteration,
+        Thread,
     )
     from world.mechanics.types import AppliedEffect
 
@@ -31,21 +33,6 @@ class AffinityType(models.TextChoices):
     CELESTIAL = "celestial", "Celestial"
     PRIMAL = "primal", "Primal"
     ABYSSAL = "abyssal", "Abyssal"
-
-
-class ResonanceScope(models.TextChoices):
-    """How a resonance attachment affects targets."""
-
-    SELF = "self", "Self Only"
-    AREA = "area", "Area Effect"
-
-
-class ResonanceStrength(models.TextChoices):
-    """The strength of a resonance attachment."""
-
-    MINOR = "minor", "Minor"
-    MODERATE = "moderate", "Moderate"
-    MAJOR = "major", "Major"
 
 
 class AnimaRitualCategory(models.TextChoices):
@@ -138,12 +125,34 @@ class TechniqueUseResult:
     soulfray_warning: SoulfrayWarning | None = None
 
 
+@dataclass(frozen=True)
+class ThreadImbueResult:
+    """Result of spend_resonance_for_imbuing (Spec A §3.2)."""
+
+    resonance_spent: int
+    developed_points_added: int
+    levels_gained: int
+    new_level: int
+    new_developed_points: int
+    blocked_by: Literal["NONE", "XP_LOCK", "ANCHOR_CAP", "PATH_CAP", "INSUFFICIENT_BUCKET"]
+
+
+@dataclass(frozen=True)
+class ThreadXPLockProspect:
+    """A thread that is close to an XP-locked level boundary (Spec A §3.6)."""
+
+    thread: Thread
+    boundary_level: int
+    xp_cost: int
+    dev_points_to_boundary: int
+
+
 class AlterationGateError(Exception):
     """Raised when a character tries to spend advancement points while
-    having unresolved magical alterations."""
+    having unresolved Mage Scars."""
 
     user_message = (
-        "You have an unresolved magical alteration. "
+        "You have an unresolved Mage Scar. "
         "Visit the alteration screen to resolve it before "
         "spending advancement points."
     )
@@ -153,8 +162,7 @@ class AlterationResolutionError(Exception):
     """Raised when condition application fails during alteration resolution."""
 
     user_message = (
-        "The magical alteration could not be applied due to a "
-        "condition interaction. Please contact staff."
+        "The Mage Scar could not be applied due to a condition interaction. Please contact staff."
     )
 
 
@@ -175,3 +183,80 @@ class AlterationResolutionResult:
     template: MagicalAlterationTemplate
     condition_instance: ConditionInstance
     event: MagicalAlterationEvent
+
+
+# =============================================================================
+# Resonance Pivot Spec A — Phase 12: Pull service result types
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class PullActionContext:
+    """Context describing the action the pull would attach to (Spec A §5.4).
+
+    Combat-context pulls supply both ``combat_encounter`` and ``participant``;
+    ephemeral (RP) pulls leave both ``None``. The ``involved_*`` tuples carry
+    the typed-FK pks that describe which anchors the action engages, so
+    ``_anchor_in_action`` can avoid introspecting the action graph from inside
+    the service layer (caller is responsible for populating them).
+
+    Distinct from ``actions.types.ActionContext`` — that dataclass is the
+    generic action-resolver context with totally different fields.
+    """
+
+    combat_encounter: CombatEncounter | None = None
+    participant: CombatParticipant | None = None
+    involved_traits: tuple[int, ...] = ()
+    involved_techniques: tuple[int, ...] = ()
+    involved_objects: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class ResolvedPullEffect:
+    """One resolved pull effect (per-thread × per-tier; Spec A §5.4 step 3).
+
+    ``inactive`` flags VITAL_BONUS rows in ephemeral context — the cost is
+    still paid in full but ``scaled_value`` is zeroed since there is no
+    combat consumer for the bonus. ``inactive_reason`` carries the player-
+    facing explanation.
+    """
+
+    kind: str
+    authored_value: int | None
+    level_multiplier: int
+    scaled_value: int
+    vital_target: str | None
+    source_thread: Thread
+    source_thread_level: int
+    source_tier: int
+    granted_capability: CapabilityType | None
+    narrative_snippet: str
+    inactive: bool = False
+    inactive_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class ResonancePullResult:
+    """Result of ``spend_resonance_for_pull`` (Spec A §5.4 step 8)."""
+
+    resonance_spent: int
+    anima_spent: int
+    resolved_effects: list[ResolvedPullEffect]
+
+
+@dataclass(frozen=True)
+class PullPreviewResult:
+    """Read-only preview of a resonance pull (Spec A §5.6).
+
+    Returned by ``preview_resonance_pull`` for the pre-commit UI. Contains
+    everything the client needs to render the pull panel without mutating
+    any state. ``capped_intensity`` is True when the summed INTENSITY_BUMP
+    across ``resolved_effects`` would exceed the highest authored
+    IntensityTier threshold.
+    """
+
+    resonance_cost: int
+    anima_cost: int
+    affordable: bool
+    resolved_effects: list[ResolvedPullEffect]
+    capped_intensity: bool

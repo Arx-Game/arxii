@@ -30,6 +30,7 @@ from world.vitals.types import DamageConsequenceResult
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.conditions.models import ConditionTemplate, DamageType
 
@@ -173,6 +174,51 @@ def process_damage_consequences(  # noqa: PLR0913 — survivability pipeline nee
 
     result.final_status = CharacterStatus.ALIVE
     return result
+
+
+def recompute_max_health(
+    character_sheet: CharacterSheet,
+    *,
+    thread_addend: int = 0,
+) -> int:
+    """Derive max_health from base_max_health plus a thread-derived addend.
+
+    Spec A §5.8 lines 1644–1657 names this the "canonical recomputation
+    entry point". Phase 13 lands the minimal implementation: max_health =
+    base_max_health + thread_addend, clamped to >= 0.
+
+    Clamp-not-injure semantics (§3.8): if the new max drops below current
+    health, current health is clamped down to the new max — the character
+    never gets *injured* by a recomputation, only un-bolstered. If new max
+    is >= current health, current is untouched (no free heal).
+
+    No-op when the sheet has no CharacterVitals row: characters that haven't
+    been set up with vitals (fresh test fixtures, non-combat NPCs) should
+    not crash callers that are simply folding thread addends through.
+
+    Args:
+        character_sheet: CharacterSheet whose vitals to recompute.
+        thread_addend: Sum of thread-derived MAX_HEALTH VITAL_BONUS
+            contributions (passive tier-0 + active-pull tier-1+).
+
+    Returns:
+        The new max_health value, or 0 if the sheet has no vitals row.
+    """
+    try:
+        vitals = character_sheet.vitals
+    except ObjectDoesNotExist:
+        return 0
+    new_max = max(vitals.base_max_health + thread_addend, 0)
+    update_fields: list[str] = []
+    if vitals.max_health != new_max:
+        vitals.max_health = new_max
+        update_fields.append("max_health")
+    if vitals.health > new_max:
+        vitals.health = new_max
+        update_fields.append("health")
+    if update_fields:
+        vitals.save(update_fields=update_fields)
+    return new_max
 
 
 def _select_and_apply_wound(

@@ -265,7 +265,7 @@ Control mishap pools contain **no `character_loss` consequences.** These
 are imprecision effects: environmental collateral, unintended area damage,
 minor injuries to the caster. Dramatic but never lethal on their own.
 
-### 7. Magical Alteration ("Magical Scars") Hook
+### 7. Magical Alteration ("Mage Scars") Hook
 
 At high Soulfray stages, one of the possible consequences in the stage's
 consequence pool is a "magical alteration occurs" entry. This is a new
@@ -277,12 +277,12 @@ The alteration resolution function takes the character's magical identity
 happens. **This function is a stub in Scope #3** — it's called, but the
 actual alteration logic (selecting from the vast space of possible
 alterations based on character identity) is a future system. For now, the
-stub applies a generic "Magical Scars" condition template created by
+stub applies a generic "Mage Scars" condition template created by
 factories.
 
 The `MAGICAL_SCARS` effect handler reuses the existing
 `condition_template` FK on `ConsequenceEffect` — the authored entry
-points at a placeholder "Magical Scars" `ConditionTemplate`. The
+points at a placeholder "Mage Scars" `ConditionTemplate`. The
 handler queries the character's magical identity from `ResolutionContext`
 (which carries the character via `context.character`). In the stub
 implementation, it just applies the pointed-to condition template. When
@@ -361,7 +361,7 @@ non-lethal imprecision consequences.
 
 ## What This Does NOT Build
 
-- **Magical scars resolution** — the function that determines *what*
+- **Mage scars resolution** — the function that determines *what*
   alteration occurs based on character identity. Scope #3 builds the hook
   (MAGICAL_SCARS effect type, stub function); the content system is
   future work.

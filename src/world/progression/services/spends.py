@@ -47,7 +47,7 @@ def spend_xp_on_unlock(
         tuple: (success: bool, message: str, unlock: CharacterUnlock or None)
 
     Raises:
-        AlterationGateError: If the character has unresolved magical alterations.
+        AlterationGateError: If the character has unresolved Mage Scars.
     """
     try:
         sheet = character.sheet_data

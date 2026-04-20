@@ -22,7 +22,6 @@ from world.character_creation.constants import ApplicationStatus, CommentType
 from world.character_creation.models import CharacterDraft
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
-from world.mechanics.constants import RESONANCE_CATEGORY_NAME
 from world.roster.models import Roster, RosterEntry, RosterTenure
 from world.roster.models.choices import RosterType
 
@@ -526,8 +525,11 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
     Bulk-create ModifierSource and CharacterModifier records for a list of CharacterDistinctions.
 
     Expects the distinction FK on each CharacterDistinction to have effects prefetched.
+
+    Note: aura percentages are computed live from these CharacterModifier rows by
+    `world.magic.services.get_aura_percentages`, so no denormalized resonance-total
+    bookkeeping is needed.
     """
-    from world.magic.services import add_resonance_total  # noqa: PLC0415
     from world.mechanics.models import CharacterModifier, ModifierSource  # noqa: PLC0415
 
     # Build ModifierSource instances for all effects across all distinctions
@@ -548,28 +550,17 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
 
     created_sources = ModifierSource.objects.bulk_create(sources)
 
-    # Build CharacterModifier instances and collect resonance updates
-    modifiers = []
-    resonance_totals: dict = {}
-
-    for source, (effect, rank) in zip(created_sources, source_effect_ranks, strict=True):
-        value = effect.get_value_at_rank(rank)
-        modifiers.append(
-            CharacterModifier(
-                character=sheet,
-                target=effect.target,
-                value=value,
-                source=source,
-            )
+    modifiers = [
+        CharacterModifier(
+            character=sheet,
+            target=effect.target,
+            value=effect.get_value_at_rank(rank),
+            source=source,
         )
-        if effect.target.category.name == RESONANCE_CATEGORY_NAME:
-            resonance_totals[effect.target] = resonance_totals.get(effect.target, 0) + value
+        for source, (effect, rank) in zip(created_sources, source_effect_ranks, strict=True)
+    ]
 
     CharacterModifier.objects.bulk_create(modifiers)
-
-    # Apply aggregated resonance updates
-    for resonance_type, total_value in resonance_totals.items():
-        add_resonance_total(sheet, resonance_type, total_value)
 
 
 def _create_true_form(character: ObjectDB, draft_data: dict) -> None:

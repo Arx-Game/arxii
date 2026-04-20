@@ -5,7 +5,15 @@ import factory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.magic.audere import AudereThreshold
-from world.magic.constants import AlterationTier, CantripArchetype, PendingAlterationStatus
+from world.magic.constants import (
+    AlterationTier,
+    CantripArchetype,
+    EffectKind,
+    PendingAlterationStatus,
+    RitualExecutionKind,
+    TargetKind,
+    VitalBonusTarget,
+)
 from world.magic.models import (
     Affinity,
     AnimaRitualPerformance,
@@ -16,10 +24,12 @@ from world.magic.models import (
     CharacterGift,
     CharacterResonance,
     CharacterTechnique,
+    CharacterThreadWeavingUnlock,
     CharacterTradition,
     EffectType,
     Facet,
     Gift,
+    ImbuingProseTemplate,
     IntensityTier,
     MagicalAlterationEvent,
     MagicalAlterationTemplate,
@@ -30,21 +40,23 @@ from world.magic.models import (
     PendingAlteration,
     Resonance,
     Restriction,
+    Ritual,
+    RitualComponentRequirement,
     SoulfrayConfig,
     Technique,
     TechniqueCapabilityGrant,
     TechniqueOutcomeModifier,
     TechniqueStyle,
     Thread,
-    ThreadJournal,
-    ThreadResonance,
-    ThreadType,
+    ThreadLevelUnlock,
+    ThreadPullCost,
+    ThreadPullEffect,
+    ThreadWeavingTeachingOffer,
+    ThreadWeavingUnlock,
+    ThreadXPLockedLevel,
     Tradition,
 )
-from world.magic.types import (
-    ResonanceScope,
-    ResonanceStrength,
-)
+from world.traits.factories import TraitFactory
 
 
 class EffectTypeFactory(factory.django.DjangoModelFactory):
@@ -153,13 +165,17 @@ class CharacterAuraFactory(factory.django.DjangoModelFactory):
 class CharacterResonanceFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CharacterResonance
+        django_get_or_create = ("character_sheet", "resonance")
 
-    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
     resonance = factory.SubFactory(ResonanceFactory)
-    scope = ResonanceScope.SELF
-    strength = ResonanceStrength.MODERATE
+    balance = 0
+    lifetime_earned = 0
     flavor_text = ""
-    is_active = True
+
+    class Params:
+        with_balance = factory.Trait(balance=10, lifetime_earned=10)
+        claimed_only = factory.Trait(balance=0, lifetime_earned=0)
 
 
 # =============================================================================
@@ -306,55 +322,6 @@ class AnimaRitualPerformanceFactory(factory.django.DjangoModelFactory):
     target_character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
     was_successful = True
     anima_recovered = factory.LazyAttribute(lambda o: 5 if o.was_successful else None)
-
-
-# =============================================================================
-# Phase 4: Threads Factories
-# =============================================================================
-
-
-class ThreadTypeFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = ThreadType
-        django_get_or_create = ("slug",)
-
-    name = factory.Sequence(lambda n: f"Thread Type {n}")
-    slug = factory.Sequence(lambda n: f"thread-type-{n}")
-    description = factory.LazyAttribute(lambda o: f"The {o.name} relationship.")
-    admin_notes = ""
-
-
-class ThreadFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = Thread
-
-    initiator = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
-    receiver = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
-    romantic = 0
-    trust = 0
-    rivalry = 0
-    protective = 0
-    enmity = 0
-    is_soul_tether = False
-
-
-class ThreadJournalFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = ThreadJournal
-
-    thread = factory.SubFactory(ThreadFactory)
-    author = factory.LazyAttribute(lambda o: o.thread.initiator)
-    content = "A moment that defined our connection."
-
-
-class ThreadResonanceFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = ThreadResonance
-
-    thread = factory.SubFactory(ThreadFactory)
-    resonance = factory.SubFactory(ResonanceFactory)
-    strength = ResonanceStrength.MODERATE
-    flavor_text = ""
 
 
 # =============================================================================
@@ -544,3 +511,397 @@ class MagicalAlterationEventFactory(factory.django.DjangoModelFactory):
 
     character = factory.SubFactory(CharacterSheetFactory)
     alteration_template = factory.SubFactory(MagicalAlterationTemplateFactory)
+
+
+# =============================================================================
+# Resonance Pivot Spec A — Phase 3 Lookup Factories
+# =============================================================================
+
+
+class ThreadPullCostFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadPullCost — per-tier pull cost lookup."""
+
+    class Meta:
+        model = ThreadPullCost
+        django_get_or_create = ("tier",)
+
+    tier = 1
+    resonance_cost = 1
+    anima_per_thread = 1
+    label = "soft"
+
+
+class ThreadXPLockedLevelFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadXPLockedLevel — XP-locked level boundaries."""
+
+    class Meta:
+        model = ThreadXPLockedLevel
+        django_get_or_create = ("level",)
+
+    level = 20
+    xp_cost = 200
+
+
+class ThreadPullEffectFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadPullEffect — authored pull-effect templates.
+
+    Defaults to a tier-0 FLAT_BONUS for a fresh resonance. Use traits
+    (as_intensity_bump, as_vital_bonus, as_capability_grant,
+    as_narrative_only) to switch payload shape.
+    """
+
+    class Meta:
+        model = ThreadPullEffect
+
+    target_kind = TargetKind.TRAIT
+    resonance = factory.SubFactory(ResonanceFactory)
+    tier = 0
+    min_thread_level = 0
+    effect_kind = EffectKind.FLAT_BONUS
+    flat_bonus_amount = 1
+
+    class Params:
+        as_flat_bonus = factory.Trait(
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=2,
+        )
+        as_intensity_bump = factory.Trait(
+            effect_kind=EffectKind.INTENSITY_BUMP,
+            intensity_bump_amount=1,
+            flat_bonus_amount=None,
+        )
+        as_vital_bonus = factory.Trait(
+            effect_kind=EffectKind.VITAL_BONUS,
+            flat_bonus_amount=None,
+            vital_bonus_amount=5,
+            vital_target=VitalBonusTarget.MAX_HEALTH,
+        )
+        as_capability_grant = factory.Trait(
+            effect_kind=EffectKind.CAPABILITY_GRANT,
+            flat_bonus_amount=None,
+            capability_grant=factory.SubFactory(
+                "world.conditions.factories.CapabilityTypeFactory",
+            ),
+        )
+        as_narrative_only = factory.Trait(
+            effect_kind=EffectKind.NARRATIVE_ONLY,
+            flat_bonus_amount=None,
+            narrative_snippet="A whisper at the edge of hearing.",
+        )
+
+
+class ImbuingProseTemplateFactory(factory.django.DjangoModelFactory):
+    """Factory for ImbuingProseTemplate — authored fallback prose templates."""
+
+    class Meta:
+        model = ImbuingProseTemplate
+
+    resonance = factory.SubFactory(ResonanceFactory)
+    target_kind = TargetKind.TRAIT
+    prose = "default prose"
+
+
+class RitualFactory(factory.django.DjangoModelFactory):
+    """Factory for Ritual.
+
+    Defaults to a SERVICE-kind ritual with a placeholder dotted path so the
+    default factory build passes clean(). Override execution_kind / flow /
+    service_function_path for other shapes.
+    """
+
+    class Meta:
+        model = Ritual
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"Ritual {n}")
+    description = factory.Faker("paragraph")
+    hedge_accessible = False
+    glimpse_eligible = False
+    narrative_prose = factory.Faker("paragraph")
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.magic.services.placeholder_ritual"
+    flow = None
+
+
+class ImbuingRitualFactory(RitualFactory):
+    """Seed factory for the canonical 'Rite of Imbuing' ritual.
+
+    Uses django_get_or_create so repeated calls in tests return the same row.
+    Spec A §4.3 lines 1270-1286.
+    """
+
+    class Meta:
+        model = Ritual
+        django_get_or_create = ("name",)
+
+    name = "Rite of Imbuing"
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.magic.services.spend_resonance_for_imbuing"
+    flow = None
+
+
+class RitualComponentRequirementFactory(factory.django.DjangoModelFactory):
+    """Factory for RitualComponentRequirement."""
+
+    class Meta:
+        model = RitualComponentRequirement
+
+    ritual = factory.SubFactory(RitualFactory)
+    item_template = factory.SubFactory("world.items.factories.ItemTemplateFactory")
+    quantity = 1
+    min_quality_tier = None
+
+
+# =============================================================================
+# Resonance Pivot Spec A — Phase 4 Thread Factories
+# =============================================================================
+
+
+class ThreadFactory(factory.django.DjangoModelFactory):
+    """Factory for Thread.
+
+    Defaults to TRAIT-kind (the simplest discriminator with no typeclass-registry
+    coupling). Override target_kind + the matching target_* FK for other shapes.
+
+    Convenience post-gen params (Phase 10, Spec A §2.4 cap-helper tests):
+    - as_trait_thread=True  → keep TRAIT kind; use with _trait_value=<int>
+    - _trait_value=<int>    → set CharacterTraitValue.value for (owner, target_trait)
+    - as_technique_thread=True → switch to TECHNIQUE kind; use with _technique_level=<int>
+    - _technique_level=<int>   → set target_technique.level (saved in place)
+    - as_track_thread=True  → switch to RELATIONSHIP_TRACK kind
+    - _track_tier_index=<int>  → create a RelationshipTier with that tier_number on the
+                                 progress.track; set developed_points >= threshold so
+                                 current_tier returns that tier
+    - as_capstone_thread=True  → switch to RELATIONSHIP_CAPSTONE kind
+    - _path_stage=<int>        → add a CharacterPathHistory row for thread.owner with
+                                 a Path of that stage (applies to capstone + effective cap)
+    - as_item_thread=True   → switch to ITEM kind (raises AnchorCapNotImplemented)
+    - as_room_thread=True   → switch to ROOM kind (raises AnchorCapNotImplemented)
+
+    NOTE: this factory intentionally does NOT call full_clean(). DB-level
+    CheckConstraints catch shape errors at write time; clean() is opt-in via
+    tests that exercise validation explicitly.
+    """
+
+    class Meta:
+        model = Thread
+
+    owner = factory.SubFactory(CharacterSheetFactory)
+    resonance = factory.SubFactory(ResonanceFactory)
+    target_kind = TargetKind.TRAIT
+    target_trait = factory.SubFactory(TraitFactory)
+    level = 0
+    developed_points = 0
+
+    @factory.post_generation  # type: ignore[misc]
+    def as_trait_thread(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """No-op: TRAIT is already the default kind. Exists for test readability."""
+
+    @factory.post_generation  # type: ignore[misc]
+    def _trait_value(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """Set CharacterTraitValue.value for (owner.character, target_trait)."""
+        if not create or extracted is None:
+            return
+        from world.traits.models import CharacterTraitValue
+
+        CharacterTraitValue.objects.update_or_create(
+            character=self.owner.character,
+            trait=self.target_trait,
+            defaults={"value": int(extracted)},  # type: ignore[arg-type]
+        )
+
+    @factory.post_generation  # type: ignore[misc]
+    def as_technique_thread(
+        self: "Thread", create: bool, extracted: object, **kwargs: object
+    ) -> None:
+        """Switch to TECHNIQUE kind: create a Technique, clear target_trait."""
+        if not create or not extracted:
+            return
+        tech = TechniqueFactory(level=1)
+        Thread.objects.filter(pk=self.pk).update(
+            target_kind=TargetKind.TECHNIQUE,
+            target_technique=tech,
+            target_trait=None,
+        )
+        self.target_kind = TargetKind.TECHNIQUE
+        self.target_technique = tech
+        self.target_trait = None  # type: ignore[assignment]
+
+    @factory.post_generation  # type: ignore[misc]
+    def _technique_level(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """Set target_technique.level (after as_technique_thread has run)."""
+        if not create or extracted is None:
+            return
+        if self.target_technique is not None:
+            self.target_technique.level = int(extracted)  # type: ignore[arg-type]
+            self.target_technique.save(update_fields=["level"])
+
+    @factory.post_generation  # type: ignore[misc]
+    def as_track_thread(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """Switch to RELATIONSHIP_TRACK kind: create a RelationshipTrackProgress."""
+        if not create or not extracted:
+            return
+        from world.relationships.factories import RelationshipTrackProgressFactory
+
+        progress = RelationshipTrackProgressFactory()
+        Thread.objects.filter(pk=self.pk).update(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            target_relationship_track=progress,
+            target_trait=None,
+        )
+        self.target_kind = TargetKind.RELATIONSHIP_TRACK
+        self.target_relationship_track = progress
+        self.target_trait = None  # type: ignore[assignment]
+
+    @factory.post_generation  # type: ignore[misc]
+    def _track_tier_index(
+        self: "Thread", create: bool, extracted: object, **kwargs: object
+    ) -> None:
+        """Create a RelationshipTier with tier_number=extracted on the progress track.
+
+        Sets developed_points on the progress so that current_tier returns the
+        newly created tier (developed_points = tier.point_threshold).
+        """
+        if not create or extracted is None:
+            return
+        if self.target_relationship_track is None:
+            return
+        tier_number = int(extracted)  # type: ignore[arg-type]
+        from world.relationships.factories import RelationshipTierFactory
+
+        progress = self.target_relationship_track
+        tier = RelationshipTierFactory(
+            track=progress.track,
+            tier_number=tier_number,
+            point_threshold=tier_number * 10,
+        )
+        # Set developed_points so current_tier resolves to this tier.
+        progress.developed_points = tier.point_threshold
+        progress.save(update_fields=["developed_points"])
+
+    @factory.post_generation  # type: ignore[misc]
+    def as_capstone_thread(
+        self: "Thread", create: bool, extracted: object, **kwargs: object
+    ) -> None:
+        """Switch to RELATIONSHIP_CAPSTONE kind: create a RelationshipCapstone."""
+        if not create or not extracted:
+            return
+        from world.relationships.factories import RelationshipCapstoneFactory
+
+        capstone = RelationshipCapstoneFactory()
+        Thread.objects.filter(pk=self.pk).update(
+            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+            target_capstone=capstone,
+            target_trait=None,
+        )
+        self.target_kind = TargetKind.RELATIONSHIP_CAPSTONE
+        self.target_capstone = capstone
+        self.target_trait = None  # type: ignore[assignment]
+
+    @factory.post_generation  # type: ignore[misc]
+    def _path_stage(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """Add a CharacterPathHistory row for thread.owner with a Path of the given stage."""
+        if not create or extracted is None:
+            return
+        stage = int(extracted)  # type: ignore[arg-type]
+        from world.classes.factories import PathFactory
+        from world.progression.models.paths import CharacterPathHistory
+
+        path = PathFactory(stage=stage)
+        CharacterPathHistory.objects.create(character=self.owner.character, path=path)
+
+    @factory.post_generation  # type: ignore[misc]
+    def as_item_thread(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """Switch to ITEM kind: create an ObjectDB."""
+        if not create or not extracted:
+            return
+        from evennia_extensions.factories import ObjectDBFactory
+
+        obj = ObjectDBFactory()
+        Thread.objects.filter(pk=self.pk).update(
+            target_kind=TargetKind.ITEM,
+            target_object=obj,
+            target_trait=None,
+        )
+        self.target_kind = TargetKind.ITEM
+        self.target_object = obj
+        self.target_trait = None  # type: ignore[assignment]
+
+    @factory.post_generation  # type: ignore[misc]
+    def as_room_thread(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """Switch to ROOM kind: create an ObjectDB."""
+        if not create or not extracted:
+            return
+        from evennia_extensions.factories import ObjectDBFactory
+
+        obj = ObjectDBFactory()
+        Thread.objects.filter(pk=self.pk).update(
+            target_kind=TargetKind.ROOM,
+            target_object=obj,
+            target_trait=None,
+        )
+        self.target_kind = TargetKind.ROOM
+        self.target_object = obj
+        self.target_trait = None  # type: ignore[assignment]
+
+
+class ThreadLevelUnlockFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadLevelUnlock — per-thread level-unlock receipt."""
+
+    class Meta:
+        model = ThreadLevelUnlock
+
+    thread = factory.SubFactory(ThreadFactory)
+    unlocked_level = 20
+    xp_spent = 200
+
+
+# =============================================================================
+# Resonance Pivot Spec A — Phase 5 ThreadWeaving Factories
+# =============================================================================
+
+
+class ThreadWeavingUnlockFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadWeavingUnlock — authored unlock catalog.
+
+    Defaults to TRAIT-kind (the simplest discriminator with no typeclass-registry
+    coupling). Override target_kind + the matching unlock_* field for other shapes.
+    Pass ``unlock_trait=None`` explicitly when switching to another kind so the
+    factory's default doesn't populate the wrong column.
+
+    NOTE: this factory intentionally does NOT call full_clean(). DB-level
+    CheckConstraints catch shape errors at write time; clean() is opt-in via
+    tests that exercise validation explicitly.
+    """
+
+    class Meta:
+        model = ThreadWeavingUnlock
+
+    target_kind = TargetKind.TRAIT
+    unlock_trait = factory.SubFactory(TraitFactory)
+    xp_cost = 100
+
+
+class CharacterThreadWeavingUnlockFactory(factory.django.DjangoModelFactory):
+    """Factory for CharacterThreadWeavingUnlock — per-character purchase record."""
+
+    class Meta:
+        model = CharacterThreadWeavingUnlock
+
+    character = factory.SubFactory(CharacterSheetFactory)
+    unlock = factory.SubFactory(ThreadWeavingUnlockFactory)
+    xp_spent = 100
+    teacher = None
+
+
+class ThreadWeavingTeachingOfferFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadWeavingTeachingOffer — teacher-side offer record."""
+
+    class Meta:
+        model = ThreadWeavingTeachingOffer
+
+    teacher = factory.SubFactory("world.roster.factories.RosterTenureFactory")
+    unlock = factory.SubFactory(ThreadWeavingUnlockFactory)
+    pitch = factory.Faker("paragraph")
+    gold_cost = 0
+    banked_ap = 5

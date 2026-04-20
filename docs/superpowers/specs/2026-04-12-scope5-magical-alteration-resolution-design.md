@@ -3,7 +3,7 @@
 ## Purpose
 
 Replace the `MAGICAL_SCARS` stub handler (`src/world/mechanics/effect_handlers.py:261-279`)
-with a full resolution system where players author their own magical scars.
+with a full resolution system where players author their own mage scars.
 When a Soulfray stage consequence pool fires `MAGICAL_SCARS`, the system
 queues a `PendingAlteration` that blocks advancement spending until the
 player resolves it — either by selecting a staff-authored library entry or

@@ -53,6 +53,14 @@ The central spine connecting every system in the game. Characters develop throug
 - XP rewards integration across all pillars (scenes, kudos, journals, GM rewards) — kudos→XP conversion done, see below for scene/GM notes
 - Level caps for content participation (minimum/maximum level for joining activities)
 
+### Magic XP Sinks (Spec A — done)
+- **ThreadWeaving unlock acceptance spend** — `accept_thread_weaving_unlock` /
+  `compute_thread_weaving_xp_cost` charge a Path-multiplied XP cost to open a new
+  thread anchor kind for the character
+- **XP-lock crossing** — `cross_thread_xp_lock` charges XP when a thread crosses an
+  `ThreadXPLockedLevel` boundary, gating high-tier thread growth behind character XP
+- Cross-reference: `docs/systems/magic.md` for the full model lineup
+
 ## Notes
 
 ### XP Rewards Integration Status

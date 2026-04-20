@@ -14,7 +14,7 @@ class EffectType(models.TextChoices):
     LAUNCH_ATTACK = "launch_attack", "Launch Attack"
     LAUNCH_FLOW = "launch_flow", "Launch Flow"
     GRANT_CODEX = "grant_codex", "Grant Codex Entry"
-    MAGICAL_SCARS = "magical_scars", "Magical Scars"
+    MAGICAL_SCARS = "magical_scars", "Mage Scars"
 
 
 class EffectTarget(models.TextChoices):

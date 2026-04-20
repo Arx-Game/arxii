@@ -10,12 +10,81 @@
 ## Game Systems
 
 ### Magic
-Powers, affinities, auras, resonances, and magical relationships (threads).
+Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Scars.
 
-- **Models:** `Gift`, `CharacterGift`, `CharacterAura`, `Technique`, `CharacterTechnique`, `Thread`
-- **Key Methods:** `CharacterAura.dominant_affinity`, `Thread.get_matching_types()`
-- **Enums:** `AffinityType`, `ResonanceScope`, `ResonanceStrength`, `AnimaRitualCategory`
-- **Integrates with:** traits (for magical rolls), progression (for gift unlocks)
+- **Models:**
+  - **Identity/aura/techniques:** `Affinity`, `Resonance`, `CharacterAura`,
+    `CharacterResonance` (reshaped Spec A §2.2 — `balance` + `lifetime_earned`),
+    `Gift`, `CharacterGift`, `Technique`, `CharacterTechnique`, `Cantrip`,
+    `TechniqueStyle`, `EffectType`, `Restriction`, `IntensityTier`,
+    `TechniqueCapabilityGrant`
+  - **Anima / rituals:** `CharacterAnima`, `CharacterAnimaRitual`,
+    `AnimaRitualPerformance`, `SoulfrayConfig`, `MishapPoolTier`,
+    `TechniqueOutcomeModifier`
+  - **Mage Scars (renamed from Magical Scars — display-only, §7.2):**
+    `MagicalAlterationTemplate`, `PendingAlteration`, `MagicalAlterationEvent`
+  - **Spec A Thread + Currency (NEW):** `Thread` (discriminator + typed FKs:
+    `target_trait` / `target_technique` / `target_object` / `target_relationship_track`
+    / `target_capstone`), `ThreadLevelUnlock`, `ThreadPullCost`,
+    `ThreadXPLockedLevel`, `ThreadPullEffect`, `ImbuingProseTemplate`,
+    `Ritual`, `RitualComponentRequirement`, `ThreadWeavingUnlock`,
+    `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`
+  - **Combat-side Spec A surface (in `world/combat`):** `CombatPull`,
+    `CombatPullResolvedEffect`
+- **Handlers:**
+  - `character.threads` (`CharacterThreadHandler`) — cached thread list,
+    `passive_vital_bonuses(vital_target)` for tier-0 VITAL_BONUS
+    aggregation
+  - `character.resonances` (`CharacterResonanceHandler`) —
+    `balance(resonance)`, `lifetime(resonance)`, `get_or_create(resonance)`,
+    `most_recently_earned()` (used by Mage Scars)
+  - `character.combat_pulls` (`CharacterCombatPullHandler` in `world/combat`)
+    — `active()`, `active_for_encounter()`, `active_pull_vital_bonuses()`
+- **Key Services:**
+  - Economy: `grant_resonance(character_sheet, resonance, amount, source, source_ref=None)`,
+    `spend_resonance_for_imbuing(character_sheet, thread, amount) -> ThreadImbueResult`,
+    `spend_resonance_for_pull(...)`, `preview_resonance_pull(...) -> PullPreviewResult`,
+    `resolve_pull_effects(...)`, `cross_thread_xp_lock(character_sheet, thread, level)`
+  - Thread lifecycle: `weave_thread(...)`, `update_thread_narrative(...)`,
+    `imbue_ready_threads(character_sheet)`, `near_xp_lock_threads(...)`,
+    `threads_blocked_by_cap(character_sheet)`
+  - ThreadWeaving acquisition: `compute_thread_weaving_xp_cost(character_sheet, unlock) -> int`,
+    `accept_thread_weaving_unlock(character_sheet, unlock, teacher=None)`
+  - Cap helpers: `compute_anchor_cap(thread) -> int`,
+    `compute_path_cap(character_sheet) -> int`, `compute_effective_cap(thread) -> int`
+  - VITAL_BONUS routing: `recompute_max_health_with_threads(character_sheet) -> int`,
+    `apply_damage_reduction_from_threads(character, damage_amount) -> int`
+- **Key Methods:** `CharacterAura.dominant_affinity`,
+  `Thread.target` (populated FK), `Thread.display_name`,
+  `ThreadWeavingUnlock.display_name`
+- **Enums:** `AffinityType`, `TargetKind` (Thread discriminator),
+  `EffectKind` (ThreadPullEffect), `VitalBonusTarget`,
+  `RitualExecutionKind`, `AnimaRitualCategory`,
+  `PendingAlterationStatus`, `AlterationTier`
+- **Exceptions (used by services + views):** `AnchorCapExceeded`,
+  `AnchorCapNotImplemented`, `InvalidImbueAmount`, `ResonanceInsufficient`,
+  `WeavingUnlockMissing`, `XPInsufficient`, `RitualComponentError` —
+  all with `user_message` properties for safe API responses.
+- **Integrates with:** traits (thread anchor kind TRAIT), progression (XP
+  spend for ThreadWeaving and XP-lock crossings), relationships (soul tether,
+  magical_flavor; thread anchors RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE),
+  journals (`JournalEntry.related_threads` M2M), combat (CombatPull,
+  DamagePreApply for DAMAGE_TAKEN_REDUCTION), vitals
+  (MAX_HEALTH recompute), conditions (CAPABILITY_GRANT effects + Mage Scars),
+  mechanics (Property via Thread ROOM anchor + Ritual site_property),
+  items (RitualComponentRequirement FKs ItemTemplate / QualityTier),
+  flows (Ritual FLOW dispatch via FlowDefinition)
+- **API endpoints (Spec A §4.5):**
+  - `GET/POST/DELETE /api/magic/threads/`,
+    `GET /api/magic/threads/{id}/` — list/create/soft-retire owned threads;
+    requires `character_sheet_id` on create
+  - `GET /api/magic/character-resonances/` — per-character balance +
+    lifetime_earned rows
+  - `POST /api/magic/thread-pull-preview/` — read-only preview of a pull's
+    resonance/anima cost and resolved effects
+  - `POST /api/magic/rituals/perform/` — dispatches PerformRitualAction
+    (resolves primitive `thread_id` → Thread instance for Imbuing)
+  - `GET /api/magic/teaching-offers/` — ThreadWeavingTeachingOffer listing
 - **Source:** `src/world/magic/`
 - **Details:** [magic.md](magic.md)
 

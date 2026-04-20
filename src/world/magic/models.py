@@ -9,13 +9,17 @@ This module contains the foundational models for the magic system:
 - CharacterAnima: Magical resource tracking
 - CharacterAnimaRitual: Personalized recovery rituals (stat+skill+resonance)
 - Motif: Character-level magical aesthetic
-- Thread: Magical relationships between characters
 
 Affinities and Resonances are proper domain models (Affinity, Resonance) in this app.
+
+Note: The legacy 5-axis Thread family (Thread, ThreadType, ThreadJournal,
+ThreadResonance) was removed in Phase 2 of the Resonance Pivot. A new Thread
+model with a discriminator + typed FKs is reintroduced in Phase 4.
 """
 
 from decimal import Decimal
 from functools import cached_property
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -24,12 +28,22 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from world.magic.constants import AlterationTier, CantripArchetype, PendingAlterationStatus
+from world.magic.constants import (
+    THREADWEAVING_ITEM_TYPECLASSES,
+    AlterationTier,
+    CantripArchetype,
+    EffectKind,
+    PendingAlterationStatus,
+    RitualExecutionKind,
+    TargetKind,
+    VitalBonusTarget,
+)
 from world.magic.types import (
     AffinityType,
-    ResonanceScope,
-    ResonanceStrength,
 )
+
+if TYPE_CHECKING:
+    from world.conditions.models import CapabilityType
 
 
 class EffectTypeManager(NaturalKeyManager):
@@ -293,19 +307,18 @@ class CharacterAura(SharedMemoryModel):
 
 
 class CharacterResonance(SharedMemoryModel):
-    """
-    A resonance attached to a character.
+    """Per-character per-resonance row.
 
-    Personal resonances come from heritage, personality, or development.
-    They stack with resonances from equipment, environment, and powers.
-    Resonances are proper Resonance model instances.
+    Identity (the row exists = "this character is associated with this
+    resonance") and currency bucket (`balance` is spendable, `lifetime_earned`
+    is monotonic). See Resonance Pivot Spec A §2.2.
     """
 
-    character = models.ForeignKey(
-        ObjectDB,
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
         on_delete=models.CASCADE,
         related_name="resonances",
-        help_text="The character this resonance is attached to.",
+        help_text="The character sheet this resonance is attached to.",
     )
     resonance = models.ForeignKey(
         Resonance,
@@ -313,35 +326,30 @@ class CharacterResonance(SharedMemoryModel):
         related_name="character_resonances",
         help_text="The resonance type.",
     )
-    scope = models.CharField(
-        max_length=20,
-        choices=ResonanceScope.choices,
-        default=ResonanceScope.SELF,
-        help_text="Whether this resonance affects only the character or an area.",
+    balance = models.PositiveIntegerField(
+        default=0,
+        help_text="Spendable resonance currency.",
     )
-    strength = models.CharField(
-        max_length=20,
-        choices=ResonanceStrength.choices,
-        default=ResonanceStrength.MODERATE,
-        help_text="The strength of this resonance attachment.",
+    lifetime_earned = models.PositiveIntegerField(
+        default=0,
+        help_text="Monotonic total of resonance earned (never decremented).",
+    )
+    claimed_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When this resonance row was created (claimed by the character).",
     )
     flavor_text = models.TextField(
         blank=True,
         help_text="Optional player-defined description of how this resonance manifests.",
     )
-    is_active = models.BooleanField(
-        default=True,
-        help_text="Whether this resonance is currently active.",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ["character", "resonance"]
+        unique_together = (("character_sheet", "resonance"),)
         verbose_name = "Character Resonance"
         verbose_name_plural = "Character Resonances"
 
     def __str__(self) -> str:
-        return f"{self.resonance.name} on {self.character}"
+        return f"{self.resonance.name} on {self.character_sheet}"
 
 
 class GiftManager(NaturalKeyManager):
@@ -687,284 +695,6 @@ class AnimaRitualPerformance(SharedMemoryModel):
     def __str__(self) -> str:
         status = "success" if self.was_successful else "failure"
         return f"{self.ritual} ({status}) at {self.performed_at}"
-
-
-class ThreadTypeManager(NaturalKeyManager):
-    """Manager for ThreadType with natural key support."""
-
-
-class ThreadType(NaturalKeyMixin, SharedMemoryModel):
-    """
-    A type of magical relationship (Thread) that emerges from axis values.
-
-    Thread types like Lover, Ally, Rival emerge when axis values reach
-    certain thresholds. A thread can match multiple types simultaneously.
-    """
-
-    name = models.CharField(
-        max_length=50,
-        help_text="Display name for this thread type.",
-    )
-    slug = models.SlugField(
-        max_length=50,
-        unique=True,
-        help_text="URL-safe identifier for this thread type.",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Player-facing description of this thread type.",
-    )
-    admin_notes = models.TextField(
-        blank=True,
-        help_text="Staff-only notes about this thread type.",
-    )
-    # Axis thresholds - relationship qualifies if all non-null thresholds are met
-    romantic_threshold = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Minimum romantic value to qualify (null = not required).",
-    )
-    trust_threshold = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Minimum trust value to qualify (null = not required).",
-    )
-    rivalry_threshold = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Minimum rivalry value to qualify (null = not required).",
-    )
-    protective_threshold = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Minimum protective value to qualify (null = not required).",
-    )
-    enmity_threshold = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Minimum enmity value to qualify (null = not required).",
-    )
-    # Resonance bonus when this type applies
-    grants_resonance = models.ForeignKey(
-        Resonance,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="thread_type_grants",
-        help_text="Resonance granted by this thread type.",
-    )
-
-    objects = ThreadTypeManager()
-
-    class Meta:
-        ordering = ["name"]
-        verbose_name = "Thread Type"
-        verbose_name_plural = "Thread Types"
-
-    class NaturalKeyConfig:
-        fields = ["slug"]
-        dependencies = ["world.magic.Resonance"]
-
-    def __str__(self) -> str:
-        return self.name
-
-
-class Thread(SharedMemoryModel):
-    """
-    A magical connection between two characters.
-
-    Threads are the magical manifestation of relationships. They have
-    values along multiple axes and can match multiple thread types.
-    Threads provide resonance bonuses and affect Anima recovery.
-    """
-
-    initiator = models.ForeignKey(
-        ObjectDB,
-        on_delete=models.CASCADE,
-        related_name="threads_initiated",
-        help_text="The character who initiated this thread.",
-    )
-    receiver = models.ForeignKey(
-        ObjectDB,
-        on_delete=models.CASCADE,
-        related_name="threads_received",
-        help_text="The character who received this thread.",
-    )
-    # Axis values (0-100)
-    romantic = models.PositiveIntegerField(
-        default=0,
-        validators=[MaxValueValidator(100)],
-        help_text="Romantic intensity (0-100).",
-    )
-    trust = models.PositiveIntegerField(
-        default=0,
-        validators=[MaxValueValidator(100)],
-        help_text="Trust and faith (0-100).",
-    )
-    rivalry = models.PositiveIntegerField(
-        default=0,
-        validators=[MaxValueValidator(100)],
-        help_text="Competitive tension (0-100).",
-    )
-    protective = models.PositiveIntegerField(
-        default=0,
-        validators=[MaxValueValidator(100)],
-        help_text="Protective instinct (0-100).",
-    )
-    enmity = models.PositiveIntegerField(
-        default=0,
-        validators=[MaxValueValidator(100)],
-        help_text="Hatred and opposition (0-100).",
-    )
-    # Soul Tether - special Abyssal bond
-    is_soul_tether = models.BooleanField(
-        default=False,
-        help_text="Whether this is an Abyssal Soul Tether (grants Control bonus).",
-    )
-    # Metadata
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        unique_together = ["initiator", "receiver"]
-        verbose_name = "Thread"
-        verbose_name_plural = "Threads"
-
-    def __str__(self) -> str:
-        return f"Thread: {self.initiator} — {self.receiver}"
-
-    def clean(self) -> None:
-        """Validate thread constraints."""
-        if self.initiator_id == self.receiver_id:
-            msg = "A character cannot have a thread with themselves."
-            raise ValidationError(msg)
-
-    def save(self, *args, **kwargs) -> None:
-        self.full_clean()
-        super().save(*args, **kwargs)
-
-    def get_matching_types(self):
-        """Return all ThreadTypes that this thread qualifies for."""
-        return [
-            thread_type
-            for thread_type in ThreadType.objects.all()
-            if self._matches_type(thread_type)
-        ]
-
-    def _matches_type(self, thread_type: ThreadType) -> bool:
-        """Check if this thread meets a type's thresholds."""
-        checks = [
-            (thread_type.romantic_threshold, self.romantic),
-            (thread_type.trust_threshold, self.trust),
-            (thread_type.rivalry_threshold, self.rivalry),
-            (thread_type.protective_threshold, self.protective),
-            (thread_type.enmity_threshold, self.enmity),
-        ]
-        return all(threshold is None or value >= threshold for threshold, value in checks)
-
-    @cached_property
-    def cached_resonances(self) -> list:
-        """Resonances for this thread. Supports Prefetch(to_attr=)."""
-        return list(self.resonances.all())
-
-
-class ThreadJournal(SharedMemoryModel):
-    """
-    An IC-visible record of a thread's evolution.
-
-    Journal entries document significant moments in a relationship,
-    visible to both characters. They provide narrative context for
-    how threads have grown or changed.
-    """
-
-    thread = models.ForeignKey(
-        Thread,
-        on_delete=models.CASCADE,
-        related_name="journal_entries",
-        help_text="The thread this entry belongs to.",
-    )
-    author = models.ForeignKey(
-        ObjectDB,
-        on_delete=models.SET_NULL,
-        null=True,
-        related_name="thread_journal_entries",
-        help_text="The character who wrote this entry.",
-    )
-    content = models.TextField(
-        help_text="The journal entry content (IC description of the moment).",
-    )
-    # Optional axis changes recorded with this entry
-    romantic_change = models.IntegerField(
-        default=0,
-        help_text="Change in romantic value when this entry was made.",
-    )
-    trust_change = models.IntegerField(
-        default=0,
-        help_text="Change in trust value when this entry was made.",
-    )
-    rivalry_change = models.IntegerField(
-        default=0,
-        help_text="Change in rivalry value when this entry was made.",
-    )
-    protective_change = models.IntegerField(
-        default=0,
-        help_text="Change in protective value when this entry was made.",
-    )
-    enmity_change = models.IntegerField(
-        default=0,
-        help_text="Change in enmity value when this entry was made.",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-        verbose_name = "Thread Journal Entry"
-        verbose_name_plural = "Thread Journal Entries"
-
-    def __str__(self) -> str:
-        return f"Journal entry on {self.thread} by {self.author}"
-
-
-class ThreadResonance(SharedMemoryModel):
-    """
-    A resonance attached to a thread.
-
-    Threads can carry resonances that affect both characters when
-    interacting with each other. These emerge from shared experiences.
-    Resonances are proper Resonance model instances.
-    """
-
-    thread = models.ForeignKey(
-        Thread,
-        on_delete=models.CASCADE,
-        related_name="resonances",
-        help_text="The thread this resonance is attached to.",
-    )
-    resonance = models.ForeignKey(
-        Resonance,
-        on_delete=models.PROTECT,
-        related_name="thread_resonances",
-        help_text="The resonance type.",
-    )
-    strength = models.CharField(
-        max_length=20,
-        choices=ResonanceStrength.choices,
-        default=ResonanceStrength.MODERATE,
-        help_text="The strength of this resonance on the thread.",
-    )
-    flavor_text = models.TextField(
-        blank=True,
-        help_text="How this resonance manifests in the relationship.",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        unique_together = ["thread", "resonance"]
-        verbose_name = "Thread Resonance"
-        verbose_name_plural = "Thread Resonances"
-
-    def __str__(self) -> str:
-        return f"{self.resonance.name} on {self.thread}"
 
 
 class RestrictionManager(NaturalKeyManager):
@@ -1420,35 +1150,6 @@ class CharacterAffinityTotal(SharedMemoryModel):
         return f"{self.character}: {self.affinity.name} = {self.total}"
 
 
-class CharacterResonanceTotal(SharedMemoryModel):
-    """
-    Aggregate resonance total for a character.
-
-    Updated when resonance sources change. Contributes to affinity
-    totals via the resonance's affinity FK.
-    """
-
-    character = models.ForeignKey(
-        "character_sheets.CharacterSheet",
-        on_delete=models.CASCADE,
-        related_name="resonance_totals",
-    )
-    resonance = models.ForeignKey(
-        Resonance,
-        on_delete=models.PROTECT,
-        related_name="character_totals",
-    )
-    total = models.IntegerField(default=0)
-
-    class Meta:
-        unique_together = [("character", "resonance")]
-        verbose_name = "Character Resonance Total"
-        verbose_name_plural = "Character Resonance Totals"
-
-    def __str__(self) -> str:
-        return f"{self.character}: {self.resonance.name} = {self.total}"
-
-
 class Motif(SharedMemoryModel):
     """
     Character-level magical aesthetic.
@@ -1793,12 +1494,16 @@ class TechniqueOutcomeModifier(SharedMemoryModel):
 
 
 class MagicalAlterationTemplate(SharedMemoryModel):
-    """Magic-specific metadata layered on top of a ConditionTemplate.
+    """Template for a Mage Scar (permanent magical alteration).
 
-    A magical alteration IS a condition — runtime effects (check modifiers,
-    capability effects, resistance, properties, descriptions) live on the
-    OneToOne'd ConditionTemplate. This table adds authoring slots, tier
-    classification, and origin context.
+    Mage-specific metadata layered on top of a ConditionTemplate. A Mage
+    Scar IS a condition — runtime effects (check modifiers, capability
+    effects, resistance, properties, descriptions) live on the OneToOne'd
+    ConditionTemplate. This table adds authoring slots, tier classification,
+    and origin context.
+
+    Note: the class and table names retain the "MagicalAlteration" prefix
+    for database stability; the player-facing label is "Mage Scar".
     """
 
     condition_template = models.OneToOneField(
@@ -1874,12 +1579,16 @@ class MagicalAlterationTemplate(SharedMemoryModel):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        verbose_name = "mage scar"
+        verbose_name_plural = "mage scars"
+
     def __str__(self) -> str:
         return f"{self.condition_template.name} (Tier {self.tier})"
 
 
 class PendingAlteration(SharedMemoryModel):
-    """A magical alteration owed to a character, awaiting resolution.
+    """A Mage Scar owed to a character, awaiting resolution.
 
     Created by the MAGICAL_SCARS effect handler. Blocks progression
     spending until resolved via library browse or author-from-scratch.
@@ -1956,12 +1665,14 @@ class PendingAlteration(SharedMemoryModel):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        verbose_name = "pending mage scar"
+        verbose_name_plural = "pending mage scars"
         indexes = [
             models.Index(fields=["character", "status"], name="magic_pendi_charact_4fea0a_idx"),
         ]
 
     def __str__(self) -> str:
-        return f"Pending Tier {self.tier} alteration for {self.character} ({self.status})"
+        return f"Pending Tier {self.tier} mage scar for {self.character} ({self.status})"
 
 
 class MagicalAlterationEvent(SharedMemoryModel):
@@ -2020,6 +1731,1061 @@ class MagicalAlterationEvent(SharedMemoryModel):
             f"{self.alteration_template.condition_template.name} "
             f"applied to {self.character} at {self.applied_at}"
         )
+
+
+# =============================================================================
+# Resonance Pivot Spec A — Phase 3 Lookup Tables
+# =============================================================================
+
+
+class ThreadPullCost(SharedMemoryModel):
+    """Per-tier pull cost. Three rows at launch (tier 1/2/3).
+
+    Pull-cost tuning surface — see Spec A §2.1 / §5.4 step 2. Per-tier
+    numbers (resonance_cost, anima_per_thread) live here as data; the
+    cost-formula shape lives in spend_resonance_for_pull. Edit values
+    here for per-tier tweaks; edit the service for shape changes.
+    """
+
+    tier = models.PositiveSmallIntegerField(unique=True)
+    resonance_cost = models.PositiveSmallIntegerField()
+    anima_per_thread = models.PositiveSmallIntegerField()
+    label = models.CharField(max_length=32)
+
+    class Meta:
+        ordering = ("tier",)
+
+    def __str__(self) -> str:
+        return f"Tier {self.tier} ({self.label})"
+
+
+class ThreadXPLockedLevel(SharedMemoryModel):
+    """XP-locked boundary on the internal level scale. Mirrors skills XP locks."""
+
+    level = models.PositiveSmallIntegerField(unique=True)
+    xp_cost = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ("level",)
+
+    def __str__(self) -> str:
+        return f"Lvl {self.level} (XP {self.xp_cost})"
+
+
+class ThreadPullEffect(SharedMemoryModel):
+    """Authored pull-effect template.
+
+    Tier 0 is passive (always-on while anchor is in scope); tiers 1-3 are
+    paid pulls. Lookup row keyed (target_kind, resonance, tier, min_thread_level).
+    Payload columns are mutually exclusive per effect_kind; clean() enforces
+    the legal combinations and DB CheckConstraints mirror the validation.
+    """
+
+    target_kind = models.CharField(max_length=32, choices=TargetKind.choices)
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        related_name="pull_effects",
+    )
+    tier = models.PositiveSmallIntegerField()  # 0..3
+    min_thread_level = models.PositiveSmallIntegerField(default=0)
+    effect_kind = models.CharField(max_length=32, choices=EffectKind.choices)
+
+    flat_bonus_amount = models.SmallIntegerField(null=True, blank=True)
+    intensity_bump_amount = models.SmallIntegerField(null=True, blank=True)
+    vital_bonus_amount = models.SmallIntegerField(null=True, blank=True)
+    vital_target = models.CharField(
+        max_length=32,
+        choices=VitalBonusTarget.choices,
+        null=True,
+        blank=True,
+    )
+    capability_grant = models.ForeignKey(
+        "conditions.CapabilityType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="thread_pull_effects",
+    )
+    narrative_snippet = models.TextField(blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["target_kind", "resonance", "tier"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["target_kind", "resonance", "tier", "min_thread_level"],
+                name="threadpulleffect_lookup_key",
+            ),
+            # FLAT_BONUS: requires flat_bonus_amount, forbids other payloads.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(effect_kind="FLAT_BONUS")
+                    | (
+                        models.Q(flat_bonus_amount__isnull=False)
+                        & models.Q(intensity_bump_amount__isnull=True)
+                        & models.Q(vital_bonus_amount__isnull=True)
+                        & models.Q(vital_target__isnull=True)
+                        & models.Q(capability_grant__isnull=True)
+                    )
+                ),
+                name="threadpulleffect_flat_bonus_payload",
+            ),
+            # INTENSITY_BUMP: requires intensity_bump_amount, forbids others.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(effect_kind="INTENSITY_BUMP")
+                    | (
+                        models.Q(intensity_bump_amount__isnull=False)
+                        & models.Q(flat_bonus_amount__isnull=True)
+                        & models.Q(vital_bonus_amount__isnull=True)
+                        & models.Q(vital_target__isnull=True)
+                        & models.Q(capability_grant__isnull=True)
+                    )
+                ),
+                name="threadpulleffect_intensity_bump_payload",
+            ),
+            # VITAL_BONUS: requires vital_bonus_amount + vital_target, forbids others.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(effect_kind="VITAL_BONUS")
+                    | (
+                        models.Q(vital_bonus_amount__isnull=False)
+                        & models.Q(vital_target__isnull=False)
+                        & models.Q(flat_bonus_amount__isnull=True)
+                        & models.Q(intensity_bump_amount__isnull=True)
+                        & models.Q(capability_grant__isnull=True)
+                    )
+                ),
+                name="threadpulleffect_vital_bonus_payload",
+            ),
+            # CAPABILITY_GRANT: requires capability_grant FK, forbids numeric payloads.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(effect_kind="CAPABILITY_GRANT")
+                    | (
+                        models.Q(capability_grant__isnull=False)
+                        & models.Q(flat_bonus_amount__isnull=True)
+                        & models.Q(intensity_bump_amount__isnull=True)
+                        & models.Q(vital_bonus_amount__isnull=True)
+                        & models.Q(vital_target__isnull=True)
+                    )
+                ),
+                name="threadpulleffect_capability_grant_payload",
+            ),
+            # NARRATIVE_ONLY: requires non-empty snippet, forbids all other payloads.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(effect_kind="NARRATIVE_ONLY")
+                    | (
+                        ~models.Q(narrative_snippet="")
+                        & models.Q(flat_bonus_amount__isnull=True)
+                        & models.Q(intensity_bump_amount__isnull=True)
+                        & models.Q(vital_bonus_amount__isnull=True)
+                        & models.Q(vital_target__isnull=True)
+                        & models.Q(capability_grant__isnull=True)
+                    )
+                ),
+                name="threadpulleffect_narrative_only_payload",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"PullEffect(t={self.target_kind} res={self.resonance_id} "
+            f"tier={self.tier} kind={self.effect_kind})"
+        )
+
+    def clean(self) -> None:
+        super().clean()
+        numeric_fields: dict[str, int | None] = {
+            "flat_bonus_amount": self.flat_bonus_amount,
+            "intensity_bump_amount": self.intensity_bump_amount,
+            "vital_bonus_amount": self.vital_bonus_amount,
+        }
+        validators = {
+            EffectKind.FLAT_BONUS: self._clean_flat_bonus,
+            EffectKind.INTENSITY_BUMP: self._clean_intensity_bump,
+            EffectKind.VITAL_BONUS: self._clean_vital_bonus,
+            EffectKind.CAPABILITY_GRANT: self._clean_capability_grant,
+            EffectKind.NARRATIVE_ONLY: self._clean_narrative_only,
+        }
+        validator = validators.get(self.effect_kind)
+        if validator is not None:
+            validator(numeric_fields)
+
+    def _clean_flat_bonus(self, numeric_fields: dict[str, int | None]) -> None:
+        self._require_only("flat_bonus_amount", numeric_fields, self.capability_grant)
+
+    def _clean_intensity_bump(self, numeric_fields: dict[str, int | None]) -> None:
+        self._require_only("intensity_bump_amount", numeric_fields, self.capability_grant)
+
+    def _clean_vital_bonus(self, numeric_fields: dict[str, int | None]) -> None:
+        self._require_only("vital_bonus_amount", numeric_fields, self.capability_grant)
+        if not self.vital_target:
+            raise ValidationError({"vital_target": "VITAL_BONUS requires vital_target."})
+
+    def _clean_capability_grant(self, numeric_fields: dict[str, int | None]) -> None:
+        if self.capability_grant is None:
+            raise ValidationError(
+                {"capability_grant": "CAPABILITY_GRANT requires capability_grant."}
+            )
+        for name, val in numeric_fields.items():
+            if val is not None:
+                raise ValidationError({name: "Must be null for CAPABILITY_GRANT."})
+
+    def _clean_narrative_only(self, numeric_fields: dict[str, int | None]) -> None:
+        if not self.narrative_snippet.strip():
+            raise ValidationError({"narrative_snippet": "NARRATIVE_ONLY requires snippet."})
+        if self.capability_grant is not None:
+            raise ValidationError({"capability_grant": "Must be null for NARRATIVE_ONLY."})
+        for name, val in numeric_fields.items():
+            if val is not None:
+                raise ValidationError({name: "Must be null for NARRATIVE_ONLY."})
+
+    @staticmethod
+    def _require_only(
+        name: str,
+        numeric_fields: dict[str, int | None],
+        capability: "CapabilityType | None",
+    ) -> None:
+        if numeric_fields[name] is None:
+            raise ValidationError({name: f"{name} required for this effect_kind."})
+        for other, val in numeric_fields.items():
+            if other != name and val is not None:
+                raise ValidationError({other: "Must be null for this effect_kind."})
+        if capability is not None:
+            raise ValidationError({"capability_grant": "Must be null for this effect_kind."})
+
+
+class ImbuingProseTemplate(SharedMemoryModel):
+    """Authored fallback prose for imbuing flow templates.
+
+    Lookup keyed (resonance, target_kind). Either field nullable; the row
+    where both are NULL is the universal fallback used when no more-specific
+    template matches. Spec A §4.3.
+    """
+
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="imbuing_prose",
+    )
+    target_kind = models.CharField(
+        max_length=32,
+        choices=TargetKind.choices,
+        null=True,
+        blank=True,
+    )
+    prose = models.TextField()
+
+    class Meta:
+        unique_together = (("resonance", "target_kind"),)
+
+    def __str__(self) -> str:
+        res = self.resonance.name if self.resonance else "*"
+        tk = self.target_kind or "*"
+        return f"ImbuingProse({res} / {tk})"
+
+
+class Ritual(SharedMemoryModel):
+    """A ritual: authored magical procedure executed via service or flow.
+
+    Spec A §4.3. Each Ritual is dispatched either via a registered service
+    function (execution_kind=SERVICE) or via a flow definition
+    (execution_kind=FLOW); never both. clean() enforces the legal shape.
+    """
+
+    name = models.CharField(max_length=120, unique=True)
+    description = models.TextField()
+    hedge_accessible = models.BooleanField(default=False)
+    glimpse_eligible = models.BooleanField(default=False)
+    narrative_prose = models.TextField()
+
+    execution_kind = models.CharField(
+        max_length=16,
+        choices=RitualExecutionKind.choices,
+    )
+    service_function_path = models.CharField(max_length=255, blank=True)
+    flow = models.ForeignKey(
+        "flows.FlowDefinition",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="rituals",
+    )
+
+    site_property = models.ForeignKey(
+        "mechanics.Property",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ritual_sites",
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=(
+                    (
+                        models.Q(execution_kind="SERVICE")
+                        & ~models.Q(service_function_path="")
+                        & models.Q(flow__isnull=True)
+                    )
+                    | (
+                        models.Q(execution_kind="FLOW")
+                        & models.Q(service_function_path="")
+                        & models.Q(flow__isnull=False)
+                    )
+                ),
+                name="ritual_execution_payload",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def clean(self) -> None:
+        super().clean()
+        if self.execution_kind == RitualExecutionKind.SERVICE:
+            if not self.service_function_path:
+                raise ValidationError({"service_function_path": "SERVICE rituals require a path."})
+            if self.flow is not None:
+                raise ValidationError({"flow": "SERVICE rituals must not set flow."})
+        elif self.execution_kind == RitualExecutionKind.FLOW:
+            if self.flow is None:
+                raise ValidationError({"flow": "FLOW rituals require a FlowDefinition."})
+            if self.service_function_path:
+                raise ValidationError(
+                    {"service_function_path": ("FLOW rituals must not set service_function_path.")}
+                )
+
+
+class RitualComponentRequirement(SharedMemoryModel):
+    """A component an actor must consume / supply to perform a Ritual.
+
+    Spec A §4.3. Quantity is the count of items required; min_quality_tier
+    optionally constrains the minimum acceptable QualityTier.
+    """
+
+    ritual = models.ForeignKey(
+        "magic.Ritual",
+        on_delete=models.CASCADE,
+        related_name="requirements",
+    )
+    item_template = models.ForeignKey(
+        "items.ItemTemplate",
+        on_delete=models.PROTECT,
+        related_name="ritual_requirements",
+    )
+    quantity = models.PositiveSmallIntegerField(default=1)
+    min_quality_tier = models.ForeignKey(
+        "items.QualityTier",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    authored_provenance = models.TextField(blank=True)
+
+    def __str__(self) -> str:
+        return f"{self.ritual.name} needs {self.quantity}x {self.item_template_id}"
+
+
+# =============================================================================
+# Resonance Pivot Spec A — Phase 4 Thread Model
+# =============================================================================
+
+
+class Thread(SharedMemoryModel):
+    """Per-character thread anchored to a trait/technique/item/room/relationship.
+
+    Discriminator + typed-FK pattern (Spec A §2.1 lines 83-151). Exactly one
+    target_* column is populated, matching ``target_kind``. Three layers of
+    enforcement:
+
+    - ``clean()`` raises ValidationError on missing / mismatched targets and on
+      ITEM-kind targets whose typeclass isn't in THREADWEAVING_ITEM_TYPECLASSES.
+    - Per-kind CheckConstraints mirror the "exactly one target_* set, matching
+      target_kind" rule at the DB layer (so misuse via .objects.create() also
+      fails).
+    - Per-kind partial UniqueConstraints prevent duplicate threads within the
+      same (owner, resonance, target_kind, target_*) combination, while still
+      allowing — for example — an ITEM thread and a ROOM thread on the same
+      ObjectDB.
+    """
+
+    owner = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.PROTECT,
+        related_name="threads",
+        help_text="Character who owns this thread.",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        related_name="threads",
+        help_text="Resonance this thread channels.",
+    )
+    target_kind = models.CharField(
+        max_length=32,
+        choices=TargetKind.choices,
+        help_text="Discriminator selecting which target_* FK is populated.",
+    )
+
+    name = models.CharField(max_length=120, blank=True)
+    description = models.TextField(blank=True)
+
+    developed_points = models.PositiveIntegerField(
+        default=0,
+        help_text="Permanent points; advances level via ThreadLevelUnlock entries.",
+    )
+    level = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Current level on the internal scale (multiples of 10).",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    retired_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Set when owner soft-retires this thread; retired threads are "
+            "excluded from list/detail views and from all pull / passive paths."
+        ),
+    )
+
+    target_trait = models.ForeignKey(
+        "traits.Trait",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=TRAIT; null otherwise.",
+    )
+    target_technique = models.ForeignKey(
+        "magic.Technique",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=TECHNIQUE; null otherwise.",
+    )
+    target_object = models.ForeignKey(
+        ObjectDB,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind in (ITEM, ROOM); null otherwise.",
+    )
+    target_relationship_track = models.ForeignKey(
+        "relationships.RelationshipTrackProgress",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=RELATIONSHIP_TRACK; null otherwise.",
+    )
+    target_capstone = models.ForeignKey(
+        "relationships.RelationshipCapstone",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=RELATIONSHIP_CAPSTONE; null otherwise.",
+    )
+
+    class Meta:
+        constraints = [
+            # ---- Per-kind partial UniqueConstraints (one per TargetKind) ---------
+            models.UniqueConstraint(
+                fields=["owner", "resonance", "target_trait"],
+                condition=models.Q(target_kind=TargetKind.TRAIT),
+                name="uniq_thread_trait",
+            ),
+            models.UniqueConstraint(
+                fields=["owner", "resonance", "target_technique"],
+                condition=models.Q(target_kind=TargetKind.TECHNIQUE),
+                name="uniq_thread_technique",
+            ),
+            models.UniqueConstraint(
+                fields=["owner", "resonance", "target_object"],
+                condition=models.Q(target_kind=TargetKind.ITEM),
+                name="uniq_thread_item",
+            ),
+            models.UniqueConstraint(
+                fields=["owner", "resonance", "target_object"],
+                condition=models.Q(target_kind=TargetKind.ROOM),
+                name="uniq_thread_room",
+            ),
+            models.UniqueConstraint(
+                fields=["owner", "resonance", "target_relationship_track"],
+                condition=models.Q(target_kind=TargetKind.RELATIONSHIP_TRACK),
+                name="uniq_thread_rel_track",
+            ),
+            models.UniqueConstraint(
+                fields=["owner", "resonance", "target_capstone"],
+                condition=models.Q(target_kind=TargetKind.RELATIONSHIP_CAPSTONE),
+                name="uniq_thread_rel_capstone",
+            ),
+            # ---- Per-kind CheckConstraints (exactly one target_* set) -----------
+            models.CheckConstraint(
+                name="thread_trait_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.TRAIT)
+                    | (
+                        models.Q(target_trait__isnull=False)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=True)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="thread_technique_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.TECHNIQUE)
+                    | (
+                        models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=False)
+                        & models.Q(target_object__isnull=True)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="thread_item_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.ITEM)
+                    | (
+                        models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=False)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="thread_room_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.ROOM)
+                    | (
+                        models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=False)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="thread_rel_track_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.RELATIONSHIP_TRACK)
+                    | (
+                        models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=True)
+                        & models.Q(target_relationship_track__isnull=False)
+                        & models.Q(target_capstone__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="thread_rel_capstone_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.RELATIONSHIP_CAPSTONE)
+                    | (
+                        models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=True)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=False)
+                    )
+                ),
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Thread<{self.target_kind}> for {self.owner_id} ({self.resonance_id})"
+
+    @property
+    def target(self) -> models.Model | None:
+        """Return the populated FK object, picked by target_kind."""
+        match self.target_kind:
+            case TargetKind.TRAIT:
+                return self.target_trait
+            case TargetKind.TECHNIQUE:
+                return self.target_technique
+            case TargetKind.ITEM | TargetKind.ROOM:
+                return self.target_object
+            case TargetKind.RELATIONSHIP_TRACK:
+                return self.target_relationship_track
+            case TargetKind.RELATIONSHIP_CAPSTONE:
+                return self.target_capstone
+        return None
+
+    def clean(self) -> None:
+        """Validate exactly-one-target rule + ITEM typeclass registry membership.
+
+        DB constraints catch the same shape errors at write time; ``clean()``
+        is the user-facing error path (forms / serializers / tests calling
+        ``full_clean()``).
+        """
+        # Map target_kind -> (expected_field_name, list_of_other_field_names)
+        kind_to_field: dict[str, str] = {
+            TargetKind.TRAIT: "target_trait",
+            TargetKind.TECHNIQUE: "target_technique",
+            TargetKind.ITEM: "target_object",
+            TargetKind.ROOM: "target_object",
+            TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
+            TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
+        }
+        all_target_fields = (
+            "target_trait",
+            "target_technique",
+            "target_object",
+            "target_relationship_track",
+            "target_capstone",
+        )
+
+        expected_field = kind_to_field.get(self.target_kind)
+        if expected_field is None:
+            raise ValidationError(
+                {"target_kind": f"Unknown target_kind: {self.target_kind!r}."},
+            )
+
+        if getattr(self, expected_field) is None:
+            raise ValidationError(
+                {expected_field: f"target_kind={self.target_kind} requires {expected_field}."},
+            )
+
+        for field_name in all_target_fields:
+            if field_name == expected_field:
+                continue
+            if getattr(self, field_name) is not None:
+                raise ValidationError(
+                    {
+                        field_name: (
+                            f"target_kind={self.target_kind} requires {field_name} to be null."
+                        ),
+                    },
+                )
+
+        # ITEM-kind: validate the target_object's typeclass is in the
+        # THREADWEAVING_ITEM_TYPECLASSES registry (subclass-aware).
+        if self.target_kind == TargetKind.ITEM:
+            from world.magic.services import _typeclass_path_in_registry  # noqa: PLC0415
+
+            tc_path = self.target_object.db_typeclass_path
+            if not _typeclass_path_in_registry(tc_path, THREADWEAVING_ITEM_TYPECLASSES):
+                raise ValidationError(
+                    {
+                        "target_object": (
+                            f"Typeclass {tc_path!r} is not in "
+                            "THREADWEAVING_ITEM_TYPECLASSES registry."
+                        ),
+                    },
+                )
+
+
+class ThreadLevelUnlock(SharedMemoryModel):
+    """Per-thread level-unlock receipt.
+
+    Records that ``thread`` paid ``xp_spent`` to unlock ``unlocked_level`` on the
+    internal level scale (multiples of 10). Spec A §2.1 lines 200-206. Pairs
+    with ThreadXPLockedLevel (the global price list); a row here represents one
+    ownership instance of one boundary on one thread.
+    """
+
+    thread = models.ForeignKey(
+        Thread,
+        on_delete=models.PROTECT,
+        related_name="level_unlocks",
+        help_text="Thread that purchased this level unlock.",
+    )
+    unlocked_level = models.PositiveSmallIntegerField(
+        help_text="Level boundary unlocked (matches ThreadXPLockedLevel.level).",
+    )
+    xp_spent = models.PositiveIntegerField(
+        help_text="XP actually spent at unlock time (snapshot of price list).",
+    )
+    acquired_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = (("thread", "unlocked_level"),)
+        ordering = ("thread", "unlocked_level")
+
+    def __str__(self) -> str:
+        return f"Thread {self.thread_id} -> lvl {self.unlocked_level}"
+
+
+class ThreadWeavingUnlock(SharedMemoryModel):
+    """Authored unlock catalog. Discriminator + typed-FK; one unlock per anchor.
+
+    No name/description: ``display_name`` derives from the discriminator FK
+    (Spec A §2.1 lines 348-369). Per-kind partial UniqueConstraints +
+    CheckConstraints enforce 'one unlock per anchor' and 'exactly one
+    target_* set, matching target_kind' at the DB layer. ``clean()`` mirrors
+    the same shape rules at the application layer plus validates ITEM
+    typeclass paths against the THREADWEAVING_ITEM_TYPECLASSES registry.
+
+    Spec A §2.1 lines 313-429.
+    """
+
+    target_kind = models.CharField(
+        max_length=32,
+        choices=TargetKind.choices,
+        help_text="Discriminator selecting which unlock_* field is populated.",
+    )
+
+    unlock_trait = models.ForeignKey(
+        "traits.Trait",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="thread_weaving_unlocks",
+        help_text="Set when target_kind=TRAIT; null otherwise.",
+    )
+    unlock_gift = models.ForeignKey(
+        "magic.Gift",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="thread_weaving_unlocks",
+        help_text="Set when target_kind=TECHNIQUE; covers all techniques under Gift.",
+    )
+    unlock_item_typeclass_path = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Set when target_kind=ITEM; typeclass path string.",
+    )
+    unlock_room_property = models.ForeignKey(
+        "mechanics.Property",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="thread_weaving_unlocks",
+        help_text="Set when target_kind=ROOM; rooms with this Property.",
+    )
+    unlock_track = models.ForeignKey(
+        "relationships.RelationshipTrack",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="thread_weaving_unlocks",
+        help_text="Set when target_kind=RELATIONSHIP_TRACK; per-track unlock.",
+    )
+
+    xp_cost = models.PositiveIntegerField(
+        help_text="Base XP cost; multiplied by out_of_path_multiplier when out-of-Path.",
+    )
+    paths = models.ManyToManyField(
+        "classes.Path",
+        related_name="thread_weaving_unlocks",
+        blank=True,
+        help_text="Paths that treat this unlock as in-band (full xp_cost).",
+    )
+    out_of_path_multiplier = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=Decimal("2.0"),
+        help_text="Cost multiplier applied when buyer's Path is not in `paths`.",
+    )
+
+    class Meta:
+        constraints = [
+            # ---- Per-kind partial UniqueConstraints (one per TargetKind, no CAPSTONE) -
+            models.UniqueConstraint(
+                fields=["unlock_trait"],
+                condition=models.Q(target_kind="TRAIT"),
+                name="unique_threadweaving_unlock_trait",
+            ),
+            models.UniqueConstraint(
+                fields=["unlock_gift"],
+                condition=models.Q(target_kind="TECHNIQUE"),
+                name="unique_threadweaving_unlock_gift",
+            ),
+            models.UniqueConstraint(
+                fields=["unlock_item_typeclass_path"],
+                condition=models.Q(target_kind="ITEM"),
+                name="unique_threadweaving_unlock_item",
+            ),
+            models.UniqueConstraint(
+                fields=["unlock_room_property"],
+                condition=models.Q(target_kind="ROOM"),
+                name="unique_threadweaving_unlock_room",
+            ),
+            models.UniqueConstraint(
+                fields=["unlock_track"],
+                condition=models.Q(target_kind="RELATIONSHIP_TRACK"),
+                name="unique_threadweaving_unlock_track",
+            ),
+            # ---- Per-kind CheckConstraints (exactly one target_* set, others null) ----
+            models.CheckConstraint(
+                name="threadweaving_trait_payload",
+                check=(
+                    ~models.Q(target_kind="TRAIT")
+                    | (
+                        models.Q(unlock_trait__isnull=False)
+                        & models.Q(unlock_gift__isnull=True)
+                        & models.Q(unlock_item_typeclass_path="")
+                        & models.Q(unlock_room_property__isnull=True)
+                        & models.Q(unlock_track__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="threadweaving_technique_payload",
+                check=(
+                    ~models.Q(target_kind="TECHNIQUE")
+                    | (
+                        models.Q(unlock_trait__isnull=True)
+                        & models.Q(unlock_gift__isnull=False)
+                        & models.Q(unlock_item_typeclass_path="")
+                        & models.Q(unlock_room_property__isnull=True)
+                        & models.Q(unlock_track__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="threadweaving_item_payload",
+                check=(
+                    ~models.Q(target_kind="ITEM")
+                    | (
+                        models.Q(unlock_trait__isnull=True)
+                        & models.Q(unlock_gift__isnull=True)
+                        & ~models.Q(unlock_item_typeclass_path="")
+                        & models.Q(unlock_room_property__isnull=True)
+                        & models.Q(unlock_track__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="threadweaving_room_payload",
+                check=(
+                    ~models.Q(target_kind="ROOM")
+                    | (
+                        models.Q(unlock_trait__isnull=True)
+                        & models.Q(unlock_gift__isnull=True)
+                        & models.Q(unlock_item_typeclass_path="")
+                        & models.Q(unlock_room_property__isnull=False)
+                        & models.Q(unlock_track__isnull=True)
+                    )
+                ),
+            ),
+            models.CheckConstraint(
+                name="threadweaving_track_payload",
+                check=(
+                    ~models.Q(target_kind="RELATIONSHIP_TRACK")
+                    | (
+                        models.Q(unlock_trait__isnull=True)
+                        & models.Q(unlock_gift__isnull=True)
+                        & models.Q(unlock_item_typeclass_path="")
+                        & models.Q(unlock_room_property__isnull=True)
+                        & models.Q(unlock_track__isnull=False)
+                    )
+                ),
+            ),
+            # CAPSTONE has no slot on this model — capstones inherit from their
+            # parent RELATIONSHIP_TRACK unlock per spec line 426. The 5
+            # per-kind checks above all early-out for non-matching target_kind
+            # values, so without this guard a CAPSTONE row with all target_*
+            # slots empty would satisfy every check. Forbid it explicitly.
+            models.CheckConstraint(
+                name="threadweaving_no_capstone",
+                check=~models.Q(target_kind="RELATIONSHIP_CAPSTONE"),
+            ),
+        ]
+
+    # Field-name constants used by clean() / _get_target_value() to dispatch by
+    # target_kind. Extracted so the STRING_LITERAL linter doesn't flag bare
+    # string field names — and so renaming a target_* field forces a single
+    # update here.
+    _F_TRAIT = "unlock_trait"
+    _F_GIFT = "unlock_gift"
+    _F_ITEM_PATH = "unlock_item_typeclass_path"
+    _F_ROOM = "unlock_room_property"
+    _F_TRACK = "unlock_track"
+
+    # Discriminator -> required field name. CAPSTONE is intentionally absent
+    # (capstones inherit from RELATIONSHIP_TRACK unlocks per spec line 426).
+    _KIND_TO_FIELD: dict[str, str] = {
+        TargetKind.TRAIT: _F_TRAIT,
+        TargetKind.TECHNIQUE: _F_GIFT,
+        TargetKind.ITEM: _F_ITEM_PATH,
+        TargetKind.ROOM: _F_ROOM,
+        TargetKind.RELATIONSHIP_TRACK: _F_TRACK,
+    }
+    _ALL_TARGET_FIELDS: tuple[str, ...] = (
+        _F_TRAIT,
+        _F_GIFT,
+        _F_ITEM_PATH,
+        _F_ROOM,
+        _F_TRACK,
+    )
+
+    def _get_target_value(self, field_name: str) -> object | None:
+        """Return the populated value for ``field_name``, normalising "" to None.
+
+        ``unlock_item_typeclass_path`` is a CharField with blank=True (no
+        nullable column), so 'empty' is "" not None. Normalising lets the
+        clean() and display_name code treat all five target_* slots
+        uniformly.
+        """
+        value = getattr(self, field_name)
+        if field_name == self._F_ITEM_PATH and value == "":
+            return None
+        return value
+
+    @property
+    def display_name(self) -> str:
+        if self.target_kind == TargetKind.TRAIT:
+            return f"ThreadWeaving: {self.unlock_trait.name}"
+        if self.target_kind == TargetKind.TECHNIQUE:
+            return f"ThreadWeaving: Gift of {self.unlock_gift.name}"
+        if self.target_kind == TargetKind.ITEM:
+            return f"ThreadWeaving: {self.unlock_item_typeclass_path.rsplit('.', 1)[-1]}"
+        if self.target_kind == TargetKind.ROOM:
+            return f"ThreadWeaving: {self.unlock_room_property.name} spaces"
+        if self.target_kind == TargetKind.RELATIONSHIP_TRACK:
+            return f"ThreadWeaving: {self.unlock_track.name} bonds"
+        return "ThreadWeaving: <unknown>"  # defensive; unreachable while choices apply
+
+    def __str__(self) -> str:
+        return self.display_name
+
+    def clean(self) -> None:
+        """Validate exactly-one-target rule + ITEM typeclass-registry membership.
+
+        Mirrors Thread.clean() (see models.py). DB CheckConstraints catch the
+        same shape errors at write time; clean() is the user-facing error path
+        (forms / serializers / tests calling full_clean()).
+        """
+        expected_field = self._KIND_TO_FIELD.get(self.target_kind)
+        if expected_field is None:
+            raise ValidationError(
+                {"target_kind": f"Unknown target_kind: {self.target_kind!r}."},
+            )
+
+        if self._get_target_value(expected_field) is None:
+            raise ValidationError(
+                {expected_field: f"target_kind={self.target_kind} requires {expected_field}."},
+            )
+
+        for field_name in self._ALL_TARGET_FIELDS:
+            if field_name == expected_field:
+                continue
+            if self._get_target_value(field_name) is not None:
+                raise ValidationError(
+                    {
+                        field_name: (
+                            f"target_kind={self.target_kind} requires {field_name} to be empty."
+                        ),
+                    },
+                )
+
+        # ITEM-kind: validate the typeclass path is in the registry
+        # (subclass-aware via the same helper Thread.clean() uses).
+        if self.target_kind == TargetKind.ITEM:
+            from world.magic.services import _typeclass_path_in_registry  # noqa: PLC0415
+
+            tc_path = self.unlock_item_typeclass_path
+            if not _typeclass_path_in_registry(tc_path, THREADWEAVING_ITEM_TYPECLASSES):
+                raise ValidationError(
+                    {
+                        "unlock_item_typeclass_path": (
+                            f"Typeclass {tc_path!r} is not in "
+                            "THREADWEAVING_ITEM_TYPECLASSES registry."
+                        ),
+                    },
+                )
+
+
+class CharacterThreadWeavingUnlock(SharedMemoryModel):
+    """Per-character purchase record for a ThreadWeavingUnlock.
+
+    One row per (character, unlock) — enforced by unique_together. Records the
+    actual XP paid (which depends on the buyer's Path: in-band uses ``xp_cost``,
+    out-of-band multiplies by ``out_of_path_multiplier``) and optionally the
+    teacher who unlocked it. Spec A §2.1 lines 431-440.
+    """
+
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="thread_weaving_unlocks",
+        help_text="Character who owns this purchase.",
+    )
+    unlock = models.ForeignKey(
+        ThreadWeavingUnlock,
+        on_delete=models.PROTECT,
+        related_name="character_purchases",
+        help_text="Authored unlock the character purchased.",
+    )
+    acquired_at = models.DateTimeField(auto_now_add=True)
+    xp_spent = models.PositiveIntegerField(
+        help_text="Actual XP paid (in-Path: xp_cost; out-of-Path: xp_cost * multiplier).",
+    )
+    teacher = models.ForeignKey(
+        "roster.RosterTenure",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="thread_weaving_unlocks_taught",
+        help_text="Teacher RosterTenure when applicable; audit only.",
+    )
+
+    class Meta:
+        unique_together = (("character", "unlock"),)
+
+    def __str__(self) -> str:
+        return f"CharacterThreadWeavingUnlock<{self.character_id} -> {self.unlock_id}>"
+
+
+class ThreadWeavingTeachingOffer(SharedMemoryModel):
+    """Teacher-side offer linking a RosterTenure to a ThreadWeavingUnlock.
+
+    Mirrors the existing CodexTeachingOffer model exactly. NPC academy teachers
+    are seeded as RosterTenure-backed offers tied to specific ThreadWeaving
+    unlocks. Path multiplier (in-band vs. out-of-band) is computed at acceptance
+    time, not stored on the offer. Spec A §4.2 lines 1186-1198.
+    """
+
+    teacher = models.ForeignKey(
+        "roster.RosterTenure",
+        on_delete=models.CASCADE,
+        related_name="thread_weaving_offers",
+        help_text="Teaching tenure offering this unlock.",
+    )
+    unlock = models.ForeignKey(
+        ThreadWeavingUnlock,
+        on_delete=models.PROTECT,
+        related_name="teaching_offers",
+        help_text="Authored unlock being offered.",
+    )
+    pitch = models.TextField(
+        help_text="Teacher's narrative pitch for this offer.",
+    )
+    gold_cost = models.PositiveIntegerField(
+        default=0,
+        help_text="Gold price the teacher charges (XP cost stays on the unlock).",
+    )
+    banked_ap = models.PositiveIntegerField(
+        help_text="Teacher's AP commitment backing this offer.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"ThreadWeavingTeachingOffer<{self.teacher_id} -> {self.unlock_id}>"
 
 
 from world.magic.audere import AudereThreshold  # noqa: F401, E402

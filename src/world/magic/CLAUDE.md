@@ -9,7 +9,24 @@ The magic system for Arx II. Power flows from identity and connection.
 - **Resonance**: Style tags that define magical identity - proper domain models with FK to Affinity and optional ModifierTarget link
 - **Motif**: Character-level magical aesthetic containing resonances and facets
 - **Facet**: Hierarchical imagery/symbolism (Spider, Silk, Fire) assigned to resonances
-- **Threads**: Magical manifestation of relationships
+- **Threads**: Per-character attachments anchored to a trait/technique/item/room/
+  relationship-track/relationship-capstone. Each Thread channels a single
+  Resonance (currency) and accrues `developed_points` → `level` via the Imbuing
+  ritual. The legacy 5-axis Thread family was removed and replaced in Phase 4
+  of the resonance pivot.
+- **Resonance currency**: `CharacterResonance.balance` is spendable currency
+  earned via `grant_resonance` (Spec C surfaces will write here) and spent
+  via `spend_resonance_for_imbuing` (advances Thread level) or
+  `spend_resonance_for_pull` (activates tier-1/2/3 pull effects during an
+  action or combat round). `lifetime_earned` is monotonic audit.
+- **ThreadWeaving**: Acquisition layer. `ThreadWeavingUnlock` is the authored
+  catalog (per anchor scope); `CharacterThreadWeavingUnlock` is the per-character
+  purchase record; `ThreadWeavingTeachingOffer` is the teacher-facing offer
+  (mirrors `CodexTeachingOffer`).
+- **Ritual**: Authored magical procedures with dual dispatch —
+  `execution_kind=SERVICE` invokes a registered service function path;
+  `execution_kind=FLOW` invokes a `FlowDefinition`. Imbuing is the first
+  SERVICE-dispatched ritual and wraps `spend_resonance_for_imbuing`.
 
 ## Models
 
@@ -19,7 +36,11 @@ The magic system for Arx II. Power flows from identity and connection.
 
 ### Character State
 - `CharacterAura` - Tracks a character's affinity percentages (celestial/primal/abyssal)
-- `CharacterResonance` - Personal resonances attached to characters (FK to Resonance)
+- `CharacterResonance` - Per-character per-resonance row. Identity anchor AND
+  spendable currency bucket. Fields: `character_sheet` FK, `resonance` FK,
+  `balance` (spendable), `lifetime_earned` (monotonic audit), `claimed_at`,
+  `flavor_text`. Unified per Spec A §2.2 — the old `scope`/`strength`/`is_active`
+  shape was dropped; row existence replaces `is_active`.
 - `CharacterAnima` - Magical resource (anima) tracking
 
 ### Gifts & Techniques
@@ -55,11 +76,62 @@ system. Anima rituals are set up post-CG. CharacterAnimaRitual references Resona
 - `CharacterFacet` - Links characters to facets with resonance assignments
 - `MotifResonanceAssociation` - Links resonances to facets in a motif
 
-### Thread System
-- `ThreadType` - Types of relationships (Lover, Ally, Rival, etc.)
-- `Thread` - Magical connection between two characters
-- `ThreadJournal` - IC records of thread evolution
-- `ThreadResonance` - Resonances attached to threads
+### Thread System (Resonance Pivot Spec A)
+
+**Authored catalogs (lookup, SharedMemoryModel):**
+- `ThreadPullCost` - Per-tier pull cost knobs (tier 1/2/3: `resonance_cost`,
+  `anima_per_thread`, `label`). Tuning surface — values here are data; cost
+  *shape* lives in `spend_resonance_for_pull`.
+- `ThreadXPLockedLevel` - XP-locked boundary price list (`level` on the
+  internal 10/20/30... scale, `xp_cost`). Mirrors skills' XP locks.
+- `ThreadPullEffect` - Authored pull-effect template keyed
+  `(target_kind, resonance, tier, min_thread_level)`. `effect_kind` chooses
+  payload column: `FLAT_BONUS` / `INTENSITY_BUMP` / `VITAL_BONUS` (+ `vital_target`) /
+  `CAPABILITY_GRANT` (FK to `CapabilityType`) / `NARRATIVE_ONLY`. Tier 0 is
+  always-on passive; tiers 1–3 are paid pulls. `clean()` + CheckConstraints
+  enforce payload/effect_kind shape.
+- `ThreadWeavingUnlock` - Authored catalog of "you can weave threads on X"
+  unlocks. Same discriminator + typed-FK pattern as Thread: `unlock_trait`,
+  `unlock_gift`, `unlock_item_typeclass_path`, `unlock_room_property`,
+  `unlock_track`. `xp_cost` + M2M to `Path` (in-band) + `out_of_path_multiplier`.
+- `ImbuingProseTemplate` - Fallback prose for the Imbuing ritual keyed on
+  `(resonance, target_kind)`. The row with both NULL is the universal fallback.
+- `Ritual` - Authored magical procedure with dual dispatch
+  (`execution_kind=SERVICE` → `service_function_path`; `execution_kind=FLOW` →
+  FK to `FlowDefinition`). `site_property` optionally gates where it can be
+  performed.
+- `RitualComponentRequirement` - FK to `Ritual` + FK to `ItemTemplate` with
+  `quantity` and optional `min_quality_tier`. Consumed during ritual dispatch.
+
+**Per-thread and per-character records:**
+- `Thread` - The thread row. Discriminator (`target_kind`) + typed FKs:
+  `target_trait`, `target_technique`, `target_object` (ITEM and ROOM),
+  `target_relationship_track`, `target_capstone`. Fields: `owner` (FK
+  CharacterSheet), `resonance` (FK Resonance), `name`, `description`,
+  `developed_points`, `level`, timestamps, `retired_at` (soft-retire).
+  All typed FKs use `on_delete=PROTECT`. Three layers of integrity: `clean()`,
+  per-kind CheckConstraints, per-kind partial UniqueConstraints.
+- `ThreadLevelUnlock` - Per-thread XP-locked-boundary receipt. Unique per
+  `(thread, unlocked_level)`. Records that a thread paid XP to cross a
+  specific boundary (20, 30, ...).
+- `CharacterThreadWeavingUnlock` - Per-character purchase record linking a
+  CharacterSheet to a ThreadWeavingUnlock. Captures actual `xp_spent`
+  (in-band uses unlock.xp_cost; out-of-band multiplies by
+  `out_of_path_multiplier`) and optional `teacher` (FK RosterTenure).
+- `ThreadWeavingTeachingOffer` - Teacher-side offer. FK to RosterTenure +
+  ThreadWeavingUnlock. Mirrors `CodexTeachingOffer` shape (pitch, gold_cost,
+  banked_ap). Path multiplier computed at acceptance time, not stored.
+
+**Combat-side models (live in `world/combat`, not magic):**
+- `CombatPull` - Per-(participant, round) commit envelope for a thread pull.
+  Unique per (participant, round_number). M2M to Thread for the threads
+  pulled; `resonance_spent` / `anima_spent` for audit.
+- `CombatPullResolvedEffect` - Frozen snapshot of one resolved effect from
+  a pull. Captures `kind`, `authored_value`, `level_multiplier`, `scaled_value`,
+  `vital_target`, `source_thread`, `source_thread_level`, `source_tier`,
+  `granted_capability`, `narrative_snippet`. Cascades from CombatPull;
+  edits to authoring or Thread.level mid-round cannot retroactively alter
+  what a committed pull granted.
 
 **Note:** Affinity and Resonance are proper domain models in this app, each with an
 optional OneToOne FK back to ModifierTarget for modifier system integration.
@@ -71,12 +143,23 @@ The following models have been removed and replaced:
 - `CharacterPower` - Replaced by `CharacterTechnique`
 - `AnimaRitualType` - Replaced by freeform stat+skill+resonance system
 - `ResonanceAssociation` - Replaced by hierarchical `Facet` model
+- `Thread` (legacy 5-axis model), `ThreadType`, `ThreadJournal`,
+  `ThreadResonance` - Legacy 5-axis thread family. Replaced by the new
+  `Thread` discriminator + typed-FK model and supporting catalogs
+  (`ThreadPullCost` / `ThreadXPLockedLevel` / `ThreadPullEffect` /
+  `ThreadWeavingUnlock` / `ThreadLevelUnlock` / `CharacterThreadWeavingUnlock` /
+  `ThreadWeavingTeachingOffer`). See "Thread System (Resonance Pivot Spec A)"
+  above.
+- `CharacterResonanceTotal` - Aura recompute now reads `CharacterModifier` rows
+  whose target category is `resonance` directly (no denormalized aggregate)
 
 ## Design Docs
 
 - `docs/plans/2026-01-20-magic-system-design.md` - original system design
 - `docs/plans/2026-03-02-cantrip-technique-alignment.md` - cantrip/technique alignment + spell mechanics
 - `docs/plans/2026-03-04-path-cantrip-filtering-design.md` - path-based cantrip filtering design
+- `docs/superpowers/specs/2026-04-18-resonance-pivot-spec-a-threads-and-currency-design.md` - Resonance Pivot Spec A (Threads + Currency + Rituals + Mage Scars rename)
+- `docs/superpowers/plans/2026-04-19-resonance-pivot-spec-a-threads-and-currency.md` - 19-phase implementation plan for Spec A
 
 ## Key Rules
 

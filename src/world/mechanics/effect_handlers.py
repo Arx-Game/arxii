@@ -275,22 +275,20 @@ def _severity_to_tier(severity: int) -> int:
 def _derive_alteration_origin(
     character: "ObjectDB",
 ) -> "tuple[Affinity | None, Resonance | None]":
-    """Derive origin affinity and resonance from the character's active resonances.
+    """Derive origin affinity and resonance from the character's resonances.
 
-    Picks the first active CharacterResonance attached to the character's ObjectDB.
-    Returns (None, None) if the character has no active resonances — callers must
-    handle this case by skipping pending alteration creation.
+    Picks the most recently earned CharacterResonance for the character via the
+    ``character.resonances`` handler (Spec A §3.7). Returns (None, None) if the
+    character has no sheet or no resonance rows — callers must handle this case
+    by skipping pending alteration creation.
     """
-    from world.magic.models import CharacterResonance  # noqa: PLC0415
-
-    # Pick most recently acquired active resonance as the alteration origin.
-    # When multiple exist, newest (highest pk) is used deterministically.
-    char_res = (
-        CharacterResonance.objects.filter(character=character, is_active=True)
-        .select_related("resonance__affinity")
-        .order_by("-pk")
-        .first()
-    )
+    try:
+        sheet = character.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return None, None
+    if sheet is None:
+        return None, None
+    char_res = character.resonances.most_recently_earned()
     if char_res is None:
         return None, None
     return char_res.resonance.affinity, char_res.resonance
@@ -302,10 +300,10 @@ def _apply_magical_scars(
 ) -> AppliedEffect:
     """Create a PendingAlteration the player must later resolve.
 
-    Does NOT apply any condition directly. The character's own active resonance
-    provides the origin affinity and resonance — the scar marks come from their
-    magical essence. If the character has no sheet or no active resonance, the
-    handler skips gracefully and returns applied=False.
+    Does NOT apply any condition directly. The character's most-recently-earned
+    resonance provides the origin affinity and resonance — the scar marks come
+    from their magical essence. If the character has no sheet or no resonance
+    rows, the handler skips gracefully and returns applied=False.
     """
     from world.magic.services import create_pending_alteration  # noqa: PLC0415
 
@@ -325,9 +323,9 @@ def _apply_magical_scars(
     if affinity is None or resonance is None:
         return AppliedEffect(
             effect_type=EffectType.MAGICAL_SCARS,
-            description="Target has no active resonance — cannot determine alteration origin",
+            description="Target has no resonance — cannot determine alteration origin",
             applied=False,
-            skip_reason="No active CharacterResonance found",
+            skip_reason="No CharacterResonance found",
         )
 
     severity = effect.condition_severity or 1

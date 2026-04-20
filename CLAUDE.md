@@ -68,6 +68,7 @@ All `arx` commands below require the venv to be activated, or must be prefixed w
 - `pnpm lint:fix` - Run ESLint with auto-fix
 - `pnpm format` - Format code with Prettier
 - `pnpm typecheck` - Run TypeScript type checking
+- `just gen-api-types` - Regenerate OpenAPI schema (`src/schema.json`) and frontend TypeScript API types (`frontend/src/generated/api.d.ts`)
 
 ### Integration Testing
 - `arx integration-test` - Automated integration test environment (highly automated!)

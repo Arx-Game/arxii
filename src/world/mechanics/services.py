@@ -15,9 +15,7 @@ from world.checks.services import chart_has_success_outcomes, preview_check_diff
 from world.conditions.services import get_all_capability_values
 from world.distinctions.models import CharacterDistinction
 from world.magic.models import Resonance, TechniqueCapabilityGrant
-from world.magic.services import add_resonance_total
 from world.mechanics.constants import (
-    RESONANCE_CATEGORY_NAME,
     CapabilitySourceType,
     DifficultyIndicator,
 )
@@ -180,7 +178,9 @@ def create_distinction_modifiers(
         # Calculate value at current rank
         value = effect.get_value_at_rank(rank)
 
-        # Create the modifier
+        # Create the modifier. CharacterModifier rows targeting resonances are
+        # the source of truth for the aura calc (see magic.services.get_aura_percentages);
+        # no denormalized resonance-total update is needed.
         modifier = CharacterModifier.objects.create(
             character=character,
             target=effect.target,
@@ -188,11 +188,6 @@ def create_distinction_modifiers(
             source=source,
         )
         created_modifiers.append(modifier)
-
-        # If targeting a resonance, update CharacterResonanceTotal
-        target = effect.target
-        if target.category.name == RESONANCE_CATEGORY_NAME and target.target_resonance_id:
-            add_resonance_total(character, target.target_resonance, value)
 
     return created_modifiers
 
@@ -210,24 +205,16 @@ def delete_distinction_modifiers(character_distinction: CharacterDistinction) ->
     Returns:
         Count of deleted CharacterModifier records
     """
-    # Get modifiers BEFORE deleting (evaluate queryset once)
+    # Get modifiers BEFORE deleting (evaluate queryset once). Aura percentages
+    # are derived from these CharacterModifier rows directly, so no separate
+    # denormalized resonance-total bookkeeping is required.
     modifiers = list(
         CharacterModifier.objects.filter(
             source__character_distinction=character_distinction
         ).select_related("target__category", "source__distinction_effect")
     )
 
-    # Subtract from resonance totals
-    for modifier in modifiers:
-        target = modifier.target
-        if target.category.name == RESONANCE_CATEGORY_NAME and target.target_resonance_id:
-            add_resonance_total(
-                character_distinction.character.sheet_data,
-                target.target_resonance,
-                -modifier.value,  # Negative to subtract
-            )
-
-    # Then delete sources (which cascades to modifiers)
+    # Delete sources (which cascades to modifiers)
     sources = ModifierSource.objects.filter(character_distinction=character_distinction)
     sources.delete()
     return len(modifiers)
@@ -252,21 +239,12 @@ def update_distinction_rank(character_distinction: CharacterDistinction) -> None
 
     for modifier in modifiers:
         effect = modifier.source.distinction_effect
-        old_value = modifier.value
         new_value = effect.get_value_at_rank(new_rank)
 
-        # Update modifier
+        # Update modifier — the aura calc reads from these rows directly,
+        # so no denormalized resonance-total adjustment is required.
         modifier.value = new_value
         modifier.save()
-
-        # If resonance, adjust total by the difference
-        target = modifier.target
-        if target.category.name == RESONANCE_CATEGORY_NAME and target.target_resonance_id:
-            add_resonance_total(
-                character_distinction.character.sheet_data,
-                target.target_resonance,
-                new_value - old_value,
-            )
 
 
 # =============================================================================

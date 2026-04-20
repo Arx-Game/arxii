@@ -1,12 +1,16 @@
-"""Tests for CharacterAffinityTotal and CharacterResonanceTotal models."""
+"""Tests for CharacterAffinityTotal model.
+
+CharacterResonanceTotal was removed in Phase 2 of the resonance pivot; aura
+recompute now reads `CharacterModifier` rows whose target category is
+`resonance` directly. See test_services.py for the rewritten coverage.
+"""
 
 from django.db import IntegrityError
-from django.db.models import ProtectedError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.factories import AffinityFactory, ResonanceFactory
-from world.magic.models import CharacterAffinityTotal, CharacterResonanceTotal
+from world.magic.factories import AffinityFactory
+from world.magic.models import CharacterAffinityTotal
 
 
 class CharacterAffinityTotalModelTests(TestCase):
@@ -80,81 +84,3 @@ class CharacterAffinityTotalModelTests(TestCase):
             affinity=self.celestial,
         )
         self.assertEqual(total.total, 0)
-
-
-class CharacterResonanceTotalModelTests(TestCase):
-    """Tests for CharacterResonanceTotal model."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.character_sheet = CharacterSheetFactory()
-        cls.shadows = ResonanceFactory(name="Shadows")
-
-    def test_character_resonance_total_creation(self):
-        """Test creating a resonance total for a character."""
-        total = CharacterResonanceTotal.objects.create(
-            character=self.character_sheet,
-            resonance=self.shadows,
-            total=50,
-        )
-        self.assertEqual(total.total, 50)
-        self.assertEqual(total.resonance, self.shadows)
-
-    def test_character_resonance_total_str(self):
-        """Test string representation of resonance total."""
-        total = CharacterResonanceTotal.objects.create(
-            character=self.character_sheet,
-            resonance=self.shadows,
-            total=75,
-        )
-        result = str(total)
-        self.assertIn("Shadows", result)
-        self.assertIn("75", result)
-
-    def test_character_resonance_total_unique_together(self):
-        """Test that character can only have one total per resonance."""
-        CharacterResonanceTotal.objects.create(
-            character=self.character_sheet,
-            resonance=self.shadows,
-            total=50,
-        )
-        with self.assertRaises(IntegrityError):
-            CharacterResonanceTotal.objects.create(
-                character=self.character_sheet,
-                resonance=self.shadows,
-                total=100,
-            )
-
-    def test_character_can_have_multiple_resonance_totals(self):
-        """Test that a character can have totals for multiple resonances."""
-        majesty = ResonanceFactory(name="Majesty")
-        CharacterResonanceTotal.objects.create(
-            character=self.character_sheet,
-            resonance=self.shadows,
-            total=30,
-        )
-        CharacterResonanceTotal.objects.create(
-            character=self.character_sheet,
-            resonance=majesty,
-            total=20,
-        )
-        self.assertEqual(self.character_sheet.resonance_totals.count(), 2)
-
-    def test_resonance_total_default_value(self):
-        """Test that total defaults to 0."""
-        total = CharacterResonanceTotal.objects.create(
-            character=self.character_sheet,
-            resonance=self.shadows,
-        )
-        self.assertEqual(total.total, 0)
-
-    def test_resonance_total_protect_on_delete(self):
-        """Test that deleting Resonance is protected when totals exist."""
-        test_resonance = ResonanceFactory(name="TestResonance")
-        CharacterResonanceTotal.objects.create(
-            character=self.character_sheet,
-            resonance=test_resonance,
-            total=50,
-        )
-        with self.assertRaises(ProtectedError):
-            test_resonance.delete()

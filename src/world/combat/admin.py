@@ -8,6 +8,8 @@ from world.combat.models import (
     CombatOpponent,
     CombatOpponentAction,
     CombatParticipant,
+    CombatPull,
+    CombatPullResolvedEffect,
     CombatRoundAction,
     ComboDefinition,
     ComboLearning,
@@ -168,3 +170,60 @@ class ComboSlotAdmin(admin.ModelAdmin):
 class ComboLearningAdmin(admin.ModelAdmin):
     list_display = ["character_sheet", "combo", "learned_via", "learned_at"]
     list_filter = ["learned_via"]
+
+
+class CombatPullResolvedEffectInline(admin.TabularInline):
+    model = CombatPullResolvedEffect
+    extra = 0
+    fields = [
+        "kind",
+        "authored_value",
+        "level_multiplier",
+        "scaled_value",
+        "vital_target",
+        "source_thread",
+        "source_thread_level",
+        "source_tier",
+        "granted_capability",
+        "narrative_snippet",
+    ]
+    raw_id_fields = ["source_thread", "granted_capability"]
+
+
+@admin.register(CombatPull)
+class CombatPullAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "participant",
+        "encounter",
+        "round_number",
+        "resonance",
+        "tier",
+        "resonance_spent",
+        "anima_spent",
+        "committed_at",
+    ]
+    list_filter = ["tier", "resonance"]
+    search_fields = [
+        "participant__character_sheet__display_name",
+        "encounter__id",
+    ]
+    raw_id_fields = ["participant", "encounter", "resonance", "threads"]
+    inlines = [CombatPullResolvedEffectInline]
+
+
+@admin.register(CombatPullResolvedEffect)
+class CombatPullResolvedEffectAdmin(admin.ModelAdmin):
+    list_display = [
+        "id",
+        "pull",
+        "kind",
+        "scaled_value",
+        "vital_target",
+        "source_thread",
+        "source_tier",
+        "granted_capability",
+    ]
+    list_filter = ["kind", "vital_target", "source_tier"]
+    search_fields = ["narrative_snippet"]
+    raw_id_fields = ["pull", "source_thread", "granted_capability"]
