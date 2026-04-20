@@ -36,6 +36,7 @@ from world.magic.exceptions import (
 from world.magic.models import (
     CharacterAnima,
     CharacterResonance,
+    CharacterThreadWeavingUnlock,
     IntensityTier,
     MagicalAlterationEvent,
     MagicalAlterationTemplate,
@@ -58,6 +59,7 @@ from world.magic.types import (
     SoulfrayWarning,
     TechniqueUseResult,
     ThreadImbueResult,
+    ThreadXPLockProspect,
 )
 from world.mechanics.constants import (
     RESONANCE_CATEGORY_NAME,
@@ -1360,3 +1362,191 @@ def cross_thread_xp_lock(
         unlocked_level=boundary_level,
         xp_spent=locked.xp_cost,
     )
+
+
+def _has_weaving_unlock(
+    character_sheet: CharacterSheet,
+    target_kind: str,
+    target: object,
+) -> bool:
+    """Check if a character has the required ThreadWeavingUnlock for a given anchor.
+
+    Spec A §7.4 eligibility table (lines 449-457).
+    """
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+
+    base = CharacterThreadWeavingUnlock.objects.filter(character=character_sheet)
+    match target_kind:
+        case TargetKind.TRAIT:
+            return base.filter(unlock__unlock_trait=target).exists()
+        case TargetKind.TECHNIQUE:
+            return base.filter(unlock__unlock_gift=target.gift).exists()  # type: ignore[union-attr]
+        case TargetKind.ITEM:
+            return base.filter(
+                unlock__unlock_item_typeclass_path=target.db_typeclass_path,  # type: ignore[union-attr]
+            ).exists()
+        case TargetKind.ROOM:
+            # Match if the unlock's room property is one of the anchor's properties.
+            return base.filter(
+                unlock__unlock_room_property__in=target.properties.all(),  # type: ignore[union-attr]
+            ).exists()
+        case TargetKind.RELATIONSHIP_TRACK | TargetKind.RELATIONSHIP_CAPSTONE:
+            # Both RelationshipTrackProgress and RelationshipCapstone expose .track
+            track = target.track  # type: ignore[union-attr]  # noqa: GETATTR_LITERAL — both relationship anchor types expose .track
+            return base.filter(unlock__unlock_track=track).exists()
+    return False
+
+
+@transaction.atomic
+def weave_thread(  # noqa: PLR0913 — kw-only args; target+resonance+kind are distinct, cannot collapse
+    character_sheet: CharacterSheet,
+    target_kind: str,
+    target: object,
+    resonance: ResonanceModel,
+    *,
+    name: str = "",
+    description: str = "",
+) -> Thread:
+    """Create a new Thread anchored to the given target.
+
+    Spec A §7.4. Validates eligibility via CharacterThreadWeavingUnlock before
+    creating the Thread.
+
+    Args:
+        character_sheet: Character creating the thread.
+        target_kind: TargetKind discriminator string.
+        target: The anchor object (Trait, Technique, ObjectDB, RelationshipTrackProgress,
+                RelationshipCapstone).
+        resonance: Resonance this thread channels.
+        name: Optional narrative name.
+        description: Optional narrative description.
+
+    Returns:
+        Newly created Thread instance.
+
+    Raises:
+        InvalidImbueAmount: If the character lacks the required weaving unlock.
+    """
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+
+    if not _has_weaving_unlock(character_sheet, target_kind, target):
+        msg = "Character lacks the required ThreadWeavingUnlock for this anchor."
+        raise InvalidImbueAmount(msg)
+
+    field_map: dict[str, str] = {
+        TargetKind.TRAIT: "target_trait",
+        TargetKind.TECHNIQUE: "target_technique",
+        TargetKind.ITEM: "target_object",
+        TargetKind.ROOM: "target_object",
+        TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
+        TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
+    }
+    kwargs: dict[str, object] = {
+        "owner": character_sheet,
+        "resonance": resonance,
+        "target_kind": target_kind,
+        "name": name,
+        "description": description,
+        "level": 0,
+        "developed_points": 0,
+    }
+    kwargs[field_map[target_kind]] = target
+    return Thread.objects.create(**kwargs)
+
+
+def update_thread_narrative(
+    thread: Thread,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+) -> Thread:
+    """Update the narrative name and/or description of a thread.
+
+    Only provided fields are updated. Spec A §3.6.
+
+    Args:
+        thread: Thread to update.
+        name: New name (omit to leave unchanged).
+        description: New description (omit to leave unchanged).
+
+    Returns:
+        The updated Thread instance.
+    """
+    if name is not None:
+        thread.name = name
+    if description is not None:
+        thread.description = description
+    thread.save(update_fields=["name", "description", "updated_at"])
+    return thread
+
+
+def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
+    """Return threads that have matching CharacterResonance balance > 0 and level < cap.
+
+    Spec A §3.6.
+    """
+    threads = list(
+        Thread.objects.filter(owner=character_sheet).select_related(
+            "resonance__affinity",
+            "target_trait",
+            "target_technique",
+            "target_object",
+            "target_relationship_track",
+            "target_capstone",
+        )
+    )
+    crs = {
+        cr.resonance_id: cr
+        for cr in CharacterResonance.objects.filter(character_sheet=character_sheet)
+    }
+    out: list[Thread] = []
+    for t in threads:
+        cr = crs.get(t.resonance_id)
+        if cr is None or cr.balance <= 0:
+            continue
+        if t.level < compute_effective_cap(t):
+            out.append(t)
+    return out
+
+
+def near_xp_lock_threads(
+    character_sheet: CharacterSheet,
+    within: int = 100,
+) -> list[ThreadXPLockProspect]:
+    """Return threads whose dev_points are within `within` of the next XP-locked boundary.
+
+    Only boundaries that aren't already unlocked are included. Spec A §3.6.
+    """
+    threads = Thread.objects.filter(owner=character_sheet)
+    out: list[ThreadXPLockProspect] = []
+    for t in threads:
+        next_boundary = ((t.level // 10) + 1) * 10
+        # Only XP-locked boundaries count.
+        locked = ThreadXPLockedLevel.objects.filter(level=next_boundary).first()
+        if locked is None:
+            continue
+        # Already unlocked?
+        if ThreadLevelUnlock.objects.filter(thread=t, unlocked_level=next_boundary).exists():
+            continue
+        # Compute dev_points needed to reach next_boundary from current level.
+        dp_needed = sum(max((n - 9) * 100, 1) for n in range(t.level, next_boundary))
+        dp_to_boundary = dp_needed - t.developed_points
+        if dp_to_boundary <= within:
+            out.append(
+                ThreadXPLockProspect(
+                    thread=t,
+                    boundary_level=next_boundary,
+                    xp_cost=locked.xp_cost,
+                    dev_points_to_boundary=max(dp_to_boundary, 0),
+                )
+            )
+    return out
+
+
+def threads_blocked_by_cap(character_sheet: CharacterSheet) -> list[Thread]:
+    """Return threads that are at their effective cap (no further imbuing helps).
+
+    Spec A §3.6.
+    """
+    threads = list(Thread.objects.filter(owner=character_sheet))
+    return [t for t in threads if t.level >= compute_effective_cap(t)]

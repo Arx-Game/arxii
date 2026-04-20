@@ -14,16 +14,24 @@ from world.magic.exceptions import (
 from world.magic.factories import (
     CharacterResonanceFactory,
     CharacterSheetFactory,
+    CharacterThreadWeavingUnlockFactory,
     ResonanceFactory,
     ThreadFactory,
     ThreadLevelUnlockFactory,
+    ThreadWeavingUnlockFactory,
     ThreadXPLockedLevelFactory,
 )
-from world.magic.models import ThreadLevelUnlock
+from world.magic.models import (
+    ThreadLevelUnlock,
+)
 from world.magic.services import (
-    cross_thread_xp_lock,
     grant_resonance,
+    imbue_ready_threads,
+    near_xp_lock_threads,
     spend_resonance_for_imbuing,
+    threads_blocked_by_cap,
+    update_thread_narrative,
+    weave_thread,
 )
 
 # =============================================================================
@@ -236,6 +244,8 @@ class CrossThreadXpLockTests(TestCase):
         return thread, xp_tracker
 
     def test_pays_xp_creates_unlock_row(self) -> None:
+        from world.magic.services import cross_thread_xp_lock
+
         thread, xp_tracker = self._make_thread_with_xp(thread_level=10, xp_available=500)
         ThreadXPLockedLevelFactory(level=20, xp_cost=200)
         unlock = cross_thread_xp_lock(thread.owner, thread, 20)
@@ -245,6 +255,8 @@ class CrossThreadXpLockTests(TestCase):
         self.assertEqual(xp_tracker.current_available, 300)
 
     def test_idempotent_double_unlock(self) -> None:
+        from world.magic.services import cross_thread_xp_lock
+
         thread, xp_tracker = self._make_thread_with_xp(thread_level=10, xp_available=500)
         ThreadXPLockedLevelFactory(level=20, xp_cost=200)
         unlock1 = cross_thread_xp_lock(thread.owner, thread, 20)
@@ -258,12 +270,16 @@ class CrossThreadXpLockTests(TestCase):
         )
 
     def test_insufficient_xp_raises(self) -> None:
+        from world.magic.services import cross_thread_xp_lock
+
         thread, _ = self._make_thread_with_xp(thread_level=10, xp_available=50)
         ThreadXPLockedLevelFactory(level=20, xp_cost=200)
         with self.assertRaises(XPInsufficient):
             cross_thread_xp_lock(thread.owner, thread, 20)
 
     def test_boundary_above_effective_cap_raises(self) -> None:
+        from world.magic.services import cross_thread_xp_lock
+
         # trait_value=20 → anchor_cap=20. path_stage=2 → path_cap=20.
         # effective_cap=20. boundary=30 > 20 → AnchorCapExceeded.
         thread, _ = self._make_thread_with_xp(
@@ -277,3 +293,148 @@ class CrossThreadXpLockTests(TestCase):
 # =============================================================================
 # 11.4 — weave_thread, update_thread_narrative, helper queries
 # =============================================================================
+
+
+class WeaveThreadTests(TestCase):
+    def test_weave_thread_trait_happy_path(self) -> None:
+        """Character with TRAIT weaving unlock can create a TRAIT thread."""
+        from world.magic.constants import TargetKind
+        from world.traits.factories import TraitFactory
+
+        trait = TraitFactory()
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        # Create weaving unlock for this trait
+        unlock = ThreadWeavingUnlockFactory(target_kind=TargetKind.TRAIT, unlock_trait=trait)
+        CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock, xp_spent=100)
+
+        thread = weave_thread(sheet, TargetKind.TRAIT, trait, res, name="My Thread")
+        self.assertEqual(thread.owner, sheet)
+        self.assertEqual(thread.resonance, res)
+        self.assertEqual(thread.target_kind, TargetKind.TRAIT)
+        self.assertEqual(thread.target_trait, trait)
+        self.assertEqual(thread.name, "My Thread")
+        self.assertEqual(thread.level, 0)
+
+    def test_weave_thread_no_unlock_raises(self) -> None:
+        """Character without weaving unlock → raises InvalidImbueAmount."""
+        from world.magic.constants import TargetKind
+        from world.traits.factories import TraitFactory
+
+        trait = TraitFactory()
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        with self.assertRaises(InvalidImbueAmount):
+            weave_thread(sheet, TargetKind.TRAIT, trait, res)
+
+
+class UpdateThreadNarrativeTests(TestCase):
+    def test_update_name_and_description(self) -> None:
+        thread = ThreadFactory(name="Old", description="Old desc")
+        result = update_thread_narrative(thread, name="New", description="New desc")
+        self.assertEqual(result.name, "New")
+        self.assertEqual(result.description, "New desc")
+        thread.refresh_from_db()
+        self.assertEqual(thread.name, "New")
+
+    def test_update_name_only(self) -> None:
+        thread = ThreadFactory(name="Old", description="Keep")
+        update_thread_narrative(thread, name="Changed")
+        thread.refresh_from_db()
+        self.assertEqual(thread.name, "Changed")
+        self.assertEqual(thread.description, "Keep")
+
+    def test_update_nothing_is_noop(self) -> None:
+        """Calling with no kwargs returns thread unchanged."""
+        thread = ThreadFactory(name="Same", description="Same desc")
+        update_thread_narrative(thread)
+        thread.refresh_from_db()
+        self.assertEqual(thread.name, "Same")
+
+
+class ImbuReadyThreadsTests(TestCase):
+    def test_returns_thread_with_balance_below_cap(self) -> None:
+        """Thread at level 5 with cap=10 (path_cap=10, anchor_cap=100) and balance > 0."""
+        sheet = CharacterSheetFactory(_path_stage=1)  # path_cap = max(1,1)*10 = 10
+        res = ResonanceFactory()
+        # trait_value=100, so anchor_cap=100, effective_cap=min(10,100)=10. level=5<10
+        thread = ThreadFactory(owner=sheet, resonance=res, level=5, _trait_value=100)
+        CharacterResonanceFactory(
+            character_sheet=sheet, resonance=res, balance=50, lifetime_earned=50
+        )
+        result = imbue_ready_threads(sheet)
+        self.assertIn(thread, result)
+
+    def test_excludes_thread_at_cap(self) -> None:
+        """Thread at effective cap is excluded."""
+        sheet = CharacterSheetFactory(_path_stage=1)  # path_cap=10
+        res = ResonanceFactory()
+        # trait_value=100, effective_cap=10, level=10 → at cap
+        thread = ThreadFactory(owner=sheet, resonance=res, level=10, _trait_value=100)
+        CharacterResonanceFactory(
+            character_sheet=sheet, resonance=res, balance=50, lifetime_earned=50
+        )
+        result = imbue_ready_threads(sheet)
+        self.assertNotIn(thread, result)
+
+    def test_excludes_thread_with_zero_balance(self) -> None:
+        """Thread with zero balance is excluded."""
+        sheet = CharacterSheetFactory(_path_stage=1)
+        res = ResonanceFactory()
+        ThreadFactory(owner=sheet, resonance=res, level=5, _trait_value=100)
+        CharacterResonanceFactory(
+            character_sheet=sheet, resonance=res, balance=0, lifetime_earned=0
+        )
+        result = imbue_ready_threads(sheet)
+        self.assertEqual(result, [])
+
+
+class NearXpLockThreadsTests(TestCase):
+    def test_returns_thread_near_boundary(self) -> None:
+        """Thread at level 10, dev_points=5400, next boundary=20.
+        dp_needed = sum(max((n-9)*100,1) for n in range(10,20))
+                  = 100+200+300+400+500+600+700+800+900+1000 = 5500
+        dp_to_boundary = 5500-5400=100 → within=100 → included."""
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        thread = ThreadFactory(
+            owner=sheet, resonance=res, level=10, developed_points=5400, _trait_value=100
+        )
+        ThreadXPLockedLevelFactory(level=20, xp_cost=200)
+        result = near_xp_lock_threads(sheet, within=100)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].thread, thread)
+        self.assertEqual(result[0].boundary_level, 20)
+        self.assertEqual(result[0].dev_points_to_boundary, 100)
+
+    def test_excludes_already_unlocked_boundary(self) -> None:
+        """Boundary already unlocked is excluded."""
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        thread = ThreadFactory(
+            owner=sheet, resonance=res, level=10, developed_points=5400, _trait_value=100
+        )
+        ThreadXPLockedLevelFactory(level=20, xp_cost=200)
+        ThreadLevelUnlockFactory(thread=thread, unlocked_level=20, xp_spent=200)
+        result = near_xp_lock_threads(sheet, within=100)
+        self.assertEqual(result, [])
+
+
+class ThreadsBlockedByCapTests(TestCase):
+    def test_returns_thread_at_cap(self) -> None:
+        """Thread at effective_cap is returned."""
+        sheet = CharacterSheetFactory(_path_stage=1)  # path_cap=10
+        res = ResonanceFactory()
+        # trait_value=100, effective_cap=min(10,100)=10, level=10 → at cap
+        thread = ThreadFactory(owner=sheet, resonance=res, level=10, _trait_value=100)
+        result = threads_blocked_by_cap(sheet)
+        self.assertIn(thread, result)
+
+    def test_excludes_thread_below_cap(self) -> None:
+        """Thread below effective_cap is excluded."""
+        sheet = CharacterSheetFactory(_path_stage=1)  # path_cap=10
+        res = ResonanceFactory()
+        # level=5 < cap=10 → below cap
+        thread = ThreadFactory(owner=sheet, resonance=res, level=5, _trait_value=100)
+        result = threads_blocked_by_cap(sheet)
+        self.assertNotIn(thread, result)
