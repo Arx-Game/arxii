@@ -19,6 +19,7 @@ from world.magic.constants import TargetKind
 from world.magic.factories import (
     CharacterThreadWeavingUnlockFactory,
     GiftFactory,
+    ThreadWeavingTeachingOfferFactory,
     ThreadWeavingUnlockFactory,
 )
 from world.traits.factories import TraitFactory
@@ -114,3 +115,11 @@ class CharacterThreadWeavingUnlockTests(TestCase):
                 unlock=unlock,
                 xp_spent=100,
             )
+
+
+class ThreadWeavingTeachingOfferTests(TestCase):
+    def test_offer_links_teacher_and_unlock(self) -> None:
+        offer = ThreadWeavingTeachingOfferFactory()
+        self.assertIsNotNone(offer.teacher)
+        self.assertIsNotNone(offer.unlock)
+        self.assertGreaterEqual(offer.banked_ap, 0)

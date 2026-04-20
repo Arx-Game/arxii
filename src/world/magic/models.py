@@ -2732,4 +2732,41 @@ class CharacterThreadWeavingUnlock(SharedMemoryModel):
         return f"CharacterThreadWeavingUnlock<{self.character_id} -> {self.unlock_id}>"
 
 
+class ThreadWeavingTeachingOffer(SharedMemoryModel):
+    """Teacher-side offer linking a RosterTenure to a ThreadWeavingUnlock.
+
+    Mirrors the existing CodexTeachingOffer model exactly. NPC academy teachers
+    are seeded as RosterTenure-backed offers tied to specific ThreadWeaving
+    unlocks. Path multiplier (in-band vs. out-of-band) is computed at acceptance
+    time, not stored on the offer. Spec A §4.2 lines 1186-1198.
+    """
+
+    teacher = models.ForeignKey(
+        "roster.RosterTenure",
+        on_delete=models.CASCADE,
+        related_name="thread_weaving_offers",
+        help_text="Teaching tenure offering this unlock.",
+    )
+    unlock = models.ForeignKey(
+        ThreadWeavingUnlock,
+        on_delete=models.PROTECT,
+        related_name="teaching_offers",
+        help_text="Authored unlock being offered.",
+    )
+    pitch = models.TextField(
+        help_text="Teacher's narrative pitch for this offer.",
+    )
+    gold_cost = models.PositiveIntegerField(
+        default=0,
+        help_text="Gold price the teacher charges (XP cost stays on the unlock).",
+    )
+    banked_ap = models.PositiveIntegerField(
+        help_text="Teacher's AP commitment backing this offer.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"ThreadWeavingTeachingOffer<{self.teacher_id} -> {self.unlock_id}>"
+
+
 from world.magic.audere import AudereThreshold  # noqa: F401, E402

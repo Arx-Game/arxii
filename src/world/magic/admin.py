@@ -38,6 +38,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
+    ThreadWeavingTeachingOffer,
     ThreadWeavingUnlock,
     ThreadXPLockedLevel,
     Tradition,
@@ -493,3 +494,17 @@ class CharacterThreadWeavingUnlockAdmin(admin.ModelAdmin):
     ]
     raw_id_fields = ["character", "unlock", "teacher"]
     readonly_fields = ["acquired_at"]
+
+
+@admin.register(ThreadWeavingTeachingOffer)
+class ThreadWeavingTeachingOfferAdmin(admin.ModelAdmin):
+    list_display = ["id", "teacher", "unlock", "gold_cost", "banked_ap", "created_at"]
+    list_filter = ["unlock__target_kind"]
+    search_fields = [
+        "teacher__roster_entry__character__db_key",
+        "unlock__unlock_trait__name",
+        "unlock__unlock_gift__name",
+        "pitch",
+    ]
+    raw_id_fields = ["teacher", "unlock"]
+    readonly_fields = ["created_at"]

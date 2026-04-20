@@ -51,6 +51,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
+    ThreadWeavingTeachingOffer,
     ThreadWeavingUnlock,
     ThreadXPLockedLevel,
     Tradition,
@@ -708,3 +709,16 @@ class CharacterThreadWeavingUnlockFactory(factory.django.DjangoModelFactory):
     unlock = factory.SubFactory(ThreadWeavingUnlockFactory)
     xp_spent = 100
     teacher = None
+
+
+class ThreadWeavingTeachingOfferFactory(factory.django.DjangoModelFactory):
+    """Factory for ThreadWeavingTeachingOffer — teacher-side offer record."""
+
+    class Meta:
+        model = ThreadWeavingTeachingOffer
+
+    teacher = factory.SubFactory("world.roster.factories.RosterTenureFactory")
+    unlock = factory.SubFactory(ThreadWeavingUnlockFactory)
+    pitch = factory.Faker("paragraph")
+    gold_cost = 0
+    banked_ap = 5
