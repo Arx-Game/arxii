@@ -13,7 +13,7 @@ from world.character_sheets.models import CharacterSheet
 from world.items.models import ItemInstance
 from world.magic.constants import RitualExecutionKind
 from world.magic.exceptions import RitualComponentError
-from world.magic.models import Ritual
+from world.magic.models import Ritual, RitualComponentRequirement
 
 
 class PerformRitualAction:
@@ -47,7 +47,7 @@ class PerformRitualAction:
         actor: CharacterSheet,
         ritual: Ritual,
         components_provided: list[ItemInstance],
-        kwargs: dict,
+        kwargs: dict[str, object],
     ) -> None:
         self.actor = actor
         self.ritual = ritual
@@ -145,13 +145,13 @@ class PerformRitualAction:
         return consumed_pks
 
     @staticmethod
-    def _meets_quality(inst: ItemInstance, req: object) -> bool:
+    def _meets_quality(inst: ItemInstance, req: RitualComponentRequirement) -> bool:
         """Return True if inst satisfies req.min_quality_tier (if any)."""
-        if req.min_quality_tier_id is None:  # type: ignore[union-attr]
+        if req.min_quality_tier_id is None:
             return True
         if inst.quality_tier_id is None:
             return False
-        return inst.quality_tier.sort_order >= req.min_quality_tier.sort_order  # type: ignore[union-attr]
+        return inst.quality_tier.sort_order >= req.min_quality_tier.sort_order
 
     def _consume_components(self, pks: list[int]) -> None:
         """Delete the consumed ItemInstance rows (bulk)."""
