@@ -14,6 +14,7 @@ from world.magic.models import (
     CharacterGift,
     CharacterResonance,
     CharacterTechnique,
+    CharacterThreadWeavingUnlock,
     CharacterTradition,
     EffectType,
     Facet,
@@ -479,3 +480,16 @@ class ThreadWeavingUnlockAdmin(admin.ModelAdmin):
         "unlock_track",
     ]
     filter_horizontal = ["paths"]
+
+
+@admin.register(CharacterThreadWeavingUnlock)
+class CharacterThreadWeavingUnlockAdmin(admin.ModelAdmin):
+    list_display = ["id", "character", "unlock", "xp_spent", "teacher", "acquired_at"]
+    list_filter = ["unlock__target_kind"]
+    search_fields = [
+        "character__character__db_key",
+        "unlock__unlock_trait__name",
+        "unlock__unlock_gift__name",
+    ]
+    raw_id_fields = ["character", "unlock", "teacher"]
+    readonly_fields = ["acquired_at"]

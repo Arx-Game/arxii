@@ -24,6 +24,7 @@ from world.magic.models import (
     CharacterGift,
     CharacterResonance,
     CharacterTechnique,
+    CharacterThreadWeavingUnlock,
     CharacterTradition,
     EffectType,
     Facet,
@@ -695,3 +696,15 @@ class ThreadWeavingUnlockFactory(factory.django.DjangoModelFactory):
     target_kind = TargetKind.TRAIT
     unlock_trait = factory.SubFactory(TraitFactory)
     xp_cost = 100
+
+
+class CharacterThreadWeavingUnlockFactory(factory.django.DjangoModelFactory):
+    """Factory for CharacterThreadWeavingUnlock — per-character purchase record."""
+
+    class Meta:
+        model = CharacterThreadWeavingUnlock
+
+    character = factory.SubFactory(CharacterSheetFactory)
+    unlock = factory.SubFactory(ThreadWeavingUnlockFactory)
+    xp_spent = 100
+    teacher = None

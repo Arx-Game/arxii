@@ -2691,4 +2691,45 @@ class ThreadWeavingUnlock(SharedMemoryModel):
                 )
 
 
+class CharacterThreadWeavingUnlock(SharedMemoryModel):
+    """Per-character purchase record for a ThreadWeavingUnlock.
+
+    One row per (character, unlock) — enforced by unique_together. Records the
+    actual XP paid (which depends on the buyer's Path: in-band uses ``xp_cost``,
+    out-of-band multiplies by ``out_of_path_multiplier``) and optionally the
+    teacher who unlocked it. Spec A §2.1 lines 431-440.
+    """
+
+    character = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="thread_weaving_unlocks",
+        help_text="Character who owns this purchase.",
+    )
+    unlock = models.ForeignKey(
+        ThreadWeavingUnlock,
+        on_delete=models.PROTECT,
+        related_name="character_purchases",
+        help_text="Authored unlock the character purchased.",
+    )
+    acquired_at = models.DateTimeField(auto_now_add=True)
+    xp_spent = models.PositiveIntegerField(
+        help_text="Actual XP paid (in-Path: xp_cost; out-of-Path: xp_cost * multiplier).",
+    )
+    teacher = models.ForeignKey(
+        "roster.RosterTenure",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="thread_weaving_unlocks_taught",
+        help_text="Teacher RosterTenure when applicable; audit only.",
+    )
+
+    class Meta:
+        unique_together = (("character", "unlock"),)
+
+    def __str__(self) -> str:
+        return f"CharacterThreadWeavingUnlock<{self.character_id} -> {self.unlock_id}>"
+
+
 from world.magic.audere import AudereThreshold  # noqa: F401, E402

@@ -17,6 +17,7 @@ from django.test import TestCase
 
 from world.magic.constants import TargetKind
 from world.magic.factories import (
+    CharacterThreadWeavingUnlockFactory,
     GiftFactory,
     ThreadWeavingUnlockFactory,
 )
@@ -101,3 +102,15 @@ class ThreadWeavingUnlockCleanTests(TestCase):
             unlock_trait=trait,
         )
         u.clean()  # no exception
+
+
+class CharacterThreadWeavingUnlockTests(TestCase):
+    def test_idempotency_one_purchase_per_unlock(self) -> None:
+        unlock = ThreadWeavingUnlockFactory()
+        purchase = CharacterThreadWeavingUnlockFactory(unlock=unlock, xp_spent=100)
+        with self.assertRaises(IntegrityError):
+            CharacterThreadWeavingUnlockFactory(
+                character=purchase.character,
+                unlock=unlock,
+                xp_spent=100,
+            )
