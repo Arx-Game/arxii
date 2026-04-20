@@ -22,6 +22,9 @@ from world.magic.factories import (
     ThreadWeavingTeachingOfferFactory,
     ThreadWeavingUnlockFactory,
 )
+from world.magic.models import ThreadWeavingUnlock
+from world.mechanics.factories import PropertyFactory
+from world.relationships.factories import RelationshipTrackFactory
 from world.traits.factories import TraitFactory
 
 
@@ -86,6 +89,24 @@ class ThreadWeavingUnlockDisplayNameTests(TestCase):
         )
         self.assertEqual(u.display_name, "ThreadWeaving: Object")
 
+    def test_room_display_name(self) -> None:
+        prop = PropertyFactory(name="Consecrated")
+        u = ThreadWeavingUnlockFactory(
+            target_kind=TargetKind.ROOM,
+            unlock_trait=None,
+            unlock_room_property=prop,
+        )
+        self.assertEqual(u.display_name, "ThreadWeaving: Consecrated spaces")
+
+    def test_relationship_track_display_name(self) -> None:
+        track = RelationshipTrackFactory(name="Romantic")
+        u = ThreadWeavingUnlockFactory(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            unlock_trait=None,
+            unlock_track=track,
+        )
+        self.assertEqual(u.display_name, "ThreadWeaving: Romantic bonds")
+
 
 class ThreadWeavingUnlockCleanTests(TestCase):
     def test_clean_rejects_no_target_fk(self) -> None:
@@ -103,6 +124,24 @@ class ThreadWeavingUnlockCleanTests(TestCase):
             unlock_trait=trait,
         )
         u.clean()  # no exception
+
+    def test_clean_rejects_item_path_not_in_registry(self) -> None:
+        """ITEM kind validates unlock_item_typeclass_path against the registry."""
+        u = ThreadWeavingUnlockFactory.build(
+            target_kind=TargetKind.ITEM,
+            unlock_trait=None,
+            unlock_item_typeclass_path="typeclasses.objects.Object",
+        )
+        with self.assertRaises(ValidationError):
+            u.clean()
+
+    def test_db_rejects_capstone_target_kind(self) -> None:
+        """CAPSTONE has no slot on this model — DB must reject it directly."""
+        with self.assertRaises(IntegrityError):
+            ThreadWeavingUnlock.objects.create(
+                target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+                xp_cost=100,
+            )
 
 
 class CharacterThreadWeavingUnlockTests(TestCase):

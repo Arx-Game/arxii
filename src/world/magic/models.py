@@ -2585,6 +2585,15 @@ class ThreadWeavingUnlock(SharedMemoryModel):
                     )
                 ),
             ),
+            # CAPSTONE has no slot on this model — capstones inherit from their
+            # parent RELATIONSHIP_TRACK unlock per spec line 426. The 5
+            # per-kind checks above all early-out for non-matching target_kind
+            # values, so without this guard a CAPSTONE row with all target_*
+            # slots empty would satisfy every check. Forbid it explicitly.
+            models.CheckConstraint(
+                name="threadweaving_no_capstone",
+                check=~models.Q(target_kind="RELATIONSHIP_CAPSTONE"),
+            ),
         ]
 
     # Field-name constants used by clean() / _get_target_value() to dispatch by
