@@ -121,6 +121,27 @@ class Character(ObjectParent, DefaultCharacter):
 
         return CharacterItemDataHandler(self)
 
+    @cached_property
+    def threads(self):
+        """Handler for this character's owned magical threads (Spec A §3.7)."""
+        from world.magic.handlers import CharacterThreadHandler
+
+        return CharacterThreadHandler(self)
+
+    @cached_property
+    def resonances(self):
+        """Handler for this character's CharacterResonance rows (Spec A §3.7)."""
+        from world.magic.handlers import CharacterResonanceHandler
+
+        return CharacterResonanceHandler(self)
+
+    @cached_property
+    def combat_pulls(self):
+        """Handler for this character's active CombatPull rows (Spec A §3.7)."""
+        from world.combat.handlers import CharacterCombatPullHandler
+
+        return CharacterCombatPullHandler(self)
+
     @property
     def active_account(self):
         """Return the account currently linked to this character.

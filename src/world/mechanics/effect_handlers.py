@@ -277,28 +277,18 @@ def _derive_alteration_origin(
 ) -> "tuple[Affinity | None, Resonance | None]":
     """Derive origin affinity and resonance from the character's resonances.
 
-    Picks the most recently earned CharacterResonance for the character's
-    sheet. Returns (None, None) if the character has no sheet or no
-    resonance rows — callers must handle this case by skipping pending
-    alteration creation.
-
-    Phase 12 will replace this direct ORM query with a handler method
-    `sheet.resonances.most_recently_earned()`.
+    Picks the most recently earned CharacterResonance for the character via the
+    ``character.resonances`` handler (Spec A §3.7). Returns (None, None) if the
+    character has no sheet or no resonance rows — callers must handle this case
+    by skipping pending alteration creation.
     """
-    from world.magic.models import CharacterResonance  # noqa: PLC0415
-
     try:
         sheet = character.sheet_data
     except (AttributeError, ObjectDoesNotExist):
         return None, None
     if sheet is None:
         return None, None
-    char_res = (
-        CharacterResonance.objects.filter(character_sheet=sheet)
-        .select_related("resonance__affinity")
-        .order_by("-lifetime_earned", "-pk")
-        .first()
-    )
+    char_res = character.resonances.most_recently_earned()
     if char_res is None:
         return None, None
     return char_res.resonance.affinity, char_res.resonance
