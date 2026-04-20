@@ -1085,11 +1085,12 @@ def _current_path_stage(character_sheet: CharacterSheet) -> int:
     """Return the stage of the most-recently-selected Path; 1 if none.
 
     Navigates CharacterSheet → ObjectDB (character) → path_history (reverse FK
-    on CharacterPathHistory), ordered by -selected_at. Returns path.stage as int.
+    on CharacterPathHistory), ordered by -selected_at then -pk for deterministic
+    tie-breaking. Returns path.stage as int.
     """
     history = (
         character_sheet.character.path_history.select_related("path")
-        .order_by("-selected_at")
+        .order_by("-selected_at", "-pk")
         .first()
     )
     if history is None:
