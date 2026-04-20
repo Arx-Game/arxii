@@ -29,6 +29,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.constants import (
+    THREADWEAVING_ITEM_TYPECLASSES,
     AlterationTier,
     CantripArchetype,
     EffectKind,
@@ -2372,7 +2373,6 @@ class Thread(SharedMemoryModel):
         # ITEM-kind: validate the target_object's typeclass is in the
         # THREADWEAVING_ITEM_TYPECLASSES registry (subclass-aware).
         if self.target_kind == TargetKind.ITEM:
-            from world.magic.constants import THREADWEAVING_ITEM_TYPECLASSES  # noqa: PLC0415
             from world.magic.services import _typeclass_path_in_registry  # noqa: PLC0415
 
             tc_path = self.target_object.db_typeclass_path

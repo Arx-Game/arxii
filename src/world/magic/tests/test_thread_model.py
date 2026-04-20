@@ -130,7 +130,7 @@ class ThreadPartialUniqueTests(TestCase):
             resonance=res,
             target_kind=TargetKind.ITEM,
             target_object=obj,
-            target_trait=None,
+            target_trait=None,  # explicitly null factory's default TRAIT FK
         )
         # ROOM thread on the same object — same target_object, different
         # target_kind — should NOT collide.
