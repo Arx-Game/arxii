@@ -26,14 +26,19 @@ from world.magic.constants import (
     PendingAlterationStatus,
     TargetKind,
 )
-from world.magic.exceptions import AnchorCapNotImplemented
+from world.magic.exceptions import (
+    AnchorCapNotImplemented,
+    InvalidImbueAmount,
+)
 from world.magic.models import (
     CharacterAnima,
+    CharacterResonance,
     IntensityTier,
     MagicalAlterationEvent,
     MagicalAlterationTemplate,
     PendingAlteration,
     SoulfrayConfig,
+    Thread,
 )
 from world.magic.types import (
     AffinityType,
@@ -71,7 +76,6 @@ if TYPE_CHECKING:
         Affinity,
         Resonance as ResonanceModel,
         Technique,
-        Thread,
     )
     from world.mechanics.models import ModifierTarget
     from world.scenes.models import Scene
@@ -1153,3 +1157,45 @@ def compute_path_cap(character_sheet: CharacterSheet) -> int:
 def compute_effective_cap(thread: Thread) -> int:
     """Return min(path cap, anchor cap) — the binding limit on this thread (Spec A §2.4)."""
     return min(compute_path_cap(thread.owner), compute_anchor_cap(thread))
+
+
+# =============================================================================
+# Phase 11 — Earn / Spend services (Spec A §3.1, §3.2, §3.6, §7.4)
+# =============================================================================
+
+
+@transaction.atomic
+def grant_resonance(
+    character_sheet: CharacterSheet,
+    resonance: ResonanceModel,
+    amount: int,
+    source: str,  # noqa: ARG001 — reserved for Phase 12 audit hook
+    source_ref: int | None = None,  # noqa: ARG001 — reserved for Phase 12 audit hook
+) -> CharacterResonance:
+    """Lazily create CharacterResonance and credit balance + lifetime_earned.
+
+    Args:
+        character_sheet: The character receiving resonance.
+        resonance: The Resonance being granted.
+        amount: Positive integer amount to grant.
+        source: Label for audit (Phase 12 hook; not yet persisted).
+        source_ref: Optional PK for the source object (Phase 12 hook; not yet persisted).
+
+    Returns:
+        The updated CharacterResonance instance.
+
+    Raises:
+        InvalidImbueAmount: If amount <= 0.
+    """
+    if amount <= 0:
+        msg = "Resonance grant amount must be positive."
+        raise InvalidImbueAmount(msg)
+    cr, _ = CharacterResonance.objects.get_or_create(
+        character_sheet=character_sheet,
+        resonance=resonance,
+        defaults={"balance": 0, "lifetime_earned": 0},
+    )
+    cr.balance += amount
+    cr.lifetime_earned += amount
+    cr.save(update_fields=["balance", "lifetime_earned"])
+    return cr
