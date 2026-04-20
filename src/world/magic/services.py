@@ -1788,9 +1788,6 @@ def spend_resonance_for_pull(  # noqa: C901 — sequential guards + combat/ephem
             resonance_cost=cost.resonance_cost,
             anima_total=anima_total,
         )
-        # Phase 13 will call recompute_max_health_with_threads here so any
-        # MAX_HEALTH contribution flows through immediately.
-
     # Debit only after persistence succeeded (mutates SharedMemoryModel-cached
     # instances in place).
     cr.balance -= cost.resonance_cost

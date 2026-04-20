@@ -298,7 +298,7 @@ def expire_pulls_for_round(encounter: CombatEncounter) -> None:
     # zero-query once the participants have been loaded in the request.
     participants = CombatParticipant.objects.filter(
         pk__in=affected_participant_ids,
-    ).select_related("character_sheet")
+    ).select_related("character_sheet__character")
     for p in participants:
         p.character_sheet.character.combat_pulls.invalidate()
         recompute_max_health_with_threads(p.character_sheet)

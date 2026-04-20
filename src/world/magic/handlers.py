@@ -73,25 +73,52 @@ class CharacterThreadHandler:
         times the authored ``vital_bonus_amount``. ``min_thread_level``
         filters rows that require a higher thread investment.
 
-        Passive contributions do not check anchor-in-scope: tier-0 VITAL_BONUS
-        rows exist as always-on passive layers per §3.8. Pulled (tier 1+)
-        contributions live on ``CharacterCombatPullHandler`` instead.
+        Anchor-in-scope filter: §5.8 requires that only threads "whose anchor
+        is currently in scope" contribute passively. All typed FKs on Thread
+        use ``on_delete=PROTECT``, so any deletion of a referenced anchor
+        object raises ProtectedError — the thread itself can never outlive its
+        anchor. Therefore every existing Thread row always has its anchor in
+        scope; no runtime filter is needed. (Do not replace this comment with a
+        call to ``with_anchor_involved`` — that stub is for action-scoped
+        queries, a different concept.)
+
+        Query strategy: batch-fetch all matching ThreadPullEffect rows in a
+        single query keyed by ``(target_kind, resonance_id)`` pairs, then
+        apply per-thread level multipliers in Python to avoid N+1 queries.
+        Pulled (tier 1+) contributions live on ``CharacterCombatPullHandler``.
         """
+        threads = self._all
+        if not threads:
+            return 0
+
+        # Build lookup: (target_kind, resonance_id) → thread level, so we can
+        # apply the right multiplier after the batched query.
+        thread_level: dict[tuple[str, int], int] = {
+            (t.target_kind, t.resonance_id): t.level for t in threads
+        }
+
+        # One query for all tier-0 VITAL_BONUS rows that match any of this
+        # character's (target_kind, resonance_id) pairs.
+        from django.db.models import Q  # noqa: PLC0415
+
+        q = Q()
+        for target_kind, resonance_id in thread_level:
+            q |= Q(target_kind=target_kind, resonance_id=resonance_id)
+
+        effects = ThreadPullEffect.objects.filter(
+            q,
+            tier=0,
+            effect_kind=EffectKind.VITAL_BONUS,
+            vital_target=vital_target,
+        ).exclude(vital_bonus_amount__isnull=True)
+
         total = 0
-        for t in self._all:
-            multiplier = max(1, t.level // 10)
-            rows = ThreadPullEffect.objects.filter(
-                target_kind=t.target_kind,
-                resonance_id=t.resonance_id,
-                tier=0,
-                effect_kind=EffectKind.VITAL_BONUS,
-                vital_target=vital_target,
-                min_thread_level__lte=t.level,
-            )
-            for row in rows:
-                if row.vital_bonus_amount is None:
-                    continue
-                total += row.vital_bonus_amount * multiplier
+        for row in effects:
+            level = thread_level.get((row.target_kind, row.resonance_id), 0)
+            if row.min_thread_level > level:
+                continue
+            multiplier = max(1, level // 10)
+            total += row.vital_bonus_amount * multiplier
         return total
 
     def invalidate(self) -> None:

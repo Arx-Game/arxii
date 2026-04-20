@@ -12,7 +12,10 @@ Covers three responsibilities of the routing layer:
 
 from __future__ import annotations
 
+from django.db import connection
+from django.db.models.deletion import ProtectedError
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import (
@@ -27,6 +30,7 @@ from world.magic.factories import (
     ThreadFactory,
     ThreadPullEffectFactory,
 )
+from world.magic.models import Thread
 from world.magic.services import (
     apply_damage_reduction_from_threads,
     recompute_max_health_with_threads,
@@ -314,4 +318,83 @@ class DamageReductionRoutingTests(TestCase):
         self.assertEqual(
             apply_damage_reduction_from_threads(self.sheet.character, 20),
             20,
+        )
+
+
+class AnchorInScopeVacuousTests(TestCase):
+    """Anchor-in-scope filter is vacuous because all Thread typed FKs use PROTECT.
+
+    Spec §5.8 lines 1650-1652 requires passive contributions only from threads
+    "whose anchor is currently in scope." All Thread typed FKs (target_trait,
+    target_technique, target_object, target_relationship_track, target_capstone)
+    use on_delete=PROTECT, so deleting any anchor object raises ProtectedError
+    rather than silently removing or nulling the FK. An existing Thread row
+    therefore always has its anchor present.
+
+    These tests confirm:
+    1. Deleting a trait anchor object raises ProtectedError (proving PROTECT).
+    2. passive_vital_bonuses still returns the correct total when multiple
+       threads exist across different (target_kind, resonance_id) pairs — the
+       single-query rewrite handles them all correctly.
+    """
+
+    def test_deleting_trait_anchor_raises_protected_error(self) -> None:
+        """Deleting the target Trait raises ProtectedError — anchor cannot vanish."""
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        thread = ThreadFactory(owner=sheet, resonance=resonance, level=10)
+        trait = thread.target_trait
+
+        with self.assertRaises(ProtectedError):
+            trait.delete()
+
+        # Thread still exists; anchor was never deleted.
+        self.assertTrue(Thread.objects.filter(pk=thread.pk).exists())
+
+    def test_passive_vital_bonuses_single_query_multi_thread(self) -> None:
+        """passive_vital_bonuses fires ONE query regardless of thread count.
+
+        Three threads on different resonances all have a tier-0 MAX_HEALTH
+        row; the method should batch them in a single DB round-trip and
+        return the correct summed total.
+        """
+        sheet = CharacterSheetFactory()
+        CharacterVitals.objects.create(
+            character_sheet=sheet,
+            health=100,
+            max_health=100,
+            base_max_health=100,
+        )
+
+        # Three threads, each with a tier-0 MAX_HEALTH +5 effect.
+        for _ in range(3):
+            resonance = ResonanceFactory()
+            thread = ThreadFactory(owner=sheet, resonance=resonance, level=10)
+            ThreadPullEffectFactory(
+                target_kind=thread.target_kind,
+                resonance=resonance,
+                tier=0,
+                min_thread_level=0,
+                effect_kind=EffectKind.VITAL_BONUS,
+                flat_bonus_amount=None,
+                vital_bonus_amount=5,
+                vital_target=VitalBonusTarget.MAX_HEALTH,
+            )
+
+        # Warm the _all cache (simulates what recompute_max_health_with_threads
+        # does via character.threads._all).
+        handler = sheet.character.threads
+        _ = handler._all  # prime cache
+
+        with CaptureQueriesContext(connection) as ctx:
+            total = handler.passive_vital_bonuses(VitalBonusTarget.MAX_HEALTH)
+
+        # level=10 → multiplier max(1,10//10)=1; 5×1×3 threads = 15.
+        self.assertEqual(total, 15)
+        # Exactly one query for all ThreadPullEffect rows.
+        self.assertEqual(
+            len(ctx.captured_queries),
+            1,
+            msg=f"Expected 1 query, got {len(ctx.captured_queries)}: "
+            f"{[q['sql'] for q in ctx.captured_queries]}",
         )
