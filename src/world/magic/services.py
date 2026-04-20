@@ -49,6 +49,8 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadPullCost,
     ThreadPullEffect,
+    ThreadWeavingTeachingOffer,
+    ThreadWeavingUnlock,
     ThreadXPLockedLevel,
 )
 from world.magic.types import (
@@ -1847,6 +1849,92 @@ def recompute_max_health_with_threads(character_sheet: CharacterSheet) -> int:
     passive = character.threads.passive_vital_bonuses(VitalBonusTarget.MAX_HEALTH)
     pulled = character.combat_pulls.active_pull_vital_bonuses(VitalBonusTarget.MAX_HEALTH)
     return recompute_max_health(character_sheet, thread_addend=passive + pulled)
+
+
+def compute_thread_weaving_xp_cost(
+    unlock: ThreadWeavingUnlock,
+    learner: CharacterSheet,
+) -> int:
+    """Compute the XP cost for a learner to acquire a ThreadWeavingUnlock (Spec A §6.2).
+
+    Returns ``unlock.xp_cost`` for Path-neutral unlocks (no paths M2M set) and
+    for learners whose path history intersects the unlock's paths.  Returns
+    ``int(unlock.xp_cost * unlock.out_of_path_multiplier)`` for learners who
+    have never walked any of the unlock's paths.
+    """
+    unlock_paths = set(unlock.paths.all())
+    if not unlock_paths:
+        return unlock.xp_cost  # Path-neutral
+
+    learner_paths = {h.path for h in learner.character.path_history.select_related("path")}
+    if learner_paths & unlock_paths:
+        return unlock.xp_cost  # in-Path
+
+    return int(unlock.xp_cost * unlock.out_of_path_multiplier)  # out-of-Path
+
+
+@transaction.atomic
+def accept_thread_weaving_unlock(
+    learner: CharacterSheet,
+    offer: ThreadWeavingTeachingOffer,
+) -> CharacterThreadWeavingUnlock:
+    """Accept a ThreadWeavingTeachingOffer on behalf of a learner (Spec A §6.1).
+
+    Mirrors ``CodexTeachingOffer.accept`` but implemented as a module-level
+    service function (Spec A §3.6).  Steps (in order inside the atomic txn):
+
+    1. Compute XP cost via ``compute_thread_weaving_xp_cost``.
+    2. Verify learner has enough XP; raise ``XPInsufficient`` if not.
+    3. Deduct learner XP and record an ``XPTransaction``.
+    4. Consume teacher's banked AP.
+    5. Create and return the ``CharacterThreadWeavingUnlock`` row.
+
+    Gold transfer is TODO (matching codex's deferred economy TODO).
+    Learner AP is NOT spent — ``ThreadWeavingUnlock`` has no ``learn_cost``
+    field, unlike ``CodexEntry``.
+    """
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+    from world.progression.models import XPTransaction  # noqa: PLC0415
+    from world.progression.services.awards import get_or_create_xp_tracker  # noqa: PLC0415
+    from world.progression.types import ProgressionReason  # noqa: PLC0415
+
+    unlock = offer.unlock
+    xp_cost = compute_thread_weaving_xp_cost(unlock, learner)
+
+    account = learner.character.account
+    if account is None:
+        msg = "Learner character has no linked account; cannot spend XP."
+        raise XPInsufficient(msg)
+
+    xp_tracker = get_or_create_xp_tracker(account)
+    if not xp_tracker.can_spend(xp_cost):
+        msg = f"Need {xp_cost} XP to learn {unlock}, have {xp_tracker.current_available}."
+        raise XPInsufficient(msg)
+
+    # Spend the XP (updates total_spent; save is called inside spend_xp).
+    xp_tracker.spend_xp(xp_cost)
+
+    XPTransaction.objects.create(
+        account=account,
+        amount=-xp_cost,
+        reason=ProgressionReason.XP_PURCHASE,
+        description=f"ThreadWeaving unlock: {unlock}",
+        character=learner.character,
+        gm=None,
+    )
+
+    # Consume teacher's banked AP commitment.
+    teacher_pool = ActionPointPool.get_or_create_for_character(offer.teacher.character)
+    teacher_pool.consume_banked(offer.banked_ap)
+
+    # TODO: Transfer gold when economy system exists (matching codex TODO).
+
+    return CharacterThreadWeavingUnlock.objects.create(
+        character=learner,
+        unlock=unlock,
+        xp_spent=xp_cost,
+        teacher=offer.teacher,
+    )
 
 
 def apply_damage_reduction_from_threads(
