@@ -16,7 +16,7 @@ from rest_framework.test import APIClient, APITestCase
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import EffectKind, TargetKind
+from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterResonanceFactory,
@@ -302,6 +302,47 @@ class ThreadPullPreviewTests(APITestCase):
         )
         self.char_resonance.refresh_from_db()
         self.assertEqual(self.char_resonance.balance, before_balance)
+
+    def test_preview_marks_vital_bonus_inactive_in_non_combat_context(self) -> None:
+        """Per spec §5.6 inactive flag + §3.8 ephemeral VITAL_BONUS rules.
+
+        When the preview runs without a combat_encounter_id (ephemeral / RP
+        context), any VITAL_BONUS resolved effect must be flagged inactive
+        with scaled_value=0 and a non-empty inactive_reason so the UI can
+        explain why the bonus isn't applied.
+        """
+        # Wire a tier-1 VITAL_BONUS row at min_thread_level=5 so the
+        # (kind, resonance, tier, min_thread_level) unique key differs from
+        # the tier-0 FLAT_BONUS row seeded in setUpTestData.
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TRAIT,
+            resonance=self.resonance,
+            tier=1,
+            min_thread_level=5,
+            as_vital_bonus=True,
+            vital_bonus_amount=4,
+            vital_target=VitalBonusTarget.MAX_HEALTH,
+            flat_bonus_amount=None,
+        )
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-pull-preview"),
+            {
+                "resonance_id": self.resonance.pk,
+                "tier": 1,
+                "thread_ids": [self.thread.pk],
+                # No action_context → ephemeral / RP (non-combat) context.
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        vital_rows = [
+            r for r in response.data["resolved_effects"] if r["kind"] == EffectKind.VITAL_BONUS
+        ]
+        self.assertEqual(len(vital_rows), 1)
+        self.assertTrue(vital_rows[0]["inactive"])
+        self.assertEqual(vital_rows[0]["scaled_value"], 0)
+        self.assertTrue(vital_rows[0]["inactive_reason"])
 
 
 class RitualPerformViewTests(APITestCase):
