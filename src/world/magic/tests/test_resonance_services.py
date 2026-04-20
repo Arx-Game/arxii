@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from django.test import TestCase
+from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import AccountFactory
+from world.magic.constants import TargetKind
 from world.magic.exceptions import (
     AnchorCapExceeded,
     InvalidImbueAmount,
     ResonanceInsufficient,
+    WeavingUnlockMissing,
     XPInsufficient,
 )
 from world.magic.factories import (
@@ -22,9 +25,11 @@ from world.magic.factories import (
     ThreadXPLockedLevelFactory,
 )
 from world.magic.models import (
+    Thread,
     ThreadLevelUnlock,
 )
 from world.magic.services import (
+    cross_thread_xp_lock,
     grant_resonance,
     imbue_ready_threads,
     near_xp_lock_threads,
@@ -33,6 +38,8 @@ from world.magic.services import (
     update_thread_narrative,
     weave_thread,
 )
+from world.progression.models.rewards import ExperiencePointsData
+from world.traits.factories import TraitFactory
 
 # =============================================================================
 # 11.1 — grant_resonance
@@ -75,7 +82,7 @@ class SpendResonanceForImbuingTests(TestCase):
         balance: int = 0,
         trait_value: int = 100,
         path_stage: int = 10,
-    ) -> Thread:  # type: ignore[name-defined]
+    ) -> Thread:
         """Helper: trait thread with cap determined by path_stage and trait_value."""
         sheet = CharacterSheetFactory(_path_stage=path_stage)
         res = ResonanceFactory()
@@ -213,12 +220,8 @@ class CrossThreadXpLockTests(TestCase):
         xp_available: int = 500,
         trait_value: int = 100,
         path_stage: int = 10,
-    ) -> tuple[Thread, ExperiencePointsData]:  # type: ignore[name-defined]
+    ) -> tuple[Thread, ExperiencePointsData]:
         """Helper: thread + seeded XP on an account linked to the character."""
-        from evennia.objects.models import ObjectDB
-
-        from world.progression.models.rewards import ExperiencePointsData
-
         account = AccountFactory()
         sheet = CharacterSheetFactory(_path_stage=path_stage)
         # Link the account to the character (Evennia pattern)
@@ -244,8 +247,6 @@ class CrossThreadXpLockTests(TestCase):
         return thread, xp_tracker
 
     def test_pays_xp_creates_unlock_row(self) -> None:
-        from world.magic.services import cross_thread_xp_lock
-
         thread, xp_tracker = self._make_thread_with_xp(thread_level=10, xp_available=500)
         ThreadXPLockedLevelFactory(level=20, xp_cost=200)
         unlock = cross_thread_xp_lock(thread.owner, thread, 20)
@@ -255,8 +256,6 @@ class CrossThreadXpLockTests(TestCase):
         self.assertEqual(xp_tracker.current_available, 300)
 
     def test_idempotent_double_unlock(self) -> None:
-        from world.magic.services import cross_thread_xp_lock
-
         thread, xp_tracker = self._make_thread_with_xp(thread_level=10, xp_available=500)
         ThreadXPLockedLevelFactory(level=20, xp_cost=200)
         unlock1 = cross_thread_xp_lock(thread.owner, thread, 20)
@@ -270,16 +269,12 @@ class CrossThreadXpLockTests(TestCase):
         )
 
     def test_insufficient_xp_raises(self) -> None:
-        from world.magic.services import cross_thread_xp_lock
-
         thread, _ = self._make_thread_with_xp(thread_level=10, xp_available=50)
         ThreadXPLockedLevelFactory(level=20, xp_cost=200)
         with self.assertRaises(XPInsufficient):
             cross_thread_xp_lock(thread.owner, thread, 20)
 
     def test_boundary_above_effective_cap_raises(self) -> None:
-        from world.magic.services import cross_thread_xp_lock
-
         # trait_value=20 → anchor_cap=20. path_stage=2 → path_cap=20.
         # effective_cap=20. boundary=30 > 20 → AnchorCapExceeded.
         thread, _ = self._make_thread_with_xp(
@@ -298,9 +293,6 @@ class CrossThreadXpLockTests(TestCase):
 class WeaveThreadTests(TestCase):
     def test_weave_thread_trait_happy_path(self) -> None:
         """Character with TRAIT weaving unlock can create a TRAIT thread."""
-        from world.magic.constants import TargetKind
-        from world.traits.factories import TraitFactory
-
         trait = TraitFactory()
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
@@ -317,14 +309,11 @@ class WeaveThreadTests(TestCase):
         self.assertEqual(thread.level, 0)
 
     def test_weave_thread_no_unlock_raises(self) -> None:
-        """Character without weaving unlock → raises InvalidImbueAmount."""
-        from world.magic.constants import TargetKind
-        from world.traits.factories import TraitFactory
-
+        """Character without weaving unlock → raises WeavingUnlockMissing."""
         trait = TraitFactory()
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
-        with self.assertRaises(InvalidImbueAmount):
+        with self.assertRaises(WeavingUnlockMissing):
             weave_thread(sheet, TargetKind.TRAIT, trait, res)
 
 

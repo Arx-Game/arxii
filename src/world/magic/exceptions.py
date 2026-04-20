@@ -28,3 +28,7 @@ class XPInsufficient(MagicError):
 
 class InvalidImbueAmount(MagicError):
     user_message = "Invalid imbue amount."
+
+
+class WeavingUnlockMissing(MagicError):
+    user_message = "You have not learned to weave threads of this kind."

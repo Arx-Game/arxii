@@ -31,6 +31,7 @@ from world.magic.exceptions import (
     AnchorCapNotImplemented,
     InvalidImbueAmount,
     ResonanceInsufficient,
+    WeavingUnlockMissing,
     XPInsufficient,
 )
 from world.magic.models import (
@@ -1425,13 +1426,13 @@ def weave_thread(  # noqa: PLR0913 — kw-only args; target+resonance+kind are d
         Newly created Thread instance.
 
     Raises:
-        InvalidImbueAmount: If the character lacks the required weaving unlock.
+        WeavingUnlockMissing: If the character lacks the required weaving unlock.
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
 
     if not _has_weaving_unlock(character_sheet, target_kind, target):
         msg = "Character lacks the required ThreadWeavingUnlock for this anchor."
-        raise InvalidImbueAmount(msg)
+        raise WeavingUnlockMissing(msg)
 
     field_map: dict[str, str] = {
         TargetKind.TRAIT: "target_trait",
@@ -1499,12 +1500,14 @@ def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
         cr.resonance_id: cr
         for cr in CharacterResonance.objects.filter(character_sheet=character_sheet)
     }
+    path_cap = compute_path_cap(character_sheet)
     out: list[Thread] = []
     for t in threads:
         cr = crs.get(t.resonance_id)
         if cr is None or cr.balance <= 0:
             continue
-        if t.level < compute_effective_cap(t):
+        effective_cap = min(path_cap, compute_anchor_cap(t))
+        if t.level < effective_cap:
             out.append(t)
     return out
 
@@ -1517,18 +1520,27 @@ def near_xp_lock_threads(
 
     Only boundaries that aren't already unlocked are included. Spec A §3.6.
     """
-    threads = Thread.objects.filter(owner=character_sheet)
+    threads = list(Thread.objects.filter(owner=character_sheet))
+    if not threads:
+        return []
+    next_boundaries = {((t.level // 10) + 1) * 10 for t in threads}
+    locked_map = {
+        locked.level: locked
+        for locked in ThreadXPLockedLevel.objects.filter(level__in=next_boundaries)
+    }
+    unlocked_pairs = set(
+        ThreadLevelUnlock.objects.filter(
+            thread__in=threads, unlocked_level__in=next_boundaries
+        ).values_list("thread_id", "unlocked_level")
+    )
     out: list[ThreadXPLockProspect] = []
     for t in threads:
         next_boundary = ((t.level // 10) + 1) * 10
-        # Only XP-locked boundaries count.
-        locked = ThreadXPLockedLevel.objects.filter(level=next_boundary).first()
+        locked = locked_map.get(next_boundary)
         if locked is None:
             continue
-        # Already unlocked?
-        if ThreadLevelUnlock.objects.filter(thread=t, unlocked_level=next_boundary).exists():
+        if (t.pk, next_boundary) in unlocked_pairs:
             continue
-        # Compute dev_points needed to reach next_boundary from current level.
         dp_needed = sum(max((n - 9) * 100, 1) for n in range(t.level, next_boundary))
         dp_to_boundary = dp_needed - t.developed_points
         if dp_to_boundary <= within:
@@ -1549,4 +1561,5 @@ def threads_blocked_by_cap(character_sheet: CharacterSheet) -> list[Thread]:
     Spec A §3.6.
     """
     threads = list(Thread.objects.filter(owner=character_sheet))
-    return [t for t in threads if t.level >= compute_effective_cap(t)]
+    path_cap = compute_path_cap(character_sheet)
+    return [t for t in threads if t.level >= min(path_cap, compute_anchor_cap(t))]
