@@ -4,6 +4,7 @@ Spec §2.1 lines 459-540, §3.8 lines 1016-1104.
 """
 
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.utils import IntegrityError
 from django.test import TestCase
 
@@ -308,7 +309,7 @@ class CombatPullResolvedEffectCheckConstraintTests(TestCase):
         cls.thread = ThreadFactory()
         cls.capability = CapabilityTypeFactory()
 
-    def _base_kwargs(self) -> dict:
+    def _base_kwargs(self) -> dict[str, object]:
         return {
             "pull": self.pull,
             "source_thread": self.thread,
@@ -317,8 +318,10 @@ class CombatPullResolvedEffectCheckConstraintTests(TestCase):
             "source_tier": 1,
         }
 
+    # Required-field rejections ------------------------------------------
+
     def test_flat_bonus_requires_scaled_value_db(self) -> None:
-        with self.assertRaises(IntegrityError):
+        with self.assertRaises(IntegrityError), transaction.atomic():
             CombatPullResolvedEffect.objects.create(
                 **self._base_kwargs(),
                 kind=EffectKind.FLAT_BONUS,
@@ -326,7 +329,7 @@ class CombatPullResolvedEffectCheckConstraintTests(TestCase):
             )
 
     def test_intensity_bump_requires_scaled_value_db(self) -> None:
-        with self.assertRaises(IntegrityError):
+        with self.assertRaises(IntegrityError), transaction.atomic():
             CombatPullResolvedEffect.objects.create(
                 **self._base_kwargs(),
                 kind=EffectKind.INTENSITY_BUMP,
@@ -334,7 +337,7 @@ class CombatPullResolvedEffectCheckConstraintTests(TestCase):
             )
 
     def test_vital_bonus_requires_target_db(self) -> None:
-        with self.assertRaises(IntegrityError):
+        with self.assertRaises(IntegrityError), transaction.atomic():
             CombatPullResolvedEffect.objects.create(
                 **self._base_kwargs(),
                 kind=EffectKind.VITAL_BONUS,
@@ -342,8 +345,17 @@ class CombatPullResolvedEffectCheckConstraintTests(TestCase):
                 vital_target=None,
             )
 
+    def test_vital_bonus_requires_scaled_value_db(self) -> None:
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CombatPullResolvedEffect.objects.create(
+                **self._base_kwargs(),
+                kind=EffectKind.VITAL_BONUS,
+                scaled_value=None,
+                vital_target=VitalBonusTarget.MAX_HEALTH,
+            )
+
     def test_capability_grant_requires_capability_db(self) -> None:
-        with self.assertRaises(IntegrityError):
+        with self.assertRaises(IntegrityError), transaction.atomic():
             CombatPullResolvedEffect.objects.create(
                 **self._base_kwargs(),
                 kind=EffectKind.CAPABILITY_GRANT,
@@ -351,11 +363,68 @@ class CombatPullResolvedEffectCheckConstraintTests(TestCase):
             )
 
     def test_narrative_only_requires_snippet_db(self) -> None:
-        with self.assertRaises(IntegrityError):
+        with self.assertRaises(IntegrityError), transaction.atomic():
             CombatPullResolvedEffect.objects.create(
                 **self._base_kwargs(),
                 kind=EffectKind.NARRATIVE_ONLY,
                 narrative_snippet="",
+            )
+
+    # Forbidden-field rejections (one axis per kind) ---------------------
+
+    def test_flat_bonus_rejects_capability_db(self) -> None:
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CombatPullResolvedEffect.objects.create(
+                **self._base_kwargs(),
+                kind=EffectKind.FLAT_BONUS,
+                scaled_value=4,
+                granted_capability=self.capability,
+            )
+
+    def test_flat_bonus_rejects_vital_target_db(self) -> None:
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CombatPullResolvedEffect.objects.create(
+                **self._base_kwargs(),
+                kind=EffectKind.FLAT_BONUS,
+                scaled_value=4,
+                vital_target=VitalBonusTarget.MAX_HEALTH,
+            )
+
+    def test_intensity_bump_rejects_narrative_db(self) -> None:
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CombatPullResolvedEffect.objects.create(
+                **self._base_kwargs(),
+                kind=EffectKind.INTENSITY_BUMP,
+                scaled_value=2,
+                narrative_snippet="not allowed",
+            )
+
+    def test_vital_bonus_rejects_capability_db(self) -> None:
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CombatPullResolvedEffect.objects.create(
+                **self._base_kwargs(),
+                kind=EffectKind.VITAL_BONUS,
+                scaled_value=10,
+                vital_target=VitalBonusTarget.MAX_HEALTH,
+                granted_capability=self.capability,
+            )
+
+    def test_capability_grant_rejects_scaled_value_db(self) -> None:
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CombatPullResolvedEffect.objects.create(
+                **self._base_kwargs(),
+                kind=EffectKind.CAPABILITY_GRANT,
+                granted_capability=self.capability,
+                scaled_value=4,
+            )
+
+    def test_narrative_only_rejects_capability_db(self) -> None:
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            CombatPullResolvedEffect.objects.create(
+                **self._base_kwargs(),
+                kind=EffectKind.NARRATIVE_ONLY,
+                narrative_snippet="A whisper of frost.",
+                granted_capability=self.capability,
             )
 
 
@@ -380,8 +449,8 @@ class CombatPullFactoryDefaultTests(TestCase):
         self.assertIsNone(eff.vital_target)
 
 
-class CombatPullEncounterIndexTests(TestCase):
-    """Verify the index on (encounter, round_number) is queryable."""
+class CombatPullEncounterRoundQueryTests(TestCase):
+    """Verify queries by (encounter, round_number) return expected rows."""
 
     def test_encounter_round_query(self) -> None:
         p1 = CombatParticipantFactory()

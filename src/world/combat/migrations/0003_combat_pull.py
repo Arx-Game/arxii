@@ -108,7 +108,7 @@ class Migration(migrations.Migration):
                         blank=True,
                         null=True,
                         on_delete=django.db.models.deletion.PROTECT,
-                        related_name="thread_pull_grants",
+                        related_name="combat_pull_grants",
                         to="conditions.capabilitytype",
                     ),
                 ),

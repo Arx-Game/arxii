@@ -554,11 +554,14 @@ class CombatPullResolvedEffect(SharedMemoryModel):
         on_delete=models.PROTECT,
         null=True,
         blank=True,
-        related_name="thread_pull_grants",
+        related_name="combat_pull_grants",
     )
     narrative_snippet = models.TextField(blank=True)
 
     class Meta:
+        # String literals match EffectKind.choices values; constraint coverage in
+        # CombatPullResolvedEffectCheckConstraintTests guards against drift. Mirrors
+        # ThreadPullEffect's pattern for consistency across pull-effect models.
         constraints = [
             # FLAT_BONUS: requires scaled_value, forbids capability/narrative/vital_target.
             models.CheckConstraint(
@@ -688,6 +691,8 @@ class CombatPullResolvedEffect(SharedMemoryModel):
             raise ValidationError({"vital_target": "Must be null for CAPABILITY_GRANT."})
 
     def _clean_narrative_only(self) -> None:
+        # DB constraint only checks != "". clean() is stricter; bypassing clean() can
+        # persist whitespace-only snippets.
         if not self.narrative_snippet.strip():
             raise ValidationError({"narrative_snippet": "NARRATIVE_ONLY requires snippet."})
         if self.scaled_value is not None:
