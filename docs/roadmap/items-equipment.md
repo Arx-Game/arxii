@@ -42,4 +42,12 @@ The item and equipment system handles everything characters can own, wear, wield
 - Item interaction service functions — using items, consuming charges (not started)
 - Equipment UI — inventory management, equipping/unequipping, viewing item details (not started)
 
+## Magic Integration (Spec A)
+- **Items as thread anchors** — The new `Thread` model supports an `ITEM` anchor kind
+  (`thread.item` FK to `ItemInstance`). Heirloom weapons, legendary relics, and other
+  thread-capable items can accrue resonance and level as persistent threads
+- **Ritual components** — `RitualComponentRequirement` FKs to `ItemTemplate` (with an
+  optional `QualityTier`) to declare what items a ritual consumes when cast
+- Cross-reference: `docs/systems/magic.md` for the full model lineup
+
 ## Notes

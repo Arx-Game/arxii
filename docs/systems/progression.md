@@ -287,6 +287,10 @@ transactions = award_scene_development_points(scene, participants, awards)
 - **Classes**: `ClassLevelUnlock`, `ClassXPCost`, and requirements reference `CharacterClass` and class levels.
 - **Scenes**: Scene completion triggers `award_scene_development_points()` for trait-specific development.
 - **Character Creation**: CG-to-XP conversion via `award_cg_conversion_xp()` creates locked (non-transferable) `CharacterXP`.
+- **Magic (Spec A)**: Two XP sinks live in `world.magic.services`:
+  - `accept_thread_weaving_unlock(character, unlock)` / `compute_thread_weaving_xp_cost(character, unlock)` — Path-multiplied XP spend that opens a new thread anchor kind via `ThreadWeavingUnlock` → `CharacterThreadWeavingUnlock`
+  - `cross_thread_xp_lock(character, thread, target_level)` — XP charged when a thread crosses a `ThreadXPLockedLevel` boundary
+  See `docs/systems/magic.md` for the full thread model lineup.
 
 ---
 

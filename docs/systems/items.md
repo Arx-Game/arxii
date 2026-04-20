@@ -119,6 +119,18 @@ items both capability sources AND potential targets for challenges (a rust spell
 
 ---
 
+## Integration with Magic / Threads (Spec A)
+
+- **Items as thread anchors** — The `Thread` model in `world.magic` supports an `ITEM`
+  anchor kind (`thread.item` FK → `ItemInstance`). Thread-bearing items accrue
+  resonance and level independently of their wielder.
+- **Ritual components** — `RitualComponentRequirement` FKs to `ItemTemplate` with an
+  optional `QualityTier`, declaring what the ritual consumes on cast.
+
+See `docs/systems/magic.md` for the full thread and ritual model lineup.
+
+---
+
 ## What's Not Yet Built
 
 - **Service functions** for equip/unequip, give, pick up, drop, consume

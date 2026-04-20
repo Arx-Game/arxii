@@ -94,3 +94,17 @@ fe-typecheck:
 
 fe-lint *args:
     cd frontend && pnpm lint {{args}}
+
+# --- API codegen -------------------------------------------------------------
+
+# Regenerate the OpenAPI schema + frontend TypeScript API types.
+# Runs drf-spectacular to write src/schema.json, then runs
+# openapi-typescript (via pnpm) to write frontend/src/generated/api.d.ts.
+# Either step's failure aborts the pipeline.
+# Note: `arx manage` chdirs to src/ before invoking evennia, so the --file
+# path is relative to src/ (i.e. schema.json lands at src/schema.json).
+#   just gen-api-types
+gen-api-types:
+    uv run arx manage spectacular --file schema.json --validate
+    pnpm --prefix frontend generate:types
+    @echo "gen-api-types: schema regenerated and frontend types updated."
