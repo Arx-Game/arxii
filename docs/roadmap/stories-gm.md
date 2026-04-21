@@ -1,6 +1,6 @@
 # Stories & GM Tables
 
-**Status:** in-progress
+**Status:** phase-1-complete
 **Depends on:** Scenes, Missions, Codex, Relationships, Progression
 
 ## Overview
@@ -17,21 +17,59 @@ The narrative engine that tracks every character's story arc from CG backstory t
 - **Player agency:** Players can reference active stories, see story beats, track what's happening, and have mechanical tasks they can pursue independently between GM sessions
 
 ## What Exists
-- **Models:** Story (campaign container with trust requirements), Chapter (major arcs with ordering), Episode (individual sessions linking to scenes), EpisodeScene (bridge table), StoryParticipation (character involvement), TrustCategory, PlayerTrust, PlayerTrustLevel, StoryTrustRequirement (trust system), StoryFeedback, TrustCategoryFeedbackRating (feedback for trust building)
-- **APIs:** Full viewsets and serializers
+
+### Pre-Phase-1 Foundation
+- **Trust system:** TrustCategory, PlayerTrust, PlayerTrustLevel, StoryTrustRequirement — fully built, orthogonal to the episode engine
+- **Feedback models:** StoryFeedback, TrustCategoryFeedbackRating — fully built
+- **StoryParticipation** — character involvement tracking, fully built
+- **Legacy APIs:** Full viewsets and serializers for the pre-Phase-1 Story/Chapter/Episode shape
 - **Tests:** Model tests, view permission tests
 
+### Phase 1 Backend Foundation (complete)
+
+The task-gated episode progression engine is fully implemented in `src/world/stories/`.
+
+- **Era model** — temporal metaplot era tag ("Season N" in player-facing UI); partial unique constraint enforces at most one ACTIVE era at a time; `activated_at`/`concluded_at` timestamps; admin-managed
+- **Story extended** — added `scope` (CHARACTER / GROUP / GLOBAL; Phase 1 implements CHARACTER only), `character_sheet` FK (to character_sheets.CharacterSheet), `created_in_era` FK (to stories.Era)
+- **Chapter / Episode hierarchy preserved** — `Chapter` and `Episode` keep their existing fields; `Episode.connection_to_next` and `Episode.connection_summary` removed (those semantics moved to Transition)
+- **Transition** — first-class directed edge between episodes: `source_episode` FK, `target_episode` nullable FK (null = authoring frontier), `mode` (AUTO fires automatically; GM_CHOICE requires a Lead GM to select), `connection_type` (THEREFORE / BUT narrative flavor), `connection_summary`, `order` for tie-breaking
+- **EpisodeProgressionRequirement** — a beat that must reach `required_outcome` before any outbound transition from that episode is eligible (episode-level gate; AND semantics)
+- **TransitionRequiredOutcome** — per-transition routing predicate; a beat-outcome pair that must be satisfied for this specific transition to be eligible (AND over all rows on a single transition; OR expressed by creating multiple transitions)
+- **Beat** — flat predicate discriminator model on an episode: `predicate_type` selects the concrete type; `outcome` tracks current state; full text layers (`internal_description`, `player_hint`, `player_resolution_text`); `visibility` (HINTED default, SECRET, VISIBLE); `deadline` scaffolded (expiry handling deferred to Phase 3+). Two concrete predicate types in Phase 1:
+  - `GM_MARKED` — manually resolved by a Lead GM via `record_gm_marked_outcome`
+  - `CHARACTER_LEVEL_AT_LEAST` — auto-evaluated against `CharacterClassLevel`; fires when `character_level >= required_level`
+- **BeatCompletion** — append-only audit ledger: one row per (beat, character_sheet) outcome event, capturing `roster_entry` tenure (who was playing), `outcome`, `era`, `gm_notes`, `recorded_at`
+- **EpisodeResolution** — append-only audit ledger: one row per episode resolved for a character, capturing `chosen_transition`, `resolved_by` (GMProfile), `era`, `gm_notes`, `resolved_at`
+- **StoryProgress** — per-character pointer into a CHARACTER-scope story's DAG: unique per (story, character_sheet); `current_episode` nullable FK (null = frontier or not started); `is_active` flag; `last_advanced_at` auto-updated on each advance
+- **Typed exception hierarchy** — `StoryError` base with `user_message` property; concrete subtypes: `BeatNotResolvableError`, `NoEligibleTransitionError`, `AmbiguousTransitionError`, `ProgressionRequirementNotMetError`
+- **Services:** `evaluate_auto_beats`, `record_gm_marked_outcome`, `get_eligible_transitions`, `resolve_episode`
+- **End-to-end integration test** — Crucible "Who Am I?" scenario: author builds a two-episode story with a level-gate beat and a GM-marked beat → character's progression is initialized → `evaluate_auto_beats` fires the level check → `record_gm_marked_outcome` marks the GM beat → `get_eligible_transitions` confirms both requirements met → `resolve_episode` advances progress and writes full audit trail (BeatCompletion + EpisodeResolution rows). All 121 stories tests pass; 626 tests pass across the 5-app regression suite on a fresh DB.
+
 ## What's Needed for MVP
-- GM Table model — the container linking a GM to their group of PCs and active stories
-- Story beat / step tracking — structured steps with mechanical tasks, scene references, notes
-- Player story view — seeing your active stories, past entries, what's needed next
-- GM dashboard — managing assigned PCs, their stories, scheduling sessions
-- Task mode integration — connecting story steps to missions (async), research (cron), and GM sessions (scheduled)
-- Time mode handling — reconciling canon time, scene time, and session time
-- GM level system implementation — scaling abilities, reward caps, and impact scope by GM trust level
-- Story scheduling — coordinating GM availability with player availability
-- World impact tracking — how GM story outcomes affect the broader world state
-- Cross-table coordination tools — staff view of all active stories and their world impacts
-- Story UI — web interface for players and GMs to interact with the story system
+
+### Phase 2 (next up): Basic REST API + Dashboards
+
+- ViewSets for Story, Chapter, Episode, Transition, Beat, StoryProgress
+  - Read-only for players (their own stories and beats)
+  - CRUD for Lead GMs on their assigned stories
+  - Full CRUD for staff
+- Story log query with visibility filtering — HINTED / SECRET / VISIBLE rules applied at serializer time (SECRET beats omitted for players; HINTED shows player_hint only; VISIBLE shows player_resolution_text once resolved)
+- Player "active stories" list with status one-liners ("Ch1 Ep2 — waiting on you", "Ch1 Ep3 — ready to schedule", "Ch1 Ep4 — on hold", etc.)
+- Lead GM "episodes ready to run" dashboard — episodes where all progression requirements are met and at least one transition is eligible
+- Per-story view for players: story log, active episode panel (hinted beats with progress bar), what's-next call-to-action
+
+### Phase 3+: Advanced Features
+
+- **GROUP scope** — GMTable/covenant-owned progress; shared beat evaluation across group members; covenant leadership model (PC leader / group vote / assigned GM — TBD)
+- **GLOBAL scope** — metaplot + aggregate contribution ledger; cross-character threshold beats
+- **Additional beat predicate types:** `MISSION_COMPLETE`, `ACHIEVEMENT_HELD`, `AGGREGATE_THRESHOLD`, `STORY_AT_MILESTONE` (cross-story dependency), `CODEX_ENTRY_UNLOCKED`, `CONDITION_HELD`
+- **Deadlines** — expiry handling flow; EXPIRED outcome wired to deadline field already scaffolded; story author tooling for deadline management
+- **Assistant GM pool** — beat flag marking a beat as AGM-eligible; AGM claim + Lead GM approval; scoped beat access; post-session review workflow
+- **Events system integration** — SessionRequest creation triggered when an episode enters "ready to run" state
+- **Staff cross-story workload dashboard** — all active stories across all GM tables with world-impact tagging
+- **Era-stamping on all remaining time-relevant events** — Era lifecycle management (advance Era, handle overlap with pending episodes)
+- **Beat authoring UX beyond Django admin** — in-app flow for GMs to author beats and wire transitions
+- **Dispute / withdrawal state transitions** — personal-story GM change, story transfer, player withdrawal
+- **Covenant leadership model** — required before GROUP scope lands (PC leader / group vote / assigned GM — TBD)
 
 ## Notes
