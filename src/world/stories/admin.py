@@ -11,6 +11,7 @@ from world.stories.models import (
     StoryFeedback,
     StoryParticipation,
     StoryTrustRequirement,
+    Transition,
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
@@ -135,6 +136,13 @@ class EpisodeSceneInline(admin.TabularInline):
     fields = ["order", "scene"]
 
 
+class TransitionInline(admin.TabularInline):
+    model = Transition
+    fk_name = "source_episode"
+    extra = 0
+    fields = ["order", "target_episode", "mode", "connection_type", "connection_summary"]
+
+
 @admin.register(Episode)
 class EpisodeAdmin(admin.ModelAdmin):
     list_display = [
@@ -148,7 +156,7 @@ class EpisodeAdmin(admin.ModelAdmin):
     list_filter = ["is_active", "completed_at", "created_at"]
     search_fields = ["title", "chapter__title", "chapter__story__title"]
     readonly_fields = ["created_at", "updated_at"]
-    inlines = [EpisodeSceneInline]
+    inlines = [EpisodeSceneInline, TransitionInline]
 
     fieldsets = (
         (None, {"fields": ("chapter", "order", "title", "description", "is_active")}),
@@ -175,6 +183,14 @@ class EpisodeAdmin(admin.ModelAdmin):
         return obj.episode_scenes.count()
 
     scenes_count.short_description = "Scenes"
+
+
+@admin.register(Transition)
+class TransitionAdmin(admin.ModelAdmin):
+    list_display = ("source_episode", "target_episode", "mode", "connection_type", "order")
+    list_filter = ("mode", "connection_type")
+    search_fields = ("source_episode__title", "target_episode__title", "connection_summary")
+    ordering = ("source_episode", "order")
 
 
 class TrustCategoryFeedbackRatingInline(admin.TabularInline):

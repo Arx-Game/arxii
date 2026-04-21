@@ -4,8 +4,9 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.stories.constants import EraStatus, StoryScope
+from world.stories.constants import EraStatus, StoryScope, TransitionMode
 from world.stories.types import (
+    ConnectionType,
     ParticipationLevel,
     StoryPrivacy,
     StoryStatus,
@@ -611,3 +612,53 @@ class Era(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Season {self.season_number}: {self.display_name}"
+
+
+class Transition(SharedMemoryModel):
+    """A guarded edge from one Episode to another."""
+
+    source_episode = models.ForeignKey(
+        "stories.Episode",
+        on_delete=models.CASCADE,
+        related_name="outbound_transitions",
+    )
+    target_episode = models.ForeignKey(
+        "stories.Episode",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="inbound_transitions",
+        help_text="May be null when next episode is unauthored (frontier pause).",
+    )
+    mode = models.CharField(
+        max_length=20,
+        choices=TransitionMode.choices,
+        default=TransitionMode.AUTO,
+        help_text=(
+            "AUTO fires when eligibility is satisfied. GM_CHOICE requires a Lead "
+            "GM to pick from the eligible set."
+        ),
+    )
+    connection_type = models.CharField(
+        max_length=20,
+        choices=ConnectionType.choices,
+        blank=True,
+        default="",
+        help_text="Narrative flavor: THEREFORE / BUT.",
+    )
+    connection_summary = models.TextField(
+        blank=True,
+        help_text="Short narrative description of why this transition fires.",
+    )
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["source_episode", "order"]
+        indexes = [
+            models.Index(fields=["source_episode"]),
+        ]
+
+    def __str__(self) -> str:
+        target_name = self.target_episode.title if self.target_episode else "(unauthored)"
+        return f"{self.source_episode.title} -> {target_name}"

@@ -2,7 +2,7 @@ import factory
 import factory.django as factory_django
 import factory.fuzzy
 
-from world.stories.constants import EraStatus, StoryScope
+from world.stories.constants import EraStatus, StoryScope, TransitionMode
 from world.stories.models import (
     Chapter,
     Episode,
@@ -13,6 +13,7 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryParticipation,
+    Transition,
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
@@ -151,6 +152,20 @@ class ActiveEpisodeFactory(EpisodeFactory):
 
 class EpisodeWithButConnectionFactory(EpisodeFactory):
     """Factory for episodes with 'but' connection — kept for scenario variety"""
+
+
+class TransitionFactory(factory_django.DjangoModelFactory):
+    """Factory for creating Transition instances linking two Episodes."""
+
+    class Meta:
+        model = Transition
+
+    source_episode = factory.SubFactory(EpisodeFactory)
+    target_episode = factory.LazyAttribute(
+        lambda obj: EpisodeFactory(chapter=obj.source_episode.chapter)
+    )
+    mode = TransitionMode.AUTO
+    order = 0
 
 
 # Note: SceneFactory removed due to cross-app dependency issues
