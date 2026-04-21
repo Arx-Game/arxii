@@ -4,7 +4,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.stories.constants import EraStatus
+from world.stories.constants import EraStatus, StoryScope
 from world.stories.types import (
     ConnectionType,
     ParticipationLevel,
@@ -76,6 +76,26 @@ class Story(SharedMemoryModel):
         max_length=20,
         choices=StoryPrivacy.choices,
         default=StoryPrivacy.PUBLIC,
+    )
+    scope = models.CharField(
+        max_length=20,
+        choices=StoryScope.choices,
+        default=StoryScope.CHARACTER,
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="owned_stories",
+        help_text="For CHARACTER-scope stories: the character whose story this is.",
+    )
+    created_in_era = models.ForeignKey(
+        "stories.Era",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="stories_created_in_era",
     )
 
     # Ownership and management

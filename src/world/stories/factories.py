@@ -2,7 +2,7 @@ import factory
 import factory.django as factory_django
 import factory.fuzzy
 
-from world.stories.constants import EraStatus
+from world.stories.constants import EraStatus, StoryScope
 from world.stories.models import (
     Chapter,
     Episode,
@@ -46,6 +46,9 @@ class StoryFactory(factory_django.DjangoModelFactory):
     description = factory.Faker("paragraph", nb_sentences=3)
     status = StoryStatus.ACTIVE
     privacy = StoryPrivacy.PUBLIC
+    scope = StoryScope.CHARACTER
+    character_sheet = None  # Tests that need character-scoped stories set this explicitly.
+    created_in_era = None
     is_personal_story = False
     personal_story_character = None
 
