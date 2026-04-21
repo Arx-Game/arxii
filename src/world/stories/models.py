@@ -765,3 +765,67 @@ class Beat(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"Beat({self.predicate_type}) on {self.episode.title}"
+
+
+class EpisodeProgressionRequirement(SharedMemoryModel):
+    """A beat that must reach ``required_outcome`` before any outbound transition fires."""
+
+    episode = models.ForeignKey(
+        "stories.Episode",
+        on_delete=models.CASCADE,
+        related_name="progression_requirements",
+    )
+    beat = models.ForeignKey(
+        "stories.Beat",
+        on_delete=models.CASCADE,
+        related_name="gating_for_episodes",
+    )
+    required_outcome = models.CharField(
+        max_length=20,
+        choices=BeatOutcome.choices,
+        default=BeatOutcome.SUCCESS,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["episode", "beat"],
+                name="unique_progression_req_per_episode_beat",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.episode.title} requires beat #{self.beat_id} = {self.required_outcome}"
+
+
+class TransitionRequiredOutcome(SharedMemoryModel):
+    """A beat outcome that must be satisfied for this transition to be eligible."""
+
+    transition = models.ForeignKey(
+        "stories.Transition",
+        on_delete=models.CASCADE,
+        related_name="required_outcomes",
+    )
+    beat = models.ForeignKey(
+        "stories.Beat",
+        on_delete=models.CASCADE,
+        related_name="routing_for_transitions",
+    )
+    required_outcome = models.CharField(
+        max_length=20,
+        choices=BeatOutcome.choices,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["transition", "beat"],
+                name="unique_routing_req_per_transition_beat",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"Transition #{self.transition_id} requires beat #{self.beat_id}"
+            f" = {self.required_outcome}"
+        )

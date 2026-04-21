@@ -5,6 +5,7 @@ from world.stories.models import (
     Beat,
     Chapter,
     Episode,
+    EpisodeProgressionRequirement,
     EpisodeScene,
     Era,
     PlayerTrustLevel,
@@ -13,6 +14,7 @@ from world.stories.models import (
     StoryParticipation,
     StoryTrustRequirement,
     Transition,
+    TransitionRequiredOutcome,
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
@@ -150,6 +152,13 @@ class BeatInline(admin.TabularInline):
     fields = ["predicate_type", "outcome", "visibility", "required_level", "order"]
 
 
+class EpisodeProgressionRequirementInline(admin.TabularInline):
+    model = EpisodeProgressionRequirement
+    extra = 0
+    fk_name = "episode"
+    autocomplete_fields = ("beat",)
+
+
 @admin.register(Episode)
 class EpisodeAdmin(admin.ModelAdmin):
     list_display = [
@@ -163,7 +172,12 @@ class EpisodeAdmin(admin.ModelAdmin):
     list_filter = ["is_active", "completed_at", "created_at"]
     search_fields = ["title", "chapter__title", "chapter__story__title"]
     readonly_fields = ["created_at", "updated_at"]
-    inlines = [EpisodeSceneInline, TransitionInline, BeatInline]
+    inlines = [
+        EpisodeSceneInline,
+        TransitionInline,
+        BeatInline,
+        EpisodeProgressionRequirementInline,
+    ]
 
     fieldsets = (
         (None, {"fields": ("chapter", "order", "title", "description", "is_active")}),
@@ -192,12 +206,20 @@ class EpisodeAdmin(admin.ModelAdmin):
     scenes_count.short_description = "Scenes"
 
 
+class TransitionRequiredOutcomeInline(admin.TabularInline):
+    model = TransitionRequiredOutcome
+    extra = 0
+    fk_name = "transition"
+    autocomplete_fields = ("beat",)
+
+
 @admin.register(Transition)
 class TransitionAdmin(admin.ModelAdmin):
     list_display = ("source_episode", "target_episode", "mode", "connection_type", "order")
     list_filter = ("mode", "connection_type")
     search_fields = ("source_episode__title", "target_episode__title", "connection_summary")
     ordering = ("source_episode", "order")
+    inlines = [TransitionRequiredOutcomeInline]
 
 
 @admin.register(Beat)

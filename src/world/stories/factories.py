@@ -14,6 +14,7 @@ from world.stories.models import (
     Beat,
     Chapter,
     Episode,
+    EpisodeProgressionRequirement,
     EpisodeScene,
     Era,
     PlayerTrust,
@@ -22,6 +23,7 @@ from world.stories.models import (
     StoryFeedback,
     StoryParticipation,
     Transition,
+    TransitionRequiredOutcome,
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
@@ -332,6 +334,28 @@ class BeatFactory(factory_django.DjangoModelFactory):
     player_hint = factory.Faker("sentence")
     player_resolution_text = factory.Faker("sentence")
     required_level = None
+
+
+class EpisodeProgressionRequirementFactory(factory_django.DjangoModelFactory):
+    """Factory for creating EpisodeProgressionRequirement instances."""
+
+    class Meta:
+        model = EpisodeProgressionRequirement
+
+    episode = factory.SubFactory(EpisodeFactory)
+    beat = factory.LazyAttribute(lambda obj: BeatFactory(episode=obj.episode))
+    required_outcome = BeatOutcome.SUCCESS
+
+
+class TransitionRequiredOutcomeFactory(factory_django.DjangoModelFactory):
+    """Factory for creating TransitionRequiredOutcome instances."""
+
+    class Meta:
+        model = TransitionRequiredOutcome
+
+    transition = factory.SubFactory(TransitionFactory)
+    beat = factory.LazyAttribute(lambda obj: BeatFactory(episode=obj.transition.source_episode))
+    required_outcome = BeatOutcome.SUCCESS
 
 
 # Convenience functions for common test scenarios
