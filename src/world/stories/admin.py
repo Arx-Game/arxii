@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 
 from world.stories.models import (
+    Beat,
     Chapter,
     Episode,
     EpisodeScene,
@@ -143,6 +144,12 @@ class TransitionInline(admin.TabularInline):
     fields = ["order", "target_episode", "mode", "connection_type", "connection_summary"]
 
 
+class BeatInline(admin.TabularInline):
+    model = Beat
+    extra = 0
+    fields = ["predicate_type", "outcome", "visibility", "required_level", "order"]
+
+
 @admin.register(Episode)
 class EpisodeAdmin(admin.ModelAdmin):
     list_display = [
@@ -156,7 +163,7 @@ class EpisodeAdmin(admin.ModelAdmin):
     list_filter = ["is_active", "completed_at", "created_at"]
     search_fields = ["title", "chapter__title", "chapter__story__title"]
     readonly_fields = ["created_at", "updated_at"]
-    inlines = [EpisodeSceneInline, TransitionInline]
+    inlines = [EpisodeSceneInline, TransitionInline, BeatInline]
 
     fieldsets = (
         (None, {"fields": ("chapter", "order", "title", "description", "is_active")}),
@@ -191,6 +198,15 @@ class TransitionAdmin(admin.ModelAdmin):
     list_filter = ("mode", "connection_type")
     search_fields = ("source_episode__title", "target_episode__title", "connection_summary")
     ordering = ("source_episode", "order")
+
+
+@admin.register(Beat)
+class BeatAdmin(admin.ModelAdmin):
+    list_display = ("episode", "predicate_type", "outcome", "visibility", "order")
+    list_filter = ("predicate_type", "outcome", "visibility")
+    search_fields = ("internal_description", "player_hint", "episode__title")
+    ordering = ("episode", "order")
+    readonly_fields = ("created_at", "updated_at")
 
 
 class TrustCategoryFeedbackRatingInline(admin.TabularInline):

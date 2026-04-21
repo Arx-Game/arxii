@@ -1,10 +1,17 @@
 from typing import TYPE_CHECKING, Any, cast
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.stories.constants import EraStatus, StoryScope, TransitionMode
+from world.stories.constants import (
+    BeatOutcome,
+    BeatPredicateType,
+    BeatVisibility,
+    EraStatus,
+    StoryScope,
+    TransitionMode,
+)
 from world.stories.types import (
     ConnectionType,
     ParticipationLevel,
@@ -662,3 +669,99 @@ class Transition(SharedMemoryModel):
     def __str__(self) -> str:
         target_name = self.target_episode.title if self.target_episode else "(unauthored)"
         return f"{self.source_episode.title} -> {target_name}"
+
+
+class Beat(SharedMemoryModel):
+    """
+    A boolean predicate attached to an episode, with rich outcome state.
+
+    Predicate-type-specific config is stored as nullable columns on this model.
+    ``clean()`` enforces that exactly the right columns are populated for the
+    chosen predicate_type.
+    """
+
+    episode = models.ForeignKey(
+        "stories.Episode",
+        on_delete=models.CASCADE,
+        related_name="beats",
+    )
+    predicate_type = models.CharField(
+        max_length=40,
+        choices=BeatPredicateType.choices,
+        default=BeatPredicateType.GM_MARKED,
+    )
+    outcome = models.CharField(
+        max_length=20,
+        choices=BeatOutcome.choices,
+        default=BeatOutcome.UNSATISFIED,
+        help_text=(
+            "Current outcome for this beat in the story's current play session. "
+            "Historical outcomes live in BeatCompletion."
+        ),
+    )
+    visibility = models.CharField(
+        max_length=20,
+        choices=BeatVisibility.choices,
+        default=BeatVisibility.HINTED,
+    )
+
+    # Text layers
+    internal_description = models.TextField(
+        help_text="Author/Lead GM/staff view: real predicate + meaning.",
+    )
+    player_hint = models.TextField(
+        blank=True,
+        help_text="Shown while active (if visibility=HINTED or VISIBLE).",
+    )
+    player_resolution_text = models.TextField(
+        blank=True,
+        help_text="Shown in story log after beat completes.",
+    )
+
+    # Predicate-type-specific config (nullable; populated based on predicate_type)
+    required_level = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="For CHARACTER_LEVEL_AT_LEAST predicates.",
+    )
+
+    # Scaffolding for future phases (not wired yet):
+    deadline = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Optional wall-clock deadline. Expiry handling deferred to Phase 3+.",
+    )
+
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["episode", "order"]
+        indexes = [
+            models.Index(fields=["episode", "outcome"]),
+        ]
+
+    # Invariant mapping: predicate_type -> required config field names
+    _REQUIRED_CONFIG: dict[str, tuple[str, ...]] = {
+        BeatPredicateType.GM_MARKED: (),
+        BeatPredicateType.CHARACTER_LEVEL_AT_LEAST: ("required_level",),
+    }
+
+    def clean(self) -> None:
+        super().clean()
+        required = self._REQUIRED_CONFIG.get(self.predicate_type, ())
+        errors: dict[str, str] = {}
+        for field_name in required:
+            if getattr(self, field_name) in (None, ""):
+                errors[field_name] = f"Required when predicate_type is {self.predicate_type}."
+        # All non-required config fields must be null for this predicate_type.
+        all_config_fields = {"required_level"}
+        for field_name in all_config_fields - set(required):
+            if getattr(self, field_name) is not None:
+                errors[field_name] = f"Must be null when predicate_type is {self.predicate_type}."
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self) -> str:
+        return f"Beat({self.predicate_type}) on {self.episode.title}"

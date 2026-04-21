@@ -2,8 +2,16 @@ import factory
 import factory.django as factory_django
 import factory.fuzzy
 
-from world.stories.constants import EraStatus, StoryScope, TransitionMode
+from world.stories.constants import (
+    BeatOutcome,
+    BeatPredicateType,
+    BeatVisibility,
+    EraStatus,
+    StoryScope,
+    TransitionMode,
+)
 from world.stories.models import (
+    Beat,
     Chapter,
     Episode,
     EpisodeScene,
@@ -308,6 +316,22 @@ class GMFeedbackFactory(StoryFeedbackFactory):
         nb_sentences=3,
         extra_kwargs={"start_words": ["The GM", "Game Master", "As a GM"]},
     )
+
+
+class BeatFactory(factory_django.DjangoModelFactory):
+    """Factory for creating Beat instances"""
+
+    class Meta:
+        model = Beat
+
+    episode = factory.SubFactory(EpisodeFactory)
+    predicate_type = BeatPredicateType.GM_MARKED
+    outcome = BeatOutcome.UNSATISFIED
+    visibility = BeatVisibility.HINTED
+    internal_description = factory.Faker("sentence")
+    player_hint = factory.Faker("sentence")
+    player_resolution_text = factory.Faker("sentence")
+    required_level = None
 
 
 # Convenience functions for common test scenarios
