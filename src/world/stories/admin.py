@@ -3,6 +3,7 @@ from django.utils.html import format_html
 
 from world.stories.models import (
     Beat,
+    BeatCompletion,
     Chapter,
     Episode,
     EpisodeProgressionRequirement,
@@ -400,3 +401,12 @@ class EraAdmin(admin.ModelAdmin):
     list_filter = ("status",)
     search_fields = ("name", "display_name")
     ordering = ("-season_number",)
+
+
+@admin.register(BeatCompletion)
+class BeatCompletionAdmin(admin.ModelAdmin):
+    list_display = ("beat", "character_sheet", "outcome", "era", "recorded_at")
+    list_filter = ("outcome",)
+    search_fields = ("beat__internal_description", "character_sheet__name")
+    readonly_fields = tuple(f.name for f in BeatCompletion._meta.fields)  # noqa: SLF001
+    ordering = ("-recorded_at",)

@@ -829,3 +829,53 @@ class TransitionRequiredOutcome(SharedMemoryModel):
             f"Transition #{self.transition_id} requires beat #{self.beat_id}"
             f" = {self.required_outcome}"
         )
+
+
+class BeatCompletion(SharedMemoryModel):
+    """Audit ledger row for each beat outcome applied to a character's progress."""
+
+    beat = models.ForeignKey(
+        Beat,
+        on_delete=models.CASCADE,
+        related_name="completions",
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="beat_completions",
+    )
+    roster_entry = models.ForeignKey(
+        "roster.RosterEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        help_text=(
+            "Which roster tenure (which player) was active when this beat "
+            "completed. For audit only."
+        ),
+    )
+    outcome = models.CharField(
+        max_length=20,
+        choices=BeatOutcome.choices,
+    )
+    era = models.ForeignKey(
+        Era,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="beat_completions",
+    )
+    gm_notes = models.TextField(blank=True)
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["beat", "character_sheet"]),
+            models.Index(fields=["character_sheet", "-recorded_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"BeatCompletion(beat=#{self.beat_id}, char=#{self.character_sheet_id},"
+            f" outcome={self.outcome})"
+        )

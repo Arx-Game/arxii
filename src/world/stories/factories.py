@@ -2,6 +2,7 @@ import factory
 import factory.django as factory_django
 import factory.fuzzy
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
@@ -12,6 +13,7 @@ from world.stories.constants import (
 )
 from world.stories.models import (
     Beat,
+    BeatCompletion,
     Chapter,
     Episode,
     EpisodeProgressionRequirement,
@@ -356,6 +358,20 @@ class TransitionRequiredOutcomeFactory(factory_django.DjangoModelFactory):
     transition = factory.SubFactory(TransitionFactory)
     beat = factory.LazyAttribute(lambda obj: BeatFactory(episode=obj.transition.source_episode))
     required_outcome = BeatOutcome.SUCCESS
+
+
+class BeatCompletionFactory(factory_django.DjangoModelFactory):
+    """Factory for creating BeatCompletion audit ledger entries."""
+
+    class Meta:
+        model = BeatCompletion
+
+    beat = factory.SubFactory(BeatFactory)
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    roster_entry = None
+    era = None
+    outcome = BeatOutcome.SUCCESS
+    gm_notes = ""
 
 
 # Convenience functions for common test scenarios
