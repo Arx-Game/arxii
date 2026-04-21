@@ -2,10 +2,12 @@ import factory
 import factory.django as factory_django
 import factory.fuzzy
 
+from world.stories.constants import EraStatus
 from world.stories.models import (
     Chapter,
     Episode,
     EpisodeScene,
+    Era,
     PlayerTrust,
     PlayerTrustLevel,
     Story,
@@ -21,6 +23,17 @@ from world.stories.types import (
     StoryStatus,
     TrustLevel,
 )
+
+
+class EraFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = Era
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"era_{n}")
+    display_name = factory.Sequence(lambda n: f"Era {n}")
+    season_number = factory.Sequence(lambda n: n + 1)
+    status = EraStatus.UPCOMING
 
 
 class StoryFactory(factory_django.DjangoModelFactory):

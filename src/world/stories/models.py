@@ -4,6 +4,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.stories.constants import EraStatus
 from world.stories.types import (
     ConnectionType,
     ParticipationLevel,
@@ -579,3 +580,32 @@ class TrustCategoryFeedbackRating(SharedMemoryModel):
             f"{cast(Any, self.trust_category).display_name}: "
             f"{cast(Any, self).get_rating_display()}"
         )
+
+
+class Era(SharedMemoryModel):
+    """Staff-activated metaplot era ('Season' in player-facing UI)."""
+
+    name = models.SlugField(max_length=100, unique=True)
+    display_name = models.CharField(max_length=200)
+    season_number = models.PositiveIntegerField(help_text="Player-facing 'Season N' number.")
+    description = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=EraStatus.choices,
+        default=EraStatus.UPCOMING,
+    )
+    activated_at = models.DateTimeField(null=True, blank=True)
+    concluded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["status"],
+                condition=models.Q(status=EraStatus.ACTIVE),
+                name="only_one_active_era",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Season {self.season_number}: {self.display_name}"

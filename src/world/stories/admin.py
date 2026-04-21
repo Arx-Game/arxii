@@ -5,6 +5,7 @@ from world.stories.models import (
     Chapter,
     Episode,
     EpisodeScene,
+    Era,
     PlayerTrustLevel,
     Story,
     StoryFeedback,
@@ -351,3 +352,11 @@ class StoryTrustRequirementAdmin(admin.ModelAdmin):
         )
 
     minimum_trust_level_display.short_description = "Min Trust Level"
+
+
+@admin.register(Era)
+class EraAdmin(admin.ModelAdmin):
+    list_display = ("season_number", "display_name", "status", "activated_at")
+    list_filter = ("status",)
+    search_fields = ("name", "display_name")
+    ordering = ("-season_number",)
