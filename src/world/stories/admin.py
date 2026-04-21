@@ -14,6 +14,7 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryParticipation,
+    StoryProgress,
     StoryTrustRequirement,
     Transition,
     TransitionRequiredOutcome,
@@ -427,3 +428,18 @@ class EpisodeResolutionAdmin(admin.ModelAdmin):
     search_fields = ("episode__title", "character_sheet__name", "gm_notes")
     readonly_fields = tuple(f.name for f in EpisodeResolution._meta.fields)  # noqa: SLF001
     ordering = ("-resolved_at",)
+
+
+@admin.register(StoryProgress)
+class StoryProgressAdmin(admin.ModelAdmin):
+    list_display = (
+        "story",
+        "character_sheet",
+        "current_episode",
+        "is_active",
+        "started_at",
+        "last_advanced_at",
+    )
+    list_filter = ("is_active",)
+    search_fields = ("story__title", "character_sheet__name")
+    readonly_fields = ("started_at", "last_advanced_at")

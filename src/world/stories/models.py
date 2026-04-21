@@ -930,3 +930,45 @@ class EpisodeResolution(SharedMemoryModel):
         else:
             dest = "(frontier)"
         return f"EpisodeResolution({self.episode.title} -> {dest})"
+
+
+class StoryProgress(SharedMemoryModel):
+    """Per-character pointer into a CHARACTER-scope story's current state."""
+
+    story = models.ForeignKey(
+        Story,
+        on_delete=models.CASCADE,
+        related_name="progress_records",
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="story_progress",
+    )
+    current_episode = models.ForeignKey(
+        Episode,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="active_progress_records",
+        help_text="Null while the story is at the frontier (unauthored) or before start.",
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+    last_advanced_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["story", "character_sheet"],
+                name="unique_progress_per_story_per_character",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["character_sheet", "is_active"]),
+        ]
+
+    def __str__(self) -> str:
+        episode_title = self.current_episode.title if self.current_episode else "(frontier)"
+        char_label = self.character_sheet.character.db_key if self.character_sheet_id else "?"
+        return f"StoryProgress({char_label} in {self.story.title} @ {episode_title})"

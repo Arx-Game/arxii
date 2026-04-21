@@ -25,6 +25,7 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryParticipation,
+    StoryProgress,
     Transition,
     TransitionRequiredOutcome,
     TrustCategory,
@@ -387,6 +388,18 @@ class EpisodeResolutionFactory(factory_django.DjangoModelFactory):
     resolved_by = None
     era = None
     gm_notes = ""
+
+
+class StoryProgressFactory(factory_django.DjangoModelFactory):
+    """Factory for creating StoryProgress per-character progress pointer instances."""
+
+    class Meta:
+        model = StoryProgress
+
+    story = factory.SubFactory(StoryFactory)
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    current_episode = None
+    is_active = True
 
 
 # Convenience functions for common test scenarios
