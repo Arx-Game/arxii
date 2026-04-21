@@ -6,7 +6,6 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.stories.constants import EraStatus, StoryScope
 from world.stories.types import (
-    ConnectionType,
     ParticipationLevel,
     StoryPrivacy,
     StoryStatus,
@@ -336,16 +335,6 @@ class Episode(SharedMemoryModel):
         blank=True,
         help_text="What consequences lead to the next episode",
     )
-    connection_to_next = models.CharField(
-        max_length=20,
-        choices=ConnectionType.choices,
-        blank=True,
-        help_text="How this episode connects to the next",
-    )
-    connection_summary = models.TextField(
-        blank=True,
-        help_text="Explanation of how episodes connect",
-    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -373,18 +362,6 @@ class EpisodeScene(SharedMemoryModel):
         related_name="story_episodes",
     )
     order = models.PositiveIntegerField()
-
-    # Scene connection tracking within episode
-    connection_to_next = models.CharField(
-        max_length=20,
-        choices=ConnectionType.choices,
-        blank=True,
-        help_text="How this scene connects to the next in the episode",
-    )
-    connection_summary = models.TextField(
-        blank=True,
-        help_text="Brief explanation of the scene connection",
-    )
 
     class Meta:
         unique_together = ["episode", "scene"]

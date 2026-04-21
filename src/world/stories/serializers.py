@@ -239,7 +239,6 @@ class EpisodeListSerializer(serializers.ModelSerializer):
             "title",
             "order",
             "is_active",
-            "connection_to_next",
             "scenes_count",
             "completed_at",
         ]
@@ -261,8 +260,6 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             "is_active",
             "summary",
             "consequences",
-            "connection_to_next",
-            "connection_summary",
             "completed_at",
             "created_at",
             "updated_at",
@@ -281,8 +278,6 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "order",
-            "connection_to_next",
-            "connection_summary",
         ]
 
     def validate_title(self, value):
@@ -321,8 +316,6 @@ class EpisodeSceneSerializer(serializers.ModelSerializer):
             "episode",
             "scene",
             "order",
-            "connection_to_next",
-            "connection_summary",
         ]
 
 

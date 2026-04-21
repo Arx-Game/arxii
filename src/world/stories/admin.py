@@ -132,7 +132,7 @@ class ChapterAdmin(admin.ModelAdmin):
 class EpisodeSceneInline(admin.TabularInline):
     model = EpisodeScene
     extra = 0
-    fields = ["order", "scene", "connection_to_next", "connection_summary"]
+    fields = ["order", "scene"]
 
 
 @admin.register(Episode)
@@ -143,10 +143,9 @@ class EpisodeAdmin(admin.ModelAdmin):
         "title",
         "is_active",
         "scenes_count",
-        "connection_display",
         "completed_at",
     ]
-    list_filter = ["is_active", "connection_to_next", "completed_at", "created_at"]
+    list_filter = ["is_active", "completed_at", "created_at"]
     search_fields = ["title", "chapter__title", "chapter__story__title"]
     readonly_fields = ["created_at", "updated_at"]
     inlines = [EpisodeSceneInline]
@@ -157,8 +156,6 @@ class EpisodeAdmin(admin.ModelAdmin):
             "Narrative Connections",
             {
                 "fields": (
-                    "connection_to_next",
-                    "connection_summary",
                     "summary",
                     "consequences",
                 ),
@@ -178,17 +175,6 @@ class EpisodeAdmin(admin.ModelAdmin):
         return obj.episode_scenes.count()
 
     scenes_count.short_description = "Scenes"
-
-    def connection_display(self, obj):
-        if obj.connection_to_next:
-            return format_html(
-                '<span style="color: {};">{}</span>',
-                ("#28a745" if obj.connection_to_next in ["therefore", "but"] else "#ffc107"),
-                obj.connection_to_next.title(),
-            )
-        return "-"
-
-    connection_display.short_description = "Connection Type"
 
 
 class TrustCategoryFeedbackRatingInline(admin.TabularInline):

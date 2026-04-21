@@ -17,7 +17,6 @@ from world.stories.models import (
     TrustCategoryFeedbackRating,
 )
 from world.stories.types import (
-    ConnectionType,
     ParticipationLevel,
     StoryPrivacy,
     StoryStatus,
@@ -142,8 +141,6 @@ class EpisodeFactory(factory_django.DjangoModelFactory):
     is_active = False
     summary = factory.Faker("paragraph", nb_sentences=2)
     consequences = factory.Faker("paragraph", nb_sentences=1)
-    connection_to_next = ConnectionType.THEREFORE
-    connection_summary = factory.Faker("sentence")
 
 
 class ActiveEpisodeFactory(EpisodeFactory):
@@ -153,13 +150,7 @@ class ActiveEpisodeFactory(EpisodeFactory):
 
 
 class EpisodeWithButConnectionFactory(EpisodeFactory):
-    """Factory for episodes with 'but' connection"""
-
-    connection_to_next = ConnectionType.BUT
-    connection_summary = factory.Faker(
-        "sentence",
-        extra_kwargs={"start_words": ["But suddenly", "However"]},
-    )
+    """Factory for episodes with 'but' connection — kept for scenario variety"""
 
 
 # Note: SceneFactory removed due to cross-app dependency issues
@@ -176,8 +167,6 @@ class EpisodeSceneFactory(factory_django.DjangoModelFactory):
     # Note: scene field must be set manually when creating instances
     # due to cross-app dependency issues with SceneFactory
     order = factory.Sequence(lambda n: n + 1)
-    connection_to_next = ConnectionType.THEREFORE
-    connection_summary = factory.Faker("sentence")
 
 
 class PlayerTrustFactory(factory_django.DjangoModelFactory):
@@ -320,7 +309,7 @@ def create_complete_story_structure():
 
     # Create episodes for first chapter
     EpisodeFactory(chapter=chapter1, order=1, is_active=True)
-    EpisodeFactory(chapter=chapter1, order=2, connection_to_next=ConnectionType.BUT)
+    EpisodeFactory(chapter=chapter1, order=2)
 
     # Create episodes for second chapter
     EpisodeFactory(chapter=chapter2, order=1)

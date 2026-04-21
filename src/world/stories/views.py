@@ -238,7 +238,7 @@ class EpisodeSceneViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = EpisodeSceneFilter
     pagination_class = StandardResultsSetPagination
-    ordering_fields = ["order", "connection_to_next"]
+    ordering_fields = ["order"]
     ordering = ["episode", "order"]
 
 

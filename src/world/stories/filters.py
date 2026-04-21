@@ -115,7 +115,6 @@ class EpisodeFilter(django_filters.FilterSet):
 
     chapter = django_filters.NumberFilter(field_name="chapter_id")
     story = django_filters.NumberFilter(field_name="chapter__story_id")
-    connection_to_next = django_filters.CharFilter(field_name="connection_to_next")
 
     # Order range filtering
     order_min = django_filters.NumberFilter(field_name="order", lookup_expr="gte")
@@ -123,19 +122,18 @@ class EpisodeFilter(django_filters.FilterSet):
 
     class Meta:
         model = Episode
-        fields = ["chapter", "is_active", "connection_to_next"]
+        fields = ["chapter", "is_active"]
 
 
 class EpisodeSceneFilter(django_filters.FilterSet):
     """Filter for EpisodeScene model"""
 
     episode = django_filters.NumberFilter(field_name="episode_id")
-    connection_to_next = django_filters.CharFilter(field_name="connection_to_next")
     story = django_filters.NumberFilter(field_name="episode__chapter__story_id")
 
     class Meta:
         model = EpisodeScene
-        fields = ["episode", "connection_to_next", "order"]
+        fields = ["episode", "order"]
 
 
 class PlayerTrustFilter(django_filters.FilterSet):
