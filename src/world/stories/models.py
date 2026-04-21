@@ -81,13 +81,17 @@ class Story(SharedMemoryModel):
         max_length=20,
         choices=StoryScope.choices,
         default=StoryScope.CHARACTER,
+        help_text=(
+            "Whether this story belongs to one character (CHARACTER), "
+            "a covenant/group (GROUP), or the whole metaplot (GLOBAL)."
+        ),
     )
     character_sheet = models.ForeignKey(
         "character_sheets.CharacterSheet",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
-        related_name="owned_stories",
+        related_name="character_stories",
         help_text="For CHARACTER-scope stories: the character whose story this is.",
     )
     created_in_era = models.ForeignKey(
@@ -96,6 +100,7 @@ class Story(SharedMemoryModel):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="stories_created_in_era",
+        help_text="The metaplot era in which this story was created. Null = pre-era or ungrouped.",
     )
 
     # Ownership and management

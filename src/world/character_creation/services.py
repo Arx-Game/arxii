@@ -1264,6 +1264,7 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
         description=draft.story_description,
         primary_table=draft.target_table,
         scope=StoryScope.CHARACTER,
+        character_sheet=sheet,
     )
     story.owners.add(draft.account)
 

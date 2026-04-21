@@ -10,7 +10,7 @@ class StoryExtensionTests(TestCase):
         story = StoryFactory()
         self.assertEqual(story.scope, StoryScope.CHARACTER)
 
-    def test_character_scope_requires_character_sheet(self) -> None:
+    def test_character_scope_story_stores_character_sheet(self) -> None:
         sheet = CharacterSheetFactory()
         story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
         self.assertEqual(story.character_sheet, sheet)
