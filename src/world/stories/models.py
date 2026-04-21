@@ -1,3 +1,4 @@
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, cast
 
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
@@ -669,6 +670,18 @@ class Transition(SharedMemoryModel):
     def __str__(self) -> str:
         target_name = self.target_episode.title if self.target_episode else "(unauthored)"
         return f"{self.source_episode.title} -> {target_name}"
+
+    @cached_property
+    def cached_required_outcomes(self) -> list["TransitionRequiredOutcome"]:
+        """Routing requirements for this transition with beat pre-fetched.
+
+        Serves as the ``to_attr`` target for
+        ``Prefetch("required_outcomes__beat", to_attr="cached_required_outcomes")``.
+        When not prefetched, falls back to a fresh query.
+
+        To invalidate: ``del transition.cached_required_outcomes``.
+        """
+        return list(self.required_outcomes.select_related("beat").all())
 
 
 class Beat(SharedMemoryModel):
