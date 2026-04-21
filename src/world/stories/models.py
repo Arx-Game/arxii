@@ -879,3 +879,54 @@ class BeatCompletion(SharedMemoryModel):
             f"BeatCompletion(beat=#{self.beat_id}, char=#{self.character_sheet_id},"
             f" outcome={self.outcome})"
         )
+
+
+class EpisodeResolution(SharedMemoryModel):
+    """Audit record when an episode is resolved and (optionally) a transition fires."""
+
+    episode = models.ForeignKey(
+        Episode,
+        on_delete=models.CASCADE,
+        related_name="resolutions",
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="episode_resolutions",
+    )
+    chosen_transition = models.ForeignKey(
+        Transition,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="resolutions_using",
+        help_text="Null when the episode resolves with no transition (frontier pause).",
+    )
+    resolved_by = models.ForeignKey(
+        "gm.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="episode_resolutions",
+    )
+    era = models.ForeignKey(
+        Era,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    gm_notes = models.TextField(blank=True)
+    resolved_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["episode", "-resolved_at"]),
+            models.Index(fields=["character_sheet", "-resolved_at"]),
+        ]
+
+    def __str__(self) -> str:
+        if self.chosen_transition and self.chosen_transition.target_episode:
+            dest = self.chosen_transition.target_episode.title
+        else:
+            dest = "(frontier)"
+        return f"EpisodeResolution({self.episode.title} -> {dest})"

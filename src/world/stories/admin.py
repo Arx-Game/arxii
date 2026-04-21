@@ -7,6 +7,7 @@ from world.stories.models import (
     Chapter,
     Episode,
     EpisodeProgressionRequirement,
+    EpisodeResolution,
     EpisodeScene,
     Era,
     PlayerTrustLevel,
@@ -410,3 +411,19 @@ class BeatCompletionAdmin(admin.ModelAdmin):
     search_fields = ("beat__internal_description", "character_sheet__name")
     readonly_fields = tuple(f.name for f in BeatCompletion._meta.fields)  # noqa: SLF001
     ordering = ("-recorded_at",)
+
+
+@admin.register(EpisodeResolution)
+class EpisodeResolutionAdmin(admin.ModelAdmin):
+    list_display = (
+        "episode",
+        "character_sheet",
+        "chosen_transition",
+        "resolved_by",
+        "era",
+        "resolved_at",
+    )
+    list_filter = ("era",)
+    search_fields = ("episode__title", "character_sheet__name", "gm_notes")
+    readonly_fields = tuple(f.name for f in EpisodeResolution._meta.fields)  # noqa: SLF001
+    ordering = ("-resolved_at",)

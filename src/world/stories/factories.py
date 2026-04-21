@@ -17,6 +17,7 @@ from world.stories.models import (
     Chapter,
     Episode,
     EpisodeProgressionRequirement,
+    EpisodeResolution,
     EpisodeScene,
     Era,
     PlayerTrust,
@@ -371,6 +372,20 @@ class BeatCompletionFactory(factory_django.DjangoModelFactory):
     roster_entry = None
     era = None
     outcome = BeatOutcome.SUCCESS
+    gm_notes = ""
+
+
+class EpisodeResolutionFactory(factory_django.DjangoModelFactory):
+    """Factory for creating EpisodeResolution audit ledger entries."""
+
+    class Meta:
+        model = EpisodeResolution
+
+    episode = factory.SubFactory(EpisodeFactory)
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    chosen_transition = None
+    resolved_by = None
+    era = None
     gm_notes = ""
 
 
