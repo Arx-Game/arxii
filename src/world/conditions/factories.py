@@ -15,6 +15,7 @@ from world.conditions.constants import (
     ConditionInteractionTrigger,
     DamageTickTiming,
     DurationType,
+    TreatmentTargetKind,
 )
 from world.conditions.models import (
     CapabilityType,
@@ -29,6 +30,7 @@ from world.conditions.models import (
     ConditionStage,
     ConditionTemplate,
     DamageType,
+    TreatmentTemplate,
 )
 
 
@@ -203,6 +205,32 @@ class ConditionInstanceFactory(DjangoModelFactory):
     source_technique = None
     source_description = ""
     is_suppressed = False
+
+
+class TreatmentTemplateFactory(DjangoModelFactory):
+    """Factory for TreatmentTemplate."""
+
+    class Meta:
+        model = TreatmentTemplate
+
+    key = factory.Sequence(lambda n: f"treatment-{n}")
+    name = factory.Sequence(lambda n: f"Treatment {n}")
+    description = "Test treatment"
+    target_condition = factory.SubFactory(ConditionTemplateFactory)
+    target_kind = TreatmentTargetKind.AFTERMATH
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    target_difficulty = 0
+    requires_bond = False
+    resonance_cost = 0
+    anima_cost = 0
+    once_per_scene_per_helper = True
+    scene_required = True
+    backlash_severity_on_failure = 0
+    backlash_target_condition = None
+    reduction_on_crit = 5
+    reduction_on_success = 3
+    reduction_on_partial = 1
+    reduction_on_failure = 0
 
 
 class _ReactiveConditionFactory:
