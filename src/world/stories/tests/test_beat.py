@@ -2,6 +2,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from world.achievements.factories import AchievementFactory
+from world.conditions.factories import ConditionTemplateFactory
 from world.stories.constants import BeatOutcome, BeatPredicateType, BeatVisibility
 from world.stories.factories import BeatFactory, EpisodeFactory
 
@@ -74,6 +75,42 @@ class BeatTests(TestCase):
             predicate_type=BeatPredicateType.CHARACTER_LEVEL_AT_LEAST,
             required_level=5,
             required_achievement=achievement,
+        )
+        with self.assertRaises(ValidationError):
+            beat.full_clean()
+
+    # --- CONDITION_HELD invariants ---
+
+    def test_condition_held_beat_requires_required_condition_template(self):
+        episode = EpisodeFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.CONDITION_HELD,
+            required_condition_template=None,
+        )
+        with self.assertRaises(ValidationError):
+            beat.full_clean()
+
+    def test_gm_marked_beat_rejects_required_condition_template(self):
+        episode = EpisodeFactory()
+        template = ConditionTemplateFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.GM_MARKED,
+            required_condition_template=template,
+        )
+        with self.assertRaises(ValidationError):
+            beat.full_clean()
+
+    def test_achievement_held_beat_rejects_required_condition_template(self):
+        episode = EpisodeFactory()
+        achievement = AchievementFactory()
+        template = ConditionTemplateFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.ACHIEVEMENT_HELD,
+            required_achievement=achievement,
+            required_condition_template=template,
         )
         with self.assertRaises(ValidationError):
             beat.full_clean()

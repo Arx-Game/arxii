@@ -127,22 +127,46 @@ def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
     Returns UNSATISFIED when the predicate is not yet met or the type is
     unknown to this evaluator (e.g., GM_MARKED, future types).
     """
-    if beat.predicate_type == BeatPredicateType.CHARACTER_LEVEL_AT_LEAST:
-        required = beat.required_level
-        if required is None:
-            # Misconfigured beat — treat as unsatisfied rather than crash.
-            return BeatOutcome.UNSATISFIED
-        if _character_level(progress.character_sheet) >= required:
-            return BeatOutcome.SUCCESS
-        return BeatOutcome.UNSATISFIED
+    ptype = beat.predicate_type
+    sheet = progress.character_sheet
 
-    if beat.predicate_type == BeatPredicateType.ACHIEVEMENT_HELD:
-        if beat.required_achievement is None:
-            return BeatOutcome.UNSATISFIED
-        held = progress.character_sheet.cached_achievements_held
-        return BeatOutcome.SUCCESS if beat.required_achievement in held else BeatOutcome.UNSATISFIED
+    if ptype == BeatPredicateType.CHARACTER_LEVEL_AT_LEAST:
+        return _evaluate_character_level(beat, sheet)
+    if ptype == BeatPredicateType.ACHIEVEMENT_HELD:
+        return _evaluate_achievement_held(beat, sheet)
+    if ptype == BeatPredicateType.CONDITION_HELD:
+        return _evaluate_condition_held(beat, sheet)
 
     # GM_MARKED and any future types not handled here.
+    return BeatOutcome.UNSATISFIED
+
+
+def _evaluate_character_level(beat: Beat, sheet: CharacterSheet) -> BeatOutcome:
+    """Evaluate a CHARACTER_LEVEL_AT_LEAST predicate."""
+    required = beat.required_level
+    if required is None:
+        # Misconfigured beat — treat as unsatisfied rather than crash.
+        return BeatOutcome.UNSATISFIED
+    if _character_level(sheet) >= required:
+        return BeatOutcome.SUCCESS
+    return BeatOutcome.UNSATISFIED
+
+
+def _evaluate_achievement_held(beat: Beat, sheet: CharacterSheet) -> BeatOutcome:
+    """Evaluate an ACHIEVEMENT_HELD predicate."""
+    if beat.required_achievement is None:
+        return BeatOutcome.UNSATISFIED
+    held = sheet.cached_achievements_held
+    return BeatOutcome.SUCCESS if beat.required_achievement in held else BeatOutcome.UNSATISFIED
+
+
+def _evaluate_condition_held(beat: Beat, sheet: CharacterSheet) -> BeatOutcome:
+    """Evaluate a CONDITION_HELD predicate."""
+    if beat.required_condition_template is None:
+        return BeatOutcome.UNSATISFIED
+    active = sheet.cached_active_condition_templates
+    if beat.required_condition_template in active:
+        return BeatOutcome.SUCCESS
     return BeatOutcome.UNSATISFIED
 
 

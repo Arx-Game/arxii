@@ -384,3 +384,63 @@ class CachedAchievementsHeldTests(TestCase):
 
         # Now the cache reflects the mutation.
         self.assertIn(achievement, sheet.cached_achievements_held)
+
+
+class CachedActiveConditionTemplatesTests(TestCase):
+    """Tests for CharacterSheet.cached_active_condition_templates and invalidation."""
+
+    def test_cached_active_condition_templates_empty_when_none_active(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        self.assertEqual(sheet.cached_active_condition_templates, set())
+
+    def test_cached_active_condition_templates_contains_active_condition(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
+
+        sheet = CharacterSheetFactory()
+        template = ConditionTemplateFactory()
+        ConditionInstanceFactory(target=sheet.character, condition=template)
+
+        active = sheet.cached_active_condition_templates
+        self.assertIn(template, active)
+
+    def test_cached_active_condition_templates_excludes_suppressed(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
+
+        sheet = CharacterSheetFactory()
+        template = ConditionTemplateFactory()
+        ConditionInstanceFactory(target=sheet.character, condition=template, is_suppressed=True)
+
+        active = sheet.cached_active_condition_templates
+        self.assertNotIn(template, active)
+
+    def test_cached_active_condition_templates_excludes_other_characters(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
+
+        sheet_a = CharacterSheetFactory()
+        sheet_b = CharacterSheetFactory()
+        template = ConditionTemplateFactory()
+        ConditionInstanceFactory(target=sheet_b.character, condition=template)
+
+        self.assertNotIn(template, sheet_a.cached_active_condition_templates)
+
+    def test_invalidate_condition_cache_clears_cached_property(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
+
+        sheet = CharacterSheetFactory()
+        template = ConditionTemplateFactory()
+
+        # Populate the cache (empty).
+        self.assertEqual(sheet.cached_active_condition_templates, set())
+
+        # Apply condition and invalidate.
+        ConditionInstanceFactory(target=sheet.character, condition=template)
+        sheet.invalidate_condition_cache()
+
+        # Now the cache reflects the mutation.
+        self.assertIn(template, sheet.cached_active_condition_templates)

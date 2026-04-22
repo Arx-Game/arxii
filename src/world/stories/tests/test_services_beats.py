@@ -5,6 +5,7 @@ from evennia.utils.test_resources import EvenniaTestCase
 from world.achievements.factories import AchievementFactory, CharacterAchievementFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
+from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.roster.factories import RosterEntryFactory, RosterFactory
 from world.stories.constants import BeatOutcome, BeatPredicateType, EraStatus
 from world.stories.exceptions import BeatNotResolvableError
@@ -216,6 +217,93 @@ class EvaluateAutoBeatsAchievementTests(EvenniaTestCase):
             episode=episode,
             predicate_type=BeatPredicateType.ACHIEVEMENT_HELD,
             required_achievement=required_achievement,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+
+class EvaluateAutoBeatsConditionTests(EvenniaTestCase):
+    """Tests for CONDITION_HELD predicate evaluation."""
+
+    def _make_progress_with_sheet(self):
+        sheet = CharacterSheetFactory()
+        episode = EpisodeFactory()
+        return (
+            StoryProgressFactory(character_sheet=sheet, current_episode=episode),
+            sheet,
+            episode,
+        )
+
+    def test_condition_held_beat_satisfied_when_condition_active(self):
+        """Beat flips to SUCCESS when the required condition is active on the character."""
+        progress, sheet, episode = self._make_progress_with_sheet()
+        template = ConditionTemplateFactory()
+        ConditionInstanceFactory(target=sheet.character, condition=template)
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.CONDITION_HELD,
+            required_condition_template=template,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+        self.assertTrue(BeatCompletion.objects.filter(beat=beat, character_sheet=sheet).exists())
+
+    def test_condition_held_beat_unsatisfied_when_not_active(self):
+        """Beat stays UNSATISFIED when the required condition is not active."""
+        progress, _sheet, episode = self._make_progress_with_sheet()
+        template = ConditionTemplateFactory()
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.CONDITION_HELD,
+            required_condition_template=template,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+        self.assertFalse(BeatCompletion.objects.filter(beat=beat).exists())
+
+    def test_condition_held_beat_unsatisfied_when_condition_is_suppressed(self):
+        """Beat stays UNSATISFIED when the condition instance is suppressed."""
+        progress, sheet, episode = self._make_progress_with_sheet()
+        template = ConditionTemplateFactory()
+        ConditionInstanceFactory(target=sheet.character, condition=template, is_suppressed=True)
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.CONDITION_HELD,
+            required_condition_template=template,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+    def test_condition_held_beat_unsatisfied_when_different_condition_held(self):
+        """Beat stays UNSATISFIED when a different condition is active."""
+        progress, sheet, episode = self._make_progress_with_sheet()
+        required_template = ConditionTemplateFactory()
+        other_template = ConditionTemplateFactory()
+        ConditionInstanceFactory(target=sheet.character, condition=other_template)
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.CONDITION_HELD,
+            required_condition_template=required_template,
             outcome=BeatOutcome.UNSATISFIED,
         )
 
