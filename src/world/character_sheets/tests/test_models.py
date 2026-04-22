@@ -335,3 +335,52 @@ class CurrentLevelTests(TestCase):
         # Explicit invalidation refreshes.
         sheet.invalidate_class_level_cache()
         self.assertEqual(sheet.current_level, 7)
+
+
+class CachedAchievementsHeldTests(TestCase):
+    """Tests for CharacterSheet.cached_achievements_held and invalidation."""
+
+    def test_cached_achievements_held_empty_when_none_earned(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        self.assertEqual(sheet.cached_achievements_held, set())
+
+    def test_cached_achievements_held_contains_earned_achievement(self):
+        from world.achievements.factories import AchievementFactory, CharacterAchievementFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        achievement = AchievementFactory()
+        CharacterAchievementFactory(character_sheet=sheet, achievement=achievement)
+
+        held = sheet.cached_achievements_held
+        self.assertIn(achievement, held)
+
+    def test_cached_achievements_held_excludes_other_characters(self):
+        from world.achievements.factories import AchievementFactory, CharacterAchievementFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet_a = CharacterSheetFactory()
+        sheet_b = CharacterSheetFactory()
+        achievement = AchievementFactory()
+        CharacterAchievementFactory(character_sheet=sheet_b, achievement=achievement)
+
+        self.assertNotIn(achievement, sheet_a.cached_achievements_held)
+
+    def test_invalidate_achievement_cache_clears_cached_property(self):
+        from world.achievements.factories import AchievementFactory, CharacterAchievementFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+
+        sheet = CharacterSheetFactory()
+        achievement = AchievementFactory()
+
+        # Populate the cache (empty).
+        self.assertEqual(sheet.cached_achievements_held, set())
+
+        # Grant the achievement and invalidate.
+        CharacterAchievementFactory(character_sheet=sheet, achievement=achievement)
+        sheet.invalidate_achievement_cache()
+
+        # Now the cache reflects the mutation.
+        self.assertIn(achievement, sheet.cached_achievements_held)

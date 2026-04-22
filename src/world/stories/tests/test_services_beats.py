@@ -2,6 +2,7 @@
 
 from evennia.utils.test_resources import EvenniaTestCase
 
+from world.achievements.factories import AchievementFactory, CharacterAchievementFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
 from world.roster.factories import RosterEntryFactory, RosterFactory
@@ -152,6 +153,76 @@ class EvaluateAutoBeatsLevelTests(EvenniaTestCase):
 
         completion = BeatCompletion.objects.get(beat=beat, character_sheet=sheet)
         self.assertIsNone(completion.roster_entry)
+
+
+class EvaluateAutoBeatsAchievementTests(EvenniaTestCase):
+    """Tests for ACHIEVEMENT_HELD predicate evaluation."""
+
+    def _make_progress_with_sheet(self):
+        sheet = CharacterSheetFactory()
+        episode = EpisodeFactory()
+        return (
+            StoryProgressFactory(character_sheet=sheet, current_episode=episode),
+            sheet,
+            episode,
+        )
+
+    def test_achievement_held_beat_satisfied_when_achievement_earned(self):
+        """Beat flips to SUCCESS when the character holds the required achievement."""
+        progress, sheet, episode = self._make_progress_with_sheet()
+        achievement = AchievementFactory()
+        CharacterAchievementFactory(character_sheet=sheet, achievement=achievement)
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.ACHIEVEMENT_HELD,
+            required_achievement=achievement,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+        self.assertTrue(BeatCompletion.objects.filter(beat=beat, character_sheet=sheet).exists())
+
+    def test_achievement_held_beat_unsatisfied_when_not_earned(self):
+        """Beat stays UNSATISFIED when the character does not hold the achievement."""
+        progress, _sheet, episode = self._make_progress_with_sheet()
+        achievement = AchievementFactory()
+        # Do NOT grant the achievement to the character.
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.ACHIEVEMENT_HELD,
+            required_achievement=achievement,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+        self.assertFalse(BeatCompletion.objects.filter(beat=beat).exists())
+
+    def test_achievement_held_beat_unsatisfied_when_different_achievement_held(self):
+        """Beat stays UNSATISFIED when a different achievement is held."""
+        progress, sheet, episode = self._make_progress_with_sheet()
+        required_achievement = AchievementFactory()
+        other_achievement = AchievementFactory()
+        CharacterAchievementFactory(character_sheet=sheet, achievement=other_achievement)
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.ACHIEVEMENT_HELD,
+            required_achievement=required_achievement,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
 
 
 class RecordGmMarkedOutcomeTests(EvenniaTestCase):

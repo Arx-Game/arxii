@@ -136,6 +136,12 @@ def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
             return BeatOutcome.SUCCESS
         return BeatOutcome.UNSATISFIED
 
+    if beat.predicate_type == BeatPredicateType.ACHIEVEMENT_HELD:
+        if beat.required_achievement is None:
+            return BeatOutcome.UNSATISFIED
+        held = progress.character_sheet.cached_achievements_held
+        return BeatOutcome.SUCCESS if beat.required_achievement in held else BeatOutcome.UNSATISFIED
+
     # GM_MARKED and any future types not handled here.
     return BeatOutcome.UNSATISFIED
 

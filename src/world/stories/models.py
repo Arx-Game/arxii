@@ -741,6 +741,14 @@ class Beat(SharedMemoryModel):
         blank=True,
         help_text="For CHARACTER_LEVEL_AT_LEAST predicates.",
     )
+    required_achievement = models.ForeignKey(
+        "achievements.Achievement",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For ACHIEVEMENT_HELD predicates.",
+    )
 
     # Scaffolding for future phases (not wired yet):
     deadline = models.DateTimeField(
@@ -763,6 +771,7 @@ class Beat(SharedMemoryModel):
     _REQUIRED_CONFIG: dict[str, tuple[str, ...]] = {
         BeatPredicateType.GM_MARKED: (),
         BeatPredicateType.CHARACTER_LEVEL_AT_LEAST: ("required_level",),
+        BeatPredicateType.ACHIEVEMENT_HELD: ("required_achievement",),
     }
 
     def clean(self) -> None:
@@ -773,7 +782,7 @@ class Beat(SharedMemoryModel):
             if getattr(self, field_name) in (None, ""):
                 errors[field_name] = f"Required when predicate_type is {self.predicate_type}."
         # All non-required config fields must be null for this predicate_type.
-        all_config_fields = {"required_level"}
+        all_config_fields = {"required_level", "required_achievement"}
         for field_name in all_config_fields - set(required):
             if getattr(self, field_name) is not None:
                 errors[field_name] = f"Must be null when predicate_type is {self.predicate_type}."

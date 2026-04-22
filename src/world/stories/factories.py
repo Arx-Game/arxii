@@ -338,6 +338,7 @@ class BeatFactory(factory_django.DjangoModelFactory):
     player_hint = factory.Faker("sentence")
     player_resolution_text = factory.Faker("sentence")
     required_level = None
+    required_achievement = None
 
 
 class EpisodeProgressionRequirementFactory(factory_django.DjangoModelFactory):
