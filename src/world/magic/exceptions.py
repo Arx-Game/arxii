@@ -36,3 +36,19 @@ class WeavingUnlockMissing(MagicError):
 
 class RitualComponentError(MagicError):
     user_message = "You do not have the required components for this ritual."
+
+
+class NoRitualConfigured(MagicError):
+    user_message = "You don't have an anima ritual configured."
+
+
+class RitualAlreadyPerformedThisScene(MagicError):
+    user_message = "You've already performed your ritual in this scene."
+
+
+class CharacterEngagedForRitual(MagicError):
+    user_message = "You cannot perform a ritual during combat."
+
+
+class AnimaPoolAtMaximum(MagicError):
+    user_message = "Your anima pool is already full."

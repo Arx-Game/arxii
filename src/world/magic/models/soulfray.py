@@ -7,6 +7,7 @@ imprecision mishaps.
 """
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -39,6 +40,15 @@ class SoulfrayConfig(SharedMemoryModel):
     base_check_difficulty = models.PositiveIntegerField(
         help_text="Base difficulty for the resilience check before stage modifiers.",
     )
+    ritual_budget_critical_success = models.PositiveIntegerField(default=10)
+    ritual_budget_success = models.PositiveIntegerField(default=6)
+    ritual_budget_partial = models.PositiveIntegerField(default=3)
+    ritual_budget_failure = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1)],
+        help_text="Must be > 0; failure always returns some anima.",
+    )
+    ritual_severity_cost_per_point = models.PositiveIntegerField(default=1)
 
     class Meta:
         verbose_name = "Soulfray Configuration"

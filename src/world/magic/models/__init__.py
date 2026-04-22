@@ -44,6 +44,7 @@ from world.magic.models.alterations import (
     PendingAlteration,
 )
 from world.magic.models.anima import (
+    AnimaConfig,
     AnimaRitualPerformance,
     CharacterAnima,
     CharacterAnimaRitual,
@@ -108,6 +109,7 @@ __all__ = [
     "Affinity",
     "AffinityManager",
     # anima
+    "AnimaConfig",
     "AnimaRitualPerformance",
     # audere (re-exported from world.magic.audere)
     "AudereThreshold",

@@ -108,6 +108,7 @@ class CharacterAnimaRitual(SharedMemoryModel):
     description = models.TextField(
         help_text="Social activity that restores anima.",
     )
+    target_difficulty = models.PositiveIntegerField(default=0)
 
     class Meta:
         verbose_name = "Character Anima Ritual"
@@ -157,6 +158,24 @@ class AnimaRitualPerformance(SharedMemoryModel):
         blank=True,
         help_text="Amount of anima recovered (if successful).",
     )
+    outcome = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anima_ritual_performances",
+        help_text=(
+            "CheckOutcome resolved for this performance. Nullable for "
+            "backward-compat with existing rows that predate Scope 6."
+        ),
+    )
+    severity_reduced = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Severity points the performance removed from the performer's "
+            "Soulfray condition. 0 if no reduction."
+        ),
+    )
     notes = models.TextField(
         blank=True,
         help_text="Optional notes about this performance.",
@@ -170,3 +189,22 @@ class AnimaRitualPerformance(SharedMemoryModel):
     def __str__(self) -> str:
         status = "success" if self.was_successful else "failure"
         return f"{self.ritual} ({status}) at {self.performed_at}"
+
+
+class AnimaConfig(SharedMemoryModel):
+    daily_regen_percent = models.PositiveIntegerField(
+        default=5,
+        help_text="% of CharacterAnima.maximum regenerated per daily tick",
+    )
+    daily_regen_blocking_property_key = models.SlugField(
+        default="blocks_anima_regen",
+        help_text="Property key on a ConditionStage that blocks anima regen",
+    )
+
+    @classmethod
+    def get_singleton(cls) -> "AnimaConfig":
+        obj, _ = cls.objects.get_or_create(pk=1, defaults={})
+        return obj
+
+    def __str__(self) -> str:
+        return f"{type(self).__name__}"
