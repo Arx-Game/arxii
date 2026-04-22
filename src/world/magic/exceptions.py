@@ -52,3 +52,7 @@ class CharacterEngagedForRitual(MagicError):
 
 class AnimaPoolAtMaximum(MagicError):
     user_message = "Your anima pool is already full."
+
+
+class RitualScenePrerequisiteFailed(MagicError):
+    user_message = "You cannot perform a ritual right now."
