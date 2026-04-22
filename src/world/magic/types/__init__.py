@@ -5,7 +5,7 @@ Public surface is preserved for the flat-module era: importers that use
 Submodules:
 
 - ``aura``        — aura percentages and the AffinityType enum
-- ``ritual``      — ritual-related enums (reserved for Phase 8's RitualOutcome)
+- ``ritual``      — ritual-related enums, RitualOutcome, and AnimaRegenTickSummary
 - ``threads``     — thread axis enum and Imbuing / XP-lock result types
 - ``techniques``  — runtime stats, anima cost, soulfray, mishap, use-technique results
 - ``alterations`` — Mage Scar exception classes and pending/resolution results
@@ -26,7 +26,11 @@ from world.magic.types.pull import (
     ResolvedPullEffect,
     ResonancePullResult,
 )
-from world.magic.types.ritual import AnimaRitualCategory, RitualOutcome
+from world.magic.types.ritual import (
+    AnimaRegenTickSummary,
+    AnimaRitualCategory,
+    RitualOutcome,
+)
 from world.magic.types.techniques import (
     AnimaCostResult,
     MishapResult,
@@ -43,6 +47,7 @@ __all__ = [
     "AlterationResolutionError",
     "AlterationResolutionResult",
     "AnimaCostResult",
+    "AnimaRegenTickSummary",
     "AnimaRitualCategory",
     "AuraPercentages",
     "MishapResult",

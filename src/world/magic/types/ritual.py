@@ -30,3 +30,13 @@ class RitualOutcome:
     anima_recovered: int
     soulfray_stage_after: ConditionStage | None
     soulfray_resolved: bool
+
+
+@dataclass(frozen=True)
+class AnimaRegenTickSummary:
+    """Result of a single anima_regen_tick() scheduler invocation."""
+
+    examined: int
+    regenerated: int
+    engagement_blocked: int
+    condition_blocked: int

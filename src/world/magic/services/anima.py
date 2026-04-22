@@ -5,9 +5,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.db.models import F
 
+from world.conditions.models import ConditionInstance
 from world.magic.models import CharacterAnima
-from world.magic.types.ritual import RitualOutcome
+from world.magic.models.anima import AnimaConfig
+from world.magic.types.ritual import AnimaRegenTickSummary, RitualOutcome
+from world.mechanics.engagement import CharacterEngagement
+from world.mechanics.models import Property
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -174,3 +179,63 @@ def _scene_participant(scene: Scene, character: ObjectDB) -> bool:
         return False
     account_id = tenure.player_data.account_id
     return SceneParticipation.objects.filter(scene=scene, account_id=account_id).exists()
+
+
+def anima_regen_tick() -> AnimaRegenTickSummary:
+    """Scheduler entry point. Daily anima regen across all characters.
+
+    Per spec §5.5. Skips engaged characters and characters whose active
+    condition stages carry the blocking Property. Skip sets are bulk-
+    fetched in 2 queries before the loop to avoid N+1.
+    """
+    config = AnimaConfig.get_singleton()
+    blocker = Property.objects.get(name=config.daily_regen_blocking_property_key)
+
+    engaged_ids = set(
+        CharacterEngagement.objects.values_list("character_id", flat=True),
+    )
+    blocked_ids = set(
+        ConditionInstance.objects.filter(
+            resolved_at__isnull=True,
+            current_stage__properties=blocker,
+        )
+        .values_list("target_id", flat=True)
+        .distinct(),
+    )
+
+    qs = CharacterAnima.objects.filter(
+        current__lt=F("maximum"),
+    ).select_related("character")
+
+    examined = 0
+    regenerated = 0
+    engagement_blocked = 0
+    condition_blocked = 0
+    to_update = []
+
+    for row in qs:
+        examined += 1
+        char_id = row.character_id
+        if char_id in engaged_ids:
+            engagement_blocked += 1
+            continue
+        if char_id in blocked_ids:
+            condition_blocked += 1
+            continue
+        regen = (row.maximum * config.daily_regen_percent) // 100
+        if regen <= 0:
+            continue
+        row.current = min(row.current + regen, row.maximum)
+        to_update.append(row)
+        regenerated += 1
+
+    # Bulk update all at once
+    if to_update:
+        CharacterAnima.objects.bulk_update(to_update, ["current"], batch_size=1000)
+
+    return AnimaRegenTickSummary(
+        examined=examined,
+        regenerated=regenerated,
+        engagement_blocked=engagement_blocked,
+        condition_blocked=condition_blocked,
+    )
