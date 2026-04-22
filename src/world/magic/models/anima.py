@@ -105,6 +105,12 @@ class CharacterAnimaRitual(SharedMemoryModel):
         related_name="anima_rituals",
         help_text="The resonance that powers this ritual.",
     )
+    check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.PROTECT,
+        related_name="anima_rituals",
+        help_text="CheckType used when rolling this ritual.",
+    )
     description = models.TextField(
         help_text="Social activity that restores anima.",
     )

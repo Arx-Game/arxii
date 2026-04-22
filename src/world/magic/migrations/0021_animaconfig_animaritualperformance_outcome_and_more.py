@@ -7,6 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
+        ("checks", "0001_initial"),
         ("magic", "0020_alter_magicalalterationtemplate_options_and_more"),
         ("traits", "0001_initial"),
     ]
@@ -67,6 +68,18 @@ class Migration(migrations.Migration):
             model_name="characteranimaritual",
             name="target_difficulty",
             field=models.PositiveIntegerField(default=0),
+        ),
+        migrations.AddField(
+            model_name="characteranimaritual",
+            name="check_type",
+            field=models.ForeignKey(
+                default=1,
+                help_text="CheckType used when rolling this ritual.",
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name="anima_rituals",
+                to="checks.checktype",
+            ),
+            preserve_default=False,
         ),
         migrations.AddField(
             model_name="soulfrayconfig",

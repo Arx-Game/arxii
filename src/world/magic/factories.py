@@ -309,6 +309,7 @@ class CharacterAnimaRitualFactory(factory.django.DjangoModelFactory):
     skill = factory.SubFactory("world.skills.factories.SkillFactory")
     specialization = None
     resonance = factory.SubFactory(ResonanceFactory)
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
     description = factory.Faker("paragraph")
 
 
