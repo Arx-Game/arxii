@@ -387,10 +387,10 @@ Lives in `magic/services/anima.py`.
 **Boundary translation:** Callers pass `CharacterSheet`; the service resolves `character_sheet.character` to the `ObjectDB` instance needed for `perform_check` and engagement queries.
 
 **Preflight gates:**
-1. `CharacterAnimaRitual.objects.filter(character_sheet=character_sheet).exists()`; else raise `NoRitualConfigured`.
+1. Resolve the configured ritual via the reverse accessor: `ritual = getattr(character_sheet, "anima_ritual", None)`. (`CharacterAnimaRitual.character` is a OneToOneField to `CharacterSheet` with `related_name="anima_ritual"`, per `world/magic/models.py:600`.) If `ritual is None`, raise `NoRitualConfigured`.
 2. `CharacterEngagement.objects.filter(character=character_sheet.character).exists()` is `False`; else raise `CharacterEngagedForRitual`.
 3. `scene` is active and the character is a participant; else raise `TreatmentScenePrerequisiteFailed` (or a ritual-side equivalent — both use the same precondition helper).
-4. `AnimaRitualPerformance.objects.filter(target_character=character_sheet, scene=scene).exists()` is `False`; else raise `RitualAlreadyPerformedThisScene`.
+4. `AnimaRitualPerformance.objects.filter(ritual=ritual, scene=scene).exists()` is `False`; else raise `RitualAlreadyPerformedThisScene`. (Performer is derivable via `performance.ritual.character`; `AnimaRitualPerformance.target_character` per the existing model means "other character the ritual was performed with" and is intentionally unset by `perform_anima_ritual` for solo rituals.)
 
 **Execute:**
 1. Resolve check via `perform_check(character_sheet.character, check_type=ritual.check_type, target_difficulty=ritual.target_difficulty)`. (`CharacterAnimaRitual.target_difficulty` is the new field added in Section 4.3.) The check returns a `CheckResult` with `.outcome: CheckOutcome`.
@@ -404,7 +404,7 @@ Lives in `magic/services/anima.py`.
    - Deduct `SoulfrayConfig.ritual_severity_cost_per_point` from budget.
 4. **Refill anima with leftover:** `CharacterAnima.current_anima = min(current + remaining_budget, maximum)`.
 5. **Crit override:** if outcome is `CheckOutcome.CRITICAL_SUCCESS`, force `current_anima = maximum` after step 4 regardless of leftover budget. On a crit, the budget effectively governs only severity reduction; anima always tops up. This interaction is called out here and in the tuning section (8.7) so balance tuning accounts for it.
-6. Persist `AnimaRitualPerformance` with `target_character=character_sheet`, `scene=scene`, `was_successful=(outcome in {CRITICAL_SUCCESS, SUCCESS})`, `anima_recovered`, `outcome` (CheckOutcome value), `severity_reduced`.
+6. Persist `AnimaRitualPerformance` with `ritual=ritual`, `scene=scene`, `was_successful=(outcome in {CRITICAL_SUCCESS, SUCCESS})`, `anima_recovered`, `outcome` (CheckOutcome value), `severity_reduced`. `target_character` left unset (solo ritual; field semantics belong to a future co-performance scope).
 7. Return `RitualOutcome`.
 
 **Transactional boundary:** entire service wrapped in `transaction.atomic()` with `select_for_update()` on the `CharacterAnima` row and the active Soulfray `ConditionInstance` (if any).
@@ -469,7 +469,7 @@ Lives in `world/conditions/services.py`. Inverse of `advance_condition_severity`
 4. Assign `instance.severity`, `instance.current_stage`.
 5. If `new_severity == 0`, set `instance.resolved_at = get_ic_now() or timezone.now()`. The fallback to `timezone.now()` covers the case where the IC clock is unconfigured (see `world/game_clock/services.py:19` which returns `datetime | None`).
 6. `instance.save(update_fields=["severity", "current_stage", "resolved_at"])`.
-7. If the stage actually changed, emit `CONDITION_STAGE_CHANGED` via the existing `ConditionStageChangedPayload(target, instance, old_stage, new_stage)` — no new fields on the payload. Direction is derivable by callers from `old_stage.stage_order` vs `new_stage.stage_order` where needed; the spec's stage-entry handler in Section 5.6 uses `new_stage.stage_order > previous_stage.stage_order` to detect ascending (entry) vs descending (not-entry).
+7. If the stage actually changed, emit `CONDITION_STAGE_CHANGED` via the existing `ConditionStageChangedPayload(target, instance, old_stage, new_stage)` — no new fields on the payload. **Decay paths (this service) emit descending events; ascent paths (`advance_condition_severity`) emit ascending events; neither carries a `direction` field.** Downstream handlers must derive ascending vs descending from `old_stage.stage_order` vs `new_stage.stage_order`. The §5.6 stage-entry handler is the reference example.
 8. Return `SeverityDecayResult(previous_stage, new_stage, new_severity, resolved=(new_severity == 0))`.
 
 ### 5.4 `decay_all_conditions_tick() -> DecayTickSummary`
