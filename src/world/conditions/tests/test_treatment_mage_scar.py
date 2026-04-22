@@ -38,7 +38,8 @@ def _make_check_result(success_level: int):
     return result
 
 
-def _make_pending_treatment(  # noqa: PLR0913 — kw-only test scaffold mirrors TreatmentTemplateFactory shape
+# Test scaffold mirrors TreatmentTemplateFactory shape.
+def _make_pending_treatment(  # noqa: PLR0913
     reduction_on_success: int = 1,
     reduction_on_crit: int = 2,
     reduction_on_partial: int = 0,
