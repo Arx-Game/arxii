@@ -82,7 +82,7 @@ class UseTechniqueSoulfrayCheckpointTests(TestCase):
         self.character = self.anima.character
         CharacterEngagementFactory(character=self.character)
 
-    @patch("world.magic.services.get_soulfray_warning")
+    @patch("world.magic.services.techniques.get_soulfray_warning")
     def test_soulfray_warning_pauses_for_confirmation(
         self,
         mock_warning: MagicMock,
@@ -165,7 +165,7 @@ class UseTechniqueMishapTests(TestCase):
         self.character = self.anima.character
         CharacterEngagementFactory(character=self.character)
 
-    @patch("world.magic.services.select_mishap_pool")
+    @patch("world.magic.services.techniques.select_mishap_pool")
     def test_mishap_fires_when_intensity_exceeds_control(
         self,
         mock_pool: MagicMock,
@@ -203,7 +203,7 @@ class UseTechniqueCheckResultExtractionTests(TestCase):
         self.character = self.anima.character
         CharacterEngagementFactory(character=self.character)
 
-    @patch("world.magic.services.select_mishap_pool")
+    @patch("world.magic.services.techniques.select_mishap_pool")
     def test_use_technique_extracts_check_result_from_pending_resolution(
         self,
         mock_pool: MagicMock,
@@ -250,8 +250,8 @@ class UseTechniqueCheckResultExtractionTests(TestCase):
         # select_mishap_pool was called (control_deficit = 10 - 1 = 9)
         mock_pool.assert_called_once_with(9)
 
-    @patch("world.magic.services._resolve_mishap")
-    @patch("world.magic.services.select_mishap_pool")
+    @patch("world.magic.services.techniques._resolve_mishap")
+    @patch("world.magic.services.techniques.select_mishap_pool")
     def test_extracted_check_result_passed_to_resolve_mishap(
         self,
         mock_pool: MagicMock,
