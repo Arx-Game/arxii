@@ -60,6 +60,7 @@ from world.conditions.types import (
     SeverityAdvanceResult,
     SeverityDecayResult,
 )
+from world.game_clock.services import get_ic_now
 from world.mechanics.models import CharacterModifier
 
 if TYPE_CHECKING:
@@ -1463,7 +1464,12 @@ def advance_condition_severity(
         instance.current_stage = new_stage
         stage_changed = True
 
-    instance.save(update_fields=["severity", "current_stage"])
+    update_fields = ["severity", "current_stage"]
+    if instance.severity > 0 and instance.resolved_at is not None:
+        instance.resolved_at = None
+        update_fields.append("resolved_at")
+
+    instance.save(update_fields=update_fields)
 
     if stage_changed:
         target_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL
@@ -1497,8 +1503,6 @@ def decay_condition_severity(
     actually changes; consumers derive descending-vs-ascending from
     stage_order comparison. Sets resolved_at when severity reaches 0.
     """
-    from world.game_clock.services import get_ic_now  # noqa: PLC0415
-
     previous_stage = instance.current_stage
     new_severity = max(0, instance.severity - amount)
 

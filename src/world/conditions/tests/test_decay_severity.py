@@ -175,3 +175,27 @@ class DecayConditionSeverityTests(TestCase):
         inst.refresh_from_db()
         self.assertEqual(inst.severity, 3)
         self.assertEqual(inst.current_stage, stage1)
+
+    def test_advance_after_decay_to_zero_clears_resolved_at(self):
+        """Reviving a resolved instance via advance must clear resolved_at."""
+        template = ConditionTemplateFactory()
+        stage1 = ConditionStageFactory(condition=template, severity_threshold=1)
+        inst = ConditionInstanceFactory(
+            condition=template,
+            current_stage=stage1,
+            severity=1,
+        )
+
+        # Decay to zero → resolved_at should be set
+        decay_result = decay_condition_severity(inst, amount=1)
+        self.assertTrue(decay_result.resolved)
+        self.assertEqual(inst.severity, 0)
+        inst.refresh_from_db()
+        self.assertIsNotNone(inst.resolved_at)
+
+        # Advance by 1 → resolved_at must be cleared, severity must be > 0
+        advance_result = advance_condition_severity(inst, amount=1)
+        self.assertEqual(advance_result.total_severity, 1)
+        inst.refresh_from_db()
+        self.assertIsNone(inst.resolved_at)
+        self.assertEqual(inst.severity, 1)

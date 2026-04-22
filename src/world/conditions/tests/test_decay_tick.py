@@ -6,6 +6,7 @@ passive_decay_blocked_in_engagement and passive_decay_max_severity.
 """
 
 from django.test import TestCase
+from evennia.objects.models import ObjectDB
 
 from world.conditions.factories import (
     ConditionInstanceFactory,
@@ -13,6 +14,7 @@ from world.conditions.factories import (
     ConditionTemplateFactory,
 )
 from world.conditions.services import decay_all_conditions_tick
+from world.mechanics.factories import CharacterEngagementFactory
 
 
 class DecayAllConditionsTickTests(TestCase):
@@ -43,8 +45,6 @@ class DecayAllConditionsTickTests(TestCase):
         self.assertEqual(summary.examined, 1)
 
     def test_engagement_gate_honored_when_flag_true(self):
-        from world.mechanics.factories import CharacterEngagementFactory
-
         template = ConditionTemplateFactory(
             passive_decay_per_day=1,
             passive_decay_blocked_in_engagement=True,
@@ -70,8 +70,6 @@ class DecayAllConditionsTickTests(TestCase):
         self.assertEqual(summary.examined, 1)
 
     def test_positive_decays_when_passive_decay_blocked_in_engagement_is_false(self):
-        from world.mechanics.factories import CharacterEngagementFactory
-
         template = ConditionTemplateFactory(
             passive_decay_per_day=1,
             passive_decay_blocked_in_engagement=False,
@@ -118,8 +116,6 @@ class DecayAllConditionsTickTests(TestCase):
         self.assertEqual(summary.examined, 1)
 
     def test_non_character_target_never_engagement_gated(self):
-        from evennia.objects.models import ObjectDB
-
         template = ConditionTemplateFactory(
             passive_decay_per_day=1,
             passive_decay_blocked_in_engagement=True,
