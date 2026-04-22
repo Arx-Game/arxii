@@ -240,7 +240,7 @@ class TreatmentAttempt(SharedMemoryModel):
         related_name="treatment_attempts_targeting_alteration",
     )
 
-    outcome = models.CharField(max_length=32, choices=CheckOutcome.choices)
+    outcome = models.ForeignKey("traits.CheckOutcome", on_delete=models.PROTECT, related_name="treatment_attempts")
     severity_reduced = models.IntegerField(default=0)
     tiers_reduced = models.IntegerField(default=0)
     helper_backlash_applied = models.IntegerField(default=0)
@@ -312,6 +312,26 @@ target_difficulty = models.PositiveIntegerField(default=0)
 ```
 
 Difficulty is a property of the per-character ritual (some rituals are harder than others) rather than a property of Soulfray, so it lives on `CharacterAnimaRitual`, not on `SoulfrayConfig`.
+
+#### `AnimaRitualPerformance` — new fields
+
+Persistence of ritual outcomes (per §5.1 step 6) needs two new fields on the existing `AnimaRitualPerformance` model:
+
+```python
+outcome = models.ForeignKey(
+    "traits.CheckOutcome", on_delete=models.PROTECT,
+    null=True, blank=True,
+    related_name="anima_ritual_performances",
+    help_text="CheckOutcome resolved for this performance. Nullable for "
+              "backward compatibility with rows created before Scope 6.",
+)
+severity_reduced = models.PositiveIntegerField(
+    default=0,
+    help_text="Soulfray severity points paid down by this ritual.",
+)
+```
+
+Existing fields (`ritual`, `performed_at`, `target_character`, `scene`, `was_successful`, `anima_recovered`, `notes`) are unchanged.
 
 ### 4.4 File layout — convert `magic/models.py` and `magic/services.py` into packages
 
@@ -536,7 +556,7 @@ def apply_stage_entry_aftermath(payload: ConditionStageChangedPayload) -> None:
 
 **Aftermath severity cap is intentional.** Re-entering an aftermath-granting stage never escalates an existing aftermath instance past `assoc.severity`. The design treats aftermath as "you have it or you don't, plus some scaling per stage" — repeat exposure to the same stage doesn't keep ratcheting severity upward. Players who want to push aftermath higher must reach a higher Soulfray stage that authors a higher-severity aftermath association.
 
-Lives in `world/conditions/services.py` (service function) and is registered as a trigger handler via the existing Scope 5.5 pattern in the app's `AppConfig.ready()`.
+Lives in `world/conditions/services.py` (service function). **Dispatch:** called inline from `advance_condition_severity` immediately after the existing `CONDITION_STAGE_CHANGED` emission. The codebase's reactive layer (`flows/emit.py`) dispatches only to DB-defined `Trigger` rows via `FlowDefinition` — there is no in-process Python subscriber registry. Inlining matches the precedent set by Scope A's `apply_damage_reduction_from_threads` (see `world/magic/services.py:2038-2043`, which documents this same constraint). Building a Python subscriber registry is out of scope for Scope 6; the inline call can migrate to a registered subscriber in a future scope without behaviour change.
 
 ### 5.7 `reduce_pending_alteration_tier(pending, amount, reason) -> PendingAlterationTierReduction`
 
