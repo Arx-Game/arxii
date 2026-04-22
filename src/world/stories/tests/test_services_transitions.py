@@ -4,6 +4,7 @@ from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.stories.constants import BeatOutcome, TransitionMode
+from world.stories.exceptions import ProgressionRequirementNotMetError
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
@@ -39,7 +40,7 @@ class GetEligibleTransitionsTests(EvenniaTestCase):
     # ------------------------------------------------------------------
 
     def test_no_transitions_eligible_when_progression_requirement_unmet(self):
-        """All transitions are blocked when a gating beat is still UNSATISFIED."""
+        """ProgressionRequirementNotMetError raised when a gating beat is still UNSATISFIED."""
         episode = EpisodeFactory()
         progress = self._make_progress(episode=episode)
 
@@ -52,8 +53,19 @@ class GetEligibleTransitionsTests(EvenniaTestCase):
         # A perfectly fine transition with no routing requirements.
         TransitionFactory(source_episode=episode)
 
-        result = get_eligible_transitions(progress)
-        self.assertEqual(result, [])
+        with self.assertRaises(ProgressionRequirementNotMetError):
+            get_eligible_transitions(progress)
+
+    def test_no_progression_requirements_no_routing_requirements_returns_empty(self):
+        """Frontier pause: episode has no progression or routing requirements → returns [].
+
+        This is the authorless-frontier case. The caller can distinguish it from
+        ProgressionRequirementNotMetError because no exception is raised.
+        """
+        episode = EpisodeFactory()
+        progress = self._make_progress(episode=episode)
+        # No EpisodeProgressionRequirements, no outbound Transitions.
+        self.assertEqual(get_eligible_transitions(progress), [])
 
     def test_transition_eligible_when_requirements_met(self):
         """Single transition is returned when all requirements are satisfied."""

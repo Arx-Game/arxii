@@ -8,6 +8,7 @@ Public API:
 
 from django.db.models import Prefetch
 
+from world.stories.exceptions import ProgressionRequirementNotMetError
 from world.stories.models import StoryProgress, Transition, TransitionRequiredOutcome
 
 
@@ -23,8 +24,14 @@ def get_eligible_transitions(progress: StoryProgress) -> list[Transition]:
 
     Returns an empty list when:
         - progress.current_episode is None (frontier or not started)
-        - Any progression requirement is unmet (no transitions can fire)
+        - No outbound transitions are authored AND no progression requirements exist
+          (frontier pause — the story author has not yet written the next episode)
         - No outbound transition passes its routing predicate check
+
+    Raises:
+        ProgressionRequirementNotMetError: when at least one EpisodeProgressionRequirement
+            is unmet. Callers that need to distinguish "blocked by unmet gate" from
+            "frontier pause (no episodes authored yet)" should catch this exception.
 
     Ordered by Transition.order, then pk for determinism.
     """
@@ -38,7 +45,7 @@ def get_eligible_transitions(progress: StoryProgress) -> list[Transition]:
     progression_reqs = list(episode.progression_requirements.select_related("beat").all())
     for req in progression_reqs:
         if req.beat.outcome != req.required_outcome:
-            return []
+            raise ProgressionRequirementNotMetError
 
     # Step 2: Evaluate each outbound transition's routing requirements.
     # Prefetch routing requirements with beats; populate cached_required_outcomes.

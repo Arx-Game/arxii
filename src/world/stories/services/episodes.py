@@ -26,6 +26,7 @@ def resolve_episode(
 
     Algorithm:
         1. Call get_eligible_transitions(progress).
+           - If ProgressionRequirementNotMetError is raised, it propagates to the caller.
         2. If empty → raise NoEligibleTransitionError.
         3. If chosen_transition is provided:
                - Must be in the eligible set, else raise NoEligibleTransitionError.
