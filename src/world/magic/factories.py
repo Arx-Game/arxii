@@ -913,6 +913,7 @@ class ThreadWeavingTeachingOfferFactory(factory.django.DjangoModelFactory):
     unlock = factory.SubFactory(ThreadWeavingUnlockFactory)
     pitch = factory.Faker("paragraph")
     gold_cost = 0
+    banked_ap = 0
 
 
 # =============================================================================
