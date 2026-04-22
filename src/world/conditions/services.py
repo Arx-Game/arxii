@@ -1472,33 +1472,26 @@ def advance_condition_severity(
     instance.save(update_fields=update_fields)
 
     if stage_changed:
+        stage_change_payload = ConditionStageChangedPayload(
+            target=instance.target,
+            instance=instance,
+            old_stage=previous_stage,
+            new_stage=instance.current_stage,
+        )
         target_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL
         if target_location is not None:
             emit_event(
                 EventName.CONDITION_STAGE_CHANGED,
-                ConditionStageChangedPayload(
-                    target=instance.target,
-                    instance=instance,
-                    old_stage=previous_stage,
-                    new_stage=instance.current_stage,
-                ),
+                stage_change_payload,
                 location=target_location,
             )
 
-    # Inline dispatch of the stage-entry aftermath hook. The reactive layer
-    # dispatches only to DB Trigger rows; Python subscribers use the inline
-    # pattern (see apply_damage_reduction_from_threads in magic/services.py).
-    # Only ascending transitions apply aftermath — apply_stage_entry_aftermath
-    # gates internally on stage_order comparison.
-    if stage_changed:
-        apply_stage_entry_aftermath(
-            ConditionStageChangedPayload(
-                target=instance.target,
-                instance=instance,
-                old_stage=previous_stage,
-                new_stage=instance.current_stage,
-            ),
-        )
+        # Inline dispatch of the stage-entry aftermath hook. The reactive layer
+        # dispatches only to DB Trigger rows; Python subscribers use the inline
+        # pattern (see apply_damage_reduction_from_threads in magic/services.py).
+        # Only ascending transitions apply aftermath — apply_stage_entry_aftermath
+        # gates internally on stage_order comparison.
+        apply_stage_entry_aftermath(stage_change_payload)
 
     return SeverityAdvanceResult(
         previous_stage=previous_stage,
@@ -1520,6 +1513,8 @@ def apply_stage_entry_aftermath(payload: ConditionStageChangedPayload) -> None:
     Idempotency: existing aftermath instance with severity >= assoc.severity
     is left alone; lower severity is advanced to assoc.severity.
     """
+    # Aftermath conditions must not themselves have on_entry_conditions; unbounded
+    # recursion otherwise. Authoring/validation enforces this invariant.
     old = payload.old_stage
     new = payload.new_stage
     if new is None:

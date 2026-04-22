@@ -8,6 +8,7 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory
+from flows.constants import EventName
 from flows.events.payloads import ConditionStageChangedPayload
 from world.conditions.factories import (
     ConditionInstanceFactory,
@@ -78,6 +79,7 @@ class ApplyStageEntryAftermathTests(TestCase):
         ).first()
         self.assertIsNotNone(aftermath)
         self.assertEqual(aftermath.severity, 1)
+        self.assertIsNone(aftermath.resolved_at)
 
     def test_descending_does_not_auto_remove_existing_aftermath(self):
         """Aftermath instances are NOT removed when the stage descends.
@@ -106,9 +108,29 @@ class ApplyStageEntryAftermathTests(TestCase):
         )
 
         # Advance to stage3 via inline wiring (not direct hook call)
-        advance_condition_severity(inst, amount=4)
+        captured: list[ConditionStageChangedPayload] = []
+
+        import world.conditions.services as svc_mod
+
+        original = svc_mod.emit_event
+
+        def capturing(name, payload, **kw):
+            if name == EventName.CONDITION_STAGE_CHANGED:
+                captured.append(payload)
+            return original(name, payload, **kw)
+
+        svc_mod.emit_event = capturing
+        try:
+            advance_condition_severity(inst, amount=4)
+        finally:
+            svc_mod.emit_event = original
+
         inst.refresh_from_db()
         self.assertEqual(inst.current_stage, stage3)
+
+        # Verify CONDITION_STAGE_CHANGED was emitted for the ascent
+        self.assertGreaterEqual(len(captured), 1)
+        self.assertEqual(captured[0].new_stage, stage3)
 
         # Aftermath should have been applied by inline wiring
         aftermath = ConditionInstance.objects.filter(
@@ -238,3 +260,5 @@ class ApplyStageEntryAftermathTests(TestCase):
         self.assertIsNotNone(b_inst, "aftermath_b should be applied")
         self.assertEqual(a_inst.severity, 1)
         self.assertEqual(b_inst.severity, 2)
+        self.assertIsNone(a_inst.resolved_at)
+        self.assertIsNone(b_inst.resolved_at)
