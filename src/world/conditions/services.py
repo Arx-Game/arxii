@@ -53,6 +53,7 @@ from world.conditions.types import (
     CapabilityStatus,
     CheckModifierResult,
     DamageInteractionResult,
+    DecayTickSummary,
     InteractionResult,
     ResistanceModifierResult,
     RoundTickResult,
@@ -1540,4 +1541,52 @@ def decay_condition_severity(
         new_stage=new_stage,
         new_severity=new_severity,
         resolved=resolved,
+    )
+
+
+def decay_all_conditions_tick() -> DecayTickSummary:
+    """Scheduler entry point. Decays all opt-in conditions by one tick.
+
+    Per spec Scope 6 §5.4. Skips:
+    - instances whose template sets passive_decay_blocked_in_engagement=True
+      and whose target is an engaged character
+    - instances where severity exceeds passive_decay_max_severity
+    """
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    examined = 0
+    ticked = 0
+    engagement_blocked = 0
+    severity_gated = 0
+
+    qs = ConditionInstance.objects.filter(
+        resolved_at__isnull=True,
+        condition__passive_decay_per_day__gt=0,
+    ).select_related("condition", "current_stage", "target")
+
+    for instance in qs:
+        examined += 1
+        cond = instance.condition
+        if (
+            cond.passive_decay_blocked_in_engagement
+            and CharacterEngagement.objects.filter(
+                character=instance.target,
+            ).exists()
+        ):
+            engagement_blocked += 1
+            continue
+        if (
+            cond.passive_decay_max_severity is not None
+            and instance.severity > cond.passive_decay_max_severity
+        ):
+            severity_gated += 1
+            continue
+        decay_condition_severity(instance, cond.passive_decay_per_day)
+        ticked += 1
+
+    return DecayTickSummary(
+        examined=examined,
+        ticked=ticked,
+        engagement_blocked=engagement_blocked,
+        severity_gated=severity_gated,
     )
