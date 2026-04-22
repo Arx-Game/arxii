@@ -5,14 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import transaction
-from django.db.models import F
 
-from world.conditions.models import ConditionInstance
 from world.magic.models import CharacterAnima
-from world.magic.models.anima import AnimaConfig
 from world.magic.types.ritual import AnimaRegenTickSummary, RitualOutcome
-from world.mechanics.engagement import CharacterEngagement
-from world.mechanics.models import Property
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -188,6 +183,12 @@ def anima_regen_tick() -> AnimaRegenTickSummary:
     condition stages carry the blocking Property. Skip sets are bulk-
     fetched in 2 queries before the loop to avoid N+1.
     """
+    from django.db.models import F  # noqa: PLC0415, I001
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.magic.models.anima import AnimaConfig  # noqa: PLC0415
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+    from world.mechanics.models import Property  # noqa: PLC0415
+
     config = AnimaConfig.get_singleton()
     blocker = Property.objects.get(name=config.daily_regen_blocking_property_key)
 
