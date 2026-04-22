@@ -25,6 +25,7 @@ from world.magic.exceptions import (
     XPInsufficient,
 )
 from world.magic.models import (
+    CharacterResonance,
     CharacterThreadWeavingUnlock,
     Thread,
     ThreadLevelUnlock,
@@ -348,8 +349,6 @@ def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
 
     Spec A §3.6.
     """
-    from world.magic.models import CharacterResonance  # noqa: PLC0415
-
     threads = list(
         Thread.objects.filter(owner=character_sheet, retired_at__isnull=True).select_related(
             "resonance__affinity",
