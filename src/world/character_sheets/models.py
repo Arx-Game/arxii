@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from world.achievements.handlers import StatHandler
+    from world.classes.models import CharacterClassLevel
     from world.scenes.models import Persona
 
 from django.core.exceptions import ValidationError
@@ -280,6 +281,69 @@ class CharacterSheet(SharedMemoryModel):
         from world.scenes.constants import PersonaType  # noqa: PLC0415
 
         return self.personas.get(persona_type=PersonaType.PRIMARY)
+
+    @cached_property
+    def cached_character_class_levels(self) -> list[CharacterClassLevel]:
+        """All CharacterClassLevel records for this character's ObjectDB.
+
+        Serves as the ``to_attr`` target for::
+
+            Prefetch(
+                "character__character_class_levels",
+                queryset=CharacterClassLevel.objects.select_related("character_class"),
+                to_attr="cached_character_class_levels",
+            )
+
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+
+        To invalidate after mutating levels::
+
+            sheet.invalidate_class_level_cache()
+
+        Note: ``CharacterClassLevel.character`` FKs to ObjectDB (shared-pk with
+        CharacterSheet), so we walk ``self.character.character_class_levels``.
+        """
+        from world.classes.models import CharacterClassLevel  # noqa: PLC0415
+
+        return list(
+            CharacterClassLevel.objects.filter(character=self.character).select_related(
+                "character_class"
+            )
+        )
+
+    @cached_property
+    def current_level(self) -> int:
+        """Character's current level — the highest level across all class assignments.
+
+        Returns 0 if the character has no class assignments (freshly created test
+        characters, NPCs without classes).
+
+        Derived from ``cached_character_class_levels``; invalidate after any
+        mutation to class levels::
+
+            sheet.invalidate_class_level_cache()
+        """
+        levels = [ccl.level for ccl in self.cached_character_class_levels]
+        return max(levels) if levels else 0
+
+    def invalidate_class_level_cache(self) -> None:
+        """Clear the cached class-level data.
+
+        Call this after any code path that mutates the character's
+        CharacterClassLevel records (create, update, delete, bulk ops).
+        Progression services, admin actions, and test fixtures that set
+        levels directly must call this so subsequent reads of
+        ``current_level`` and ``cached_character_class_levels`` reflect
+        the mutation.
+
+        Example::
+
+            CharacterClassLevel.objects.create(character=sheet.character, ...)
+            sheet.invalidate_class_level_cache()
+        """
+        self.__dict__.pop("cached_character_class_levels", None)
+        self.__dict__.pop("current_level", None)
 
     def display_ic(self) -> str:
         """Delegate to primary_persona.display_ic()."""

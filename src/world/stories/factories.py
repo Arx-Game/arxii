@@ -2,25 +2,52 @@ import factory
 import factory.django as factory_django
 import factory.fuzzy
 
+from world.character_sheets.factories import CharacterSheetFactory
+from world.stories.constants import (
+    BeatOutcome,
+    BeatPredicateType,
+    BeatVisibility,
+    EraStatus,
+    StoryScope,
+    TransitionMode,
+)
 from world.stories.models import (
+    Beat,
+    BeatCompletion,
     Chapter,
     Episode,
+    EpisodeProgressionRequirement,
+    EpisodeResolution,
     EpisodeScene,
+    Era,
     PlayerTrust,
     PlayerTrustLevel,
     Story,
     StoryFeedback,
     StoryParticipation,
+    StoryProgress,
+    Transition,
+    TransitionRequiredOutcome,
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
 from world.stories.types import (
-    ConnectionType,
     ParticipationLevel,
     StoryPrivacy,
     StoryStatus,
     TrustLevel,
 )
+
+
+class EraFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = Era
+        django_get_or_create = ("name",)
+
+    name = factory.Sequence(lambda n: f"era_{n}")
+    display_name = factory.Sequence(lambda n: f"Era {n}")
+    season_number = factory.Sequence(lambda n: n + 1)
+    status = EraStatus.UPCOMING
 
 
 class StoryFactory(factory_django.DjangoModelFactory):
@@ -33,6 +60,9 @@ class StoryFactory(factory_django.DjangoModelFactory):
     description = factory.Faker("paragraph", nb_sentences=3)
     status = StoryStatus.ACTIVE
     privacy = StoryPrivacy.PUBLIC
+    scope = StoryScope.CHARACTER
+    character_sheet = None  # Tests that need character-scoped stories set this explicitly.
+    created_in_era = None
     is_personal_story = False
     personal_story_character = None
 
@@ -126,8 +156,6 @@ class EpisodeFactory(factory_django.DjangoModelFactory):
     is_active = False
     summary = factory.Faker("paragraph", nb_sentences=2)
     consequences = factory.Faker("paragraph", nb_sentences=1)
-    connection_to_next = ConnectionType.THEREFORE
-    connection_summary = factory.Faker("sentence")
 
 
 class ActiveEpisodeFactory(EpisodeFactory):
@@ -137,13 +165,21 @@ class ActiveEpisodeFactory(EpisodeFactory):
 
 
 class EpisodeWithButConnectionFactory(EpisodeFactory):
-    """Factory for episodes with 'but' connection"""
+    """Factory for episodes with 'but' connection — kept for scenario variety"""
 
-    connection_to_next = ConnectionType.BUT
-    connection_summary = factory.Faker(
-        "sentence",
-        extra_kwargs={"start_words": ["But suddenly", "However"]},
+
+class TransitionFactory(factory_django.DjangoModelFactory):
+    """Factory for creating Transition instances linking two Episodes."""
+
+    class Meta:
+        model = Transition
+
+    source_episode = factory.SubFactory(EpisodeFactory)
+    target_episode = factory.LazyAttribute(
+        lambda obj: EpisodeFactory(chapter=obj.source_episode.chapter)
     )
+    mode = TransitionMode.AUTO
+    order = 0
 
 
 # Note: SceneFactory removed due to cross-app dependency issues
@@ -160,8 +196,6 @@ class EpisodeSceneFactory(factory_django.DjangoModelFactory):
     # Note: scene field must be set manually when creating instances
     # due to cross-app dependency issues with SceneFactory
     order = factory.Sequence(lambda n: n + 1)
-    connection_to_next = ConnectionType.THEREFORE
-    connection_summary = factory.Faker("sentence")
 
 
 class PlayerTrustFactory(factory_django.DjangoModelFactory):
@@ -290,6 +324,84 @@ class GMFeedbackFactory(StoryFeedbackFactory):
     )
 
 
+class BeatFactory(factory_django.DjangoModelFactory):
+    """Factory for creating Beat instances"""
+
+    class Meta:
+        model = Beat
+
+    episode = factory.SubFactory(EpisodeFactory)
+    predicate_type = BeatPredicateType.GM_MARKED
+    outcome = BeatOutcome.UNSATISFIED
+    visibility = BeatVisibility.HINTED
+    internal_description = factory.Faker("sentence")
+    player_hint = factory.Faker("sentence")
+    player_resolution_text = factory.Faker("sentence")
+    required_level = None
+
+
+class EpisodeProgressionRequirementFactory(factory_django.DjangoModelFactory):
+    """Factory for creating EpisodeProgressionRequirement instances."""
+
+    class Meta:
+        model = EpisodeProgressionRequirement
+
+    episode = factory.SubFactory(EpisodeFactory)
+    beat = factory.LazyAttribute(lambda obj: BeatFactory(episode=obj.episode))
+    required_outcome = BeatOutcome.SUCCESS
+
+
+class TransitionRequiredOutcomeFactory(factory_django.DjangoModelFactory):
+    """Factory for creating TransitionRequiredOutcome instances."""
+
+    class Meta:
+        model = TransitionRequiredOutcome
+
+    transition = factory.SubFactory(TransitionFactory)
+    beat = factory.LazyAttribute(lambda obj: BeatFactory(episode=obj.transition.source_episode))
+    required_outcome = BeatOutcome.SUCCESS
+
+
+class BeatCompletionFactory(factory_django.DjangoModelFactory):
+    """Factory for creating BeatCompletion audit ledger entries."""
+
+    class Meta:
+        model = BeatCompletion
+
+    beat = factory.SubFactory(BeatFactory)
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    roster_entry = None
+    era = None
+    outcome = BeatOutcome.SUCCESS
+    gm_notes = ""
+
+
+class EpisodeResolutionFactory(factory_django.DjangoModelFactory):
+    """Factory for creating EpisodeResolution audit ledger entries."""
+
+    class Meta:
+        model = EpisodeResolution
+
+    episode = factory.SubFactory(EpisodeFactory)
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    chosen_transition = None
+    resolved_by = None
+    era = None
+    gm_notes = ""
+
+
+class StoryProgressFactory(factory_django.DjangoModelFactory):
+    """Factory for creating StoryProgress per-character progress pointer instances."""
+
+    class Meta:
+        model = StoryProgress
+
+    story = factory.SubFactory(StoryFactory)
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    current_episode = None
+    is_active = True
+
+
 # Convenience functions for common test scenarios
 
 
@@ -304,7 +416,7 @@ def create_complete_story_structure():
 
     # Create episodes for first chapter
     EpisodeFactory(chapter=chapter1, order=1, is_active=True)
-    EpisodeFactory(chapter=chapter1, order=2, connection_to_next=ConnectionType.BUT)
+    EpisodeFactory(chapter=chapter1, order=2)
 
     # Create episodes for second chapter
     EpisodeFactory(chapter=chapter2, order=1)

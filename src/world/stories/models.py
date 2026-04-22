@@ -1,9 +1,18 @@
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, cast
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.stories.constants import (
+    BeatOutcome,
+    BeatPredicateType,
+    BeatVisibility,
+    EraStatus,
+    StoryScope,
+    TransitionMode,
+)
 from world.stories.types import (
     ConnectionType,
     ParticipationLevel,
@@ -75,6 +84,31 @@ class Story(SharedMemoryModel):
         max_length=20,
         choices=StoryPrivacy.choices,
         default=StoryPrivacy.PUBLIC,
+    )
+    scope = models.CharField(
+        max_length=20,
+        choices=StoryScope.choices,
+        default=StoryScope.CHARACTER,
+        help_text=(
+            "Whether this story belongs to one character (CHARACTER), "
+            "a covenant/group (GROUP), or the whole metaplot (GLOBAL)."
+        ),
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="character_stories",
+        help_text="For CHARACTER-scope stories: the character whose story this is.",
+    )
+    created_in_era = models.ForeignKey(
+        "stories.Era",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="stories_created_in_era",
+        help_text="The metaplot era in which this story was created. Null = pre-era or ungrouped.",
     )
 
     # Ownership and management
@@ -310,16 +344,6 @@ class Episode(SharedMemoryModel):
         blank=True,
         help_text="What consequences lead to the next episode",
     )
-    connection_to_next = models.CharField(
-        max_length=20,
-        choices=ConnectionType.choices,
-        blank=True,
-        help_text="How this episode connects to the next",
-    )
-    connection_summary = models.TextField(
-        blank=True,
-        help_text="Explanation of how episodes connect",
-    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -347,18 +371,6 @@ class EpisodeScene(SharedMemoryModel):
         related_name="story_episodes",
     )
     order = models.PositiveIntegerField()
-
-    # Scene connection tracking within episode
-    connection_to_next = models.CharField(
-        max_length=20,
-        choices=ConnectionType.choices,
-        blank=True,
-        help_text="How this scene connects to the next in the episode",
-    )
-    connection_summary = models.TextField(
-        blank=True,
-        help_text="Brief explanation of the scene connection",
-    )
 
     class Meta:
         unique_together = ["episode", "scene"]
@@ -579,3 +591,436 @@ class TrustCategoryFeedbackRating(SharedMemoryModel):
             f"{cast(Any, self.trust_category).display_name}: "
             f"{cast(Any, self).get_rating_display()}"
         )
+
+
+class EraManager(models.Manager):
+    def get_active(self) -> "Era | None":
+        """Return the currently ACTIVE Era, or None if none is active."""
+        return self.filter(status=EraStatus.ACTIVE).first()
+
+
+class Era(SharedMemoryModel):
+    """Staff-activated metaplot era ('Season' in player-facing UI)."""
+
+    objects = EraManager()
+
+    name = models.SlugField(max_length=100, unique=True)
+    display_name = models.CharField(max_length=200)
+    season_number = models.PositiveIntegerField(help_text="Player-facing 'Season N' number.")
+    description = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=EraStatus.choices,
+        default=EraStatus.UPCOMING,
+    )
+    activated_at = models.DateTimeField(null=True, blank=True)
+    concluded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["status"],
+                condition=models.Q(status=EraStatus.ACTIVE),
+                name="only_one_active_era",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"Season {self.season_number}: {self.display_name}"
+
+
+class Transition(SharedMemoryModel):
+    """A guarded edge from one Episode to another."""
+
+    source_episode = models.ForeignKey(
+        "stories.Episode",
+        on_delete=models.CASCADE,
+        related_name="outbound_transitions",
+    )
+    target_episode = models.ForeignKey(
+        "stories.Episode",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="inbound_transitions",
+        help_text="May be null when next episode is unauthored (frontier pause).",
+    )
+    mode = models.CharField(
+        max_length=20,
+        choices=TransitionMode.choices,
+        default=TransitionMode.AUTO,
+        help_text=(
+            "AUTO fires when eligibility is satisfied. GM_CHOICE requires a Lead "
+            "GM to pick from the eligible set."
+        ),
+    )
+    connection_type = models.CharField(
+        max_length=20,
+        choices=ConnectionType.choices,
+        blank=True,
+        default="",
+        help_text="Narrative flavor: THEREFORE / BUT.",
+    )
+    connection_summary = models.TextField(
+        blank=True,
+        help_text="Short narrative description of why this transition fires.",
+    )
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["source_episode", "order"]
+        indexes = [
+            models.Index(fields=["source_episode"]),
+        ]
+
+    def __str__(self) -> str:
+        target_name = self.target_episode.title if self.target_episode else "(unauthored)"
+        return f"{self.source_episode.title} -> {target_name}"
+
+    @cached_property
+    def cached_required_outcomes(self) -> list["TransitionRequiredOutcome"]:
+        """Routing requirements for this transition with beat pre-fetched.
+
+        Serves as the ``to_attr`` target for::
+
+            Prefetch(
+                "required_outcomes",
+                queryset=TransitionRequiredOutcome.objects.select_related("beat"),
+                to_attr="cached_required_outcomes",
+            )
+
+        When not prefetched, falls back to a fresh query.
+
+        To invalidate: ``del transition.cached_required_outcomes``.
+        """
+        return list(self.required_outcomes.select_related("beat").all())
+
+
+class Beat(SharedMemoryModel):
+    """
+    A boolean predicate attached to an episode, with rich outcome state.
+
+    Predicate-type-specific config is stored as nullable columns on this model.
+    ``clean()`` enforces that exactly the right columns are populated for the
+    chosen predicate_type.
+    """
+
+    episode = models.ForeignKey(
+        "stories.Episode",
+        on_delete=models.CASCADE,
+        related_name="beats",
+    )
+    predicate_type = models.CharField(
+        max_length=40,
+        choices=BeatPredicateType.choices,
+        default=BeatPredicateType.GM_MARKED,
+    )
+    outcome = models.CharField(
+        max_length=20,
+        choices=BeatOutcome.choices,
+        default=BeatOutcome.UNSATISFIED,
+        help_text=(
+            "The story's current outcome on this beat — a single shared value across "
+            "the story's progression (the owning character for CHARACTER scope, the "
+            "group for GROUP scope, the world for GLOBAL scope). A story has exactly "
+            "one progression trail, so this field represents the whole story's state, "
+            "not per-character state. Historical per-character contributions live in "
+            "BeatCompletion."
+        ),
+    )
+    visibility = models.CharField(
+        max_length=20,
+        choices=BeatVisibility.choices,
+        default=BeatVisibility.HINTED,
+    )
+
+    # Text layers
+    internal_description = models.TextField(
+        help_text="Author/Lead GM/staff view: real predicate + meaning.",
+    )
+    player_hint = models.TextField(
+        blank=True,
+        help_text="Shown while active (if visibility=HINTED or VISIBLE).",
+    )
+    player_resolution_text = models.TextField(
+        blank=True,
+        help_text="Shown in story log after beat completes.",
+    )
+
+    # Predicate-type-specific config (nullable; populated based on predicate_type)
+    required_level = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="For CHARACTER_LEVEL_AT_LEAST predicates.",
+    )
+
+    # Scaffolding for future phases (not wired yet):
+    deadline = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Optional wall-clock deadline. Expiry handling deferred to Phase 3+.",
+    )
+
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["episode", "order"]
+        indexes = [
+            models.Index(fields=["episode", "outcome"]),
+        ]
+
+    # Invariant mapping: predicate_type -> required config field names
+    _REQUIRED_CONFIG: dict[str, tuple[str, ...]] = {
+        BeatPredicateType.GM_MARKED: (),
+        BeatPredicateType.CHARACTER_LEVEL_AT_LEAST: ("required_level",),
+    }
+
+    def clean(self) -> None:
+        super().clean()
+        required = self._REQUIRED_CONFIG.get(self.predicate_type, ())
+        errors: dict[str, str] = {}
+        for field_name in required:
+            if getattr(self, field_name) in (None, ""):
+                errors[field_name] = f"Required when predicate_type is {self.predicate_type}."
+        # All non-required config fields must be null for this predicate_type.
+        all_config_fields = {"required_level"}
+        for field_name in all_config_fields - set(required):
+            if getattr(self, field_name) is not None:
+                errors[field_name] = f"Must be null when predicate_type is {self.predicate_type}."
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self) -> str:
+        return f"Beat({self.predicate_type}) on {self.episode.title}"
+
+
+class EpisodeProgressionRequirement(SharedMemoryModel):
+    """A beat that must reach ``required_outcome`` before any outbound transition fires."""
+
+    episode = models.ForeignKey(
+        "stories.Episode",
+        on_delete=models.CASCADE,
+        related_name="progression_requirements",
+    )
+    beat = models.ForeignKey(
+        "stories.Beat",
+        on_delete=models.CASCADE,
+        related_name="gating_for_episodes",
+    )
+    required_outcome = models.CharField(
+        max_length=20,
+        choices=BeatOutcome.choices,
+        default=BeatOutcome.SUCCESS,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["episode", "beat"],
+                name="unique_progression_req_per_episode_beat",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.episode.title} requires beat #{self.beat_id} = {self.required_outcome}"
+
+
+class TransitionRequiredOutcome(SharedMemoryModel):
+    """A beat outcome that must be satisfied for this transition to be eligible."""
+
+    transition = models.ForeignKey(
+        "stories.Transition",
+        on_delete=models.CASCADE,
+        related_name="required_outcomes",
+    )
+    beat = models.ForeignKey(
+        "stories.Beat",
+        on_delete=models.CASCADE,
+        related_name="routing_for_transitions",
+    )
+    required_outcome = models.CharField(
+        max_length=20,
+        choices=BeatOutcome.choices,
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["transition", "beat"],
+                name="unique_routing_req_per_transition_beat",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"Transition #{self.transition_id} requires beat #{self.beat_id}"
+            f" = {self.required_outcome}"
+        )
+
+
+class BeatCompletion(SharedMemoryModel):
+    """Audit ledger row for each beat outcome applied to a character's progress."""
+
+    beat = models.ForeignKey(
+        Beat,
+        on_delete=models.CASCADE,
+        related_name="completions",
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="beat_completions",
+    )
+    roster_entry = models.ForeignKey(
+        "roster.RosterEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        help_text=(
+            "Which roster tenure (which player) was active when this beat "
+            "completed. For audit only."
+        ),
+    )
+    outcome = models.CharField(
+        max_length=20,
+        choices=BeatOutcome.choices,
+    )
+    era = models.ForeignKey(
+        Era,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="beat_completions",
+    )
+    gm_notes = models.TextField(blank=True)
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["beat", "character_sheet"]),
+            models.Index(fields=["character_sheet", "-recorded_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"BeatCompletion(beat=#{self.beat_id}, char=#{self.character_sheet_id},"
+            f" outcome={self.outcome})"
+        )
+
+
+class EpisodeResolution(SharedMemoryModel):
+    """Audit record when an episode is resolved and (optionally) a transition fires."""
+
+    episode = models.ForeignKey(
+        Episode,
+        on_delete=models.CASCADE,
+        related_name="resolutions",
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="episode_resolutions",
+    )
+    chosen_transition = models.ForeignKey(
+        Transition,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="resolutions_using",
+        help_text="Null when the episode resolves with no transition (frontier pause).",
+    )
+    resolved_by = models.ForeignKey(
+        "gm.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="episode_resolutions",
+    )
+    era = models.ForeignKey(
+        Era,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="episode_resolutions",
+    )
+    gm_notes = models.TextField(blank=True)
+    resolved_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["episode", "-resolved_at"]),
+            models.Index(fields=["character_sheet", "-resolved_at"]),
+        ]
+
+    def __str__(self) -> str:
+        if self.chosen_transition and self.chosen_transition.target_episode:
+            dest = self.chosen_transition.target_episode.title
+        else:
+            dest = "(frontier)"
+        return f"EpisodeResolution({self.episode.title} -> {dest})"
+
+
+class StoryProgress(SharedMemoryModel):
+    """Per-character pointer into a CHARACTER-scope story's current state."""
+
+    story = models.ForeignKey(
+        Story,
+        on_delete=models.CASCADE,
+        related_name="progress_records",
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="story_progress",
+    )
+    current_episode = models.ForeignKey(
+        Episode,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="active_progress_records",
+        help_text="Null while the story is at the frontier (unauthored) or before start.",
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+    last_advanced_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["story", "character_sheet"],
+                name="unique_progress_per_story_per_character",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["character_sheet", "is_active"]),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.story.scope == StoryScope.CHARACTER:
+            if self.story.character_sheet_id is None:
+                # Story has no owner wired — cannot validate. Allow; service layer will flag.
+                return
+            if self.character_sheet_id != self.story.character_sheet_id:
+                raise ValidationError(
+                    {
+                        "character_sheet": (
+                            "StoryProgress for a CHARACTER-scope story must belong to the "
+                            "story's owning character_sheet."
+                        )
+                    }
+                )
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        episode_title = self.current_episode.title if self.current_episode else "(frontier)"
+        char_label = self.character_sheet.character.db_key if self.character_sheet_id else "?"
+        return f"StoryProgress({char_label} in {self.story.title} @ {episode_title})"

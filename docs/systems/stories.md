@@ -1,15 +1,26 @@
 # Stories System
 
-Player-driven narrative campaign management with hierarchical storytelling and trust-based participation.
+Structured narrative campaign management: trust-based participation, task-gated episode progression, and per-character story arcs.
 
 **Source:** `src/world/stories/`
 **API Base:** `/api/stories/`, `/api/chapters/`, `/api/episodes/`, `/api/episode-scenes/`, `/api/story-participations/`, `/api/player-trust/`, `/api/story-feedback/`
 
 ---
 
-## Enums (types.py)
+## Enums (constants.py and types.py)
 
 ```python
+# constants.py — Phase 1 additions
+from world.stories.constants import (
+    EraStatus,           # UPCOMING, ACTIVE, CONCLUDED
+    StoryScope,          # CHARACTER, GROUP, GLOBAL
+    BeatPredicateType,   # GM_MARKED, CHARACTER_LEVEL_AT_LEAST
+    BeatOutcome,         # UNSATISFIED, SUCCESS, FAILURE, EXPIRED, PENDING_GM_REVIEW
+    BeatVisibility,      # HINTED, SECRET, VISIBLE
+    TransitionMode,      # AUTO, GM_CHOICE
+)
+
+# types.py — pre-Phase-1 (unchanged)
 from world.stories.types import (
     StoryStatus,         # ACTIVE, INACTIVE, COMPLETED, CANCELLED
     StoryPrivacy,        # PUBLIC, PRIVATE, INVITE_ONLY
@@ -17,42 +28,184 @@ from world.stories.types import (
     TrustLevel,          # UNTRUSTED (0), BASIC (1), INTERMEDIATE (2), ADVANCED (3), EXPERT (4)
     ConnectionType,      # THEREFORE, BUT
 )
-
-# Typed data structures
-from world.stories.types import (
-    SceneConnection,   # Dataclass: from_scene_id, to_scene_id, connection_type, summary
-    EpisodeSummary,    # Dataclass: episode_id, summary, consequences, next_episode_setup
-)
 ```
 
 ---
 
-## Models
-
-### Hierarchical Structure
+## Hierarchy
 
 ```
-Story (Campaign)
+Era  (temporal tag — not a hierarchy parent)
+
+Story (CHARACTER / GROUP / GLOBAL scope)
   -> Chapter (Major Arc)
-    -> Episode (Individual Session)
-      -> EpisodeScene (Link to Scene recording)
+    -> Episode (node in the episode DAG)
+
+Episode <-- Transition --> Episode   (directed edges; may be null target = authoring frontier)
+Episode <-- Beat                     (predicates attached to an episode)
+Episode <-- EpisodeProgressionRequirement  (gates all outbound transitions)
+Transition <-- TransitionRequiredOutcome   (gates this specific transition)
 ```
 
-| Model | Purpose | Key Fields |
-|-------|---------|------------|
-| `Story` | Top-level campaign container | `title`, `description`, `status`, `privacy`, `owners` (M2M AccountDB), `active_gms` (M2M gm.GMProfile), `is_personal_story`, `personal_story_character` (FK ObjectDB) |
-| `Chapter` | Major narrative arc within a story | `story` (FK), `title`, `description`, `order`, `is_active`, `summary`, `consequences` |
-| `Episode` | Individual session within a chapter | `chapter` (FK), `title`, `description`, `order`, `is_active`, `summary`, `consequences`, `connection_to_next`, `connection_summary` |
-| `EpisodeScene` | Links scenes to episodes | `episode` (FK), `scene` (FK scenes.Scene), `order`, `connection_to_next`, `connection_summary` |
+---
+
+## Phase 1 Models — Episode Engine
+
+### Era
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `name` | SlugField | Unique slug |
+| `display_name` | CharField | Human-readable |
+| `season_number` | PositiveIntegerField | Player-facing "Season N" |
+| `description` | TextField | |
+| `status` | TextChoices (EraStatus) | UPCOMING / ACTIVE / CONCLUDED |
+| `activated_at` | DateTimeField | Nullable |
+| `concluded_at` | DateTimeField | Nullable |
+
+Partial unique constraint: at most one Era may be ACTIVE at a time (`only_one_active_era`).
+
+### Story (extended in Phase 1)
+
+Pre-Phase-1 fields unchanged. Phase 1 adds:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `scope` | TextChoices (StoryScope) | CHARACTER / GROUP / GLOBAL; default CHARACTER |
+| `character_sheet` | FK → character_sheets.CharacterSheet | Nullable; set for CHARACTER-scope stories |
+| `created_in_era` | FK → stories.Era | Nullable; null = pre-era or ungrouped |
+
+Existing fields: `title`, `description`, `status`, `privacy`, `owners` (M2M AccountDB), `active_gms` (M2M gm.GMProfile), `primary_table` (FK gm.GMTable), `required_trust_categories` (M2M through StoryTrustRequirement), `is_personal_story`, `personal_story_character` (FK ObjectDB).
+
+### Chapter
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `story` | FK → Story | |
+| `title`, `description` | CharField / TextField | |
+| `order` | PositiveIntegerField | Unique per story |
+| `is_active` | BooleanField | |
+| `summary`, `consequences` | TextField | Narrative tracking |
+
+### Episode
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `chapter` | FK → Chapter | |
+| `title`, `description` | CharField / TextField | |
+| `order` | PositiveIntegerField | Unique per chapter |
+| `is_active` | BooleanField | |
+| `summary`, `consequences` | TextField | Narrative tracking |
+
+`connection_to_next` and `connection_summary` removed in Phase 1 — those semantics live on Transition.
+
+### Transition
+
+First-class directed edge in the episode DAG.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `source_episode` | FK → Episode | `related_name="outbound_transitions"` |
+| `target_episode` | FK → Episode (nullable) | Null = authoring frontier |
+| `mode` | TextChoices (TransitionMode) | AUTO (fires on eligibility) / GM_CHOICE (requires explicit GM pick) |
+| `connection_type` | TextChoices (ConnectionType) | THEREFORE / BUT narrative flavor |
+| `connection_summary` | TextField | Short narrative description |
+| `order` | PositiveIntegerField | Tie-breaker for eligibility ordering |
+
+### EpisodeProgressionRequirement
+
+A beat that must reach `required_outcome` before **any** outbound transition from the episode is eligible (episode-level gate; AND semantics across all rows).
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `episode` | FK → Episode | |
+| `beat` | FK → Beat | |
+| `required_outcome` | TextChoices (BeatOutcome) | Default SUCCESS |
+
+### TransitionRequiredOutcome
+
+Per-transition routing predicate. All rows on a given transition must be satisfied (AND). OR semantics expressed by creating multiple transitions.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `transition` | FK → Transition | |
+| `beat` | FK → Beat | |
+| `required_outcome` | TextChoices (BeatOutcome) | |
+
+### Beat
+
+Boolean predicate attached to an episode. Phase 1 implements two concrete predicate types via a flat discriminator column; `clean()` enforces that exactly the right nullable config fields are populated.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `episode` | FK → Episode | |
+| `predicate_type` | TextChoices (BeatPredicateType) | GM_MARKED / CHARACTER_LEVEL_AT_LEAST |
+| `outcome` | TextChoices (BeatOutcome) | Current state; history in BeatCompletion |
+| `visibility` | TextChoices (BeatVisibility) | HINTED (default) / SECRET / VISIBLE |
+| `internal_description` | TextField | Author/staff view |
+| `player_hint` | TextField | Shown while active (if HINTED or VISIBLE) |
+| `player_resolution_text` | TextField | Shown in story log after completion |
+| `required_level` | PositiveIntegerField (nullable) | For CHARACTER_LEVEL_AT_LEAST predicate |
+| `deadline` | DateTimeField (nullable) | Scaffolded; expiry handling in Phase 3+ |
+| `order` | PositiveIntegerField | |
+
+### BeatCompletion
+
+Append-only audit ledger. One row per beat outcome event applied to a character.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `beat` | FK → Beat | |
+| `character_sheet` | FK → character_sheets.CharacterSheet | |
+| `roster_entry` | FK → roster.RosterEntry (nullable) | Which player tenure was active |
+| `outcome` | TextChoices (BeatOutcome) | |
+| `era` | FK → Era (nullable) | Active era at time of completion |
+| `gm_notes` | TextField | |
+| `recorded_at` | DateTimeField (auto_now_add) | |
+
+### EpisodeResolution
+
+Append-only audit ledger. One row per episode resolved for a character.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `episode` | FK → Episode | |
+| `character_sheet` | FK → character_sheets.CharacterSheet | |
+| `chosen_transition` | FK → Transition (nullable) | Null = frontier pause |
+| `resolved_by` | FK → gm.GMProfile (nullable) | |
+| `era` | FK → Era (nullable) | |
+| `gm_notes` | TextField | |
+| `resolved_at` | DateTimeField (auto_now_add) | |
+
+### StoryProgress
+
+Per-character pointer into a CHARACTER-scope story's DAG.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `story` | FK → Story | |
+| `character_sheet` | FK → character_sheets.CharacterSheet | |
+| `current_episode` | FK → Episode (nullable) | Null = frontier or not started |
+| `is_active` | BooleanField | |
+| `started_at` | DateTimeField (auto_now_add) | |
+| `last_advanced_at` | DateTimeField (auto_now) | Updated on each `resolve_episode` call |
+
+Unique constraint: one StoryProgress per (story, character_sheet).
+
+---
+
+## Pre-Phase-1 Models — Trust System & Participation
+
+These models are orthogonal to the episode engine and unchanged.
 
 ### Trust System
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `TrustCategory` | Dynamic trust categories (SharedMemoryModel) | `name`, `display_name`, `description`, `is_active`, `created_by` (FK AccountDB) |
-| `PlayerTrust` | Aggregate trust profile for a player (1:1) | `account` (OneToOne AccountDB), `gm_trust_level` (IntegerChoices), `trust_categories` (M2M through PlayerTrustLevel) |
-| `PlayerTrustLevel` | Per-category trust level for a player | `player_trust` (FK), `trust_category` (FK), `trust_level` (IntegerChoices), `positive_feedback_count`, `negative_feedback_count`, `notes` |
-| `StoryTrustRequirement` | Trust required to join a story | `story` (FK), `trust_category` (FK), `minimum_trust_level` (IntegerChoices), `created_by` (FK AccountDB), `notes` |
+| `TrustCategory` | Dynamic trust categories | `name`, `display_name`, `description`, `is_active`, `created_by` (FK AccountDB) |
+| `PlayerTrust` | Aggregate trust profile (1:1 per account) | `account` (OneToOne AccountDB), `gm_trust_level`, `trust_categories` (M2M through PlayerTrustLevel) |
+| `PlayerTrustLevel` | Per-category trust level | `player_trust` (FK), `trust_category` (FK), `trust_level`, `positive_feedback_count`, `negative_feedback_count` |
+| `StoryTrustRequirement` | Trust required to join a story | `story` (FK), `trust_category` (FK), `minimum_trust_level`, `created_by` (FK AccountDB) |
 
 ### Participation & Feedback
 
@@ -60,141 +213,86 @@ Story (Campaign)
 |-------|---------|------------|
 | `StoryParticipation` | Character participation in a story | `story` (FK), `character` (FK ObjectDB), `participation_level`, `trusted_by_owner`, `is_active` |
 | `StoryFeedback` | Post-story feedback for trust building | `story` (FK), `reviewer` (FK AccountDB), `reviewed_player` (FK AccountDB), `is_gm_feedback`, `comments` |
-| `TrustCategoryFeedbackRating` | Per-category rating within feedback | `feedback` (FK), `trust_category` (FK), `rating` (-2 to +2), `notes` |
+| `TrustCategoryFeedbackRating` | Per-category rating within feedback | `feedback` (FK), `trust_category` (FK), `rating` (-2 to +2) |
 
 ---
 
-## Key Methods
+## Service Functions
 
-### Story
-
-```python
-from world.stories.models import Story
-
-# Check if story is active (has active GMs and ACTIVE status)
-story.is_active()
-
-# Check if a player can apply to participate
-story.can_player_apply(account)  # Checks privacy + trust requirements
-
-# Get trust requirements summary for display
-story.get_trust_requirements_summary()
-# Returns: [{"category": "Antagonistic Roleplay", "minimum_level": "Basic"}, ...]
-```
-
-### PlayerTrust
+All services are in `src/world/stories/services/`.
 
 ```python
-from world.stories.models import PlayerTrust
-
-# Get trust level for a specific category
-trust_profile = account.trust_profile
-level = trust_profile.get_trust_level_for_category(trust_category)
-
-# Get trust level by category name string
-level = trust_profile.get_trust_level_for_category_name("antagonism")
-
-# Check if player meets multiple trust requirements
-trust_profile.has_minimum_trust_for_categories([
-    {"category": "antagonism", "minimum_level": TrustLevel.BASIC},
-    {"category": "mature_themes", "minimum_level": TrustLevel.INTERMEDIATE},
-])
-
-# Aggregate feedback counts
-trust_profile.total_positive_feedback  # Sum across all categories
-trust_profile.total_negative_feedback
+from world.stories.services.beats import evaluate_auto_beats, record_gm_marked_outcome
+from world.stories.services.transitions import get_eligible_transitions
+from world.stories.services.episodes import resolve_episode
 ```
 
-### StoryFeedback
-
-```python
-from world.stories.models import StoryFeedback
-
-# Get average rating across all trust categories
-feedback.get_average_rating()  # Returns float
-
-# Check if feedback is overall positive
-feedback.is_overall_positive()  # True if average > 0
-```
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `evaluate_auto_beats` | `(progress: StoryProgress) -> None` | Re-evaluates all non-GM_MARKED beats in the current episode; flips UNSATISFIED beats whose predicate is now met and writes BeatCompletion rows |
+| `record_gm_marked_outcome` | `(*, progress: StoryProgress, beat: Beat, outcome: BeatOutcome, gm_notes: str = "") -> BeatCompletion` | GM manually resolves a GM_MARKED beat with SUCCESS or FAILURE; raises BeatNotResolvableError if beat is wrong type or outcome is invalid |
+| `get_eligible_transitions` | `(progress: StoryProgress) -> list[Transition]` | Returns outbound transitions eligible to fire: all EpisodeProgressionRequirements met AND each transition's TransitionRequiredOutcomes met; returns [] if any gate is unmet |
+| `resolve_episode` | `(*, progress: StoryProgress, chosen_transition: Transition \| None = None, gm_notes: str = "", resolved_by: GMProfile \| None = None) -> EpisodeResolution` | Selects or validates a transition, creates EpisodeResolution, advances StoryProgress.current_episode; raises NoEligibleTransitionError or AmbiguousTransitionError on bad state |
 
 ---
 
-## API Endpoints
+## Exceptions
 
-### Stories (`/api/stories/`)
-- `GET /api/stories/` - List stories (filtered by privacy/trust)
-- `POST /api/stories/` - Create story (auto-adds creator as owner)
-- `GET /api/stories/{id}/` - Story detail
-- `PUT/PATCH /api/stories/{id}/` - Update story (owner/staff)
-- `POST /api/stories/{id}/apply_to_participate/` - Apply with character_id
-- `GET /api/stories/{id}/participants/` - List active participants
-- `GET /api/stories/{id}/chapters/` - List chapters ordered by order
+```python
+from world.stories.exceptions import (
+    StoryError,                       # Base; has user_message property
+    BeatNotResolvableError,           # Wrong predicate type or invalid outcome for GM resolution
+    NoEligibleTransitionError,        # No transitions eligible, or chosen_transition not in eligible set
+    AmbiguousTransitionError,         # Multiple eligible or GM_CHOICE mode with no explicit pick
+    ProgressionRequirementNotMetError, # Episode-level gate not satisfied (raised defensively)
+)
+```
 
-**Search:** `title`, `description`
-**Ordering:** `created_at`, `updated_at`, `title`, `status`
-
-### Chapters (`/api/chapters/`)
-- `GET /api/chapters/` - List chapters
-- `POST /api/chapters/` - Create chapter
-- `GET /api/chapters/{id}/` - Chapter detail
-- `GET /api/chapters/{id}/episodes/` - List episodes ordered by order
-
-**Search:** `title`, `description`, `summary`
-
-### Episodes (`/api/episodes/`)
-- `GET /api/episodes/` - List episodes
-- `POST /api/episodes/` - Create episode
-- `GET /api/episodes/{id}/` - Episode detail
-- `GET /api/episodes/{id}/scenes/` - List linked scenes ordered by order
-
-**Search:** `title`, `description`, `summary`
-
-### Episode-Scenes (`/api/episode-scenes/`)
-- Full CRUD for linking scenes to episodes
-
-### Story Participations (`/api/story-participations/`)
-- Full CRUD for managing participation records
-
-### Player Trust (`/api/player-trust/`)
-- `GET /api/player-trust/` - List trust profiles (staff or story owners of participants)
-- `GET /api/player-trust/my_trust/` - Get current user's trust profile
-
-### Story Feedback (`/api/story-feedback/`)
-- `GET /api/story-feedback/` - List feedback
-- `POST /api/story-feedback/` - Create feedback (auto-sets reviewer to current user)
-- `GET /api/story-feedback/my_feedback/` - Feedback received by current user
-- `GET /api/story-feedback/feedback_given/` - Feedback given by current user
-
----
-
-## Permissions
-
-| Permission Class | Used For | Rule |
-|-----------------|----------|------|
-| `IsStoryOwnerOrStaff` | Story CRUD | Read: public visible to authenticated users, private/invite-only restricted; Write: owner only |
-| `IsChapterStoryOwnerOrStaff` | Chapter CRUD | Delegates to parent story's owner check |
-| `IsEpisodeStoryOwnerOrStaff` | Episode/EpisodeScene CRUD | Delegates through chapter to story owner check |
-| `IsParticipationOwnerOrStoryOwnerOrStaff` | Participation management | Character owner can read own; story owner can manage all |
-| `IsPlayerTrustOwnerOrStaff` | Trust profiles | Users read own; story owners read participants'; staff modify |
-| `IsReviewerOrStoryOwnerOrStaff` | Feedback | Reviewer manages own; reviewed player reads; story owner reads |
-| `IsGMOrStaff` | GM-only operations | Checks for active GMCharacter typeclass |
-| `CanParticipateInStory` | Story application | Delegates to `story.can_player_apply()` for trust checks |
+All exceptions expose a safe `user_message` string suitable for API responses. Never pass `str(exc)` to response bodies — use `exc.user_message`.
 
 ---
 
 ## Integration Points
 
-- **Scenes System**: `EpisodeScene` links episodes to `scenes.Scene`, allowing scenes to update multiple stories
-- **Connection Tracking**: Episodes and scenes use `ConnectionType` (THEREFORE/BUT) for narrative flow documentation
+- **CharacterSheet** — CHARACTER-scope `StoryProgress` and `BeatCompletion` FK to CharacterSheet; `CharacterSheet` owns the character identity
+- **CharacterClassLevel** (classes app) — `CHARACTER_LEVEL_AT_LEAST` predicate queries CharacterClassLevel for the character's current level
+- **GMProfile** (gm app) — `EpisodeResolution.resolved_by`; `Story.active_gms` M2M; `Story.primary_table` FK to GMTable
+- **RosterEntry** (roster app) — `BeatCompletion.roster_entry` captures which tenure (player) was active at resolution time; audit only
+- **Era** — `BeatCompletion.era` and `EpisodeResolution.era` stamp the active metaplot era at resolution time; `Story.created_in_era` for grouping
+- **Scenes** — `EpisodeScene` links scenes to episodes (unchanged from pre-Phase-1)
+- **Trust system** — `StoryParticipation` and trust models are orthogonal; their APIs and logic are unchanged
 
 ---
 
 ## Admin
 
-- `StoryAdmin` - Full editing with horizontal filter for owners/active_gms; displays active GM and participant counts
-- `ChapterAdmin` - Inline episodes; searchable by story title
-- `EpisodeAdmin` - Inline episode-scenes; color-coded connection type display
-- `TrustCategoryAdmin` - Manage dynamic trust categories
-- `PlayerTrustLevelAdmin` - Color-coded trust levels with feedback summary (+N/-N)
-- `StoryTrustRequirementAdmin` - Color-coded minimum trust level display
-- `StoryFeedbackAdmin` - Inline category ratings; color-coded average rating display
+- `EraAdmin` — season number, status, activation timestamps; enforces at-most-one-active constraint via DB
+- `StoryAdmin` — full editing with horizontal filter for owners/active_gms; scope + character_sheet fields
+- `ChapterAdmin` — inline episodes
+- `EpisodeAdmin` — inline episode-scenes
+- `BeatAdmin` — predicate_type filter; outcome coloring; required_level display conditional on type
+- `TransitionAdmin` — source/target episode; mode + connection_type display
+- `StoryProgressAdmin` — per-character episode pointer; is_active filter
+- `TrustCategoryAdmin`, `PlayerTrustLevelAdmin`, `StoryTrustRequirementAdmin`, `StoryFeedbackAdmin` — unchanged from pre-Phase-1
+
+---
+
+## Key Methods (pre-Phase-1, unchanged)
+
+```python
+# Story
+story.is_active()                              # True if ACTIVE status + has active GMs
+story.can_player_apply(account)                # Privacy + trust requirement check
+story.get_trust_requirements_summary()         # [{"category": ..., "minimum_level": ...}, ...]
+
+# PlayerTrust
+trust_profile.get_trust_level_for_category(trust_category)
+trust_profile.get_trust_level_for_category_name("antagonism")
+trust_profile.has_minimum_trust_for_categories([...])
+trust_profile.total_positive_feedback          # sum across all categories
+trust_profile.total_negative_feedback
+
+# StoryFeedback
+feedback.get_average_rating()                  # float
+feedback.is_overall_positive()                 # True if average > 0
+```

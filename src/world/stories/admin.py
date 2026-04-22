@@ -2,14 +2,22 @@ from django.contrib import admin
 from django.utils.html import format_html
 
 from world.stories.models import (
+    Beat,
+    BeatCompletion,
     Chapter,
     Episode,
+    EpisodeProgressionRequirement,
+    EpisodeResolution,
     EpisodeScene,
+    Era,
     PlayerTrustLevel,
     Story,
     StoryFeedback,
     StoryParticipation,
+    StoryProgress,
     StoryTrustRequirement,
+    Transition,
+    TransitionRequiredOutcome,
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
@@ -131,7 +139,27 @@ class ChapterAdmin(admin.ModelAdmin):
 class EpisodeSceneInline(admin.TabularInline):
     model = EpisodeScene
     extra = 0
-    fields = ["order", "scene", "connection_to_next", "connection_summary"]
+    fields = ["order", "scene"]
+
+
+class TransitionInline(admin.TabularInline):
+    model = Transition
+    fk_name = "source_episode"
+    extra = 0
+    fields = ["order", "target_episode", "mode", "connection_type", "connection_summary"]
+
+
+class BeatInline(admin.TabularInline):
+    model = Beat
+    extra = 0
+    fields = ["predicate_type", "outcome", "visibility", "required_level", "order"]
+
+
+class EpisodeProgressionRequirementInline(admin.TabularInline):
+    model = EpisodeProgressionRequirement
+    extra = 0
+    fk_name = "episode"
+    autocomplete_fields = ("beat",)
 
 
 @admin.register(Episode)
@@ -142,13 +170,17 @@ class EpisodeAdmin(admin.ModelAdmin):
         "title",
         "is_active",
         "scenes_count",
-        "connection_display",
         "completed_at",
     ]
-    list_filter = ["is_active", "connection_to_next", "completed_at", "created_at"]
+    list_filter = ["is_active", "completed_at", "created_at"]
     search_fields = ["title", "chapter__title", "chapter__story__title"]
     readonly_fields = ["created_at", "updated_at"]
-    inlines = [EpisodeSceneInline]
+    inlines = [
+        EpisodeSceneInline,
+        TransitionInline,
+        BeatInline,
+        EpisodeProgressionRequirementInline,
+    ]
 
     fieldsets = (
         (None, {"fields": ("chapter", "order", "title", "description", "is_active")}),
@@ -156,8 +188,6 @@ class EpisodeAdmin(admin.ModelAdmin):
             "Narrative Connections",
             {
                 "fields": (
-                    "connection_to_next",
-                    "connection_summary",
                     "summary",
                     "consequences",
                 ),
@@ -178,16 +208,30 @@ class EpisodeAdmin(admin.ModelAdmin):
 
     scenes_count.short_description = "Scenes"
 
-    def connection_display(self, obj):
-        if obj.connection_to_next:
-            return format_html(
-                '<span style="color: {};">{}</span>',
-                ("#28a745" if obj.connection_to_next in ["therefore", "but"] else "#ffc107"),
-                obj.connection_to_next.title(),
-            )
-        return "-"
 
-    connection_display.short_description = "Connection Type"
+class TransitionRequiredOutcomeInline(admin.TabularInline):
+    model = TransitionRequiredOutcome
+    extra = 0
+    fk_name = "transition"
+    autocomplete_fields = ("beat",)
+
+
+@admin.register(Transition)
+class TransitionAdmin(admin.ModelAdmin):
+    list_display = ("source_episode", "target_episode", "mode", "connection_type", "order")
+    list_filter = ("mode", "connection_type")
+    search_fields = ("source_episode__title", "target_episode__title", "connection_summary")
+    ordering = ("source_episode", "order")
+    inlines = [TransitionRequiredOutcomeInline]
+
+
+@admin.register(Beat)
+class BeatAdmin(admin.ModelAdmin):
+    list_display = ("episode", "predicate_type", "outcome", "visibility", "order")
+    list_filter = ("predicate_type", "outcome", "visibility")
+    search_fields = ("internal_description", "player_hint", "episode__title")
+    ordering = ("episode", "order")
+    readonly_fields = ("created_at", "updated_at")
 
 
 class TrustCategoryFeedbackRatingInline(admin.TabularInline):
@@ -351,3 +395,51 @@ class StoryTrustRequirementAdmin(admin.ModelAdmin):
         )
 
     minimum_trust_level_display.short_description = "Min Trust Level"
+
+
+@admin.register(Era)
+class EraAdmin(admin.ModelAdmin):
+    list_display = ("season_number", "display_name", "status", "activated_at")
+    list_filter = ("status",)
+    search_fields = ("name", "display_name")
+    ordering = ("-season_number",)
+
+
+@admin.register(BeatCompletion)
+class BeatCompletionAdmin(admin.ModelAdmin):
+    list_display = ("beat", "character_sheet", "outcome", "era", "recorded_at")
+    list_filter = ("outcome",)
+    search_fields = ("beat__internal_description", "character_sheet__name")
+    readonly_fields = tuple(f.name for f in BeatCompletion._meta.fields)  # noqa: SLF001
+    ordering = ("-recorded_at",)
+
+
+@admin.register(EpisodeResolution)
+class EpisodeResolutionAdmin(admin.ModelAdmin):
+    list_display = (
+        "episode",
+        "character_sheet",
+        "chosen_transition",
+        "resolved_by",
+        "era",
+        "resolved_at",
+    )
+    list_filter = ("era",)
+    search_fields = ("episode__title", "character_sheet__name", "gm_notes")
+    readonly_fields = tuple(f.name for f in EpisodeResolution._meta.fields)  # noqa: SLF001
+    ordering = ("-resolved_at",)
+
+
+@admin.register(StoryProgress)
+class StoryProgressAdmin(admin.ModelAdmin):
+    list_display = (
+        "story",
+        "character_sheet",
+        "current_episode",
+        "is_active",
+        "started_at",
+        "last_advanced_at",
+    )
+    list_filter = ("is_active",)
+    search_fields = ("story__title", "character_sheet__name")
+    readonly_fields = ("started_at", "last_advanced_at")

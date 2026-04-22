@@ -1205,6 +1205,7 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
         ValidationError: if draft is not a GM draft, or missing target_table,
             or missing story_title.
     """
+    from world.stories.constants import StoryScope  # noqa: PLC0415
     from world.stories.models import Story, StoryParticipation  # noqa: PLC0415
 
     if not draft.is_gm_creation:
@@ -1253,6 +1254,8 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
         title=draft.story_title,
         description=draft.story_description,
         primary_table=draft.target_table,
+        scope=StoryScope.CHARACTER,
+        character_sheet=sheet,
     )
     story.owners.add(draft.account)
 
