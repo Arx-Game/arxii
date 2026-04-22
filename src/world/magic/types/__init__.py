@@ -30,6 +30,7 @@ from world.magic.types.ritual import (
     AnimaRegenTickSummary,
     AnimaRitualCategory,
     RitualOutcome,
+    SoulfrayContent,
 )
 from world.magic.types.techniques import (
     AnimaCostResult,
@@ -59,6 +60,7 @@ __all__ = [
     "ResonancePullResult",
     "RitualOutcome",
     "RuntimeTechniqueStats",
+    "SoulfrayContent",
     "SoulfrayResult",
     "SoulfrayWarning",
     "TechniqueUseResult",

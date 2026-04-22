@@ -52,28 +52,34 @@ class AudereEligibilityTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        # Soulfray condition with stages
+        # Soulfray condition with stages — 5-stage mapping per §8.1
         cls.soulfray_template = ConditionTemplateFactory(
             name=SOULFRAY_CONDITION_NAME, has_progression=True
         )
         cls.stage1 = ConditionStageFactory(
-            condition=cls.soulfray_template, stage_order=1, name="Strain"
+            condition=cls.soulfray_template, stage_order=1, name="Fraying"
         )
         cls.stage2 = ConditionStageFactory(
-            condition=cls.soulfray_template, stage_order=2, name="Fracture"
+            condition=cls.soulfray_template, stage_order=2, name="Tearing"
         )
         cls.stage3 = ConditionStageFactory(
-            condition=cls.soulfray_template, stage_order=3, name="Collapse"
+            condition=cls.soulfray_template, stage_order=3, name="Ripping"
+        )
+        cls.stage4 = ConditionStageFactory(
+            condition=cls.soulfray_template, stage_order=4, name="Sundering"
+        )
+        cls.stage5 = ConditionStageFactory(
+            condition=cls.soulfray_template, stage_order=5, name="Unravelling"
         )
 
         # Intensity tiers
         cls.minor_tier = IntensityTierFactory(name="Minor", threshold=1, control_modifier=0)
         cls.major_tier = IntensityTierFactory(name="Major", threshold=15, control_modifier=-5)
 
-        # Audere requires Major tier + stage 2+ soulfray
+        # Audere requires Major tier + stage 3+ soulfray (Ripping) per §8.6
         cls.threshold = AudereThresholdFactory(
             minimum_intensity_tier=cls.major_tier,
-            minimum_warp_stage=cls.stage2,
+            minimum_warp_stage=cls.stage3,
             intensity_bonus=20,
             anima_pool_bonus=30,
             warp_multiplier=2,
@@ -96,15 +102,16 @@ class AudereEligibilityTests(TestCase):
     def test_all_gates_met(self) -> None:
         char = self._create_character()
         self._create_engagement(char)
+        # Stage 3 (Ripping) meets the §8.6 threshold
         ConditionInstanceFactory(
-            target=char, condition=self.soulfray_template, current_stage=self.stage2
+            target=char, condition=self.soulfray_template, current_stage=self.stage3
         )
         assert check_audere_eligibility(char, runtime_intensity=20) is True
 
     def test_no_engagement(self) -> None:
         char = self._create_character()
         ConditionInstanceFactory(
-            target=char, condition=self.soulfray_template, current_stage=self.stage2
+            target=char, condition=self.soulfray_template, current_stage=self.stage3
         )
         assert check_audere_eligibility(char, runtime_intensity=20) is False
 
@@ -112,15 +119,25 @@ class AudereEligibilityTests(TestCase):
         char = self._create_character()
         self._create_engagement(char)
         ConditionInstanceFactory(
-            target=char, condition=self.soulfray_template, current_stage=self.stage2
+            target=char, condition=self.soulfray_template, current_stage=self.stage3
         )
         assert check_audere_eligibility(char, runtime_intensity=5) is False
 
     def test_soulfray_stage_too_low(self) -> None:
         char = self._create_character()
         self._create_engagement(char)
+        # Stage 1 (Fraying) is below the Ripping threshold — ineligible
         ConditionInstanceFactory(
             target=char, condition=self.soulfray_template, current_stage=self.stage1
+        )
+        assert check_audere_eligibility(char, runtime_intensity=20) is False
+
+    def test_soulfray_stage_2_not_eligible(self) -> None:
+        """Stage 2 (Tearing) is still below the stage 3 threshold per §8.6."""
+        char = self._create_character()
+        self._create_engagement(char)
+        ConditionInstanceFactory(
+            target=char, condition=self.soulfray_template, current_stage=self.stage2
         )
         assert check_audere_eligibility(char, runtime_intensity=20) is False
 
@@ -133,7 +150,7 @@ class AudereEligibilityTests(TestCase):
         char = self._create_character()
         self._create_engagement(char)
         ConditionInstanceFactory(
-            target=char, condition=self.soulfray_template, current_stage=self.stage2
+            target=char, condition=self.soulfray_template, current_stage=self.stage3
         )
         AudereThreshold.objects.all().delete()
         assert check_audere_eligibility(char, runtime_intensity=20) is False
@@ -142,7 +159,7 @@ class AudereEligibilityTests(TestCase):
         char = self._create_character()
         self._create_engagement(char)
         ConditionInstanceFactory(
-            target=char, condition=self.soulfray_template, current_stage=self.stage2
+            target=char, condition=self.soulfray_template, current_stage=self.stage3
         )
         # Already has Audere condition
         audere_template = ConditionTemplateFactory(name=AUDERE_CONDITION_NAME)
@@ -160,14 +177,22 @@ class AudereLifecycleTests(TestCase):
         cls.soulfray_template = ConditionTemplateFactory(
             name=SOULFRAY_CONDITION_NAME, has_progression=True
         )
+        # Create stages up to Ripping (stage 3) per §8.6
+        cls.stage1 = ConditionStageFactory(
+            condition=cls.soulfray_template, stage_order=1, name="Fraying"
+        )
         cls.stage2 = ConditionStageFactory(
-            condition=cls.soulfray_template, stage_order=2, name="Fracture"
+            condition=cls.soulfray_template, stage_order=2, name="Tearing"
+        )
+        cls.stage3 = ConditionStageFactory(
+            condition=cls.soulfray_template, stage_order=3, name="Ripping"
         )
 
         cls.major_tier = IntensityTierFactory(name="Major_lc", threshold=15, control_modifier=-5)
+        # Threshold now gates at stage 3 (Ripping) per §8.6
         cls.threshold = AudereThresholdFactory(
             minimum_intensity_tier=cls.major_tier,
-            minimum_warp_stage=cls.stage2,
+            minimum_warp_stage=cls.stage3,
             intensity_bonus=20,
             anima_pool_bonus=30,
             warp_multiplier=2,

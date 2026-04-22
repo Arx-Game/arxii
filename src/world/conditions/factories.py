@@ -277,3 +277,120 @@ class _ReactiveConditionFactory:
 
 
 ReactiveConditionFactory = _ReactiveConditionFactory()
+
+
+# =============================================================================
+# Scope 6 §8.3 — Aftermath condition factories
+# =============================================================================
+
+
+def _get_soulfray_template() -> ConditionTemplate:
+    """Return the Soulfray ConditionTemplate, creating it if absent.
+
+    Aftermath factories use this as a LazyFunction so they can be created in
+    isolation (without calling SoulfrayContentFactory first). Callers that
+    need the full seeded content (stages + properties) should use
+    ``SoulfrayContentFactory()`` from ``world.magic.factories`` instead.
+    """
+    from world.magic.audere import SOULFRAY_CONDITION_NAME
+
+    template, _ = ConditionTemplate.objects.get_or_create(
+        name=SOULFRAY_CONDITION_NAME,
+        defaults={
+            "description": "Soulfray condition (auto-created by aftermath factory).",
+            "has_progression": True,
+            "passive_decay_per_day": 1,
+            "passive_decay_blocked_in_engagement": True,
+        },
+    )
+    return template
+
+
+def _default_treatment_check_type():
+    """Return a throwaway CheckType for treatment factories.
+
+    Seed-tuning PRs can replace the check type explicitly; this gives a
+    usable default so tests don't require manual wiring.
+    """
+    from world.checks.factories import CheckTypeFactory
+
+    return CheckTypeFactory()
+
+
+class SoulAcheTemplateFactory(ConditionTemplateFactory):
+    """Seed factory for the 'soul_ache' aftermath condition (§8.3)."""
+
+    name = "soul_ache"
+    description = "A dull, persistent ache in the soul."
+    parent_condition = factory.LazyFunction(_get_soulfray_template)
+
+
+class ArcaneTremorTemplateFactory(ConditionTemplateFactory):
+    """Seed factory for the 'arcane_tremor' aftermath condition (§8.3)."""
+
+    name = "arcane_tremor"
+    description = "Uncontrolled tremors in the magical pathways."
+    parent_condition = factory.LazyFunction(_get_soulfray_template)
+
+
+class AuraBleedTemplateFactory(ConditionTemplateFactory):
+    """Seed factory for the 'aura_bleed' aftermath condition (§8.3)."""
+
+    name = "aura_bleed"
+    description = "The aura bleeds raw power, leaving the mage dangerously exposed."
+    parent_condition = factory.LazyFunction(_get_soulfray_template)
+
+
+# =============================================================================
+# Scope 6 §8.5 — Soulfray treatment template factories
+# =============================================================================
+
+
+class SoulfrayStabilizeAftermathTreatmentFactory(DjangoModelFactory):
+    """Seed factory for 'soulfray_stabilize_aftermath' treatment (§8.5)."""
+
+    class Meta:
+        model = TreatmentTemplate
+        django_get_or_create = ("key",)
+
+    key = "soulfray_stabilize_aftermath"
+    name = "Stabilize Soulfray Aftermath"
+    description = "An ally attempts to stabilize a Soulfray aftermath condition."
+    target_condition = factory.LazyFunction(_get_soulfray_template)
+    target_kind = TreatmentTargetKind.AFTERMATH
+    check_type = factory.LazyFunction(_default_treatment_check_type)
+    requires_bond = True
+    resonance_cost = 1
+    anima_cost = 0
+    once_per_scene_per_helper = True
+    backlash_severity_on_failure = 1
+    backlash_target_condition = factory.LazyFunction(_get_soulfray_template)
+    reduction_on_crit = 3
+    reduction_on_success = 2
+    reduction_on_partial = 1
+    reduction_on_failure = 0
+
+
+class SoulfrayStabilizeMageScarTreatmentFactory(DjangoModelFactory):
+    """Seed factory for 'soulfray_stabilize_mage_scar' treatment (§8.5)."""
+
+    class Meta:
+        model = TreatmentTemplate
+        django_get_or_create = ("key",)
+
+    key = "soulfray_stabilize_mage_scar"
+    name = "Stabilize Pending Mage Scar"
+    description = "An ally attempts to reduce the severity of a pending Mage Scar."
+    target_condition = factory.LazyFunction(_get_soulfray_template)
+    target_kind = TreatmentTargetKind.PENDING_ALTERATION
+    check_type = factory.LazyFunction(_default_treatment_check_type)
+    requires_bond = True
+    resonance_cost = 2
+    anima_cost = 0
+    once_per_scene_per_helper = True
+    backlash_severity_on_failure = 1
+    backlash_target_condition = factory.LazyFunction(_get_soulfray_template)
+    reduction_on_crit = 2
+    reduction_on_success = 1
+    reduction_on_partial = 1
+    reduction_on_failure = 0

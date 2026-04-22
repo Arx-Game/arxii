@@ -18,7 +18,7 @@ from world.magic.factories import CharacterAnimaFactory
 from world.magic.models.anima import AnimaConfig
 from world.magic.services.anima import anima_regen_tick
 from world.magic.types import AnimaRegenTickSummary
-from world.mechanics.factories import CharacterEngagementFactory, PropertyFactory
+from world.mechanics.factories import BlocksAnimaRegenPropertyFactory, CharacterEngagementFactory
 
 
 class CharacterAtMaxNotExaminedTests(TestCase):
@@ -27,8 +27,7 @@ class CharacterAtMaxNotExaminedTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         """Create the blocking property."""
-        config = AnimaConfig.get_singleton()
-        PropertyFactory(name=config.daily_regen_blocking_property_key)
+        BlocksAnimaRegenPropertyFactory()
 
     def test_character_at_max_not_examined(self) -> None:
         """Character with current == maximum → examined==0."""
@@ -54,8 +53,7 @@ class CharacterBelowMaxNoBlockingConditionsTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         """Create the blocking property."""
-        config = AnimaConfig.get_singleton()
-        PropertyFactory(name=config.daily_regen_blocking_property_key)
+        BlocksAnimaRegenPropertyFactory()
 
     def test_character_below_max_no_blocking_conditions_regen_applied(self) -> None:
         """Character with current < maximum and no blocking conditions → regen applied."""
@@ -90,11 +88,8 @@ class CharacterBelowMaxSoulfrayStage2SkippedTests(TestCase):
         self,
     ) -> None:
         """Character with Soulfray stage 2 carrying blocks_anima_regen property → skipped."""
-        config = AnimaConfig.get_singleton()
-        blocker_key = config.daily_regen_blocking_property_key
-
         # Create the blocking property
-        blocker = PropertyFactory(name=blocker_key)
+        blocker = BlocksAnimaRegenPropertyFactory()
 
         # Create Soulfray condition with stages
         soulfray = ConditionTemplateFactory(
@@ -150,10 +145,9 @@ class CharacterBelowMaxSoulfrayStage1RegenAppliedTests(TestCase):
         config = AnimaConfig.get_singleton()
         config.daily_regen_percent = 10
         config.save()
-        blocker_key = config.daily_regen_blocking_property_key
 
-        # Create the blocking property
-        blocker = PropertyFactory(name=blocker_key)
+        # Create the blocking property (exists but NOT attached to stage 1)
+        blocker = BlocksAnimaRegenPropertyFactory()
 
         # Create Soulfray condition with stages
         soulfray = ConditionTemplateFactory(
@@ -207,8 +201,7 @@ class CharacterEngagedSkippedTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         """Create the blocking property."""
-        config = AnimaConfig.get_singleton()
-        PropertyFactory(name=config.daily_regen_blocking_property_key)
+        BlocksAnimaRegenPropertyFactory()
 
     def test_engaged_character_skipped(self) -> None:
         """Character with active CharacterEngagement → skipped."""
@@ -245,8 +238,7 @@ class NCharactersSingleDigitQueryCountTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         """Create the blocking property."""
-        config = AnimaConfig.get_singleton()
-        PropertyFactory(name=config.daily_regen_blocking_property_key)
+        BlocksAnimaRegenPropertyFactory()
 
     def test_n_characters_single_digit_query_count(self) -> None:
         """Create 10+ CharacterAnima rows → single-digit query count."""

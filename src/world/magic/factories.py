@@ -4,7 +4,7 @@ import factory
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionTemplateFactory
-from world.magic.audere import AudereThreshold
+from world.magic.audere import SOULFRAY_CONDITION_NAME, AudereThreshold
 from world.magic.constants import (
     AlterationTier,
     CantripArchetype,
@@ -56,6 +56,8 @@ from world.magic.models import (
     ThreadXPLockedLevel,
     Tradition,
 )
+from world.magic.models.anima import AnimaConfig
+from world.magic.types.ritual import SoulfrayContent
 from world.traits.factories import TraitFactory
 
 
@@ -442,6 +444,12 @@ class SoulfrayConfigFactory(factory.django.DjangoModelFactory):
     deficit_scale = 5
     resilience_check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
     base_check_difficulty = 15
+    # Ritual budget defaults per spec §8.7 (mirrors migration 0021 defaults)
+    ritual_budget_critical_success = 10
+    ritual_budget_success = 6
+    ritual_budget_partial = 3
+    ritual_budget_failure = 1
+    ritual_severity_cost_per_point = 1
 
 
 class MishapPoolTierFactory(factory.django.DjangoModelFactory):
@@ -905,4 +913,146 @@ class ThreadWeavingTeachingOfferFactory(factory.django.DjangoModelFactory):
     unlock = factory.SubFactory(ThreadWeavingUnlockFactory)
     pitch = factory.Faker("paragraph")
     gold_cost = 0
-    banked_ap = 5
+
+
+# =============================================================================
+# Scope 6 §8 — Seed Content Factories
+# =============================================================================
+
+
+class AnimaConfigFactory(factory.django.DjangoModelFactory):
+    """Factory for AnimaConfig singleton (spec §8.8).
+
+    Uses django_get_or_create on pk=1 to mirror AnimaConfig.get_singleton().
+    Repeated calls in the same test DB return the same row.
+    """
+
+    class Meta:
+        model = AnimaConfig
+        django_get_or_create = ("id",)
+
+    id = 1
+    daily_regen_percent = 5
+    daily_regen_blocking_property_key = "blocks_anima_regen"
+
+
+class _SoulfrayContentFactory:
+    """Callable helper that seeds the 5-stage Soulfray condition per spec §8.1.
+
+    Not a DjangoModelFactory — this is a composition helper. Callers invoke
+    ``SoulfrayContentFactory()`` to get a ``SoulfrayContent`` dataclass holding:
+      - template: the seeded ConditionTemplate (name=SOULFRAY_CONDITION_NAME)
+      - stages: list of 5 ConditionStage rows [Fraying, Tearing, Ripping,
+                Sundering, Unravelling] in stage_order order
+      - blocks_anima_regen: the seeded Property row (name="blocks_anima_regen")
+
+    After stage creation, backfills
+    ``template.passive_decay_max_severity = stages[1].severity_threshold - 1``
+    (= 5, one below Tearing) so passive decay only operates at stage 1.
+
+    Idempotent: uses get_or_create on template name and stage unique_together
+    so running twice in one test class setup does not double-create rows.
+    """
+
+    # Stage spec per §8.1
+    _STAGES = [
+        {"stage_order": 1, "name": "Fraying", "severity_threshold": 1},
+        {"stage_order": 2, "name": "Tearing", "severity_threshold": 6},
+        {"stage_order": 3, "name": "Ripping", "severity_threshold": 16},
+        {"stage_order": 4, "name": "Sundering", "severity_threshold": 36},
+        {"stage_order": 5, "name": "Unravelling", "severity_threshold": 66},
+    ]
+
+    def __call__(self) -> SoulfrayContent:
+        from world.conditions.models import ConditionStage
+        from world.mechanics.factories import BlocksAnimaRegenPropertyFactory
+
+        # Ensure the blocks_anima_regen property exists
+        blocks_prop = BlocksAnimaRegenPropertyFactory()
+
+        # Build the Soulfray ConditionTemplate (get_or_create via factory's
+        # django_get_or_create on name)
+        template = ConditionTemplateFactory(
+            name=SOULFRAY_CONDITION_NAME,
+            has_progression=True,
+            passive_decay_per_day=1,
+            passive_decay_blocked_in_engagement=True,
+        )
+
+        stages = []
+        for spec in self._STAGES:
+            stage, _ = ConditionStage.objects.get_or_create(
+                condition=template,
+                stage_order=spec["stage_order"],
+                defaults={
+                    "name": spec["name"],
+                    "severity_threshold": spec["severity_threshold"],
+                    "description": f"Soulfray {spec['name']} stage.",
+                },
+            )
+            stages.append(stage)
+
+        # Wire blocks_anima_regen onto stages 2–5 (Tearing onward, per §8.4)
+        for stage in stages[1:]:
+            stage.properties.add(blocks_prop)
+
+        # Backfill passive_decay_max_severity = Tearing.severity_threshold - 1 = 5
+        tearing_threshold = stages[1].severity_threshold
+        if template.passive_decay_max_severity != tearing_threshold - 1:
+            template.passive_decay_max_severity = tearing_threshold - 1
+            template.save(update_fields=["passive_decay_max_severity"])
+
+        return SoulfrayContent(
+            template=template,
+            stages=stages,
+            blocks_anima_regen=blocks_prop,
+        )
+
+
+SoulfrayContentFactory = _SoulfrayContentFactory()
+
+
+def wire_soulfray_aftermath(content: SoulfrayContent) -> None:
+    """Create ConditionStageOnEntry rows for Soulfray aftermath per spec §8.3.
+
+    Stage 3 (Ripping)   → soul_ache severity=1
+    Stage 4 (Sundering) → soul_ache severity=1, arcane_tremor severity=1
+    Stage 5 (Unravelling) → arcane_tremor severity=1, aura_bleed severity=2
+
+    Requires the aftermath ConditionTemplates to already exist (created by
+    SoulAcheTemplateFactory, ArcaneTremorTemplateFactory, AuraBleedTemplateFactory).
+    Idempotent: get_or_create on the through-model's unique constraint.
+    """
+    from world.conditions.models import (
+        ConditionStageOnEntry,
+        ConditionTemplate,
+    )
+
+    soul_ache = ConditionTemplate.objects.get(name="soul_ache")
+    arcane_tremor = ConditionTemplate.objects.get(name="arcane_tremor")
+    aura_bleed = ConditionTemplate.objects.get(name="aura_bleed")
+
+    ripping = content.stages[2]
+    sundering = content.stages[3]
+    unravelling = content.stages[4]
+
+    # Stage 3 → soul_ache
+    ConditionStageOnEntry.objects.get_or_create(
+        stage=ripping, condition=soul_ache, defaults={"severity": 1}
+    )
+
+    # Stage 4 → soul_ache + arcane_tremor
+    ConditionStageOnEntry.objects.get_or_create(
+        stage=sundering, condition=soul_ache, defaults={"severity": 1}
+    )
+    ConditionStageOnEntry.objects.get_or_create(
+        stage=sundering, condition=arcane_tremor, defaults={"severity": 1}
+    )
+
+    # Stage 5 → arcane_tremor + aura_bleed
+    ConditionStageOnEntry.objects.get_or_create(
+        stage=unravelling, condition=arcane_tremor, defaults={"severity": 1}
+    )
+    ConditionStageOnEntry.objects.get_or_create(
+        stage=unravelling, condition=aura_bleed, defaults={"severity": 2}
+    )
