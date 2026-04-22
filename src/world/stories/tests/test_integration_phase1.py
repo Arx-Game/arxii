@@ -138,6 +138,10 @@ class FullLoopPhase1IntegrationTest(EvenniaTestCase):
         # ------------------------------------------------------------------ #
         char_class = CharacterClassFactory()
         CharacterClassLevelFactory(character=sheet.character, character_class=char_class, level=2)
+        # Simulate what production progression code does after mutating a
+        # CharacterClassLevel: invalidate the sheet's cached level data so
+        # evaluate_auto_beats sees the new level.
+        sheet.invalidate_class_level_cache()
         evaluate_auto_beats(progress)
 
         gating_beat.refresh_from_db()

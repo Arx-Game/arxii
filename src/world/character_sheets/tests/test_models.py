@@ -333,6 +333,5 @@ class CurrentLevelTests(TestCase):
         self.assertEqual(sheet.current_level, 5, "Cached value should persist")
 
         # Explicit invalidation refreshes.
-        del sheet.cached_character_class_levels
-        del sheet.current_level
+        sheet.invalidate_class_level_cache()
         self.assertEqual(sheet.current_level, 7)

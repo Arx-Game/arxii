@@ -299,8 +299,7 @@ class CharacterSheet(SharedMemoryModel):
 
         To invalidate after mutating levels::
 
-            del sheet.cached_character_class_levels
-            del sheet.current_level  # if accessed
+            sheet.invalidate_class_level_cache()
 
         Note: ``CharacterClassLevel.character`` FKs to ObjectDB (shared-pk with
         CharacterSheet), so we walk ``self.character.character_class_levels``.
@@ -320,14 +319,31 @@ class CharacterSheet(SharedMemoryModel):
         Returns 0 if the character has no class assignments (freshly created test
         characters, NPCs without classes).
 
-        Derived from ``cached_character_class_levels``; invalidate that too after
-        any mutation to class levels::
+        Derived from ``cached_character_class_levels``; invalidate after any
+        mutation to class levels::
 
-            del sheet.cached_character_class_levels
-            del sheet.current_level
+            sheet.invalidate_class_level_cache()
         """
         levels = [ccl.level for ccl in self.cached_character_class_levels]
         return max(levels) if levels else 0
+
+    def invalidate_class_level_cache(self) -> None:
+        """Clear the cached class-level data.
+
+        Call this after any code path that mutates the character's
+        CharacterClassLevel records (create, update, delete, bulk ops).
+        Progression services, admin actions, and test fixtures that set
+        levels directly must call this so subsequent reads of
+        ``current_level`` and ``cached_character_class_levels`` reflect
+        the mutation.
+
+        Example::
+
+            CharacterClassLevel.objects.create(character=sheet.character, ...)
+            sheet.invalidate_class_level_cache()
+        """
+        self.__dict__.pop("cached_character_class_levels", None)
+        self.__dict__.pop("current_level", None)
 
     def display_ic(self) -> str:
         """Delegate to primary_persona.display_ic()."""

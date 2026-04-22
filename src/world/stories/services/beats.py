@@ -37,12 +37,6 @@ def evaluate_auto_beats(progress: StoryProgress) -> None:
 
     sheet: CharacterSheet = progress.character_sheet
 
-    # Invalidate cached class-level data so this call always reads current state.
-    # evaluate_auto_beats is called after progression events; stale caches would
-    # return the pre-mutation level on subsequent calls within the same request.
-    sheet.__dict__.pop("cached_character_class_levels", None)
-    sheet.__dict__.pop("current_level", None)
-
     era = Era.objects.get_active()
     roster_entry = _current_roster_entry(sheet)
 
