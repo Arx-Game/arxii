@@ -310,6 +310,29 @@ def register_all_tasks() -> None:
         )
     )
 
+    from world.conditions.services import decay_all_conditions_tick
+    from world.magic.services.anima import anima_regen_tick
+
+    register_task(
+        CronDefinition(
+            task_key="magic.anima_regen_daily",
+            callable=anima_regen_tick,
+            interval=timedelta(hours=24),
+            description=(
+                "Daily anima pool regeneration (skips engaged characters and "
+                "characters whose active condition stages carry blocks_anima_regen)."
+            ),
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="conditions.decay_daily",
+            callable=decay_all_conditions_tick,
+            interval=timedelta(hours=24),
+            description="Passive decay for conditions with passive_decay_per_day > 0.",
+        )
+    )
+
     # Unified weekly rollover — orchestrates all weekly systems in sequence.
     # Advances the GameWeek, then processes votes, random scenes, skills,
     # journals, relationships, and AP regen.
