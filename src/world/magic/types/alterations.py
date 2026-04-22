@@ -48,3 +48,17 @@ class AlterationResolutionResult:
     template: MagicalAlterationTemplate
     condition_instance: ConditionInstance
     event: MagicalAlterationEvent
+
+
+@dataclass(frozen=True)
+class PendingAlterationTierReduction:
+    """Result of reduce_pending_alteration_tier (Scope 6 §7).
+
+    Distinct from AlterationResolutionResult: no template or condition is
+    created — the debt is decremented or cleared without authoring an alteration.
+    """
+
+    pending: PendingAlteration
+    previous_tier: int
+    new_tier: int
+    resolved: bool

@@ -17,6 +17,7 @@ from world.magic.types.alterations import (
     AlterationResolutionError,
     AlterationResolutionResult,
     PendingAlterationResult,
+    PendingAlterationTierReduction,
 )
 from world.magic.types.aura import AffinityType, AuraPercentages
 from world.magic.types.pull import (
@@ -46,6 +47,7 @@ __all__ = [
     "AuraPercentages",
     "MishapResult",
     "PendingAlterationResult",
+    "PendingAlterationTierReduction",
     "PullActionContext",
     "PullPreviewResult",
     "ResolvedPullEffect",

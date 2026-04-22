@@ -22,6 +22,7 @@ from world.magic.types import (
     AlterationResolutionError,
     AlterationResolutionResult,
     PendingAlterationResult,
+    PendingAlterationTierReduction,
 )
 
 if TYPE_CHECKING:
@@ -377,6 +378,47 @@ def resolve_pending_alteration(  # noqa: PLR0913 — kw-only resolution fields a
         template=alteration_template,
         condition_instance=result.instance,
         event=event,
+    )
+
+
+@transaction.atomic
+def reduce_pending_alteration_tier(
+    pending: PendingAlteration,
+    amount: int,
+    reason: str,  # noqa: ARG001 — accepted for future audit/logging; not yet consumed
+) -> PendingAlterationTierReduction:
+    """Reduce the tier on a PendingAlteration. Distinct from resolve_pending_alteration.
+
+    Per spec §5.7. When tier reaches 0, marks RESOLVED with
+    resolved_alteration=None (treatment cleared the debt without
+    authoring an alteration). No MagicalAlterationEvent is created.
+    """
+    from django.utils import timezone as _tz  # noqa: PLC0415
+
+    from world.game_clock.services import get_ic_now  # noqa: PLC0415
+
+    pending = PendingAlteration.objects.select_for_update().get(pk=pending.pk)
+    if pending.status != PendingAlterationStatus.OPEN:
+        raise AlterationResolutionError
+
+    previous_tier = pending.tier
+    new_tier = max(0, previous_tier - amount)
+    resolved = new_tier == 0
+
+    update_fields = ["tier"]
+    pending.tier = new_tier
+    if resolved:
+        pending.status = PendingAlterationStatus.RESOLVED
+        pending.resolved_alteration = None
+        pending.resolved_at = get_ic_now() or _tz.now()
+        update_fields.extend(["status", "resolved_alteration", "resolved_at"])
+    pending.save(update_fields=update_fields)
+
+    return PendingAlterationTierReduction(
+        pending=pending,
+        previous_tier=previous_tier,
+        new_tier=new_tier,
+        resolved=resolved,
     )
 
 
