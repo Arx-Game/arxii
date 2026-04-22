@@ -162,7 +162,7 @@ class TreatmentTemplate(SharedMemoryModel):
     target_kind = models.CharField(max_length=32, choices=TreatmentTargetKind.choices)
 
     check_type = models.ForeignKey("checks.CheckType", on_delete=models.PROTECT)
-    prerequisite_key = models.CharField(max_length=64, blank=True, default="")
+    target_difficulty = models.PositiveIntegerField(default=0)
     requires_bond = models.BooleanField(default=False)
 
     resonance_cost = models.PositiveIntegerField(default=0)
@@ -182,7 +182,21 @@ class TreatmentTemplate(SharedMemoryModel):
     reduction_on_success = models.PositiveIntegerField(default=0)
     reduction_on_partial = models.PositiveIntegerField(default=0)
     reduction_on_failure = models.PositiveIntegerField(default=0)
+
+    def clean(self) -> None:
+        # Resonance cost requires a bond, because the resonance is debited from
+        # the helper's CharacterResonance row keyed to bond_thread.resonance.
+        # Without a bond, there is no Resonance row to debit and the service
+        # would crash. Enforce the invariant at the data layer.
+        super().clean()
+        if self.resonance_cost > 0 and not self.requires_bond:
+            from django.core.exceptions import ValidationError  # noqa: PLC0415
+            raise ValidationError(
+                {"resonance_cost": "resonance_cost > 0 requires requires_bond=True."}
+            )
 ```
+
+> **Note on `prerequisite_key`:** an earlier draft proposed a `prerequisite_key` CharField for plug-in prerequisite callables. There is no project-wide prerequisite registry today (progression uses inheritance-based `AbstractClassLevelRequirement.is_met_by_character`, not a string registry). Scope 6's two seeded treatments don't need a prerequisite hook, so the field is dropped from Scope 6. A future scope that needs treatment-side prerequisite plugins can either add a typed `prerequisite_callable_path` field with a registry, or extend `TreatmentTemplate` via inheritance.
 
 Target-kind choices are placed in `world/conditions/constants.py` per project convention.
 
@@ -289,6 +303,16 @@ class AnimaConfig(SharedMemoryModel):
         return obj
 ```
 
+#### `CharacterAnimaRitual.target_difficulty` (new field)
+
+A per-character ritual difficulty:
+
+```python
+target_difficulty = models.PositiveIntegerField(default=0)
+```
+
+Difficulty is a property of the per-character ritual (some rituals are harder than others) rather than a property of Soulfray, so it lives on `CharacterAnimaRitual`, not on `SoulfrayConfig`.
+
 ### 4.4 File layout — convert `magic/models.py` and `magic/services.py` into packages
 
 This scope converts the flat modules into topically-split packages. Every existing model and service moves into a thematic submodule; `__init__.py` re-exports the full public surface so external callers are unaffected.
@@ -301,10 +325,10 @@ This scope converts the flat modules into topically-split packages. Every existi
 | `aura.py` | `CharacterAura`, `CharacterResonance`, `CharacterAffinityTotal` |
 | `anima.py` | `CharacterAnima`, `CharacterAnimaRitual`, `AnimaRitualPerformance`, **new** `AnimaConfig` |
 | `gifts.py` | `Gift`, `CharacterGift`, `Tradition`, `CharacterTradition` |
-| `techniques.py` | `EffectType`, `TechniqueStyle`, `Restriction`, `IntensityTier`, `Technique`, `TechniqueCapabilityGrant`, `CharacterTechnique` |
+| `techniques.py` | `EffectType`, `TechniqueStyle`, `Restriction`, `IntensityTier`, `Technique`, `TechniqueCapabilityGrant`, `CharacterTechnique`, `TechniqueOutcomeModifier` |
 | `cantrips.py` | `Cantrip` |
 | `motifs.py` | `Facet`, `CharacterFacet`, `Motif`, `MotifResonance`, `MotifResonanceAssociation` |
-| `soulfray.py` | `SoulfrayConfig` (+ new ritual-budget fields), `MishapPoolTier`, `TechniqueOutcomeModifier` |
+| `soulfray.py` | `SoulfrayConfig` (+ new ritual-budget fields), `MishapPoolTier` |
 | `alterations.py` | `MagicalAlterationTemplate`, `PendingAlteration`, `MagicalAlterationEvent` |
 | `threads.py` | `Thread`, `ThreadLevelUnlock`, `ThreadPullCost`, `ThreadXPLockedLevel`, `ThreadPullEffect` |
 | `weaving.py` | `ThreadWeavingUnlock`, `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer` |
@@ -318,7 +342,7 @@ This scope converts the flat modules into topically-split packages. Every existi
 | `aura.py` | `calculate_affinity_breakdown`, `get_aura_percentages` |
 | `anima.py` | `deduct_anima`, **new** `perform_anima_ritual`, **new** `anima_regen_tick` |
 | `techniques.py` | `get_runtime_technique_stats`, `calculate_effective_anima_cost`, `use_technique`, private technique helpers |
-| `alterations.py` | `create_pending_alteration`, `validate_alteration_resolution`, `resolve_pending_alteration`, `has_pending_alterations`, `staff_clear_alteration`, `get_library_entries` |
+| `alterations.py` | `create_pending_alteration`, `validate_alteration_resolution`, `resolve_pending_alteration`, `has_pending_alterations`, `staff_clear_alteration`, `get_library_entries`, **new** `reduce_pending_alteration_tier` |
 | `soulfray.py` | `calculate_soulfray_severity`, `get_soulfray_warning`, `select_mishap_pool`, `_handle_soulfray_accumulation`, `_resolve_mishap`. **Move-only refactor** — Scope 6 does not change these callers' behaviour. |
 | `resonance.py` | `grant_resonance`, `spend_resonance_for_imbuing`, `spend_resonance_for_pull`, `resolve_pull_effects`, `preview_resonance_pull`, private pull/anchor helpers |
 | `threads.py` | `weave_thread`, `accept_thread_weaving_unlock`, cap/lock math, `imbue_ready_threads`, thread queries, damage reduction |
@@ -369,7 +393,7 @@ Lives in `magic/services/anima.py`.
 4. `AnimaRitualPerformance.objects.filter(target_character=character_sheet, scene=scene).exists()` is `False`; else raise `RitualAlreadyPerformedThisScene`.
 
 **Execute:**
-1. Resolve check via `perform_check(character_sheet.character, check_type=ritual.check_type, target_difficulty=<tunable via SoulfrayConfig.ritual_target_difficulty — new field added in 4.3, default 0>)`. The ritual's inherent difficulty is a property of the ritual, not of Soulfray — so an additional field `CharacterAnimaRitual.target_difficulty` (new, default 0) is added in Scope 6 to store per-character difficulty. The check returns a `CheckResult` with `.outcome: CheckOutcome`.
+1. Resolve check via `perform_check(character_sheet.character, check_type=ritual.check_type, target_difficulty=ritual.target_difficulty)`. (`CharacterAnimaRitual.target_difficulty` is the new field added in Section 4.3.) The check returns a `CheckResult` with `.outcome: CheckOutcome`.
 2. Look up budget from outcome:
    - `CheckOutcome.CRITICAL_SUCCESS` → `SoulfrayConfig.ritual_budget_critical_success`
    - `CheckOutcome.SUCCESS` → `...budget_success`
@@ -406,18 +430,17 @@ Internally resolves `helper = helper_sheet.character` and `target = target_sheet
 2. **Parent/primary match** (discriminates PRIMARY vs AFTERMATH since both use `ConditionInstance`):
    - `target_kind == PRIMARY`: `target_effect.condition == treatment.target_condition`; else raise `TreatmentParentMismatch`.
    - `target_kind == AFTERMATH`: `target_effect.condition.parent_condition == treatment.target_condition`; else raise `TreatmentParentMismatch`.
-   - `target_kind == PENDING_ALTERATION`: `target_effect.source_condition_instance.condition == treatment.target_condition` (or whatever FK ties the alteration to its source condition on the current `PendingAlteration` model); else raise `TreatmentParentMismatch`.
+   - `target_kind == PENDING_ALTERATION`: no parent-match check is performed. `PendingAlteration` (in `world.magic.models`) has no FK back to a source `ConditionTemplate` or `ConditionInstance` — Mage Scars are produced by the Scope 5 alteration pipeline, which today only sources from Soulfray. The `treatment.target_condition` field still serves as the "kind of effect this treatment is meant for" for authoring/querying purposes (i.e. `target_condition=soulfray, target_kind=PENDING_ALTERATION` reads as "Mage Scar treatment"), but at the service level the parent-match check is a no-op. If a future scope adds non-Soulfray-sourced `PendingAlteration` rows, add an explicit FK on `PendingAlteration` to its source condition and re-introduce a real parent-match check here.
 3. **Bond gate:** if `treatment.requires_bond`:
    - `bond_thread` is not None and `bond_thread.owner == helper_sheet` and the thread is anchored to a relationship-track or capstone whose subject is `target_sheet`; else raise `NoSupportingBondThread`.
 4. **Scene gate:** if `treatment.scene_required`, `scene` is active and both `helper` and `target` are participants; else raise `TreatmentScenePrerequisiteFailed`.
-5. **Engagement gate:** neither helper nor target has an active `CharacterEngagement`; else raise `HelperEngagedForTreatment`. (Stabilization is in-scene aftercare, not mid-combat.)
-6. **Duplicate gate:** if `treatment.once_per_scene_per_helper`, no prior `TreatmentAttempt` exists for `(helper, target, scene, treatment)`; else raise `TreatmentAlreadyAttempted`.
-7. **Prerequisite callable:** if `treatment.prerequisite_key`, resolve via the project's prerequisite registry and call with `(helper_sheet, target_sheet, scene, treatment, target_effect)`; on False raise `TreatmentScenePrerequisiteFailed`.
-8. **Resonance cost:** debit `treatment.resonance_cost` from `CharacterResonance.objects.select_for_update().get(character_sheet=helper_sheet, resonance=bond_thread.resonance).balance`. (`bond_thread.resonance` is the `Resonance` FK on the Thread; the helper's spendable currency row is `CharacterResonance`.) Raise `TreatmentResonanceInsufficient` on shortfall.
-9. **Anima cost:** if `treatment.anima_cost > 0`, debit via `deduct_anima(helper, treatment.anima_cost)`; raise `TreatmentAnimaInsufficient` on shortfall.
+5. **Engagement gate:** neither helper nor target has an active `CharacterEngagement` (imported from `world.mechanics.engagement`); else raise `HelperEngagedForTreatment`. (Stabilization is in-scene aftercare, not mid-combat.)
+6. **Duplicate gate:** if `treatment.once_per_scene_per_helper`, no prior `TreatmentAttempt` exists for `(helper, target, scene, treatment)`; else raise `TreatmentAlreadyAttempted`. The pre-check is racy under concurrent calls; the partial-unique constraint on `TreatmentAttempt` (Section 4.2) is the authoritative gate. The service wraps the final INSERT in `try/except IntegrityError → raise TreatmentAlreadyAttempted` to give a clean exception across both paths.
+7. **Resonance cost:** if `treatment.resonance_cost > 0`, then `bond_thread` MUST be set (enforced by `TreatmentTemplate.clean()` in §4.2: `resonance_cost > 0 ⇒ requires_bond=True`, and step 3 validates `bond_thread`). Debit via `CharacterResonance.objects.select_for_update().get(character_sheet=helper_sheet, resonance=bond_thread.resonance)`; raise `TreatmentResonanceInsufficient` if `balance < resonance_cost`. (`bond_thread.resonance` is the `Resonance` FK on the Thread; the helper's spendable currency row is `CharacterResonance`.)
+8. **Anima cost:** if `treatment.anima_cost > 0`, debit via `deduct_anima(helper, treatment.anima_cost)`; raise `TreatmentAnimaInsufficient` on shortfall.
 
 **Execute:**
-1. Resolve check via `perform_check(helper, check_type=treatment.check_type, target_difficulty=treatment.target_difficulty_field_if_added_else_0)`. Currently `TreatmentTemplate` has no difficulty field; Scope 6 adds `target_difficulty = PositiveIntegerField(default=0)` to the template (clarification to Section 4.2).
+1. Resolve check via `perform_check(helper, check_type=treatment.check_type, target_difficulty=treatment.target_difficulty)`. (`TreatmentTemplate.target_difficulty` is the new field added in §4.2.)
 2. Map `check_result.outcome` to reduction:
    - `CRITICAL_SUCCESS` → `reduction_on_crit`
    - `SUCCESS` → `reduction_on_success`
@@ -425,15 +448,15 @@ Internally resolves `helper = helper_sheet.character` and `target = target_sheet
    - any failure outcome → `reduction_on_failure` (typically 0)
 3. **Apply reduction:**
    - `PRIMARY` or `AFTERMATH`: `decay_condition_severity(target_effect, amount=reduction)`.
-   - `PENDING_ALTERATION`: call the Scope 5 helper `resolve_pending_alteration(target_effect, reduce_tier_by=reduction, suppress_escalation=True)` — this helper signature exists (confirmed against Scope 5 spec) but may need a `reduce_tier_by` parameter added; Scope 6 delivers that parameter if it's not already present. If tier reaches 0 the alteration is resolved without escalation.
+   - `PENDING_ALTERATION`: call **new** service `reduce_pending_alteration_tier(pending=target_effect, amount=reduction, reason="treatment")` (added in this scope, lives in `magic/services/alterations.py`). This is **NOT** `resolve_pending_alteration` — that helper authors a new alteration template, which is a different operation. The new helper updates `PendingAlteration.tier` (clamped at 0) and, when `tier` reaches 0, marks `status=PendingAlterationStatus.RESOLVED` with `resolved_alteration=None` and `resolved_at=get_ic_now() or timezone.now()` to indicate the pending was cleared without an authored alteration. Return shape is `PendingAlterationTierReduction(pending, previous_tier, new_tier, resolved)` (added to §7).
 4. **Failure backlash:** if `check_result.outcome` is a failure outcome and `treatment.backlash_severity_on_failure > 0`:
    - Determine target condition: `treatment.backlash_target_condition or treatment.target_condition`.
    - Find helper's active `ConditionInstance` for that condition; if none, call `apply_condition(helper, condition=backlash_target, severity=treatment.backlash_severity_on_failure, source_description="stabilization backlash")`.
    - If present, call `advance_condition_severity(helper_instance, amount=treatment.backlash_severity_on_failure)`.
-5. Persist `TreatmentAttempt` with `created_at=get_ic_now()`, outcome, reductions, backlash applied, costs debited, target FK populated per target_kind.
+5. Persist `TreatmentAttempt` with `created_at=get_ic_now() or timezone.now()` (fallback because `get_ic_now()` returns `None` when the IC clock is unconfigured — see `world/game_clock/services.py:19`), outcome, reductions, backlash applied, costs debited, target FK populated per target_kind. Wrap the INSERT in `try/except IntegrityError → raise TreatmentAlreadyAttempted` per step 6.
 6. Return `TreatmentOutcome`.
 
-**Transactional boundary:** entire service wrapped in `transaction.atomic()`. `select_for_update()` on helper's resonance row, helper's anima row (if anima_cost > 0), target's ConditionInstance (or PendingAlteration), and helper's backlash-target ConditionInstance (if present).
+**Transactional boundary:** entire service wrapped in `transaction.atomic()`. `select_for_update()` on helper's resonance row (if `resonance_cost > 0`), helper's anima row (if `anima_cost > 0`), target's `ConditionInstance` or `PendingAlteration`, and helper's backlash-target `ConditionInstance` (if present).
 
 ### 5.3 `decay_condition_severity(instance, amount) -> SeverityDecayResult`
 
@@ -442,9 +465,9 @@ Lives in `world/conditions/services.py`. Inverse of `advance_condition_severity`
 **Behaviour:**
 1. Snapshot `previous_stage = instance.current_stage`.
 2. `new_severity = max(0, instance.severity - amount)`.
-3. Resolve new stage: the `ConditionStage` for this template with the largest `severity_threshold <= new_severity`, or `None` if no stage matches (pre-first-stage).
+3. Resolve new stage: the `ConditionStage` for this template with the largest `severity_threshold <= new_severity`, or `None` if no stage matches (pre-first-stage). When `new_severity == 0` and the lowest authored stage has `severity_threshold >= 1`, `new_stage` is `None`. Consumers of `CONDITION_STAGE_CHANGED` must tolerate `new_stage is None`; the §5.6 stage-entry handler already does.
 4. Assign `instance.severity`, `instance.current_stage`.
-5. If `new_severity == 0`, set `instance.resolved_at = get_ic_now()`.
+5. If `new_severity == 0`, set `instance.resolved_at = get_ic_now() or timezone.now()`. The fallback to `timezone.now()` covers the case where the IC clock is unconfigured (see `world/game_clock/services.py:19` which returns `datetime | None`).
 6. `instance.save(update_fields=["severity", "current_stage", "resolved_at"])`.
 7. If the stage actually changed, emit `CONDITION_STAGE_CHANGED` via the existing `ConditionStageChangedPayload(target, instance, old_stage, new_stage)` — no new fields on the payload. Direction is derivable by callers from `old_stage.stage_order` vs `new_stage.stage_order` where needed; the spec's stage-entry handler in Section 5.6 uses `new_stage.stage_order > previous_stage.stage_order` to detect ascending (entry) vs descending (not-entry).
 8. Return `SeverityDecayResult(previous_stage, new_stage, new_severity, resolved=(new_severity == 0))`.
@@ -471,19 +494,14 @@ Lives in `magic/services/anima.py`. Scheduler entry point.
 1. Fetch `config = AnimaConfig.get_singleton()`.
 2. Resolve the blocking-property Property once: `blocker = Property.objects.get(key=config.daily_regen_blocking_property_key)`.
 3. Query `CharacterAnima.objects.filter(current_anima__lt=models.F("maximum")).select_related("character_sheet__character")`.
-4. For each row:
-   - If `CharacterEngagement.objects.filter(character=row.character_sheet.character).exists()`, skip (engagement-blocked).
-   - Query whether any active ConditionInstance on this target carries the blocker property on its current stage. Shape:
-     ```python
-     blocked = ConditionInstance.objects.filter(
-         target=row.character_sheet.character,
-         resolved_at__isnull=True,
-         current_stage__properties=blocker,
-     ).exists()
-     ```
-     This is one extra query per character. Scale handled by bulk pre-query: pre-fetch the set of character IDs with any blocked active stage in one pass (`ConditionInstance.objects.filter(resolved_at__isnull=True, current_stage__properties=blocker).values_list("target_id", flat=True).distinct()`), then test membership per row — avoids N+1.
+4. **Bulk pre-fetch** the two skip sets in two queries before the loop (avoids N+1):
+   - `engaged_ids = set(CharacterEngagement.objects.values_list("character_id", flat=True))`
+   - `blocked_ids = set(ConditionInstance.objects.filter(resolved_at__isnull=True, current_stage__properties=blocker).values_list("target_id", flat=True).distinct())`
+5. For each row:
+   - If `row.character_sheet.character_id in engaged_ids`, increment "engagement_blocked" counter, skip.
+   - If `row.character_sheet.character_id in blocked_ids`, increment "condition_blocked" counter, skip.
    - Compute `regen = floor(row.maximum * config.daily_regen_percent / 100)`; `row.current_anima = min(row.current_anima + regen, row.maximum)`; save.
-5. Return `AnimaRegenTickSummary(examined, regenerated, engagement_blocked, condition_blocked)`.
+6. Return `AnimaRegenTickSummary(examined, regenerated, engagement_blocked, condition_blocked)`.
 
 ### 5.6 Stage-entry aftermath hook
 
@@ -513,9 +531,33 @@ def apply_stage_entry_aftermath(payload: ConditionStageChangedPayload) -> None:
             )
         elif existing.severity < assoc.severity:
             advance_condition_severity(existing, assoc.severity - existing.severity)
+        # else: existing severity >= assoc.severity — leave alone.
 ```
 
+**Aftermath severity cap is intentional.** Re-entering an aftermath-granting stage never escalates an existing aftermath instance past `assoc.severity`. The design treats aftermath as "you have it or you don't, plus some scaling per stage" — repeat exposure to the same stage doesn't keep ratcheting severity upward. Players who want to push aftermath higher must reach a higher Soulfray stage that authors a higher-severity aftermath association.
+
 Lives in `world/conditions/services.py` (service function) and is registered as a trigger handler via the existing Scope 5.5 pattern in the app's `AppConfig.ready()`.
+
+### 5.7 `reduce_pending_alteration_tier(pending, amount, reason) -> PendingAlterationTierReduction`
+
+Lives in `magic/services/alterations.py`. New service introduced by Scope 6.
+
+**Purpose:** the Scope 5 helper `resolve_pending_alteration` *authors a new alteration template* and applies it as a condition. That is the wrong operation for treatment, which only wants to reduce the tier-debt the helper already owes (potentially clearing the pending entirely). This helper is the missing primitive.
+
+**Behaviour:**
+1. `pending = PendingAlteration.objects.select_for_update().get(pk=pending.pk)`.
+2. If `pending.status != PendingAlterationStatus.OPEN`: raise `AlterationResolutionError` (consistent with `resolve_pending_alteration`).
+3. `previous_tier = pending.tier`; `new_tier = max(0, previous_tier - amount)`; `resolved = (new_tier == 0)`.
+4. If `resolved`:
+   - `pending.status = PendingAlterationStatus.RESOLVED`
+   - `pending.resolved_alteration = None` (no alteration template was authored — treatment cleared the debt)
+   - `pending.resolved_at = get_ic_now() or timezone.now()`
+   - Do **not** create a `MagicalAlterationEvent` (no alteration was applied).
+5. Else: `pending.tier = new_tier`.
+6. `pending.save(update_fields=[...])`.
+7. Return `PendingAlterationTierReduction(pending, previous_tier, new_tier, resolved)`.
+
+The Scope 5 escalation pipeline is unaffected: a same-scene escalation that fires after a treatment-induced tier reduction can still raise the tier. There is no "suppress_escalation" flag — escalation is keyed off scope-5 logic, not off this helper.
 
 ## 6. Scheduler Integration
 
@@ -579,7 +621,15 @@ class TreatmentOutcome:
 class SeverityDecayResult:
     previous_stage: ConditionStage | None
     new_stage: ConditionStage | None
-    total_severity: int
+    new_severity: int
+    resolved: bool
+
+
+@dataclass
+class PendingAlterationTierReduction:
+    pending: PendingAlteration
+    previous_tier: int
+    new_tier: int
     resolved: bool
 
 
@@ -623,7 +673,11 @@ Stage thresholds are tunable during implementation — spec locks the 5-stage co
 ConditionTemplate(
     name="soulfray",
     passive_decay_per_day=1,
-    passive_decay_max_severity=<stage_1_ceiling>,
+    # passive_decay_max_severity == (stage_2.severity_threshold - 1).
+    # i.e. the highest severity that still maps to stage 1. With the tuning
+    # numbers in §8.1, this is 6 - 1 = 5. Decay applies only while severity
+    # is in the stage-1 band (1..5); stage 2+ requires ritual to escape.
+    passive_decay_max_severity=<stage_2.severity_threshold - 1>,
     passive_decay_blocked_in_engagement=True,
     parent_condition=None,
 )
@@ -655,7 +709,7 @@ TreatmentTemplate(
     name="Stabilize Soulfray Aftermath",
     target_condition=soulfray,
     target_kind=TreatmentTargetKind.AFTERMATH,
-    check_type=<TBD seed check type>,
+    check_type=<seed picks the catalog CheckType — choice deferred to seed-tuning PR; both rows can share or diverge>,
     requires_bond=True,
     resonance_cost=1,
     anima_cost=0,
@@ -670,7 +724,7 @@ TreatmentTemplate(
     name="Stabilize Pending Mage Scar",
     target_condition=soulfray,
     target_kind=TreatmentTargetKind.PENDING_ALTERATION,
-    check_type=<TBD seed check type>,
+    check_type=<seed picks the catalog CheckType — choice deferred to seed-tuning PR; both rows can share or diverge>,
     requires_bond=True,
     resonance_cost=2,
     anima_cost=0,
@@ -758,9 +812,10 @@ Exact numbers set during implementation against the stage-threshold tuning.
 - `TreatmentAttempt` persisted accurately.
 
 **`world/conditions/tests/test_treatment_mage_scar.py`**
-- Success on tier-3 pending Mage Scar → tier reduced by `reduction_on_success`.
-- Tier reaches 0 → alteration resolves without escalation via `resolve_pending_alteration(..., suppress_escalation=True)`.
+- Success on tier-3 pending Mage Scar → tier reduced by `reduction_on_success` via `reduce_pending_alteration_tier`.
+- Tier reaches 0 → `PendingAlteration.status` becomes `RESOLVED` with `resolved_alteration=None` and `resolved_at` populated; no `MagicalAlterationEvent` is created (treatment cleared the pending without authoring an alteration).
 - Failure backlash adds Soulfray severity to helper.
+- Concurrency: two simultaneous helper invocations under the partial unique constraint — one INSERT succeeds, the other surfaces `TreatmentAlreadyAttempted` (not `IntegrityError`).
 
 **`world/conditions/tests/test_stage_entry_aftermath.py`**
 - Ascending stage entry with `on_entry_conditions` → aftermath instances appear on target.
