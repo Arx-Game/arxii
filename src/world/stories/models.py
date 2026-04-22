@@ -899,7 +899,14 @@ class BeatCompletion(SharedMemoryModel):
 
 
 class EpisodeResolution(SharedMemoryModel):
-    """Audit record when an episode is resolved and (optionally) a transition fires."""
+    """Audit record when an episode is resolved and (optionally) a transition fires.
+
+    Exactly one of character_sheet / gm_table / neither must be populated,
+    matching the story's scope:
+      - CHARACTER scope → character_sheet non-null, gm_table null.
+      - GROUP scope     → gm_table non-null, character_sheet null.
+      - GLOBAL scope    → both null (the story itself is the identifier).
+    """
 
     episode = models.ForeignKey(
         Episode,
@@ -908,8 +915,19 @@ class EpisodeResolution(SharedMemoryModel):
     )
     character_sheet = models.ForeignKey(
         "character_sheets.CharacterSheet",
+        null=True,
+        blank=True,
         on_delete=models.CASCADE,
         related_name="episode_resolutions",
+        help_text="For CHARACTER-scope stories: the character whose progress advanced.",
+    )
+    gm_table = models.ForeignKey(
+        "gm.GMTable",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="episode_resolutions",
+        help_text="For GROUP-scope stories: the GMTable whose progress advanced.",
     )
     chosen_transition = models.ForeignKey(
         Transition,
@@ -940,7 +958,23 @@ class EpisodeResolution(SharedMemoryModel):
         indexes = [
             models.Index(fields=["episode", "-resolved_at"]),
             models.Index(fields=["character_sheet", "-resolved_at"]),
+            models.Index(fields=["gm_table", "-resolved_at"]),
         ]
+
+    def clean(self) -> None:
+        super().clean()
+        scope = self.episode.chapter.story.scope
+        if scope == StoryScope.CHARACTER and not self.character_sheet_id:
+            raise ValidationError({"character_sheet": "Required for CHARACTER-scope stories."})
+        if scope == StoryScope.GROUP and not self.gm_table_id:
+            raise ValidationError({"gm_table": "Required for GROUP-scope stories."})
+        if scope == StoryScope.CHARACTER and self.gm_table_id:
+            raise ValidationError({"gm_table": "Must be null for CHARACTER-scope stories."})
+        if scope == StoryScope.GROUP and self.character_sheet_id:
+            raise ValidationError({"character_sheet": "Must be null for GROUP-scope stories."})
+        if scope == StoryScope.GLOBAL and (self.character_sheet_id or self.gm_table_id):
+            msg = "Both character_sheet and gm_table must be null for GLOBAL-scope stories."
+            raise ValidationError(msg)
 
     def __str__(self) -> str:
         if self.chosen_transition and self.chosen_transition.target_episode:

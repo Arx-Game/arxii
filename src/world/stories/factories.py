@@ -377,13 +377,18 @@ class BeatCompletionFactory(factory_django.DjangoModelFactory):
 
 
 class EpisodeResolutionFactory(factory_django.DjangoModelFactory):
-    """Factory for creating EpisodeResolution audit ledger entries."""
+    """Factory for creating EpisodeResolution audit ledger entries.
+
+    Defaults to a CHARACTER-scope episode/story with character_sheet populated.
+    For GROUP or GLOBAL scope tests, override episode and set the appropriate FK.
+    """
 
     class Meta:
         model = EpisodeResolution
 
     episode = factory.SubFactory(EpisodeFactory)
     character_sheet = factory.SubFactory(CharacterSheetFactory)
+    gm_table = None
     chosen_transition = None
     resolved_by = None
     era = None

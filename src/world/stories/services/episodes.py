@@ -3,17 +3,18 @@
 Public API:
     resolve_episode(*, progress, chosen_transition=None, gm_notes="", resolved_by=None)
         — evaluates eligibility, selects or validates the transition, creates an
-          EpisodeResolution row, and advances StoryProgress.
+          EpisodeResolution row, and advances progress.
 """
 
-from typing import cast
+from typing import Any
 
 from django.db import transaction
 
 from world.gm.models import GMProfile
-from world.stories.constants import TransitionMode
+from world.stories.constants import StoryScope, TransitionMode
 from world.stories.exceptions import AmbiguousTransitionError, NoEligibleTransitionError
-from world.stories.models import EpisodeResolution, Era, StoryProgress, Transition
+from world.stories.models import EpisodeResolution, Era, Transition
+from world.stories.services.progress import advance_progress_to_episode
 from world.stories.services.transitions import get_eligible_transitions
 from world.stories.types import AnyStoryProgress
 
@@ -27,6 +28,8 @@ def resolve_episode(
 ) -> EpisodeResolution:
     """Resolve the current episode for a story progress record.
 
+    Works for CHARACTER, GROUP, and GLOBAL scope progress types.
+
     Algorithm:
         1. Call get_eligible_transitions(progress).
            - If ProgressionRequirementNotMetError is raised, it propagates to the caller.
@@ -39,10 +42,11 @@ def resolve_episode(
                - If exactly one eligible AND mode == GM_CHOICE → raise AmbiguousTransitionError.
                - If multiple eligible → raise AmbiguousTransitionError.
         5. Atomically:
-               a. Create EpisodeResolution (episode, character_sheet, chosen_transition,
-                  resolved_by, gm_notes, era).
+               a. Create EpisodeResolution, populating the scope-appropriate FK:
+                  - CHARACTER → character_sheet
+                  - GROUP     → gm_table
+                  - GLOBAL    → both null
                b. Advance progress.current_episode to transition.target_episode (may be None).
-               c. Save progress with update_fields to trigger last_advanced_at (auto_now=True).
         6. Return the EpisodeResolution instance.
     """
     eligible = get_eligible_transitions(progress)
@@ -72,25 +76,23 @@ def resolve_episode(
 
     era = Era.objects.get_active()
     episode = progress.current_episode
+    scope = progress.story.scope
 
-    # character_sheet is only present on CHARACTER-scope StoryProgress.
-    # For GROUP/GLOBAL scope, EpisodeResolution.character_sheet will need
-    # to become nullable (deferred to a future task). For now, callers
-    # should only invoke resolve_episode with CHARACTER-scope progress.
-    character_sheet = cast(StoryProgress, progress).character_sheet
+    resolution_kwargs: dict[str, Any] = {
+        "episode": episode,
+        "chosen_transition": selected,
+        "resolved_by": resolved_by,
+        "era": era,
+        "gm_notes": gm_notes,
+    }
+    if scope == StoryScope.CHARACTER:
+        resolution_kwargs["character_sheet"] = progress.character_sheet
+    elif scope == StoryScope.GROUP:
+        resolution_kwargs["gm_table"] = progress.gm_table
+    # GLOBAL: both character_sheet and gm_table stay null.
 
     with transaction.atomic():
-        resolution = EpisodeResolution.objects.create(
-            episode=episode,
-            character_sheet=character_sheet,
-            chosen_transition=selected,
-            resolved_by=resolved_by,
-            era=era,
-            gm_notes=gm_notes,
-        )
-        # Advance the progress pointer (target_episode may be None → frontier).
-        progress.current_episode = selected.target_episode
-        # Saving with update_fields triggers the auto_now=True on last_advanced_at.
-        progress.save(update_fields=["current_episode", "last_advanced_at"])
+        resolution = EpisodeResolution.objects.create(**resolution_kwargs)
+        advance_progress_to_episode(progress, selected.target_episode)
 
     return resolution
