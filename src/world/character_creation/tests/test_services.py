@@ -1357,3 +1357,17 @@ class FinalizeGMCharacterTests(TestCase):
         draft = self._make_gm_draft(target_table=other_table)
         with self.assertRaises(ValidationError):
             finalize_gm_character(draft)
+
+    def test_creates_story_progress_for_cg_character(self) -> None:
+        """CG finalization creates exactly one StoryProgress with current_episode=None."""
+        from world.character_creation.services import finalize_gm_character
+        from world.stories.models import StoryProgress
+
+        draft = self._make_gm_draft()
+        entry, story = finalize_gm_character(draft)
+        sheet = entry.character_sheet
+
+        progress_qs = StoryProgress.objects.filter(story=story, character_sheet=sheet)
+        assert progress_qs.count() == 1, "Exactly one StoryProgress should be created"
+        progress = progress_qs.get()
+        assert progress.current_episode is None, "current_episode should be None at CG time"
