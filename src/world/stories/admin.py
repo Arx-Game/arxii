@@ -10,6 +10,8 @@ from world.stories.models import (
     EpisodeResolution,
     EpisodeScene,
     Era,
+    GlobalStoryProgress,
+    GroupStoryProgress,
     PlayerTrustLevel,
     Story,
     StoryFeedback,
@@ -442,4 +444,20 @@ class StoryProgressAdmin(admin.ModelAdmin):
     )
     list_filter = ("is_active",)
     search_fields = ("story__title", "character_sheet__name")
+    readonly_fields = ("started_at", "last_advanced_at")
+
+
+@admin.register(GroupStoryProgress)
+class GroupStoryProgressAdmin(admin.ModelAdmin):
+    list_display = ("story", "gm_table", "current_episode", "is_active", "last_advanced_at")
+    list_filter = ("is_active",)
+    search_fields = ("story__title", "gm_table__name")
+    readonly_fields = ("started_at", "last_advanced_at")
+
+
+@admin.register(GlobalStoryProgress)
+class GlobalStoryProgressAdmin(admin.ModelAdmin):
+    list_display = ("story", "current_episode", "is_active", "last_advanced_at")
+    list_filter = ("is_active",)
+    search_fields = ("story__title",)
     readonly_fields = ("started_at", "last_advanced_at")

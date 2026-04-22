@@ -950,6 +950,109 @@ class EpisodeResolution(SharedMemoryModel):
         return f"EpisodeResolution({self.episode.title} -> {dest})"
 
 
+class GroupStoryProgress(SharedMemoryModel):
+    """Per-group pointer into a GROUP-scope story's current state.
+
+    One row per story — the entire GMTable shares the progression trail.
+    Group members never diverge onto separate branches; the group resolves
+    episodes as a unit.
+
+    For individual character contributions within a group story, see
+    AggregateBeatContribution (Phase 2 Wave 4) and BeatCompletion.
+    """
+
+    story = models.ForeignKey(
+        Story,
+        on_delete=models.CASCADE,
+        related_name="group_progress_records",
+    )
+    gm_table = models.ForeignKey(
+        "gm.GMTable",
+        on_delete=models.CASCADE,
+        related_name="story_progress",
+    )
+    current_episode = models.ForeignKey(
+        Episode,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="active_group_progress_records",
+        help_text="Null while the story is at the frontier (unauthored) or before start.",
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+    last_advanced_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["story", "gm_table"],
+                name="unique_group_progress_per_story_per_table",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["gm_table", "is_active"]),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.story_id and self.story.scope != StoryScope.GROUP:
+            raise ValidationError({"story": "GroupStoryProgress requires a GROUP-scope story."})
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        ep = self.current_episode.title if self.current_episode else "(frontier)"
+        return f"GroupStoryProgress({self.gm_table.name} in {self.story.title} @ {ep})"
+
+
+class GlobalStoryProgress(SharedMemoryModel):
+    """Singleton pointer into a GLOBAL-scope story's current state.
+
+    One row per story — the whole server shares the progression trail for
+    the metaplot. Characters opt-in/out via StoryParticipation, but the
+    progression itself is a single thread. OneToOne on story enforces
+    the singleton invariant at the DB level.
+    """
+
+    story = models.OneToOneField(
+        Story,
+        on_delete=models.CASCADE,
+        related_name="global_progress",
+    )
+    current_episode = models.ForeignKey(
+        Episode,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="active_global_progress_records",
+        help_text="Null while the story is at the frontier or before start.",
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+    last_advanced_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["is_active"]),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.story_id and self.story.scope != StoryScope.GLOBAL:
+            raise ValidationError({"story": "GlobalStoryProgress requires a GLOBAL-scope story."})
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        ep = self.current_episode.title if self.current_episode else "(frontier)"
+        return f"GlobalStoryProgress({self.story.title} @ {ep})"
+
+
 class StoryProgress(SharedMemoryModel):
     """Per-character pointer into a CHARACTER-scope story's current state."""
 

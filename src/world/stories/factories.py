@@ -20,6 +20,8 @@ from world.stories.models import (
     EpisodeResolution,
     EpisodeScene,
     Era,
+    GlobalStoryProgress,
+    GroupStoryProgress,
     PlayerTrust,
     PlayerTrustLevel,
     Story,
@@ -396,6 +398,29 @@ class StoryProgressFactory(factory_django.DjangoModelFactory):
 
     story = factory.SubFactory(StoryFactory)
     character_sheet = factory.SubFactory(CharacterSheetFactory)
+    current_episode = None
+    is_active = True
+
+
+class GroupStoryProgressFactory(factory_django.DjangoModelFactory):
+    """Factory for creating GroupStoryProgress per-group progress pointer instances."""
+
+    class Meta:
+        model = GroupStoryProgress
+
+    story = factory.SubFactory(StoryFactory, scope=StoryScope.GROUP)
+    gm_table = factory.SubFactory("world.gm.factories.GMTableFactory")
+    current_episode = None
+    is_active = True
+
+
+class GlobalStoryProgressFactory(factory_django.DjangoModelFactory):
+    """Factory for creating GlobalStoryProgress singleton-per-story progress instances."""
+
+    class Meta:
+        model = GlobalStoryProgress
+
+    story = factory.SubFactory(StoryFactory, scope=StoryScope.GLOBAL)
     current_episode = None
     is_active = True
 
