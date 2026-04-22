@@ -57,6 +57,7 @@ from world.conditions.types import (
     ResistanceModifierResult,
     RoundTickResult,
     SeverityAdvanceResult,
+    SeverityDecayResult,
 )
 from world.mechanics.models import CharacterModifier
 
@@ -1482,4 +1483,61 @@ def advance_condition_severity(
         new_stage=instance.current_stage,
         stage_changed=stage_changed,
         total_severity=instance.severity,
+    )
+
+
+def decay_condition_severity(
+    instance: ConditionInstance,
+    amount: int,
+) -> SeverityDecayResult:
+    """Inverse of advance_condition_severity. Walks stage down if threshold crossed.
+
+    Per spec Scope 6 §5.3. Emits CONDITION_STAGE_CHANGED only when the stage
+    actually changes; consumers derive descending-vs-ascending from
+    stage_order comparison. Sets resolved_at when severity reaches 0.
+    """
+    from world.game_clock.services import get_ic_now  # noqa: PLC0415
+
+    previous_stage = instance.current_stage
+    new_severity = max(0, instance.severity - amount)
+
+    new_stage = (
+        instance.condition.stages.filter(
+            severity_threshold__isnull=False,
+            severity_threshold__lte=new_severity,
+        )
+        .order_by("-severity_threshold")
+        .first()
+    )
+
+    instance.severity = new_severity
+    instance.current_stage = new_stage
+    update_fields = ["severity", "current_stage"]
+
+    resolved = new_severity == 0
+    if resolved:
+        instance.resolved_at = get_ic_now() or timezone.now()
+        update_fields.append("resolved_at")
+
+    instance.save(update_fields=update_fields)
+
+    if new_stage != previous_stage:
+        target_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL
+        if target_location is not None:
+            emit_event(
+                EventName.CONDITION_STAGE_CHANGED,
+                ConditionStageChangedPayload(
+                    target=instance.target,
+                    instance=instance,
+                    old_stage=previous_stage,
+                    new_stage=new_stage,
+                ),
+                location=target_location,
+            )
+
+    return SeverityDecayResult(
+        previous_stage=previous_stage,
+        new_stage=new_stage,
+        new_severity=new_severity,
+        resolved=resolved,
     )
