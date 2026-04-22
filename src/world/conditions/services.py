@@ -1806,6 +1806,8 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     if treatment.requires_bond:
         if bond_thread is None or int(bond_thread.owner_id) != int(helper_sheet.pk):
             raise NoSupportingBondThread
+        if bond_thread.retired_at is not None:
+            raise NoSupportingBondThread
         if not _thread_anchors_to_character(bond_thread, target_sheet):
             raise NoSupportingBondThread
 
@@ -1858,16 +1860,16 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
         resonance_spent = treatment.resonance_cost
 
     # ------------------------------------------------------------------
-    # Gate 8: anima cost (Correction #1: deduct_anima never raises; check manually)
+    # Gate 8: anima cost — mirror resonance gate: lock, check, debit in-place.
+    # Treatment has no overburn; insufficient anima fails cleanly at the gate.
     # ------------------------------------------------------------------
     anima_spent = 0
     if treatment.anima_cost > 0:
-        from world.magic.services.anima import deduct_anima  # noqa: PLC0415
-
         anima_row = CharacterAnima.objects.select_for_update().get(character=helper)
         if anima_row.current < treatment.anima_cost:
             raise TreatmentAnimaInsufficient
-        deduct_anima(helper, treatment.anima_cost)
+        anima_row.current -= treatment.anima_cost
+        anima_row.save(update_fields=["current"])
         anima_spent = treatment.anima_cost
 
     # ------------------------------------------------------------------
@@ -1940,7 +1942,11 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     # ------------------------------------------------------------------
     # Persist attempt; authoritative duplicate check via UniqueConstraint
     # ------------------------------------------------------------------
-    attempt_kwargs: dict = {
+    from typing import Any  # noqa: PLC0415
+
+    from psycopg.errors import UniqueViolation  # noqa: PLC0415
+
+    attempt_kwargs: dict[str, Any] = {
         "helper": helper,
         "target": target,
         "scene": scene,
@@ -1962,7 +1968,9 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
     try:
         attempt = TreatmentAttempt.objects.create(**attempt_kwargs)
     except IntegrityError as exc:
-        raise TreatmentAlreadyAttempted from exc
+        if isinstance(exc.__cause__, UniqueViolation):
+            raise TreatmentAlreadyAttempted from exc
+        raise
 
     return TreatmentOutcome(
         attempt=attempt,

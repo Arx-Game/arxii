@@ -316,6 +316,34 @@ class TreatmentBondGateTests(TestCase):
                 bond_thread=thread,
             )
 
+    def test_retired_bond_thread_raises_no_supporting_bond_thread(self):
+        """A retired thread (retired_at != None) → NoSupportingBondThread."""
+        from django.utils import timezone
+
+        resonance = ResonanceFactory()
+        relationship = CharacterRelationshipFactory(
+            source=self.helper_sheet, target=self.target_sheet
+        )
+        progress = RelationshipTrackProgressFactory(relationship=relationship)
+        thread = ThreadFactory(
+            owner=self.helper_sheet,
+            resonance=resonance,
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            target_trait=None,
+            target_relationship_track=progress,
+        )
+        thread.retired_at = timezone.now()
+        thread.save(update_fields=["retired_at"])
+        with self.assertRaises(NoSupportingBondThread):
+            perform_treatment(
+                helper_sheet=self.helper_sheet,
+                target_sheet=self.target_sheet,
+                scene=self.scene,
+                treatment=self.treatment,
+                target_effect=self.target_effect,
+                bond_thread=thread,
+            )
+
 
 # =============================================================================
 # Gate 4 — Scene gate
@@ -475,6 +503,48 @@ class TreatmentDuplicateGateTests(TestCase):
                 scene=scene,
                 treatment=treatment,
                 target_effect=effect2,
+            )
+
+    def test_non_unique_integrity_error_propagates(self):
+        """Non-unique IntegrityError (e.g. FK violation cause) is not swallowed."""
+        from django.db import IntegrityError
+
+        helper_sheet = CharacterSheetFactory()
+        target_sheet = CharacterSheetFactory()
+        scene = SceneFactory(is_active=True)
+        soulfray = ConditionTemplateFactory(name="Soulfray_IE")
+        aftermath_cond = ConditionTemplateFactory(
+            name="SoulAche_IE",
+            parent_condition=soulfray,
+        )
+        treatment = _make_treatment(
+            target_kind=TreatmentTargetKind.AFTERMATH,
+            target_condition=soulfray,
+            scene_required=False,
+            once_per_scene_per_helper=False,
+            reduction_on_success=1,
+        )
+        target_effect = ConditionInstanceFactory(condition=aftermath_cond, severity=10)
+
+        # Simulate a non-unique IntegrityError: cause is a plain Exception (not UniqueViolation)
+        fk_error = IntegrityError("FK violation")
+        fk_error.__cause__ = Exception("foreign key constraint failed")
+
+        with (
+            patch("world.checks.services.perform_check") as mock_check,
+            patch(
+                "world.conditions.models.TreatmentAttempt.objects.create",
+                side_effect=fk_error,
+            ),
+            self.assertRaises(IntegrityError),
+        ):
+            mock_check.return_value = _make_check_result(success_level=1)
+            perform_treatment(
+                helper_sheet=helper_sheet,
+                target_sheet=target_sheet,
+                scene=scene,
+                treatment=treatment,
+                target_effect=target_effect,
             )
 
 
