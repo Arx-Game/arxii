@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from django.db import models
@@ -50,8 +50,8 @@ class SoulfrayContent:
     """
 
     template: ConditionTemplate
-    stages: list[ConditionStage] = field(default_factory=list)
-    blocks_anima_regen: Property | None = None
+    stages: tuple[ConditionStage, ...]
+    blocks_anima_regen: Property
 
 
 @dataclass(frozen=True)

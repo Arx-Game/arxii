@@ -1004,7 +1004,7 @@ class _SoulfrayContentFactory:
 
         return SoulfrayContent(
             template=template,
-            stages=stages,
+            stages=tuple(stages),
             blocks_anima_regen=blocks_prop,
         )
 
