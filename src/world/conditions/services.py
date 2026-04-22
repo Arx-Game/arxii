@@ -1485,12 +1485,65 @@ def advance_condition_severity(
                 location=target_location,
             )
 
+    # Inline dispatch of the stage-entry aftermath hook. The reactive layer
+    # dispatches only to DB Trigger rows; Python subscribers use the inline
+    # pattern (see apply_damage_reduction_from_threads in magic/services.py).
+    # Only ascending transitions apply aftermath — apply_stage_entry_aftermath
+    # gates internally on stage_order comparison.
+    if stage_changed:
+        apply_stage_entry_aftermath(
+            ConditionStageChangedPayload(
+                target=instance.target,
+                instance=instance,
+                old_stage=previous_stage,
+                new_stage=instance.current_stage,
+            ),
+        )
+
     return SeverityAdvanceResult(
         previous_stage=previous_stage,
         new_stage=instance.current_stage,
         stage_changed=stage_changed,
         total_severity=instance.severity,
     )
+
+
+def apply_stage_entry_aftermath(payload: ConditionStageChangedPayload) -> None:
+    """On ascending stage changes, apply the stage's on_entry_conditions.
+
+    Per spec §5.6. Callers pass a ConditionStageChangedPayload frozen
+    dataclass (the same payload emitted by advance_condition_severity).
+    Gates:
+    - new_stage is None → no-op (fully decayed).
+    - old_stage.stage_order >= new_stage.stage_order → descending or
+      sideways; no-op.
+    Idempotency: existing aftermath instance with severity >= assoc.severity
+    is left alone; lower severity is advanced to assoc.severity.
+    """
+    old = payload.old_stage
+    new = payload.new_stage
+    if new is None:
+        return
+    if old is not None and new.stage_order <= old.stage_order:
+        return
+    target = payload.target
+
+    for assoc in new.on_entry_assocs.select_related("condition").all():
+        existing = ConditionInstance.objects.filter(
+            target=target,
+            condition=assoc.condition,
+            resolved_at__isnull=True,
+        ).first()
+        if existing is None:
+            apply_condition(
+                target,
+                assoc.condition,
+                severity=assoc.severity,
+                source_description=f"on_entry of {new.name}",
+            )
+        elif existing.severity < assoc.severity:
+            advance_condition_severity(existing, assoc.severity - existing.severity)
+        # else: existing severity >= assoc.severity — leave alone.
 
 
 def decay_condition_severity(
