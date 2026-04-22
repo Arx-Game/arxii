@@ -9,10 +9,11 @@ Public API:
 from django.db.models import Prefetch
 
 from world.stories.exceptions import ProgressionRequirementNotMetError
-from world.stories.models import StoryProgress, Transition, TransitionRequiredOutcome
+from world.stories.models import Transition, TransitionRequiredOutcome
+from world.stories.types import AnyStoryProgress
 
 
-def get_eligible_transitions(progress: StoryProgress) -> list[Transition]:
+def get_eligible_transitions(progress: AnyStoryProgress) -> list[Transition]:
     """Return the transitions eligible to fire from the current episode.
 
     An outbound transition is eligible when:

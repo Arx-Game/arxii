@@ -6,6 +6,8 @@ Public API:
           EpisodeResolution row, and advances StoryProgress.
 """
 
+from typing import cast
+
 from django.db import transaction
 
 from world.gm.models import GMProfile
@@ -13,11 +15,12 @@ from world.stories.constants import TransitionMode
 from world.stories.exceptions import AmbiguousTransitionError, NoEligibleTransitionError
 from world.stories.models import EpisodeResolution, Era, StoryProgress, Transition
 from world.stories.services.transitions import get_eligible_transitions
+from world.stories.types import AnyStoryProgress
 
 
 def resolve_episode(
     *,
-    progress: StoryProgress,
+    progress: AnyStoryProgress,
     chosen_transition: Transition | None = None,
     gm_notes: str = "",
     resolved_by: GMProfile | None = None,
@@ -70,10 +73,16 @@ def resolve_episode(
     era = Era.objects.get_active()
     episode = progress.current_episode
 
+    # character_sheet is only present on CHARACTER-scope StoryProgress.
+    # For GROUP/GLOBAL scope, EpisodeResolution.character_sheet will need
+    # to become nullable (deferred to a future task). For now, callers
+    # should only invoke resolve_episode with CHARACTER-scope progress.
+    character_sheet = cast(StoryProgress, progress).character_sheet
+
     with transaction.atomic():
         resolution = EpisodeResolution.objects.create(
             episode=episode,
-            character_sheet=progress.character_sheet,
+            character_sheet=character_sheet,
             chosen_transition=selected,
             resolved_by=resolved_by,
             era=era,

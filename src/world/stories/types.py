@@ -1,6 +1,18 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Union
 
 from django.db import models
+
+if TYPE_CHECKING:
+    from world.stories.models import (
+        GlobalStoryProgress,
+        GroupStoryProgress,
+        StoryProgress,
+    )
+
+AnyStoryProgress = Union["StoryProgress", "GroupStoryProgress", "GlobalStoryProgress"]
 
 
 class StoryStatus(models.TextChoices):
