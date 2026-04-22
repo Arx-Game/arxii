@@ -67,7 +67,8 @@ def perform_anima_ritual(
     from world.magic.models.soulfray import SoulfrayConfig  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 
-    ritual = getattr(character_sheet, "anima_ritual", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor, not a simple attribute
+    # OneToOne reverse accessor, not a simple attribute — getattr is correct here.
+    ritual = getattr(character_sheet, "anima_ritual", None)  # noqa: GETATTR_LITERAL
     if ritual is None:
         raise NoRitualConfigured
 
