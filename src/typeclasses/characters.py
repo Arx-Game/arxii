@@ -15,6 +15,9 @@ from django.utils import timezone
 from evennia.objects.objects import DefaultCharacter
 
 from commands.utils import serialize_cmdset
+from flows.constants import EventName
+from flows.emit import emit_event
+from flows.events.payloads import AttackLandedPayload, MovePreDepartPayload
 from flows.object_states.character_state import CharacterState
 from flows.service_functions.serializers import build_room_state_payload
 from typeclasses.mixins import ObjectParent
@@ -118,6 +121,27 @@ class Character(ObjectParent, DefaultCharacter):
 
         return CharacterItemDataHandler(self)
 
+    @cached_property
+    def threads(self):
+        """Handler for this character's owned magical threads (Spec A §3.7)."""
+        from world.magic.handlers import CharacterThreadHandler
+
+        return CharacterThreadHandler(self)
+
+    @cached_property
+    def resonances(self):
+        """Handler for this character's CharacterResonance rows (Spec A §3.7)."""
+        from world.magic.handlers import CharacterResonanceHandler
+
+        return CharacterResonanceHandler(self)
+
+    @cached_property
+    def combat_pulls(self):
+        """Handler for this character's active CombatPull rows (Spec A §3.7)."""
+        from world.combat.handlers import CharacterCombatPullHandler
+
+        return CharacterCombatPullHandler(self)
+
     @property
     def active_account(self):
         """Return the account currently linked to this character.
@@ -184,6 +208,54 @@ class Character(ObjectParent, DefaultCharacter):
 
         # Send room state to frontend
         self.send_room_state()
+
+    def at_attacked(self, attacker, weapon, damage_result, action) -> None:
+        """Called by combat after damage calc, before damage apply.
+
+        Emits ATTACK_LANDED and gives listeners a chance to react. Downstream
+        damage application fires DAMAGE_PRE_APPLY separately (Task 28).
+        """
+        if self.location is None:
+            return
+        payload = AttackLandedPayload(
+            attacker=attacker,
+            target=self,
+            weapon=weapon,
+            damage_result=damage_result,
+            action=action,
+        )
+        emit_event(
+            EventName.ATTACK_LANDED,
+            payload,
+            location=self.location,
+        )
+
+    def at_pre_move(self, destination, move_type="move", **kwargs):
+        """Called just before moving to destination.
+
+        Emits MOVE_PRE_DEPART and returns False if a reactive listener
+        cancels the event, allowing conditions/triggers to block movement.
+        """
+        origin = self.location
+        result = super().at_pre_move(destination, move_type=move_type, **kwargs)
+        if result is False:
+            return False  # Evennia-side cancel; skip emission
+        if origin is None:
+            return True  # No location to dispatch from; allow the move.
+        payload = MovePreDepartPayload(
+            character=self,
+            origin=origin,
+            destination=destination,
+            exit_used=kwargs.get("exit_used") or kwargs.get("move_type"),
+        )
+        stack = emit_event(
+            EventName.MOVE_PRE_DEPART,
+            payload,
+            location=origin,
+        )
+        if stack.was_cancelled():
+            return False
+        return True
 
     def at_post_unpuppet(self, account=None, session=None, **kwargs):
         """Handle cleanup after a session stops puppeting this character.

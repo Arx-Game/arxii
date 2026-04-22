@@ -58,7 +58,19 @@ Known effect categories (will expand as combat develops):
 Some abilities cross categories (poison touch = attack + subtle assassination tool) and will need the restriction/tag system to express.
 
 ## What Exists
-- **Models:** CharacterAura, CharacterResonance, Gift, CharacterGift, Technique, CharacterTechnique, TechniqueStyle, EffectType, Restriction, IntensityTier, CharacterAnima, CharacterAnimaRitual, AnimaRitualPerformance, Motif, MotifResonance, MotifResonanceAssociation, Facet, CharacterFacet, Thread, ThreadType, ThreadJournal, ThreadResonance, Tradition, CharacterTradition, CharacterAffinityTotal, CharacterResonanceTotal, Reincarnation, Cantrip, **TechniqueCapabilityGrant**
+- **Models:** CharacterAura, CharacterResonance (reshaped per Spec A §2.2 —
+  balance + lifetime_earned), Gift, CharacterGift, Technique,
+  CharacterTechnique, TechniqueStyle, EffectType, Restriction, IntensityTier,
+  CharacterAnima, CharacterAnimaRitual, AnimaRitualPerformance, Motif,
+  MotifResonance, MotifResonanceAssociation, Facet, CharacterFacet,
+  **Thread** (new discriminator + typed-FK design, Spec A §2.1),
+  **ThreadPullCost**, **ThreadXPLockedLevel**, **ThreadLevelUnlock**,
+  **ThreadPullEffect**, **ThreadWeavingUnlock**, **CharacterThreadWeavingUnlock**,
+  **ThreadWeavingTeachingOffer**, **Ritual**, **RitualComponentRequirement**,
+  **ImbuingProseTemplate**, Tradition, CharacterTradition,
+  CharacterAffinityTotal, Reincarnation, Cantrip, **TechniqueCapabilityGrant**.
+  CombatPull / CombatPullResolvedEffect live in `world/combat` but are
+  part of the Spec A surface.
 - **Capability integration:** TechniqueCapabilityGrant links Techniques to CapabilityTypes (from conditions app) with `base_value + (intensity_multiplier * intensity)` formula. This feeds into the mechanics app's action generation pipeline — when a character has a Technique that grants a Capability, the system can match it against Properties on Challenges to surface available approaches
 - **Cantrip-technique alignment** — cantrip templates produce real Techniques with intensity/control at CG finalization
 - **APIs:** Full viewsets and serializers
@@ -165,12 +177,305 @@ What was built:
 - **Layered result display** — ActionResult shows both social outcome and technique effects as distinct results, making the layered action pipeline transparent to players
 - **Integration tests** — Comprehensive tests covering mundane consequences, enhanced pipeline, validation, and available-actions filtering
 
-Deferred to future scopes:
+**Scope #5 — Magical Alteration Resolution (DONE):**
+
+What was built:
+- **Three new models** — `MagicalAlterationTemplate` (OneToOne on `ConditionTemplate`,
+  carries magic-specific metadata: tier, origin affinity/resonance, library flag,
+  visibility), `PendingAlteration` (queued unresolved scars with status lifecycle
+  OPEN → RESOLVED / STAFF_CLEARED, scene + triggering-state snapshot), and
+  `MagicalAlterationEvent` (immutable provenance audit log). Single migration covers
+  all three. Plan/spec at `docs/superpowers/plans/2026-04-12-scope5-magical-alteration-resolution.md`.
+- **MAGICAL_SCARS handler rewrite** — `_apply_magical_scars` in
+  `src/world/mechanics/effect_handlers.py` no longer applies a placeholder condition.
+  It calls `create_pending_alteration()`, which queues a `PendingAlteration` and
+  defers the actual `ConditionInstance` until the player resolves it.
+- **Same-scene escalation** — successive overburns within the same scene upgrade the
+  open `PendingAlteration` in place rather than stacking. Higher tier wins; the
+  triggering-state snapshot updates to the latest. Different scenes still create
+  separate pendings.
+- **Progression gate** — `has_pending_alterations(sheet)` is checked by
+  `world.progression.services.spends.spend_xp_on_unlock`; XP/unlock spending raises
+  `AlterationGateError` until all pendings are RESOLVED or STAFF_CLEARED.
+- **Service layer** — `create_pending_alteration`, `resolve_pending_alteration`,
+  `staff_clear_alteration`, `validate_alteration_resolution`, `get_library_entries`,
+  `has_pending_alterations`. Resolution is atomic: schema validation → template
+  creation/lookup → condition instance application → event log → pending status update,
+  all in one transaction with rollback on apply failure.
+- **Two resolution paths** — *library pick* (player selects an existing staff-curated
+  `MagicalAlterationTemplate` matching their tier/affinity/resonance, applied as-is)
+  and *author from scratch* (player provides name, descriptions, weakness/resonance/
+  social-reactivity magnitudes, visibility flag — validated against `ALTERATION_TIER_CAPS`
+  per-tier ceilings). Library path is duplicate-checked.
+- **Constrained-authoring schema validation** — `validate_alteration_resolution` enforces
+  per-tier caps on weakness magnitude, resonance bonus magnitude, social reactivity
+  magnitude, visibility-required flag, and minimum description length. First instance of
+  the constrained-authoring pattern (structured form → ceiling check → atomic effect
+  creation) intended to be reused for techniques and consequences.
+- **REST API** — `PendingAlterationViewSet` (account-scoped queryset) at
+  `/api/magic/pending-alterations/` with `GET` list/retrieve, `POST {id}/resolve/`
+  (dispatches library vs scratch by payload), and `GET {id}/library/` (returns
+  tier-matched templates ordered by affinity match).
+- **Comprehensive test coverage** — model unit tests, service tests (creation,
+  escalation, resolution, gate, staff-clear, atomic rollback), validation tests
+  (both paths, all caps), view tests (APITestCase + setUpTestData + force_authenticate),
+  handler tests, and 12 end-to-end pipeline integration tests in
+  `src/integration_tests/pipeline/test_alteration_pipeline.py` driving the full chain
+  `use_technique → Soulfray accumulation → consequence pool → MAGICAL_SCARS handler →
+  PendingAlteration → resolve_pending_alteration → ConditionInstance + event + gate
+  release`. `MagicContent.create_alteration_content()` extends the integration-test
+  game-content factory with library entries (with effect rows) plus a wired Soulfray
+  consequence pool and stage.
+- **Scope boundary preserved** — passive effects only. Reactive side effects on the
+  scar template (cold-iron triggers, holy-ground reactions) remain Scope 5.5.
+
+Decoupling: Standalone. Does NOT depend on Scope 6 (Soulfray recovery). Shipped on
+the `magical-scars` branch.
+
+**Resonance Pivot — Spec A (Threads + Currency + Rituals + Mage Scars rename) — DONE:**
+
+**Spec:** `docs/superpowers/specs/2026-04-18-resonance-pivot-spec-a-threads-and-currency-design.md`
+**Plan:** `docs/superpowers/plans/2026-04-19-resonance-pivot-spec-a-threads-and-currency.md`
+
+This is the first of a four-spec resonance pivot (A, B, C, D). Spec A
+pivots Resonance from a passive rank to a per-resonance **currency** that
+gets earned from identity-expressive RP, spent to develop **Threads**
+(anchors to specific traits/techniques/items/rooms/relationship-tracks/
+relationship-capstones), and spent again to **pull** on those threads
+during actions for authored mechanical payoff.
+
+What was built (Phases 0–17, 19 phases total counting Phase 18 — this
+completion note):
+
+- **Legacy 5-axis Thread family deleted.** `magic.Thread` (old),
+  `ThreadType`, `ThreadJournal`, `ThreadResonance`, and
+  `CharacterResonanceTotal` removed. `is_soul_tether` migrated to
+  `CharacterRelationship`. Journaling preserved via relationships-app
+  writeups plus a new `JournalEntry.related_threads` M2M for
+  non-relationship threads.
+- **New `Thread` model.** Discriminator (`target_kind`) + five typed FK
+  columns (`target_trait`, `target_technique`, `target_object`,
+  `target_relationship_track`, `target_capstone`) — exactly one populated,
+  matching the discriminator. All FKs are PROTECT. Triple-layer integrity:
+  `clean()`, per-kind CheckConstraints, per-kind partial UniqueConstraints.
+  `retired_at` provides soft-retire.
+- **CharacterResonance reshaped (Spec §2.2).** Collapsed identity +
+  currency into one model. `balance` (spendable, no cap) and
+  `lifetime_earned` (monotonic audit) replaced the old
+  `scope`/`strength`/`is_active` shape; row existence now replaces
+  `is_active`. Re-FK'd from ObjectDB → CharacterSheet.
+- **Resonance economy services.** `grant_resonance` (lazy-create row on
+  earn; Spec C will author the gain surfaces), `spend_resonance_for_imbuing`
+  (greedy advancement through `developed_points` → `level`; stops at
+  XP-lock boundaries and effective cap), `spend_resonance_for_pull`
+  (combat and ephemeral paths, §3.8 duration model),
+  `preview_resonance_pull` (read-only wire preview),
+  `resolve_pull_effects` (runtime resolver), `cross_thread_xp_lock`
+  (pays XP at a boundary), `weave_thread` (create Thread after unlock
+  check), `update_thread_narrative`, `imbue_ready_threads` /
+  `near_xp_lock_threads` / `threads_blocked_by_cap` (UI hints),
+  `compute_thread_weaving_xp_cost`, `accept_thread_weaving_unlock`
+  (records purchase with Path-aware pricing), plus `recompute_max_health_with_threads`
+  and `apply_damage_reduction_from_threads` for VITAL_BONUS routing.
+- **Pull-cost / XP-lock / Effect / Ritual authored catalogs.**
+  `ThreadPullCost` (per-tier data knobs; formula lives in the service),
+  `ThreadXPLockedLevel` (boundary price list), `ThreadPullEffect`
+  (authored template keyed (`target_kind`, `resonance`, `tier`,
+  `min_thread_level`); effect_kind chooses the payload column —
+  `FLAT_BONUS` / `INTENSITY_BUMP` / `VITAL_BONUS` with `vital_target` /
+  `CAPABILITY_GRANT` / `NARRATIVE_ONLY`), `ImbuingProseTemplate` (fallback
+  prose), `Ritual` + `RitualComponentRequirement` (SERVICE or FLOW
+  dispatch, component consumption).
+- **ThreadWeaving acquisition family.** `ThreadWeavingUnlock` (authored
+  catalog; discriminator + typed FKs; per-kind partial unique +
+  CheckConstraints), `CharacterThreadWeavingUnlock` (per-character
+  purchase; unique per (character, unlock); captures Path-multiplied
+  `xp_spent`), `ThreadWeavingTeachingOffer` (teacher offer; mirrors
+  CodexTeachingOffer).
+- **CombatPull / CombatPullResolvedEffect.** Live in `world/combat`.
+  Persist committed pulls across round transitions and request boundaries.
+  Resolved effects are a frozen child-table snapshot (no JSONField);
+  mid-round authoring edits can't retroactively alter a committed pull.
+  One pull per participant per round (unique_together).
+- **VITAL_BONUS routing.** Tier-0 VITAL_BONUS rows are passive (always
+  on while the anchor exists — enforced automatically by Thread's
+  PROTECT FKs, see `CharacterThreadHandler.passive_vital_bonuses`
+  docstring). Tier 1+ VITAL_BONUS rows persist under the standard
+  pull-duration model. MAX_HEALTH folds into `recompute_max_health_with_threads`
+  as an addend; DAMAGE_TAKEN_REDUCTION applies on the combat
+  `DamagePreApply` hook. Pull expiry uses clamp-not-injure semantics
+  (current HP clamps to the new max; it never injures).
+- **PerformRitualAction with dual dispatch.** Actions-layer wrapper that
+  validates components, then dispatches either via a registered service
+  path (Imbuing being the first) or via FlowDefinition. Enforces
+  component consumption atomically.
+- **API surface (Spec §4.5).** ThreadViewSet (GET/POST/DELETE, soft-retire
+  on DELETE; CRUD gated on thread ownership via `character_sheet_id`),
+  ThreadPullPreviewView (POST `/thread-pull-preview/`),
+  RitualPerformView (POST `/rituals/perform/`, resolves primitive kwargs
+  → model instances), ThreadWeavingTeachingOfferViewSet (GET), reshaped
+  CharacterResonanceViewSet.
+- **Per-character handlers (Spec §3.7).** `character.threads`
+  (`CharacterThreadHandler` — cached thread list with passive
+  VITAL_BONUS aggregation), `character.resonances`
+  (`CharacterResonanceHandler` — cached `{resonance_pk: row}` dict;
+  `balance(resonance)`, `lifetime(resonance)`, `get_or_create`,
+  `most_recently_earned` for Mage Scars origin derivation),
+  `character.combat_pulls` (`CharacterCombatPullHandler` in
+  `world/combat` — active pulls + `active_pull_vital_bonuses`).
+- **Mage Scars rename (§7.2).** Display-only — class names and table
+  names unchanged; verbose_names + CLI strings + docs updated.
+
+Not in Spec A (authored separately): Spec B (Relational Resilience,
+Soul Tether, Ritual Capstones), Spec C (Resonance gain surfaces — the
+sites that call `grant_resonance`), Spec D (Ritual-grade items + ITEM /
+ROOM anchor cap formulas — Imbuing against ITEM/ROOM currently raises
+`AnchorCapNotImplemented`).
+
+**Scope #5.5 — Reactive Foundations (DONE — branch `design/reactive-layer`):**
+
+Shipped the reactive layer wedge: events are now emitted at damage, attack,
+move, examine, condition-lifecycle, and technique-cast moments; triggers
+install from `ConditionInstance` rows and are served by a per-owner
+`TriggerHandler` cached on the typeclass. Dispatch is **unified** —
+`emit_event(event_name, payload, location)` performs one location walk,
+calls `triggers_for(event_name)` on every owner reached, priority-sorts
+the combined list globally (descending), and dispatches synchronously on
+one `FlowStack`, stopping on cancellation. There is no `scope` field and
+no ROOM-vs-PERSONAL split; self-vs-target-vs-bystander semantics come
+from JSON filters (`{"path": "target", "op": "==", "value": "self"}` and
+friends — the evaluator resolves bare `"self"` to the trigger owner).
+Filters are a JSON DSL (`==`, `!=`, `contains`, `has_property`, `in`,
+`>`/`<`); AE payloads carry a `targets: list` and emit once through the
+same path; flow authors get new action steps (`CANCEL_EVENT`,
+`MODIFY_PAYLOAD`, `PROMPT_PLAYER`, plus `EMIT_FLOW_EVENT` that also
+routes through `emit_event`); player prompts suspend via Twisted
+`Deferred` with no DB rows and resume via the `@reply` account command.
+`DEAL_DAMAGE` / `REMOVE_CONDITION` flow steps were deferred — flows can
+still trigger those side effects today by emitting a flow event that
+calls the existing `apply_damage_to_participant` / `remove_condition`
+service functions.
+
+Plan: `docs/superpowers/plans/2026-04-17-reactive-layer-implementation.md`.
+Spec: `docs/superpowers/specs/2026-04-16-reactive-layer-design.md`.
+Key new modules: `flows/trigger_handler.py`, `flows/emit.py`,
+`flows/events/`, `flows/filters/`, `flows/execution/prompts.py`,
+`world/combat/damage_source.py`. 29 integration tests cover damage-source
+discrimination, cross-character filters, AE topology, stage cascades,
+cancellation tiers, and async prompt resolution; 10 are authored-but-skipped
+pending follow-up infrastructure (covenant relationships, Property M2M on
+Technique, trigger usage-cap fields, mutable `ExaminedPayload`).
+
+Scope 5.5 is the deliberate "light up flows/triggers" PR. It must follow Scope 5
+**sooner rather than later** — mage scars without reactive side effects are
+half a feature, and every later system that wants reactive behavior is blocked
+on the same plumbing. This is the wedge that turns paper architecture into
+real infrastructure.
+
+What to build:
+- **Event seeding and emission at reactive moments.** At minimum: character
+  arrival in a room (`character_arrived_in_room`), technique use
+  (`technique_used`), social interaction targeting a character (`social_targeted`),
+  damage taken (`damage_taken`). Each event carries a payload rich enough for
+  trigger filters — destination Property names, technique affinity, source
+  identity, damage type, etc.
+- **Service function surface for flows.** Concrete service functions that
+  FlowDefinitions can call: `force_check(target, check_type, difficulty)`,
+  `apply_condition(target, template, severity)`, `deal_damage(target, type, amount)`,
+  `emit_observer_message(scene, text)`. Mirrors the pattern in
+  `flows/service_functions/`.
+- **ConditionTemplate → TriggerDefinition M2M.** Add `reactive_triggers` as
+  an M2M from `ConditionTemplate` to `flows.TriggerDefinition`. When a condition
+  is applied to a character, any TriggerDefinitions on the template get
+  instantiated as `Trigger` rows on the character's `ObjectDB` and registered
+  with the room's `TriggerRegistry` on entry. When the condition is removed,
+  triggers go with it. This lives on the condition (not on
+  `MagicalAlterationTemplate`) so distinctions, races, items, curses, and any
+  other condition source benefit from the same plumbing.
+- **Reference content.** 2-3 fully-authored reactive scars exercising the loop
+  end-to-end: e.g., an Abyssal-aligned character with the "Hallowed Rejection"
+  scar takes a forced check on entering rooms with the `holy_ground` Property,
+  applying a `Burning` condition on failure. These are the integration tests
+  that prove the plumbing works.
+- **Documentation pass.** A new `docs/roadmap/reactive-layer.md` (or section in
+  `capabilities-and-challenges.md`) describing the event surface, payload
+  conventions, the service function set, and how to author triggers. This is
+  cross-cutting infra; every later consumer needs the reference.
+
+Key design questions to resolve during brainstorm:
+- What's the minimum event surface for MVP, and what's the naming convention?
+  (Event names are global — once we ship them, renaming is painful.)
+- Should event payloads carry resolved Property name lists, or just object PKs
+  the trigger flow has to look up? (Affects trigger filter ergonomics vs.
+  payload size.)
+- How does trigger registration handle scenes vs. the grid? `TriggerRegistry`
+  lives on rooms today — does it apply during scene RP, or do scenes get their
+  own registry?
+- Does `force_check` block flow execution (synchronous resolution) or fire
+  asynchronously into a player prompt? Affects how reactive side effects compose.
+- How do we prevent trigger storms? (Same character with five reactive scars
+  entering a room shouldn't fire 20 nested flows.)
+
+Dependencies:
+- Flows/triggers infrastructure (live — `flows/` app, fully implemented)
+- Scope 5 ships first so the `MagicalAlterationTemplate.reactive_triggers` link
+  exists as the first real consumer
+
+Decoupling: Sequenced AFTER Scope 5, but unblocks far more than magic. Combat
+reactions, cursed items, environmental hazards, divine wrath, allergies, observer
+reactions, and any future "something happens when X" feature flows through
+this PR's plumbing.
+
+**Scope #6 — Soulfray Recovery & Decay (TODO):**
+
+Soulfray severity currently only accumulates — there is no mechanism for it to go down.
+This scope adds the recovery side: time-based decay, ritual-driven recovery, and the
+"anima fade out of combat" behavior the world-clock roadmap has been waiting on.
+
+What to build:
+- **`decay_soulfray_severity(character)`** service — decrements severity by a configured
+  amount per tick, retreating through stages when severity drops below the current
+  stage's threshold. Inverse of `advance_condition_severity()` from Scope 3.
+- **`SoulfrayConfig.decay_rate`** — authored field for base decay per unit time.
+  Consider separate rates for in-scene vs out-of-scene vs post-ritual.
+- **Weekly / periodic hook** — wire decay into the `weekly_rollover` orchestrator
+  (or a faster tick) via the world-clock scheduler. Task registry pattern, idempotent,
+  matches AP regen shape.
+- **Ritual-driven recovery** — `AnimaRitualPerformance.apply_recovery()` (or similar)
+  consumes the existing CharacterAnimaRitual + AnimaRitualPerformance records and
+  decrements Soulfray severity as one of the outcomes. Scene-linked, so ritual
+  performance in RP has a concrete mechanical effect.
+- **`CharacterAnima` anima recovery too** — while we're here, make the existing
+  `last_recovery` field actually drive anima pool recovery on the same scheduler tick.
+  This is the "anima fade out of combat" item from the world-clock deferred list.
+- **Engagement-aware recovery** — Soulfray should NOT decay while a character has an
+  active high-stakes CharacterEngagement (combat, mission). Recovery is a between-scenes
+  phenomenon, not a mid-fight one.
+- **Integration test** in `src/integration_tests/pipeline/` exercising: character
+  overburns into Soulfray stage 2, performs a ritual (factory-built), severity drops,
+  stage retreats to 1. A second test covers time-based decay via the scheduler tick.
+  A third covers engagement blocking decay.
+
+Key design questions to resolve during brainstorm:
+- Does decay ever fully clear Soulfray, or does it asymptote toward stage 1 so some
+  lingering magical fatigue remains until a proper ritual?
+- Does ritual recovery require the character to be OUT of engagement, or can it happen
+  mid-arc as a dramatic pause?
+- Should decay rate scale with resonance/affinity (some characters recover faster)?
+- Does the scheduler hook run weekly (GameWeek-aligned) or daily (AP-regen-aligned)?
+  This affects how "spiky" recovery feels.
+- Do we need a "soulfray history" audit trail, or is live severity enough?
+
+Dependencies:
+- World-clock scheduler (live — `GameWeek`, `weekly_rollover`, task registry exist)
+- CharacterAnimaRitual / AnimaRitualPerformance (live)
+- Soulfray stage progression from Scope 3 (live — reuse `ConditionStage.severity_threshold`)
+
+Decoupling: Standalone. Does NOT depend on Scope 5 (alteration resolution). A separate PR.
+
+Deferred to later scopes:
 - Abyssal corruption as long-term consequence of abyssal magic overuse
 - Character loss deferral during Audere (needs combat/mission lifecycle)
-- Soulfray recovery/decay mechanics
-- Magical alteration resolution (the function that determines *what* alteration
-  occurs based on character identity — resonances, affinity, Soulfray state)
 
 **Key design principles (apply across all scopes):**
 - Anima is a safety margin, not a gate. Magic always works. Deficit costs life force.

@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from world.checks.models import Consequence
     from world.checks.types import CheckResult
-    from world.mechanics.models import Prerequisite
 
 from world.checks.types import OutcomeDisplay
 from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
+from world.mechanics.models import Prerequisite
 
 # Re-export for backwards compatibility within mechanics app
 ConsequenceDisplay = OutcomeDisplay

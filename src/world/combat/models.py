@@ -1,5 +1,6 @@
 """Models for the combat system."""
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -19,6 +20,7 @@ from world.combat.constants import (
     TargetSelection,
 )
 from world.fatigue.constants import EffortLevel
+from world.magic.constants import EffectKind, VitalBonusTarget
 
 
 class CombatEncounter(SharedMemoryModel):
@@ -458,3 +460,244 @@ class CombatOpponentAction(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.opponent.name} Round {self.round_number}: {self.threat_entry.name}"
+
+
+# =============================================================================
+# Resonance Pivot Spec A — Phase 6: CombatPull + CombatPullResolvedEffect
+# Spec §2.1 lines 459-540, §3.8 lines 1016-1104.
+# =============================================================================
+
+
+class CombatPull(SharedMemoryModel):
+    """Per-(participant, round) commit envelope for a thread pull in combat.
+
+    Captures the resonance/tier/threads spent for a participant's pull in a
+    specific round. Resolved effects are snapshotted into CombatPullResolvedEffect
+    rows so that mid-round edits to authoring (or Thread.level) cannot
+    retroactively change a committed pull. Spec §2.1 lines 459-466.
+    """
+
+    participant = models.ForeignKey(
+        "combat.CombatParticipant",
+        on_delete=models.CASCADE,
+        related_name="combat_pulls",
+    )
+    encounter = models.ForeignKey(
+        "combat.CombatEncounter",
+        on_delete=models.CASCADE,
+        related_name="combat_pulls",
+    )
+    round_number = models.PositiveIntegerField()
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        related_name="combat_pulls",
+    )
+    tier = models.PositiveSmallIntegerField()  # 1, 2, or 3
+    threads = models.ManyToManyField(
+        "magic.Thread",
+        related_name="combat_pulls",
+    )
+    resonance_spent = models.PositiveIntegerField()
+    anima_spent = models.PositiveIntegerField()
+    committed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = (("participant", "round_number"),)
+        indexes = [
+            models.Index(fields=["encounter", "round_number"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"CombatPull(participant={self.participant_id} "
+            f"round={self.round_number} tier={self.tier})"
+        )
+
+
+class CombatPullResolvedEffect(SharedMemoryModel):
+    """Frozen runtime snapshot of one resolved pull effect.
+
+    Captured at pull-commit time. ``scaled_value`` is already multiplied by
+    ``level_multiplier`` so subsequent changes to authoring rows or
+    ``Thread.level`` cannot retroactively alter what a committed pull granted.
+
+    Per spec §2.1 lines 530-533: clean() and CheckConstraints enforce that
+    exactly one of scaled_value / granted_capability / narrative_snippet is
+    populated per kind, mirroring ThreadPullEffect.clean().
+    """
+
+    pull = models.ForeignKey(
+        CombatPull,
+        on_delete=models.CASCADE,
+        related_name="resolved_effects",
+    )
+    kind = models.CharField(max_length=32, choices=EffectKind.choices)
+    authored_value = models.IntegerField(null=True, blank=True)
+    level_multiplier = models.PositiveSmallIntegerField()
+    scaled_value = models.IntegerField(null=True, blank=True)
+    vital_target = models.CharField(
+        max_length=32,
+        choices=VitalBonusTarget.choices,
+        null=True,
+        blank=True,
+    )
+    source_thread = models.ForeignKey(
+        "magic.Thread",
+        on_delete=models.PROTECT,
+        related_name="resolved_pull_effects",
+    )
+    source_thread_level = models.PositiveSmallIntegerField()
+    source_tier = models.PositiveSmallIntegerField()  # 0..pull.tier
+    granted_capability = models.ForeignKey(
+        "conditions.CapabilityType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="combat_pull_grants",
+    )
+    narrative_snippet = models.TextField(blank=True)
+
+    class Meta:
+        # String literals match EffectKind.choices values; constraint coverage in
+        # CombatPullResolvedEffectCheckConstraintTests guards against drift. Mirrors
+        # ThreadPullEffect's pattern for consistency across pull-effect models.
+        constraints = [
+            # FLAT_BONUS: requires scaled_value, forbids capability/narrative/vital_target.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(kind="FLAT_BONUS")
+                    | (
+                        models.Q(scaled_value__isnull=False)
+                        & models.Q(granted_capability__isnull=True)
+                        & models.Q(narrative_snippet="")
+                        & models.Q(vital_target__isnull=True)
+                    )
+                ),
+                name="combatpullresolvedeffect_flat_bonus_payload",
+            ),
+            # INTENSITY_BUMP: same shape as FLAT_BONUS.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(kind="INTENSITY_BUMP")
+                    | (
+                        models.Q(scaled_value__isnull=False)
+                        & models.Q(granted_capability__isnull=True)
+                        & models.Q(narrative_snippet="")
+                        & models.Q(vital_target__isnull=True)
+                    )
+                ),
+                name="combatpullresolvedeffect_intensity_bump_payload",
+            ),
+            # VITAL_BONUS: requires scaled_value AND vital_target,
+            # forbids capability/narrative.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(kind="VITAL_BONUS")
+                    | (
+                        models.Q(scaled_value__isnull=False)
+                        & models.Q(vital_target__isnull=False)
+                        & models.Q(granted_capability__isnull=True)
+                        & models.Q(narrative_snippet="")
+                    )
+                ),
+                name="combatpullresolvedeffect_vital_bonus_payload",
+            ),
+            # CAPABILITY_GRANT: requires granted_capability, forbids scaled_value
+            # / narrative / vital_target.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(kind="CAPABILITY_GRANT")
+                    | (
+                        models.Q(granted_capability__isnull=False)
+                        & models.Q(scaled_value__isnull=True)
+                        & models.Q(narrative_snippet="")
+                        & models.Q(vital_target__isnull=True)
+                    )
+                ),
+                name="combatpullresolvedeffect_capability_grant_payload",
+            ),
+            # NARRATIVE_ONLY: requires non-empty snippet, forbids all other payloads.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(kind="NARRATIVE_ONLY")
+                    | (
+                        ~models.Q(narrative_snippet="")
+                        & models.Q(scaled_value__isnull=True)
+                        & models.Q(granted_capability__isnull=True)
+                        & models.Q(vital_target__isnull=True)
+                    )
+                ),
+                name="combatpullresolvedeffect_narrative_only_payload",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"CombatPullResolvedEffect(pull={self.pull_id} "
+            f"kind={self.kind} src_tier={self.source_tier})"
+        )
+
+    def clean(self) -> None:
+        super().clean()
+        validators = {
+            EffectKind.FLAT_BONUS: self._clean_flat_bonus,
+            EffectKind.INTENSITY_BUMP: self._clean_intensity_bump,
+            EffectKind.VITAL_BONUS: self._clean_vital_bonus,
+            EffectKind.CAPABILITY_GRANT: self._clean_capability_grant,
+            EffectKind.NARRATIVE_ONLY: self._clean_narrative_only,
+        }
+        validator = validators.get(self.kind)
+        if validator is not None:
+            validator()
+
+    def _require_scaled_value_only(self) -> None:
+        """FLAT_BONUS / INTENSITY_BUMP shape: scaled_value populated; others empty."""
+        if self.scaled_value is None:
+            raise ValidationError({"scaled_value": "Required for this kind."})
+        if self.granted_capability is not None:
+            raise ValidationError({"granted_capability": "Must be null for this kind."})
+        if self.narrative_snippet:
+            raise ValidationError({"narrative_snippet": "Must be empty for this kind."})
+        if self.vital_target:
+            raise ValidationError({"vital_target": "Must be null for this kind."})
+
+    def _clean_flat_bonus(self) -> None:
+        self._require_scaled_value_only()
+
+    def _clean_intensity_bump(self) -> None:
+        self._require_scaled_value_only()
+
+    def _clean_vital_bonus(self) -> None:
+        if self.scaled_value is None:
+            raise ValidationError({"scaled_value": "Required for VITAL_BONUS."})
+        if not self.vital_target:
+            raise ValidationError({"vital_target": "VITAL_BONUS requires vital_target."})
+        if self.granted_capability is not None:
+            raise ValidationError({"granted_capability": "Must be null for VITAL_BONUS."})
+        if self.narrative_snippet:
+            raise ValidationError({"narrative_snippet": "Must be empty for VITAL_BONUS."})
+
+    def _clean_capability_grant(self) -> None:
+        if self.granted_capability is None:
+            raise ValidationError(
+                {"granted_capability": "CAPABILITY_GRANT requires granted_capability."}
+            )
+        if self.scaled_value is not None:
+            raise ValidationError({"scaled_value": "Must be null for CAPABILITY_GRANT."})
+        if self.narrative_snippet:
+            raise ValidationError({"narrative_snippet": "Must be empty for CAPABILITY_GRANT."})
+        if self.vital_target:
+            raise ValidationError({"vital_target": "Must be null for CAPABILITY_GRANT."})
+
+    def _clean_narrative_only(self) -> None:
+        # DB constraint only checks != "". clean() is stricter; bypassing clean() can
+        # persist whitespace-only snippets.
+        if not self.narrative_snippet.strip():
+            raise ValidationError({"narrative_snippet": "NARRATIVE_ONLY requires snippet."})
+        if self.scaled_value is not None:
+            raise ValidationError({"scaled_value": "Must be null for NARRATIVE_ONLY."})
+        if self.granted_capability is not None:
+            raise ValidationError({"granted_capability": "Must be null for NARRATIVE_ONLY."})
+        if self.vital_target:
+            raise ValidationError({"vital_target": "Must be null for NARRATIVE_ONLY."})

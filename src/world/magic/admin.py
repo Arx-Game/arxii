@@ -14,10 +14,12 @@ from world.magic.models import (
     CharacterGift,
     CharacterResonance,
     CharacterTechnique,
+    CharacterThreadWeavingUnlock,
     CharacterTradition,
     EffectType,
     Facet,
     Gift,
+    ImbuingProseTemplate,
     IntensityTier,
     MishapPoolTier,
     Motif,
@@ -25,15 +27,20 @@ from world.magic.models import (
     Reincarnation,
     Resonance,
     Restriction,
+    Ritual,
+    RitualComponentRequirement,
     SoulfrayConfig,
     Technique,
     TechniqueCapabilityGrant,
     TechniqueOutcomeModifier,
     TechniqueStyle,
     Thread,
-    ThreadJournal,
-    ThreadResonance,
-    ThreadType,
+    ThreadLevelUnlock,
+    ThreadPullCost,
+    ThreadPullEffect,
+    ThreadWeavingTeachingOffer,
+    ThreadWeavingUnlock,
+    ThreadXPLockedLevel,
     Tradition,
 )
 
@@ -154,11 +161,21 @@ class CharacterAuraAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterResonance)
 class CharacterResonanceAdmin(admin.ModelAdmin):
-    list_display = ["character", "resonance", "scope", "strength", "is_active"]
-    list_filter = ["scope", "strength", "is_active"]
-    search_fields = ["character__db_key", "resonance__name"]
+    list_display = [
+        "character_sheet",
+        "resonance",
+        "balance",
+        "lifetime_earned",
+        "claimed_at",
+    ]
+    search_fields = ["character_sheet__character__db_key", "resonance__name"]
     autocomplete_fields = ["resonance"]
-    list_select_related = ["character", "resonance", "resonance__affinity"]
+    list_select_related = [
+        "character_sheet",
+        "character_sheet__character",
+        "resonance",
+        "resonance__affinity",
+    ]
 
 
 @admin.register(Gift)
@@ -242,60 +259,6 @@ class AnimaRitualPerformanceAdmin(admin.ModelAdmin):
     ]
     list_filter = ["was_successful", "performed_at"]
     date_hierarchy = "performed_at"
-
-
-@admin.register(ThreadType)
-class ThreadTypeAdmin(admin.ModelAdmin):
-    list_display = [
-        "name",
-        "slug",
-        "romantic_threshold",
-        "trust_threshold",
-        "rivalry_threshold",
-        "protective_threshold",
-        "enmity_threshold",
-    ]
-    search_fields = ["name", "slug", "description"]
-    prepopulated_fields = {"slug": ("name",)}
-    autocomplete_fields = ["grants_resonance"]
-
-
-class ThreadResonanceInline(admin.TabularInline):
-    model = ThreadResonance
-    extra = 0
-    autocomplete_fields = ["resonance"]
-
-
-class ThreadJournalInline(admin.TabularInline):
-    model = ThreadJournal
-    extra = 0
-    readonly_fields = ["created_at"]
-    fields = ["author", "content", "created_at"]
-
-
-@admin.register(Thread)
-class ThreadAdmin(admin.ModelAdmin):
-    list_display = [
-        "initiator",
-        "receiver",
-        "romantic",
-        "trust",
-        "rivalry",
-        "protective",
-        "enmity",
-        "is_soul_tether",
-    ]
-    list_filter = ["is_soul_tether", "created_at"]
-    search_fields = ["initiator__db_key", "receiver__db_key"]
-    inlines = [ThreadResonanceInline, ThreadJournalInline]
-
-
-@admin.register(ThreadJournal)
-class ThreadJournalAdmin(admin.ModelAdmin):
-    list_display = ["thread", "author", "created_at"]
-    list_filter = ["created_at"]
-    search_fields = ["thread__initiator__db_key", "thread__receiver__db_key"]
-    readonly_fields = ["created_at"]
 
 
 class MotifResonanceInline(admin.TabularInline):
@@ -408,3 +371,150 @@ class MishapPoolTierAdmin(admin.ModelAdmin):
 @admin.register(TechniqueOutcomeModifier)
 class TechniqueOutcomeModifierAdmin(admin.ModelAdmin):
     list_display = ["outcome", "modifier_value"]
+
+
+@admin.register(ThreadPullCost)
+class ThreadPullCostAdmin(admin.ModelAdmin):
+    list_display = ["tier", "label", "resonance_cost", "anima_per_thread"]
+    ordering = ["tier"]
+
+
+@admin.register(ThreadXPLockedLevel)
+class ThreadXPLockedLevelAdmin(admin.ModelAdmin):
+    list_display = ["level", "xp_cost"]
+    ordering = ["level"]
+
+
+@admin.register(ThreadPullEffect)
+class ThreadPullEffectAdmin(admin.ModelAdmin):
+    list_display = [
+        "target_kind",
+        "resonance",
+        "tier",
+        "min_thread_level",
+        "effect_kind",
+    ]
+    list_filter = ["target_kind", "tier", "effect_kind"]
+    search_fields = ["resonance__name", "narrative_snippet"]
+    autocomplete_fields = ["resonance", "capability_grant"]
+    list_select_related = ["resonance", "capability_grant"]
+
+
+@admin.register(ImbuingProseTemplate)
+class ImbuingProseTemplateAdmin(admin.ModelAdmin):
+    list_display = ["resonance", "target_kind"]
+    list_filter = ["target_kind"]
+    search_fields = ["resonance__name", "prose"]
+    autocomplete_fields = ["resonance"]
+    list_select_related = ["resonance"]
+
+
+class RitualComponentRequirementInline(admin.TabularInline):
+    model = RitualComponentRequirement
+    extra = 0
+    autocomplete_fields = ["item_template"]
+    raw_id_fields = ["min_quality_tier"]
+
+
+@admin.register(Ritual)
+class RitualAdmin(admin.ModelAdmin):
+    list_display = [
+        "name",
+        "execution_kind",
+        "hedge_accessible",
+        "glimpse_eligible",
+    ]
+    list_filter = ["execution_kind", "hedge_accessible", "glimpse_eligible"]
+    search_fields = ["name", "description"]
+    autocomplete_fields = ["flow", "site_property"]
+    inlines = [RitualComponentRequirementInline]
+
+
+@admin.register(RitualComponentRequirement)
+class RitualComponentRequirementAdmin(admin.ModelAdmin):
+    list_display = ["ritual", "item_template", "quantity", "min_quality_tier"]
+    list_filter = ["ritual"]
+    autocomplete_fields = ["ritual", "item_template"]
+    raw_id_fields = ["min_quality_tier"]
+    list_select_related = ["ritual", "item_template", "min_quality_tier"]
+
+
+class ThreadLevelUnlockInline(admin.TabularInline):
+    model = ThreadLevelUnlock
+    extra = 0
+    readonly_fields = ["acquired_at"]
+
+
+@admin.register(Thread)
+class ThreadAdmin(admin.ModelAdmin):
+    list_display = ["id", "owner", "resonance", "target_kind", "level", "developed_points"]
+    list_filter = ["target_kind", "resonance"]
+    search_fields = ["owner__character__db_key", "resonance__name", "name"]
+    autocomplete_fields = ["resonance"]
+    raw_id_fields = [
+        "owner",
+        "target_trait",
+        "target_technique",
+        "target_object",
+        "target_relationship_track",
+        "target_capstone",
+    ]
+    list_select_related = ["owner", "resonance"]
+    readonly_fields = ["created_at", "updated_at"]
+    inlines = [ThreadLevelUnlockInline]
+
+
+@admin.register(ThreadLevelUnlock)
+class ThreadLevelUnlockAdmin(admin.ModelAdmin):
+    list_display = ["thread", "unlocked_level", "xp_spent", "acquired_at"]
+    list_filter = ["unlocked_level"]
+    search_fields = ["thread__owner__character__db_key"]
+    readonly_fields = ["acquired_at"]
+    raw_id_fields = ["thread"]
+
+
+@admin.register(ThreadWeavingUnlock)
+class ThreadWeavingUnlockAdmin(admin.ModelAdmin):
+    list_display = ["id", "target_kind", "display_name", "xp_cost", "out_of_path_multiplier"]
+    list_filter = ["target_kind"]
+    search_fields = [
+        "unlock_trait__name",
+        "unlock_gift__name",
+        "unlock_item_typeclass_path",
+        "unlock_room_property__name",
+        "unlock_track__name",
+    ]
+    raw_id_fields = [
+        "unlock_trait",
+        "unlock_gift",
+        "unlock_room_property",
+        "unlock_track",
+    ]
+    filter_horizontal = ["paths"]
+
+
+@admin.register(CharacterThreadWeavingUnlock)
+class CharacterThreadWeavingUnlockAdmin(admin.ModelAdmin):
+    list_display = ["id", "character", "unlock", "xp_spent", "teacher", "acquired_at"]
+    list_filter = ["unlock__target_kind"]
+    search_fields = [
+        "character__character__db_key",
+        "unlock__unlock_trait__name",
+        "unlock__unlock_gift__name",
+    ]
+    raw_id_fields = ["character", "unlock", "teacher"]
+    readonly_fields = ["acquired_at"]
+
+
+@admin.register(ThreadWeavingTeachingOffer)
+class ThreadWeavingTeachingOfferAdmin(admin.ModelAdmin):
+    list_display = ["id", "teacher", "unlock", "gold_cost", "banked_ap", "created_at"]
+    list_filter = ["unlock__target_kind"]
+    search_fields = [
+        "teacher__roster_entry__character__db_key",
+        "unlock__unlock_trait__name",
+        "unlock__unlock_gift__name",
+        "pitch",
+    ]
+    raw_id_fields = ["teacher", "unlock"]
+    readonly_fields = ["created_at"]

@@ -60,6 +60,9 @@ class FlowActionChoices(models.TextChoices):
         "emit_flow_event_for_each",
         "Emit Flow Event For Each",
     )
+    CANCEL_EVENT = "cancel_event", "Cancel Event"
+    MODIFY_PAYLOAD = "modify_payload", "Modify Payload"
+    PROMPT_PLAYER = "prompt_player", "Prompt Player"
 
 
 # Map the comparison actions to their corresponding operator functions.
@@ -79,6 +82,7 @@ class FlowState(Enum):
 
     RUNNING = auto()
     STOP = auto()
+    SUSPENDED = auto()
 
 
 class DefaultEvents(models.TextChoices):

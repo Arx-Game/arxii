@@ -4,6 +4,235 @@
  */
 
 export interface paths {
+  '/api/achievements/achievements/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for listing and retrieving achievements.
+     *
+     *     Returns active achievements that are either visible (not hidden) or
+     *     have been earned by the requesting user's characters.
+     */
+    get: operations['achievements_achievements_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/achievements/achievements/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for listing and retrieving achievements.
+     *
+     *     Returns active achievements that are either visible (not hidden) or
+     *     have been earned by the requesting user's characters.
+     */
+    get: operations['achievements_achievements_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/achievements/character-achievements/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for listing character achievements.
+     *
+     *     Returns achievements earned by characters, filterable by character_sheet.
+     */
+    get: operations['achievements_character_achievements_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/achievements/character-achievements/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for listing character achievements.
+     *
+     *     Returns achievements earned by characters, filterable by character_sheet.
+     */
+    get: operations['achievements_character_achievements_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/action-requests/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for scene action requests with consent flow. */
+    get: operations['action_requests_list'];
+    put?: never;
+    /** @description Create a new action request. */
+    post: operations['action_requests_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/action-requests/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for scene action requests with consent flow. */
+    get: operations['action_requests_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/action-requests/{id}/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Respond to a pending action request (accept/deny). */
+    post: operations['action_requests_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/action-requests/available/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Return social actions available to the requesting user's character.
+     *
+     *     Resolves the character from the first persona owned by the account,
+     *     then returns all social ActionTemplates with technique enhancement
+     *     options for that character.
+     */
+    get: operations['action_requests_available_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/areas/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Browse the area hierarchy for room selection. */
+    get: operations['areas_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/areas/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Browse the area hierarchy for room selection. */
+    get: operations['areas_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/areas/rooms/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Browse public rooms, filterable by area (includes descendant areas). */
+    get: operations['areas_rooms_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/areas/rooms/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Browse public rooms, filterable by area (includes descendant areas). */
+    get: operations['areas_rooms_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/auth/browser/v1/auth/email/request': {
     parameters: {
       query?: never;
@@ -336,6 +565,7 @@ export interface paths {
      * @description List active cantrips for character creation.
      *
      *     Returns all active cantrips with their allowed facets.
+     *     Accepts optional ``?path_id=<int>`` to filter by Path's allowed styles.
      *     Registered under /api/character-creation/ since it's used during CG.
      */
     get: operations['character_creation_cantrips_list'];
@@ -358,6 +588,7 @@ export interface paths {
      * @description List active cantrips for character creation.
      *
      *     Returns all active cantrips with their allowed facets.
+     *     Accepts optional ``?path_id=<int>`` to filter by Path's allowed styles.
      *     Registered under /api/character-creation/ since it's used during CG.
      */
     get: operations['character_creation_cantrips_retrieve'];
@@ -1080,6 +1311,238 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/classes/aspects/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for listing aspects.
+     *
+     *     Simple lookup table — no list/detail distinction needed.
+     */
+    get: operations['classes_aspects_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/classes/aspects/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for listing aspects.
+     *
+     *     Simple lookup table — no list/detail distinction needed.
+     */
+    get: operations['classes_aspects_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/classes/classes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for listing character classes.
+     *
+     *     list: Get all visible classes (lighter serializer)
+     *     retrieve: Get a single class with core trait ids
+     */
+    get: operations['classes_classes_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/classes/classes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for listing character classes.
+     *
+     *     list: Get all visible classes (lighter serializer)
+     *     retrieve: Get a single class with core trait ids
+     */
+    get: operations['classes_classes_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/classes/paths/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for listing paths and their aspects.
+     *
+     *     list: Get all active paths (lighter serializer without aspects)
+     *     retrieve: Get a single path with its aspects and parent path ids
+     */
+    get: operations['classes_paths_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/classes/paths/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for listing paths and their aspects.
+     *
+     *     list: Get all active paths (lighter serializer without aspects)
+     *     retrieve: Get a single path with its aspects and parent path ids
+     */
+    get: operations['classes_paths_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/clock/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET / — return the current clock state. */
+    get: operations['clock_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/clock/adjust/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /adjust/ — staff: set the IC clock time. */
+    post: operations['clock_adjust_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/clock/convert/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /convert/ — convert between IC and real dates. */
+    get: operations['clock_convert_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/clock/pause/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /pause/ — staff: pause the clock. */
+    post: operations['clock_pause_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/clock/ratio/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /ratio/ — staff: change the time ratio. */
+    post: operations['clock_ratio_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/clock/unpause/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST /unpause/ — staff: unpause the clock. */
+    post: operations['clock_unpause_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/codex/categories/': {
     parameters: {
       query?: never;
@@ -1225,6 +1688,288 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/combat/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for combat encounter lifecycle and player actions. */
+    get: operations['combat_list'];
+    put?: never;
+    /** @description ViewSet for combat encounter lifecycle and player actions. */
+    post: operations['combat_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for combat encounter lifecycle and player actions. */
+    get: operations['combat_retrieve'];
+    /** @description ViewSet for combat encounter lifecycle and player actions. */
+    put: operations['combat_update'];
+    post?: never;
+    /** @description ViewSet for combat encounter lifecycle and player actions. */
+    delete: operations['combat_destroy'];
+    options?: never;
+    head?: never;
+    /** @description ViewSet for combat encounter lifecycle and player actions. */
+    patch: operations['combat_partial_update'];
+    trace?: never;
+  };
+  '/api/combat/{id}/add_opponent/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Add an NPC opponent to the encounter (GM action). */
+    post: operations['combat_add_opponent_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/add_participant/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Add a PC to the encounter (GM action). */
+    post: operations['combat_add_participant_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/available_combos/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Get available combos for the current round. */
+    get: operations['combat_available_combos_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/begin_round/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Begin a new declaration phase. */
+    post: operations['combat_begin_round_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/declare/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Declare actions for the current round. */
+    post: operations['combat_declare_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/flee/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Declare intent to flee. Creates a passives-only action. */
+    post: operations['combat_flee_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/join/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Player self-joins the encounter. */
+    post: operations['combat_join_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/my_action/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Get the current user's action for this round. */
+    get: operations['combat_my_action_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/pause/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Pause or unpause the encounter timer. */
+    post: operations['combat_pause_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/ready/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Toggle ready status for the current round. */
+    post: operations['combat_ready_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/remove_participant/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Remove a PC from the encounter (GM action). */
+    post: operations['combat_remove_participant_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/resolve_round/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Resolve the current round.
+     *
+     *     SharedMemoryModel identity map means all .save() calls during
+     *     resolution update the same Python objects in participants_cached
+     *     and opponents_cached — no re-fetch needed.
+     */
+    post: operations['combat_resolve_round_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/revert_combo/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Revert combo upgrade on own action. */
+    post: operations['combat_revert_combo_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/combat/{id}/upgrade_combo/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Upgrade own action to a combo. */
+    post: operations['combat_upgrade_combo_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/conditions/capabilities/': {
     parameters: {
       query?: never;
@@ -1344,7 +2089,7 @@ export interface paths {
      *     Only returns conditions with is_visible_to_others=True.
      *
      *     Query params:
-     *         target_id: ID of the character being observed
+     *         target_id: ID of the character being observed (via filterset)
      */
     get: operations['conditions_character_observed_retrieve'];
     put?: never;
@@ -1370,48 +2115,6 @@ export interface paths {
      *     for the character sheet conditions tab.
      */
     get: operations['conditions_character_summary_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/conditions/check-types/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for check types.
-     *
-     *     Read-only endpoint for retrieving check type definitions.
-     */
-    get: operations['conditions_check_types_list'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/conditions/check-types/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for check types.
-     *
-     *     Read-only endpoint for retrieving check type definitions.
-     */
-    get: operations['conditions_check_types_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1859,6 +2562,215 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/events/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for listing, creating, and managing events. */
+    get: operations['events_list'];
+    put?: never;
+    /** @description ViewSet for listing, creating, and managing events. */
+    post: operations['events_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/events/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for listing, creating, and managing events. */
+    get: operations['events_retrieve'];
+    /** @description ViewSet for listing, creating, and managing events. */
+    put: operations['events_update'];
+    post?: never;
+    /** @description ViewSet for listing, creating, and managing events. */
+    delete: operations['events_destroy'];
+    options?: never;
+    head?: never;
+    /** @description ViewSet for listing, creating, and managing events. */
+    patch: operations['events_partial_update'];
+    trace?: never;
+  };
+  '/api/events/{id}/cancel/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description ViewSet for listing, creating, and managing events. */
+    post: operations['events_cancel_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/events/{id}/complete/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description ViewSet for listing, creating, and managing events. */
+    post: operations['events_complete_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/events/{id}/schedule/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description ViewSet for listing, creating, and managing events. */
+    post: operations['events_schedule_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/events/{id}/start/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description ViewSet for listing, creating, and managing events. */
+    post: operations['events_start_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/events/invitations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for managing event invitations. */
+    get: operations['events_invitations_list'];
+    put?: never;
+    /** @description Create an invitation for an event. */
+    post: operations['events_invitations_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/events/invitations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description ViewSet for managing event invitations. */
+    delete: operations['events_invitations_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/events/organizations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Search organizations by name for invitation targeting. */
+    get: operations['events_organizations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/events/societies/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Search societies by name for invitation targeting. */
+    get: operations['events_societies_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/fatigue/rest/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Rest command: spend AP for Well Rested bonus. */
+    post: operations['fatigue_rest_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/fatigue/status/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Get current fatigue status for the player's active character. */
+    get: operations['fatigue_status_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/forms/builds/': {
     parameters: {
       query?: never;
@@ -2012,6 +2924,369 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/gm/applications/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GM application management.
+     *
+     *     Create: any authenticated player.
+     *     List/Retrieve/Update: staff only.
+     */
+    get: operations['gm_applications_list'];
+    put?: never;
+    /**
+     * @description GM application management.
+     *
+     *     Create: any authenticated player.
+     *     List/Retrieve/Update: staff only.
+     */
+    post: operations['gm_applications_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/applications/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GM application management.
+     *
+     *     Create: any authenticated player.
+     *     List/Retrieve/Update: staff only.
+     */
+    get: operations['gm_applications_retrieve'];
+    /**
+     * @description GM application management.
+     *
+     *     Create: any authenticated player.
+     *     List/Retrieve/Update: staff only.
+     */
+    put: operations['gm_applications_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description GM application management.
+     *
+     *     Create: any authenticated player.
+     *     List/Retrieve/Update: staff only.
+     */
+    patch: operations['gm_applications_partial_update'];
+    trace?: never;
+  };
+  '/api/gm/invites/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GM invites for specific roster characters.
+     *
+     *     - create: GM only, must oversee the character (validated in serializer)
+     *     - list/retrieve: scoped to GM's invites (staff sees all)
+     *     - destroy: revokes unclaimed invites (validated in serializer)
+     */
+    get: operations['gm_invites_list'];
+    put?: never;
+    /**
+     * @description GM invites for specific roster characters.
+     *
+     *     - create: GM only, must oversee the character (validated in serializer)
+     *     - list/retrieve: scoped to GM's invites (staff sees all)
+     *     - destroy: revokes unclaimed invites (validated in serializer)
+     */
+    post: operations['gm_invites_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/invites/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GM invites for specific roster characters.
+     *
+     *     - create: GM only, must oversee the character (validated in serializer)
+     *     - list/retrieve: scoped to GM's invites (staff sees all)
+     *     - destroy: revokes unclaimed invites (validated in serializer)
+     */
+    get: operations['gm_invites_retrieve'];
+    put?: never;
+    post?: never;
+    /**
+     * @description GM invites for specific roster characters.
+     *
+     *     - create: GM only, must oversee the character (validated in serializer)
+     *     - list/retrieve: scoped to GM's invites (staff sees all)
+     *     - destroy: revokes unclaimed invites (validated in serializer)
+     */
+    delete: operations['gm_invites_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/invites/claim/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Logged-in user claims an invite by code. */
+    post: operations['gm_invites_claim_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/queue/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only list of pending applications for this GM's characters. */
+    get: operations['gm_queue_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/queue/{id}/{action}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description GM approves or denies a pending application in their queue.
+     *
+     *     URL path: /api/gm/queue/<id>/<action>/ where action is 'approve' or 'deny'.
+     */
+    post: operations['gm_queue_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/table-memberships/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GM table membership management.
+     *
+     *     Staff sees all memberships. GMs see only memberships for tables they own.
+     *     Creation uses the join_table service to apply temporary-persona validation.
+     *     Destroy is a soft-leave — the record remains with left_at set.
+     */
+    get: operations['gm_table_memberships_list'];
+    put?: never;
+    /**
+     * @description GM table membership management.
+     *
+     *     Staff sees all memberships. GMs see only memberships for tables they own.
+     *     Creation uses the join_table service to apply temporary-persona validation.
+     *     Destroy is a soft-leave — the record remains with left_at set.
+     */
+    post: operations['gm_table_memberships_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/table-memberships/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GM table membership management.
+     *
+     *     Staff sees all memberships. GMs see only memberships for tables they own.
+     *     Creation uses the join_table service to apply temporary-persona validation.
+     *     Destroy is a soft-leave — the record remains with left_at set.
+     */
+    get: operations['gm_table_memberships_retrieve'];
+    /**
+     * @description GM table membership management.
+     *
+     *     Staff sees all memberships. GMs see only memberships for tables they own.
+     *     Creation uses the join_table service to apply temporary-persona validation.
+     *     Destroy is a soft-leave — the record remains with left_at set.
+     */
+    put: operations['gm_table_memberships_update'];
+    post?: never;
+    /**
+     * @description GM table membership management.
+     *
+     *     Staff sees all memberships. GMs see only memberships for tables they own.
+     *     Creation uses the join_table service to apply temporary-persona validation.
+     *     Destroy is a soft-leave — the record remains with left_at set.
+     */
+    delete: operations['gm_table_memberships_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description GM table membership management.
+     *
+     *     Staff sees all memberships. GMs see only memberships for tables they own.
+     *     Creation uses the join_table service to apply temporary-persona validation.
+     *     Destroy is a soft-leave — the record remains with left_at set.
+     */
+    patch: operations['gm_table_memberships_partial_update'];
+    trace?: never;
+  };
+  '/api/gm/tables/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GM table management.
+     *
+     *     Staff sees all tables. GMs see only their own. Archive and transfer
+     *     ownership are staff-only lifecycle actions.
+     */
+    get: operations['gm_tables_list'];
+    put?: never;
+    /**
+     * @description GM table management.
+     *
+     *     Staff sees all tables. GMs see only their own. Archive and transfer
+     *     ownership are staff-only lifecycle actions.
+     */
+    post: operations['gm_tables_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/tables/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GM table management.
+     *
+     *     Staff sees all tables. GMs see only their own. Archive and transfer
+     *     ownership are staff-only lifecycle actions.
+     */
+    get: operations['gm_tables_retrieve'];
+    /**
+     * @description GM table management.
+     *
+     *     Staff sees all tables. GMs see only their own. Archive and transfer
+     *     ownership are staff-only lifecycle actions.
+     */
+    put: operations['gm_tables_update'];
+    post?: never;
+    /**
+     * @description GM table management.
+     *
+     *     Staff sees all tables. GMs see only their own. Archive and transfer
+     *     ownership are staff-only lifecycle actions.
+     */
+    delete: operations['gm_tables_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description GM table management.
+     *
+     *     Staff sees all tables. GMs see only their own. Archive and transfer
+     *     ownership are staff-only lifecycle actions.
+     */
+    patch: operations['gm_tables_partial_update'];
+    trace?: never;
+  };
+  '/api/gm/tables/{id}/archive/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description GM table management.
+     *
+     *     Staff sees all tables. GMs see only their own. Archive and transfer
+     *     ownership are staff-only lifecycle actions.
+     */
+    post: operations['gm_tables_archive_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/tables/{id}/transfer_ownership/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description GM table management.
+     *
+     *     Staff sees all tables. GMs see only their own. Archive and transfer
+     *     ownership are staff-only lifecycle actions.
+     */
+    post: operations['gm_tables_transfer_ownership_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/goals/domains/': {
     parameters: {
       query?: never;
@@ -2023,7 +3298,7 @@ export interface paths {
      * @description ViewSet for listing goal domains.
      *
      *     Read-only endpoint for retrieving goal domain definitions.
-     *     Goal domains are ModifierType entries with category='goal'.
+     *     Goal domains are ModifierTarget entries with category='goal'.
      */
     get: operations['goals_domains_list'];
     put?: never;
@@ -2045,7 +3320,7 @@ export interface paths {
      * @description ViewSet for listing goal domains.
      *
      *     Read-only endpoint for retrieving goal domain definitions.
-     *     Goal domains are ModifierType entries with category='goal'.
+     *     Goal domains are ModifierTarget entries with category='goal'.
      */
     get: operations['goals_domains_retrieve'];
     put?: never;
@@ -2073,7 +3348,7 @@ export interface paths {
      *
      *     Request body:
      *         {
-     *             "domain": 1 (optional, goal domain ModifierType ID),
+     *             "domain": 1 (optional, goal domain ModifierTarget ID),
      *             "title": "My journey to power",
      *             "content": "Today I made progress...",
      *             "is_public": false
@@ -2169,6 +3444,311 @@ export interface paths {
     };
     /** @description Return basic game statistics. */
     get: operations['homepage_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/interaction-favorites/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for toggling interaction favorites. */
+    get: operations['interaction_favorites_list'];
+    put?: never;
+    /** @description Toggle a favorite on or off for the authenticated user. */
+    post: operations['interaction_favorites_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/interaction-favorites/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for toggling interaction favorites. */
+    get: operations['interaction_favorites_retrieve'];
+    put?: never;
+    post?: never;
+    /** @description ViewSet for toggling interaction favorites. */
+    delete: operations['interaction_favorites_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/interaction-reactions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Toggle: delete if exists, create if not. */
+    post: operations['interaction_reactions_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/interaction-reactions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description Toggle emoji reactions on interactions. */
+    delete: operations['interaction_reactions_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/interactions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for browsing interactions with destroy and mark_private actions. */
+    get: operations['interactions_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/interactions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for browsing interactions with destroy and mark_private actions. */
+    get: operations['interactions_retrieve'];
+    put?: never;
+    post?: never;
+    /** @description ViewSet for browsing interactions with destroy and mark_private actions. */
+    delete: operations['interactions_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/interactions/{id}/mark-private/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description ViewSet for browsing interactions with destroy and mark_private actions. */
+    post: operations['interactions_mark_private_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/interaction-types/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only ViewSet for interaction type lookup data. */
+    get: operations['items_interaction_types_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/interaction-types/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only ViewSet for interaction type lookup data. */
+    get: operations['items_interaction_types_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/quality-tiers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only ViewSet for quality tier lookup data. */
+    get: operations['items_quality_tiers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/quality-tiers/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only ViewSet for quality tier lookup data. */
+    get: operations['items_quality_tiers_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/templates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only ViewSet for item templates. */
+    get: operations['items_templates_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/templates/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only ViewSet for item templates. */
+    get: operations['items_templates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/journals/entries/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description List public journal entries.
+     *
+     *     Supports query params:
+     *     - ?author=<character_id> — filter by author
+     *     - ?tag=<tag_name> — filter by tag name
+     */
+    get: operations['journals_entries_retrieve'];
+    put?: never;
+    /** @description Create a new journal entry. */
+    post: operations['journals_entries_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/journals/entries/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Retrieve a single journal entry.
+     *
+     *     Public entries are visible to all authenticated users.
+     *     Private entries are only visible to their author.
+     */
+    get: operations['journals_entries_retrieve_2'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** @description Edit an existing journal entry (owner only). */
+    patch: operations['journals_entries_partial_update'];
+    trace?: never;
+  };
+  '/api/journals/entries/{id}/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Create a praise or retort response to a journal entry. */
+    post: operations['journals_entries_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/journals/entries/mine/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List the requesting character's own entries (including private). */
+    get: operations['journals_entries_mine_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -2726,6 +4306,88 @@ export interface paths {
     patch: operations['magic_gifts_partial_update'];
     trace?: never;
   };
+  '/api/magic/pending-alterations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for pending Mage Scars.
+     *
+     *     list: Returns the authenticated player's open pending alterations.
+     *     retrieve: Returns a single pending alteration.
+     *     resolve: Custom action to resolve a pending via author or library path.
+     *     library: Custom action to browse tier-matched library entries.
+     */
+    get: operations['magic_pending_alterations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/pending-alterations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for pending Mage Scars.
+     *
+     *     list: Returns the authenticated player's open pending alterations.
+     *     retrieve: Returns a single pending alteration.
+     *     resolve: Custom action to resolve a pending via author or library path.
+     *     library: Custom action to browse tier-matched library entries.
+     */
+    get: operations['magic_pending_alterations_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/pending-alterations/{id}/library/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Browse tier-matched library entries for a pending alteration. */
+    get: operations['magic_pending_alterations_library_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/pending-alterations/{id}/resolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Resolve a pending alteration via author-from-scratch or library path. */
+    post: operations['magic_pending_alterations_resolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/restrictions/': {
     parameters: {
       query?: never;
@@ -2768,6 +4430,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/rituals/perform/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate, resolve, and dispatch the ritual; return a result payload. */
+    post: operations['magic_rituals_perform_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/styles/': {
     parameters: {
       query?: never;
@@ -2802,6 +4481,40 @@ export interface paths {
      *     Provides read-only access to technique styles (Manifestation, Subtle, etc.).
      */
     get: operations['magic_styles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/teaching-offers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only ViewSet for ThreadWeavingTeachingOffer records (Spec A §4.5). */
+    get: operations['magic_teaching_offers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/teaching-offers/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only ViewSet for ThreadWeavingTeachingOffer records (Spec A §4.5). */
+    get: operations['magic_teaching_offers_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -2872,168 +4585,17 @@ export interface paths {
     patch: operations['magic_techniques_partial_update'];
     trace?: never;
   };
-  '/api/magic/thread-journals/': {
+  '/api/magic/thread-pull-preview/': {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for ThreadJournal records.
-     *
-     *     Manages IC-visible journal entries on threads.
-     */
-    get: operations['magic_thread_journals_list'];
+    get?: never;
     put?: never;
-    /**
-     * @description ViewSet for ThreadJournal records.
-     *
-     *     Manages IC-visible journal entries on threads.
-     */
-    post: operations['magic_thread_journals_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/magic/thread-journals/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for ThreadJournal records.
-     *
-     *     Manages IC-visible journal entries on threads.
-     */
-    get: operations['magic_thread_journals_retrieve'];
-    /**
-     * @description ViewSet for ThreadJournal records.
-     *
-     *     Manages IC-visible journal entries on threads.
-     */
-    put: operations['magic_thread_journals_update'];
-    post?: never;
-    /**
-     * @description ViewSet for ThreadJournal records.
-     *
-     *     Manages IC-visible journal entries on threads.
-     */
-    delete: operations['magic_thread_journals_destroy'];
-    options?: never;
-    head?: never;
-    /**
-     * @description ViewSet for ThreadJournal records.
-     *
-     *     Manages IC-visible journal entries on threads.
-     */
-    patch: operations['magic_thread_journals_partial_update'];
-    trace?: never;
-  };
-  '/api/magic/thread-resonances/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for ThreadResonance records.
-     *
-     *     Manages resonances attached to threads.
-     */
-    get: operations['magic_thread_resonances_list'];
-    put?: never;
-    /**
-     * @description ViewSet for ThreadResonance records.
-     *
-     *     Manages resonances attached to threads.
-     */
-    post: operations['magic_thread_resonances_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/magic/thread-resonances/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for ThreadResonance records.
-     *
-     *     Manages resonances attached to threads.
-     */
-    get: operations['magic_thread_resonances_retrieve'];
-    /**
-     * @description ViewSet for ThreadResonance records.
-     *
-     *     Manages resonances attached to threads.
-     */
-    put: operations['magic_thread_resonances_update'];
-    post?: never;
-    /**
-     * @description ViewSet for ThreadResonance records.
-     *
-     *     Manages resonances attached to threads.
-     */
-    delete: operations['magic_thread_resonances_destroy'];
-    options?: never;
-    head?: never;
-    /**
-     * @description ViewSet for ThreadResonance records.
-     *
-     *     Manages resonances attached to threads.
-     */
-    patch: operations['magic_thread_resonances_partial_update'];
-    trace?: never;
-  };
-  '/api/magic/thread-types/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for ThreadType lookup records.
-     *
-     *     Provides read-only access to relationship types that emerge
-     *     based on thread axis thresholds.
-     */
-    get: operations['magic_thread_types_list'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/magic/thread-types/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for ThreadType lookup records.
-     *
-     *     Provides read-only access to relationship types that emerge
-     *     based on thread axis thresholds.
-     */
-    get: operations['magic_thread_types_retrieve'];
-    put?: never;
-    post?: never;
+    /** @description Run the preview and return its wire representation. */
+    post: operations['magic_thread_pull_preview_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -3048,18 +4610,28 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description ViewSet for Thread records.
+     * @description ViewSet for Thread records (Spec A §4.5).
      *
-     *     Manages magical connections between characters. Users can only
-     *     access threads involving characters they own.
+     *     list / retrieve: returns threads the requesting account owns (staff can
+     *     see all), excluding soft-retired rows.
+     *     create: delegates to the serializer, which calls ``weave_thread``. The
+     *     caller MUST supply ``character_sheet_id`` identifying which owned sheet
+     *     to weave the thread for — no implicit first-sheet selection.
+     *     destroy: soft-retire — sets ``retired_at`` rather than deleting the row,
+     *     so historical references remain.
      */
     get: operations['magic_threads_list'];
     put?: never;
     /**
-     * @description ViewSet for Thread records.
+     * @description ViewSet for Thread records (Spec A §4.5).
      *
-     *     Manages magical connections between characters. Users can only
-     *     access threads involving characters they own.
+     *     list / retrieve: returns threads the requesting account owns (staff can
+     *     see all), excluding soft-retired rows.
+     *     create: delegates to the serializer, which calls ``weave_thread``. The
+     *     caller MUST supply ``character_sheet_id`` identifying which owned sheet
+     *     to weave the thread for — no implicit first-sheet selection.
+     *     destroy: soft-retire — sets ``retired_at`` rather than deleting the row,
+     *     so historical references remain.
      */
     post: operations['magic_threads_create'];
     delete?: never;
@@ -3076,34 +4648,50 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description ViewSet for Thread records.
+     * @description ViewSet for Thread records (Spec A §4.5).
      *
-     *     Manages magical connections between characters. Users can only
-     *     access threads involving characters they own.
+     *     list / retrieve: returns threads the requesting account owns (staff can
+     *     see all), excluding soft-retired rows.
+     *     create: delegates to the serializer, which calls ``weave_thread``. The
+     *     caller MUST supply ``character_sheet_id`` identifying which owned sheet
+     *     to weave the thread for — no implicit first-sheet selection.
+     *     destroy: soft-retire — sets ``retired_at`` rather than deleting the row,
+     *     so historical references remain.
      */
     get: operations['magic_threads_retrieve'];
     /**
-     * @description ViewSet for Thread records.
+     * @description ViewSet for Thread records (Spec A §4.5).
      *
-     *     Manages magical connections between characters. Users can only
-     *     access threads involving characters they own.
+     *     list / retrieve: returns threads the requesting account owns (staff can
+     *     see all), excluding soft-retired rows.
+     *     create: delegates to the serializer, which calls ``weave_thread``. The
+     *     caller MUST supply ``character_sheet_id`` identifying which owned sheet
+     *     to weave the thread for — no implicit first-sheet selection.
+     *     destroy: soft-retire — sets ``retired_at`` rather than deleting the row,
+     *     so historical references remain.
      */
     put: operations['magic_threads_update'];
     post?: never;
     /**
-     * @description ViewSet for Thread records.
+     * @description Soft-retire the thread by stamping ``retired_at`` instead of deleting.
      *
-     *     Manages magical connections between characters. Users can only
-     *     access threads involving characters they own.
+     *     Spec A §4.5: DELETE is a soft-retire — retired threads stop appearing
+     *     in list/detail, never contribute to pulls or passives, but remain
+     *     intact so historical journal references keep resolving.
      */
     delete: operations['magic_threads_destroy'];
     options?: never;
     head?: never;
     /**
-     * @description ViewSet for Thread records.
+     * @description ViewSet for Thread records (Spec A §4.5).
      *
-     *     Manages magical connections between characters. Users can only
-     *     access threads involving characters they own.
+     *     list / retrieve: returns threads the requesting account owns (staff can
+     *     see all), excluding soft-retired rows.
+     *     create: delegates to the serializer, which calls ``weave_thread``. The
+     *     caller MUST supply ``character_sheet_id`` identifying which owned sheet
+     *     to weave the thread for — no implicit first-sheet selection.
+     *     destroy: soft-retire — sets ``retired_at`` rather than deleting the row,
+     *     so historical references remain.
      */
     patch: operations['magic_threads_partial_update'];
     trace?: never;
@@ -3142,6 +4730,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/mechanics/challenge-instances/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List and retrieve challenge instances. */
+    get: operations['mechanics_challenge_instances_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/mechanics/challenge-instances/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List and retrieve challenge instances. */
+    get: operations['mechanics_challenge_instances_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/mechanics/challenge-templates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List and retrieve challenge templates. */
+    get: operations['mechanics_challenge_templates_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/mechanics/challenge-templates/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List and retrieve challenge templates. */
+    get: operations['mechanics_challenge_templates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/mechanics/character-modifiers/': {
     parameters: {
       query?: never;
@@ -3149,12 +4805,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description List and retrieve character modifiers.
-     *
-     *     Note: modifier_type is a property derived from source.distinction_effect.target,
-     *     so we select_related through that path and can only filter by character directly.
-     */
+    /** @description List and retrieve character modifiers. */
     get: operations['mechanics_character_modifiers_list'];
     put?: never;
     post?: never;
@@ -3171,12 +4822,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description List and retrieve character modifiers.
-     *
-     *     Note: modifier_type is a property derived from source.distinction_effect.target,
-     *     so we select_related through that path and can only filter by character directly.
-     */
+    /** @description List and retrieve character modifiers. */
     get: operations['mechanics_character_modifiers_retrieve'];
     put?: never;
     post?: never;
@@ -3186,15 +4832,19 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/mechanics/types/': {
+  '/api/mechanics/characters/{character_id}/available-actions/': {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /** @description List and retrieve modifier types. */
-    get: operations['mechanics_types_list'];
+    /**
+     * @description Available actions for a character at their current location.
+     *
+     *     Returns actions grouped by challenge.
+     */
+    get: operations['mechanics_characters_available_actions_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -3203,15 +4853,15 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/mechanics/types/{id}/': {
+  '/api/mechanics/modifier-targets/': {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /** @description List and retrieve modifier types. */
-    get: operations['mechanics_types_retrieve'];
+    /** @description List and retrieve modifier targets. */
+    get: operations['mechanics_modifier_targets_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -3220,42 +4870,89 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/messages/': {
+  '/api/mechanics/modifier-targets/{id}/': {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /** @description ViewSet for managing messages within scenes with pagination and filtering */
-    get: operations['messages_list'];
+    /** @description List and retrieve modifier targets. */
+    get: operations['mechanics_modifier_targets_retrieve'];
     put?: never;
-    /** @description ViewSet for managing messages within scenes with pagination and filtering */
-    post: operations['messages_create'];
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
     trace?: never;
   };
-  '/api/messages/{id}/': {
+  '/api/mechanics/situation-instances/': {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /** @description ViewSet for managing messages within scenes with pagination and filtering */
-    get: operations['messages_retrieve'];
-    /** @description ViewSet for managing messages within scenes with pagination and filtering */
-    put: operations['messages_update'];
+    /** @description List and retrieve situation instances. */
+    get: operations['mechanics_situation_instances_list'];
+    put?: never;
     post?: never;
-    /** @description ViewSet for managing messages within scenes with pagination and filtering */
-    delete: operations['messages_destroy'];
+    delete?: never;
     options?: never;
     head?: never;
-    /** @description ViewSet for managing messages within scenes with pagination and filtering */
-    patch: operations['messages_partial_update'];
+    patch?: never;
+    trace?: never;
+  };
+  '/api/mechanics/situation-instances/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List and retrieve situation instances. */
+    get: operations['mechanics_situation_instances_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/mechanics/situation-templates/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List and retrieve situation templates. */
+    get: operations['mechanics_situation_templates_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/mechanics/situation-templates/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List and retrieve situation templates. */
+    get: operations['mechanics_situation_templates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/personas/': {
@@ -3294,6 +4991,276 @@ export interface paths {
     head?: never;
     /** @description ViewSet for managing personas within scenes */
     patch: operations['personas_partial_update'];
+    trace?: never;
+  };
+  '/api/places/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for managing places within rooms. */
+    get: operations['places_list'];
+    put?: never;
+    /** @description ViewSet for managing places within rooms. */
+    post: operations['places_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/places/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for managing places within rooms. */
+    get: operations['places_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/places/{id}/join/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Join a place. */
+    post: operations['places_join_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/places/{id}/leave/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Leave a place. */
+    post: operations['places_leave_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/player-submissions/bug-reports/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    get: operations['player_submissions_bug_reports_list'];
+    put?: never;
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    post: operations['player_submissions_bug_reports_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/player-submissions/bug-reports/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    get: operations['player_submissions_bug_reports_retrieve'];
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    put: operations['player_submissions_bug_reports_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    patch: operations['player_submissions_bug_reports_partial_update'];
+    trace?: never;
+  };
+  '/api/player-submissions/feedback/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    get: operations['player_submissions_feedback_list'];
+    put?: never;
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    post: operations['player_submissions_feedback_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/player-submissions/feedback/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    get: operations['player_submissions_feedback_retrieve'];
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    put: operations['player_submissions_feedback_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    patch: operations['player_submissions_feedback_partial_update'];
+    trace?: never;
+  };
+  '/api/player-submissions/player-reports/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    get: operations['player_submissions_player_reports_list'];
+    put?: never;
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    post: operations['player_submissions_player_reports_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/player-submissions/player-reports/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    get: operations['player_submissions_player_reports_retrieve'];
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    put: operations['player_submissions_player_reports_update'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * @description Tiny shared config for the three submission ViewSets.
+     *
+     *     Just deduplication of permission/context wiring — no abstract
+     *     enforcement, no framework. Each concrete ViewSet still owns its
+     *     queryset, serializers, and filterset.
+     */
+    patch: operations['player_submissions_player_reports_partial_update'];
     trace?: never;
   };
   '/api/player-trust/': {
@@ -3386,7 +5353,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/reactions/': {
+  '/api/progression/claim-kudos/': {
     parameters: {
       query?: never;
       header?: never;
@@ -3395,15 +5362,97 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** @description Toggle a reaction on or off for the authenticated user. */
-    post: operations['reactions_create'];
+    /** @description Claim kudos for XP conversion. */
+    post: operations['progression_claim_kudos_create'];
     delete?: never;
     options?: never;
     head?: never;
     patch?: never;
     trace?: never;
   };
-  '/api/reactions/{id}/': {
+  '/api/progression/random-scenes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for listing, claiming, and rerolling weekly random scene targets.
+     *
+     *     GET /random-scenes/ — List current week's targets for the requesting user
+     *     POST /random-scenes/<id>/claim/ — Claim a target
+     *     POST /random-scenes/<id>/reroll/ — Reroll a target
+     */
+    get: operations['progression_random_scenes_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/random-scenes/{id}/claim/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Claim a random scene target, awarding XP. */
+    post: operations['progression_random_scenes_claim_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/random-scenes/{id}/reroll/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Reroll a random scene target slot. */
+    post: operations['progression_random_scenes_reroll_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/votes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for casting, removing, and listing weekly votes.
+     *
+     *     POST /votes/ — Cast a vote
+     *     DELETE /votes/<id>/ — Unvote
+     *     GET /votes/ — List current week's votes for the requesting user
+     *     GET /votes/budget/ — Return current vote budget
+     */
+    get: operations['progression_votes_list'];
+    put?: never;
+    /** @description Cast a vote on a piece of content. */
+    post: operations['progression_votes_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/votes/{id}/': {
     parameters: {
       query?: never;
       header?: never;
@@ -3413,8 +5462,25 @@ export interface paths {
     get?: never;
     put?: never;
     post?: never;
-    /** @description ViewSet for adding or removing reactions on scene messages. */
-    delete: operations['reactions_destroy'];
+    /** @description Remove (unvote) an existing vote by ID. */
+    delete: operations['progression_votes_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/votes/budget/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the current vote budget for the requesting user. */
+    get: operations['progression_votes_budget_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
@@ -3471,6 +5537,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/relationships/hybrid-types/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List and retrieve hybrid relationship types with nested requirements. */
+    get: operations['relationships_hybrid_types_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/hybrid-types/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List and retrieve hybrid relationship types with nested requirements. */
+    get: operations['relationships_hybrid_types_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/relationships/relationships/': {
     parameters: {
       query?: never;
@@ -3497,6 +5597,40 @@ export interface paths {
     };
     /** @description List and retrieve character relationships. */
     get: operations['relationships_relationships_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/tracks/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List and retrieve relationship tracks with nested tiers. */
+    get: operations['relationships_tracks_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/tracks/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List and retrieve relationship tracks with nested tiers. */
+    get: operations['relationships_tracks_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -4200,6 +6334,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/staff-inbox/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Aggregated inbox of items needing staff attention. */
+    get: operations['staff_inbox_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/staff-inbox/accounts/{account_id}/history/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff-only view of all submissions related to an account. */
+    get: operations['staff_inbox_accounts_history_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/status/': {
     parameters: {
       query?: never;
@@ -4470,6 +6638,53 @@ export interface paths {
     patch: operations['story_participations_partial_update'];
     trace?: never;
   };
+  '/api/summary-revisions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for listing and creating scene summary revisions.
+     *
+     *     Only participants of ephemeral scenes can submit summary revisions.
+     */
+    get: operations['summary_revisions_list'];
+    put?: never;
+    /**
+     * @description ViewSet for listing and creating scene summary revisions.
+     *
+     *     Only participants of ephemeral scenes can submit summary revisions.
+     */
+    post: operations['summary_revisions_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/summary-revisions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for listing and creating scene summary revisions.
+     *
+     *     Only participants of ephemeral scenes can submit summary revisions.
+     */
+    get: operations['summary_revisions_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/traits/stat-definitions/': {
     parameters: {
       query?: never;
@@ -4535,6 +6750,62 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** @description Full serializer for achievement detail view. */
+    Achievement: {
+      readonly id: number;
+      /** @description Display name of the achievement */
+      readonly name: string;
+      /** @description URL-safe identifier for the achievement */
+      readonly slug: string;
+      /** @description What this achievement represents and how to earn it */
+      readonly description: string;
+      /** @description Icon identifier for frontend display */
+      readonly icon: string;
+      /**
+       * @description Who gets notified when this achievement is earned
+       *
+       *     * `personal` - Personal
+       *     * `room` - Room
+       *     * `gamewide` - Gamewide
+       */
+      readonly notification_level: components['schemas']['NotificationLevelEnum'];
+      readonly discovery: components['schemas']['Discovery'] | null;
+      readonly rewards: components['schemas']['AchievementReward'][];
+    };
+    /** @description Lightweight serializer for achievement list view. */
+    AchievementList: {
+      readonly id: number;
+      /** @description Display name of the achievement */
+      readonly name: string;
+      /** @description URL-safe identifier for the achievement */
+      readonly slug: string;
+      /** @description Icon identifier for frontend display */
+      readonly icon: string;
+      /**
+       * @description Who gets notified when this achievement is earned
+       *
+       *     * `personal` - Personal
+       *     * `room` - Room
+       *     * `gamewide` - Gamewide
+       */
+      readonly notification_level: components['schemas']['NotificationLevelEnum'];
+    };
+    /** @description Serializer for achievement rewards. */
+    AchievementReward: {
+      readonly id: number;
+      readonly reward_type: string;
+      readonly reward_key: string;
+      readonly reward_name: string;
+      /** @description Additional value data for the reward (e.g., bonus amount) */
+      readonly reward_value: string;
+    };
+    /**
+     * @description * `submit` - Submit
+     *     * `edit` - Edit
+     *     * `agree` - Agree
+     * @enum {string}
+     */
+    ActionEnum: 'submit' | 'edit' | 'agree';
     /**
      * @description * `major` - Major Arcana
      *     * `minor` - Minor Arcana
@@ -4550,6 +6821,56 @@ export interface components {
      * @enum {string}
      */
     ArchetypeEnum: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
+    AreaList: {
+      readonly id: number;
+      readonly name: string;
+      readonly level: components['schemas']['AreaListLevelEnum'];
+      readonly level_display: string;
+      readonly children_count: number;
+    };
+    /**
+     * @description * `10` - Building
+     *     * `20` - Neighborhood
+     *     * `30` - Ward
+     *     * `40` - City
+     *     * `50` - Region
+     *     * `60` - Kingdom
+     *     * `70` - Continent
+     *     * `80` - World
+     *     * `90` - Plane
+     * @enum {integer}
+     */
+    AreaListLevelEnum: 10 | 20 | 30 | 40 | 50 | 60 | 70 | 80 | 90;
+    AreaRoom: {
+      id: number;
+      name: string;
+      /** @default  */
+      area_name: string;
+    };
+    /** @description Serializer for Aspect model. */
+    Aspect: {
+      readonly id: number;
+      /** @description Aspect name (e.g., 'Warfare', 'Subterfuge') */
+      name: string;
+      /** @description Description of what this aspect represents */
+      description?: string;
+    };
+    AvailableAction: {
+      application_id: number;
+      application_name: string;
+      capability_source: components['schemas']['CapabilitySource'];
+      challenge_instance_id: number;
+      challenge_name: string;
+      approach_id: number | null;
+      check_type_name: string;
+      display_name: string;
+      custom_description: string;
+      difficulty_indicator?:
+        | (components['schemas']['DifficultyIndicatorEnum'] | components['schemas']['NullEnum'])
+        | null;
+      prerequisite_met?: boolean;
+      prerequisite_reasons?: string[];
+    };
     /** @description Serializer for Beginnings options. */
     Beginnings: {
       readonly id: number;
@@ -4599,6 +6920,79 @@ export interface components {
     };
     /** @enum {unknown} */
     BlankEnum: '';
+    /**
+     * @description * `head` - Head
+     *     * `face` - Face
+     *     * `neck` - Neck
+     *     * `shoulders` - Shoulders
+     *     * `torso` - Torso
+     *     * `back` - Back
+     *     * `waist` - Waist
+     *     * `left_arm` - Left Arm
+     *     * `right_arm` - Right Arm
+     *     * `left_hand` - Left Hand
+     *     * `right_hand` - Right Hand
+     *     * `left_leg` - Left Leg
+     *     * `right_leg` - Right Leg
+     *     * `feet` - Feet
+     *     * `left_finger` - Left Finger
+     *     * `right_finger` - Right Finger
+     *     * `left_ear` - Left Ear
+     *     * `right_ear` - Right Ear
+     * @enum {string}
+     */
+    BodyRegionEnum:
+      | 'head'
+      | 'face'
+      | 'neck'
+      | 'shoulders'
+      | 'torso'
+      | 'back'
+      | 'waist'
+      | 'left_arm'
+      | 'right_arm'
+      | 'left_hand'
+      | 'right_hand'
+      | 'left_leg'
+      | 'right_leg'
+      | 'feet'
+      | 'left_finger'
+      | 'right_finger'
+      | 'left_ear'
+      | 'right_ear';
+    /** @description Frontend supplies ``reporter_persona``; ``location`` is server-derived. */
+    BugReportCreate: {
+      reporter_persona: number;
+      /** @description What the player observed. */
+      description: string;
+    };
+    /** @description Frontend supplies ``reporter_persona``; ``location`` is server-derived. */
+    BugReportCreateRequest: {
+      reporter_persona: number;
+      /** @description What the player observed. */
+      description: string;
+    };
+    BugReportDetail: {
+      readonly id: number;
+      /** @description The account that submitted this. */
+      readonly reporter_account: number;
+      readonly reporter_account_username: string;
+      reporter_persona: number;
+      readonly reporter_persona_name: string;
+      /** @description What the player observed. */
+      description: string;
+      location?: number | null;
+      /** Format: date-time */
+      readonly created_at: string;
+      status?: components['schemas']['StatusD66Enum'];
+    };
+    BugReportDetailRequest: {
+      reporter_persona: number;
+      /** @description What the player observed. */
+      description: string;
+      location?: number | null;
+      status?: components['schemas']['StatusD66Enum'];
+    };
     Build: {
       readonly id: number;
       /** @description Internal key */
@@ -4653,15 +7047,22 @@ export interface components {
       readonly requires_facet: boolean;
       /** @description Player-facing dropdown label, e.g. "Choose your element". Only used when requires_facet=True. */
       readonly facet_prompt: string;
-      readonly allowed_facets: components['schemas']['CantripFacet'][];
+      /** @description Get allowed facets using cached property. */
+      readonly allowed_facets: {
+        [key: string]: unknown;
+      }[];
       readonly sort_order: number;
       readonly style_id: number;
     };
-    /** @description Lightweight facet representation for cantrip dropdown. */
-    CantripFacet: {
-      readonly id: number;
-      /** @description Facet name (e.g., 'Wolf', 'Silk', 'Creatures'). */
-      readonly name: string;
+    CapabilitySource: {
+      capability_name: string;
+      capability_id: number;
+      value: number;
+      source_type: components['schemas']['SourceTypeEnum'];
+      source_name: string;
+      source_id: number;
+      effect_property_ids?: number[];
+      prerequisite?: number | null;
     };
     /** @description Serializer for capability types. */
     CapabilityType: {
@@ -4673,6 +7074,7 @@ export interface components {
      * @description * `physical` - Physical
      *     * `social` - Social
      *     * `mental` - Mental
+     *     * `meta` - Meta
      *     * `magic` - Magic
      *     * `combat` - Combat
      *     * `general` - General
@@ -4685,12 +7087,93 @@ export interface components {
       | 'physical'
       | 'social'
       | 'mental'
+      | 'meta'
       | 'magic'
       | 'combat'
       | 'general'
       | 'crafting'
       | 'war'
       | 'other';
+    /** @description Nested serializer for challenge approaches. */
+    ChallengeApproach: {
+      readonly id: number;
+      application: number;
+      readonly application_name: string;
+      check_type: number;
+      readonly check_type_name: string;
+      required_effect_property?: number | null;
+      display_name?: string;
+      custom_description?: string;
+      /** @description When set, resolution uses this template's check_type and pool. */
+      action_template?: number | null;
+    };
+    /** @description Serializer for ChallengeGroup — actions grouped by challenge. */
+    ChallengeGroup: {
+      challenge_instance_id: number;
+      challenge_name: string;
+      actions: components['schemas']['AvailableAction'][];
+    };
+    /** @description Serializer for challenge instances. */
+    ChallengeInstance: {
+      readonly id: number;
+      template: number;
+      readonly template_name: string;
+      location: number;
+      readonly location_name: string;
+      /** @description The object embodying this challenge in the world. */
+      target_object: number;
+      readonly target_object_name: string;
+      situation_instance?: number | null;
+      is_active?: boolean;
+      is_revealed?: boolean;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description Nested serializer for challenge template consequences. */
+    ChallengeTemplateConsequence: {
+      consequence: number;
+      readonly consequence_name: string;
+      resolution_type?: components['schemas']['ResolutionTypeEnum'];
+      resolution_duration_rounds?: number | null;
+    };
+    /** @description Full serializer for challenge template detail views. */
+    ChallengeTemplateDetail: {
+      readonly id: number;
+      name: string;
+      category: number;
+      readonly category_name: string;
+      /** @description Template string with {variables} for instance-specific text. */
+      description_template?: string;
+      goal?: string;
+      severity?: number;
+      challenge_type?: components['schemas']['ChallengeTypeEnum'];
+      discovery_type?: components['schemas']['DiscoveryTypeEnum'];
+      readonly template_properties: components['schemas']['ChallengeTemplateProperty'][];
+      readonly approaches: components['schemas']['ChallengeApproach'][];
+      readonly template_consequences: components['schemas']['ChallengeTemplateConsequence'][];
+    };
+    /** @description Lightweight serializer for challenge template list views. */
+    ChallengeTemplateList: {
+      readonly id: number;
+      name: string;
+      category: number;
+      readonly category_name: string;
+      severity?: number;
+      challenge_type?: components['schemas']['ChallengeTypeEnum'];
+      discovery_type?: components['schemas']['DiscoveryTypeEnum'];
+    };
+    /** @description Nested serializer for challenge template properties. */
+    ChallengeTemplateProperty: {
+      property: number;
+      readonly property_name: string;
+      value?: number;
+    };
+    /**
+     * @description * `inhibitor` - Inhibitor (blocks actions/progress)
+     *     * `threat` - Threat (actively causes harm)
+     * @enum {string}
+     */
+    ChallengeTypeEnum: 'inhibitor' | 'threat';
     /** @description Serializer for creating chapters */
     ChapterCreate: {
       story: number;
@@ -4771,6 +7254,18 @@ export interface components {
       relationships?: string[];
       galleries?: components['schemas']['CharacterGallery'][];
     };
+    /** @description Serializer for character achievement records. */
+    CharacterAchievement: {
+      readonly id: number;
+      readonly achievement: components['schemas']['Achievement'];
+      /**
+       * Format: date-time
+       * @description When this achievement was earned
+       */
+      readonly earned_at: string;
+      /** @description Return True if the character was a discoverer of this achievement. */
+      readonly is_discoverer: boolean;
+    };
     /** @description Serializer for CharacterAnima records. */
     CharacterAnima: {
       readonly id: number;
@@ -4813,7 +7308,7 @@ export interface components {
       /** @description The resonance that powers this ritual. */
       resonance: number;
       readonly resonance_name: string;
-      readonly resonance_detail: components['schemas']['ModifierType'];
+      readonly resonance_detail: components['schemas']['Resonance'];
       /** @description Social activity that restores anima. */
       description: string;
     };
@@ -4878,6 +7373,27 @@ export interface components {
        */
       abyssal?: string;
     };
+    /** @description Full serializer for character class detail with core traits. */
+    CharacterClass: {
+      readonly id: number;
+      /** @description Class name (e.g., 'Warrior', 'Scholar', 'Noble') */
+      name: string;
+      /** @description Description of what this class represents and its role */
+      description?: string;
+      /** @description Minimum level required to have this class (0-10) */
+      minimum_level?: number;
+      readonly core_trait_ids: unknown[][];
+    };
+    /** @description Lighter serializer for character class lists. */
+    CharacterClassList: {
+      readonly id: number;
+      /** @description Class name (e.g., 'Warrior', 'Scholar', 'Noble') */
+      name: string;
+      /** @description Description of what this class represents and its role */
+      description?: string;
+      /** @description Minimum level required to have this class (0-10) */
+      minimum_level?: number;
+    };
     /** @description Serializer for character drafts. */
     CharacterDraft: {
       readonly id: number;
@@ -4911,7 +7427,7 @@ export interface components {
       readonly selected_tradition: components['schemas']['Tradition'];
       /** @description Staged data: stats, skills, traits, identity, etc. */
       draft_data?: unknown;
-      /** @description True if account has any characters with roster entries (for advanced CG options). */
+      /** @description True if account has any active roster tenure (for advanced CG options). */
       readonly has_existing_characters: boolean;
       /** @description Get total CG points spent. */
       readonly cg_points_spent: number;
@@ -4929,9 +7445,9 @@ export interface components {
       readonly stage_errors: {
         [key: string]: string[];
       };
-      /** @description Get remaining stat points (includes distinction bonuses). */
+      /** @description Get remaining stat points to allocate (0 = fully allocated). */
       readonly stats_points_remaining: number;
-      /** @description Get total stat point budget. */
+      /** @description Get total stat point budget (base + bonuses). */
       readonly stats_budget: number;
     };
     /** @description Serializer for creating a new draft. */
@@ -5047,20 +7563,14 @@ export interface components {
       /** @description The gift known. */
       gift: number;
     };
-    /**
-     * @description Serializer for CharacterModifier.
-     *
-     *     modifier_type is derived from source.distinction_effect.target, so we use
-     *     SerializerMethodField to safely access it through the property.
-     */
     CharacterModifier: {
       readonly id: number;
       /** @description Character who has this modifier */
       character: number;
       readonly character_name: string;
-      readonly modifier_type_id: number | null;
-      readonly modifier_type_name: string | null;
-      readonly category_name: string | null;
+      readonly modifier_target_id: number;
+      readonly modifier_target_name: string;
+      readonly category_name: string;
       /** @description Modifier value (can be negative) */
       value: number;
       readonly source: components['schemas']['ModifierSourceList'];
@@ -5072,26 +7582,58 @@ export interface components {
       /** Format: date-time */
       readonly created_at: string;
     };
-    /**
-     * @description Serializer for CharacterRelationship.
-     *
-     *     Uses CharacterSheet FKs. The source/target PKs are ObjectDB PKs since
-     *     CharacterSheet uses character (ObjectDB) as its primary key.
-     */
+    /** @description Full serializer for CharacterRelationship detail view. */
     CharacterRelationship: {
       readonly id: number;
-      /** @description The character who holds this opinion */
-      source: number;
+      /** @description The character who holds this relationship */
+      readonly source: number;
       readonly source_name: string;
-      /** @description The character this opinion is about */
-      target: number;
+      /** @description The character this relationship is about */
+      readonly target: number;
       readonly target_name: string;
-      /** @description Reputation score from -1000 (hostile) to 1000 (allied) */
-      reputation?: number;
-      readonly conditions: components['schemas']['RelationshipConditionList'][];
-      /** Format: date-time */
+      /** @description Whether this relationship is currently active */
+      readonly is_active: boolean;
+      /** @description Whether this relationship is awaiting mutual consent */
+      readonly is_pending: boolean;
+      /** @description Whether the displayed track/tier differs from the actual values */
+      readonly is_deceitful: boolean;
+      readonly track_progress: components['schemas']['RelationshipTrackProgress'][];
+      readonly absolute_value: number;
+      readonly developed_absolute_value: number;
+      /** Format: double */
+      readonly mechanical_bonus: number;
+      readonly affection: number;
+      /**
+       * Format: date-time
+       * @description When this relationship was created
+       */
       readonly created_at: string;
-      /** Format: date-time */
+      /**
+       * Format: date-time
+       * @description When this relationship was last modified
+       */
+      readonly updated_at: string;
+    };
+    /** @description Lightweight serializer for CharacterRelationship list view. */
+    CharacterRelationshipList: {
+      readonly id: number;
+      /** @description The character who holds this relationship */
+      readonly source: number;
+      readonly source_name: string;
+      /** @description The character this relationship is about */
+      readonly target: number;
+      readonly target_name: string;
+      /** @description Whether this relationship is currently active */
+      readonly is_active: boolean;
+      /** @description Whether this relationship is awaiting mutual consent */
+      readonly is_pending: boolean;
+      readonly absolute_value: number;
+      readonly developed_absolute_value: number;
+      readonly affection: number;
+      /**
+       * Format: date-time
+       * @description When this relationship was last modified
+       */
       readonly updated_at: string;
     };
     /** @description Serialize character data for roster entry views. */
@@ -5103,67 +7645,36 @@ export interface components {
     /** @description Serializer for CharacterResonance records. */
     CharacterResonance: {
       readonly id: number;
-      /** @description The character this resonance is attached to. */
-      character: number;
-      /** @description The resonance type (must be category='resonance'). */
+      /** @description The character sheet this resonance is attached to. */
+      character_sheet: number;
+      /** @description The resonance type. */
       resonance: number;
       readonly resonance_name: string;
-      readonly resonance_detail: components['schemas']['ModifierType'];
+      readonly resonance_detail: components['schemas']['Resonance'];
+      /** @description Spendable resonance currency. */
+      balance?: number;
+      /** @description Monotonic total of resonance earned (never decremented). */
+      lifetime_earned?: number;
       /**
-       * @description Whether this resonance affects only the character or an area.
-       *
-       *     * `self` - Self Only
-       *     * `area` - Area Effect
+       * Format: date-time
+       * @description When this resonance row was created (claimed by the character).
        */
-      scope?: components['schemas']['ScopeEnum'];
-      readonly scope_display: string;
-      /**
-       * @description The strength of this resonance attachment.
-       *
-       *     * `minor` - Minor
-       *     * `moderate` - Moderate
-       *     * `major` - Major
-       */
-      strength?: components['schemas']['StrengthEnum'];
-      readonly strength_display: string;
+      readonly claimed_at: string;
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
-      /** @description Whether this resonance is currently active. */
-      is_active?: boolean;
-      /** Format: date-time */
-      readonly created_at: string;
     };
     /** @description Serializer for CharacterResonance records. */
     CharacterResonanceRequest: {
-      /** @description The character this resonance is attached to. */
-      character: number;
-      /** @description The resonance type (must be category='resonance'). */
+      /** @description The character sheet this resonance is attached to. */
+      character_sheet: number;
+      /** @description The resonance type. */
       resonance: number;
-      /**
-       * @description Whether this resonance affects only the character or an area.
-       *
-       *     * `self` - Self Only
-       *     * `area` - Area Effect
-       */
-      scope?: components['schemas']['ScopeEnum'];
-      /**
-       * @description The strength of this resonance attachment.
-       *
-       *     * `minor` - Minor
-       *     * `moderate` - Moderate
-       *     * `major` - Major
-       */
-      strength?: components['schemas']['StrengthEnum'];
+      /** @description Spendable resonance currency. */
+      balance?: number;
+      /** @description Monotonic total of resonance earned (never decremented). */
+      lifetime_earned?: number;
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
-      /** @description Whether this resonance is currently active. */
-      is_active?: boolean;
-    };
-    /** @description Serializer for check types. */
-    CheckType: {
-      readonly id: number;
-      readonly name: string;
-      readonly description: string;
     };
     CodexCategory: {
       readonly id: number;
@@ -5343,13 +7854,6 @@ export interface components {
      */
     ConnectionToNextEnum: 'therefore' | 'but';
     /**
-     * @description * `public` - Public
-     *     * `tabletalk` - Tabletalk
-     *     * `private` - Private
-     * @enum {string}
-     */
-    ContextEnum: 'public' | 'tabletalk' | 'private';
-    /**
      * @description * `1` - Origin
      *     * `2` - Heritage
      *     * `3` - Lineage
@@ -5382,6 +7886,40 @@ export interface components {
      * @enum {string}
      */
     DefaultDurationTypeEnum: 'rounds' | 'until_cured' | 'until_used' | 'end_combat' | 'permanent';
+    /**
+     * @description * `trivial` - Trivial
+     *     * `easy` - Easy
+     *     * `normal` - Normal
+     *     * `hard` - Hard
+     *     * `daunting` - Daunting
+     * @enum {string}
+     */
+    DifficultyChoiceEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting';
+    /**
+     * @description * `impossible` - IMPOSSIBLE
+     *     * `easy` - EASY
+     *     * `moderate` - MODERATE
+     *     * `hard` - HARD
+     *     * `very_hard` - VERY_HARD
+     * @enum {string}
+     */
+    DifficultyIndicatorEnum: 'impossible' | 'easy' | 'moderate' | 'hard' | 'very_hard';
+    /** @description Serializer for discovery records. */
+    Discovery: {
+      /**
+       * Format: date-time
+       * @description When this achievement was first discovered
+       */
+      readonly discovered_at: string;
+      /** @description Return display names of characters who discovered this achievement. */
+      readonly discoverer_names: string[];
+    };
+    /**
+     * @description * `obvious` - Obvious (visible if capability met)
+     *     * `discoverable` - Discoverable (must be learned)
+     * @enum {string}
+     */
+    DiscoveryTypeEnum: 'obvious' | 'discoverable';
     /** @description Serializer for DistinctionCategory lookup records. */
     DistinctionCategory: {
       readonly id: number;
@@ -5551,6 +8089,82 @@ export interface components {
       /** @description Whether this effect type uses power scaling. */
       readonly has_power_scaling: boolean;
     };
+    /** @description Full encounter state with covenant-filtered action visibility. */
+    EncounterDetail: {
+      readonly id: number;
+      scene?: number | null;
+      encounter_type?: components['schemas']['EncounterTypeEnum'];
+      status?: components['schemas']['Status4e6Enum'];
+      round_number?: number;
+      risk_level?: components['schemas']['RiskLevelEnum'];
+      stakes_level?: components['schemas']['StakesLevelEnum'];
+      pace_mode?: components['schemas']['PaceModeEnum'];
+      /** @description Minutes before auto-resolving in timed mode. */
+      pace_timer_minutes?: number;
+      is_paused?: boolean;
+      /**
+       * Format: date-time
+       * @description When the current declaration phase began.
+       */
+      round_started_at?: string | null;
+      /** Format: date-time */
+      readonly created_at: string;
+      readonly participants: components['schemas']['Participant'][];
+      readonly opponents: components['schemas']['Opponent'][];
+      /**
+       * @description Return actions visible to the requesting user.
+       *
+       *     Covenant-scoped: participants see own covenant's actions.
+       *     GMs and staff see all.
+       */
+      readonly current_round_actions: {
+        [key: string]: unknown;
+      }[];
+      /** @description Check whether the requesting user has a character in this encounter. */
+      readonly is_participant: boolean;
+      /** @description Check whether the requesting user is GM of the linked scene. */
+      readonly is_gm: boolean;
+    };
+    /** @description Full encounter state with covenant-filtered action visibility. */
+    EncounterDetailRequest: {
+      scene?: number | null;
+      encounter_type?: components['schemas']['EncounterTypeEnum'];
+      status?: components['schemas']['Status4e6Enum'];
+      round_number?: number;
+      risk_level?: components['schemas']['RiskLevelEnum'];
+      stakes_level?: components['schemas']['StakesLevelEnum'];
+      pace_mode?: components['schemas']['PaceModeEnum'];
+      /** @description Minutes before auto-resolving in timed mode. */
+      pace_timer_minutes?: number;
+      is_paused?: boolean;
+      /**
+       * Format: date-time
+       * @description When the current declaration phase began.
+       */
+      round_started_at?: string | null;
+    };
+    /** @description Lightweight listing serializer for combat encounters. */
+    EncounterList: {
+      readonly id: number;
+      scene?: number | null;
+      encounter_type?: components['schemas']['EncounterTypeEnum'];
+      status?: components['schemas']['Status4e6Enum'];
+      round_number?: number;
+      pace_mode?: components['schemas']['PaceModeEnum'];
+      /** @description Minutes before auto-resolving in timed mode. */
+      pace_timer_minutes?: number;
+      is_paused?: boolean;
+      /** @description Return participant count, preferring cached list. */
+      readonly participant_count: number;
+      /** @description Return opponent count, preferring cached list. */
+      readonly opponent_count: number;
+    };
+    /**
+     * @description * `party_combat` - Party Combat
+     *     * `open_encounter` - Open Encounter
+     * @enum {string}
+     */
+    EncounterTypeEnum: 'party_combat' | 'open_encounter';
     /** @description Serializer for creating episodes */
     EpisodeCreate: {
       chapter: number;
@@ -5693,6 +8307,250 @@ export interface components {
         | components['schemas']['BlankEnum'];
       /** @description Brief explanation of the scene connection */
       connection_summary?: string;
+    };
+    /**
+     * @description * `skin` - Skin
+     *     * `under` - Under
+     *     * `base` - Base
+     *     * `over` - Over
+     *     * `outer` - Outer
+     *     * `accessory` - Accessory
+     * @enum {string}
+     */
+    EquipmentLayerEnum: 'skin' | 'under' | 'base' | 'over' | 'outer' | 'accessory';
+    /** @description Serializer for creating events. Host is derived from the request. */
+    EventCreate: {
+      name: string;
+      description?: string;
+      /** @description The room where this event takes place */
+      location: number;
+      /** @description Public events are visible on the calendar to everyone */
+      is_public?: boolean;
+      /**
+       * Format: date-time
+       * @description The OOC date/time players schedule for
+       */
+      scheduled_real_time: string;
+      /**
+       * Format: date-time
+       * @description IC datetime — derived from game clock, then adjustable
+       */
+      scheduled_ic_time: string;
+      /**
+       * @description Time-of-day phase for the event (scene time freezes here)
+       *
+       *     * `dawn` - Dawn
+       *     * `day` - Day
+       *     * `dusk` - Dusk
+       *     * `night` - Night
+       */
+      time_phase?: components['schemas']['TimePhaseEnum'];
+    };
+    /** @description Serializer for creating events. Host is derived from the request. */
+    EventCreateRequest: {
+      name: string;
+      description?: string;
+      /** @description The room where this event takes place */
+      location: number;
+      /** @description Public events are visible on the calendar to everyone */
+      is_public?: boolean;
+      /**
+       * Format: date-time
+       * @description The OOC date/time players schedule for
+       */
+      scheduled_real_time: string;
+      /**
+       * Format: date-time
+       * @description IC datetime — derived from game clock, then adjustable
+       */
+      scheduled_ic_time: string;
+      /**
+       * @description Time-of-day phase for the event (scene time freezes here)
+       *
+       *     * `dawn` - Dawn
+       *     * `day` - Day
+       *     * `dusk` - Dusk
+       *     * `night` - Night
+       */
+      time_phase?: components['schemas']['TimePhaseEnum'];
+    };
+    EventDetail: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      /** @description The room where this event takes place */
+      readonly location: number;
+      readonly location_name: string;
+      readonly status: components['schemas']['StatusC97Enum'];
+      /** @description Public events are visible on the calendar to everyone */
+      readonly is_public: boolean;
+      /**
+       * Format: date-time
+       * @description The OOC date/time players schedule for
+       */
+      readonly scheduled_real_time: string;
+      /**
+       * Format: date-time
+       * @description IC datetime — derived from game clock, then adjustable
+       */
+      readonly scheduled_ic_time: string;
+      /**
+       * @description Time-of-day phase for the event (scene time freezes here)
+       *
+       *     * `dawn` - Dawn
+       *     * `day` - Day
+       *     * `dusk` - Dusk
+       *     * `night` - Night
+       */
+      readonly time_phase: components['schemas']['TimePhaseEnum'];
+      /** Format: date-time */
+      readonly started_at: string | null;
+      /** Format: date-time */
+      readonly ended_at: string | null;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly updated_at: string;
+      readonly hosts: components['schemas']['EventHost'][];
+      readonly invitations: components['schemas']['EventInvitation'][];
+      readonly modification: components['schemas']['EventModification'] | null;
+      readonly is_host: boolean;
+      readonly is_gm: boolean;
+    };
+    EventHost: {
+      readonly id: number;
+      persona?: number | null;
+      readonly persona_name: string;
+      /** @description The primary host is the 'face' of the event on listings */
+      is_primary?: boolean;
+      /** Format: date-time */
+      readonly added_at: string;
+    };
+    EventHostRequest: {
+      persona?: number | null;
+      /** @description The primary host is the 'face' of the event on listings */
+      is_primary?: boolean;
+    };
+    EventInvitation: {
+      readonly id: number;
+      target_type: components['schemas']['TargetTypeFedEnum'];
+      target_persona?: number | null;
+      target_organization?: number | null;
+      target_society?: number | null;
+      readonly target_name: string | null;
+      can_bring_guests?: boolean;
+      /** Format: date-time */
+      readonly invited_at: string;
+    };
+    EventInvitationRequest: {
+      target_type: components['schemas']['TargetTypeFedEnum'];
+      target_persona?: number | null;
+      target_organization?: number | null;
+      target_society?: number | null;
+      can_bring_guests?: boolean;
+    };
+    /** @description Serializer for creating invitations. */
+    EventInvite: {
+      target_type: components['schemas']['TargetTypeFedEnum'];
+      target_id: number;
+      invited_by_persona?: number | null;
+    };
+    /** @description Serializer for creating invitations. */
+    EventInviteRequest: {
+      target_type: components['schemas']['TargetTypeFedEnum'];
+      target_id: number;
+      invited_by_persona?: number | null;
+    };
+    EventList: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      /** @description The room where this event takes place */
+      readonly location: number;
+      readonly location_name: string;
+      readonly status: components['schemas']['StatusC97Enum'];
+      /** @description Public events are visible on the calendar to everyone */
+      readonly is_public: boolean;
+      /**
+       * Format: date-time
+       * @description The OOC date/time players schedule for
+       */
+      readonly scheduled_real_time: string;
+      /**
+       * Format: date-time
+       * @description IC datetime — derived from game clock, then adjustable
+       */
+      readonly scheduled_ic_time: string;
+      /**
+       * @description Time-of-day phase for the event (scene time freezes here)
+       *
+       *     * `dawn` - Dawn
+       *     * `day` - Day
+       *     * `dusk` - Dusk
+       *     * `night` - Night
+       */
+      readonly time_phase: components['schemas']['TimePhaseEnum'];
+      readonly primary_host_name: string | null;
+    };
+    EventModification: {
+      /** @description Text that augments the room description while event is active */
+      room_description_overlay?: string;
+    };
+    EventModificationRequest: {
+      /** @description Text that augments the room description while event is active */
+      room_description_overlay?: string;
+    };
+    /** @description Serializer for updating events. Only mutable fields are writable. */
+    EventUpdate: {
+      name: string;
+      description?: string;
+      /** @description Public events are visible on the calendar to everyone */
+      is_public?: boolean;
+      /**
+       * Format: date-time
+       * @description The OOC date/time players schedule for
+       */
+      scheduled_real_time: string;
+      /**
+       * Format: date-time
+       * @description IC datetime — derived from game clock, then adjustable
+       */
+      scheduled_ic_time: string;
+      /**
+       * @description Time-of-day phase for the event (scene time freezes here)
+       *
+       *     * `dawn` - Dawn
+       *     * `day` - Day
+       *     * `dusk` - Dusk
+       *     * `night` - Night
+       */
+      time_phase?: components['schemas']['TimePhaseEnum'];
+    };
+    /** @description Serializer for updating events. Only mutable fields are writable. */
+    EventUpdateRequest: {
+      name: string;
+      description?: string;
+      /** @description Public events are visible on the calendar to everyone */
+      is_public?: boolean;
+      /**
+       * Format: date-time
+       * @description The OOC date/time players schedule for
+       */
+      scheduled_real_time: string;
+      /**
+       * Format: date-time
+       * @description IC datetime — derived from game clock, then adjustable
+       */
+      scheduled_ic_time: string;
+      /**
+       * @description Time-of-day phase for the event (scene time freezes here)
+       *
+       *     * `dawn` - Dawn
+       *     * `day` - Day
+       *     * `dusk` - Dusk
+       *     * `night` - Night
+       */
+      time_phase?: components['schemas']['TimePhaseEnum'];
     };
     /** @description Serializer for Facet model with hierarchy info. */
     Facet: {
@@ -5852,6 +8710,143 @@ export interface components {
      * @enum {string}
      */
     FormTypeEnum: 'true' | 'alternate' | 'disguise';
+    /** @description For players submitting a GM application. */
+    GMApplicationCreate: {
+      application_text: string;
+    };
+    /** @description For players submitting a GM application. */
+    GMApplicationCreateRequest: {
+      application_text: string;
+    };
+    /** @description For staff reviewing GM applications. */
+    GMApplicationDetail: {
+      readonly id: number;
+      readonly account: number;
+      readonly account_username: string;
+      /** @description Freeform: what the applicant wants to GM, who they'd run for, what stories they'd tell. */
+      application_text: string;
+      /** @description Staff feedback on the application. */
+      staff_response?: string;
+      status?: components['schemas']['StatusBa9Enum'];
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly updated_at: string;
+      /** @description Staff account that reviewed this application. */
+      readonly reviewed_by: number | null;
+      readonly reviewed_by_username: string | null;
+    };
+    /** @description For staff reviewing GM applications. */
+    GMApplicationDetailRequest: {
+      /** @description Freeform: what the applicant wants to GM, who they'd run for, what stories they'd tell. */
+      application_text: string;
+      /** @description Staff feedback on the application. */
+      staff_response?: string;
+      status?: components['schemas']['StatusBa9Enum'];
+    };
+    /** @description Pending application surfaced to the overseeing GM. */
+    GMApplicationQueue: {
+      readonly id: number;
+      readonly character: number;
+      readonly character_key: string;
+      readonly applicant_username: string;
+      readonly status: components['schemas']['StatusBa9Enum'];
+      /** Format: date-time */
+      readonly applied_date: string;
+      /** @description Why player wants this character */
+      readonly application_text: string;
+    };
+    /** @description Read-only serializer for GM profiles. */
+    GMProfile: {
+      readonly id: number;
+      readonly account: number;
+      readonly account_username: string;
+      readonly level: components['schemas']['GMProfileLevelEnum'];
+      /**
+       * Format: date-time
+       * @description When this account was approved as a GM.
+       */
+      readonly approved_at: string;
+    };
+    /**
+     * @description * `starting` - Starting GM
+     *     * `junior` - Junior GM
+     *     * `gm` - GM
+     *     * `experienced` - Experienced GM
+     *     * `senior` - Senior GM
+     * @enum {string}
+     */
+    GMProfileLevelEnum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
+    /** @description For GM create/list operations on invites for their own characters. */
+    GMRosterInvite: {
+      readonly id: number;
+      roster_entry: number;
+      readonly code: string;
+      readonly created_by: number;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      expires_at?: string | null;
+      /** @description If True, anyone with the code can claim. If False, only the invited_email may claim. */
+      is_public?: boolean;
+      /** Format: email */
+      invited_email?: string;
+      /** Format: date-time */
+      readonly claimed_at: string | null;
+      readonly claimed_by: number | null;
+      readonly claimed_username: string | null;
+    };
+    /** @description For GM create/list operations on invites for their own characters. */
+    GMRosterInviteRequest: {
+      roster_entry: number;
+      /** Format: date-time */
+      expires_at?: string | null;
+      /** @description If True, anyone with the code can claim. If False, only the invited_email may claim. */
+      is_public?: boolean;
+      /** Format: email */
+      invited_email?: string;
+    };
+    /** @description Serializer for GM tables. */
+    GMTable: {
+      readonly id: number;
+      gm: number;
+      readonly gm_username: string;
+      name: string;
+      description?: string;
+      readonly status: components['schemas']['GMTableStatusEnum'];
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly archived_at: string | null;
+    };
+    /** @description Serializer for persona memberships at GM tables. */
+    GMTableMembership: {
+      readonly id: number;
+      table: number;
+      persona: number;
+      readonly persona_name: string;
+      /** Format: date-time */
+      readonly joined_at: string;
+      /** Format: date-time */
+      readonly left_at: string | null;
+    };
+    /** @description Serializer for persona memberships at GM tables. */
+    GMTableMembershipRequest: {
+      table: number;
+      persona: number;
+    };
+    /** @description Serializer for GM tables. */
+    GMTableRequest: {
+      gm: number;
+      name: string;
+      description?: string;
+    };
+    /**
+     * @description * `active` - Active
+     *     * `archived` - Archived
+     * @enum {string}
+     */
+    GMTableStatusEnum: 'active' | 'archived';
     /** @description Serializer for gender options. */
     Gender: {
       readonly id: number;
@@ -5927,12 +8922,12 @@ export interface components {
      * @enum {integer}
      */
     GmTrustLevelEnum: 0 | 1 | 2 | 3 | 4;
-    /** @description Serializer for goal domains (ModifierType with category='goal'). */
+    /** @description Serializer for goal domains (ModifierTarget with category='goal'). */
     GoalDomain: {
       readonly id: number;
-      /** @description Modifier type name */
+      /** @description Modifier target name */
       readonly name: string;
-      /** @description Description of what this modifier type represents */
+      /** @description Description of what this modifier target represents */
       readonly description: string;
       /** @description Order for display purposes within category (lower values appear first) */
       readonly display_order: number;
@@ -5964,6 +8959,242 @@ export interface components {
       /** @description Whether players can select heights in this band during CG */
       is_cg_selectable?: boolean;
     };
+    /** @description Serializer for HybridRelationshipType with nested requirements. */
+    HybridRelationshipType: {
+      readonly id: number;
+      /** @description Hybrid type name (e.g., 'Rivalry', 'Devotion') */
+      readonly name: string;
+      /** @description URL-safe identifier for this hybrid type */
+      readonly slug: string;
+      /** @description Description of what this hybrid type represents */
+      readonly description: string;
+      readonly requirements: components['schemas']['HybridRequirement'][];
+    };
+    /** @description Serializer for a single track/tier requirement on a hybrid type. */
+    HybridRequirement: {
+      /** @description The track that must meet the minimum tier */
+      readonly track: number;
+      readonly track_name: string;
+      /** @description The minimum tier number that must be reached on this track */
+      readonly minimum_tier: number;
+    };
+    InteractionDetail: {
+      readonly id: number;
+      /** @description Persona data embedded in interaction payloads. */
+      readonly persona: {
+        id: number;
+        name: string;
+        thumbnail_url: string;
+      };
+      /** @description Scene container if one was active */
+      scene?: number | null;
+      /** @description Sub-location where this interaction occurred */
+      place?: number | null;
+      /** @description The actual written text of the interaction */
+      content: string;
+      /**
+       * @description The type of IC interaction
+       *
+       *     * `pose` - Pose
+       *     * `emit` - Emit
+       *     * `say` - Say
+       *     * `whisper` - Whisper
+       *     * `shout` - Shout
+       *     * `action` - Action
+       */
+      mode?: components['schemas']['ModeEnum'];
+      /**
+       * @description Privacy override — can only escalate, never reduce
+       *
+       *     * `default` - Default
+       *     * `very_private` - Very Private
+       */
+      visibility?: components['schemas']['VisibilityEnum'];
+      /** Format: date-time */
+      readonly timestamp: string;
+      readonly is_favorited: boolean;
+      /** @description Aggregate emoji counts with reacted-by-current-user flag. */
+      readonly reactions: {
+        emoji: string;
+        count: number;
+        reacted: boolean;
+      }[];
+      readonly receiver_persona_ids: number[];
+      readonly place_name: string | null;
+      readonly target_persona_ids: number[];
+      readonly receivers: components['schemas']['InteractionReceiver'][];
+    };
+    InteractionFavorite: {
+      readonly id: number;
+      /** @description The bookmarked interaction */
+      interaction: number;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    InteractionFavoriteRequest: {
+      /** @description The bookmarked interaction */
+      interaction: number;
+    };
+    InteractionList: {
+      readonly id: number;
+      /** @description Persona data embedded in interaction payloads. */
+      readonly persona: {
+        id: number;
+        name: string;
+        thumbnail_url: string;
+      };
+      /** @description Scene container if one was active */
+      scene?: number | null;
+      /** @description Sub-location where this interaction occurred */
+      place?: number | null;
+      /** @description The actual written text of the interaction */
+      content: string;
+      /**
+       * @description The type of IC interaction
+       *
+       *     * `pose` - Pose
+       *     * `emit` - Emit
+       *     * `say` - Say
+       *     * `whisper` - Whisper
+       *     * `shout` - Shout
+       *     * `action` - Action
+       */
+      mode?: components['schemas']['ModeEnum'];
+      /**
+       * @description Privacy override — can only escalate, never reduce
+       *
+       *     * `default` - Default
+       *     * `very_private` - Very Private
+       */
+      visibility?: components['schemas']['VisibilityEnum'];
+      /** Format: date-time */
+      readonly timestamp: string;
+      readonly is_favorited: boolean;
+      /** @description Aggregate emoji counts with reacted-by-current-user flag. */
+      readonly reactions: {
+        emoji: string;
+        count: number;
+        reacted: boolean;
+      }[];
+      readonly receiver_persona_ids: number[];
+      readonly place_name: string | null;
+      readonly target_persona_ids: number[];
+    };
+    InteractionListRequest: {
+      /** @description Scene container if one was active */
+      scene?: number | null;
+      /** @description Sub-location where this interaction occurred */
+      place?: number | null;
+      /** @description The actual written text of the interaction */
+      content: string;
+      /**
+       * @description The type of IC interaction
+       *
+       *     * `pose` - Pose
+       *     * `emit` - Emit
+       *     * `say` - Say
+       *     * `whisper` - Whisper
+       *     * `shout` - Shout
+       *     * `action` - Action
+       */
+      mode?: components['schemas']['ModeEnum'];
+      /**
+       * @description Privacy override — can only escalate, never reduce
+       *
+       *     * `default` - Default
+       *     * `very_private` - Very Private
+       */
+      visibility?: components['schemas']['VisibilityEnum'];
+    };
+    InteractionReaction: {
+      readonly id: number;
+      /** @description The interaction being reacted to */
+      interaction: number;
+      emoji: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    InteractionReactionRequest: {
+      /** @description The interaction being reacted to */
+      interaction: number;
+      emoji: string;
+    };
+    InteractionReceiver: {
+      readonly id: number;
+      readonly persona_name: string;
+      readonly persona_id: number;
+    };
+    /** @description Serializer for InteractionType lookup records. */
+    InteractionType: {
+      readonly id: number;
+      /** @description Internal identifier (e.g., 'eat', 'wield', 'study'). */
+      readonly name: string;
+      /** @description Player-facing label (e.g., 'Eat', 'Wield', 'Study'). */
+      readonly label: string;
+      /** @description Description of what this interaction does. */
+      readonly description: string;
+    };
+    /** @description Detail serializer for ItemTemplate with slots and interactions. */
+    ItemTemplateDetail: {
+      readonly id: number;
+      readonly name: string;
+      /** @description Default full description when examined. Instances can override. */
+      readonly description: string;
+      /**
+       * Format: decimal
+       * @description Base weight of the item.
+       */
+      readonly weight: string;
+      /** @description Size value for container nesting. Smaller items fit inside larger containers. */
+      readonly size: number;
+      /** @description Base gold value for trading/selling. */
+      readonly value: number;
+      /** @description Whether this item can hold other items. */
+      readonly is_container: boolean;
+      /** @description Maximum number of items this container can hold. */
+      readonly container_capacity: number;
+      /** @description Maximum size of items that fit inside this container. */
+      readonly container_max_item_size: number;
+      /** @description Whether items of this type can be stacked. */
+      readonly is_stackable: boolean;
+      /** @description Maximum quantity in a single stack. */
+      readonly max_stack_size: number;
+      /** @description Whether this item has limited uses/charges. */
+      readonly is_consumable: boolean;
+      /** @description Maximum charges for consumable items. */
+      readonly max_charges: number;
+      /** @description Whether this item can be crafted by players. */
+      readonly is_craftable: boolean;
+      readonly minimum_quality_tier: components['schemas']['QualityTier'];
+      /** @description Whether instances can be opened/closed (coats, bags, lockets). */
+      readonly supports_open_close: boolean;
+      readonly slots: components['schemas']['TemplateSlot'][];
+      readonly interactions: components['schemas']['TemplateInteraction'][];
+      readonly image_url: string;
+    };
+    /** @description List serializer for ItemTemplate (minimal fields). */
+    ItemTemplateList: {
+      readonly id: number;
+      readonly name: string;
+      /**
+       * Format: decimal
+       * @description Base weight of the item.
+       */
+      readonly weight: string;
+      /** @description Size value for container nesting. Smaller items fit inside larger containers. */
+      readonly size: number;
+      /** @description Base gold value for trading/selling. */
+      readonly value: number;
+      /** @description Whether this item can hold other items. */
+      readonly is_container: boolean;
+      /** @description Whether items of this type can be stacked. */
+      readonly is_stackable: boolean;
+      /** @description Whether this item has limited uses/charges. */
+      readonly is_consumable: boolean;
+      /** @description Whether this item can be crafted by players. */
+      readonly is_craftable: boolean;
+      readonly image_url: string;
+    };
     /**
      * @description * `photo` - Photo
      *     * `portrait` - Character Portrait
@@ -5983,10 +9214,11 @@ export interface components {
      *     * `emit` - Emit
      *     * `say` - Say
      *     * `whisper` - Whisper
-     *     * `ooc` - OOC
+     *     * `shout` - Shout
+     *     * `action` - Action
      * @enum {string}
      */
-    ModeEnum: 'pose' | 'emit' | 'say' | 'whisper' | 'ooc';
+    ModeEnum: 'pose' | 'emit' | 'say' | 'whisper' | 'shout' | 'action';
     ModifierCategory: {
       readonly id: number;
       /** @description Category name (e.g., 'stat', 'magic', 'affinity') */
@@ -6002,49 +9234,34 @@ export interface components {
       readonly source_type: string;
       readonly source_display: string;
     };
-    /** @description Serializer for ModifierType records (affinities and resonances). */
-    ModifierType: {
+    ModifierTarget: {
       readonly id: number;
-      /** @description Modifier type name */
-      readonly name: string;
-      /** @description Category this modifier type belongs to */
-      readonly category: number;
-      readonly category_name: string;
-      /** @description Description of what this modifier type represents */
-      readonly description: string;
-      /** @description Return the Codex entry ID if this modifier type has one. */
-      readonly codex_entry_id: number | null;
-    };
-    /** @description Lighter serializer for list views. */
-    ModifierTypeList: {
-      readonly id: number;
-      /** @description Modifier type name */
+      /** @description Modifier target name */
       name: string;
-      /** @description Category this modifier type belongs to */
+      /** @description Category this modifier target belongs to */
       category: number;
       readonly category_name: string;
-      /** @description Description of what this modifier type represents */
+      /** @description Description of what this modifier target represents */
       description?: string;
       /** @description Order for display purposes within category (lower values appear first) */
       display_order?: number;
-      /** @description Whether this modifier type is currently active in the game */
+      /** @description Whether this modifier target is currently active in the game */
       is_active?: boolean;
-      /** @description For resonances: the opposing resonance in the pair. */
-      opposite?: number | null;
-      /**
-       * @description For resonances: celestial, abyssal, or primal.
-       *
-       *     * `celestial` - Celestial
-       *     * `abyssal` - Abyssal
-       *     * `primal` - Primal
-       */
-      resonance_affinity?:
-        | (
-            | components['schemas']['ResonanceAffinityEnum']
-            | components['schemas']['BlankEnum']
-            | components['schemas']['NullEnum']
-          )
-        | null;
+    };
+    /** @description Lighter serializer for list views. */
+    ModifierTargetList: {
+      readonly id: number;
+      /** @description Modifier target name */
+      name: string;
+      /** @description Category this modifier target belongs to */
+      category: number;
+      readonly category_name: string;
+      /** @description Description of what this modifier target represents */
+      description?: string;
+      /** @description Order for display purposes within category (lower values appear first) */
+      display_order?: number;
+      /** @description Whether this modifier target is currently active in the game */
+      is_active?: boolean;
     };
     /** @description Serialize a summary of a roster entry for account menus. */
     MyRosterEntry: {
@@ -6052,9 +9269,176 @@ export interface components {
       name: string;
       /** @description Return the cloudinary URL for the entry's profile picture, or None. */
       readonly profile_picture_url: string | null;
+      /**
+       * @description Return the PRIMARY persona's id, or None if none exists.
+       *
+       *     Used by player-submission forms to attach a reporter_persona.
+       */
+      readonly primary_persona_id: number | null;
     };
+    /**
+     * @description * `personal` - Personal
+     *     * `room` - Room
+     *     * `gamewide` - Gamewide
+     * @enum {string}
+     */
+    NotificationLevelEnum: 'personal' | 'room' | 'gamewide';
     /** @enum {unknown} */
     NullEnum: null;
+    /**
+     * @description Read serializer for combat opponents.
+     *
+     *     Soak value and probing threshold are GM-only — players discover
+     *     these through gameplay (probing attacks, combo availability).
+     */
+    Opponent: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      tier: components['schemas']['OpponentTierEnum'];
+      health: number;
+      max_health: number;
+      /** @description Soak value — GM/staff only. */
+      readonly soak_value: number | null;
+      probing_current?: number;
+      /** @description Probing threshold — GM/staff only. */
+      readonly probing_threshold: number | null;
+      current_phase?: number;
+      status?: components['schemas']['OpponentStatusEnum'];
+    };
+    /**
+     * @description Read serializer for combat opponents.
+     *
+     *     Soak value and probing threshold are GM-only — players discover
+     *     these through gameplay (probing attacks, combo availability).
+     */
+    OpponentRequest: {
+      name: string;
+      description?: string;
+      tier: components['schemas']['OpponentTierEnum'];
+      health: number;
+      max_health: number;
+      probing_current?: number;
+      current_phase?: number;
+      status?: components['schemas']['OpponentStatusEnum'];
+    };
+    /**
+     * @description * `active` - Active
+     *     * `defeated` - Defeated
+     *     * `fled` - Fled
+     * @enum {string}
+     */
+    OpponentStatusEnum: 'active' | 'defeated' | 'fled';
+    /**
+     * @description * `swarm` - Swarm
+     *     * `mook` - Mook
+     *     * `elite` - Elite
+     *     * `boss` - Boss
+     *     * `hero_killer` - Hero Killer
+     * @enum {string}
+     */
+    OpponentTierEnum: 'swarm' | 'mook' | 'elite' | 'boss' | 'hero_killer';
+    OrganizationSearch: {
+      id: number;
+      name: string;
+    };
+    /**
+     * @description * `timed` - Timed
+     *     * `ready` - Ready
+     *     * `manual` - Manual
+     * @enum {string}
+     */
+    PaceModeEnum: 'timed' | 'ready' | 'manual';
+    PaginatedAreaListList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['AreaList'][];
+    };
+    PaginatedAreaRoomList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['AreaRoom'][];
+    };
+    PaginatedBugReportDetailList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['BugReportDetail'][];
+    };
+    PaginatedChallengeGroupList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['ChallengeGroup'][];
+    };
+    PaginatedChallengeInstanceList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['ChallengeInstance'][];
+    };
+    PaginatedChallengeTemplateListList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['ChallengeTemplateList'][];
+    };
     PaginatedChapterListList: {
       /** @example 123 */
       count?: number;
@@ -6070,6 +9454,21 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['ChapterList'][];
     };
+    PaginatedCharacterRelationshipListList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['CharacterRelationshipList'][];
+    };
     PaginatedDraftApplicationList: {
       /** @example 123 */
       count?: number;
@@ -6084,6 +9483,21 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['DraftApplication'][];
+    };
+    PaginatedEncounterListList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['EncounterList'][];
     };
     PaginatedEpisodeListList: {
       /** @example 123 */
@@ -6115,6 +9529,111 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['EpisodeScene'][];
     };
+    PaginatedEventInvitationList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['EventInvitation'][];
+    };
+    PaginatedEventListList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['EventList'][];
+    };
+    PaginatedGMApplicationDetailList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['GMApplicationDetail'][];
+    };
+    PaginatedGMApplicationQueueList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['GMApplicationQueue'][];
+    };
+    PaginatedGMRosterInviteList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['GMRosterInvite'][];
+    };
+    PaginatedGMTableList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['GMTable'][];
+    };
+    PaginatedGMTableMembershipList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['GMTableMembership'][];
+    };
     PaginatedGiftListList: {
       /** @example 123 */
       count?: number;
@@ -6129,6 +9648,71 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['GiftList'][];
+    };
+    PaginatedInteractionFavoriteList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['InteractionFavorite'][];
+    };
+    PaginatedInteractionListList: {
+      next?: string | null;
+      previous?: string | null;
+      results?: components['schemas']['InteractionList'][];
+    };
+    PaginatedItemTemplateListList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['ItemTemplateList'][];
+    };
+    PaginatedOrganizationSearchList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['OrganizationSearch'][];
+    };
+    PaginatedPendingAlterationList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['PendingAlteration'][];
     };
     PaginatedPersonaList: {
       /** @example 123 */
@@ -6145,6 +9729,36 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['Persona'][];
     };
+    PaginatedPlaceList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['Place'][];
+    };
+    PaginatedPlayerFeedbackDetailList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['PlayerFeedbackDetail'][];
+    };
     PaginatedPlayerMailList: {
       /** @example 123 */
       count?: number;
@@ -6159,6 +9773,21 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['PlayerMail'][];
+    };
+    PaginatedPlayerReportDetailList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['PlayerReportDetail'][];
     };
     PaginatedPlayerTrustList: {
       /** @example 123 */
@@ -6205,6 +9834,21 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['RosterTenureLookup'][];
     };
+    PaginatedSceneActionRequestList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['SceneActionRequest'][];
+    };
     PaginatedSceneListList: {
       /** @example 123 */
       count?: number;
@@ -6220,10 +9864,65 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['SceneList'][];
     };
-    PaginatedSceneMessageList: {
+    PaginatedSceneSummaryRevisionList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
       next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
       previous?: string | null;
-      results?: components['schemas']['SceneMessage'][];
+      results?: components['schemas']['SceneSummaryRevision'][];
+    };
+    PaginatedSituationInstanceList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['SituationInstance'][];
+    };
+    PaginatedSituationTemplateListList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['SituationTemplateList'][];
+    };
+    PaginatedSocietySearchList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['SocietySearch'][];
     };
     PaginatedStoryFeedbackList: {
       /** @example 123 */
@@ -6285,6 +9984,71 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['Technique'][];
     };
+    PaginatedThreadList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['Thread'][];
+    };
+    PaginatedThreadWeavingTeachingOfferList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['ThreadWeavingTeachingOffer'][];
+    };
+    /**
+     * @description Read serializer for combat participants.
+     *
+     *     Vitals (health, max_health, character_status) are private by default.
+     *     Only visible to staff, the scene GM, or the player who owns the
+     *     character — same visibility rules as character sheets.
+     */
+    Participant: {
+      readonly id: number;
+      readonly character_name: string;
+      status?: components['schemas']['ParticipantStatusEnum'];
+      /** @description Return current health — only if viewer has permission. */
+      readonly health: number | null;
+      /** @description Return max health — only if viewer has permission. */
+      readonly max_health: number | null;
+      /** @description Return life status — only if viewer has permission. */
+      readonly character_status: string | null;
+    };
+    /**
+     * @description Read serializer for combat participants.
+     *
+     *     Vitals (health, max_health, character_status) are private by default.
+     *     Only visible to staff, the scene GM, or the player who owns the
+     *     character — same visibility rules as character sheets.
+     */
+    ParticipantRequest: {
+      status?: components['schemas']['ParticipantStatusEnum'];
+    };
+    /**
+     * @description * `active` - Active
+     *     * `fled` - Fled
+     *     * `removed` - Removed
+     * @enum {string}
+     */
+    ParticipantStatusEnum: 'active' | 'fled' | 'removed';
     /**
      * @description * `critical` - Critical
      *     * `important` - Important
@@ -6292,6 +10056,13 @@ export interface components {
      * @enum {string}
      */
     ParticipationLevelEnum: 'critical' | 'important' | 'optional';
+    PatchedBugReportDetailRequest: {
+      reporter_persona?: number;
+      /** @description What the player observed. */
+      description?: string;
+      location?: number | null;
+      status?: components['schemas']['StatusD66Enum'];
+    };
     /** @description Full serializer for chapter details */
     PatchedChapterDetailRequest: {
       title?: string;
@@ -6402,29 +10173,34 @@ export interface components {
     };
     /** @description Serializer for CharacterResonance records. */
     PatchedCharacterResonanceRequest: {
-      /** @description The character this resonance is attached to. */
-      character?: number;
-      /** @description The resonance type (must be category='resonance'). */
+      /** @description The character sheet this resonance is attached to. */
+      character_sheet?: number;
+      /** @description The resonance type. */
       resonance?: number;
-      /**
-       * @description Whether this resonance affects only the character or an area.
-       *
-       *     * `self` - Self Only
-       *     * `area` - Area Effect
-       */
-      scope?: components['schemas']['ScopeEnum'];
-      /**
-       * @description The strength of this resonance attachment.
-       *
-       *     * `minor` - Minor
-       *     * `moderate` - Moderate
-       *     * `major` - Major
-       */
-      strength?: components['schemas']['StrengthEnum'];
+      /** @description Spendable resonance currency. */
+      balance?: number;
+      /** @description Monotonic total of resonance earned (never decremented). */
+      lifetime_earned?: number;
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
-      /** @description Whether this resonance is currently active. */
-      is_active?: boolean;
+    };
+    /** @description Full encounter state with covenant-filtered action visibility. */
+    PatchedEncounterDetailRequest: {
+      scene?: number | null;
+      encounter_type?: components['schemas']['EncounterTypeEnum'];
+      status?: components['schemas']['Status4e6Enum'];
+      round_number?: number;
+      risk_level?: components['schemas']['RiskLevelEnum'];
+      stakes_level?: components['schemas']['StakesLevelEnum'];
+      pace_mode?: components['schemas']['PaceModeEnum'];
+      /** @description Minutes before auto-resolving in timed mode. */
+      pace_timer_minutes?: number;
+      is_paused?: boolean;
+      /**
+       * Format: date-time
+       * @description When the current declaration phase began.
+       */
+      round_started_at?: string | null;
     };
     /** @description Full serializer for episode details */
     PatchedEpisodeDetailRequest: {
@@ -6465,6 +10241,32 @@ export interface components {
       /** @description Brief explanation of the scene connection */
       connection_summary?: string;
     };
+    /** @description Serializer for updating events. Only mutable fields are writable. */
+    PatchedEventUpdateRequest: {
+      name?: string;
+      description?: string;
+      /** @description Public events are visible on the calendar to everyone */
+      is_public?: boolean;
+      /**
+       * Format: date-time
+       * @description The OOC date/time players schedule for
+       */
+      scheduled_real_time?: string;
+      /**
+       * Format: date-time
+       * @description IC datetime — derived from game clock, then adjustable
+       */
+      scheduled_ic_time?: string;
+      /**
+       * @description Time-of-day phase for the event (scene time freezes here)
+       *
+       *     * `dawn` - Dawn
+       *     * `day` - Day
+       *     * `dusk` - Dusk
+       *     * `night` - Night
+       */
+      time_phase?: components['schemas']['TimePhaseEnum'];
+    };
     /** @description Serializer for family tree members. */
     PatchedFamilyMemberRequest: {
       family_id?: number;
@@ -6487,6 +10289,25 @@ export interface components {
       mother_id?: number | null;
       father_id?: number | null;
     };
+    /** @description For staff reviewing GM applications. */
+    PatchedGMApplicationDetailRequest: {
+      /** @description Freeform: what the applicant wants to GM, who they'd run for, what stories they'd tell. */
+      application_text?: string;
+      /** @description Staff feedback on the application. */
+      staff_response?: string;
+      status?: components['schemas']['StatusBa9Enum'];
+    };
+    /** @description Serializer for persona memberships at GM tables. */
+    PatchedGMTableMembershipRequest: {
+      table?: number;
+      persona?: number;
+    };
+    /** @description Serializer for GM tables. */
+    PatchedGMTableRequest: {
+      gm?: number;
+      name?: string;
+      description?: string;
+    };
     /** @description Serializer for creating Gift records. */
     PatchedGiftCreateRequest: {
       /** @description Display name for this gift. */
@@ -6496,15 +10317,54 @@ export interface components {
       description?: string;
     };
     PatchedPersonaRequest: {
-      participation?: number;
+      /** @description The character sheet this persona belongs to. */
+      character_sheet?: number;
+      /** @description Display name for this persona */
       name?: string;
-      /** @description Whether this persona uses a fake name */
+      /** @description True when this persona obscures the character's identity */
       is_fake_name?: boolean;
+      /**
+       * @description PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise
+       *
+       *     * `primary` - Primary
+       *     * `established` - Established
+       *     * `temporary` - Temporary
+       */
+      persona_type?: components['schemas']['PersonaTypeEnum'];
+      /** @description Physical description text */
       description?: string;
       /** Format: uri */
       thumbnail_url?: string;
-      /** @description The character this persona represents, if any */
-      character?: number;
+    };
+    /** @description Read serializer for staff review. */
+    PatchedPlayerFeedbackDetailRequest: {
+      /** @description The persona the submitter was wearing when they submitted. */
+      reporter_persona?: number;
+      /** @description Freeform feedback text from the player. */
+      description?: string;
+      /** @description Room the submitter was in at the time, if any. */
+      location?: number | null;
+      status?: components['schemas']['StatusD66Enum'];
+    };
+    /** @description Staff-only detail serializer with full identity context. */
+    PatchedPlayerReportDetailRequest: {
+      /** @description The persona the reporter was wearing when submitting. */
+      reporter_persona?: number;
+      /** @description The persona of the reported player at the time of the incident. */
+      reported_persona?: number;
+      /** @description What the reported persona did. Stub — wording needs design pass. */
+      behavior_description?: string;
+      /** @description Whether the reporter asked the other player to stop the behavior. */
+      asked_to_stop?: boolean;
+      /** @description Whether the reporter blocked or muted as a result. */
+      blocked_or_muted?: boolean;
+      /** @description The scene where the behavior occurred, if applicable. */
+      scene?: number | null;
+      /** @description A specific flagged interaction, if applicable. */
+      interaction?: number | null;
+      /** @description Room the reporter was in when submitting. */
+      location?: number | null;
+      status?: components['schemas']['StatusD66Enum'];
     };
     /** @description Serializer for player trust profiles */
     PatchedPlayerTrustRequest: {
@@ -6519,7 +10379,7 @@ export interface components {
        */
       gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
     };
-    /** @description Full scene representation with messages and personas */
+    /** @description Full scene representation with personas */
     PatchedSceneDetailRequest: {
       name?: string;
       description?: string;
@@ -6527,13 +10387,14 @@ export interface components {
       /** Format: date-time */
       date_finished?: string | null;
       is_active?: boolean;
-      is_public?: boolean;
-    };
-    PatchedSceneMessageRequest: {
-      persona_id?: number;
-      content?: string;
-      context?: components['schemas']['ContextEnum'];
-      mode?: components['schemas']['ModeEnum'];
+      /**
+       * @description Privacy floor for all interactions in this scene
+       *
+       *     * `public` - Public
+       *     * `private` - Private
+       *     * `ephemeral` - Ephemeral
+       */
+      privacy_mode?: components['schemas']['PrivacyModeEnum'];
     };
     /** @description Full serializer for story detail views */
     PatchedStoryDetailRequest: {
@@ -6591,60 +10452,36 @@ export interface components {
       /** @description Tenures allowed to view this private gallery */
       allowed_viewers?: number[];
     };
-    /** @description Serializer for ThreadJournal records. */
-    PatchedThreadJournalRequest: {
-      /** @description The thread this entry belongs to. */
-      thread?: number;
-      /** @description The character who wrote this entry. */
-      author?: number | null;
-      /** @description The journal entry content (IC description of the moment). */
-      content?: string;
-      /** @description Change in romantic value when this entry was made. */
-      romantic_change?: number;
-      /** @description Change in trust value when this entry was made. */
-      trust_change?: number;
-      /** @description Change in rivalry value when this entry was made. */
-      rivalry_change?: number;
-      /** @description Change in protective value when this entry was made. */
-      protective_change?: number;
-      /** @description Change in enmity value when this entry was made. */
-      enmity_change?: number;
-    };
-    /** @description Serializer for Thread records. */
+    /**
+     * @description Serializer for Thread records (Spec A §4.5).
+     *
+     *     Read: returns level / developed_points / resonance detail for display.
+     *     Write: accepts target_kind + target_id + resonance + character_sheet_id to
+     *     weave a new thread; target_id is resolved to the typed FK via ``create``
+     *     which delegates to ``weave_thread``. ``character_sheet_id`` must identify
+     *     a CharacterSheet on an active roster tenure belonging to the requesting
+     *     account (staff may pass any sheet).
+     */
     PatchedThreadRequest: {
-      /** @description The character who initiated this thread. */
-      initiator?: number;
-      /** @description The character who received this thread. */
-      receiver?: number;
-      /** @description Romantic intensity (0-100). */
-      romantic?: number;
-      /** @description Trust and faith (0-100). */
-      trust?: number;
-      /** @description Competitive tension (0-100). */
-      rivalry?: number;
-      /** @description Protective instinct (0-100). */
-      protective?: number;
-      /** @description Hatred and opposition (0-100). */
-      enmity?: number;
-      /** @description Whether this is an Abyssal Soul Tether (grants Control bonus). */
-      is_soul_tether?: boolean;
-    };
-    /** @description Serializer for ThreadResonance records. */
-    PatchedThreadResonanceRequest: {
-      /** @description The thread this resonance is attached to. */
-      thread?: number;
-      /** @description The resonance type (must be category='resonance'). */
+      /** @description Resonance this thread channels. */
       resonance?: number;
       /**
-       * @description The strength of this resonance on the thread.
+       * @description Discriminator selecting which target_* FK is populated.
        *
-       *     * `minor` - Minor
-       *     * `moderate` - Moderate
-       *     * `major` - Major
+       *     * `TRAIT` - Trait
+       *     * `TECHNIQUE` - Technique
+       *     * `ITEM` - Item
+       *     * `ROOM` - Room
+       *     * `RELATIONSHIP_TRACK` - Relationship Track
+       *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        */
-      strength?: components['schemas']['StrengthEnum'];
-      /** @description How this resonance manifests in the relationship. */
-      flavor_text?: string;
+      target_kind?: components['schemas']['TargetKindEnum'];
+      target_id?: number;
+      character_sheet_id?: number;
+      /** @default  */
+      name: string;
+      /** @default  */
+      description: string;
     };
     /** @description Serializer for Path in CG context. */
     Path: {
@@ -6682,6 +10519,39 @@ export interface components {
        *     to invalidate when needed.
        */
       readonly aspects: string[];
+    };
+    /** @description Lighter serializer for path lists without nested aspects. */
+    PathList: {
+      readonly id: number;
+      /** @description Path name (e.g., 'Path of Steel', 'Vanguard') */
+      name: string;
+      /** @description Lore and flavor text describing this path */
+      description: string;
+      /**
+       * @description Evolution stage (Prospect, Potential, Puissant, etc.)
+       *
+       *     * `1` - Prospect
+       *     * `2` - Potential
+       *     * `3` - Puissant
+       *     * `4` - True
+       *     * `5` - Grand
+       *     * `6` - Transcendent
+       */
+      stage: components['schemas']['StageEnum'];
+      readonly stage_display: string;
+      /** @description Minimum character level to enter this path (1, 3, 6, 11, 16, 21 typical) */
+      minimum_level: number;
+      /** @description Whether this path is available for selection */
+      is_active?: boolean;
+      /**
+       * Format: uri
+       * @description URL for path icon/image
+       */
+      icon_url?: string;
+      /** @description Lucide icon name (e.g., 'swords', 'eye', 'message-circle') */
+      icon_name?: string;
+      /** @description Display order within stage (lower = first) */
+      sort_order?: number;
     };
     /** @description Serializer for Path in CG context. */
     PathRequest: {
@@ -6723,29 +10593,191 @@ export interface components {
       /** @description Order for display in CG */
       display_order?: number;
     };
+    /** @description Read-only serializer for pending alterations shown on character sheet. */
+    PendingAlteration: {
+      readonly id: number;
+      status?: components['schemas']['PendingAlterationStatusEnum'];
+      /**
+       * @description Required tier for resolved alteration. Upgradeable via same-scene escalation only.
+       *
+       *     * `1` - Cosmetic Touch
+       *     * `2` - Marked
+       *     * `3` - Touched
+       *     * `4` - Marked Profoundly
+       *     * `5` - Remade
+       */
+      tier: components['schemas']['PendingAlterationTierEnum'];
+      readonly tier_display: string;
+      readonly tier_caps: {
+        [key: string]: unknown;
+      };
+      readonly origin_affinity_name: string;
+      readonly origin_resonance_name: string;
+      triggering_scene?: number | null;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description Read-only serializer for pending alterations shown on character sheet. */
+    PendingAlterationRequest: {
+      status?: components['schemas']['PendingAlterationStatusEnum'];
+      /**
+       * @description Required tier for resolved alteration. Upgradeable via same-scene escalation only.
+       *
+       *     * `1` - Cosmetic Touch
+       *     * `2` - Marked
+       *     * `3` - Touched
+       *     * `4` - Marked Profoundly
+       *     * `5` - Remade
+       */
+      tier: components['schemas']['PendingAlterationTierEnum'];
+      triggering_scene?: number | null;
+    };
+    /**
+     * @description * `open` - Open
+     *     * `resolved` - Resolved
+     *     * `staff_cleared` - Staff Cleared
+     * @enum {string}
+     */
+    PendingAlterationStatusEnum: 'open' | 'resolved' | 'staff_cleared';
+    /**
+     * @description * `1` - Cosmetic Touch
+     *     * `2` - Marked
+     *     * `3` - Touched
+     *     * `4` - Marked Profoundly
+     *     * `5` - Remade
+     * @enum {integer}
+     */
+    PendingAlterationTierEnum: 1 | 2 | 3 | 4 | 5;
     Persona: {
       readonly id: number;
-      participation: number;
+      /** @description The character sheet this persona belongs to. */
+      character_sheet: number;
+      /** @description Display name for this persona */
       name: string;
-      /** @description Whether this persona uses a fake name */
+      /** @description True when this persona obscures the character's identity */
       is_fake_name?: boolean;
+      /**
+       * @description PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise
+       *
+       *     * `primary` - Primary
+       *     * `established` - Established
+       *     * `temporary` - Temporary
+       */
+      persona_type?: components['schemas']['PersonaTypeEnum'];
+      /** @description Physical description text */
       description?: string;
       /** Format: uri */
       thumbnail_url?: string;
-      /** @description The character this persona represents, if any */
-      character: number;
-      readonly roster_entry: string;
+      readonly roster_entry: {
+        [key: string]: number | string;
+      } | null;
     };
     PersonaRequest: {
-      participation: number;
+      /** @description The character sheet this persona belongs to. */
+      character_sheet: number;
+      /** @description Display name for this persona */
       name: string;
-      /** @description Whether this persona uses a fake name */
+      /** @description True when this persona obscures the character's identity */
       is_fake_name?: boolean;
+      /**
+       * @description PRIMARY = real identity, ESTABLISHED = persistent alter ego, TEMPORARY = throwaway disguise
+       *
+       *     * `primary` - Primary
+       *     * `established` - Established
+       *     * `temporary` - Temporary
+       */
+      persona_type?: components['schemas']['PersonaTypeEnum'];
+      /** @description Physical description text */
       description?: string;
       /** Format: uri */
       thumbnail_url?: string;
-      /** @description The character this persona represents, if any */
-      character: number;
+    };
+    /**
+     * @description * `primary` - Primary
+     *     * `established` - Established
+     *     * `temporary` - Temporary
+     * @enum {string}
+     */
+    PersonaTypeEnum: 'primary' | 'established' | 'temporary';
+    Place: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      /** @description The room this place belongs to */
+      room?: number | null;
+      status?: components['schemas']['PlaceStatusEnum'];
+      /** Format: date-time */
+      readonly created_at: string;
+      readonly presence_count: number;
+    };
+    PlaceRequest: {
+      name: string;
+      description?: string;
+      /** @description The room this place belongs to */
+      room?: number | null;
+      status?: components['schemas']['PlaceStatusEnum'];
+    };
+    /**
+     * @description * `active` - Active
+     *     * `removed` - Removed
+     *     * `hidden` - Hidden
+     * @enum {string}
+     */
+    PlaceStatusEnum: 'active' | 'removed' | 'hidden';
+    /**
+     * @description Write serializer - player creates feedback.
+     *
+     *     Frontend supplies ``reporter_persona``; the serializer validates
+     *     that the requesting account currently plays that persona.
+     *     ``location`` is auto-populated server-side and is not accepted as
+     *     input.
+     */
+    PlayerFeedbackCreate: {
+      /** @description The persona the submitter was wearing when they submitted. */
+      reporter_persona: number;
+      /** @description Freeform feedback text from the player. */
+      description: string;
+    };
+    /**
+     * @description Write serializer - player creates feedback.
+     *
+     *     Frontend supplies ``reporter_persona``; the serializer validates
+     *     that the requesting account currently plays that persona.
+     *     ``location`` is auto-populated server-side and is not accepted as
+     *     input.
+     */
+    PlayerFeedbackCreateRequest: {
+      /** @description The persona the submitter was wearing when they submitted. */
+      reporter_persona: number;
+      /** @description Freeform feedback text from the player. */
+      description: string;
+    };
+    /** @description Read serializer for staff review. */
+    PlayerFeedbackDetail: {
+      readonly id: number;
+      /** @description The account that submitted this. */
+      readonly reporter_account: number;
+      readonly reporter_account_username: string;
+      /** @description The persona the submitter was wearing when they submitted. */
+      reporter_persona: number;
+      readonly reporter_persona_name: string;
+      /** @description Freeform feedback text from the player. */
+      description: string;
+      /** @description Room the submitter was in at the time, if any. */
+      location?: number | null;
+      /** Format: date-time */
+      readonly created_at: string;
+      status?: components['schemas']['StatusD66Enum'];
+    };
+    /** @description Read serializer for staff review. */
+    PlayerFeedbackDetailRequest: {
+      /** @description The persona the submitter was wearing when they submitted. */
+      reporter_persona: number;
+      /** @description Freeform feedback text from the player. */
+      description: string;
+      /** @description Room the submitter was in at the time, if any. */
+      location?: number | null;
+      status?: components['schemas']['StatusD66Enum'];
     };
     /** @description Serialize player mail messages. */
     PlayerMail: {
@@ -6788,6 +10820,103 @@ export interface components {
       readonly uploaded_date: string;
       /** Format: date-time */
       readonly updated_date: string;
+    };
+    /**
+     * @description Frontend supplies both reporter and reported personas.
+     *
+     *     The reported_account is derived from the reported persona's current
+     *     active tenure. If the reported persona has no current player, the
+     *     submission is rejected.
+     */
+    PlayerReportCreate: {
+      /** @description The persona the reporter was wearing when submitting. */
+      reporter_persona: number;
+      /** @description The persona of the reported player at the time of the incident. */
+      reported_persona: number;
+      /** @description What the reported persona did. Stub — wording needs design pass. */
+      behavior_description: string;
+      /** @description Whether the reporter asked the other player to stop the behavior. */
+      asked_to_stop?: boolean;
+      /** @description Whether the reporter blocked or muted as a result. */
+      blocked_or_muted?: boolean;
+      /** @description The scene where the behavior occurred, if applicable. */
+      scene?: number | null;
+      /** @description A specific flagged interaction, if applicable. */
+      interaction?: number | null;
+    };
+    /**
+     * @description Frontend supplies both reporter and reported personas.
+     *
+     *     The reported_account is derived from the reported persona's current
+     *     active tenure. If the reported persona has no current player, the
+     *     submission is rejected.
+     */
+    PlayerReportCreateRequest: {
+      /** @description The persona the reporter was wearing when submitting. */
+      reporter_persona: number;
+      /** @description The persona of the reported player at the time of the incident. */
+      reported_persona: number;
+      /** @description What the reported persona did. Stub — wording needs design pass. */
+      behavior_description: string;
+      /** @description Whether the reporter asked the other player to stop the behavior. */
+      asked_to_stop?: boolean;
+      /** @description Whether the reporter blocked or muted as a result. */
+      blocked_or_muted?: boolean;
+      /** @description The scene where the behavior occurred, if applicable. */
+      scene?: number | null;
+      /** @description A specific flagged interaction, if applicable. */
+      interaction?: number | null;
+    };
+    /** @description Staff-only detail serializer with full identity context. */
+    PlayerReportDetail: {
+      readonly id: number;
+      /** @description The account that submitted this. */
+      readonly reporter_account: number;
+      readonly reporter_account_username: string;
+      /** @description The persona the reporter was wearing when submitting. */
+      reporter_persona: number;
+      readonly reporter_persona_name: string;
+      /** @description The account behind the reported persona at the time of the incident. Stored directly so staff can query by account without walking the persona chain. */
+      readonly reported_account: number;
+      readonly reported_account_username: string;
+      /** @description The persona of the reported player at the time of the incident. */
+      reported_persona: number;
+      readonly reported_persona_name: string;
+      /** @description What the reported persona did. Stub — wording needs design pass. */
+      behavior_description: string;
+      /** @description Whether the reporter asked the other player to stop the behavior. */
+      asked_to_stop?: boolean;
+      /** @description Whether the reporter blocked or muted as a result. */
+      blocked_or_muted?: boolean;
+      /** @description The scene where the behavior occurred, if applicable. */
+      scene?: number | null;
+      /** @description A specific flagged interaction, if applicable. */
+      interaction?: number | null;
+      /** @description Room the reporter was in when submitting. */
+      location?: number | null;
+      /** Format: date-time */
+      readonly created_at: string;
+      status?: components['schemas']['StatusD66Enum'];
+    };
+    /** @description Staff-only detail serializer with full identity context. */
+    PlayerReportDetailRequest: {
+      /** @description The persona the reporter was wearing when submitting. */
+      reporter_persona: number;
+      /** @description The persona of the reported player at the time of the incident. */
+      reported_persona: number;
+      /** @description What the reported persona did. Stub — wording needs design pass. */
+      behavior_description: string;
+      /** @description Whether the reporter asked the other player to stop the behavior. */
+      asked_to_stop?: boolean;
+      /** @description Whether the reporter blocked or muted as a result. */
+      blocked_or_muted?: boolean;
+      /** @description The scene where the behavior occurred, if applicable. */
+      scene?: number | null;
+      /** @description A specific flagged interaction, if applicable. */
+      interaction?: number | null;
+      /** @description Room the reporter was in when submitting. */
+      location?: number | null;
+      status?: components['schemas']['StatusD66Enum'];
     };
     /** @description Serializer for player trust profiles */
     PlayerTrust: {
@@ -6832,6 +10961,13 @@ export interface components {
      * @enum {string}
      */
     PrivacyEnum: 'public' | 'private' | 'invite_only';
+    /**
+     * @description * `public` - Public
+     *     * `private` - Private
+     *     * `ephemeral` - Ephemeral
+     * @enum {string}
+     */
+    PrivacyModeEnum: 'public' | 'private' | 'ephemeral';
     /** @description Serializer for pronoun sets. */
     Pronouns: {
       readonly id: number;
@@ -6846,6 +10982,50 @@ export interface components {
       /** @description Possessive pronoun (e.g., 'his') */
       possessive: string;
     };
+    /** @description Serializer for QualityTier lookup records. */
+    QualityTier: {
+      readonly id: number;
+      readonly name: string;
+      /** @description Hex color code for UI display (e.g., '#00FF00'). */
+      readonly color_hex: string;
+      /** @description Lower bound of the internal numeric quality range. */
+      readonly numeric_min: number;
+      /** @description Upper bound of the internal numeric quality range. */
+      readonly numeric_max: number;
+      /**
+       * Format: decimal
+       * @description Multiplier applied to base stats for items of this tier.
+       */
+      readonly stat_multiplier: string;
+      /** @description Display ordering (lower = worse quality). */
+      readonly sort_order: number;
+    };
+    /** @description Read serializer for RandomSceneTarget instances. */
+    RandomSceneTarget: {
+      readonly id: number;
+      /** @description The persona (IC identity) to RP with */
+      target_persona: number;
+      readonly target_persona_name: string;
+      slot_number: number;
+      claimed?: boolean;
+      /** Format: date-time */
+      claimed_at?: string | null;
+      /** @description First RS completion with this target ever */
+      first_time?: boolean;
+      rerolled?: boolean;
+    };
+    /** @description Read serializer for RandomSceneTarget instances. */
+    RandomSceneTargetRequest: {
+      /** @description The persona (IC identity) to RP with */
+      target_persona: number;
+      slot_number: number;
+      claimed?: boolean;
+      /** Format: date-time */
+      claimed_at?: string | null;
+      /** @description First RS completion with this target ever */
+      first_time?: boolean;
+      rerolled?: boolean;
+    };
     /**
      * @description * `-2` - Very Poor
      *     * `-1` - Poor
@@ -6859,26 +11039,77 @@ export interface components {
     RelationshipCondition: {
       readonly id: number;
       /** @description Condition name (e.g., 'Attracted To', 'Fears', 'Trusts') */
-      name: string;
+      readonly name: string;
       /** @description Description of what this condition represents */
-      description?: string;
+      readonly description: string;
       /** @description Order for display purposes (lower values appear first) */
-      display_order?: number;
-      readonly gates_modifiers: number[];
+      readonly display_order: number;
     };
-    /** @description Lighter serializer for condition lists in relationships. */
-    RelationshipConditionList: {
+    /** @description Serializer for RelationshipTier. */
+    RelationshipTier: {
       readonly id: number;
-      /** @description Condition name (e.g., 'Attracted To', 'Fears', 'Trusts') */
-      name: string;
+      /** @description Tier name (e.g., 'Wary', 'Acquaintance', 'Confidant') */
+      readonly name: string;
+      /** @description Numeric rank of this tier within the track (0 = lowest) */
+      readonly tier_number: number;
+      /** @description Minimum points required to reach this tier */
+      readonly point_threshold: number;
+      /** @description Narrative description of what this tier represents */
+      readonly description: string;
+    };
+    /** @description Serializer for RelationshipTrack with nested tiers. */
+    RelationshipTrack: {
+      readonly id: number;
+      /** @description Track name (e.g., 'Trust', 'Respect', 'Rivalry', 'Fear') */
+      readonly name: string;
+      /** @description URL-safe identifier for this track */
+      readonly slug: string;
+      /** @description Description of what this track represents */
+      readonly description: string;
+      /**
+       * @description Whether this track represents positive or negative feelings
+       *
+       *     * `positive` - Positive
+       *     * `negative` - Negative
+       */
+      readonly sign: components['schemas']['SignEnum'];
+      readonly tiers: components['schemas']['RelationshipTier'][];
+    };
+    /** @description Serializer for track progress within a relationship. */
+    RelationshipTrackProgress: {
+      /** @description The track being progressed */
+      readonly track: number;
+      readonly track_name: string;
+      readonly track_sign: string;
+      /** @description Maximum developed points allowed on this track */
+      readonly capacity: number;
+      /** @description Permanent points earned through development and capstones */
+      readonly developed_points: number;
+      readonly temporary_points: number;
+      readonly total_points: number;
+      /** @description Return the name of the current tier, or None if no tier reached. */
+      readonly current_tier_name: string | null;
     };
     /**
-     * @description * `celestial` - Celestial
-     *     * `abyssal` - Abyssal
-     *     * `primal` - Primal
+     * @description * `destroy` - Destroy (removed for everyone)
+     *     * `personal` - Personal (resolved for this character only)
+     *     * `temporary` - Temporary (suppressed for N rounds)
      * @enum {string}
      */
-    ResonanceAffinityEnum: 'celestial' | 'abyssal' | 'primal';
+    ResolutionTypeEnum: 'destroy' | 'personal' | 'temporary';
+    /** @description Serializer for Resonance records. */
+    Resonance: {
+      readonly id: number;
+      /** @description Resonance name (e.g., 'Bene', 'Praedari', 'Sylva'). */
+      readonly name: string;
+      /** @description Which affinity this resonance contributes to. */
+      readonly affinity: number;
+      readonly affinity_name: string;
+      /** @description Description of this resonance. */
+      readonly description: string;
+      /** @description Return the Codex entry ID if this resonance's modifier_target has one. */
+      readonly codex_entry_id: number | null;
+    };
     /** @description Serializer for Restriction lookup records. */
     Restriction: {
       readonly id: number;
@@ -6891,6 +11122,15 @@ export interface components {
       /** @description Get effect type IDs, using cached property if available. */
       readonly allowed_effect_type_ids: number[];
     };
+    /**
+     * @description * `low` - Low
+     *     * `moderate` - Moderate
+     *     * `high` - High
+     *     * `extreme` - Extreme
+     *     * `lethal` - Lethal
+     * @enum {string}
+     */
+    RiskLevelEnum: 'low' | 'moderate' | 'high' | 'extreme' | 'lethal';
     /** @description Validate a roster application message. */
     RosterApplication: {
       message: string;
@@ -6951,7 +11191,79 @@ export interface components {
       readonly id: number;
       readonly display_name: string;
     };
-    /** @description Full scene representation with messages and personas */
+    SceneActionRequest: {
+      readonly id: number;
+      /** @description The scene where this action takes place */
+      scene: number;
+      /** @description The persona performing the action */
+      initiator_persona: number;
+      readonly initiator_name: string;
+      /** @description The persona being targeted */
+      target_persona: number;
+      readonly target_name: string;
+      /** @description Key identifying the action type (e.g., 'intimidate', 'persuade') */
+      action_key?: string;
+      /** @description Data-driven action template if applicable */
+      action_template?: number | null;
+      /** @description Technique used for this action, if any */
+      technique?: number | null;
+      readonly status: components['schemas']['SceneActionStatusEnum'];
+      /**
+       * @description Difficulty level chosen or determined for this action
+       *
+       *     * `trivial` - Trivial
+       *     * `easy` - Easy
+       *     * `normal` - Normal
+       *     * `hard` - Hard
+       *     * `daunting` - Daunting
+       */
+      difficulty_choice?: components['schemas']['DifficultyChoiceEnum'];
+      /** @description The numeric difficulty used for resolution */
+      readonly resolved_difficulty: number | null;
+      /** @description The interaction recording the result of this action */
+      readonly result_interaction: number | null;
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * Format: date-time
+       * @description When this action was resolved
+       */
+      readonly resolved_at: string | null;
+    };
+    SceneActionRequestRequest: {
+      /** @description The scene where this action takes place */
+      scene: number;
+      /** @description The persona performing the action */
+      initiator_persona: number;
+      /** @description The persona being targeted */
+      target_persona: number;
+      /** @description Key identifying the action type (e.g., 'intimidate', 'persuade') */
+      action_key?: string;
+      /** @description Data-driven action template if applicable */
+      action_template?: number | null;
+      /** @description Technique used for this action, if any */
+      technique?: number | null;
+      /**
+       * @description Difficulty level chosen or determined for this action
+       *
+       *     * `trivial` - Trivial
+       *     * `easy` - Easy
+       *     * `normal` - Normal
+       *     * `hard` - Hard
+       *     * `daunting` - Daunting
+       */
+      difficulty_choice?: components['schemas']['DifficultyChoiceEnum'];
+    };
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `denied` - Denied
+     *     * `resolved` - Resolved
+     *     * `expired` - Expired
+     * @enum {string}
+     */
+    SceneActionStatusEnum: 'pending' | 'accepted' | 'denied' | 'resolved' | 'expired';
+    /** @description Full scene representation with personas */
     SceneDetail: {
       readonly id: number;
       name?: string;
@@ -6964,12 +11276,19 @@ export interface components {
       /** Format: date-time */
       date_finished?: string | null;
       is_active?: boolean;
-      is_public?: boolean;
-      readonly personas: string;
-      readonly messages: components['schemas']['SceneMessage'][];
-      readonly highlight_message: string;
+      /**
+       * @description Privacy floor for all interactions in this scene
+       *
+       *     * `public` - Public
+       *     * `private` - Private
+       *     * `ephemeral` - Ephemeral
+       */
+      privacy_mode?: components['schemas']['PrivacyModeEnum'];
+      readonly personas: {
+        [key: string]: unknown;
+      }[];
     };
-    /** @description Full scene representation with messages and personas */
+    /** @description Full scene representation with personas */
     SceneDetailRequest: {
       name?: string;
       description?: string;
@@ -6977,7 +11296,14 @@ export interface components {
       /** Format: date-time */
       date_finished?: string | null;
       is_active?: boolean;
-      is_public?: boolean;
+      /**
+       * @description Privacy floor for all interactions in this scene
+       *
+       *     * `public` - Public
+       *     * `private` - Private
+       *     * `ephemeral` - Ephemeral
+       */
+      privacy_mode?: components['schemas']['PrivacyModeEnum'];
     };
     /** @description Simplified scene representation for lists */
     SceneList: {
@@ -6987,43 +11313,89 @@ export interface components {
       /** Format: date-time */
       readonly date_started: string;
       readonly location: string;
-      readonly participants: string;
+      readonly participants: {
+        [key: string]: unknown;
+      }[];
       readonly is_owner: string;
     };
-    SceneMessage: {
+    SceneSummaryRevision: {
       readonly id: number;
-      readonly persona: components['schemas']['Persona'];
+      /** @description The ephemeral scene this revision belongs to */
+      scene: number;
+      /** @description Who submitted this revision (IC identity, never account) */
+      persona: number;
+      readonly persona_name: string;
+      /** @description The summary text for this revision */
       content: string;
-      context?: components['schemas']['ContextEnum'];
-      mode?: components['schemas']['ModeEnum'];
-      readonly receivers: components['schemas']['Persona'][];
-      readonly supplemental_data: unknown;
+      /**
+       * @description Whether this is a submission, edit, or agreement
+       *
+       *     * `submit` - Submit
+       *     * `edit` - Edit
+       *     * `agree` - Agree
+       */
+      action: components['schemas']['ActionEnum'];
       /** Format: date-time */
       readonly timestamp: string;
-      readonly sequence_number: number;
-      readonly reactions: string;
     };
-    SceneMessageReaction: {
-      readonly id: number;
-      message: number;
-      emoji: string;
-    };
-    SceneMessageReactionRequest: {
-      message: number;
-      emoji: string;
-    };
-    SceneMessageRequest: {
-      persona_id: number;
+    SceneSummaryRevisionRequest: {
+      /** @description The ephemeral scene this revision belongs to */
+      scene: number;
+      /** @description Who submitted this revision (IC identity, never account) */
+      persona: number;
+      /** @description The summary text for this revision */
       content: string;
-      context?: components['schemas']['ContextEnum'];
-      mode?: components['schemas']['ModeEnum'];
+      /**
+       * @description Whether this is a submission, edit, or agreement
+       *
+       *     * `submit` - Submit
+       *     * `edit` - Edit
+       *     * `agree` - Agree
+       */
+      action: components['schemas']['ActionEnum'];
     };
     /**
-     * @description * `self` - Self Only
-     *     * `area` - Area Effect
+     * @description * `positive` - Positive
+     *     * `negative` - Negative
      * @enum {string}
      */
-    ScopeEnum: 'self' | 'area';
+    SignEnum: 'positive' | 'negative';
+    /** @description Nested serializer for situation challenge links. */
+    SituationChallengeLink: {
+      challenge_template: number;
+      readonly challenge_template_name: string;
+      display_order?: number;
+      depends_on?: number | null;
+    };
+    /** @description Serializer for situation instances. */
+    SituationInstance: {
+      readonly id: number;
+      template: number;
+      readonly template_name: string;
+      location: number;
+      readonly location_name: string;
+      is_active?: boolean;
+      created_by?: number | null;
+      scene?: number | null;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description Full serializer for situation template detail views. */
+    SituationTemplateDetail: {
+      readonly id: number;
+      name: string;
+      category: number;
+      readonly category_name: string;
+      description_template?: string;
+      readonly challenge_links: components['schemas']['SituationChallengeLink'][];
+    };
+    /** @description Lightweight serializer for situation template list views. */
+    SituationTemplateList: {
+      readonly id: number;
+      name: string;
+      category: number;
+      readonly category_name: string;
+    };
     /** @description Serializer for Skill model with nested specializations. */
     Skill: {
       readonly id: number;
@@ -7075,6 +11447,18 @@ export interface components {
       /** @description Maximum specialization value in CG */
       max_specialization_value?: number;
     };
+    SocietySearch: {
+      id: number;
+      name: string;
+    };
+    /**
+     * @description * `technique` - TECHNIQUE
+     *     * `trait` - TRAIT
+     *     * `condition` - CONDITION
+     *     * `equipment` - EQUIPMENT
+     * @enum {string}
+     */
+    SourceTypeEnum: 'technique' | 'trait' | 'condition' | 'equipment';
     /** @description Serializer for Specialization model. */
     Specialization: {
       readonly id: number;
@@ -7125,6 +11509,15 @@ export interface components {
      * @enum {integer}
      */
     StageEnum: 1 | 2 | 3 | 4 | 5 | 6;
+    /**
+     * @description * `local` - Local
+     *     * `regional` - Regional
+     *     * `national` - National
+     *     * `continental` - Continental
+     *     * `world` - World
+     * @enum {string}
+     */
+    StakesLevelEnum: 'local' | 'regional' | 'national' | 'continental' | 'world';
     /** @description Serializer for starting areas with accessibility check. */
     StartingArea: {
       readonly id: number;
@@ -7171,6 +11564,38 @@ export interface components {
       | 'denied'
       | 'withdrawn';
     /**
+     * @description * `declaring` - Declaring
+     *     * `resolving` - Resolving
+     *     * `between_rounds` - Between Rounds
+     *     * `completed` - Completed
+     * @enum {string}
+     */
+    Status4e6Enum: 'declaring' | 'resolving' | 'between_rounds' | 'completed';
+    /**
+     * @description * `pending` - Pending Review
+     *     * `approved` - Approved
+     *     * `denied` - Denied
+     *     * `withdrawn` - Withdrawn
+     * @enum {string}
+     */
+    StatusBa9Enum: 'pending' | 'approved' | 'denied' | 'withdrawn';
+    /**
+     * @description * `draft` - Draft
+     *     * `scheduled` - Scheduled
+     *     * `active` - Active
+     *     * `completed` - Completed
+     *     * `cancelled` - Cancelled
+     * @enum {string}
+     */
+    StatusC97Enum: 'draft' | 'scheduled' | 'active' | 'completed' | 'cancelled';
+    /**
+     * @description * `open` - Open
+     *     * `reviewed` - Reviewed
+     *     * `dismissed` - Dismissed
+     * @enum {string}
+     */
+    StatusD66Enum: 'open' | 'reviewed' | 'dismissed';
+    /**
      * @description * `active` - Active
      *     * `inactive` - Inactive
      *     * `completed` - Completed
@@ -7206,7 +11631,7 @@ export interface components {
       status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
       readonly owners: string[];
-      readonly active_gms: string[];
+      readonly active_gms: components['schemas']['GMProfile'][];
       readonly trust_requirements: string;
       /** @description True if this is a character's personal story arc */
       is_personal_story?: boolean;
@@ -7305,13 +11730,6 @@ export interface components {
       is_active?: boolean;
     };
     /**
-     * @description * `minor` - Minor
-     *     * `moderate` - Moderate
-     *     * `major` - Major
-     * @enum {string}
-     */
-    StrengthEnum: 'minor' | 'moderate' | 'major';
-    /**
      * @description * `swords` - Swords
      *     * `cups` - Cups
      *     * `wands` - Wands
@@ -7319,6 +11737,29 @@ export interface components {
      * @enum {string}
      */
     SuitEnum: 'swords' | 'cups' | 'wands' | 'coins';
+    /**
+     * @description * `TRAIT` - Trait
+     *     * `TECHNIQUE` - Technique
+     *     * `ITEM` - Item
+     *     * `ROOM` - Room
+     *     * `RELATIONSHIP_TRACK` - Relationship Track
+     *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
+     * @enum {string}
+     */
+    TargetKindEnum:
+      | 'TRAIT'
+      | 'TECHNIQUE'
+      | 'ITEM'
+      | 'ROOM'
+      | 'RELATIONSHIP_TRACK'
+      | 'RELATIONSHIP_CAPSTONE';
+    /**
+     * @description * `persona` - Persona
+     *     * `organization` - Organization
+     *     * `society` - Society
+     * @enum {string}
+     */
+    TargetTypeFedEnum: 'persona' | 'organization' | 'society';
     /** @description Serializer for TarotCard with computed surname fields. */
     TarotCard: {
       readonly id: number;
@@ -7368,7 +11809,7 @@ export interface components {
       style: number;
       /** @description The type of effect this technique produces. */
       effect_type: number;
-      restriction_ids: number[];
+      restriction_ids?: number[];
       /** @description The level of this technique (determines tier). */
       level?: number;
       /** @description Base power of the technique. Determines damage and effect strength. */
@@ -7393,7 +11834,7 @@ export interface components {
       style: number;
       /** @description The type of effect this technique produces. */
       effect_type: number;
-      restriction_ids: number[];
+      restriction_ids?: number[];
       /** @description The level of this technique (determines tier). */
       level?: number;
       /** @description Base power of the technique. Determines damage and effect strength. */
@@ -7414,6 +11855,21 @@ export interface components {
       readonly name: string;
       /** @description Description of this technique style. */
       readonly description: string;
+    };
+    /** @description Serializer for interaction bindings with flavor text. */
+    TemplateInteraction: {
+      readonly interaction_type: components['schemas']['InteractionType'];
+      /** @description Contextual text shown when this interaction is performed. */
+      readonly flavor_text: string;
+    };
+    /** @description Serializer for TemplateSlot (region/layer assignment). */
+    TemplateSlot: {
+      readonly body_region: components['schemas']['BodyRegionEnum'];
+      readonly body_region_display: string;
+      readonly equipment_layer: components['schemas']['EquipmentLayerEnum'];
+      readonly equipment_layer_display: string;
+      /** @description Whether this slot hides items on lower layers at the same region. */
+      readonly covers_lower_layers: boolean;
     };
     /** @description Serialize tenure galleries. */
     TenureGallery: {
@@ -7444,185 +11900,106 @@ export interface components {
     TenureMediaRequest: {
       sort_order?: number;
     };
-    /** @description Serializer for Thread records. */
+    /**
+     * @description Serializer for Thread records (Spec A §4.5).
+     *
+     *     Read: returns level / developed_points / resonance detail for display.
+     *     Write: accepts target_kind + target_id + resonance + character_sheet_id to
+     *     weave a new thread; target_id is resolved to the typed FK via ``create``
+     *     which delegates to ``weave_thread``. ``character_sheet_id`` must identify
+     *     a CharacterSheet on an active roster tenure belonging to the requesting
+     *     account (staff may pass any sheet).
+     */
     Thread: {
       readonly id: number;
-      /** @description The character who initiated this thread. */
-      initiator: number;
-      readonly initiator_name: string;
-      /** @description The character who received this thread. */
-      receiver: number;
-      readonly receiver_name: string;
-      /** @description Romantic intensity (0-100). */
-      romantic?: number;
-      /** @description Trust and faith (0-100). */
-      trust?: number;
-      /** @description Competitive tension (0-100). */
-      rivalry?: number;
-      /** @description Protective instinct (0-100). */
-      protective?: number;
-      /** @description Hatred and opposition (0-100). */
-      enmity?: number;
-      /** @description Whether this is an Abyssal Soul Tether (grants Control bonus). */
-      is_soul_tether?: boolean;
-      /** @description Return the thread types this thread qualifies for. */
-      readonly matching_types: {
-        [key: string]: unknown;
-      }[];
-      readonly resonances: components['schemas']['ThreadResonance'][];
-      /** Format: date-time */
-      readonly created_at: string;
-      /** Format: date-time */
-      readonly updated_at: string;
-    };
-    /** @description Serializer for ThreadJournal records. */
-    ThreadJournal: {
-      readonly id: number;
-      /** @description The thread this entry belongs to. */
-      thread: number;
-      /** @description The character who wrote this entry. */
-      author?: number | null;
-      readonly author_name: string | null;
-      /** @description The journal entry content (IC description of the moment). */
-      content: string;
-      /** @description Change in romantic value when this entry was made. */
-      romantic_change?: number;
-      /** @description Change in trust value when this entry was made. */
-      trust_change?: number;
-      /** @description Change in rivalry value when this entry was made. */
-      rivalry_change?: number;
-      /** @description Change in protective value when this entry was made. */
-      protective_change?: number;
-      /** @description Change in enmity value when this entry was made. */
-      enmity_change?: number;
-      /** Format: date-time */
-      readonly created_at: string;
-    };
-    /** @description Serializer for ThreadJournal records. */
-    ThreadJournalRequest: {
-      /** @description The thread this entry belongs to. */
-      thread: number;
-      /** @description The character who wrote this entry. */
-      author?: number | null;
-      /** @description The journal entry content (IC description of the moment). */
-      content: string;
-      /** @description Change in romantic value when this entry was made. */
-      romantic_change?: number;
-      /** @description Change in trust value when this entry was made. */
-      trust_change?: number;
-      /** @description Change in rivalry value when this entry was made. */
-      rivalry_change?: number;
-      /** @description Change in protective value when this entry was made. */
-      protective_change?: number;
-      /** @description Change in enmity value when this entry was made. */
-      enmity_change?: number;
-    };
-    /** @description Lightweight serializer for Thread list views. */
-    ThreadList: {
-      readonly id: number;
-      /** @description The character who initiated this thread. */
-      readonly initiator: number;
-      readonly initiator_name: string;
-      /** @description The character who received this thread. */
-      readonly receiver: number;
-      readonly receiver_name: string;
-      /** @description Romantic intensity (0-100). */
-      readonly romantic: number;
-      /** @description Trust and faith (0-100). */
-      readonly trust: number;
-      /** @description Competitive tension (0-100). */
-      readonly rivalry: number;
-      /** @description Protective instinct (0-100). */
-      readonly protective: number;
-      /** @description Hatred and opposition (0-100). */
-      readonly enmity: number;
-      /** @description Whether this is an Abyssal Soul Tether (grants Control bonus). */
-      readonly is_soul_tether: boolean;
-      /** Format: date-time */
-      readonly updated_at: string;
-    };
-    /** @description Serializer for Thread records. */
-    ThreadRequest: {
-      /** @description The character who initiated this thread. */
-      initiator: number;
-      /** @description The character who received this thread. */
-      receiver: number;
-      /** @description Romantic intensity (0-100). */
-      romantic?: number;
-      /** @description Trust and faith (0-100). */
-      trust?: number;
-      /** @description Competitive tension (0-100). */
-      rivalry?: number;
-      /** @description Protective instinct (0-100). */
-      protective?: number;
-      /** @description Hatred and opposition (0-100). */
-      enmity?: number;
-      /** @description Whether this is an Abyssal Soul Tether (grants Control bonus). */
-      is_soul_tether?: boolean;
-    };
-    /** @description Serializer for ThreadResonance records. */
-    ThreadResonance: {
-      readonly id: number;
-      /** @description The thread this resonance is attached to. */
-      thread: number;
-      /** @description The resonance type (must be category='resonance'). */
+      /** @description Character who owns this thread. */
+      readonly owner: number;
+      /** @description Resonance this thread channels. */
       resonance: number;
       readonly resonance_name: string;
-      readonly resonance_detail: components['schemas']['ModifierType'];
       /**
-       * @description The strength of this resonance on the thread.
+       * @description Discriminator selecting which target_* FK is populated.
        *
-       *     * `minor` - Minor
-       *     * `moderate` - Moderate
-       *     * `major` - Major
+       *     * `TRAIT` - Trait
+       *     * `TECHNIQUE` - Technique
+       *     * `ITEM` - Item
+       *     * `ROOM` - Room
+       *     * `RELATIONSHIP_TRACK` - Relationship Track
+       *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        */
-      strength?: components['schemas']['StrengthEnum'];
-      /** @description How this resonance manifests in the relationship. */
-      flavor_text?: string;
+      target_kind: components['schemas']['TargetKindEnum'];
+      /** @default  */
+      name: string;
+      /** @default  */
+      description: string;
+      /** @description Current level on the internal scale (multiples of 10). */
+      readonly level: number;
+      /** @description Permanent points; advances level via ThreadLevelUnlock entries. */
+      readonly developed_points: number;
+      /**
+       * Format: date-time
+       * @description Set when owner soft-retires this thread; retired threads are excluded from list/detail views and from all pull / passive paths.
+       */
+      readonly retired_at: string | null;
       /** Format: date-time */
       readonly created_at: string;
+      /** Format: date-time */
+      readonly updated_at: string;
     };
-    /** @description Serializer for ThreadResonance records. */
-    ThreadResonanceRequest: {
-      /** @description The thread this resonance is attached to. */
-      thread: number;
-      /** @description The resonance type (must be category='resonance'). */
+    /**
+     * @description Serializer for Thread records (Spec A §4.5).
+     *
+     *     Read: returns level / developed_points / resonance detail for display.
+     *     Write: accepts target_kind + target_id + resonance + character_sheet_id to
+     *     weave a new thread; target_id is resolved to the typed FK via ``create``
+     *     which delegates to ``weave_thread``. ``character_sheet_id`` must identify
+     *     a CharacterSheet on an active roster tenure belonging to the requesting
+     *     account (staff may pass any sheet).
+     */
+    ThreadRequest: {
+      /** @description Resonance this thread channels. */
       resonance: number;
       /**
-       * @description The strength of this resonance on the thread.
+       * @description Discriminator selecting which target_* FK is populated.
        *
-       *     * `minor` - Minor
-       *     * `moderate` - Moderate
-       *     * `major` - Major
+       *     * `TRAIT` - Trait
+       *     * `TECHNIQUE` - Technique
+       *     * `ITEM` - Item
+       *     * `ROOM` - Room
+       *     * `RELATIONSHIP_TRACK` - Relationship Track
+       *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
        */
-      strength?: components['schemas']['StrengthEnum'];
-      /** @description How this resonance manifests in the relationship. */
-      flavor_text?: string;
+      target_kind: components['schemas']['TargetKindEnum'];
+      target_id: number;
+      character_sheet_id: number;
+      /** @default  */
+      name: string;
+      /** @default  */
+      description: string;
     };
-    /** @description Serializer for ThreadType lookup records. */
-    ThreadType: {
+    /** @description Serializer for ThreadWeavingTeachingOffer records (Spec A §4.5). */
+    ThreadWeavingTeachingOffer: {
       readonly id: number;
-      /** @description Display name for this thread type. */
-      readonly name: string;
-      /** @description URL-safe identifier for this thread type. */
-      readonly slug: string;
-      /** @description Player-facing description of this thread type. */
-      readonly description: string;
-      /** @description Minimum romantic value to qualify (null = not required). */
-      readonly romantic_threshold: number | null;
-      /** @description Minimum trust value to qualify (null = not required). */
-      readonly trust_threshold: number | null;
-      /** @description Minimum rivalry value to qualify (null = not required). */
-      readonly rivalry_threshold: number | null;
-      /** @description Minimum protective value to qualify (null = not required). */
-      readonly protective_threshold: number | null;
-      /** @description Minimum enmity value to qualify (null = not required). */
-      readonly enmity_threshold: number | null;
-      /** @description Resonance granted by this thread type (must be category='resonance'). */
-      readonly grants_resonance: number | null;
-      readonly grants_resonance_name: string | null;
-      readonly grants_resonance_detail: components['schemas']['ModifierType'] | null;
+      /** @description Teaching tenure offering this unlock. */
+      readonly teacher: number;
+      /** @description Authored unlock being offered. */
+      readonly unlock: number;
+      readonly unlock_target_kind: string;
+      readonly unlock_display_name: string;
+      readonly unlock_xp_cost: number;
+      /** @description Teacher's narrative pitch for this offer. */
+      readonly pitch: string;
+      /** @description Gold price the teacher charges (XP cost stays on the unlock). */
+      readonly gold_cost: number;
     };
+    /**
+     * @description * `dawn` - Dawn
+     *     * `day` - Day
+     *     * `dusk` - Dusk
+     *     * `night` - Night
+     * @enum {string}
+     */
+    TimePhaseEnum: 'dawn' | 'day' | 'dusk' | 'night';
     /** @description Serializer for Tradition records available during CG. */
     Tradition: {
       readonly id: number;
@@ -7663,6 +12040,7 @@ export interface components {
        *     * `physical` - Physical
        *     * `social` - Social
        *     * `mental` - Mental
+       *     * `meta` - Meta
        *     * `magic` - Magic
        *     * `combat` - Combat
        *     * `general` - General
@@ -7771,6 +12149,36 @@ export interface components {
       /** @description Whether this category is currently in use */
       is_active?: boolean;
     };
+    /**
+     * @description * `default` - Default
+     *     * `very_private` - Very Private
+     * @enum {string}
+     */
+    VisibilityEnum: 'default' | 'very_private';
+    /** @description Read serializer for WeeklyVote instances. */
+    WeeklyVote: {
+      readonly id: number;
+      target_type: components['schemas']['WeeklyVoteTargetTypeEnum'];
+      /** @description PK of the voted-on object (not a FK -- no cascades) */
+      target_id: number;
+      /** @description Resolve a human-readable name for the vote target. */
+      readonly target_name: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /** @description Read serializer for WeeklyVote instances. */
+    WeeklyVoteRequest: {
+      target_type: components['schemas']['WeeklyVoteTargetTypeEnum'];
+      /** @description PK of the voted-on object (not a FK -- no cascades) */
+      target_id: number;
+    };
+    /**
+     * @description * `interaction` - Interaction
+     *     * `scene_participation` - Scene Participation
+     *     * `journal` - Journal Entry
+     * @enum {string}
+     */
+    WeeklyVoteTargetTypeEnum: 'interaction' | 'scene_participation' | 'journal';
   };
   responses: never;
   parameters: never;
@@ -7780,6 +12188,302 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  achievements_achievements_list: {
+    parameters: {
+      query?: {
+        /** @description A search term. */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AchievementList'][];
+        };
+      };
+    };
+  };
+  achievements_achievements_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Achievement'];
+        };
+      };
+    };
+  };
+  achievements_character_achievements_list: {
+    parameters: {
+      query?: {
+        character_sheet?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterAchievement'][];
+        };
+      };
+    };
+  };
+  achievements_character_achievements_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this character achievement. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterAchievement'];
+        };
+      };
+    };
+  };
+  action_requests_list: {
+    parameters: {
+      query?: {
+        initiator?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        scene?: number;
+        status?: string;
+        target?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSceneActionRequestList'];
+        };
+      };
+    };
+  };
+  action_requests_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SceneActionRequestRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneActionRequest'];
+        };
+      };
+    };
+  };
+  action_requests_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene action request. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneActionRequest'];
+        };
+      };
+    };
+  };
+  action_requests_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene action request. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SceneActionRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneActionRequest'];
+        };
+      };
+    };
+  };
+  action_requests_available_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneActionRequest'];
+        };
+      };
+    };
+  };
+  areas_list: {
+    parameters: {
+      query?: {
+        has_parent?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        parent?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAreaListList'];
+        };
+      };
+    };
+  };
+  areas_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Area. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AreaList'];
+        };
+      };
+    };
+  };
+  areas_rooms_list: {
+    parameters: {
+      query?: {
+        area?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAreaRoomList'];
+        };
+      };
+    };
+  };
+  areas_rooms_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AreaRoom'];
+        };
+      };
+    };
+  };
   auth_browser_v1_auth_email_request_create: {
     parameters: {
       query?: never;
@@ -8261,7 +12965,9 @@ export interface operations {
   };
   character_creation_cantrips_list: {
     parameters: {
-      query?: never;
+      query?: {
+        path_id?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -8707,7 +13413,9 @@ export interface operations {
   };
   character_creation_families_list: {
     parameters: {
-      query?: never;
+      query?: {
+        has_open_positions?: boolean;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -8998,7 +13706,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Starting Area. */
+        id: number;
       };
       cookie?: never;
     };
@@ -9057,7 +13766,9 @@ export interface operations {
   };
   character_creation_traditions_list: {
     parameters: {
-      query?: never;
+      query?: {
+        beginning_id?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -9135,6 +13846,242 @@ export interface operations {
     };
   };
   characters_room_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  classes_aspects_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Aspect'][];
+        };
+      };
+    };
+  };
+  classes_aspects_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Aspect. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Aspect'];
+        };
+      };
+    };
+  };
+  classes_classes_list: {
+    parameters: {
+      query?: {
+        minimum_level?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterClassList'][];
+        };
+      };
+    };
+  };
+  classes_classes_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this character class. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterClass'];
+        };
+      };
+    };
+  };
+  classes_paths_list: {
+    parameters: {
+      query?: {
+        is_active?: boolean;
+        stage?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PathList'][];
+        };
+      };
+    };
+  };
+  classes_paths_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Path. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Path'];
+        };
+      };
+    };
+  };
+  clock_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  clock_adjust_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  clock_convert_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  clock_pause_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  clock_ratio_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  clock_unpause_create: {
     parameters: {
       query?: never;
       header?: never;
@@ -9323,6 +14270,506 @@ export interface operations {
       };
     };
   };
+  combat_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        scene?: number;
+        status?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedEncounterListList'];
+        };
+      };
+    };
+  };
+  combat_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  combat_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedEncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_add_opponent_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_add_participant_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_available_combos_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_begin_round_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_declare_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_flee_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_join_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_my_action_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_pause_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_ready_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_remove_participant_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_resolve_round_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_revert_combo_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
+  combat_upgrade_combo_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this combat encounter. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['EncounterDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EncounterDetail'];
+        };
+      };
+    };
+  };
   conditions_capabilities_list: {
     parameters: {
       query?: never;
@@ -9456,47 +14903,6 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
-      };
-    };
-  };
-  conditions_check_types_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['CheckType'][];
-        };
-      };
-    };
-  };
-  conditions_check_types_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this check type. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['CheckType'];
-        };
       };
     };
   };
@@ -9647,6 +15053,7 @@ export interface operations {
       query?: {
         category?: string;
         cost_type?: string;
+        draft_id?: number;
         exclude_variants?: boolean;
         search?: string;
         tag?: string;
@@ -10112,6 +15519,398 @@ export interface operations {
       };
     };
   };
+  events_list: {
+    parameters: {
+      query?: {
+        host?: number;
+        is_public?: boolean;
+        location?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /** @description A search term. */
+        search?: string;
+        status?: string;
+        upcoming?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedEventListList'];
+        };
+      };
+    };
+  };
+  events_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EventCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EventCreate'];
+        };
+      };
+    };
+  };
+  events_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this event. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EventDetail'];
+        };
+      };
+    };
+  };
+  events_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this event. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EventUpdateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EventUpdate'];
+        };
+      };
+    };
+  };
+  events_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this event. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  events_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this event. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedEventUpdateRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EventUpdate'];
+        };
+      };
+    };
+  };
+  events_cancel_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this event. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EventDetail'];
+        };
+      };
+    };
+  };
+  events_complete_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this event. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EventDetail'];
+        };
+      };
+    };
+  };
+  events_schedule_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this event. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EventDetail'];
+        };
+      };
+    };
+  };
+  events_start_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this event. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EventDetail'];
+        };
+      };
+    };
+  };
+  events_invitations_list: {
+    parameters: {
+      query?: {
+        event?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedEventInvitationList'];
+        };
+      };
+    };
+  };
+  events_invitations_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EventInviteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EventInvite'];
+        };
+      };
+    };
+  };
+  events_invitations_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this event invitation. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  events_organizations_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOrganizationSearchList'];
+        };
+      };
+    };
+  };
+  events_societies_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSocietySearchList'];
+        };
+      };
+    };
+  };
+  fatigue_rest_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  fatigue_status_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   forms_builds_list: {
     parameters: {
       query?: never;
@@ -10295,6 +16094,631 @@ export interface operations {
       };
     };
   };
+  gm_applications_list: {
+    parameters: {
+      query?: {
+        created_after?: string;
+        created_before?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `pending` - Pending Review
+         *     * `approved` - Approved
+         *     * `denied` - Denied
+         *     * `withdrawn` - Withdrawn
+         */
+        status?: 'approved' | 'denied' | 'pending' | 'withdrawn';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGMApplicationDetailList'];
+        };
+      };
+    };
+  };
+  gm_applications_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GMApplicationCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMApplicationCreate'];
+        };
+      };
+    };
+  };
+  gm_applications_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Application. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMApplicationDetail'];
+        };
+      };
+    };
+  };
+  gm_applications_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Application. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GMApplicationDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMApplicationDetail'];
+        };
+      };
+    };
+  };
+  gm_applications_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Application. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedGMApplicationDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMApplicationDetail'];
+        };
+      };
+    };
+  };
+  gm_invites_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGMRosterInviteList'];
+        };
+      };
+    };
+  };
+  gm_invites_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GMRosterInviteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMRosterInvite'];
+        };
+      };
+    };
+  };
+  gm_invites_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMRosterInvite'];
+        };
+      };
+    };
+  };
+  gm_invites_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  gm_invites_claim_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  gm_queue_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGMApplicationQueueList'];
+        };
+      };
+    };
+  };
+  gm_queue_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        action: string;
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  gm_table_memberships_list: {
+    parameters: {
+      query?: {
+        active?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        table?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGMTableMembershipList'];
+        };
+      };
+    };
+  };
+  gm_table_memberships_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GMTableMembershipRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMTableMembership'];
+        };
+      };
+    };
+  };
+  gm_table_memberships_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Table Membership. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMTableMembership'];
+        };
+      };
+    };
+  };
+  gm_table_memberships_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Table Membership. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GMTableMembershipRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMTableMembership'];
+        };
+      };
+    };
+  };
+  gm_table_memberships_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Table Membership. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  gm_table_memberships_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Table Membership. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedGMTableMembershipRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMTableMembership'];
+        };
+      };
+    };
+  };
+  gm_tables_list: {
+    parameters: {
+      query?: {
+        gm?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `active` - Active
+         *     * `archived` - Archived
+         */
+        status?: 'active' | 'archived';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGMTableList'];
+        };
+      };
+    };
+  };
+  gm_tables_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GMTableRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMTable'];
+        };
+      };
+    };
+  };
+  gm_tables_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Table. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMTable'];
+        };
+      };
+    };
+  };
+  gm_tables_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Table. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GMTableRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMTable'];
+        };
+      };
+    };
+  };
+  gm_tables_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Table. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  gm_tables_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Table. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedGMTableRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMTable'];
+        };
+      };
+    };
+  };
+  gm_tables_archive_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Table. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GMTableRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMTable'];
+        };
+      };
+    };
+  };
+  gm_tables_transfer_ownership_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Table. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GMTableRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMTable'];
+        };
+      };
+    };
+  };
   goals_domains_list: {
     parameters: {
       query?: never;
@@ -10319,7 +16743,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this modifier type. */
+        /** @description A unique integer value identifying this modifier target. */
         id: number;
       };
       cookie?: never;
@@ -10427,6 +16851,485 @@ export interface operations {
     };
   };
   homepage_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  interaction_favorites_list: {
+    parameters: {
+      query?: {
+        interaction?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedInteractionFavoriteList'];
+        };
+      };
+    };
+  };
+  interaction_favorites_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InteractionFavoriteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionFavorite'];
+        };
+      };
+    };
+  };
+  interaction_favorites_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this interaction favorite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionFavorite'];
+        };
+      };
+    };
+  };
+  interaction_favorites_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this interaction favorite. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  interaction_reactions_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InteractionReactionRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionReaction'];
+        };
+      };
+    };
+  };
+  interaction_reactions_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  interactions_list: {
+    parameters: {
+      query?: {
+        /** @description The pagination cursor value. */
+        cursor?: string;
+        mode?: string;
+        persona?: number;
+        scene?: number;
+        since?: string;
+        target_persona?: number;
+        until?: string;
+        visibility?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedInteractionListList'];
+        };
+      };
+    };
+  };
+  interactions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this interaction. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionDetail'];
+        };
+      };
+    };
+  };
+  interactions_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this interaction. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  interactions_mark_private_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this interaction. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InteractionListRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionList'];
+        };
+      };
+    };
+  };
+  items_interaction_types_list: {
+    parameters: {
+      query?: {
+        name?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionType'][];
+        };
+      };
+    };
+  };
+  items_interaction_types_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this interaction type. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['InteractionType'];
+        };
+      };
+    };
+  };
+  items_quality_tiers_list: {
+    parameters: {
+      query?: {
+        name?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['QualityTier'][];
+        };
+      };
+    };
+  };
+  items_quality_tiers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this quality tier. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['QualityTier'];
+        };
+      };
+    };
+  };
+  items_templates_list: {
+    parameters: {
+      query?: {
+        is_consumable?: boolean;
+        is_container?: boolean;
+        is_craftable?: boolean;
+        is_stackable?: boolean;
+        name?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedItemTemplateListList'];
+        };
+      };
+    };
+  };
+  items_templates_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this item template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ItemTemplateDetail'];
+        };
+      };
+    };
+  };
+  journals_entries_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  journals_entries_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  journals_entries_retrieve_2: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  journals_entries_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  journals_entries_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  journals_entries_mine_retrieve: {
     parameters: {
       query?: never;
       header?: never;
@@ -11490,6 +18393,97 @@ export interface operations {
       };
     };
   };
+  magic_pending_alterations_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPendingAlterationList'];
+        };
+      };
+    };
+  };
+  magic_pending_alterations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingAlteration'];
+        };
+      };
+    };
+  };
+  magic_pending_alterations_library_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingAlteration'];
+        };
+      };
+    };
+  };
+  magic_pending_alterations_resolve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PendingAlterationRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingAlteration'];
+        };
+      };
+    };
+  };
   magic_restrictions_list: {
     parameters: {
       query?: {
@@ -11533,6 +18527,24 @@ export interface operations {
       };
     };
   };
+  magic_rituals_perform_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   magic_styles_list: {
     parameters: {
       query?: never;
@@ -11570,6 +18582,53 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['TechniqueStyle'];
+        };
+      };
+    };
+  };
+  magic_teaching_offers_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        target_kind?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedThreadWeavingTeachingOfferList'];
+        };
+      };
+    };
+  };
+  magic_teaching_offers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this thread weaving teaching offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ThreadWeavingTeachingOffer'];
         };
       };
     };
@@ -11721,316 +18780,32 @@ export interface operations {
       };
     };
   };
-  magic_thread_journals_list: {
+  magic_thread_pull_preview_create: {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ThreadJournal'][];
-        };
-      };
-    };
-  };
-  magic_thread_journals_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['ThreadJournalRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ThreadJournal'];
-        };
-      };
-    };
-  };
-  magic_thread_journals_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ThreadJournal'];
-        };
-      };
-    };
-  };
-  magic_thread_journals_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['ThreadJournalRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ThreadJournal'];
-        };
-      };
-    };
-  };
-  magic_thread_journals_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
       cookie?: never;
     };
     requestBody?: never;
     responses: {
       /** @description No response body */
-      204: {
+      200: {
         headers: {
           [name: string]: unknown;
         };
         content?: never;
-      };
-    };
-  };
-  magic_thread_journals_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedThreadJournalRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ThreadJournal'];
-        };
-      };
-    };
-  };
-  magic_thread_resonances_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ThreadResonance'][];
-        };
-      };
-    };
-  };
-  magic_thread_resonances_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['ThreadResonanceRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ThreadResonance'];
-        };
-      };
-    };
-  };
-  magic_thread_resonances_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ThreadResonance'];
-        };
-      };
-    };
-  };
-  magic_thread_resonances_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['ThreadResonanceRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ThreadResonance'];
-        };
-      };
-    };
-  };
-  magic_thread_resonances_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  magic_thread_resonances_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedThreadResonanceRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ThreadResonance'];
-        };
-      };
-    };
-  };
-  magic_thread_types_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ThreadType'][];
-        };
-      };
-    };
-  };
-  magic_thread_types_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this Thread Type. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ThreadType'];
-        };
       };
     };
   };
   magic_threads_list: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -12042,7 +18817,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ThreadList'][];
+          'application/json': components['schemas']['PaginatedThreadList'];
         };
       };
     };
@@ -12202,10 +18977,120 @@ export interface operations {
       };
     };
   };
+  mechanics_challenge_instances_list: {
+    parameters: {
+      query?: {
+        is_active?: boolean;
+        is_revealed?: boolean;
+        location?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        situation_instance?: number;
+        template?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedChallengeInstanceList'];
+        };
+      };
+    };
+  };
+  mechanics_challenge_instances_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this challenge instance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChallengeInstance'];
+        };
+      };
+    };
+  };
+  mechanics_challenge_templates_list: {
+    parameters: {
+      query?: {
+        category?: string;
+        /**
+         * @description * `inhibitor` - Inhibitor (blocks actions/progress)
+         *     * `threat` - Threat (actively causes harm)
+         */
+        challenge_type?: 'inhibitor' | 'threat';
+        /**
+         * @description * `obvious` - Obvious (visible if capability met)
+         *     * `discoverable` - Discoverable (must be learned)
+         */
+        discovery_type?: 'discoverable' | 'obvious';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        severity?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedChallengeTemplateListList'];
+        };
+      };
+    };
+  };
+  mechanics_challenge_templates_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this challenge template. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ChallengeTemplateDetail'];
+        };
+      };
+    };
+  };
   mechanics_character_modifiers_list: {
     parameters: {
       query?: {
         character?: number;
+        target?: number;
       };
       header?: never;
       path?: never;
@@ -12245,7 +19130,33 @@ export interface operations {
       };
     };
   };
-  mechanics_types_list: {
+  mechanics_characters_available_actions_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path: {
+        character_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedChallengeGroupList'];
+        };
+      };
+    };
+  };
+  mechanics_modifier_targets_list: {
     parameters: {
       query?: {
         category?: string;
@@ -12262,17 +19173,17 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ModifierTypeList'][];
+          'application/json': components['schemas']['ModifierTargetList'][];
         };
       };
     };
   };
-  mechanics_types_retrieve: {
+  mechanics_modifier_targets_retrieve: {
     parameters: {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this modifier type. */
+        /** @description A unique integer value identifying this modifier target. */
         id: number;
       };
       cookie?: never;
@@ -12284,22 +19195,21 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ModifierType'];
+          'application/json': components['schemas']['ModifierTarget'];
         };
       };
     };
   };
-  messages_list: {
+  mechanics_situation_instances_list: {
     parameters: {
       query?: {
-        context?: string;
-        /** @description The pagination cursor value. */
-        cursor?: string;
-        mode?: string;
+        created_by?: number;
+        is_active?: boolean;
+        location?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
-        persona?: number;
-        scene?: number;
       };
       header?: never;
       path?: never;
@@ -12312,40 +19222,64 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['PaginatedSceneMessageList'];
+          'application/json': components['schemas']['PaginatedSituationInstanceList'];
         };
       };
     };
   };
-  messages_create: {
+  mechanics_situation_instances_retrieve: {
     parameters: {
       query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this situation instance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SituationInstance'];
+        };
+      };
+    };
+  };
+  mechanics_situation_templates_list: {
+    parameters: {
+      query?: {
+        category?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
     };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['SceneMessageRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
-      201: {
+      200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['SceneMessage'];
+          'application/json': components['schemas']['PaginatedSituationTemplateListList'];
         };
       };
     };
   };
-  messages_retrieve: {
+  mechanics_situation_templates_retrieve: {
     parameters: {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this scene message. */
+        /** @description A unique integer value identifying this situation template. */
         id: number;
       };
       cookie?: never;
@@ -12357,80 +19291,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['SceneMessage'];
-        };
-      };
-    };
-  };
-  messages_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this scene message. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['SceneMessageRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['SceneMessage'];
-        };
-      };
-    };
-  };
-  messages_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this scene message. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  messages_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this scene message. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedSceneMessageRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['SceneMessage'];
+          'application/json': components['schemas']['SituationTemplateDetail'];
         };
       };
     };
@@ -12438,14 +19299,16 @@ export interface operations {
   personas_list: {
     parameters: {
       query?: {
-        account?: number;
         character?: number;
+        character_sheet?: number;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
-        participation?: number;
+        persona_type?: string;
         scene?: number;
+        /** @description A search term. */
+        search?: string;
       };
       header?: never;
       path?: never;
@@ -12577,6 +19440,515 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Persona'];
+        };
+      };
+    };
+  };
+  places_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        room?: number;
+        status?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPlaceList'];
+        };
+      };
+    };
+  };
+  places_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PlaceRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Place'];
+        };
+      };
+    };
+  };
+  places_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this place. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Place'];
+        };
+      };
+    };
+  };
+  places_join_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this place. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PlaceRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Place'];
+        };
+      };
+    };
+  };
+  places_leave_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this place. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PlaceRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Place'];
+        };
+      };
+    };
+  };
+  player_submissions_bug_reports_list: {
+    parameters: {
+      query?: {
+        created_after?: string;
+        created_before?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `open` - Open
+         *     * `reviewed` - Reviewed
+         *     * `dismissed` - Dismissed
+         */
+        status?: 'dismissed' | 'open' | 'reviewed';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBugReportDetailList'];
+        };
+      };
+    };
+  };
+  player_submissions_bug_reports_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BugReportCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BugReportCreate'];
+        };
+      };
+    };
+  };
+  player_submissions_bug_reports_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this bug report. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BugReportDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_bug_reports_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this bug report. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BugReportDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BugReportDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_bug_reports_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this bug report. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedBugReportDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['BugReportDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_feedback_list: {
+    parameters: {
+      query?: {
+        created_after?: string;
+        created_before?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /**
+         * @description * `open` - Open
+         *     * `reviewed` - Reviewed
+         *     * `dismissed` - Dismissed
+         */
+        status?: 'dismissed' | 'open' | 'reviewed';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPlayerFeedbackDetailList'];
+        };
+      };
+    };
+  };
+  player_submissions_feedback_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PlayerFeedbackCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlayerFeedbackCreate'];
+        };
+      };
+    };
+  };
+  player_submissions_feedback_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this player feedback. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlayerFeedbackDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_feedback_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this player feedback. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PlayerFeedbackDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlayerFeedbackDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_feedback_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this player feedback. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedPlayerFeedbackDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlayerFeedbackDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_player_reports_list: {
+    parameters: {
+      query?: {
+        created_after?: string;
+        created_before?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        reported_persona?: number;
+        /**
+         * @description * `open` - Open
+         *     * `reviewed` - Reviewed
+         *     * `dismissed` - Dismissed
+         */
+        status?: 'dismissed' | 'open' | 'reviewed';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPlayerReportDetailList'];
+        };
+      };
+    };
+  };
+  player_submissions_player_reports_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PlayerReportCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlayerReportCreate'];
+        };
+      };
+    };
+  };
+  player_submissions_player_reports_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this player report. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlayerReportDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_player_reports_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this player report. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PlayerReportDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlayerReportDetail'];
+        };
+      };
+    };
+  };
+  player_submissions_player_reports_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this player report. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedPlayerReportDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PlayerReportDetail'];
         };
       };
     };
@@ -12767,7 +20139,113 @@ export interface operations {
       };
     };
   };
-  reactions_create: {
+  progression_claim_kudos_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  progression_random_scenes_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RandomSceneTarget'][];
+        };
+      };
+    };
+  };
+  progression_random_scenes_claim_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RandomSceneTargetRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RandomSceneTarget'];
+        };
+      };
+    };
+  };
+  progression_random_scenes_reroll_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RandomSceneTargetRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RandomSceneTarget'];
+        };
+      };
+    };
+  };
+  progression_votes_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WeeklyVote'][];
+        };
+      };
+    };
+  };
+  progression_votes_create: {
     parameters: {
       query?: never;
       header?: never;
@@ -12776,7 +20254,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['SceneMessageReactionRequest'];
+        'application/json': components['schemas']['WeeklyVoteRequest'];
       };
     };
     responses: {
@@ -12785,12 +20263,12 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['SceneMessageReaction'];
+          'application/json': components['schemas']['WeeklyVote'];
         };
       };
     };
   };
-  reactions_destroy: {
+  progression_votes_destroy: {
     parameters: {
       query?: never;
       header?: never;
@@ -12807,6 +20285,25 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  progression_votes_budget_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['WeeklyVote'];
+        };
       };
     };
   };
@@ -12869,9 +20366,54 @@ export interface operations {
       };
     };
   };
+  relationships_hybrid_types_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HybridRelationshipType'][];
+        };
+      };
+    };
+  };
+  relationships_hybrid_types_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this hybrid relationship type. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['HybridRelationshipType'];
+        };
+      };
+    };
+  };
   relationships_relationships_list: {
     parameters: {
       query?: {
+        is_active?: boolean;
+        is_pending?: boolean;
+        /** @description A page number within the paginated result set. */
+        page?: number;
         source?: number;
         target?: number;
       };
@@ -12886,7 +20428,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['CharacterRelationship'][];
+          'application/json': components['schemas']['PaginatedCharacterRelationshipListList'];
         };
       };
     };
@@ -12909,6 +20451,47 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterRelationship'];
+        };
+      };
+    };
+  };
+  relationships_tracks_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RelationshipTrack'][];
+        };
+      };
+    };
+  };
+  relationships_tracks_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this relationship track. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RelationshipTrack'];
         };
       };
     };
@@ -13030,7 +20613,9 @@ export interface operations {
   };
   roster_families_list: {
     parameters: {
-      query?: never;
+      query?: {
+        has_open_positions?: boolean;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -13631,6 +21216,7 @@ export interface operations {
       query?: {
         /** @description A page number within the paginated result set. */
         page?: number;
+        search?: string;
       };
       header?: never;
       path?: never;
@@ -13672,7 +21258,6 @@ export interface operations {
       query?: {
         gm?: string;
         is_active?: boolean;
-        is_public?: boolean;
         location?: number;
         /** @description A page number within the paginated result set. */
         page?: number;
@@ -13680,6 +21265,7 @@ export interface operations {
         page_size?: number;
         participant?: number;
         player?: string;
+        privacy_mode?: string;
         status?: string;
       };
       header?: never;
@@ -14056,6 +21642,44 @@ export interface operations {
       query?: never;
       header?: never;
       path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  staff_inbox_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  staff_inbox_accounts_history_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        account_id: number;
+      };
       cookie?: never;
     };
     requestBody?: never;
@@ -14652,6 +22276,74 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['StoryParticipation'];
+        };
+      };
+    };
+  };
+  summary_revisions_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSceneSummaryRevisionList'];
+        };
+      };
+    };
+  };
+  summary_revisions_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SceneSummaryRevisionRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneSummaryRevision'];
+        };
+      };
+    };
+  };
+  summary_revisions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneSummaryRevision'];
         };
       };
     };

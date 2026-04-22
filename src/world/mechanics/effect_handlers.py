@@ -8,6 +8,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from world.checks.constants import EffectTarget, EffectType
 from world.codex.models import CharacterCodexKnowledge
 from world.conditions.services import apply_condition, remove_condition
+from world.magic.constants import AlterationTier
 from world.mechanics.models import ObjectProperty
 from world.mechanics.types import AppliedEffect
 from world.roster.models import RosterEntry
@@ -16,8 +17,10 @@ from world.vitals.services import process_damage_consequences
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.checks.models import Consequence, ConsequenceEffect
     from world.checks.types import ResolutionContext
+    from world.magic.models import Affinity, Resonance
 
 logger = logging.getLogger(__name__)
 
@@ -259,23 +262,87 @@ def _grant_codex(
     )
 
 
+def _severity_to_tier(severity: int) -> int:
+    """Map a condition_severity value to an AlterationTier integer (clamped 1–5)."""
+    valid_tiers = {t.value for t in AlterationTier}
+    if severity in valid_tiers:
+        return severity
+    if severity < min(valid_tiers):
+        return min(valid_tiers)
+    return max(valid_tiers)
+
+
+def _derive_alteration_origin(
+    character: "ObjectDB",
+) -> "tuple[Affinity | None, Resonance | None]":
+    """Derive origin affinity and resonance from the character's resonances.
+
+    Picks the most recently earned CharacterResonance for the character via the
+    ``character.resonances`` handler (Spec A §3.7). Returns (None, None) if the
+    character has no sheet or no resonance rows — callers must handle this case
+    by skipping pending alteration creation.
+    """
+    try:
+        sheet = character.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return None, None
+    if sheet is None:
+        return None, None
+    char_res = character.resonances.most_recently_earned()
+    if char_res is None:
+        return None, None
+    return char_res.resonance.affinity, char_res.resonance
+
+
 def _apply_magical_scars(
     effect: "ConsequenceEffect",
     context: "ResolutionContext",
 ) -> AppliedEffect:
-    """Apply a magical scars condition (stub for future alteration system).
+    """Create a PendingAlteration the player must later resolve.
 
-    Currently identical to _apply_condition. When the full magical alteration
-    system is built, this handler will be replaced to call a resolution function
-    that considers the character's resonances, affinity, and Soulfray state.
+    Does NOT apply any condition directly. The character's most-recently-earned
+    resonance provides the origin affinity and resonance — the scar marks come
+    from their magical essence. If the character has no sheet or no resonance
+    rows, the handler skips gracefully and returns applied=False.
     """
+    from world.magic.services import create_pending_alteration  # noqa: PLC0415
+
     target = _resolve_target(effect, context)
+
+    try:
+        sheet: CharacterSheet = target.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return AppliedEffect(
+            effect_type=EffectType.MAGICAL_SCARS,
+            description="Target has no character sheet",
+            applied=False,
+            skip_reason="Target has no CharacterSheet",
+        )
+
+    affinity, resonance = _derive_alteration_origin(target)
+    if affinity is None or resonance is None:
+        return AppliedEffect(
+            effect_type=EffectType.MAGICAL_SCARS,
+            description="Target has no resonance — cannot determine alteration origin",
+            applied=False,
+            skip_reason="No CharacterResonance found",
+        )
+
     severity = effect.condition_severity or 1
-    apply_condition(target, effect.condition_template, severity=severity)
-    condition_name = effect.condition_template.name
+    tier = _severity_to_tier(severity)
+
+    result = create_pending_alteration(
+        character=sheet,
+        tier=tier,
+        origin_affinity=affinity,
+        origin_resonance=resonance,
+        scene=None,  # Deferred: thread scene through ResolutionContext when available
+    )
+
+    verb = "escalated" if not result.created else "acquired"
     return AppliedEffect(
         effect_type=EffectType.MAGICAL_SCARS,
-        description=f"Magical scars: {condition_name} (severity {severity}) on {target.db_key}",
+        description=f"Magical alteration {verb}: tier {tier} pending for {target.db_key}",
         applied=True,
     )
 

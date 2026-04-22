@@ -23,6 +23,9 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
 - **JournalError** — custom exception with explicit user-safe message constants
 - **Admin interface** — JournalEntryAdmin with tag inline
 - **Full test coverage** — 54 tests covering services, views, and edge cases
+- **Thread linking** — `JournalEntry.related_threads` M2M to the new `magic.Thread` model
+  (Spec A). Replaces the deleted `ThreadJournal` join table; entries can now tag any
+  anchored thread (trait, technique, item, room, relationship track, relationship capstone)
 
 ## Deferred (depends on systems that don't exist yet)
 - **Relationship gating for retorts** — retorts should validate antagonistic relationship (needs relationships system)
@@ -32,7 +35,7 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
 - **Mute/follow preferences** — per-character subscription controls for journal feeds
 - **Account-level block integration** — respect account blocks in journal visibility
 - **Great Archive IC location gating** — IC access point for the journal archive (needs world building)
-- **GoalJournal/ThreadJournal removal** — remove old goal-specific journals once migrated
+- **GoalJournal removal** — remove old goal-specific journals once migrated (ThreadJournal already removed; see Thread linking above)
 - **Frontend React components** — journal reading, writing, and browsing UI
 
 ## Notes

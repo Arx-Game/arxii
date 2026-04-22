@@ -308,6 +308,13 @@ class FlowStepDefinitionTests(TestCase):
         assert next_step == fx.get_next_child(step)
 
     def test_execute_emit_flow_event(self):
+        """EMIT_FLOW_EVENT stores a FlowEvent shim and advances to the next step.
+
+        With no owner on the FlowStack (unit-test stack is ownerless),
+        ``_resolve_emit_location`` returns ``None`` and the unified
+        ``emit_event`` dispatch is skipped — but the FlowEvent is still
+        stored under ``variable_name`` for context traversal.
+        """
         step = FlowStepDefinitionFactory(
             flow=self.flow_def,
             action=FlowActionChoices.EMIT_FLOW_EVENT,
@@ -315,7 +322,7 @@ class FlowStepDefinitionTests(TestCase):
             parameters={"data": {"key": "value"}},
         )
 
-        fx = self.get_flow_execution(flow_stack=FlowStack(trigger_registry=MagicMock()))
+        fx = self.get_flow_execution(flow_stack=FlowStack())
 
         next_step = step.execute(fx)
 
@@ -323,12 +330,6 @@ class FlowStepDefinitionTests(TestCase):
         assert event.event_type == "test_event"
         assert event.data == {"key": "value"}
         assert event.source is fx
-
-        fx.flow_stack.trigger_registry.process_event.assert_called_once_with(
-            event,
-            fx.flow_stack,
-            fx.context,
-        )
         assert next_step == fx.get_next_child(step)
 
     def test_execute_unknown_action(self):

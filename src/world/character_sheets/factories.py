@@ -5,6 +5,8 @@ Provides efficient test data creation using factory_boy to improve
 test performance and maintainability.
 """
 
+from __future__ import annotations
+
 import factory
 import factory.django as factory_django
 
@@ -69,7 +71,7 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
 
     @factory.post_generation
     def primary_persona(
-        self: "CharacterSheet",
+        self: CharacterSheet,
         create: bool,
         extracted: object,
         **kwargs: object,
@@ -102,6 +104,28 @@ class CharacterSheetFactory(factory_django.DjangoModelFactory):
             name=self.character.db_key,
             persona_type=PersonaType.PRIMARY,
         )
+
+    @factory.post_generation
+    def _path_stage(
+        self: CharacterSheet,
+        create: bool,
+        extracted: object,
+        **kwargs: object,
+    ) -> None:
+        """Add a CharacterPathHistory row for the given stage integer.
+
+        Pass ``_path_stage=<int>`` to create a Path of that stage and a
+        corresponding history entry on the character. Used by cap-helper tests
+        (Phase 10 of the Resonance Pivot, Spec A §2.4).
+        """
+        if not create or extracted is None:
+            return
+        stage = int(extracted)  # type: ignore[arg-type]
+        from world.classes.factories import PathFactory
+        from world.progression.models.paths import CharacterPathHistory
+
+        path = PathFactory(stage=stage)
+        CharacterPathHistory.objects.create(character=self.character, path=path)
 
 
 class ObjectDisplayDataFactory(factory_django.DjangoModelFactory):

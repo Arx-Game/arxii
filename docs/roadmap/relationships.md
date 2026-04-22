@@ -21,7 +21,14 @@ Relationships are the heart of the game. A track-based system lets characters de
 ## What Exists
 - **Models:** RelationshipTrack, RelationshipTier, HybridRelationshipType + HybridRequirement, CharacterRelationship (with track progress, deceit fields, consent mechanics), RelationshipTrackProgress (capacity + developed_points), RelationshipUpdate (temporary + capacity), RelationshipDevelopment (permanent up to capacity), RelationshipCapstone (permanent + capacity), RelationshipChange, RelationshipCondition (modifier gating)
 - **Services:** create_first_impression (with reciprocal activation), redistribute_points (atomic point movement between tracks), create_development (permanent points up to capacity), create_capstone (permanent + capacity)
-- **Magic threads:** Thread, ThreadType, ThreadJournal, ThreadResonance models in the magic app
+- **Magic threads (new Thread model, Spec A):** Single `Thread` table with a discriminator
+  and typed FKs per anchor kind. For relationships the two kinds are `RELATIONSHIP_TRACK`
+  (anchored to a specific CharacterRelationship + track) and `RELATIONSHIP_CAPSTONE`
+  (soul-tether thread; requires `CharacterRelationship.is_soul_tether=True`). Threads are
+  persistent currency consumers that players spend Resonance on via pulls, not 0-100 axis
+  trackers. Supporting tables: `ThreadPullCost`, `ThreadXPLockedLevel`, `ThreadLevelUnlock`,
+  `ThreadPullEffect`, `ThreadWeavingUnlock`, `CharacterThreadWeavingUnlock`. See
+  `docs/systems/magic.md` for the full model lineup.
 - **APIs:** Full viewsets and serializers for tracks, tiers, hybrids, conditions, and relationships
 - **Admin:** Admin classes for all models with inlines
 - **Tests:** Model tests, service tests, and view tests
@@ -29,10 +36,22 @@ Relationships are the heart of the game. A track-based system lets characters de
 ## What's Needed for MVP
 
 ### Magic Integration
-- **Thread-relationship bridge** — Magic Threads (axis-based: romantic/trust/rivalry/protective/enmity 0-100) and CharacterRelationships (track-based with points/tiers/capacity) are completely separate systems with no connection. Need a bridge so thread power scales off relationship absolute value as designed
-- **Magical tethers** — XP-gated power amplifiers built around capstone events. The real source of significant mechanical power from relationships, connecting to the thread/resonance system. Future PR but core to the relationship power fantasy
-- **Thread resonance bonuses** — Thread resonances should add magical bonuses on top of relationship mechanical bonuses. Currently no formula or integration
-- **Aura farming tie-in** — Dramatic relationship moments in scenes should feed into resonance/aura (depends on scenes + magic integration)
+- **Thread anchor wiring** — The new `Thread` model (Spec A) supports `RELATIONSHIP_TRACK`
+  and `RELATIONSHIP_CAPSTONE` anchor kinds. Per-track threads anchor to a specific
+  CharacterRelationship + track; soul-tether (capstone) threads require
+  `CharacterRelationship.is_soul_tether=True`. Authoring paths, UI for creating/levelling
+  these threads, and service wiring for scaling thread power off relationship absolute
+  value are still pending.
+- **Soul tethers (capstone threads)** — XP-gated power amplifiers built around capstone
+  events, authored as `RELATIONSHIP_CAPSTONE` threads. The real source of significant
+  mechanical power from relationships. Future PR but core to the relationship power
+  fantasy. See `docs/superpowers/specs/2026-04-18-resonance-pivot-spec-a-threads-and-currency-design.md`.
+- **Pull integration** — Players should be able to spend Resonance on pulls against
+  relationship threads during actions where the other party is engaged (§5 of Spec A).
+  The underlying pull machinery (`ThreadPullCost`, `ThreadPullEffect`, `CombatPull`)
+  exists; the relationship-action surface that consumes it is not yet wired.
+- **Aura farming tie-in** — Dramatic relationship moments in scenes should feed into
+  resonance/aura (depends on scenes + magic integration)
 
 ### Mechanical Bonuses & Formulas
 - **Cube root bonus in checks** — `mechanical_bonus` property exists on CharacterRelationship (cube root of developed absolute value) but nothing in the check/attempt pipeline consumes it

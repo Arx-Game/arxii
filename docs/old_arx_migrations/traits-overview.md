@@ -29,7 +29,7 @@ Many character aspects may or may not be represented as traits:
 ### Examples of Possible Trait-Based Systems
 - **Corruption Scores**: Abyssal taint, moral degradation
 - **Atavism**: Past-life bleed-through with hidden revelation mechanics
-- **Magical Scars**: Consequences of magical failure or misuse
+- **Mage Scars**: Consequences of magical failure or misuse
 - **Bloodline Traits**: Inherited capabilities tied to ancestry
 
 ### Examples of Likely Non-Trait Systems

@@ -9,9 +9,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import EffectTarget, EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.types import ResolutionContext
-from world.conditions.constants import DurationType
-from world.conditions.factories import ConditionTemplateFactory, DamageTypeFactory
-from world.conditions.models import ConditionInstance
+from world.conditions.factories import DamageTypeFactory
 from world.mechanics.effect_handlers import _resolve_target, apply_effect
 from world.vitals.models import CharacterVitals
 
@@ -39,32 +37,30 @@ class ResolveTargetTests(TestCase):
 
 
 class MagicalScarsHandlerTests(TestCase):
-    """Tests for the MAGICAL_SCARS effect handler."""
+    """Tests for the MAGICAL_SCARS effect handler.
+
+    The handler now creates a PendingAlteration rather than directly applying
+    a condition. Full coverage lives in world.magic.tests.test_alteration_handler.
+    This suite covers the skip paths exercised via the mechanics test DB.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
         super().setUpTestData()
+        # Character with no CharacterSheet — exercises the skip path.
         cls.character = CharacterFactory()
-        cls.scar_template = ConditionTemplateFactory(
-            name="Magical Scars",
-            default_duration_type=DurationType.PERMANENT,
-        )
         cls.consequence = ConsequenceFactory()
         cls.effect = ConsequenceEffectFactory(
             consequence=cls.consequence,
             effect_type=EffectType.MAGICAL_SCARS,
-            condition_template=cls.scar_template,
         )
 
-    def test_magical_scars_applies_condition(self) -> None:
-        """MAGICAL_SCARS handler applies the pointed-to condition template."""
+    def test_magical_scars_skips_without_sheet(self) -> None:
+        """MAGICAL_SCARS handler returns applied=False when target has no CharacterSheet."""
         context = ResolutionContext(character=self.character)
         result = apply_effect(self.effect, context)
-        assert result.applied
-        assert ConditionInstance.objects.filter(
-            target=self.character,
-            condition=self.scar_template,
-        ).exists()
+        assert not result.applied
+        assert result.skip_reason is not None
 
 
 class DealDamageHandlerTests(TestCase):

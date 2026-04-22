@@ -96,6 +96,24 @@ broken regardless of technical correctness.
   when their respective systems are built. See `src/world/mechanics/TECH_DEBT.md` for the tracking
   table.
 
+### Critical Infrastructure Gap: Reactive Layer Activation
+
+The flows/triggers system in `src/flows/` is a fully-implemented reactive engine —
+`Event`, `TriggerDefinition`, `Trigger`, `TriggerRegistry`, `FlowDefinition`,
+`FlowExecution` all exist with passing tests. But it has **no content**: no events
+are emitted at most reactive moments, no FlowDefinitions or TriggerDefinitions live
+in the database, and no system declares triggers to attach. This means the entire
+architectural answer to "something happens when X" — curses, environmental hazards,
+item reactions, divine wrath, allergies, contact effects, observer reactions —
+**currently cannot be authored at all**, despite the machinery existing.
+
+This gap was not previously called out in any roadmap doc and blocks reactive
+features across every gameplay domain. It is scheduled to be addressed as
+[Magic Scope #5.5 (Reactive Foundations)](magic.md), sequenced immediately after
+Magic Scope #5. Mage scars are the wedge consumer; the resulting plumbing is
+cross-cutting infrastructure that combat, items, environments, and missions all
+inherit. **This work needs to follow Scope 5 sooner rather than later.**
+
 ### Status Key
 
 - **skeleton** — Core structure and models exist, but major features are still missing

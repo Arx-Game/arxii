@@ -68,6 +68,7 @@ All `arx` commands below require the venv to be activated, or must be prefixed w
 - `pnpm lint:fix` - Run ESLint with auto-fix
 - `pnpm format` - Format code with Prettier
 - `pnpm typecheck` - Run TypeScript type checking
+- `just gen-api-types` - Regenerate OpenAPI schema (`src/schema.json`) and frontend TypeScript API types (`frontend/src/generated/api.d.ts`)
 
 ### Integration Testing
 - `arx integration-test` - Automated integration test environment (highly automated!)
@@ -220,6 +221,25 @@ echo "yes" | uv run arx test          # no --keepdb — fresh DB, matches CI
 This is slower (~3 minutes) but catches an entire class of bugs that `--keepdb` hides. Cost of missing a CI failure is higher.
 
 **Never rely on Evennia defaults in service functions.** When calling `create_object`, always either pass explicit `home=`, `location=`, etc., or pass `nohome=True` / `nolocation=True`. The implicit fallback to `settings.DEFAULT_HOME` (Limbo #2) only works when Evennia's initial setup has run — CI test DBs do not run initial setup, so FK violations fire before any graceful fallback. Same caution for `DEFAULT_SCRIPT_HOME`, Account #1 references, and anything else that assumes "Evennia will figure out the default."
+
+**Use `just` for task runners, not raw `bash`/`python`.** The repo has a `justfile` at the root with recipes for common dev tasks (test, lint, manage, etc.). `just` is pinned in `mise.toml` and covered by a single `Bash(just:*)` allowlist entry, so any recipe invocation auto-approves.
+
+```bash
+just                        # list recipes
+just test flows --keepdb    # arx test pass-through
+just test-scratch name args # capture output to .claude/scratch/<name>
+just regression             # full no-keepdb regression run
+just lint                   # ruff check
+just manage migrate flows   # arx manage pass-through
+```
+
+Prefer `just <recipe>` over:
+- Raw `bash <script>`, `python <script>`, `sh <script>` — these invoke "can do anything" interpreters and trigger per-command approval every time. Never give `Bash(bash:*)` blanket approval.
+- Direct `bash .claude/scripts/<name>.sh` — still works (covered by `Bash(bash .claude/scripts/*)`) but use the just recipe if one exists so all invocation forms converge on one canonical form.
+
+**When no recipe exists:** add one to `justfile` rather than running raw scripts or accumulating per-path allowlist entries. Wrappers in `.claude/scripts/` that need input validation (path traversal, etc.) still live there and are called from justfile recipes — `set -o pipefail` / `PIPESTATUS` preserves exit codes. Document new recipes in this section.
+
+**Scratch workspace.** Test output capture: `just test-scratch <filename> <arx test args...>` (wraps `.claude/scripts/arx-test-scratch.sh`). Files land in `.claude/scratch/<filename>`, which is inside the working directory so `Read` works without prompts, and the whole `.claude/` tree is gitignored. Do NOT use `/tmp/...`, `$TMPDIR`, or `%TEMP%` paths. Propagate the `just test-scratch` convention into subagent prompts when you dispatch them.
 
 ### Proactive Quality Checks
 

@@ -5,12 +5,12 @@ import factory.django as factory_django
 
 from evennia_extensions.factories import ObjectDBFactory
 from flows import models
+from flows.constants import EventName
 from flows.consts import FlowActionChoices
 from flows.flow_event import FlowEvent
 from flows.flow_execution import FlowExecution
 from flows.flow_stack import FlowStack
 from flows.scene_data_manager import SceneDataManager
-from flows.trigger_registry import TriggerRegistry
 
 
 class FlowDefinitionFactory(factory_django.DjangoModelFactory):
@@ -48,22 +48,13 @@ class FlowStepDefinitionFactory(factory_django.DjangoModelFactory):
     parent_id = None
 
 
-class EventFactory(factory_django.DjangoModelFactory):
-    class Meta:
-        model = models.Event
-        django_get_or_create = ("name",)
-
-    name = factory.Sequence(lambda n: f"event_{n}")
-    label = factory.Sequence(lambda n: f"Event {n}")
-
-
 class TriggerDefinitionFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = models.TriggerDefinition
 
     name = factory.Sequence(lambda n: f"TriggerDef{n}")
     flow_definition = factory.SubFactory(FlowDefinitionFactory)
-    event = factory.SubFactory(EventFactory)
+    event_name = EventName.EXAMINED
     base_filter_condition = factory.LazyFunction(dict)
 
 
@@ -74,6 +65,10 @@ class TriggerFactory(factory_django.DjangoModelFactory):
     trigger_definition = factory.SubFactory(TriggerDefinitionFactory)
     obj = factory.SubFactory(ObjectDBFactory)
     additional_filter_condition = factory.LazyFunction(dict)
+    source_condition = factory.SubFactory(
+        "world.conditions.factories.ConditionInstanceFactory",
+    )
+    source_stage = None
 
 
 # SceneDataManager is not a model, but we can provide a helper for tests
@@ -87,8 +82,6 @@ class FlowStackFactory(factory.Factory):
 
     class Meta:
         model = FlowStack
-
-    trigger_registry = factory.LazyFunction(TriggerRegistry)
 
 
 class FlowExecutionFactory(factory.Factory):

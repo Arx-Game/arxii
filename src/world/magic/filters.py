@@ -4,7 +4,7 @@ from django.db.models import QuerySet
 import django_filters
 from rest_framework.exceptions import ValidationError
 
-from world.magic.models import Cantrip
+from world.magic.models import Cantrip, Thread, ThreadWeavingTeachingOffer
 
 
 class CantripFilter(django_filters.FilterSet):
@@ -27,3 +27,24 @@ class CantripFilter(django_filters.FilterSet):
         except (Path.DoesNotExist, ValueError, TypeError):
             raise ValidationError({"path_id": "Invalid or inactive path."}) from None
         return queryset.filter(style__allowed_paths__id=value)
+
+
+class ThreadFilter(django_filters.FilterSet):
+    """Filter for Thread list views (Spec A §4.5)."""
+
+    resonance = django_filters.NumberFilter(field_name="resonance_id")
+    target_kind = django_filters.CharFilter(field_name="target_kind")
+
+    class Meta:
+        model = Thread
+        fields = ["resonance", "target_kind"]
+
+
+class ThreadWeavingTeachingOfferFilter(django_filters.FilterSet):
+    """Filter for ThreadWeavingTeachingOffer list views (Spec A §4.5)."""
+
+    target_kind = django_filters.CharFilter(field_name="unlock__target_kind")
+
+    class Meta:
+        model = ThreadWeavingTeachingOffer
+        fields = ["target_kind"]

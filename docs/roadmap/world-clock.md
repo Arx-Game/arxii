@@ -70,7 +70,7 @@ The central time engine that drives the living world. An anchor-based game clock
 - Celery migration (if scale demands it)
 - Game-time form expiry (`DurationType.GAME_TIME`)
 - Research project rolls (codex system)
-- Anima fade out of combat (magic system)
+- Anima fade out of combat (magic system) — planned as part of `magic.md` Scope #6 (Soulfray Recovery & Decay)
 
 ## Design Document
 
