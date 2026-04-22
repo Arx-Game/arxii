@@ -20,6 +20,7 @@ from world.character_sheets.factories import (
 )
 from world.character_sheets.models import CharacterSheet
 from world.character_sheets.types import MaritalStatus
+from world.classes.factories import CharacterClassLevelFactory
 
 
 class CharacterSheetModelTests(TestCase):
@@ -303,3 +304,35 @@ class CharacterSheetDisplayDelegatesTest(TestCase):
         primary.save()
         # No roster_entry → name only
         assert sheet.display_to_staff() == "Charlie"
+
+
+class CurrentLevelTests(TestCase):
+    """Tests for CharacterSheet.current_level and cached_character_class_levels."""
+
+    def test_current_level_is_zero_without_class_assignments(self):
+        sheet = CharacterSheetFactory()
+        self.assertEqual(sheet.current_level, 0)
+
+    def test_current_level_returns_highest_across_classes(self):
+        sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(character=sheet.character, level=3)
+        CharacterClassLevelFactory(character=sheet.character, level=5)
+        CharacterClassLevelFactory(character=sheet.character, level=2)
+        self.assertEqual(sheet.current_level, 5)
+
+    def test_current_level_is_cached(self):
+        sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(character=sheet.character, level=5)
+
+        # First access populates cache.
+        first = sheet.current_level
+        self.assertEqual(first, 5)
+
+        # Now add a higher level; without invalidation, cached value persists.
+        CharacterClassLevelFactory(character=sheet.character, level=7)
+        self.assertEqual(sheet.current_level, 5, "Cached value should persist")
+
+        # Explicit invalidation refreshes.
+        del sheet.cached_character_class_levels
+        del sheet.current_level
+        self.assertEqual(sheet.current_level, 7)

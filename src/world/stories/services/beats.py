@@ -12,7 +12,6 @@ Public API:
 from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
-from world.classes.models import CharacterClassLevel
 from world.roster.models import RosterEntry
 from world.stories.constants import BeatOutcome, BeatPredicateType
 from world.stories.exceptions import BeatNotResolvableError
@@ -37,6 +36,13 @@ def evaluate_auto_beats(progress: StoryProgress) -> None:
         return
 
     sheet: CharacterSheet = progress.character_sheet
+
+    # Invalidate cached class-level data so this call always reads current state.
+    # evaluate_auto_beats is called after progression events; stale caches would
+    # return the pre-mutation level on subsequent calls within the same request.
+    sheet.__dict__.pop("cached_character_class_levels", None)
+    sheet.__dict__.pop("current_level", None)
+
     era = Era.objects.get_active()
     roster_entry = _current_roster_entry(sheet)
 
@@ -141,22 +147,13 @@ def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
 
 
 def _character_level(sheet: CharacterSheet) -> int:
-    """Return the character's current level via the classes system.
+    """Return the character's current level.
 
-    Level is defined as the highest level held across all of the character's
-    CharacterClassLevel records.  Returns 0 if the character has no class
-    assignments (e.g. freshly created test characters).
-
-    CharacterSheet shares its pk with ObjectDB (primary_key=True on the
-    OneToOne), so sheet.character is the ObjectDB used by CharacterClassLevel.
+    Delegates to ``CharacterSheet.current_level`` which is a cached_property
+    walking ``CharacterClassLevel`` records. First call populates the cache;
+    repeat calls within the same request/transaction are free.
     """
-    result = (
-        CharacterClassLevel.objects.filter(character=sheet.character)
-        .order_by("-level")
-        .values_list("level", flat=True)
-        .first()
-    )
-    return int(result) if result is not None else 0
+    return sheet.current_level
 
 
 def _current_roster_entry(sheet: CharacterSheet) -> RosterEntry | None:
