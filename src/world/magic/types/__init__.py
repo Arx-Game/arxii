@@ -26,7 +26,7 @@ from world.magic.types.pull import (
     ResolvedPullEffect,
     ResonancePullResult,
 )
-from world.magic.types.ritual import AnimaRitualCategory
+from world.magic.types.ritual import AnimaRitualCategory, RitualOutcome
 from world.magic.types.techniques import (
     AnimaCostResult,
     MishapResult,
@@ -52,6 +52,7 @@ __all__ = [
     "PullPreviewResult",
     "ResolvedPullEffect",
     "ResonancePullResult",
+    "RitualOutcome",
     "RuntimeTechniqueStats",
     "SoulfrayResult",
     "SoulfrayWarning",
