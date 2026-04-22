@@ -6,6 +6,23 @@ from world.stories.factories import EraFactory
 from world.stories.models import Era
 
 
+class EraManagerTests(TestCase):
+    """Tests for Era.objects.get_active()."""
+
+    def test_get_active_returns_none_when_no_active_era(self) -> None:
+        EraFactory(status=EraStatus.UPCOMING)
+        EraFactory(status=EraStatus.CONCLUDED)
+        self.assertIsNone(Era.objects.get_active())
+
+    def test_get_active_returns_active_era(self) -> None:
+        active = EraFactory(status=EraStatus.ACTIVE, name="active_era")
+        EraFactory(status=EraStatus.UPCOMING, name="upcoming_era")
+        self.assertEqual(Era.objects.get_active(), active)
+
+    def test_get_active_returns_none_when_no_eras_exist(self) -> None:
+        self.assertIsNone(Era.objects.get_active())
+
+
 class EraModelTests(TestCase):
     def test_era_default_status_is_upcoming(self):
         era = Era(

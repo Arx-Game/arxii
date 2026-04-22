@@ -248,3 +248,83 @@ class ResolveEpisodeTests(EvenniaTestCase):
         progress.refresh_from_db()
         self.assertEqual(progress.current_episode, target_success)
         self.assertEqual(resolution.chosen_transition, success_t)
+
+    # ------------------------------------------------------------------
+    # Mixed AUTO / GM_CHOICE eligibility
+    # ------------------------------------------------------------------
+
+    def test_mixed_auto_and_gm_choice_eligible_raises_ambiguous(self):
+        """Two eligible transitions — one AUTO, one GM_CHOICE — raise AmbiguousTransitionError
+        when no chosen_transition is passed, because multiple eligible always requires explicit
+        selection regardless of mode."""
+        source, target = self._make_story_structure()
+        other_target = EpisodeFactory(chapter=source.chapter)
+        progress = self._make_progress(source)
+
+        TransitionFactory(
+            source_episode=source,
+            target_episode=target,
+            mode=TransitionMode.AUTO,
+            order=0,
+        )
+        TransitionFactory(
+            source_episode=source,
+            target_episode=other_target,
+            mode=TransitionMode.GM_CHOICE,
+            order=1,
+        )
+
+        with self.assertRaises(AmbiguousTransitionError):
+            resolve_episode(progress=progress)
+
+    def test_mixed_eligible_set_respects_chosen_auto_transition(self):
+        """With a mixed AUTO/GM_CHOICE eligible set, passing the AUTO transition advances
+        correctly."""
+        source, target = self._make_story_structure()
+        other_target = EpisodeFactory(chapter=source.chapter)
+        progress = self._make_progress(source)
+
+        auto_t = TransitionFactory(
+            source_episode=source,
+            target_episode=target,
+            mode=TransitionMode.AUTO,
+            order=0,
+        )
+        TransitionFactory(
+            source_episode=source,
+            target_episode=other_target,
+            mode=TransitionMode.GM_CHOICE,
+            order=1,
+        )
+
+        resolution = resolve_episode(progress=progress, chosen_transition=auto_t)
+
+        progress.refresh_from_db()
+        self.assertEqual(progress.current_episode, target)
+        self.assertEqual(resolution.chosen_transition, auto_t)
+
+    def test_mixed_eligible_set_respects_chosen_gm_choice_transition(self):
+        """With a mixed AUTO/GM_CHOICE eligible set, passing the GM_CHOICE transition advances
+        correctly."""
+        source, target = self._make_story_structure()
+        other_target = EpisodeFactory(chapter=source.chapter)
+        progress = self._make_progress(source)
+
+        TransitionFactory(
+            source_episode=source,
+            target_episode=target,
+            mode=TransitionMode.AUTO,
+            order=0,
+        )
+        gm_t = TransitionFactory(
+            source_episode=source,
+            target_episode=other_target,
+            mode=TransitionMode.GM_CHOICE,
+            order=1,
+        )
+
+        resolution = resolve_episode(progress=progress, chosen_transition=gm_t)
+
+        progress.refresh_from_db()
+        self.assertEqual(progress.current_episode, other_target)
+        self.assertEqual(resolution.chosen_transition, gm_t)

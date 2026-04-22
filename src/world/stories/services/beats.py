@@ -9,10 +9,12 @@ Public API:
         call to mark a GM_MARKED beat with SUCCESS or FAILURE.
 """
 
+from django.db import transaction
+
 from world.character_sheets.models import CharacterSheet
 from world.classes.models import CharacterClassLevel
 from world.roster.models import RosterEntry
-from world.stories.constants import BeatOutcome, BeatPredicateType, EraStatus
+from world.stories.constants import BeatOutcome, BeatPredicateType
 from world.stories.exceptions import BeatNotResolvableError
 from world.stories.models import Beat, BeatCompletion, Era, StoryProgress
 
@@ -35,34 +37,35 @@ def evaluate_auto_beats(progress: StoryProgress) -> None:
         return
 
     sheet: CharacterSheet = progress.character_sheet
-    era = _get_active_era()
+    era = Era.objects.get_active()
     roster_entry = _current_roster_entry(sheet)
 
     beats = Beat.objects.filter(episode=progress.current_episode)
-    for beat in beats:
-        # GM_MARKED beats are never auto-evaluated.
-        if beat.predicate_type == BeatPredicateType.GM_MARKED:
-            continue
+    with transaction.atomic():
+        for beat in beats:
+            # GM_MARKED beats are never auto-evaluated.
+            if beat.predicate_type == BeatPredicateType.GM_MARKED:
+                continue
 
-        # Only transition beats that are still UNSATISFIED.
-        if beat.outcome != BeatOutcome.UNSATISFIED:
-            continue
+            # Only transition beats that are still UNSATISFIED.
+            if beat.outcome != BeatOutcome.UNSATISFIED:
+                continue
 
-        new_outcome = _evaluate_predicate(beat, progress)
-        if new_outcome == BeatOutcome.UNSATISFIED:
-            continue
+            new_outcome = _evaluate_predicate(beat, progress)
+            if new_outcome == BeatOutcome.UNSATISFIED:
+                continue
 
-        # Flip the outcome in-place and persist.
-        beat.outcome = new_outcome
-        beat.save(update_fields=["outcome", "updated_at"])
+            # Flip the outcome in-place and persist.
+            beat.outcome = new_outcome
+            beat.save(update_fields=["outcome", "updated_at"])
 
-        BeatCompletion.objects.create(
-            beat=beat,
-            character_sheet=sheet,
-            roster_entry=roster_entry,
-            outcome=new_outcome,
-            era=era,
-        )
+            BeatCompletion.objects.create(
+                beat=beat,
+                character_sheet=sheet,
+                roster_entry=roster_entry,
+                outcome=new_outcome,
+                era=era,
+            )
 
 
 def record_gm_marked_outcome(
@@ -96,7 +99,7 @@ def record_gm_marked_outcome(
         raise BeatNotResolvableError(msg)
 
     sheet: CharacterSheet = progress.character_sheet
-    era = _get_active_era()
+    era = Era.objects.get_active()
     roster_entry = _current_roster_entry(sheet)
 
     # Flip the outcome in-place and persist.
@@ -154,11 +157,6 @@ def _character_level(sheet: CharacterSheet) -> int:
         .first()
     )
     return int(result) if result is not None else 0
-
-
-def _get_active_era() -> Era | None:
-    """Return the currently active Era, or None if none is active."""
-    return Era.objects.filter(status=EraStatus.ACTIVE).first()
 
 
 def _current_roster_entry(sheet: CharacterSheet) -> RosterEntry | None:

@@ -9,7 +9,7 @@ Public API:
 from django.db import transaction
 
 from world.gm.models import GMProfile
-from world.stories.constants import EraStatus, TransitionMode
+from world.stories.constants import TransitionMode
 from world.stories.exceptions import AmbiguousTransitionError, NoEligibleTransitionError
 from world.stories.models import EpisodeResolution, Era, StoryProgress, Transition
 from world.stories.services.transitions import get_eligible_transitions
@@ -66,7 +66,7 @@ def resolve_episode(
             raise AmbiguousTransitionError(msg)
         selected = only
 
-    era = _get_active_era()
+    era = Era.objects.get_active()
     episode = progress.current_episode
 
     with transaction.atomic():
@@ -84,13 +84,3 @@ def resolve_episode(
         progress.save(update_fields=["current_episode", "last_advanced_at"])
 
     return resolution
-
-
-# ---------------------------------------------------------------------------
-# Private helpers
-# ---------------------------------------------------------------------------
-
-
-def _get_active_era() -> Era | None:
-    """Return the currently active Era, or None if none is active."""
-    return Era.objects.filter(status=EraStatus.ACTIVE).first()

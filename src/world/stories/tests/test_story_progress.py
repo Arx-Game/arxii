@@ -1,8 +1,10 @@
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TransactionTestCase
 from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.stories.constants import StoryScope
 from world.stories.factories import EpisodeFactory, StoryFactory, StoryProgressFactory
 
 
@@ -55,3 +57,30 @@ class StoryProgressUniqueConstraintTests(TransactionTestCase):
         StoryProgressFactory(story=story, character_sheet=sheet)
         with self.assertRaises(IntegrityError):
             StoryProgressFactory(story=story, character_sheet=sheet)
+
+
+class StoryProgressCleanInvariantTests(EvenniaTestCase):
+    """Tests for StoryProgress.clean() CHARACTER-scope invariant enforcement."""
+
+    def test_character_scope_progress_must_match_story_character_sheet(self) -> None:
+        """StoryProgress for a CHARACTER-scope story must use the story's own character_sheet."""
+        sheet_a = CharacterSheetFactory()
+        sheet_b = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet_a)
+        with self.assertRaises(ValidationError):
+            StoryProgressFactory(story=story, character_sheet=sheet_b)
+
+    def test_character_scope_progress_allows_matching_character_sheet(self) -> None:
+        """StoryProgress for a CHARACTER-scope story succeeds when sheets match."""
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+        self.assertEqual(progress.character_sheet, sheet)
+
+    def test_character_scope_without_owner_wired_allows_any_sheet(self) -> None:
+        """If Story.character_sheet is None, the invariant is skipped (deferred to service)."""
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=None)
+        # Should not raise.
+        progress = StoryProgressFactory(story=story, character_sheet=sheet)
+        self.assertEqual(progress.character_sheet, sheet)

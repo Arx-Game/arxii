@@ -11,6 +11,7 @@ from world.stories.factories import (
     BeatFactory,
     EpisodeFactory,
     EraFactory,
+    StoryFactory,
     StoryProgressFactory,
 )
 from world.stories.models import BeatCompletion
@@ -233,3 +234,33 @@ class RecordGmMarkedOutcomeTests(EvenniaTestCase):
                         beat=beat,
                         outcome=bad_outcome,
                     )
+
+
+class EvaluateAutoBeatsIdempotencyTests(EvenniaTestCase):
+    """Tests for evaluate_auto_beats idempotency — second call must not duplicate."""
+
+    def test_evaluate_auto_beats_idempotent_does_not_duplicate_completions(self) -> None:
+        """Calling evaluate_auto_beats twice creates exactly one BeatCompletion."""
+        sheet = CharacterSheetFactory()
+        char_class = CharacterClassFactory()
+        CharacterClassLevelFactory(character=sheet.character, character_class=char_class, level=5)
+        episode = EpisodeFactory()
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.CHARACTER_LEVEL_AT_LEAST,
+            required_level=5,
+        )
+        story = StoryFactory(character_sheet=sheet)
+        progress = StoryProgressFactory(
+            character_sheet=sheet,
+            current_episode=episode,
+            story=story,
+        )
+
+        evaluate_auto_beats(progress)
+        evaluate_auto_beats(progress)  # second call should be a no-op
+
+        self.assertEqual(
+            BeatCompletion.objects.filter(beat=beat, character_sheet=sheet).count(),
+            1,
+        )

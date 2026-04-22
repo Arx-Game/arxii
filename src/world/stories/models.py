@@ -593,8 +593,16 @@ class TrustCategoryFeedbackRating(SharedMemoryModel):
         )
 
 
+class EraManager(models.Manager):
+    def get_active(self) -> "Era | None":
+        """Return the currently ACTIVE Era, or None if none is active."""
+        return self.filter(status=EraStatus.ACTIVE).first()
+
+
 class Era(SharedMemoryModel):
     """Staff-activated metaplot era ('Season' in player-facing UI)."""
+
+    objects = EraManager()
 
     name = models.SlugField(max_length=100, unique=True)
     display_name = models.CharField(max_length=200)
@@ -675,8 +683,14 @@ class Transition(SharedMemoryModel):
     def cached_required_outcomes(self) -> list["TransitionRequiredOutcome"]:
         """Routing requirements for this transition with beat pre-fetched.
 
-        Serves as the ``to_attr`` target for
-        ``Prefetch("required_outcomes__beat", to_attr="cached_required_outcomes")``.
+        Serves as the ``to_attr`` target for::
+
+            Prefetch(
+                "required_outcomes",
+                queryset=TransitionRequiredOutcome.objects.select_related("beat"),
+                to_attr="cached_required_outcomes",
+            )
+
         When not prefetched, falls back to a fresh query.
 
         To invalidate: ``del transition.cached_required_outcomes``.
@@ -708,8 +722,12 @@ class Beat(SharedMemoryModel):
         choices=BeatOutcome.choices,
         default=BeatOutcome.UNSATISFIED,
         help_text=(
-            "Current outcome for this beat in the story's current play session. "
-            "Historical outcomes live in BeatCompletion."
+            "The story's current outcome on this beat — a single shared value across "
+            "the story's progression (the owning character for CHARACTER scope, the "
+            "group for GROUP scope, the world for GLOBAL scope). A story has exactly "
+            "one progression trail, so this field represents the whole story's state, "
+            "not per-character state. Historical per-character contributions live in "
+            "BeatCompletion."
         ),
     )
     visibility = models.CharField(
@@ -927,6 +945,7 @@ class EpisodeResolution(SharedMemoryModel):
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
+        related_name="episode_resolutions",
     )
     gm_notes = models.TextField(blank=True)
     resolved_at = models.DateTimeField(auto_now_add=True)
@@ -980,6 +999,26 @@ class StoryProgress(SharedMemoryModel):
         indexes = [
             models.Index(fields=["character_sheet", "is_active"]),
         ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.story.scope == StoryScope.CHARACTER:
+            if self.story.character_sheet_id is None:
+                # Story has no owner wired — cannot validate. Allow; service layer will flag.
+                return
+            if self.character_sheet_id != self.story.character_sheet_id:
+                raise ValidationError(
+                    {
+                        "character_sheet": (
+                            "StoryProgress for a CHARACTER-scope story must belong to the "
+                            "story's owning character_sheet."
+                        )
+                    }
+                )
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         episode_title = self.current_episode.title if self.current_episode else "(frontier)"

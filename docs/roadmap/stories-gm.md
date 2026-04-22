@@ -72,4 +72,38 @@ The task-gated episode progression engine is fully implemented in `src/world/sto
 - **Dispute / withdrawal state transitions** — personal-story GM change, story transfer, player withdrawal
 - **Covenant leadership model** — required before GROUP scope lands (PC leader / group vote / assigned GM — TBD)
 
+### Architecture Decisions (recorded for Phase 3+)
+
+These were agreed during the Phase 1 post-merge review but are not yet implemented:
+
+- **Scope progress models are separate per scope.** Phase 1 has
+  `StoryProgress(story, character_sheet, current_episode)` for CHARACTER scope.
+  Phase 3+ introduces:
+  - `GroupStoryProgress(story, group, current_episode)` — one row per story,
+    the whole group shares the pointer
+  - `GlobalStoryProgress(story, current_episode)` — singleton per story
+  Each progress model has exactly one row per story in its scope. Members of
+  a group are never split onto different branches; the whole group shares one
+  progression trail.
+
+- **`Beat.outcome` is the story's single shared state on the beat.** Not
+  per-character. A story has one progression trail; all participants within
+  the story's scope see the same outcomes and transitions. `BeatCompletion`
+  is the per-character audit ledger recording who contributed what.
+
+- **CHARACTER-scope invariant (now enforced).**
+  `StoryProgress.character_sheet` must equal `Story.character_sheet`.
+  Validated via `StoryProgress.clean()`.
+
+- **Phase 2 hooks (not yet wired):**
+  - `ProgressionRequirementNotMetError` is defined but not raised; Phase 2
+    view layer will need to distinguish "no eligible transition because
+    progression unmet" from "frontier pause (no transitions authored)".
+  - `StoryProgress` records are not auto-created during CG finalization;
+    Phase 2 needs a "create on first access" or "create during CG" path.
+  - Legacy `Story.is_personal_story` / `Story.personal_story_character` (the
+    latter is an ObjectDB FK — an anti-pattern per CLAUDE.md) overlap with
+    the new `scope`/`character_sheet` fields. Migrate both away during
+    Phase 2 serializer work.
+
 ## Notes
