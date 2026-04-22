@@ -5,6 +5,7 @@ from evennia_extensions.factories import (
     CharacterFactory,
 )
 from world.gm.factories import GMProfileFactory
+from world.stories.constants import StoryScope
 from world.stories.factories import (
     ChapterFactory,
     EpisodeFactory,
@@ -37,11 +38,8 @@ class StoryModelTestCase(TestCase):
         cls.user = AccountFactory()
         cls.story = StoryFactory()
         cls.private_story = StoryFactory(privacy=StoryPrivacy.PRIVATE)
-        # Create a character for the personal story
-        personal_char = CharacterFactory()
-        cls.personal_story = PersonalStoryFactory(
-            personal_story_character=personal_char,
-        )
+        # PersonalStoryFactory is a CHARACTER-scope story; no legacy fields.
+        cls.personal_story = PersonalStoryFactory()
 
     def test_story_trust_requirements_affect_player_application(self):
         """Test that trust requirements prevent/allow player applications"""
@@ -117,10 +115,9 @@ class StoryModelTestCase(TestCase):
         """Test that players cannot apply to private stories by default"""
         assert not self.private_story.can_player_apply(self.user)
 
-    def test_personal_story_has_character(self):
-        """Test that personal stories have an associated character"""
-        assert self.personal_story.is_personal_story
-        assert self.personal_story.personal_story_character is not None
+    def test_personal_story_has_character_scope(self):
+        """CHARACTER-scope stories created via PersonalStoryFactory have scope=CHARACTER."""
+        assert self.personal_story.scope == StoryScope.CHARACTER
 
 
 class StoryParticipationModelTestCase(TestCase):

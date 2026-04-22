@@ -29,23 +29,23 @@ class StoryAdmin(admin.ModelAdmin):
         "title",
         "status",
         "privacy",
-        "is_personal_story",
+        "scope",
         "active_gms_count",
         "participants_count",
         "created_at",
     ]
-    list_filter = ["status", "privacy", "is_personal_story", "created_at"]
+    list_filter = ["status", "privacy", "scope", "created_at"]
     search_fields = ["title", "description"]
     filter_horizontal = ["owners", "active_gms"]
     readonly_fields = ["created_at", "updated_at"]
 
     fieldsets = (
-        (None, {"fields": ("title", "description", "status", "privacy")}),
+        (None, {"fields": ("title", "description", "status", "privacy", "scope")}),
         ("Ownership & Management", {"fields": ("owners", "active_gms")}),
         (
-            "Personal Story",
+            "Character / Group Link",
             {
-                "fields": ("is_personal_story", "personal_story_character"),
+                "fields": ("character_sheet",),
                 "classes": ("collapse",),
             },
         ),

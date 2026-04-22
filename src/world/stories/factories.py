@@ -63,8 +63,6 @@ class StoryFactory(factory_django.DjangoModelFactory):
     scope = StoryScope.CHARACTER
     character_sheet = None  # Tests that need character-scoped stories set this explicitly.
     created_in_era = None
-    is_personal_story = False
-    personal_story_character = None
 
     @factory.post_generation
     def owners(self, create, extracted, **kwargs):
@@ -88,12 +86,12 @@ class StoryFactory(factory_django.DjangoModelFactory):
 
 
 class PersonalStoryFactory(StoryFactory):
-    """Factory for creating personal stories"""
+    """Factory for creating CHARACTER-scope stories (personal arcs).
 
-    is_personal_story = True
-    # Note: personal_story_character must be set manually due to cross-app
-    # dependencies
-    personal_story_character = None
+    scope=CHARACTER is already the StoryFactory default; this subclass exists
+    as a named alias for tests that historically referenced PersonalStoryFactory.
+    Set character_sheet explicitly when a FK to CharacterSheet is needed.
+    """
 
 
 class PrivateStoryFactory(StoryFactory):

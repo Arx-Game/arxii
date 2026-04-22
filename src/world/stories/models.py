@@ -143,20 +143,6 @@ class Story(SharedMemoryModel):
         help_text="Trust categories required to participate in this story",
     )
 
-    # Story metadata
-    is_personal_story = models.BooleanField(
-        default=False,
-        help_text="True if this is a character's personal story arc",
-    )
-    personal_story_character = models.ForeignKey(
-        "objects.ObjectDB",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="personal_story",
-        help_text="Character this personal story belongs to",
-    )
-
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

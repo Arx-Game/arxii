@@ -38,7 +38,7 @@ class StoryListSerializer(serializers.ModelSerializer):
             "title",
             "status",
             "privacy",
-            "is_personal_story",
+            "scope",
             "owners_count",
             "active_gms_count",
             "participants_count",
@@ -52,7 +52,7 @@ class StoryDetailSerializer(serializers.ModelSerializer):
 
     owners = serializers.StringRelatedField(many=True, read_only=True)
     active_gms = GMProfileSerializer(many=True, read_only=True)
-    personal_story_character = serializers.StringRelatedField(read_only=True)
+    character_sheet = serializers.PrimaryKeyRelatedField(read_only=True)
     chapters_count = serializers.IntegerField(source="chapters.count", read_only=True)
     trust_requirements = serializers.SerializerMethodField()
 
@@ -64,11 +64,11 @@ class StoryDetailSerializer(serializers.ModelSerializer):
             "description",
             "status",
             "privacy",
+            "scope",
             "owners",
             "active_gms",
             "trust_requirements",
-            "is_personal_story",
-            "personal_story_character",
+            "character_sheet",
             "chapters_count",
             "created_at",
             "updated_at",
@@ -89,8 +89,7 @@ class StoryCreateSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "privacy",
-            "is_personal_story",
-            "personal_story_character",
+            "scope",
         ]
 
     # Title validation constants
@@ -111,22 +110,6 @@ class StoryCreateSerializer(serializers.ModelSerializer):
             msg = "Title cannot exceed 200 characters"
             raise serializers.ValidationError(msg)
         return value.strip()
-
-    def validate(self, data: Any) -> Any:  # type: ignore[invalid-method-override]
-        """Cross-field validation"""
-        if data.get("is_personal_story") and not data.get("personal_story_character"):
-            msg = "Personal stories must specify a character"
-            raise serializers.ValidationError(
-                msg,
-            )
-
-        if data.get("personal_story_character") and not data.get("is_personal_story"):
-            msg = "Only personal stories can have a character specified"
-            raise serializers.ValidationError(
-                msg,
-            )
-
-        return data
 
 
 class StoryParticipationSerializer(serializers.ModelSerializer):

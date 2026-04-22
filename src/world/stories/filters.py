@@ -45,7 +45,7 @@ class StoryFilter(django_filters.FilterSet):
 
     class Meta:
         model = Story
-        fields = ["status", "privacy", "is_personal_story"]
+        fields = ["status", "privacy", "scope"]
 
     def filter_search(self, queryset: QuerySet[Story], name: str, value: str) -> QuerySet[Story]:
         """Search in title and description"""
