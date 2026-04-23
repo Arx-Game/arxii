@@ -55,6 +55,7 @@ from world.magic.models.aura import (
     CharacterResonance,
 )
 from world.magic.models.cantrips import Cantrip
+from world.magic.models.gain_config import ResonanceGainConfig
 from world.magic.models.gifts import (
     CharacterGift,
     CharacterTradition,
@@ -151,6 +152,8 @@ __all__ = [
     # reincarnation
     "Reincarnation",
     "Resonance",
+    # gain config (Spec C §2.1)
+    "ResonanceGainConfig",
     "ResonanceManager",
     "Restriction",
     "RestrictionManager",
