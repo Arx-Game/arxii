@@ -46,3 +46,14 @@ class AccountForSheetTests(TestCase):
         tenure = RosterTenureFactory()
         sheet = tenure.roster_entry.character_sheet
         self.assertEqual(account_for_sheet(sheet), tenure.player_data.account)
+
+
+class RoomAuraProfileTests(TestCase):
+    def test_onetoone_to_room_profile(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.magic.models import RoomAuraProfile
+
+        rp = RoomProfileFactory()
+        aura = RoomAuraProfile.objects.create(room_profile=rp)
+        self.assertEqual(aura.pk, rp.pk)
+        self.assertEqual(rp.room_aura_profile, aura)

@@ -1021,6 +1021,13 @@ class ResonanceGainConfigFactory(factory.django.DjangoModelFactory):
     pk = 1
 
 
+class RoomAuraProfileFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.RoomAuraProfile"
+
+    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+
+
 def wire_soulfray_aftermath(content: SoulfrayContent) -> None:
     """Create ConditionStageOnEntry rows for Soulfray aftermath per spec §8.3.
 

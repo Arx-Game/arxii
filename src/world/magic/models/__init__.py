@@ -78,6 +78,7 @@ from world.magic.models.rituals import (
     Ritual,
     RitualComponentRequirement,
 )
+from world.magic.models.room_aura import RoomAuraProfile
 from world.magic.models.soulfray import MishapPoolTier, SoulfrayConfig
 from world.magic.models.techniques import (
     CharacterTechnique,
@@ -159,6 +160,8 @@ __all__ = [
     "RestrictionManager",
     "Ritual",
     "RitualComponentRequirement",
+    # room aura (Spec C §2.5)
+    "RoomAuraProfile",
     "SoulfrayConfig",
     "Technique",
     "TechniqueCapabilityGrant",
