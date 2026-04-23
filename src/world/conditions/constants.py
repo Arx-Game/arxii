@@ -52,3 +52,11 @@ class ConditionInteractionOutcome(models.TextChoices):
     PREVENT_SELF = "prevent_self", "Prevent this from being applied"
     TRANSFORM_SELF = "transform_self", "Transform this into another condition"
     MERGE = "merge", "Merge into a different condition"
+
+
+class TreatmentTargetKind(models.TextChoices):
+    """What a TreatmentTemplate is authored to target."""
+
+    PRIMARY = "primary", "Primary condition severity"
+    AFTERMATH = "aftermath", "Aftermath child condition severity"
+    PENDING_ALTERATION = "pending_alteration", "Pending alteration tier"

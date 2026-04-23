@@ -34,6 +34,7 @@ from world.conditions.constants import (
     DamageTickTiming,
     DurationType,
     StackBehavior,
+    TreatmentTargetKind,
 )
 from world.conditions.models import (
     CapabilityType,
@@ -47,24 +48,32 @@ from world.conditions.models import (
     ConditionStage,
     ConditionTemplate,
     DamageType,
+    TreatmentAttempt,
+    TreatmentTemplate,
 )
 from world.conditions.types import (
     ApplyConditionResult,
     CapabilityStatus,
     CheckModifierResult,
     DamageInteractionResult,
+    DecayTickSummary,
     InteractionResult,
     ResistanceModifierResult,
     RoundTickResult,
     SeverityAdvanceResult,
+    SeverityDecayResult,
+    TreatmentOutcome,
 )
+from world.game_clock.services import get_ic_now
 from world.mechanics.models import CharacterModifier
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.conditions.models import ConditionCategory
-    from world.magic.models import Technique
+    from world.magic.models import PendingAlteration, Technique, Thread
+    from world.scenes.models import Scene
 
 # Timing constants
 SECONDS_PER_ROUND = 6
@@ -1461,9 +1470,117 @@ def advance_condition_severity(
         instance.current_stage = new_stage
         stage_changed = True
 
-    instance.save(update_fields=["severity", "current_stage"])
+    update_fields = ["severity", "current_stage"]
+    if instance.severity > 0 and instance.resolved_at is not None:
+        instance.resolved_at = None
+        update_fields.append("resolved_at")
+
+    instance.save(update_fields=update_fields)
 
     if stage_changed:
+        stage_change_payload = ConditionStageChangedPayload(
+            target=instance.target,
+            instance=instance,
+            old_stage=previous_stage,
+            new_stage=instance.current_stage,
+        )
+        target_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL
+        if target_location is not None:
+            emit_event(
+                EventName.CONDITION_STAGE_CHANGED,
+                stage_change_payload,
+                location=target_location,
+            )
+
+        # Inline dispatch of the stage-entry aftermath hook. The reactive layer
+        # dispatches only to DB Trigger rows; Python subscribers use the inline
+        # pattern (see apply_damage_reduction_from_threads in magic/services.py).
+        # Only ascending transitions apply aftermath — apply_stage_entry_aftermath
+        # gates internally on stage_order comparison.
+        apply_stage_entry_aftermath(stage_change_payload)
+
+    return SeverityAdvanceResult(
+        previous_stage=previous_stage,
+        new_stage=instance.current_stage,
+        stage_changed=stage_changed,
+        total_severity=instance.severity,
+    )
+
+
+def apply_stage_entry_aftermath(payload: ConditionStageChangedPayload) -> None:
+    """On ascending stage changes, apply the stage's on_entry_conditions.
+
+    Per spec §5.6. Callers pass a ConditionStageChangedPayload frozen
+    dataclass (the same payload emitted by advance_condition_severity).
+    Gates:
+    - new_stage is None → no-op (fully decayed).
+    - old_stage.stage_order >= new_stage.stage_order → descending or
+      sideways; no-op.
+    Idempotency: existing aftermath instance with severity >= assoc.severity
+    is left alone; lower severity is advanced to assoc.severity.
+    """
+    # Aftermath conditions must not themselves have on_entry_conditions; unbounded
+    # recursion otherwise. Authoring/validation enforces this invariant.
+    old = payload.old_stage
+    new = payload.new_stage
+    if new is None:
+        return
+    if old is not None and new.stage_order <= old.stage_order:
+        return
+    target = payload.target
+
+    for assoc in new.on_entry_assocs.select_related("condition").all():
+        existing = ConditionInstance.objects.filter(
+            target=target,
+            condition=assoc.condition,
+            resolved_at__isnull=True,
+        ).first()
+        if existing is None:
+            apply_condition(
+                target,
+                assoc.condition,
+                severity=assoc.severity,
+                source_description=f"on_entry of {new.name}",
+            )
+        elif existing.severity < assoc.severity:
+            advance_condition_severity(existing, assoc.severity - existing.severity)
+        # else: existing severity >= assoc.severity — leave alone.
+
+
+def decay_condition_severity(
+    instance: ConditionInstance,
+    amount: int,
+) -> SeverityDecayResult:
+    """Inverse of advance_condition_severity. Walks stage down if threshold crossed.
+
+    Per spec Scope 6 §5.3. Emits CONDITION_STAGE_CHANGED only when the stage
+    actually changes; consumers derive descending-vs-ascending from
+    stage_order comparison. Sets resolved_at when severity reaches 0.
+    """
+    previous_stage = instance.current_stage
+    new_severity = max(0, instance.severity - amount)
+
+    new_stage = (
+        instance.condition.stages.filter(
+            severity_threshold__isnull=False,
+            severity_threshold__lte=new_severity,
+        )
+        .order_by("-severity_threshold")
+        .first()
+    )
+
+    instance.severity = new_severity
+    instance.current_stage = new_stage
+    update_fields = ["severity", "current_stage"]
+
+    resolved = new_severity == 0
+    if resolved:
+        instance.resolved_at = get_ic_now() or timezone.now()
+        update_fields.append("resolved_at")
+
+    instance.save(update_fields=update_fields)
+
+    if new_stage != previous_stage:
         target_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL
         if target_location is not None:
             emit_event(
@@ -1472,14 +1589,395 @@ def advance_condition_severity(
                     target=instance.target,
                     instance=instance,
                     old_stage=previous_stage,
-                    new_stage=instance.current_stage,
+                    new_stage=new_stage,
                 ),
                 location=target_location,
             )
 
-    return SeverityAdvanceResult(
+    return SeverityDecayResult(
         previous_stage=previous_stage,
-        new_stage=instance.current_stage,
-        stage_changed=stage_changed,
-        total_severity=instance.severity,
+        new_stage=new_stage,
+        new_severity=new_severity,
+        resolved=resolved,
+    )
+
+
+def decay_all_conditions_tick() -> DecayTickSummary:
+    """Scheduler entry point. Decays all opt-in conditions by one tick.
+
+    Per spec Scope 6 §5.4. Skips:
+    - instances whose template sets passive_decay_blocked_in_engagement=True
+      and whose target is an engaged character
+    - instances where severity exceeds passive_decay_max_severity
+    """
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    examined = 0
+    ticked = 0
+    engagement_blocked = 0
+    severity_gated = 0
+
+    qs = ConditionInstance.objects.filter(
+        resolved_at__isnull=True,
+        condition__passive_decay_per_day__gt=0,
+    ).select_related("condition", "current_stage", "target")
+
+    for instance in qs:
+        examined += 1
+        cond = instance.condition
+        if (
+            cond.passive_decay_blocked_in_engagement
+            and CharacterEngagement.objects.filter(
+                character=instance.target,
+            ).exists()
+        ):
+            engagement_blocked += 1
+            continue
+        if (
+            cond.passive_decay_max_severity is not None
+            and instance.severity > cond.passive_decay_max_severity
+        ):
+            severity_gated += 1
+            continue
+        decay_condition_severity(instance, cond.passive_decay_per_day)
+        ticked += 1
+
+    return DecayTickSummary(
+        examined=examined,
+        ticked=ticked,
+        engagement_blocked=engagement_blocked,
+        severity_gated=severity_gated,
+    )
+
+
+# =============================================================================
+# Treatment service (Scope 6 §5.2)
+# =============================================================================
+
+
+_CRIT_SUCCESS_LEVEL = 2
+_SUCCESS_LEVEL = 1
+_PARTIAL_LEVEL = 0
+
+
+def _map_outcome_to_reduction(outcome: "object", treatment: TreatmentTemplate) -> int:
+    """Map a CheckOutcome instance to a severity-reduction integer via success_level.
+
+    Correction #2 from Phase 6 plan: outcome.name is human-readable, not a slug.
+    The canonical discriminator is the integer success_level field on CheckOutcome.
+      >= 2  → critical success
+      == 1  → success
+      == 0  → partial
+      <  0  → failure
+    """
+    level = int(outcome.success_level)  # type: ignore[union-attr]
+    if level >= _CRIT_SUCCESS_LEVEL:
+        return treatment.reduction_on_crit
+    if level >= _SUCCESS_LEVEL:
+        return treatment.reduction_on_success
+    if level == _PARTIAL_LEVEL:
+        return treatment.reduction_on_partial
+    return treatment.reduction_on_failure
+
+
+def _is_failure_outcome(outcome: "object") -> bool:
+    """Return True when the outcome represents a failure (success_level < 0)."""
+    return int(outcome.success_level) < _PARTIAL_LEVEL  # type: ignore[union-attr]
+
+
+def _thread_anchors_to_character(thread: "Thread", target_sheet: "CharacterSheet") -> bool:
+    """Return True if a Thread's anchor resolves to target_sheet.
+
+    Anchor access path (Correction #3 from Phase 6 plan):
+    - RELATIONSHIP_TRACK anchor: thread.target_relationship_track is a
+      RelationshipTrackProgress, whose .relationship FK is a CharacterRelationship
+      with .source and .target FKs to CharacterSheet. The thread owner (helper)
+      holds a relationship *toward* the target, so we check relationship.target.
+    - RELATIONSHIP_CAPSTONE anchor: thread.target_capstone is a RelationshipCapstone,
+      whose .relationship FK similarly has .target pointing at the other party.
+    Returns False if neither anchor kind is set.
+    """
+    track = thread.target_relationship_track
+    if track is not None:
+        # RelationshipTrackProgress → CharacterRelationship → target CharacterSheet
+        return int(track.relationship.target_id) == int(target_sheet.pk)
+    capstone = thread.target_capstone
+    if capstone is not None:
+        # RelationshipCapstone → CharacterRelationship → target CharacterSheet
+        return int(capstone.relationship.target_id) == int(target_sheet.pk)
+    return False
+
+
+def _scene_participant(scene: "Scene", character: "ObjectDB") -> bool:
+    """Return True when *character* has a SceneParticipation row in *scene*.
+
+    SceneParticipation links accounts, not characters directly. The character's
+    account is reached via the roster tenure path (same as
+    interaction_services._get_account_for_character). This helper must be cheap
+    enough to call twice per perform_treatment invocation.
+    """
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.scenes.models import SceneParticipation  # noqa: PLC0415
+
+    try:
+        entry = RosterEntry.objects.get(character_sheet_id=character.pk)
+        tenure = entry.tenures.filter(end_date__isnull=True).first()
+        if tenure is None:
+            return False
+        account_id = tenure.player_data.account_id
+    except RosterEntry.DoesNotExist:
+        return False
+
+    return SceneParticipation.objects.filter(scene=scene, account_id=account_id).exists()
+
+
+@transaction.atomic
+def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
+    helper_sheet: "CharacterSheet",
+    target_sheet: "CharacterSheet",
+    scene: "Scene",
+    treatment: TreatmentTemplate,
+    target_effect: "ConditionInstance | PendingAlteration",
+    bond_thread: "Thread | None" = None,
+) -> TreatmentOutcome:
+    """Resolve a TreatmentTemplate against an effect instance.
+
+    Full preflight gate suite per spec Scope 6 §5.2:
+      1. Type match (TreatmentTargetKind vs instance type)
+      2. Parent/primary match (condition ancestry)
+      3. Bond gate (thread anchored to target when requires_bond)
+      4. Scene gate (active scene + both participants present)
+      5. Engagement gate (neither helper nor target engaged)
+      6. Duplicate pre-check (racy; INSERT-time UniqueConstraint is authoritative)
+      7. Resonance cost debit
+      8. Anima cost debit
+
+    The PENDING_ALTERATION branch defers to Phase 7 (reduce_pending_alteration_tier
+    is not yet implemented). The import is lazy so an ImportError only fires at
+    runtime if this code path is actually invoked.
+    """
+    from django.db import IntegrityError  # noqa: PLC0415
+    from django.utils import timezone as tz  # noqa: PLC0415
+
+    from world.checks.services import perform_check  # noqa: PLC0415
+    from world.conditions.exceptions import (  # noqa: PLC0415
+        HelperEngagedForTreatment,
+        NoSupportingBondThread,
+        TreatmentAlreadyAttempted,
+        TreatmentAnimaInsufficient,
+        TreatmentParentMismatch,
+        TreatmentResonanceInsufficient,
+        TreatmentScenePrerequisiteFailed,
+        TreatmentTargetMismatch,
+    )
+    from world.magic.models import (  # noqa: PLC0415
+        CharacterAnima,
+        CharacterResonance,
+        PendingAlteration,
+    )
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    helper = helper_sheet.character
+    target = target_sheet.character
+
+    # ------------------------------------------------------------------
+    # Gate 1: type match
+    # ------------------------------------------------------------------
+    if treatment.target_kind == TreatmentTargetKind.PENDING_ALTERATION:
+        if not isinstance(target_effect, PendingAlteration):
+            raise TreatmentTargetMismatch
+    elif not isinstance(target_effect, ConditionInstance):
+        raise TreatmentTargetMismatch
+
+    # ------------------------------------------------------------------
+    # Gate 2: parent/primary match
+    # ------------------------------------------------------------------
+    if treatment.target_kind == TreatmentTargetKind.PRIMARY:
+        if target_effect.condition_id != treatment.target_condition_id:
+            raise TreatmentParentMismatch
+    elif treatment.target_kind == TreatmentTargetKind.AFTERMATH:
+        if target_effect.condition.parent_condition_id != treatment.target_condition_id:
+            raise TreatmentParentMismatch
+    # PENDING_ALTERATION: no parent-match check per spec §5.2 step 2.
+
+    # ------------------------------------------------------------------
+    # Gate 3: bond gate
+    # ------------------------------------------------------------------
+    if treatment.requires_bond:
+        if bond_thread is None or int(bond_thread.owner_id) != int(helper_sheet.pk):
+            raise NoSupportingBondThread
+        if bond_thread.retired_at is not None:
+            raise NoSupportingBondThread
+        if not _thread_anchors_to_character(bond_thread, target_sheet):
+            raise NoSupportingBondThread
+
+    # ------------------------------------------------------------------
+    # Gate 4: scene gate
+    # ------------------------------------------------------------------
+    if treatment.scene_required:
+        if (
+            not scene.is_active
+            or not _scene_participant(scene, helper)
+            or not _scene_participant(scene, target)
+        ):
+            raise TreatmentScenePrerequisiteFailed
+
+    # ------------------------------------------------------------------
+    # Gate 5: engagement gate (both helper and target)
+    # ------------------------------------------------------------------
+    if CharacterEngagement.objects.filter(character__in=[helper, target]).exists():
+        raise HelperEngagedForTreatment
+
+    # ------------------------------------------------------------------
+    # Gate 6: duplicate pre-check (racy; INSERT-time constraint is authoritative)
+    # ------------------------------------------------------------------
+    if (
+        treatment.once_per_scene_per_helper
+        and TreatmentAttempt.objects.filter(
+            helper=helper,
+            target=target,
+            scene=scene,
+            treatment=treatment,
+        ).exists()
+    ):
+        raise TreatmentAlreadyAttempted
+
+    # ------------------------------------------------------------------
+    # Gate 7: resonance cost
+    # ------------------------------------------------------------------
+    resonance_spent = 0
+    if treatment.resonance_cost > 0:
+        # bond_thread guaranteed non-None here: clean() enforces requires_bond
+        # when resonance_cost > 0, and Gate 3 validated bond_thread above.
+        res_row = CharacterResonance.objects.select_for_update().get(
+            character_sheet=helper_sheet,
+            resonance=bond_thread.resonance,  # type: ignore[union-attr]
+        )
+        if res_row.balance < treatment.resonance_cost:
+            raise TreatmentResonanceInsufficient
+        res_row.balance -= treatment.resonance_cost
+        res_row.save(update_fields=["balance"])
+        resonance_spent = treatment.resonance_cost
+
+    # ------------------------------------------------------------------
+    # Gate 8: anima cost — mirror resonance gate: lock, check, debit in-place.
+    # Treatment has no overburn; insufficient anima fails cleanly at the gate.
+    # ------------------------------------------------------------------
+    anima_spent = 0
+    if treatment.anima_cost > 0:
+        anima_row = CharacterAnima.objects.select_for_update().get(character=helper)
+        if anima_row.current < treatment.anima_cost:
+            raise TreatmentAnimaInsufficient
+        anima_row.current -= treatment.anima_cost
+        anima_row.save(update_fields=["current"])
+        anima_spent = treatment.anima_cost
+
+    # ------------------------------------------------------------------
+    # Execute: perform check
+    # ------------------------------------------------------------------
+    check_result = perform_check(
+        helper,
+        check_type=treatment.check_type,
+        target_difficulty=treatment.target_difficulty,
+    )
+
+    # ------------------------------------------------------------------
+    # Map outcome → reduction (Correction #2: use success_level, not .name)
+    # ------------------------------------------------------------------
+    reduction = _map_outcome_to_reduction(check_result.outcome, treatment)
+    is_failure = _is_failure_outcome(check_result.outcome)
+
+    # ------------------------------------------------------------------
+    # Apply reduction
+    # ------------------------------------------------------------------
+    severity_reduced = 0
+    tiers_reduced = 0
+    target_resolved = False
+
+    if not is_failure and reduction > 0:
+        if treatment.target_kind in (
+            TreatmentTargetKind.PRIMARY,
+            TreatmentTargetKind.AFTERMATH,
+        ):
+            decay_result = decay_condition_severity(target_effect, amount=reduction)  # type: ignore[arg-type]
+            severity_reduced = reduction
+            target_resolved = decay_result.resolved
+        else:
+            # PENDING_ALTERATION — deferred to Phase 7.  Import is lazy so an
+            # ImportError only surfaces if this branch is actually reached.
+            from world.magic.services.alterations import (  # noqa: PLC0415
+                reduce_pending_alteration_tier,
+            )
+
+            tier_result = reduce_pending_alteration_tier(
+                pending=target_effect,
+                amount=reduction,
+                reason="treatment",
+            )
+            tiers_reduced = tier_result.previous_tier - tier_result.new_tier
+            target_resolved = tier_result.resolved
+
+    # ------------------------------------------------------------------
+    # Failure backlash
+    # ------------------------------------------------------------------
+    helper_backlash = 0
+    if is_failure and treatment.backlash_severity_on_failure > 0:
+        backlash_target = treatment.backlash_target_condition or treatment.target_condition
+        helper_backlash = treatment.backlash_severity_on_failure
+        existing = ConditionInstance.objects.filter(
+            target=helper,
+            condition=backlash_target,
+            resolved_at__isnull=True,
+        ).first()
+        if existing is None:
+            apply_condition(
+                helper,
+                backlash_target,
+                severity=helper_backlash,
+                source_description="stabilization backlash",
+            )
+        else:
+            advance_condition_severity(existing, helper_backlash)
+
+    # ------------------------------------------------------------------
+    # Persist attempt; authoritative duplicate check via UniqueConstraint
+    # ------------------------------------------------------------------
+    from typing import Any  # noqa: PLC0415
+
+    from psycopg.errors import UniqueViolation  # noqa: PLC0415
+
+    attempt_kwargs: dict[str, Any] = {
+        "helper": helper,
+        "target": target,
+        "scene": scene,
+        "treatment": treatment,
+        "thread_used": bond_thread,
+        "outcome": check_result.outcome,
+        "severity_reduced": severity_reduced,
+        "tiers_reduced": tiers_reduced,
+        "helper_backlash_applied": helper_backlash,
+        "resonance_spent": resonance_spent,
+        "anima_spent": anima_spent,
+        "created_at": get_ic_now() or tz.now(),
+    }
+    if treatment.target_kind == TreatmentTargetKind.PENDING_ALTERATION:
+        attempt_kwargs["target_pending_alteration"] = target_effect
+    else:
+        attempt_kwargs["target_condition_instance"] = target_effect
+
+    try:
+        attempt = TreatmentAttempt.objects.create(**attempt_kwargs)
+    except IntegrityError as exc:
+        if isinstance(exc.__cause__, UniqueViolation):
+            raise TreatmentAlreadyAttempted from exc
+        raise
+
+    return TreatmentOutcome(
+        attempt=attempt,
+        outcome=check_result.outcome,
+        effect_applied=(severity_reduced + tiers_reduced) > 0,
+        severity_reduced=severity_reduced,
+        tiers_reduced=tiers_reduced,
+        helper_backlash_applied=helper_backlash,
+        target_resolved=target_resolved,
     )

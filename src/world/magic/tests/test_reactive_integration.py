@@ -91,7 +91,7 @@ class TechniquePreCastEmissionTest(TestCase):
     def test_pre_cast_emitted(self) -> None:
         captured: list[tuple[str, object]] = []
 
-        import world.magic.services as svc_mod
+        import world.magic.services.techniques as svc_mod
 
         original = svc_mod.emit_event
 
@@ -115,7 +115,7 @@ class TechniquePreCastEmissionTest(TestCase):
     def test_pre_cast_payload_correct(self) -> None:
         captured: list[TechniquePreCastPayload] = []
 
-        import world.magic.services as svc_mod
+        import world.magic.services.techniques as svc_mod
 
         original = svc_mod.emit_event
 
@@ -143,7 +143,7 @@ class TechniquePreCastEmissionTest(TestCase):
     def test_pre_cast_then_cast_order(self) -> None:
         order: list[str] = []
 
-        import world.magic.services as svc_mod
+        import world.magic.services.techniques as svc_mod
 
         original = svc_mod.emit_event
 
@@ -173,7 +173,7 @@ class TechniquePreCastEmissionTest(TestCase):
         captured: list[TechniqueCastPayload] = []
         mock_result = MagicMock(return_value="cast_result")
 
-        import world.magic.services as svc_mod
+        import world.magic.services.techniques as svc_mod
 
         original = svc_mod.emit_event
 
@@ -268,7 +268,7 @@ class TechniquePreCastCancellationTest(TestCase):
         )
         cast_fired: list[bool] = []
 
-        import world.magic.services as svc_mod
+        import world.magic.services.techniques as svc_mod
 
         original = svc_mod.emit_event
 
@@ -313,7 +313,7 @@ class TechniqueAffectedEmissionTest(TestCase):
     def test_affected_emitted_per_target(self) -> None:
         captured: list[TechniqueAffectedPayload] = []
 
-        import world.magic.services as svc_mod
+        import world.magic.services.techniques as svc_mod
 
         original = svc_mod.emit_event
 
@@ -338,7 +338,7 @@ class TechniqueAffectedEmissionTest(TestCase):
     def test_affected_payload_has_correct_targets(self) -> None:
         captured: list[TechniqueAffectedPayload] = []
 
-        import world.magic.services as svc_mod
+        import world.magic.services.techniques as svc_mod
 
         original = svc_mod.emit_event
 
@@ -366,7 +366,7 @@ class TechniqueAffectedEmissionTest(TestCase):
         """When no targets passed, TECHNIQUE_AFFECTED is not emitted."""
         fired: list[bool] = []
 
-        import world.magic.services as svc_mod
+        import world.magic.services.techniques as svc_mod
 
         original = svc_mod.emit_event
 
@@ -390,7 +390,7 @@ class TechniqueAffectedEmissionTest(TestCase):
     def test_affected_payload_has_caster_and_technique(self) -> None:
         captured: list[TechniqueAffectedPayload] = []
 
-        import world.magic.services as svc_mod
+        import world.magic.services.techniques as svc_mod
 
         original = svc_mod.emit_event
 

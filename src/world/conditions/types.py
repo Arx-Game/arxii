@@ -15,7 +15,9 @@ if TYPE_CHECKING:
         ConditionStage,
         ConditionTemplate,
         DamageType,
+        TreatmentAttempt,
     )
+    from world.traits.models import CheckOutcome
 
 
 @dataclass
@@ -111,3 +113,41 @@ class SeverityAdvanceResult:
     new_stage: "ConditionStage | None"
     stage_changed: bool
     total_severity: int
+
+
+@dataclass(frozen=True)
+class SeverityDecayResult:
+    """Result of decaying a condition's severity."""
+
+    previous_stage: "ConditionStage | None"
+    new_stage: "ConditionStage | None"
+    new_severity: int
+    resolved: bool
+
+
+@dataclass(frozen=True)
+class DecayTickSummary:
+    """Summary of a scheduler-driven decay tick over all opt-in conditions."""
+
+    examined: int
+    ticked: int
+    engagement_blocked: int
+    severity_gated: int
+
+
+@dataclass(frozen=True)
+class TreatmentOutcome:
+    """Result returned by perform_treatment.
+
+    Captures what happened: which attempt was persisted, the raw CheckOutcome
+    row, whether any severity or tier reduction was applied, how much backlash
+    the helper received, and whether the target effect was fully resolved.
+    """
+
+    attempt: "TreatmentAttempt"
+    outcome: "CheckOutcome"
+    effect_applied: bool
+    severity_reduced: int
+    tiers_reduced: int
+    helper_backlash_applied: int
+    target_resolved: bool
