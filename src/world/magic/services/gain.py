@@ -59,8 +59,31 @@ Accessor reference (verified 2026-04-23 during implementation):
 from __future__ import annotations
 
 from django.db import transaction
+from evennia.accounts.models import AccountDB
 
+from world.character_sheets.models import CharacterSheet
 from world.magic.models import ResonanceGainConfig
+
+
+def account_for_sheet(sheet: CharacterSheet) -> AccountDB | None:
+    """Resolve a CharacterSheet to the Account currently playing it.
+
+    Walks CharacterSheet → RosterEntry → current RosterTenure → PlayerData → Account.
+    Returns None if the sheet has no RosterEntry or no current tenure (between
+    players, retired, NPC). Alt-guard comparisons that receive None should
+    treat it as "no alt relationship proven" — fail-open at the sheet layer.
+    """
+    try:
+        roster_entry = sheet.roster_entry
+    except CharacterSheet.roster_entry.RelatedObjectDoesNotExist:
+        return None
+    current_tenure = roster_entry.tenures.filter(end_date__isnull=True).first()
+    if current_tenure is None:
+        return None
+    player_data = current_tenure.player_data
+    if player_data is None:
+        return None
+    return player_data.account
 
 
 def get_resonance_gain_config() -> ResonanceGainConfig:

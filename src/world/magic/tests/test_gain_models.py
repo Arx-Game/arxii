@@ -28,3 +28,21 @@ class ResonanceGainConfigTests(TestCase):
         self.assertEqual(cfg.outfit_daily_trickle_per_item_resonance, 1)
         self.assertEqual(cfg.same_pair_daily_cap, 0)
         self.assertEqual(cfg.settlement_day_of_week, 0)
+
+
+class AccountForSheetTests(TestCase):
+    def test_returns_none_for_sheet_without_tenure(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.services.gain import account_for_sheet
+
+        sheet = CharacterSheetFactory()
+        # Sheet is freshly created; no RosterEntry/RosterTenure bound.
+        self.assertIsNone(account_for_sheet(sheet))
+
+    def test_returns_account_for_played_sheet(self) -> None:
+        from world.magic.services.gain import account_for_sheet
+        from world.roster.factories import RosterTenureFactory
+
+        tenure = RosterTenureFactory()
+        sheet = tenure.roster_entry.character_sheet
+        self.assertEqual(account_for_sheet(sheet), tenure.player_data.account)
