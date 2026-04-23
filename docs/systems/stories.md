@@ -1,32 +1,40 @@
 # Stories System
 
-Structured narrative campaign management: trust-based participation, task-gated episode progression, and per-character story arcs.
+Structured narrative campaign management: task-gated episode progression, multi-scope (CHARACTER / GROUP / GLOBAL) story arcs, and a full GM workflow (scheduling, AGM delegation, session requests).
+
+**Phase 2 complete.** All backend models, services, and API endpoints are implemented. Phase 3 is the React frontend.
 
 **Source:** `src/world/stories/`
-**API Base:** `/api/stories/`, `/api/chapters/`, `/api/episodes/`, `/api/episode-scenes/`, `/api/story-participations/`, `/api/player-trust/`, `/api/story-feedback/`
+**API Base:** `/api/stories/`, `/api/chapters/`, `/api/episodes/`, `/api/beats/`, `/api/transitions/`, `/api/story-progress/`, `/api/group-story-progress/`, `/api/global-story-progress/`, `/api/aggregate-beat-contributions/`, `/api/assistant-gm-claims/`, `/api/session-requests/`
 
 ---
 
-## Enums (constants.py and types.py)
+## Enums
 
 ```python
-# constants.py — Phase 1 additions
+# constants.py
 from world.stories.constants import (
-    EraStatus,           # UPCOMING, ACTIVE, CONCLUDED
-    StoryScope,          # CHARACTER, GROUP, GLOBAL
-    BeatPredicateType,   # GM_MARKED, CHARACTER_LEVEL_AT_LEAST
-    BeatOutcome,         # UNSATISFIED, SUCCESS, FAILURE, EXPIRED, PENDING_GM_REVIEW
-    BeatVisibility,      # HINTED, SECRET, VISIBLE
-    TransitionMode,      # AUTO, GM_CHOICE
+    EraStatus,              # UPCOMING, ACTIVE, CONCLUDED
+    StoryScope,             # CHARACTER, GROUP, GLOBAL
+    BeatPredicateType,      # GM_MARKED, CHARACTER_LEVEL_AT_LEAST, ACHIEVEMENT_HELD,
+                            # CONDITION_HELD, CODEX_ENTRY_UNLOCKED, STORY_AT_MILESTONE,
+                            # AGGREGATE_THRESHOLD
+    StoryMilestoneType,     # STORY_RESOLVED, CHAPTER_REACHED, EPISODE_REACHED
+    BeatOutcome,            # UNSATISFIED, SUCCESS, FAILURE, EXPIRED, PENDING_GM_REVIEW
+    BeatVisibility,         # HINTED, SECRET, VISIBLE
+    TransitionMode,         # AUTO, GM_CHOICE
+    AssistantClaimStatus,   # REQUESTED, APPROVED, REJECTED, CANCELLED, COMPLETED
+    SessionRequestStatus,   # OPEN, SCHEDULED, RESOLVED, CANCELLED
 )
 
 # types.py — pre-Phase-1 (unchanged)
 from world.stories.types import (
-    StoryStatus,         # ACTIVE, INACTIVE, COMPLETED, CANCELLED
-    StoryPrivacy,        # PUBLIC, PRIVATE, INVITE_ONLY
-    ParticipationLevel,  # CRITICAL, IMPORTANT, OPTIONAL
-    TrustLevel,          # UNTRUSTED (0), BASIC (1), INTERMEDIATE (2), ADVANCED (3), EXPERT (4)
-    ConnectionType,      # THEREFORE, BUT
+    StoryStatus,            # ACTIVE, INACTIVE, COMPLETED, CANCELLED
+    StoryPrivacy,           # PUBLIC, PRIVATE, INVITE_ONLY
+    ParticipationLevel,     # CRITICAL, IMPORTANT, OPTIONAL
+    TrustLevel,             # UNTRUSTED (0) .. EXPERT (4)
+    ConnectionType,         # THEREFORE, BUT
+    AnyStoryProgress,       # StoryProgress | GroupStoryProgress | GlobalStoryProgress
 )
 ```
 
@@ -38,66 +46,87 @@ from world.stories.types import (
 Era  (temporal tag — not a hierarchy parent)
 
 Story (CHARACTER / GROUP / GLOBAL scope)
-  -> Chapter (Major Arc)
+  -> Chapter (major arc)
     -> Episode (node in the episode DAG)
 
-Episode <-- Transition --> Episode   (directed edges; may be null target = authoring frontier)
-Episode <-- Beat                     (predicates attached to an episode)
-Episode <-- EpisodeProgressionRequirement  (gates all outbound transitions)
-Transition <-- TransitionRequiredOutcome   (gates this specific transition)
+Episode <-- Transition --> Episode                 (directed edges; nullable target = authoring frontier)
+Episode <-- Beat                                   (predicates attached to an episode)
+Episode <-- EpisodeProgressionRequirement          (gates all outbound transitions from this episode)
+Transition <-- TransitionRequiredOutcome           (gates this specific transition)
 ```
 
 ---
 
-## Phase 1 Models — Episode Engine
+## Models
 
 ### Era
 
+Temporal metaplot tag. One ACTIVE era enforced by partial unique constraint.
+
 | Field | Type | Notes |
 |-------|------|-------|
-| `name` | SlugField | Unique slug |
+| `name` | SlugField (unique) | |
 | `display_name` | CharField | Human-readable |
 | `season_number` | PositiveIntegerField | Player-facing "Season N" |
 | `description` | TextField | |
-| `status` | TextChoices (EraStatus) | UPCOMING / ACTIVE / CONCLUDED |
-| `activated_at` | DateTimeField | Nullable |
-| `concluded_at` | DateTimeField | Nullable |
+| `status` | EraStatus | UPCOMING / ACTIVE / CONCLUDED |
+| `activated_at` | DateTimeField (nullable) | |
+| `concluded_at` | DateTimeField (nullable) | |
 
-Partial unique constraint: at most one Era may be ACTIVE at a time (`only_one_active_era`).
+`Era.objects.get_active()` — returns the single ACTIVE era or None.
 
-### Story (extended in Phase 1)
+---
 
-Pre-Phase-1 fields unchanged. Phase 1 adds:
+### Story
+
+Top-level campaign container.
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `scope` | TextChoices (StoryScope) | CHARACTER / GROUP / GLOBAL; default CHARACTER |
-| `character_sheet` | FK → character_sheets.CharacterSheet | Nullable; set for CHARACTER-scope stories |
-| `created_in_era` | FK → stories.Era | Nullable; null = pre-era or ungrouped |
+| `title`, `description` | CharField / TextField | |
+| `status` | StoryStatus | ACTIVE, INACTIVE, COMPLETED, CANCELLED |
+| `privacy` | StoryPrivacy | PUBLIC, PRIVATE, INVITE_ONLY |
+| `scope` | StoryScope | CHARACTER / GROUP / GLOBAL |
+| `character_sheet` | FK → character_sheets.CharacterSheet (nullable) | For CHARACTER-scope stories |
+| `created_in_era` | FK → stories.Era (nullable) | |
+| `owners` | M2M → accounts.AccountDB | |
+| `active_gms` | M2M → gm.GMProfile | |
+| `primary_table` | FK → gm.GMTable (nullable) | Lead GM's table; used for AGM claim permission check |
+| `required_trust_categories` | M2M through StoryTrustRequirement | |
 
-Existing fields: `title`, `description`, `status`, `privacy`, `owners` (M2M AccountDB), `active_gms` (M2M gm.GMProfile), `primary_table` (FK gm.GMTable), `required_trust_categories` (M2M through StoryTrustRequirement), `is_personal_story`, `personal_story_character` (FK ObjectDB).
+---
 
 ### Chapter
 
+Major arc within a story.
+
 | Field | Type | Notes |
 |-------|------|-------|
-| `story` | FK → Story | |
+| `story` | FK → Story | `related_name="chapters"` |
 | `title`, `description` | CharField / TextField | |
 | `order` | PositiveIntegerField | Unique per story |
 | `is_active` | BooleanField | |
-| `summary`, `consequences` | TextField | Narrative tracking |
+| `summary`, `consequences` | TextField | |
+
+---
 
 ### Episode
 
+Node in the episode DAG. Transitions are the edges.
+
 | Field | Type | Notes |
 |-------|------|-------|
-| `chapter` | FK → Chapter | |
+| `chapter` | FK → Chapter | `related_name="episodes"` |
 | `title`, `description` | CharField / TextField | |
 | `order` | PositiveIntegerField | Unique per chapter |
 | `is_active` | BooleanField | |
-| `summary`, `consequences` | TextField | Narrative tracking |
+| `summary`, `consequences` | TextField | |
 
-`connection_to_next` and `connection_summary` removed in Phase 1 — those semantics live on Transition.
+`episode.outbound_transitions` — reverse from Transition.source_episode.
+`episode.beats` — reverse from Beat.episode.
+`episode.progression_requirements` — reverse from EpisodeProgressionRequirement.episode.
+
+---
 
 ### Transition
 
@@ -107,132 +136,278 @@ First-class directed edge in the episode DAG.
 |-------|------|-------|
 | `source_episode` | FK → Episode | `related_name="outbound_transitions"` |
 | `target_episode` | FK → Episode (nullable) | Null = authoring frontier |
-| `mode` | TextChoices (TransitionMode) | AUTO (fires on eligibility) / GM_CHOICE (requires explicit GM pick) |
-| `connection_type` | TextChoices (ConnectionType) | THEREFORE / BUT narrative flavor |
+| `mode` | TransitionMode | AUTO fires automatically; GM_CHOICE requires explicit pick |
+| `connection_type` | ConnectionType | THEREFORE / BUT narrative flavor |
 | `connection_summary` | TextField | Short narrative description |
 | `order` | PositiveIntegerField | Tie-breaker for eligibility ordering |
 
+`transition.required_outcomes` — reverse from TransitionRequiredOutcome.transition.
+
+---
+
 ### EpisodeProgressionRequirement
 
-A beat that must reach `required_outcome` before **any** outbound transition from the episode is eligible (episode-level gate; AND semantics across all rows).
+Beat that must reach `required_outcome` before any outbound transition is eligible (AND across all rows per episode).
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `episode` | FK → Episode | |
+| `episode` | FK → Episode | `related_name="progression_requirements"` |
 | `beat` | FK → Beat | |
-| `required_outcome` | TextChoices (BeatOutcome) | Default SUCCESS |
+| `required_outcome` | BeatOutcome | Default SUCCESS |
+
+---
 
 ### TransitionRequiredOutcome
 
-Per-transition routing predicate. All rows on a given transition must be satisfied (AND). OR semantics expressed by creating multiple transitions.
+Per-transition routing predicate. All rows on a given transition must be satisfied (AND). OR semantics = multiple transitions.
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `transition` | FK → Transition | |
+| `transition` | FK → Transition | `related_name="required_outcomes"` |
 | `beat` | FK → Beat | |
-| `required_outcome` | TextChoices (BeatOutcome) | |
+| `required_outcome` | BeatOutcome | |
+
+---
 
 ### Beat
 
-Boolean predicate attached to an episode. Phase 1 implements two concrete predicate types via a flat discriminator column; `clean()` enforces that exactly the right nullable config fields are populated.
+Boolean predicate attached to an episode. Flat discriminator model — all config fields are nullable; `clean()` enforces exactly the right fields for each predicate type.
+
+**Core fields:**
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `episode` | FK → Episode | |
-| `predicate_type` | TextChoices (BeatPredicateType) | GM_MARKED / CHARACTER_LEVEL_AT_LEAST |
-| `outcome` | TextChoices (BeatOutcome) | Current state; history in BeatCompletion |
-| `visibility` | TextChoices (BeatVisibility) | HINTED (default) / SECRET / VISIBLE |
+| `episode` | FK → Episode | `related_name="beats"` |
+| `predicate_type` | BeatPredicateType | See below for per-type config fields |
+| `outcome` | BeatOutcome | Current state; history in BeatCompletion |
+| `visibility` | BeatVisibility | HINTED (default) / SECRET / VISIBLE |
 | `internal_description` | TextField | Author/staff view |
-| `player_hint` | TextField | Shown while active (if HINTED or VISIBLE) |
+| `player_hint` | TextField | Shown while active (HINTED or VISIBLE) |
 | `player_resolution_text` | TextField | Shown in story log after completion |
-| `required_level` | PositiveIntegerField (nullable) | For CHARACTER_LEVEL_AT_LEAST predicate |
-| `deadline` | DateTimeField (nullable) | Scaffolded; expiry handling in Phase 3+ |
+| `deadline` | DateTimeField (nullable) | Expiry triggers EXPIRED outcome via `expire_overdue_beats` |
+| `agm_eligible` | BooleanField | True = AGM may claim this beat |
 | `order` | PositiveIntegerField | |
+
+**Per-predicate config fields (exactly one set should be non-null per predicate type):**
+
+| Predicate type | Required field(s) |
+|---------------|------------------|
+| `CHARACTER_LEVEL_AT_LEAST` | `required_level` (PositiveIntegerField) |
+| `ACHIEVEMENT_HELD` | `required_achievement` FK → achievements.Achievement |
+| `CONDITION_HELD` | `required_condition_template` FK → conditions.ConditionTemplate |
+| `CODEX_ENTRY_UNLOCKED` | `required_codex_entry` FK → codex.CodexEntry |
+| `STORY_AT_MILESTONE` | `referenced_story` FK → Story, `referenced_milestone_type` (StoryMilestoneType), `referenced_chapter` FK → Chapter (nullable), `referenced_episode` FK → Episode (nullable) |
+| `AGGREGATE_THRESHOLD` | `required_points` PositiveIntegerField |
+| `GM_MARKED` | (no config fields) |
+
+**Scope behaviour for auto-evaluation (`evaluate_auto_beats`):**
+- CHARACTER scope: all predicate types evaluated against `progress.character_sheet`.
+- GROUP / GLOBAL scope: predicates that require a CharacterSheet (ACHIEVEMENT_HELD, CONDITION_HELD, CODEX_ENTRY_UNLOCKED, CHARACTER_LEVEL_AT_LEAST) are skipped — the GM must mark these manually. STORY_AT_MILESTONE is evaluated without a sheet.
+- AGGREGATE_THRESHOLD is write-path triggered (via `record_aggregate_contribution`), not evaluated by `evaluate_auto_beats`.
+
+---
+
+### AggregateBeatContribution
+
+Per-character contribution ledger for AGGREGATE_THRESHOLD beats.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `beat` | FK → Beat | `related_name="aggregate_contributions"` |
+| `character_sheet` | FK → CharacterSheet | Who contributed |
+| `roster_entry` | FK → RosterEntry (nullable) | Audit: which tenure was active |
+| `points` | PositiveIntegerField | |
+| `era` | FK → Era (nullable) | Active era at time of contribution |
+| `source_note` | TextField | What produced this contribution |
+| `recorded_at` | DateTimeField (auto_now_add) | |
+
+`AggregateBeatContribution.objects.total_for_beat(beat)` → int sum.
+
+---
+
+### AssistantGMClaim
+
+AGM claim lifecycle on an `agm_eligible` beat.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `beat` | FK → Beat | `related_name="agm_claims"` |
+| `assistant_gm` | FK → gm.GMProfile | The claiming AGM |
+| `status` | AssistantClaimStatus | REQUESTED → APPROVED/REJECTED/CANCELLED → COMPLETED |
+| `approved_by` | FK → gm.GMProfile (nullable) | Lead GM who approved/rejected |
+| `rejection_note` | TextField | |
+| `framing_note` | TextField | Scene framing authored by Lead GM |
+| `created_at` | DateTimeField (auto_now_add) | |
+| `updated_at` | DateTimeField (auto_now) | |
+
+Partial unique constraint: no duplicate active claims per (beat, assistant_gm) where status is REQUESTED or APPROVED.
+
+---
+
+### SessionRequest
+
+Scheduling request for an episode that requires GM involvement.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `episode` | FK → Episode | `related_name="session_requests"` |
+| `status` | SessionRequestStatus | OPEN → SCHEDULED → RESOLVED (or CANCELLED) |
+| `event` | FK → events.Event (nullable) | Set when SCHEDULED |
+| `open_to_any_gm` | BooleanField | If True, any GM may claim |
+| `assigned_gm` | FK → gm.GMProfile (nullable) | Specifically assigned GM |
+| `initiated_by_account` | FK → accounts.AccountDB (nullable) | Who requested the session |
+| `notes` | TextField | |
+| `created_at` | DateTimeField (auto_now_add) | |
+| `updated_at` | DateTimeField (auto_now) | |
+
+---
 
 ### BeatCompletion
 
-Append-only audit ledger. One row per beat outcome event applied to a character.
+Append-only audit ledger. One row per beat outcome event. Scope-aware: exactly one of `character_sheet` / `gm_table` / neither is populated.
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `beat` | FK → Beat | |
-| `character_sheet` | FK → character_sheets.CharacterSheet | |
-| `roster_entry` | FK → roster.RosterEntry (nullable) | Which player tenure was active |
-| `outcome` | TextChoices (BeatOutcome) | |
-| `era` | FK → Era (nullable) | Active era at time of completion |
+| `beat` | FK → Beat | `related_name="completions"` |
+| `character_sheet` | FK → CharacterSheet (nullable) | CHARACTER scope |
+| `gm_table` | FK → gm.GMTable (nullable) | GROUP scope |
+| `roster_entry` | FK → roster.RosterEntry (nullable) | Audit: active tenure at time of completion |
+| `outcome` | BeatOutcome | |
+| `era` | FK → Era (nullable) | Active era at completion |
 | `gm_notes` | TextField | |
 | `recorded_at` | DateTimeField (auto_now_add) | |
 
+`clean()` enforces scope consistency: CHARACTER → `character_sheet` required; GROUP → `gm_table` required; GLOBAL → both null.
+
+---
+
 ### EpisodeResolution
 
-Append-only audit ledger. One row per episode resolved for a character.
+Append-only audit ledger. One row per episode resolved. Scope-aware.
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `episode` | FK → Episode | |
-| `character_sheet` | FK → character_sheets.CharacterSheet | |
+| `episode` | FK → Episode | `related_name="resolutions"` |
+| `character_sheet` | FK → CharacterSheet (nullable) | CHARACTER scope |
+| `gm_table` | FK → gm.GMTable (nullable) | GROUP scope |
 | `chosen_transition` | FK → Transition (nullable) | Null = frontier pause |
 | `resolved_by` | FK → gm.GMProfile (nullable) | |
 | `era` | FK → Era (nullable) | |
 | `gm_notes` | TextField | |
 | `resolved_at` | DateTimeField (auto_now_add) | |
 
+---
+
 ### StoryProgress
 
-Per-character pointer into a CHARACTER-scope story's DAG.
+Per-character pointer into a CHARACTER-scope story's episode DAG.
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `story` | FK → Story | |
-| `character_sheet` | FK → character_sheets.CharacterSheet | |
-| `current_episode` | FK → Episode (nullable) | Null = frontier or not started |
+| `story` | FK → Story | `related_name="progress_records"` |
+| `character_sheet` | FK → CharacterSheet | Must equal `story.character_sheet` (clean() enforced) |
+| `current_episode` | FK → Episode (nullable) | Null = not started or frontier |
 | `is_active` | BooleanField | |
 | `started_at` | DateTimeField (auto_now_add) | |
-| `last_advanced_at` | DateTimeField (auto_now) | Updated on each `resolve_episode` call |
+| `last_advanced_at` | DateTimeField (auto_now) | Updated on each advance |
 
-Unique constraint: one StoryProgress per (story, character_sheet).
+Unique per (story, character_sheet).
 
 ---
 
-## Pre-Phase-1 Models — Trust System & Participation
+### GroupStoryProgress
 
-These models are orthogonal to the episode engine and unchanged.
+Per-GMTable pointer into a GROUP-scope story's episode DAG. The whole table shares one trail.
 
-### Trust System
+| Field | Type | Notes |
+|-------|------|-------|
+| `story` | FK → Story | `related_name="group_progress_records"` |
+| `gm_table` | FK → gm.GMTable | |
+| `current_episode` | FK → Episode (nullable) | |
+| `is_active` | BooleanField | |
+| `started_at` | DateTimeField (auto_now_add) | |
+| `last_advanced_at` | DateTimeField (auto_now) | |
 
-| Model | Purpose | Key Fields |
-|-------|---------|------------|
-| `TrustCategory` | Dynamic trust categories | `name`, `display_name`, `description`, `is_active`, `created_by` (FK AccountDB) |
-| `PlayerTrust` | Aggregate trust profile (1:1 per account) | `account` (OneToOne AccountDB), `gm_trust_level`, `trust_categories` (M2M through PlayerTrustLevel) |
-| `PlayerTrustLevel` | Per-category trust level | `player_trust` (FK), `trust_category` (FK), `trust_level`, `positive_feedback_count`, `negative_feedback_count` |
-| `StoryTrustRequirement` | Trust required to join a story | `story` (FK), `trust_category` (FK), `minimum_trust_level`, `created_by` (FK AccountDB) |
+Unique per (story, gm_table).
 
-### Participation & Feedback
+---
 
-| Model | Purpose | Key Fields |
-|-------|---------|------------|
-| `StoryParticipation` | Character participation in a story | `story` (FK), `character` (FK ObjectDB), `participation_level`, `trusted_by_owner`, `is_active` |
-| `StoryFeedback` | Post-story feedback for trust building | `story` (FK), `reviewer` (FK AccountDB), `reviewed_player` (FK AccountDB), `is_gm_feedback`, `comments` |
-| `TrustCategoryFeedbackRating` | Per-category rating within feedback | `feedback` (FK), `trust_category` (FK), `rating` (-2 to +2) |
+### GlobalStoryProgress
+
+Singleton pointer per GLOBAL-scope story.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `story` | OneToOneField → Story | `related_name="global_progress"` |
+| `current_episode` | FK → Episode (nullable) | |
+| `is_active` | BooleanField | |
+| `started_at` | DateTimeField (auto_now_add) | |
+| `last_advanced_at` | DateTimeField (auto_now) | |
 
 ---
 
 ## Service Functions
 
-All services are in `src/world/stories/services/`.
+All services in `src/world/stories/services/`.
 
-```python
-from world.stories.services.beats import evaluate_auto_beats, record_gm_marked_outcome
-from world.stories.services.transitions import get_eligible_transitions
-from world.stories.services.episodes import resolve_episode
-```
+### beats.py
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `evaluate_auto_beats` | `(progress: StoryProgress) -> None` | Re-evaluates all non-GM_MARKED beats in the current episode; flips UNSATISFIED beats whose predicate is now met and writes BeatCompletion rows |
-| `record_gm_marked_outcome` | `(*, progress: StoryProgress, beat: Beat, outcome: BeatOutcome, gm_notes: str = "") -> BeatCompletion` | GM manually resolves a GM_MARKED beat with SUCCESS or FAILURE; raises BeatNotResolvableError if beat is wrong type or outcome is invalid |
-| `get_eligible_transitions` | `(progress: StoryProgress) -> list[Transition]` | Returns outbound transitions eligible to fire: all EpisodeProgressionRequirements met AND each transition's TransitionRequiredOutcomes met; returns [] if any gate is unmet |
-| `resolve_episode` | `(*, progress: StoryProgress, chosen_transition: Transition \| None = None, gm_notes: str = "", resolved_by: GMProfile \| None = None) -> EpisodeResolution` | Selects or validates a transition, creates EpisodeResolution, advances StoryProgress.current_episode; raises NoEligibleTransitionError or AmbiguousTransitionError on bad state |
+| `evaluate_auto_beats` | `(progress: AnyStoryProgress) -> None` | Re-evaluates all non-GM_MARKED beats; flips UNSATISFIED beats whose predicate is now met; writes BeatCompletion rows; calls `maybe_create_session_request` on exit |
+| `record_gm_marked_outcome` | `(*, progress, beat, outcome, gm_notes="") -> BeatCompletion` | GM manually resolves a GM_MARKED beat; raises `BeatNotResolvableError` if wrong type or invalid outcome |
+| `record_aggregate_contribution` | `(*, beat, character_sheet, points, source_note="") -> AggregateBeatContribution` | Records contribution, re-evaluates beat atomically, flips to SUCCESS if threshold crossed |
+| `expire_overdue_beats` | `(now=None) -> int` | Idempotent bulk sweep; flips UNSATISFIED past-deadline beats to EXPIRED; returns count |
+
+### transitions.py
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `get_eligible_transitions` | `(progress: AnyStoryProgress) -> list[Transition]` | Returns eligible outbound transitions; lazily expires overdue beats; raises `ProgressionRequirementNotMetError` if any gate is unmet |
+
+### episodes.py
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `resolve_episode` | `(*, progress, chosen_transition=None, gm_notes="", resolved_by=None) -> EpisodeResolution` | Selects/validates transition, creates EpisodeResolution, advances progress; raises `NoEligibleTransitionError` or `AmbiguousTransitionError` on bad state |
+
+### progress.py
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `get_active_progress_for_story` | `(story: Story) -> AnyStoryProgress \| None` | Dispatches on scope: CHARACTER → first active StoryProgress; GROUP → first active GroupStoryProgress; GLOBAL → global_progress OneToOne accessor |
+| `advance_progress_to_episode` | `(progress, target_episode) -> None` | Updates `current_episode` and auto-stamps `last_advanced_at` |
+
+### assistant_gm.py
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `request_claim` | `(*, beat, assistant_gm, framing_note="") -> AssistantGMClaim` | AGM requests claim; raises `BeatNotAGMEligibleError` if beat not flagged |
+| `approve_claim` | `(*, claim, approver, framing_note=None) -> AssistantGMClaim` | Lead GM approves; raises `ClaimStateTransitionError` / `ClaimApprovalPermissionError` |
+| `reject_claim` | `(*, claim, approver, note="") -> AssistantGMClaim` | Lead GM rejects |
+| `cancel_claim` | `(*, claim) -> AssistantGMClaim` | AGM cancels own claim (REQUESTED only) |
+| `complete_claim` | `(*, claim, completer) -> AssistantGMClaim` | Lead GM marks APPROVED claim COMPLETED |
+
+### scheduling.py
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `maybe_create_session_request` | `(progress: AnyStoryProgress) -> SessionRequest \| None` | Idempotent; creates OPEN SessionRequest when episode has eligible transitions AND GM involvement is needed |
+| `create_event_from_session_request` | `(*, session_request, name, scheduled_real_time, host_persona, location_id, description="", is_public=True) -> Event` | Bridges OPEN SessionRequest to Events system; transitions to SCHEDULED |
+| `cancel_session_request` | `(*, session_request) -> SessionRequest` | OPEN → CANCELLED |
+| `resolve_session_request` | `(*, session_request) -> SessionRequest` | SCHEDULED → RESOLVED |
+
+### story_log.py
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `serialize_story_log` | `(story, requester_role) -> list[dict]` | Builds ordered chapter/episode/beat log with role-gated visibility |
+
+### dashboards.py
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `compute_story_status_line` | `(progress: AnyStoryProgress) -> str` | Returns a human-readable one-liner for the player dashboard |
 
 ---
 
@@ -240,59 +415,109 @@ from world.stories.services.episodes import resolve_episode
 
 ```python
 from world.stories.exceptions import (
-    StoryError,                       # Base; has user_message property
-    BeatNotResolvableError,           # Wrong predicate type or invalid outcome for GM resolution
-    NoEligibleTransitionError,        # No transitions eligible, or chosen_transition not in eligible set
-    AmbiguousTransitionError,         # Multiple eligible or GM_CHOICE mode with no explicit pick
-    ProgressionRequirementNotMetError, # Episode-level gate not satisfied (raised defensively)
+    StoryError,                         # Base; has user_message property
+    BeatNotResolvableError,             # Wrong predicate type or invalid outcome
+    NoEligibleTransitionError,          # No eligible transitions; or chosen_transition not valid
+    AmbiguousTransitionError,           # Multiple eligible; or GM_CHOICE without explicit pick
+    ProgressionRequirementNotMetError,  # Episode-level gate not satisfied
+    BeatNotAGMEligibleError,            # beat.agm_eligible is False
+    ClaimStateTransitionError,          # Claim not in expected state for transition
+    ClaimApprovalPermissionError,       # Approver is not Lead GM or staff
+    SessionRequestNotOpenError,         # Session request not in expected state
 )
 ```
 
-All exceptions expose a safe `user_message` string suitable for API responses. Never pass `str(exc)` to response bodies — use `exc.user_message`.
+Never pass `str(exc)` to API responses — use `exc.user_message`.
 
 ---
 
-## Integration Points
+## API Endpoints
 
-- **CharacterSheet** — CHARACTER-scope `StoryProgress` and `BeatCompletion` FK to CharacterSheet; `CharacterSheet` owns the character identity
-- **CharacterClassLevel** (classes app) — `CHARACTER_LEVEL_AT_LEAST` predicate queries CharacterClassLevel for the character's current level
-- **GMProfile** (gm app) — `EpisodeResolution.resolved_by`; `Story.active_gms` M2M; `Story.primary_table` FK to GMTable
-- **RosterEntry** (roster app) — `BeatCompletion.roster_entry` captures which tenure (player) was active at resolution time; audit only
-- **Era** — `BeatCompletion.era` and `EpisodeResolution.era` stamp the active metaplot era at resolution time; `Story.created_in_era` for grouping
-- **Scenes** — `EpisodeScene` links scenes to episodes (unchanged from pre-Phase-1)
-- **Trust system** — `StoryParticipation` and trust models are orthogonal; their APIs and logic are unchanged
+### Dashboard / Custom Actions
+
+| Method | URL | Permission | Description |
+|--------|-----|------------|-------------|
+| GET | `/api/stories/{pk}/log/` | Participant or staff | Story log with visibility filtering |
+| GET | `/api/stories/my-active/` | Authenticated | Player's active CHARACTER-scope stories |
+| GET | `/api/stories/gm-queue/` | GMProfile required | Lead GM's episodes-ready-to-run dashboard |
+| GET | `/api/stories/staff-workload/` | Staff | All active stories across all tables |
+| POST | `/api/stories/{pk}/resolve-episode/` | Story owner or staff | Fire `resolve_episode`; body: `{chosen_transition?}` |
+| POST | `/api/stories/expire-beats/` | Staff | Trigger `expire_overdue_beats` |
+
+### Beat Actions
+
+| Method | URL | Permission | Description |
+|--------|-----|------------|-------------|
+| POST | `/api/beats/{pk}/mark/` | Story owner (GM) | `record_gm_marked_outcome`; body: `{outcome, gm_notes?}` |
+| POST | `/api/beats/{pk}/contribute/` | Story participant | `record_aggregate_contribution`; body: `{points, source_note?}` |
+
+### AGM Claim Lifecycle
+
+| Method | URL | Permission | Description |
+|--------|-----|------------|-------------|
+| POST | `/api/assistant-gm-claims/{pk}/approve/` | Lead GM or staff | `approve_claim` |
+| POST | `/api/assistant-gm-claims/{pk}/reject/` | Lead GM or staff | `reject_claim` |
+| POST | `/api/assistant-gm-claims/{pk}/complete/` | Lead GM or staff | `complete_claim` |
+
+### Session Request Actions
+
+| Method | URL | Permission | Description |
+|--------|-----|------------|-------------|
+| POST | `/api/session-requests/{pk}/create-event/` | Story owner | Bridge to events system |
+
+### Standard ViewSet CRUD
+
+All ViewSets support standard REST verbs (GET list/detail, POST create, PATCH/PUT update, DELETE) subject to permission class rules.
+
+| ViewSet | Base URL | Writable by |
+|---------|----------|-------------|
+| StoryViewSet | `/api/stories/` | Story owners, staff |
+| ChapterViewSet | `/api/chapters/` | Story owners, staff |
+| EpisodeViewSet | `/api/episodes/` | Story owners, staff |
+| BeatViewSet | `/api/beats/` | Story owners, staff |
+| TransitionViewSet | `/api/transitions/` | Story owners, staff |
+| StoryProgressViewSet | `/api/story-progress/` | Story owners, staff |
+| GroupStoryProgressViewSet | `/api/group-story-progress/` | Lead GM of table, staff |
+| GlobalStoryProgressViewSet | `/api/global-story-progress/` | Staff only |
+| AggregateBeatContributionViewSet | `/api/aggregate-beat-contributions/` | Read-only |
+| AssistantGMClaimViewSet | `/api/assistant-gm-claims/` | Read-only (AGM creates via custom action) |
+| SessionRequestViewSet | `/api/session-requests/` | Read-only |
 
 ---
 
-## Admin
+## Cross-App Integration
 
-- `EraAdmin` — season number, status, activation timestamps; enforces at-most-one-active constraint via DB
-- `StoryAdmin` — full editing with horizontal filter for owners/active_gms; scope + character_sheet fields
-- `ChapterAdmin` — inline episodes
-- `EpisodeAdmin` — inline episode-scenes
-- `BeatAdmin` — predicate_type filter; outcome coloring; required_level display conditional on type
-- `TransitionAdmin` — source/target episode; mode + connection_type display
-- `StoryProgressAdmin` — per-character episode pointer; is_active filter
-- `TrustCategoryAdmin`, `PlayerTrustLevelAdmin`, `StoryTrustRequirementAdmin`, `StoryFeedbackAdmin` — unchanged from pre-Phase-1
+| System | Integration point |
+|--------|------------------|
+| **character_sheets** | `StoryProgress.character_sheet`, `BeatCompletion.character_sheet`; `CharacterSheet.cached_achievements_held` and `cached_active_condition_templates` for beat evaluation; `CharacterSheet.current_level` for `CHARACTER_LEVEL_AT_LEAST` |
+| **achievements** | `Beat.required_achievement` FK; `CharacterAchievement` queried for `ACHIEVEMENT_HELD` evaluation; `sheet.invalidate_achievement_cache()` must be called after granting achievements |
+| **conditions** | `Beat.required_condition_template` FK; `ConditionInstance` queried for `CONDITION_HELD` evaluation; `sheet.invalidate_condition_cache()` must be called after applying conditions |
+| **codex** | `Beat.required_codex_entry` FK; `CharacterCodexKnowledge.status == KNOWN` per RosterEntry for `CODEX_ENTRY_UNLOCKED` evaluation |
+| **gm** | `GMProfile` for `resolved_by`, `assigned_gm`, AGM claim actors; `GMTable` for GROUP scope progress and primary_table permission check; `GMTableMembership` for queryset filtering |
+| **roster** | `RosterEntry` used in `BeatCompletion.roster_entry` and `AggregateBeatContribution.roster_entry` for audit trail |
+| **events** | `SessionRequest.event` FK; `create_event_from_session_request` calls `events.services.create_event` |
+| **scenes** | `EpisodeScene` links scenes to episodes; `Persona` used as `host_persona` for session event creation |
+| **classes** | `CharacterClassLevel` queried for `CHARACTER_LEVEL_AT_LEAST` evaluation |
+| **Era** | `BeatCompletion.era`, `EpisodeResolution.era`, `AggregateBeatContribution.era` — stamped with active era at event time; `Story.created_in_era` for grouping |
 
 ---
 
-## Key Methods (pre-Phase-1, unchanged)
+## Pre-Phase-1 Models (unchanged)
 
-```python
-# Story
-story.is_active()                              # True if ACTIVE status + has active GMs
-story.can_player_apply(account)                # Privacy + trust requirement check
-story.get_trust_requirements_summary()         # [{"category": ..., "minimum_level": ...}, ...]
+### Trust System
 
-# PlayerTrust
-trust_profile.get_trust_level_for_category(trust_category)
-trust_profile.get_trust_level_for_category_name("antagonism")
-trust_profile.has_minimum_trust_for_categories([...])
-trust_profile.total_positive_feedback          # sum across all categories
-trust_profile.total_negative_feedback
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `TrustCategory` | Dynamic trust categories | `name`, `display_name`, `description`, `is_active` |
+| `PlayerTrust` | Aggregate trust profile | `account` (OneToOne AccountDB), `gm_trust_level` |
+| `PlayerTrustLevel` | Per-category trust level | `player_trust`, `trust_category`, `trust_level`, feedback counts |
+| `StoryTrustRequirement` | Trust gate for story join | `story`, `trust_category`, `minimum_trust_level` |
 
-# StoryFeedback
-feedback.get_average_rating()                  # float
-feedback.is_overall_positive()                 # True if average > 0
-```
+### Participation & Feedback
+
+| Model | Purpose |
+|-------|---------|
+| `StoryParticipation` | Character involvement in a story |
+| `StoryFeedback` | Post-story trust-building feedback |
+| `TrustCategoryFeedbackRating` | Per-category rating within feedback |
+| `EpisodeScene` | Links scenes to episodes |
