@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.constants import EffectKind, TargetKind
+from world.magic.constants import EffectKind, GainSource, TargetKind
 from world.magic.exceptions import (
     AnchorCapExceeded,
     InvalidImbueAmount,
@@ -16,6 +16,8 @@ from world.magic.models import (
     CharacterAnima,
     CharacterResonance,
     IntensityTier,
+    ResonanceGrant,
+    RoomAuraProfile,
     Thread,
     ThreadLevelUnlock,
     ThreadPullCost,
@@ -35,6 +37,8 @@ from world.magic.types import (
 )
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
+
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
     from world.magic.models import Resonance as ResonanceModel
@@ -47,31 +51,46 @@ if TYPE_CHECKING:
 
 
 @transaction.atomic
-def grant_resonance(
+def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerous; grouped for readability
     character_sheet: CharacterSheet,
     resonance: ResonanceModel,
     amount: int,
-    source: str,  # noqa: ARG001 — reserved for Phase 12 audit hook
-    source_ref: int | None = None,  # noqa: ARG001 — reserved for Phase 12 audit hook
+    *,
+    source: str,
+    pose_endorsement: None = None,  # noqa: ARG001 — reserved stub; raises ValueError in validator
+    scene_entry_endorsement: None = None,  # noqa: ARG001 — reserved stub; raises ValueError in validator
+    room_aura_profile: RoomAuraProfile | None = None,
+    staff_account: AccountDB | None = None,
 ) -> CharacterResonance:
-    """Lazily create CharacterResonance and credit balance + lifetime_earned.
+    """Atomically grant resonance AND write the ResonanceGrant ledger row.
+
+    Validates that the typed source kwarg matches the discriminator. Raises
+    ValueError for POSE_ENDORSEMENT / SCENE_ENTRY / OUTFIT_ITEM sources —
+    those typed FKs ship in Tasks 13/17 and a future Items system.
 
     Args:
         character_sheet: The character receiving resonance.
         resonance: The Resonance being granted.
         amount: Positive integer amount to grant.
-        source: Label for audit (Phase 12 hook; not yet persisted).
-        source_ref: Optional PK for the source object (Phase 12 hook; not yet persisted).
+        source: GainSource discriminator (keyword-only).
+        pose_endorsement: Reserved — raises ValueError (Task 13).
+        scene_entry_endorsement: Reserved — raises ValueError (Task 17).
+        room_aura_profile: Required for ROOM_RESIDENCE source.
+        staff_account: Optional for STAFF_GRANT source (nullable by design).
 
     Returns:
         The updated CharacterResonance instance.
 
     Raises:
         InvalidImbueAmount: If amount <= 0.
+        ValueError: If source/kwarg shape is invalid or source is not yet supported.
     """
     if amount <= 0:
         msg = "Resonance grant amount must be positive."
         raise InvalidImbueAmount(msg)
+
+    _validate_grant_source_shape(source, room_aura_profile=room_aura_profile)
+
     cr, _ = CharacterResonance.objects.get_or_create(
         character_sheet=character_sheet,
         resonance=resonance,
@@ -80,7 +99,49 @@ def grant_resonance(
     cr.balance += amount
     cr.lifetime_earned += amount
     cr.save(update_fields=["balance", "lifetime_earned"])
+
+    ResonanceGrant.objects.create(
+        character_sheet=character_sheet,
+        resonance=resonance,
+        amount=amount,
+        source=source,
+        source_room_aura_profile=room_aura_profile,
+        source_staff_account=staff_account,
+    )
     return cr
+
+
+def _validate_grant_source_shape(
+    source: str,
+    *,
+    room_aura_profile: RoomAuraProfile | None,
+) -> None:
+    """Raise ValueError if the source discriminator doesn't match the supplied kwargs."""
+    if source == GainSource.POSE_ENDORSEMENT:
+        msg = (
+            "POSE_ENDORSEMENT source requires source_pose_endorsement FK; "
+            "ResonanceGrant schema adds that FK in Task 13."
+        )
+        raise ValueError(msg)
+    if source == GainSource.SCENE_ENTRY:
+        msg = (
+            "SCENE_ENTRY source requires source_scene_entry_endorsement FK; "
+            "ResonanceGrant schema adds that FK in Task 17."
+        )
+        raise ValueError(msg)
+    if source == GainSource.OUTFIT_ITEM:
+        msg = "OUTFIT_ITEM source is reserved; item_instance FK ships with Items system."
+        raise ValueError(msg)
+    if source == GainSource.ROOM_RESIDENCE:
+        if room_aura_profile is None:
+            msg = "ROOM_RESIDENCE source requires room_aura_profile= kwarg."
+            raise ValueError(msg)
+        return
+    if source == GainSource.STAFF_GRANT:
+        # staff_account nullable by design (e.g. retirement can null it)
+        return
+    msg = f"Unknown GainSource: {source!r}"
+    raise ValueError(msg)
 
 
 @transaction.atomic

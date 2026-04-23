@@ -15,7 +15,7 @@ from flows.factories import FlowDefinitionFactory
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
 from world.items.models import ItemInstance
 from world.magic.actions import PerformRitualAction
-from world.magic.constants import RitualExecutionKind
+from world.magic.constants import GainSource, RitualExecutionKind
 from world.magic.exceptions import RitualComponentError
 from world.magic.factories import (
     CharacterSheetFactory,
@@ -36,7 +36,7 @@ class PerformRitualActionServiceTests(TestCase):
         # _trait_value=100 gives the trait anchor a cap of 100 so the thread
         # is not already at cap when we call imbuing with amount=50.
         cls.thread = ThreadFactory(owner=cls.actor, _trait_value=100)
-        grant_resonance(cls.actor, cls.thread.resonance, 100, source="setup")
+        grant_resonance(cls.actor, cls.thread.resonance, 100, source=GainSource.STAFF_GRANT)
         cls.ritual = ImbuingRitualFactory()
 
     def test_imbuing_dispatches_to_spend_resonance_for_imbuing(self) -> None:

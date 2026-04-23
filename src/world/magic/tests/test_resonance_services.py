@@ -47,26 +47,53 @@ from world.traits.factories import TraitFactory
 
 
 class GrantResonanceTests(TestCase):
-    def test_first_call_creates_row(self) -> None:
+    def test_staff_grant_writes_ledger_row(self) -> None:
+        from world.magic.constants import GainSource
+        from world.magic.models import ResonanceGrant
+
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
-        cr = grant_resonance(sheet, res, 5, source="test")
+        cr = grant_resonance(sheet, res, 5, source=GainSource.STAFF_GRANT)
         self.assertEqual(cr.balance, 5)
         self.assertEqual(cr.lifetime_earned, 5)
+        self.assertEqual(ResonanceGrant.objects.filter(character_sheet=sheet).count(), 1)
+        grant = ResonanceGrant.objects.get(character_sheet=sheet)
+        self.assertEqual(grant.amount, 5)
+        self.assertEqual(grant.source, GainSource.STAFF_GRANT)
 
-    def test_second_call_increments_both_fields(self) -> None:
+    def test_residence_grant_requires_aura_profile(self) -> None:
+        from world.magic.constants import GainSource
+
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
-        grant_resonance(sheet, res, 5, source="test")
-        cr = grant_resonance(sheet, res, 7, source="test")
-        self.assertEqual(cr.balance, 12)
-        self.assertEqual(cr.lifetime_earned, 12)
+        with self.assertRaises(ValueError):
+            grant_resonance(sheet, res, 1, source=GainSource.ROOM_RESIDENCE)
 
-    def test_zero_amount_rejected(self) -> None:
+    def test_residence_grant_happy_path(self) -> None:
+        from world.magic.constants import GainSource
+        from world.magic.factories import RoomAuraProfileFactory
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        aura = RoomAuraProfileFactory()
+        cr = grant_resonance(
+            sheet,
+            res,
+            2,
+            source=GainSource.ROOM_RESIDENCE,
+            room_aura_profile=aura,
+        )
+        self.assertEqual(cr.balance, 2)
+        self.assertEqual(ResonanceGrant.objects.filter(character_sheet=sheet).count(), 1)
+
+    def test_invalid_amount_raises(self) -> None:
+        from world.magic.constants import GainSource
+
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
         with self.assertRaises(InvalidImbueAmount):
-            grant_resonance(sheet, res, 0, source="test")
+            grant_resonance(sheet, res, 0, source=GainSource.STAFF_GRANT)
 
 
 # =============================================================================
