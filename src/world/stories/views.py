@@ -1,14 +1,20 @@
 from http import HTTPMethod
+from typing import Any
 
+from django.contrib.auth.base_user import AbstractBaseUser
+from django.contrib.auth.models import AnonymousUser
 from django.db import models
-from django.db.models import QuerySet
+from django.db.models import Count, QuerySet
+from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, status, viewsets
+from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
+from rest_framework.views import APIView
 
+from world.stories.constants import AssistantClaimStatus, SessionRequestStatus, StoryScope
 from world.stories.filters import (
     AggregateBeatContributionFilter,
     AssistantGMClaimFilter,
@@ -37,6 +43,7 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryParticipation,
+    StoryProgress,
 )
 from world.stories.pagination import (
     LargeResultsSetPagination,
@@ -80,6 +87,8 @@ from world.stories.serializers import (
     StoryListSerializer,
     StoryParticipationSerializer,
 )
+from world.stories.services.dashboards import STALE_STORY_DAYS, compute_story_status_line
+from world.stories.types import AnyStoryProgress
 
 
 class StoryViewSet(viewsets.ModelViewSet):
@@ -544,3 +553,437 @@ class BeatViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     ordering_fields = ["order", "created_at", "updated_at"]
     ordering = ["episode", "order"]
+
+
+# ---------------------------------------------------------------------------
+# Wave 10: Dashboard APIViews
+# ---------------------------------------------------------------------------
+
+
+def _serialize_progress_entry(progress: AnyStoryProgress, scope: str) -> dict[str, Any]:
+    """Build the dict shape shared by all three scope collectors in MyActiveStoriesView."""
+    story = progress.story
+    episode = progress.current_episode
+    status_line = compute_story_status_line(progress)
+
+    open_session_request_id: int | None = None
+    scheduled_event_id: int | None = None
+
+    if episode is not None:
+        session_req = (
+            SessionRequest.objects.filter(
+                episode=episode,
+                status__in=[SessionRequestStatus.OPEN, SessionRequestStatus.SCHEDULED],
+            )
+            .select_related("event")
+            .first()
+        )
+        if session_req is not None:
+            open_session_request_id = session_req.pk
+            if session_req.event_id is not None:
+                scheduled_event_id = session_req.event_id
+
+    chapter_title: str | None = None
+    current_episode_id: int | None = None
+    current_episode_title: str | None = None
+
+    if episode is not None:
+        current_episode_id = episode.pk
+        current_episode_title = episode.title
+        chapter_title = episode.chapter.title
+
+    return {
+        "story_id": story.pk,
+        "story_title": story.title,
+        "scope": scope,
+        "current_episode_id": current_episode_id,
+        "current_episode_title": current_episode_title,
+        "chapter_title": chapter_title,
+        "status_line": status_line,
+        "open_session_request_id": open_session_request_id,
+        "scheduled_event_id": scheduled_event_id,
+    }
+
+
+def _collect_character_stories(account: AbstractBaseUser | AnonymousUser) -> list[dict[str, Any]]:
+    """Return active CHARACTER-scope progress entries owned by this account."""
+    qs = StoryProgress.objects.filter(
+        story__character_sheet__character__db_account=account,
+        is_active=True,
+    ).select_related(
+        "story",
+        "current_episode",
+        "current_episode__chapter",
+    )
+    return [_serialize_progress_entry(p, StoryScope.CHARACTER) for p in qs]
+
+
+def _collect_group_stories(account: AbstractBaseUser | AnonymousUser) -> list[dict[str, Any]]:
+    """Return active GROUP-scope progress entries for tables this account belongs to."""
+    qs = (
+        GroupStoryProgress.objects.filter(
+            gm_table__memberships__persona__character_sheet__character__db_account=account,
+            gm_table__memberships__left_at__isnull=True,
+            is_active=True,
+        )
+        .select_related(
+            "story",
+            "current_episode",
+            "current_episode__chapter",
+        )
+        .distinct()
+    )
+    return [_serialize_progress_entry(p, StoryScope.GROUP) for p in qs]
+
+
+def _collect_global_stories(account: AbstractBaseUser | AnonymousUser) -> list[dict[str, Any]]:
+    """Return active GLOBAL-scope progress entries where the account has a StoryParticipation."""
+    qs = (
+        GlobalStoryProgress.objects.filter(
+            story__participants__character__db_account=account,
+            story__participants__is_active=True,
+            is_active=True,
+        )
+        .select_related(
+            "story",
+            "current_episode",
+            "current_episode__chapter",
+        )
+        .distinct()
+    )
+    return [_serialize_progress_entry(p, StoryScope.GLOBAL) for p in qs]
+
+
+class MyActiveStoriesView(APIView):
+    """GET /api/stories/my-active/
+
+    Returns the requesting account's active stories across all three scopes
+    (CHARACTER / GROUP / GLOBAL), grouped by scope. Each entry carries a
+    computed status line summarising what the player should do next.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        """Return active stories for the authenticated account."""
+        account = request.user
+        character_stories = _collect_character_stories(account)
+        group_stories = _collect_group_stories(account)
+        global_stories = _collect_global_stories(account)
+        return Response(
+            {
+                "character_stories": character_stories,
+                "group_stories": group_stories,
+                "global_stories": global_stories,
+            }
+        )
+
+
+class IsGMProfile(permissions.BasePermission):
+    """Only users with a GMProfile can access GM dashboards."""
+
+    message = "Only users with a GMProfile can access GM dashboards."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        return getattr(request.user, "gm_profile", None) is not None  # noqa: GETATTR_LITERAL
+
+
+def _serialize_eligible_transitions(transitions: list) -> list[dict[str, Any]]:
+    """Serialise eligible Transition objects for GM queue response."""
+    return [{"transition_id": t.pk, "mode": t.mode} for t in transitions]
+
+
+def _build_gm_queue_for_story(
+    gm_profile: Any,
+    story: Story,
+    episodes_ready: list,
+    pending_claims: list,
+    assigned_requests: list,
+) -> None:
+    """Populate GM queue lists from a single story, dispatching on scope."""
+    from world.stories.exceptions import ProgressionRequirementNotMetError  # noqa: PLC0415
+    from world.stories.services.transitions import get_eligible_transitions  # noqa: PLC0415
+
+    # Collect all active progress records for this story (may be multiple for GROUP).
+    if story.scope == StoryScope.CHARACTER:
+        progress_qs: QuerySet[Any] = story.progress_records.filter(is_active=True).select_related(
+            "current_episode__chapter",
+        )
+        progress_type = StoryScope.CHARACTER
+    elif story.scope == StoryScope.GROUP:
+        progress_qs = story.group_progress_records.filter(is_active=True).select_related(
+            "current_episode__chapter",
+        )
+        progress_type = StoryScope.GROUP
+    else:
+        global_progress = getattr(story, "global_progress", None)  # noqa: GETATTR_LITERAL
+        progress_qs = []
+        if global_progress is not None and global_progress.is_active:
+            progress_qs = [global_progress]
+        progress_type = StoryScope.GLOBAL
+
+    for progress in progress_qs:
+        if progress.current_episode is None:
+            continue
+        try:
+            eligible = get_eligible_transitions(progress)
+        except ProgressionRequirementNotMetError:
+            continue
+        if not eligible:
+            continue
+
+        episode = progress.current_episode
+        open_req = SessionRequest.objects.filter(
+            episode=episode,
+            status=SessionRequestStatus.OPEN,
+        ).first()
+
+        episodes_ready.append(
+            {
+                "story_id": story.pk,
+                "story_title": story.title,
+                "scope": story.scope,
+                "episode_id": episode.pk,
+                "episode_title": episode.title,
+                "progress_type": progress_type,
+                "progress_id": progress.pk,
+                "eligible_transitions": _serialize_eligible_transitions(eligible),
+                "open_session_request_id": open_req.pk if open_req else None,
+            }
+        )
+
+    # AGM claims on this story that are pending approval.
+    story_claims = AssistantGMClaim.objects.filter(
+        beat__episode__chapter__story=story,
+        status=AssistantClaimStatus.REQUESTED,
+    ).select_related("beat", "assistant_gm__account")
+    pending_claims.extend(
+        {
+            "claim_id": claim.pk,
+            "beat_id": claim.beat_id,
+            "beat_internal_description": claim.beat.internal_description,
+            "story_title": story.title,
+            "assistant_gm_id": claim.assistant_gm_id,
+            "requested_at": claim.requested_at,
+        }
+        for claim in story_claims
+    )
+
+    # SessionRequests assigned to this GM on this story.
+    story_assigned = SessionRequest.objects.filter(
+        episode__chapter__story=story,
+        assigned_gm=gm_profile,
+        status__in=[SessionRequestStatus.OPEN, SessionRequestStatus.SCHEDULED],
+    ).select_related("episode__chapter")
+    assigned_requests.extend(
+        {
+            "session_request_id": sr.pk,
+            "episode_id": sr.episode_id,
+            "episode_title": sr.episode.title,
+            "story_title": story.title,
+            "status": sr.status,
+            "event_id": sr.event_id,
+        }
+        for sr in story_assigned
+    )
+
+
+class GMQueueView(APIView):
+    """GET /api/stories/gm-queue/
+
+    Aggregates episodes ready to run across all stories where the requester
+    is Lead GM, plus pending AGM claims and assigned SessionRequests.
+    """
+
+    permission_classes = [IsGMProfile]
+
+    def get(self, request: Request) -> Response:
+        """Return the GM's current work queue."""
+        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+
+        episodes_ready: list[dict[str, Any]] = []
+        pending_claims: list[dict[str, Any]] = []
+        assigned_requests: list[dict[str, Any]] = []
+
+        # Stories where this GMProfile is Lead GM (via primary_table.gm).
+        lead_stories = Story.objects.filter(
+            primary_table__gm=gm_profile,
+            status="active",
+        ).distinct()
+
+        for story in lead_stories:
+            _build_gm_queue_for_story(
+                gm_profile,
+                story,
+                episodes_ready,
+                pending_claims,
+                assigned_requests,
+            )
+
+        return Response(
+            {
+                "episodes_ready_to_run": episodes_ready,
+                "pending_agm_claims": pending_claims,
+                "assigned_session_requests": assigned_requests,
+            }
+        )
+
+
+class StaffWorkloadView(APIView):
+    """GET /api/stories/staff-workload/
+
+    Staff-only cross-story metrics: per-GM queue depth, stale stories,
+    stories at the authoring frontier, and aggregate counts.
+
+    Performance: queries are straightforward for MVP. Consider caching
+    the per-GM queue depth if the GMProfile/story count grows large.
+    """
+
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request: Request) -> Response:
+        """Return cross-story workload metrics for staff."""
+        from world.gm.models import GMProfile  # noqa: PLC0415
+        from world.stories.exceptions import ProgressionRequirementNotMetError  # noqa: PLC0415
+        from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
+        from world.stories.services.transitions import get_eligible_transitions  # noqa: PLC0415
+
+        # --- per-GM queue depth ---
+        gm_profiles = (
+            GMProfile.objects.select_related("account")
+            .filter(
+                tables__primary_stories__isnull=False,
+            )
+            .distinct()
+        )
+
+        per_gm_queue: list[dict[str, Any]] = []
+        for gm in gm_profiles:
+            lead_stories = Story.objects.filter(
+                primary_table__gm=gm,
+                status="active",
+            )
+            episodes_ready_count = 0
+            for story in lead_stories:
+                progress = get_active_progress_for_story(story)
+                if progress is None or progress.current_episode is None:
+                    continue
+                try:
+                    eligible = get_eligible_transitions(progress)
+                except ProgressionRequirementNotMetError:
+                    continue
+                if eligible:
+                    episodes_ready_count += 1
+
+            pending_claims_count = AssistantGMClaim.objects.filter(
+                beat__episode__chapter__story__primary_table__gm=gm,
+                status=AssistantClaimStatus.REQUESTED,
+            ).count()
+
+            per_gm_queue.append(
+                {
+                    "gm_profile_id": gm.pk,
+                    "gm_name": gm.account.username,
+                    "episodes_ready": episodes_ready_count,
+                    "pending_claims": pending_claims_count,
+                }
+            )
+
+        # --- stale stories ---
+        cutoff = timezone.now() - timezone.timedelta(days=STALE_STORY_DAYS)
+        stale_qs = (
+            list(
+                StoryProgress.objects.filter(
+                    is_active=True,
+                    last_advanced_at__lt=cutoff,
+                )
+                .select_related("story")
+                .values("story__id", "story__title", "last_advanced_at")
+            )
+            + list(
+                GroupStoryProgress.objects.filter(
+                    is_active=True,
+                    last_advanced_at__lt=cutoff,
+                )
+                .select_related("story")
+                .values("story__id", "story__title", "last_advanced_at")
+            )
+            + list(
+                GlobalStoryProgress.objects.filter(
+                    is_active=True,
+                    last_advanced_at__lt=cutoff,
+                )
+                .select_related("story")
+                .values("story__id", "story__title", "last_advanced_at")
+            )
+        )
+
+        now = timezone.now()
+        stale_stories: list[dict[str, Any]] = [
+            {
+                "story_id": row["story__id"],
+                "story_title": row["story__title"],
+                "last_advanced_at": row["last_advanced_at"],
+                "days_stale": (now - row["last_advanced_at"]).days,
+            }
+            for row in stale_qs
+        ]
+
+        # --- stories at frontier (current_episode is None but active) ---
+        frontier_char = list(
+            StoryProgress.objects.filter(
+                is_active=True,
+                current_episode__isnull=True,
+            )
+            .select_related("story")
+            .values("story__id", "story__title", "story__scope")
+        )
+        frontier_group = list(
+            GroupStoryProgress.objects.filter(
+                is_active=True,
+                current_episode__isnull=True,
+            )
+            .select_related("story")
+            .values("story__id", "story__title", "story__scope")
+        )
+        frontier_global = list(
+            GlobalStoryProgress.objects.filter(
+                is_active=True,
+                current_episode__isnull=True,
+            )
+            .select_related("story")
+            .values("story__id", "story__title", "story__scope")
+        )
+        stories_at_frontier: list[dict[str, Any]] = [
+            {
+                "story_id": row["story__id"],
+                "story_title": row["story__title"],
+                "scope": row["story__scope"],
+            }
+            for row in frontier_char + frontier_group + frontier_global
+        ]
+
+        # --- aggregate counts ---
+        pending_agm_count = AssistantGMClaim.objects.filter(
+            status=AssistantClaimStatus.REQUESTED,
+        ).count()
+
+        open_session_req_count = SessionRequest.objects.filter(
+            status=SessionRequestStatus.OPEN,
+        ).count()
+
+        counts_by_scope_qs = Story.objects.values("scope").annotate(count=Count("pk"))
+        counts_by_scope: dict[str, int] = {row["scope"]: row["count"] for row in counts_by_scope_qs}
+
+        return Response(
+            {
+                "per_gm_queue_depth": per_gm_queue,
+                "stale_stories": stale_stories,
+                "stories_at_frontier": stories_at_frontier,
+                "pending_agm_claims_count": pending_agm_count,
+                "open_session_requests_count": open_session_req_count,
+                "counts_by_scope": counts_by_scope,
+            }
+        )
