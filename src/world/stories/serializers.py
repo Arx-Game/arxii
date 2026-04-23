@@ -5,12 +5,15 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from world.gm.serializers import GMProfileSerializer
+from world.stories.constants import BeatOutcome
 from world.stories.models import (
     AggregateBeatContribution,
     AssistantGMClaim,
     Beat,
+    BeatCompletion,
     Chapter,
     Episode,
+    EpisodeResolution,
     EpisodeScene,
     GlobalStoryProgress,
     GroupStoryProgress,
@@ -777,6 +780,102 @@ class BeatSerializer(serializers.ModelSerializer):
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.message_dict) from exc
         return attrs
+
+
+# ---------------------------------------------------------------------------
+# Wave 11: Action endpoint input serializers
+# ---------------------------------------------------------------------------
+
+
+class ResolveEpisodeInputSerializer(serializers.Serializer):
+    """Input for POST /api/episodes/{id}/resolve/."""
+
+    progress_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    chosen_transition_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    gm_notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class EpisodeResolutionSerializer(serializers.ModelSerializer):
+    """Read-only serializer for EpisodeResolution rows returned by the resolve action."""
+
+    class Meta:
+        model = EpisodeResolution
+        fields = [
+            "id",
+            "episode",
+            "character_sheet",
+            "gm_table",
+            "chosen_transition",
+            "resolved_by",
+            "era",
+            "gm_notes",
+            "resolved_at",
+        ]
+        read_only_fields = fields
+
+
+class MarkBeatInputSerializer(serializers.Serializer):
+    """Input for POST /api/beats/{id}/mark/."""
+
+    outcome = serializers.ChoiceField(choices=BeatOutcome.choices)
+    gm_notes = serializers.CharField(required=False, allow_blank=True, default="")
+    progress_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+
+
+class BeatCompletionSerializer(serializers.ModelSerializer):
+    """Read-only serializer for BeatCompletion returned by the mark action."""
+
+    class Meta:
+        model = BeatCompletion
+        fields = [
+            "id",
+            "beat",
+            "character_sheet",
+            "roster_entry",
+            "outcome",
+            "era",
+            "gm_notes",
+            "recorded_at",
+        ]
+        read_only_fields = fields
+
+
+class ContributeBeatInputSerializer(serializers.Serializer):
+    """Input for POST /api/beats/{id}/contribute/."""
+
+    character_sheet_id = serializers.IntegerField()
+    points = serializers.IntegerField(min_value=1)
+    source_note = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class RequestClaimInputSerializer(serializers.Serializer):
+    """Input for POST /api/assistant-gm-claims/ (create / request_claim)."""
+
+    beat_id = serializers.IntegerField()
+    framing_note = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class ApproveClaimInputSerializer(serializers.Serializer):
+    """Input for POST /api/assistant-gm-claims/{id}/approve/."""
+
+    framing_note = serializers.CharField(required=False, allow_null=True, default=None)
+
+
+class RejectClaimInputSerializer(serializers.Serializer):
+    """Input for POST /api/assistant-gm-claims/{id}/reject/."""
+
+    note = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class CreateEventFromSessionRequestInputSerializer(serializers.Serializer):
+    """Input for POST /api/session-requests/{id}/create-event/."""
+
+    name = serializers.CharField()
+    scheduled_real_time = serializers.DateTimeField()
+    host_persona_id = serializers.IntegerField()
+    location_id = serializers.IntegerField()
+    description = serializers.CharField(required=False, allow_blank=True, default="")
+    is_public = serializers.BooleanField(required=False, default=True)
 
 
 class StoryLogSerializer(serializers.Serializer):

@@ -8,6 +8,7 @@ from world.stories.views import (
     ChapterViewSet,
     EpisodeSceneViewSet,
     EpisodeViewSet,
+    ExpireOverdueBeatsView,
     GlobalStoryProgressViewSet,
     GMQueueView,
     GroupStoryProgressViewSet,
@@ -46,6 +47,12 @@ urlpatterns = [
         "api/stories/staff-workload/",
         StaffWorkloadView.as_view(),
         name="stories-staff-workload",
+    ),
+    # Wave 11: Staff trigger endpoint.
+    path(
+        "api/stories/expire-overdue-beats/",
+        ExpireOverdueBeatsView.as_view(),
+        name="stories-expire-overdue-beats",
     ),
     path("api/", include(router.urls)),
 ]

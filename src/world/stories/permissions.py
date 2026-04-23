@@ -9,8 +9,8 @@ from rest_framework.request import Request
 from rest_framework.views import APIView
 
 from world.gm.models import GMTable
-from world.stories.constants import StoryScope
-from world.stories.models import Story
+from world.stories.constants import AssistantClaimStatus, StoryScope
+from world.stories.models import AssistantGMClaim, Story
 from world.stories.types import AnyStoryProgress, StoryPrivacy
 
 
@@ -488,6 +488,161 @@ class IsSessionRequestParticipantOrStaff(permissions.BasePermission):
             character__db_account=request.user,
             is_active=True,
         ).exists()
+
+
+# ---------------------------------------------------------------------------
+# Wave 11: Action endpoint permission classes
+# ---------------------------------------------------------------------------
+
+
+class IsLeadGMOnStoryOrStaff(permissions.BasePermission):
+    """Lead GM (primary_table.gm) or staff can perform story-level GM operations.
+
+    Works for Episode objects: walks episode -> chapter -> story to find the story.
+    Also works directly for Story objects.
+    """
+
+    message = "Only the Lead GM of this story or staff may perform this action."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Check Lead GM or staff access, routing by object type."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+
+        # Find the story from whatever object was passed.
+        if isinstance(obj, Story):
+            story = obj
+        else:
+            # Walk episode -> chapter -> story.
+            episode = getattr(obj, "chapter", None)  # noqa: GETATTR_LITERAL
+            if episode is None:
+                # obj is an Episode; it has a chapter attribute.
+                episode_obj = obj
+                story = episode_obj.chapter.story
+            else:
+                story = episode.story
+
+        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        if gm_profile is None or not story.primary_table_id:
+            return False
+        return story.primary_table.gm_id == gm_profile.pk
+
+
+class CanMarkBeat(permissions.BasePermission):
+    """Who can POST /api/beats/{id}/mark/:
+    - Lead GM (story's primary_table.gm) — always
+    - Staff — always
+    - AGM with an APPROVED AssistantGMClaim on *this specific beat*
+
+    Object-level only: the beat PK is in the URL.
+    """
+
+    message = "Only the Lead GM, staff, or an AGM with an approved claim may mark this beat."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Check Lead GM, staff, or AGM with approved claim."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+
+        # Walk beat -> episode -> chapter -> story to find Lead GM.
+        story = obj.episode.chapter.story
+        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+
+        if gm_profile is not None and story.primary_table_id:
+            if story.primary_table.gm_id == gm_profile.pk:
+                return True
+
+        # AGM with an APPROVED claim on this beat.
+        if gm_profile is not None:
+            return (
+                cast(Any, AssistantGMClaim)
+                .objects.filter(
+                    beat=obj,
+                    assistant_gm=gm_profile,
+                    status=AssistantClaimStatus.APPROVED,
+                )
+                .exists()
+            )
+
+        return False
+
+
+class IsClaimOwnerOrStaff(permissions.BasePermission):
+    """The AGM who made the claim (for cancel) or staff."""
+
+    message = "Only the AGM who made this claim or staff may perform this action."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Check the AGM owner or staff."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        if gm_profile is None:
+            return False
+        return obj.assistant_gm_id == gm_profile.pk
+
+
+class IsLeadGMOnClaimStoryOrStaff(permissions.BasePermission):
+    """Lead GM of the claim's beat's story — for approve / reject / complete."""
+
+    message = "Only the Lead GM of the story or staff may approve, reject, or complete claims."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Check Lead GM or staff via claim -> beat -> episode -> chapter -> story."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        if gm_profile is None:
+            return False
+        story = obj.beat.episode.chapter.story
+        if not story.primary_table_id:
+            return False
+        return story.primary_table.gm_id == gm_profile.pk
+
+
+class IsSessionRequestGMOrStaff(permissions.BasePermission):
+    """For create-event / cancel / resolve on SessionRequest:
+    Lead GM (story owner), or staff.
+    """
+
+    message = "Only the Lead GM or staff may manage this session request."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Check Lead GM (story owner) or staff."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        story = obj.episode.chapter.story
+        return story.owners.filter(id=request.user.id).exists()
 
 
 # ---------------------------------------------------------------------------
