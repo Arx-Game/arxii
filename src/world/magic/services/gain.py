@@ -131,3 +131,33 @@ def untag_room_resonance(
         room_aura_profile=aura,
         resonance=resonance,
     ).delete()
+
+
+@transaction.atomic
+def set_residence(
+    sheet: CharacterSheet,
+    room_profile: RoomProfile | None,
+) -> None:
+    """Set or clear a character's current residence."""
+    sheet.current_residence = room_profile
+    sheet.save(update_fields=["current_residence"])
+
+
+def get_residence_resonances(sheet: CharacterSheet) -> set[Resonance]:
+    """Return the set of resonances granting trickle for this character.
+
+    Computes: (sheet.current_residence → RoomAuraProfile → tags)
+              ∩ (sheet.character_resonances — claimed set).
+    """
+    rp = sheet.current_residence
+    if rp is None:
+        return set()
+    aura = getattr(rp, "room_aura_profile", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor, raises RelatedObjectDoesNotExist if missing
+    if aura is None:
+        return set()
+    tagged_ids = set(
+        RoomResonance.objects.filter(room_aura_profile=aura).values_list("resonance_id", flat=True)
+    )
+    claimed_ids = set(sheet.resonances.values_list("resonance_id", flat=True))
+    matched_ids = tagged_ids & claimed_ids
+    return set(Resonance.objects.filter(pk__in=matched_ids))
