@@ -154,6 +154,7 @@ class TransitionInline(admin.TabularInline):
 class BeatInline(admin.TabularInline):
     model = Beat
     extra = 0
+    fk_name = "episode"
     fields = ["predicate_type", "outcome", "visibility", "required_level", "order"]
 
 

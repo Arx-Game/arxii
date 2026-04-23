@@ -10,6 +10,7 @@ from world.stories.constants import (
     BeatPredicateType,
     BeatVisibility,
     EraStatus,
+    StoryMilestoneType,
     StoryScope,
     TransitionMode,
 )
@@ -765,6 +766,37 @@ class Beat(SharedMemoryModel):
         related_name="+",
         help_text="For CODEX_ENTRY_UNLOCKED predicates.",
     )
+    referenced_story = models.ForeignKey(
+        "stories.Story",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="referenced_by_beats",
+        help_text="For STORY_AT_MILESTONE predicates.",
+    )
+    referenced_milestone_type = models.CharField(
+        max_length=30,
+        choices=StoryMilestoneType.choices,
+        blank=True,
+        default="",
+        help_text="Which kind of milestone to check on referenced_story.",
+    )
+    referenced_chapter = models.ForeignKey(
+        "stories.Chapter",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For referenced_milestone_type=CHAPTER_REACHED.",
+    )
+    referenced_episode = models.ForeignKey(
+        "stories.Episode",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For referenced_milestone_type=EPISODE_REACHED.",
+    )
 
     # Scaffolding for future phases (not wired yet):
     deadline = models.DateTimeField(
@@ -783,7 +815,8 @@ class Beat(SharedMemoryModel):
             models.Index(fields=["episode", "outcome"]),
         ]
 
-    # Invariant mapping: predicate_type -> required config field names
+    # Invariant mapping: predicate_type -> required config field names.
+    # For STORY_AT_MILESTONE, use _required_config_fields() which is milestone-type-aware.
     _REQUIRED_CONFIG: dict[str, tuple[str, ...]] = {
         BeatPredicateType.GM_MARKED: (),
         BeatPredicateType.CHARACTER_LEVEL_AT_LEAST: ("required_level",),
@@ -792,9 +825,25 @@ class Beat(SharedMemoryModel):
         BeatPredicateType.CODEX_ENTRY_UNLOCKED: ("required_codex_entry",),
     }
 
+    def _required_config_fields(self) -> tuple[str, ...]:
+        """Return the set of config fields required for this beat's predicate_type.
+
+        For STORY_AT_MILESTONE, the required fields depend on referenced_milestone_type.
+        All other types delegate to _REQUIRED_CONFIG.
+        """
+        if self.predicate_type == BeatPredicateType.STORY_AT_MILESTONE:
+            base: tuple[str, ...] = ("referenced_story", "referenced_milestone_type")
+            if self.referenced_milestone_type == StoryMilestoneType.CHAPTER_REACHED:
+                return (*base, "referenced_chapter")
+            if self.referenced_milestone_type == StoryMilestoneType.EPISODE_REACHED:
+                return (*base, "referenced_episode")
+            # STORY_RESOLVED needs only the story reference.
+            return base
+        return self._REQUIRED_CONFIG.get(self.predicate_type, ())
+
     def clean(self) -> None:
         super().clean()
-        required = self._REQUIRED_CONFIG.get(self.predicate_type, ())
+        required = self._required_config_fields()
         errors: dict[str, str] = {}
         for field_name in required:
             if getattr(self, field_name) in (None, ""):
@@ -805,9 +854,14 @@ class Beat(SharedMemoryModel):
             "required_achievement",
             "required_condition_template",
             "required_codex_entry",
+            "referenced_story",
+            "referenced_milestone_type",
+            "referenced_chapter",
+            "referenced_episode",
         }
         for field_name in all_config_fields - set(required):
-            if getattr(self, field_name) is not None:
+            val = getattr(self, field_name)
+            if val is not None and val != "":
                 errors[field_name] = f"Must be null when predicate_type is {self.predicate_type}."
         if errors:
             raise ValidationError(errors)

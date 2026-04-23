@@ -4,8 +4,13 @@ from django.test import TestCase
 from world.achievements.factories import AchievementFactory
 from world.codex.factories import CodexEntryFactory
 from world.conditions.factories import ConditionTemplateFactory
-from world.stories.constants import BeatOutcome, BeatPredicateType, BeatVisibility
-from world.stories.factories import BeatFactory, EpisodeFactory
+from world.stories.constants import (
+    BeatOutcome,
+    BeatPredicateType,
+    BeatVisibility,
+    StoryMilestoneType,
+)
+from world.stories.factories import BeatFactory, ChapterFactory, EpisodeFactory, StoryFactory
 
 
 class BeatTests(TestCase):
@@ -148,6 +153,96 @@ class BeatTests(TestCase):
             predicate_type=BeatPredicateType.CONDITION_HELD,
             required_condition_template=template,
             required_codex_entry=entry,
+        )
+        with self.assertRaises(ValidationError):
+            beat.full_clean()
+
+    # --- STORY_AT_MILESTONE invariants ---
+
+    def test_story_at_milestone_requires_referenced_story(self):
+        episode = EpisodeFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=None,
+            referenced_milestone_type=StoryMilestoneType.STORY_RESOLVED,
+        )
+        with self.assertRaises(ValidationError):
+            beat.full_clean()
+
+    def test_story_at_milestone_requires_referenced_milestone_type(self):
+        episode = EpisodeFactory()
+        story = StoryFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=story,
+            referenced_milestone_type="",  # missing
+        )
+        with self.assertRaises(ValidationError):
+            beat.full_clean()
+
+    def test_chapter_reached_requires_referenced_chapter(self):
+        episode = EpisodeFactory()
+        story = StoryFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=story,
+            referenced_milestone_type=StoryMilestoneType.CHAPTER_REACHED,
+            referenced_chapter=None,
+        )
+        with self.assertRaises(ValidationError):
+            beat.full_clean()
+
+    def test_episode_reached_requires_referenced_episode(self):
+        episode = EpisodeFactory()
+        story = StoryFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=story,
+            referenced_milestone_type=StoryMilestoneType.EPISODE_REACHED,
+            referenced_episode=None,
+        )
+        with self.assertRaises(ValidationError):
+            beat.full_clean()
+
+    def test_story_resolved_rejects_referenced_chapter(self):
+        episode = EpisodeFactory()
+        story = StoryFactory()
+        chapter = ChapterFactory(story=story)
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=story,
+            referenced_milestone_type=StoryMilestoneType.STORY_RESOLVED,
+            referenced_chapter=chapter,
+        )
+        with self.assertRaises(ValidationError):
+            beat.full_clean()
+
+    def test_story_resolved_rejects_referenced_episode(self):
+        episode = EpisodeFactory()
+        story = StoryFactory()
+        ref_episode = EpisodeFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=story,
+            referenced_milestone_type=StoryMilestoneType.STORY_RESOLVED,
+            referenced_episode=ref_episode,
+        )
+        with self.assertRaises(ValidationError):
+            beat.full_clean()
+
+    def test_non_milestone_predicate_rejects_referenced_story(self):
+        episode = EpisodeFactory()
+        story = StoryFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.GM_MARKED,
+            referenced_story=story,
         )
         with self.assertRaises(ValidationError):
             beat.full_clean()

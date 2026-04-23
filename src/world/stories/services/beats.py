@@ -9,13 +9,21 @@ Public API:
         call to mark a GM_MARKED beat with SUCCESS or FAILURE.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
 from world.roster.models import RosterEntry
-from world.stories.constants import BeatOutcome, BeatPredicateType
+from world.stories.constants import BeatOutcome, BeatPredicateType, StoryMilestoneType
 from world.stories.exceptions import BeatNotResolvableError
 from world.stories.models import Beat, BeatCompletion, Era, StoryProgress
+from world.stories.types import StoryStatus
+
+if TYPE_CHECKING:
+    from world.stories.models import Episode
 
 
 def evaluate_auto_beats(progress: StoryProgress) -> None:
@@ -138,6 +146,8 @@ def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
         return _evaluate_condition_held(beat, sheet)
     if ptype == BeatPredicateType.CODEX_ENTRY_UNLOCKED:
         return _evaluate_codex_entry_unlocked(beat, sheet)
+    if ptype == BeatPredicateType.STORY_AT_MILESTONE:
+        return _evaluate_story_at_milestone(beat)
 
     # GM_MARKED and any future types not handled here.
     return BeatOutcome.UNSATISFIED
@@ -195,6 +205,75 @@ def _evaluate_codex_entry_unlocked(beat: Beat, sheet: CharacterSheet) -> BeatOut
         status=CharacterCodexKnowledge.Status.KNOWN,
     ).exists()
     return BeatOutcome.SUCCESS if known else BeatOutcome.UNSATISFIED
+
+
+def _evaluate_story_at_milestone(beat: Beat) -> BeatOutcome:
+    """Evaluate a STORY_AT_MILESTONE predicate.
+
+    Dispatches on beat.referenced_milestone_type to per-milestone helpers.
+    """
+    from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
+
+    if beat.referenced_story is None:
+        return BeatOutcome.UNSATISFIED
+
+    milestone = beat.referenced_milestone_type
+
+    if milestone == StoryMilestoneType.STORY_RESOLVED:
+        return _milestone_story_resolved(beat)
+
+    progress = get_active_progress_for_story(beat.referenced_story)
+    if progress is None or progress.current_episode is None:
+        return BeatOutcome.UNSATISFIED
+
+    if milestone == StoryMilestoneType.CHAPTER_REACHED:
+        return _milestone_chapter_reached(beat, progress.current_episode)
+    if milestone == StoryMilestoneType.EPISODE_REACHED:
+        return _milestone_episode_reached(beat, progress.current_episode)
+
+    return BeatOutcome.UNSATISFIED
+
+
+def _milestone_story_resolved(beat: Beat) -> BeatOutcome:
+    """Check whether beat.referenced_story has COMPLETED status."""
+    return (
+        BeatOutcome.SUCCESS
+        if beat.referenced_story.status == StoryStatus.COMPLETED
+        else BeatOutcome.UNSATISFIED
+    )
+
+
+def _milestone_chapter_reached(beat: Beat, current_episode: Episode) -> BeatOutcome:
+    """Check whether the current episode is at or past beat.referenced_chapter."""
+    if beat.referenced_chapter is None:
+        return BeatOutcome.UNSATISFIED
+    current_chapter = current_episode.chapter
+    if current_chapter.story_id != beat.referenced_chapter.story_id:
+        return BeatOutcome.UNSATISFIED
+    return (
+        BeatOutcome.SUCCESS
+        if current_chapter.order >= beat.referenced_chapter.order
+        else BeatOutcome.UNSATISFIED
+    )
+
+
+def _milestone_episode_reached(beat: Beat, current_episode: Episode) -> BeatOutcome:
+    """Check whether the current episode is at or past beat.referenced_episode."""
+    if beat.referenced_episode is None:
+        return BeatOutcome.UNSATISFIED
+    current_chapter = current_episode.chapter
+    ref_chapter = beat.referenced_episode.chapter
+    if current_chapter.story_id != ref_chapter.story_id:
+        return BeatOutcome.UNSATISFIED
+    if current_chapter.order > ref_chapter.order:
+        return BeatOutcome.SUCCESS
+    if current_chapter.order == ref_chapter.order:
+        return (
+            BeatOutcome.SUCCESS
+            if current_episode.order >= beat.referenced_episode.order
+            else BeatOutcome.UNSATISFIED
+        )
+    return BeatOutcome.UNSATISFIED
 
 
 def _character_level(sheet: CharacterSheet) -> int:

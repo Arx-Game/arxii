@@ -9,10 +9,11 @@ from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import CharacterCodexKnowledgeFactory, CodexEntryFactory
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.roster.factories import RosterEntryFactory, RosterFactory
-from world.stories.constants import BeatOutcome, BeatPredicateType, EraStatus
+from world.stories.constants import BeatOutcome, BeatPredicateType, EraStatus, StoryMilestoneType
 from world.stories.exceptions import BeatNotResolvableError
 from world.stories.factories import (
     BeatFactory,
+    ChapterFactory,
     EpisodeFactory,
     EraFactory,
     StoryFactory,
@@ -20,6 +21,7 @@ from world.stories.factories import (
 )
 from world.stories.models import BeatCompletion
 from world.stories.services.beats import evaluate_auto_beats, record_gm_marked_outcome
+from world.stories.types import StoryStatus
 
 
 class EvaluateAutoBeatsLevelTests(EvenniaTestCase):
@@ -408,6 +410,244 @@ class EvaluateAutoBeatsCodexTests(EvenniaTestCase):
             episode=episode,
             predicate_type=BeatPredicateType.CODEX_ENTRY_UNLOCKED,
             required_codex_entry=required_entry,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+
+class EvaluateAutoBeatsStoryMilestoneTests(EvenniaTestCase):
+    """Tests for STORY_AT_MILESTONE predicate evaluation.
+
+    The referenced story is a CHARACTER-scope story with its own StoryProgress.
+    The beat itself lives in a separate (unrelated) story's episode.
+    """
+
+    def _make_beat_progress(self):
+        """Return a progress record for the beat's own story (not the referenced story)."""
+        sheet = CharacterSheetFactory()
+        episode = EpisodeFactory()
+        progress = StoryProgressFactory(character_sheet=sheet, current_episode=episode)
+        return progress, episode
+
+    # --- STORY_RESOLVED ---
+
+    def test_story_resolved_satisfied_when_story_completed(self):
+        progress, episode = self._make_beat_progress()
+        ref_story = StoryFactory(status=StoryStatus.COMPLETED)
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=ref_story,
+            referenced_milestone_type=StoryMilestoneType.STORY_RESOLVED,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+
+    def test_story_resolved_unsatisfied_when_story_active(self):
+        progress, episode = self._make_beat_progress()
+        ref_story = StoryFactory(status=StoryStatus.ACTIVE)
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=ref_story,
+            referenced_milestone_type=StoryMilestoneType.STORY_RESOLVED,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+    # --- CHAPTER_REACHED ---
+
+    def _make_character_story_at_chapter(self, chapter_order: int):
+        """Create a CHARACTER-scope story with StoryProgress at chapter_order."""
+        ref_sheet = CharacterSheetFactory()
+        ref_story = StoryFactory(character_sheet=ref_sheet)
+        ref_chapter = ChapterFactory(story=ref_story, order=chapter_order)
+        ref_episode = EpisodeFactory(chapter=ref_chapter, order=1)
+        StoryProgressFactory(
+            story=ref_story,
+            character_sheet=ref_sheet,
+            current_episode=ref_episode,
+        )
+        return ref_story, ref_chapter
+
+    def test_chapter_reached_satisfied_when_at_exact_chapter(self):
+        progress, episode = self._make_beat_progress()
+        # The chapter used as the current position IS the required chapter.
+        ref_story, current_chapter = self._make_character_story_at_chapter(chapter_order=2)
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=ref_story,
+            referenced_milestone_type=StoryMilestoneType.CHAPTER_REACHED,
+            referenced_chapter=current_chapter,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+
+    def test_chapter_reached_satisfied_when_past_required_chapter(self):
+        progress, episode = self._make_beat_progress()
+        ref_story, _ref_chapter = self._make_character_story_at_chapter(chapter_order=3)
+        earlier_chapter = ChapterFactory(story=ref_story, order=1)
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=ref_story,
+            referenced_milestone_type=StoryMilestoneType.CHAPTER_REACHED,
+            referenced_chapter=earlier_chapter,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+
+    def test_chapter_reached_unsatisfied_when_before_required_chapter(self):
+        progress, episode = self._make_beat_progress()
+        ref_story, _ref_chapter = self._make_character_story_at_chapter(chapter_order=1)
+        future_chapter = ChapterFactory(story=ref_story, order=3)
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=ref_story,
+            referenced_milestone_type=StoryMilestoneType.CHAPTER_REACHED,
+            referenced_chapter=future_chapter,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+    def test_chapter_reached_unsatisfied_when_no_active_progress(self):
+        progress, episode = self._make_beat_progress()
+        ref_story = StoryFactory()
+        ref_chapter = ChapterFactory(story=ref_story, order=1)
+        # No StoryProgress created for ref_story.
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=ref_story,
+            referenced_milestone_type=StoryMilestoneType.CHAPTER_REACHED,
+            referenced_chapter=ref_chapter,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+    # --- EPISODE_REACHED ---
+
+    def _make_story_at_episode(self, chapter_order: int, episode_order: int):
+        """Create a CHARACTER-scope story with StoryProgress at specific chapter/episode."""
+        ref_sheet = CharacterSheetFactory()
+        ref_story = StoryFactory(character_sheet=ref_sheet)
+        ref_chapter = ChapterFactory(story=ref_story, order=chapter_order)
+        ref_episode = EpisodeFactory(chapter=ref_chapter, order=episode_order)
+        StoryProgressFactory(
+            story=ref_story,
+            character_sheet=ref_sheet,
+            current_episode=ref_episode,
+        )
+        return ref_story, ref_chapter, ref_episode
+
+    def test_episode_reached_satisfied_when_at_exact_episode(self):
+        progress, episode = self._make_beat_progress()
+        ref_story, _ch, ref_ep = self._make_story_at_episode(chapter_order=2, episode_order=3)
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=ref_story,
+            referenced_milestone_type=StoryMilestoneType.EPISODE_REACHED,
+            referenced_episode=ref_ep,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+
+    def test_episode_reached_satisfied_when_in_later_chapter(self):
+        progress, episode = self._make_beat_progress()
+        ref_story, _ch, _current_ep = self._make_story_at_episode(chapter_order=3, episode_order=1)
+        # Required episode is in an earlier chapter.
+        earlier_chapter = ChapterFactory(story=ref_story, order=1)
+        required_ep = EpisodeFactory(chapter=earlier_chapter, order=5)
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=ref_story,
+            referenced_milestone_type=StoryMilestoneType.EPISODE_REACHED,
+            referenced_episode=required_ep,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+
+    def test_episode_reached_unsatisfied_when_in_future_episode_same_chapter(self):
+        progress, episode = self._make_beat_progress()
+        ref_story, ref_chapter, _current_ep = self._make_story_at_episode(
+            chapter_order=1, episode_order=2
+        )
+        future_ep = EpisodeFactory(chapter=ref_chapter, order=5)
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=ref_story,
+            referenced_milestone_type=StoryMilestoneType.EPISODE_REACHED,
+            referenced_episode=future_ep,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+    def test_episode_reached_unsatisfied_when_in_future_chapter(self):
+        progress, episode = self._make_beat_progress()
+        ref_story, _ch, _current_ep = self._make_story_at_episode(chapter_order=1, episode_order=3)
+        future_chapter = ChapterFactory(story=ref_story, order=3)
+        future_ep = EpisodeFactory(chapter=future_chapter, order=1)
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=ref_story,
+            referenced_milestone_type=StoryMilestoneType.EPISODE_REACHED,
+            referenced_episode=future_ep,
             outcome=BeatOutcome.UNSATISFIED,
         )
 

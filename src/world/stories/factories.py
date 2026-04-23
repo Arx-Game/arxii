@@ -341,6 +341,10 @@ class BeatFactory(factory_django.DjangoModelFactory):
     required_achievement = None
     required_condition_template = None
     required_codex_entry = None
+    referenced_story = None
+    referenced_milestone_type = ""
+    referenced_chapter = None
+    referenced_episode = None
 
 
 class EpisodeProgressionRequirementFactory(factory_django.DjangoModelFactory):
