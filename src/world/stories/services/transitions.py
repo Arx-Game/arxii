@@ -9,7 +9,7 @@ Public API:
 from django.db.models import Prefetch
 
 from world.stories.exceptions import ProgressionRequirementNotMetError
-from world.stories.models import Transition, TransitionRequiredOutcome
+from world.stories.models import Episode, Transition, TransitionRequiredOutcome
 from world.stories.types import AnyStoryProgress
 
 
@@ -41,6 +41,10 @@ def get_eligible_transitions(progress: AnyStoryProgress) -> list[Transition]:
 
     episode = progress.current_episode
 
+    # Lazily expire any overdue beats in the current episode before checking eligibility.
+    # This ensures transition routing reflects current deadline state even if no cron has fired.
+    _expire_overdue_beats_for_episode(episode)
+
     # Step 1: Check all EpisodeProgressionRequirements.
     # select_related to avoid N+1 on beat FK.
     progression_reqs = list(episode.progression_requirements.select_related("beat").all())
@@ -65,6 +69,32 @@ def get_eligible_transitions(progress: AnyStoryProgress) -> list[Transition]:
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+
+def _expire_overdue_beats_for_episode(episode: Episode) -> None:
+    """Lazily expire overdue beats scoped to a single episode.
+
+    Called at the top of get_eligible_transitions so that eligibility checks
+    reflect current deadline state even if no global cron has fired.
+
+    Uses .save() (not .update()) to update SharedMemoryModel's identity-map
+    cache in place — bulk .update() bypasses the ORM layer and leaves stale
+    Python objects in memory, which would break the subsequent FK walks in
+    progression_requirements and routing predicates.
+    """
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.stories.constants import BeatOutcome  # noqa: PLC0415
+
+    now = timezone.now()
+    overdue = episode.beats.filter(
+        outcome=BeatOutcome.UNSATISFIED,
+        deadline__isnull=False,
+        deadline__lt=now,
+    )
+    for beat in overdue:
+        beat.outcome = BeatOutcome.EXPIRED
+        beat.save(update_fields=["outcome", "updated_at"])
 
 
 def _routing_satisfied(routing_reqs: list[TransitionRequiredOutcome]) -> bool:
