@@ -9,6 +9,7 @@ from world.stories.constants import (
     BeatPredicateType,
     BeatVisibility,
     EraStatus,
+    SessionRequestStatus,
     StoryScope,
     TransitionMode,
 )
@@ -27,6 +28,7 @@ from world.stories.models import (
     GroupStoryProgress,
     PlayerTrust,
     PlayerTrustLevel,
+    SessionRequest,
     Story,
     StoryFeedback,
     StoryParticipation,
@@ -469,6 +471,21 @@ class AssistantGMClaimFactory(factory_django.DjangoModelFactory):
     approved_by = None
     rejection_note = ""
     framing_note = factory.Faker("paragraph")
+
+
+class SessionRequestFactory(factory_django.DjangoModelFactory):
+    """Factory for creating SessionRequest instances."""
+
+    class Meta:
+        model = SessionRequest
+
+    episode = factory.SubFactory(EpisodeFactory)
+    status = SessionRequestStatus.OPEN
+    event = None
+    open_to_any_gm = False
+    assigned_gm = None
+    initiated_by_account = None
+    notes = ""
 
 
 # Convenience functions for common test scenarios

@@ -11,6 +11,7 @@ from world.stories.constants import (
     BeatPredicateType,
     BeatVisibility,
     EraStatus,
+    SessionRequestStatus,
     StoryMilestoneType,
     StoryScope,
     TransitionMode,
@@ -1389,3 +1390,85 @@ class AssistantGMClaim(SharedMemoryModel):
             f"AssistantGMClaim(beat=#{self.beat_id},"
             f" agm=#{self.assistant_gm_id}, status={self.status})"
         )
+
+
+class SessionRequest(SharedMemoryModel):
+    """A scheduling request generated when an episode becomes ready-to-run.
+
+    Flow:
+        Episode becomes eligible -> SessionRequest(status=OPEN) created
+        -> Lead GM / player (per scope) turns it into an Event via the
+        events app -> SessionRequest.status=SCHEDULED, event populated
+        -> session runs, beats marked, episode resolved
+        -> SessionRequest.status=RESOLVED
+
+    Player-scope interaction:
+        CHARACTER: initiator is the story's character's account; may open
+        to first-available GM via open_to_any_gm=True.
+        GROUP: initiator is the Lead GM coordinating the group.
+        GLOBAL: initiator is staff; open_to_any_gm typically True.
+    """
+
+    episode = models.ForeignKey(
+        Episode,
+        on_delete=models.CASCADE,
+        related_name="session_requests",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=SessionRequestStatus.choices,
+        default=SessionRequestStatus.OPEN,
+    )
+    event = models.ForeignKey(
+        "events.Event",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="session_requests",
+        help_text=(
+            "Populated when the Lead GM schedules this via create_event_from_session_request."
+        ),
+    )
+    open_to_any_gm = models.BooleanField(
+        default=False,
+        help_text=(
+            "Player opted for first-available GM (CHARACTER scope only), or "
+            "staff opened a metaplot event to any GM."
+        ),
+    )
+    assigned_gm = models.ForeignKey(
+        "gm.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="assigned_session_requests",
+        help_text="The GM currently expected to run this session.",
+    )
+    initiated_by_account = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="initiated_session_requests",
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Player or staff notes (scheduling preferences, etc.).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["episode", "status"]),
+            models.Index(fields=["assigned_gm", "status"]),
+        ]
+
+    @property
+    def story(self) -> "Story":
+        """Walk episode -> chapter -> story. Free via SharedMemoryModel identity map."""
+        return self.episode.chapter.story
+
+    def __str__(self) -> str:
+        return f"SessionRequest({self.episode.title} status={self.status})"

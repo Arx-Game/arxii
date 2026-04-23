@@ -15,6 +15,7 @@ from world.stories.models import (
     GlobalStoryProgress,
     GroupStoryProgress,
     PlayerTrustLevel,
+    SessionRequest,
     Story,
     StoryFeedback,
     StoryParticipation,
@@ -473,6 +474,15 @@ class AggregateBeatContributionAdmin(admin.ModelAdmin):
     search_fields = ("beat__internal_description", "source_note")
     readonly_fields = tuple(f.name for f in AggregateBeatContribution._meta.fields)  # noqa: SLF001
     ordering = ("-recorded_at",)
+
+
+@admin.register(SessionRequest)
+class SessionRequestAdmin(admin.ModelAdmin):
+    list_display = ("episode", "status", "assigned_gm", "event", "open_to_any_gm", "created_at")
+    list_filter = ("status", "open_to_any_gm")
+    search_fields = ("episode__title", "notes")
+    readonly_fields = ("created_at", "updated_at")
+    raw_id_fields = ("episode", "event", "assigned_gm", "initiated_by_account")
 
 
 @admin.register(AssistantGMClaim)
