@@ -239,12 +239,11 @@ class ResonanceGrant(SharedMemoryModel):
         "magic.RoomAuraProfile", null=True, blank=True,
         on_delete=PROTECT, related_name="resonance_grants",
     )
-    # Future: populated once the Items system ships. Nullable by design;
-    # outfit grants before item content exists simply won't fire.
-    source_item_instance = ForeignKey(
-        "items.ItemInstance", null=True, blank=True,  # string ref; app not yet built
-        on_delete=PROTECT, related_name="resonance_grants",
-    )
+    # NOTE: `source_item_instance` is intentionally absent at launch — the
+    # Items app doesn't exist yet, so the FK can't be declared. The field +
+    # its CheckConstraint are added by the Items system's first migration
+    # when that app ships. Since the outfit trickle is a no-op stub at
+    # launch, no `OUTFIT_ITEM` rows are ever written in the meantime.
     # Staff grants: the acting staff account; SET_NULL so account retirement
     # doesn't cascade into the audit log.
     source_staff_account = ForeignKey(
@@ -297,17 +296,22 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_staff_account__isnull=True)
                 ) | ~Q(source="ROOM_RESIDENCE"),
             ),
-            CheckConstraint(
-                name="resonance_grant_outfit_shape",
-                check=(
-                    Q(source="OUTFIT_ITEM")
-                    & Q(source_pose_endorsement__isnull=True)
-                    & Q(source_scene_entry_endorsement__isnull=True)
-                    & Q(source_room_aura_profile__isnull=True)
-                    & Q(source_item_instance__isnull=False)
-                    & Q(source_staff_account__isnull=True)
-                ) | ~Q(source="OUTFIT_ITEM"),
-            ),
+            # NOTE: the OUTFIT_ITEM shape constraint is absent at launch —
+            # it references `source_item_instance`, which doesn't exist
+            # until the Items app ships. Added alongside the FK by the
+            # Items system's first migration. Form at that time:
+            #
+            #   CheckConstraint(
+            #       name="resonance_grant_outfit_shape",
+            #       check=(
+            #           Q(source="OUTFIT_ITEM")
+            #           & Q(source_pose_endorsement__isnull=True)
+            #           & Q(source_scene_entry_endorsement__isnull=True)
+            #           & Q(source_room_aura_profile__isnull=True)
+            #           & Q(source_item_instance__isnull=False)
+            #           & Q(source_staff_account__isnull=True)
+            #       ) | ~Q(source="OUTFIT_ITEM"),
+            #   ),
             CheckConstraint(
                 name="resonance_grant_staff_shape",
                 check=(
@@ -326,15 +330,27 @@ class ResonanceGrant(SharedMemoryModel):
 **Model-level `clean()`** additionally validates shape pre-save for
 friendly errors during admin/test creation (matches Thread's pattern).
 
-**Outfit FK caveat.** `source_item_instance` uses a string app reference
-to `items.ItemInstance`, an app that doesn't exist yet. Spec C ships
-with this FK *commented out* and re-added by the Items system's first
-migration when that app lands. The `OUTFIT_ITEM` enum value is preserved
-(reserved), but the CheckConstraint for outfit shape is also held back
-until the FK can be declared. The outfit trickle function stays stubbed
-(§5.4) so no `OUTFIT_ITEM` rows are ever written at launch — keeping the
-missing FK a non-issue. This is the cleanest way to preserve typed-FK
-discipline without forward-referencing a non-existent app.
+**Outfit FK deferral — explicit.** Django migrations cannot declare a
+FK to a model in an app that doesn't exist yet. Therefore at launch:
+
+- The `source_item_instance` field is **not in the model** — not present,
+  not commented as a placeholder, simply absent from Spec C's migration.
+- The `resonance_grant_outfit_shape` CheckConstraint is also **not in the
+  model** — omitted alongside the FK.
+- The `OUTFIT_ITEM` value on `GainSource` **is declared** (reserved enum
+  slot), but no code path produces a row with that source value.
+- The outfit trickle helper (§5.4) returns an empty iterable, so the
+  tick loop never attempts an outfit grant.
+
+When the Items app ships, its first migration adds (in one pass):
+- The `source_item_instance` FK to `ResonanceGrant`.
+- The `resonance_grant_outfit_shape` CheckConstraint.
+- The `get_outfit_resonance_contributions` implementation + `ItemTemplate`
+  or wearable-subtype `resonances` M2M.
+
+This is a clean forward-compatible deferral — no forward-referenced FKs,
+no schema instability, and the discriminator pattern is preserved intact
+once Items lands.
 
 **Invariant (modulo reversals — see §8.4 / §11.4):**
 
@@ -462,7 +478,8 @@ def grant_resonance(
     pose_endorsement: PoseEndorsement | None = None,
     scene_entry_endorsement: SceneEntryEndorsement | None = None,
     room_aura_profile: RoomAuraProfile | None = None,
-    item_instance: "ItemInstance | None" = None,  # future; unused at launch
+    # item_instance kwarg NOT declared at launch — Items app doesn't exist.
+    # Added by the Items system's first migration alongside the FK.
     staff_account: AccountDB | None = None,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
