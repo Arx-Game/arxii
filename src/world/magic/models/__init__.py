@@ -21,6 +21,7 @@ Submodules (see Scope 6 §4.4):
   ThreadWeavingTeachingOffer
 - rituals: Ritual, RitualComponentRequirement, ImbuingProseTemplate
 - reincarnation: Reincarnation
+- grant: ResonanceGrant
 
 Additionally: ``AudereThreshold`` lives in ``world.magic.audere`` but is
 re-exported here so Django's model registry sees it via the ``magic.models``
@@ -64,6 +65,7 @@ from world.magic.models.gifts import (
     Tradition,
     TraditionManager,
 )
+from world.magic.models.grant import ResonanceGrant
 from world.magic.models.motifs import (
     CharacterFacet,
     Facet,
@@ -155,6 +157,8 @@ __all__ = [
     "Resonance",
     # gain config (Spec C §2.1)
     "ResonanceGainConfig",
+    # gain ledger (Spec C §2.4)
+    "ResonanceGrant",
     "ResonanceManager",
     "Restriction",
     "RestrictionManager",

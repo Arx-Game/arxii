@@ -88,3 +88,61 @@ class RoomResonanceTests(TestCase):
         RoomResonance.objects.create(room_aura_profile=aura, resonance=r1)
         RoomResonance.objects.create(room_aura_profile=aura, resonance=r2)
         self.assertEqual(aura.room_resonances.count(), 2)
+
+
+class ResonanceGrantTests(TestCase):
+    def test_residence_grant_row_shape(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import ResonanceFactory, RoomAuraProfileFactory
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        aura = RoomAuraProfileFactory()
+
+        grant = ResonanceGrant.objects.create(
+            character_sheet=sheet,
+            resonance=res,
+            amount=1,
+            source=GainSource.ROOM_RESIDENCE,
+            source_room_aura_profile=aura,
+        )
+        self.assertEqual(grant.amount, 1)
+        self.assertEqual(grant.source, GainSource.ROOM_RESIDENCE)
+
+    def test_residence_grant_requires_aura_profile_fk(self) -> None:
+        from django.db import IntegrityError
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        with self.assertRaises(IntegrityError):
+            ResonanceGrant.objects.create(
+                character_sheet=sheet,
+                resonance=res,
+                amount=1,
+                source=GainSource.ROOM_RESIDENCE,
+                # missing source_room_aura_profile
+            )
+
+    def test_staff_grant_accepts_null_account(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        grant = ResonanceGrant.objects.create(
+            character_sheet=sheet,
+            resonance=res,
+            amount=5,
+            source=GainSource.STAFF_GRANT,
+            source_staff_account=None,
+        )
+        self.assertIsNone(grant.source_staff_account)
