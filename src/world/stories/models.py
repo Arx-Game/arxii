@@ -797,6 +797,11 @@ class Beat(SharedMemoryModel):
         related_name="+",
         help_text="For referenced_milestone_type=EPISODE_REACHED.",
     )
+    required_points = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="For AGGREGATE_THRESHOLD predicates — total contribution points required.",
+    )
 
     # Scaffolding for future phases (not wired yet):
     deadline = models.DateTimeField(
@@ -823,6 +828,7 @@ class Beat(SharedMemoryModel):
         BeatPredicateType.ACHIEVEMENT_HELD: ("required_achievement",),
         BeatPredicateType.CONDITION_HELD: ("required_condition_template",),
         BeatPredicateType.CODEX_ENTRY_UNLOCKED: ("required_codex_entry",),
+        BeatPredicateType.AGGREGATE_THRESHOLD: ("required_points",),
     }
 
     def _required_config_fields(self) -> tuple[str, ...]:
@@ -858,6 +864,7 @@ class Beat(SharedMemoryModel):
             "referenced_milestone_type",
             "referenced_chapter",
             "referenced_episode",
+            "required_points",
         }
         for field_name in all_config_fields - set(required):
             val = getattr(self, field_name)
@@ -931,6 +938,77 @@ class TransitionRequiredOutcome(SharedMemoryModel):
         return (
             f"Transition #{self.transition_id} requires beat #{self.beat_id}"
             f" = {self.required_outcome}"
+        )
+
+
+class AggregateBeatContributionManager(models.Manager):
+    def total_for_beat(self, beat: "Beat") -> int:
+        """Sum contributions for a beat; returns 0 when no rows exist."""
+        return self.filter(beat=beat).aggregate(total=models.Sum("points"))["total"] or 0
+
+
+class AggregateBeatContribution(SharedMemoryModel):
+    """Per-character contribution toward an AGGREGATE_THRESHOLD beat.
+
+    Different gameplay events (siege battle won, research mission completed,
+    etc.) produce contributions; the beat flips to SUCCESS when total
+    contributions cross the beat's required_points threshold.
+
+    Each row records the character, their current roster tenure (audit
+    trail), the era active at contribution time, the points, and a brief
+    source note explaining what the contribution was for.
+    """
+
+    beat = models.ForeignKey(
+        Beat,
+        on_delete=models.CASCADE,
+        related_name="aggregate_contributions",
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="aggregate_contributions",
+    )
+    roster_entry = models.ForeignKey(
+        "roster.RosterEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        help_text=(
+            "Which roster tenure was active when this contribution was made. For audit only."
+        ),
+    )
+    points = models.PositiveIntegerField(
+        help_text="Contribution points toward the beat's required_points threshold.",
+    )
+    era = models.ForeignKey(
+        Era,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="aggregate_contributions",
+    )
+    source_note = models.TextField(
+        blank=True,
+        help_text=(
+            "Brief description of what produced this contribution (siege battle, mission, etc.)."
+        ),
+    )
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    objects = AggregateBeatContributionManager()
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["beat", "character_sheet"]),
+            models.Index(fields=["beat", "-recorded_at"]),
+            models.Index(fields=["character_sheet", "-recorded_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"AggregateBeatContribution(beat=#{self.beat_id},"
+            f" char=#{self.character_sheet_id}, points={self.points})"
         )
 
 

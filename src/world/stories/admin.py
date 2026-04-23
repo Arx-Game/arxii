@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 
 from world.stories.models import (
+    AggregateBeatContribution,
     Beat,
     BeatCompletion,
     Chapter,
@@ -462,3 +463,12 @@ class GlobalStoryProgressAdmin(admin.ModelAdmin):
     list_filter = ("is_active",)
     search_fields = ("story__title",)
     readonly_fields = ("started_at", "last_advanced_at")
+
+
+@admin.register(AggregateBeatContribution)
+class AggregateBeatContributionAdmin(admin.ModelAdmin):
+    list_display = ("beat", "character_sheet", "points", "era", "recorded_at")
+    list_filter = ("era",)
+    search_fields = ("beat__internal_description", "source_note")
+    readonly_fields = tuple(f.name for f in AggregateBeatContribution._meta.fields)  # noqa: SLF001
+    ordering = ("-recorded_at",)

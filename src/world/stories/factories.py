@@ -12,6 +12,7 @@ from world.stories.constants import (
     TransitionMode,
 )
 from world.stories.models import (
+    AggregateBeatContribution,
     Beat,
     BeatCompletion,
     Chapter,
@@ -345,6 +346,7 @@ class BeatFactory(factory_django.DjangoModelFactory):
     referenced_milestone_type = ""
     referenced_chapter = None
     referenced_episode = None
+    required_points = None
 
 
 class EpisodeProgressionRequirementFactory(factory_django.DjangoModelFactory):
@@ -381,6 +383,20 @@ class BeatCompletionFactory(factory_django.DjangoModelFactory):
     era = None
     outcome = BeatOutcome.SUCCESS
     gm_notes = ""
+
+
+class AggregateBeatContributionFactory(factory_django.DjangoModelFactory):
+    """Factory for creating AggregateBeatContribution ledger rows."""
+
+    class Meta:
+        model = AggregateBeatContribution
+
+    beat = factory.SubFactory(BeatFactory)
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    roster_entry = None
+    era = None
+    points = 10
+    source_note = factory.Faker("sentence")
 
 
 class EpisodeResolutionFactory(factory_django.DjangoModelFactory):
