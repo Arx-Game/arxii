@@ -4,6 +4,7 @@ import factory.fuzzy
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.stories.constants import (
+    AssistantClaimStatus,
     BeatOutcome,
     BeatPredicateType,
     BeatVisibility,
@@ -13,6 +14,7 @@ from world.stories.constants import (
 )
 from world.stories.models import (
     AggregateBeatContribution,
+    AssistantGMClaim,
     Beat,
     BeatCompletion,
     Chapter,
@@ -451,6 +453,22 @@ class GlobalStoryProgressFactory(factory_django.DjangoModelFactory):
     story = factory.SubFactory(StoryFactory, scope=StoryScope.GLOBAL)
     current_episode = None
     is_active = True
+
+
+class AssistantGMClaimFactory(factory_django.DjangoModelFactory):
+    """Factory for creating AssistantGMClaim instances."""
+
+    class Meta:
+        model = AssistantGMClaim
+
+    beat = factory.SubFactory(
+        BeatFactory, agm_eligible=True, predicate_type=BeatPredicateType.GM_MARKED
+    )
+    assistant_gm = factory.SubFactory("world.gm.factories.GMProfileFactory")
+    status = AssistantClaimStatus.REQUESTED
+    approved_by = None
+    rejection_note = ""
+    framing_note = factory.Faker("paragraph")
 
 
 # Convenience functions for common test scenarios

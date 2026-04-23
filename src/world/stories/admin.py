@@ -3,6 +3,7 @@ from django.utils.html import format_html
 
 from world.stories.models import (
     AggregateBeatContribution,
+    AssistantGMClaim,
     Beat,
     BeatCompletion,
     Chapter,
@@ -472,3 +473,16 @@ class AggregateBeatContributionAdmin(admin.ModelAdmin):
     search_fields = ("beat__internal_description", "source_note")
     readonly_fields = tuple(f.name for f in AggregateBeatContribution._meta.fields)  # noqa: SLF001
     ordering = ("-recorded_at",)
+
+
+@admin.register(AssistantGMClaim)
+class AssistantGMClaimAdmin(admin.ModelAdmin):
+    list_display = ("beat", "assistant_gm", "status", "approved_by", "requested_at")
+    list_filter = ("status",)
+    search_fields = (
+        "beat__internal_description",
+        "assistant_gm__account__username",
+        "framing_note",
+    )
+    readonly_fields = ("requested_at", "updated_at")
+    raw_id_fields = ("beat", "assistant_gm", "approved_by")

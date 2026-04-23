@@ -6,6 +6,7 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.stories.constants import (
+    AssistantClaimStatus,
     BeatOutcome,
     BeatPredicateType,
     BeatVisibility,
@@ -803,6 +804,12 @@ class Beat(SharedMemoryModel):
         help_text="For AGGREGATE_THRESHOLD predicates — total contribution points required.",
     )
 
+    # AGM eligibility flag — Lead GM may expose specific beats to AGM pool.
+    agm_eligible = models.BooleanField(
+        default=False,
+        help_text="Lead GM may flag this beat to be claimable by Assistant GMs.",
+    )
+
     # Scaffolding for future phases (not wired yet):
     deadline = models.DateTimeField(
         null=True,
@@ -1311,3 +1318,74 @@ class StoryProgress(SharedMemoryModel):
         episode_title = self.current_episode.title if self.current_episode else "(frontier)"
         char_label = self.character_sheet.character.db_key if self.character_sheet_id else "?"
         return f"StoryProgress({char_label} in {self.story.title} @ {episode_title})"
+
+
+class AssistantGMClaim(SharedMemoryModel):
+    """An Assistant GM's claim on a specific beat session.
+
+    Flow: AGM submits (status=REQUESTED) -> Lead GM or Staff approves or
+    rejects -> AGM runs the session and marks the beat outcome ->
+    Lead GM marks COMPLETED.
+
+    Scope: the AGM sees only this beat + Lead-GM-flagged notes + the
+    framing_note written for the session. They do NOT see the rest of
+    the story plan.
+    """
+
+    beat = models.ForeignKey(
+        Beat,
+        on_delete=models.CASCADE,
+        related_name="assistant_claims",
+    )
+    assistant_gm = models.ForeignKey(
+        "gm.GMProfile",
+        on_delete=models.CASCADE,
+        related_name="assistant_claims_made",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=AssistantClaimStatus.choices,
+        default=AssistantClaimStatus.REQUESTED,
+    )
+    approved_by = models.ForeignKey(
+        "gm.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="assistant_claims_approved",
+        help_text="The Lead GM or Staff member who approved/rejected.",
+    )
+    rejection_note = models.TextField(
+        blank=True,
+        help_text="Reason for rejection (shown to AGM).",
+    )
+    framing_note = models.TextField(
+        blank=True,
+        help_text=(
+            "Lead GM's one-paragraph framing for the AGM session. Sets the "
+            "scene without exposing the rest of the story."
+        ),
+    )
+    requested_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["beat", "assistant_gm"],
+                condition=models.Q(
+                    status__in=[AssistantClaimStatus.REQUESTED, AssistantClaimStatus.APPROVED]
+                ),
+                name="unique_active_claim_per_beat_per_agm",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["status", "requested_at"]),
+            models.Index(fields=["beat", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"AssistantGMClaim(beat=#{self.beat_id},"
+            f" agm=#{self.assistant_gm_id}, status={self.status})"
+        )
