@@ -340,6 +340,7 @@ class BeatFactory(factory_django.DjangoModelFactory):
     required_level = None
     required_achievement = None
     required_condition_template = None
+    required_codex_entry = None
 
 
 class EpisodeProgressionRequirementFactory(factory_django.DjangoModelFactory):

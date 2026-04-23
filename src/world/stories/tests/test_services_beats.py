@@ -5,6 +5,8 @@ from evennia.utils.test_resources import EvenniaTestCase
 from world.achievements.factories import AchievementFactory, CharacterAchievementFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import CharacterClassFactory, CharacterClassLevelFactory
+from world.codex.constants import CodexKnowledgeStatus
+from world.codex.factories import CharacterCodexKnowledgeFactory, CodexEntryFactory
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.roster.factories import RosterEntryFactory, RosterFactory
 from world.stories.constants import BeatOutcome, BeatPredicateType, EraStatus
@@ -304,6 +306,108 @@ class EvaluateAutoBeatsConditionTests(EvenniaTestCase):
             episode=episode,
             predicate_type=BeatPredicateType.CONDITION_HELD,
             required_condition_template=required_template,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+
+class EvaluateAutoBeatsCodexTests(EvenniaTestCase):
+    """Tests for CODEX_ENTRY_UNLOCKED predicate evaluation."""
+
+    def _make_progress_with_sheet_and_roster(self):
+        sheet = CharacterSheetFactory()
+        roster = RosterFactory()
+        roster_entry = RosterEntryFactory(character_sheet=sheet, roster=roster)
+        episode = EpisodeFactory()
+        return (
+            StoryProgressFactory(character_sheet=sheet, current_episode=episode),
+            sheet,
+            roster_entry,
+            episode,
+        )
+
+    def test_codex_entry_unlocked_beat_satisfied_when_entry_known(self):
+        """Beat flips to SUCCESS when the character has KNOWN status for the entry."""
+        progress, _sheet, roster_entry, episode = self._make_progress_with_sheet_and_roster()
+        entry = CodexEntryFactory()
+        CharacterCodexKnowledgeFactory(
+            roster_entry=roster_entry,
+            entry=entry,
+            status=CodexKnowledgeStatus.KNOWN,
+        )
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.CODEX_ENTRY_UNLOCKED,
+            required_codex_entry=entry,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+
+    def test_codex_entry_unlocked_beat_unsatisfied_when_entry_uncovered(self):
+        """Beat stays UNSATISFIED when the character only has UNCOVERED status."""
+        progress, _sheet, roster_entry, episode = self._make_progress_with_sheet_and_roster()
+        entry = CodexEntryFactory()
+        CharacterCodexKnowledgeFactory(
+            roster_entry=roster_entry,
+            entry=entry,
+            status=CodexKnowledgeStatus.UNCOVERED,
+        )
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.CODEX_ENTRY_UNLOCKED,
+            required_codex_entry=entry,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+    def test_codex_entry_unlocked_beat_unsatisfied_when_no_roster_entry(self):
+        """Beat stays UNSATISFIED when the character sheet has no RosterEntry."""
+        sheet = CharacterSheetFactory()
+        episode = EpisodeFactory()
+        progress = StoryProgressFactory(character_sheet=sheet, current_episode=episode)
+        entry = CodexEntryFactory()
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.CODEX_ENTRY_UNLOCKED,
+            required_codex_entry=entry,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+    def test_codex_entry_unlocked_beat_unsatisfied_when_different_entry_known(self):
+        """Beat stays UNSATISFIED when a different codex entry is known."""
+        progress, _sheet, roster_entry, episode = self._make_progress_with_sheet_and_roster()
+        required_entry = CodexEntryFactory()
+        other_entry = CodexEntryFactory()
+        CharacterCodexKnowledgeFactory(
+            roster_entry=roster_entry,
+            entry=other_entry,
+            status=CodexKnowledgeStatus.KNOWN,
+        )
+
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.CODEX_ENTRY_UNLOCKED,
+            required_codex_entry=required_entry,
             outcome=BeatOutcome.UNSATISFIED,
         )
 

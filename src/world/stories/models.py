@@ -757,6 +757,14 @@ class Beat(SharedMemoryModel):
         related_name="+",
         help_text="For CONDITION_HELD predicates.",
     )
+    required_codex_entry = models.ForeignKey(
+        "codex.CodexEntry",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For CODEX_ENTRY_UNLOCKED predicates.",
+    )
 
     # Scaffolding for future phases (not wired yet):
     deadline = models.DateTimeField(
@@ -781,6 +789,7 @@ class Beat(SharedMemoryModel):
         BeatPredicateType.CHARACTER_LEVEL_AT_LEAST: ("required_level",),
         BeatPredicateType.ACHIEVEMENT_HELD: ("required_achievement",),
         BeatPredicateType.CONDITION_HELD: ("required_condition_template",),
+        BeatPredicateType.CODEX_ENTRY_UNLOCKED: ("required_codex_entry",),
     }
 
     def clean(self) -> None:
@@ -795,6 +804,7 @@ class Beat(SharedMemoryModel):
             "required_level",
             "required_achievement",
             "required_condition_template",
+            "required_codex_entry",
         }
         for field_name in all_config_fields - set(required):
             if getattr(self, field_name) is not None:

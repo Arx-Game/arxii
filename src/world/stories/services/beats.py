@@ -136,6 +136,8 @@ def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
         return _evaluate_achievement_held(beat, sheet)
     if ptype == BeatPredicateType.CONDITION_HELD:
         return _evaluate_condition_held(beat, sheet)
+    if ptype == BeatPredicateType.CODEX_ENTRY_UNLOCKED:
+        return _evaluate_codex_entry_unlocked(beat, sheet)
 
     # GM_MARKED and any future types not handled here.
     return BeatOutcome.UNSATISFIED
@@ -168,6 +170,31 @@ def _evaluate_condition_held(beat: Beat, sheet: CharacterSheet) -> BeatOutcome:
     if beat.required_condition_template in active:
         return BeatOutcome.SUCCESS
     return BeatOutcome.UNSATISFIED
+
+
+def _evaluate_codex_entry_unlocked(beat: Beat, sheet: CharacterSheet) -> BeatOutcome:
+    """Evaluate a CODEX_ENTRY_UNLOCKED predicate.
+
+    Codex knowledge is tracked per RosterEntry (character-level ownership, not
+    per-player). If the sheet has no RosterEntry, the character cannot have
+    codex knowledge and the predicate is UNSATISFIED.
+    """
+    from world.codex.models import CharacterCodexKnowledge  # noqa: PLC0415
+
+    if beat.required_codex_entry is None:
+        return BeatOutcome.UNSATISFIED
+
+    try:
+        roster_entry = sheet.roster_entry
+    except RosterEntry.DoesNotExist:
+        return BeatOutcome.UNSATISFIED
+
+    known = CharacterCodexKnowledge.objects.filter(
+        roster_entry=roster_entry,
+        entry=beat.required_codex_entry,
+        status=CharacterCodexKnowledge.Status.KNOWN,
+    ).exists()
+    return BeatOutcome.SUCCESS if known else BeatOutcome.UNSATISFIED
 
 
 def _character_level(sheet: CharacterSheet) -> int:
