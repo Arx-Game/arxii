@@ -61,8 +61,14 @@ from __future__ import annotations
 from django.db import transaction
 from evennia.accounts.models import AccountDB
 
+from evennia_extensions.models import RoomProfile
 from world.character_sheets.models import CharacterSheet
-from world.magic.models import ResonanceGainConfig
+from world.magic.models import (
+    Resonance,
+    ResonanceGainConfig,
+    RoomAuraProfile,
+    RoomResonance,
+)
 
 
 def account_for_sheet(sheet: CharacterSheet) -> AccountDB | None:
@@ -91,3 +97,37 @@ def get_resonance_gain_config() -> ResonanceGainConfig:
     with transaction.atomic():
         cfg, _ = ResonanceGainConfig.objects.get_or_create(pk=1)
         return cfg
+
+
+@transaction.atomic
+def tag_room_resonance(
+    room_profile: RoomProfile,
+    resonance: Resonance,
+    set_by: AccountDB | None = None,
+) -> RoomResonance:
+    """Tag a room with a resonance. Lazy-creates RoomAuraProfile if missing.
+
+    Idempotent — returns the existing row unchanged if already tagged.
+    """
+    aura, _ = RoomAuraProfile.objects.get_or_create(room_profile=room_profile)
+    tag, _ = RoomResonance.objects.get_or_create(
+        room_aura_profile=aura,
+        resonance=resonance,
+        defaults={"set_by": set_by},
+    )
+    return tag
+
+
+@transaction.atomic
+def untag_room_resonance(
+    room_profile: RoomProfile,
+    resonance: Resonance,
+) -> None:
+    """Remove a resonance tag. No-op if absent."""
+    aura = getattr(room_profile, "room_aura_profile", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor, raised RelatedObjectDoesNotExist if missing
+    if aura is None:
+        return
+    RoomResonance.objects.filter(
+        room_aura_profile=aura,
+        resonance=resonance,
+    ).delete()
