@@ -3,11 +3,16 @@ from django.db.models import QuerySet
 import django_filters
 
 from world.stories.models import (
+    AggregateBeatContribution,
+    AssistantGMClaim,
     Chapter,
     Episode,
     EpisodeScene,
+    GlobalStoryProgress,
+    GroupStoryProgress,
     PlayerTrust,
     PlayerTrustLevel,
+    SessionRequest,
     Story,
     StoryFeedback,
     StoryParticipation,
@@ -282,3 +287,90 @@ class PlayerTrustLevelFilter(django_filters.FilterSet):
     ) -> QuerySet[PlayerTrustLevel]:
         """Filter by account username"""
         return queryset.filter(player_trust__account__username__icontains=value)
+
+
+class GroupStoryProgressFilter(django_filters.FilterSet):
+    """Filter for GroupStoryProgress model"""
+
+    story = django_filters.NumberFilter(field_name="story_id")
+    gm_table = django_filters.NumberFilter(field_name="gm_table_id")
+    is_active = django_filters.BooleanFilter()
+
+    class Meta:
+        model = GroupStoryProgress
+        fields = ["story", "gm_table", "is_active"]
+
+
+class GlobalStoryProgressFilter(django_filters.FilterSet):
+    """Filter for GlobalStoryProgress model"""
+
+    story = django_filters.NumberFilter(field_name="story_id")
+    is_active = django_filters.BooleanFilter()
+
+    class Meta:
+        model = GlobalStoryProgress
+        fields = ["story", "is_active"]
+
+
+class AggregateBeatContributionFilter(django_filters.FilterSet):
+    """Filter for AggregateBeatContribution model"""
+
+    beat = django_filters.NumberFilter(field_name="beat_id")
+    character_sheet = django_filters.NumberFilter(field_name="character_sheet_id")
+    episode = django_filters.NumberFilter(field_name="beat__episode_id")
+    story = django_filters.NumberFilter(field_name="beat__episode__chapter__story_id")
+
+    recorded_after = django_filters.DateTimeFilter(
+        field_name="recorded_at",
+        lookup_expr="gte",
+    )
+    recorded_before = django_filters.DateTimeFilter(
+        field_name="recorded_at",
+        lookup_expr="lte",
+    )
+
+    class Meta:
+        model = AggregateBeatContribution
+        fields = ["beat", "character_sheet"]
+
+
+class AssistantGMClaimFilter(django_filters.FilterSet):
+    """Filter for AssistantGMClaim model"""
+
+    beat = django_filters.NumberFilter(field_name="beat_id")
+    assistant_gm = django_filters.NumberFilter(field_name="assistant_gm_id")
+    status = django_filters.CharFilter(field_name="status")
+    episode = django_filters.NumberFilter(field_name="beat__episode_id")
+    story = django_filters.NumberFilter(field_name="beat__episode__chapter__story_id")
+
+    requested_after = django_filters.DateTimeFilter(
+        field_name="requested_at",
+        lookup_expr="gte",
+    )
+
+    class Meta:
+        model = AssistantGMClaim
+        fields = ["beat", "assistant_gm", "status"]
+
+
+class SessionRequestFilter(django_filters.FilterSet):
+    """Filter for SessionRequest model"""
+
+    episode = django_filters.NumberFilter(field_name="episode_id")
+    status = django_filters.CharFilter(field_name="status")
+    story = django_filters.NumberFilter(field_name="episode__chapter__story_id")
+    assigned_gm = django_filters.NumberFilter(field_name="assigned_gm_id")
+    open_to_any_gm = django_filters.BooleanFilter()
+
+    created_after = django_filters.DateTimeFilter(
+        field_name="created_at",
+        lookup_expr="gte",
+    )
+    created_before = django_filters.DateTimeFilter(
+        field_name="created_at",
+        lookup_expr="lte",
+    )
+
+    class Meta:
+        model = SessionRequest
+        fields = ["episode", "status", "open_to_any_gm"]

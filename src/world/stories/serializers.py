@@ -1,14 +1,21 @@
 from typing import Any, cast
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from world.gm.serializers import GMProfileSerializer
 from world.stories.models import (
+    AggregateBeatContribution,
+    AssistantGMClaim,
+    Beat,
     Chapter,
     Episode,
     EpisodeScene,
+    GlobalStoryProgress,
+    GroupStoryProgress,
     PlayerTrust,
     PlayerTrustLevel,
+    SessionRequest,
     Story,
     StoryFeedback,
     StoryParticipation,
@@ -552,3 +559,220 @@ class StoryTrustRequirementCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = StoryTrustRequirement
         fields = ["story", "trust_category", "minimum_trust_level", "notes"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 serializers
+# ---------------------------------------------------------------------------
+
+
+class GroupStoryProgressSerializer(serializers.ModelSerializer):
+    """Serializer for GroupStoryProgress — per-GMTable progress pointer."""
+
+    class Meta:
+        model = GroupStoryProgress
+        fields = [
+            "id",
+            "story",
+            "gm_table",
+            "current_episode",
+            "started_at",
+            "last_advanced_at",
+            "is_active",
+        ]
+        read_only_fields = ["id", "started_at", "last_advanced_at"]
+
+    def validate(self, attrs: Any) -> Any:
+        """Enforce scope invariant via model's clean() — surfaces as 400."""
+        # Build a temporary instance merging existing fields (for partial updates)
+        # with the incoming attrs so clean() has a complete picture.
+        existing: dict[str, Any] = {}
+        if self.instance is not None:
+            for field in ["story", "gm_table", "current_episode", "is_active"]:
+                existing[field] = getattr(self.instance, field)
+        merged = {**existing, **attrs}
+        instance = GroupStoryProgress(**merged)
+        try:
+            instance.clean()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict) from exc
+        return attrs
+
+
+class GlobalStoryProgressSerializer(serializers.ModelSerializer):
+    """Serializer for GlobalStoryProgress — singleton metaplot progress pointer."""
+
+    class Meta:
+        model = GlobalStoryProgress
+        fields = [
+            "id",
+            "story",
+            "current_episode",
+            "started_at",
+            "last_advanced_at",
+            "is_active",
+        ]
+        read_only_fields = ["id", "started_at", "last_advanced_at"]
+
+    def validate(self, attrs: Any) -> Any:
+        """Enforce scope invariant via model's clean() — surfaces as 400."""
+        existing: dict[str, Any] = {}
+        if self.instance is not None:
+            for field in ["story", "current_episode", "is_active"]:
+                existing[field] = getattr(self.instance, field)
+        merged = {**existing, **attrs}
+        instance = GlobalStoryProgress(**merged)
+        try:
+            instance.clean()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict) from exc
+        return attrs
+
+
+class AggregateBeatContributionSerializer(serializers.ModelSerializer):
+    """Read-only serializer for AggregateBeatContribution ledger rows."""
+
+    class Meta:
+        model = AggregateBeatContribution
+        fields = [
+            "id",
+            "beat",
+            "character_sheet",
+            "roster_entry",
+            "points",
+            "era",
+            "source_note",
+            "recorded_at",
+        ]
+        read_only_fields = [
+            "id",
+            "beat",
+            "character_sheet",
+            "roster_entry",
+            "points",
+            "era",
+            "source_note",
+            "recorded_at",
+        ]
+
+
+class AssistantGMClaimSerializer(serializers.ModelSerializer):
+    """Read-only serializer for AssistantGMClaim records."""
+
+    class Meta:
+        model = AssistantGMClaim
+        fields = [
+            "id",
+            "beat",
+            "assistant_gm",
+            "status",
+            "approved_by",
+            "rejection_note",
+            "framing_note",
+            "requested_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "beat",
+            "assistant_gm",
+            "status",
+            "approved_by",
+            "rejection_note",
+            "framing_note",
+            "requested_at",
+            "updated_at",
+        ]
+
+
+class SessionRequestSerializer(serializers.ModelSerializer):
+    """Read-only serializer for SessionRequest records."""
+
+    story_id = serializers.IntegerField(source="story.id", read_only=True)
+
+    class Meta:
+        model = SessionRequest
+        fields = [
+            "id",
+            "episode",
+            "story_id",
+            "status",
+            "event",
+            "open_to_any_gm",
+            "assigned_gm",
+            "initiated_by_account",
+            "notes",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at", "story_id"]
+
+
+class BeatSerializer(serializers.ModelSerializer):
+    """Full serializer for Beat including all Phase 2 predicate config fields."""
+
+    class Meta:
+        model = Beat
+        fields = [
+            "id",
+            "episode",
+            "predicate_type",
+            "outcome",
+            "visibility",
+            "internal_description",
+            "player_hint",
+            "player_resolution_text",
+            "order",
+            # Predicate config fields
+            "required_level",
+            "required_achievement",
+            "required_condition_template",
+            "required_codex_entry",
+            "referenced_story",
+            "referenced_milestone_type",
+            "referenced_chapter",
+            "referenced_episode",
+            "required_points",
+            # AGM / scheduling
+            "agm_eligible",
+            "deadline",
+            # Timestamps
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def validate(self, attrs: Any) -> Any:
+        """Mirror Beat.clean() so predicate-type invariants surface as 400 responses."""
+        # Build complete picture for clean(): existing values + incoming attrs.
+        existing: dict[str, Any] = {}
+        if self.instance is not None:
+            for field_name in [
+                "episode",
+                "predicate_type",
+                "outcome",
+                "visibility",
+                "internal_description",
+                "player_hint",
+                "player_resolution_text",
+                "order",
+                "required_level",
+                "required_achievement",
+                "required_condition_template",
+                "required_codex_entry",
+                "referenced_story",
+                "referenced_milestone_type",
+                "referenced_chapter",
+                "referenced_episode",
+                "required_points",
+                "agm_eligible",
+                "deadline",
+            ]:
+                existing[field_name] = getattr(self.instance, field_name)
+        merged = {**existing, **attrs}
+        temp = Beat(**merged)
+        try:
+            temp.clean()
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.message_dict) from exc
+        return attrs

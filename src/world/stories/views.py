@@ -1,5 +1,7 @@
 from http import HTTPMethod
 
+from django.db import models
+from django.db.models import QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -8,19 +10,30 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
 from world.stories.filters import (
+    AggregateBeatContributionFilter,
+    AssistantGMClaimFilter,
     ChapterFilter,
     EpisodeFilter,
     EpisodeSceneFilter,
+    GlobalStoryProgressFilter,
+    GroupStoryProgressFilter,
     PlayerTrustFilter,
+    SessionRequestFilter,
     StoryFeedbackFilter,
     StoryFilter,
     StoryParticipationFilter,
 )
 from world.stories.models import (
+    AggregateBeatContribution,
+    AssistantGMClaim,
+    Beat,
     Chapter,
     Episode,
     EpisodeScene,
+    GlobalStoryProgress,
+    GroupStoryProgress,
     PlayerTrust,
+    SessionRequest,
     Story,
     StoryFeedback,
     StoryParticipation,
@@ -32,14 +45,23 @@ from world.stories.pagination import (
 )
 from world.stories.permissions import (
     CanParticipateInStory,
+    IsBeatStoryOwnerOrStaff,
     IsChapterStoryOwnerOrStaff,
+    IsClaimantOrLeadGMOrStaff,
+    IsContributorOrLeadGMOrStaff,
     IsEpisodeStoryOwnerOrStaff,
+    IsGlobalProgressReadableOrStaff,
+    IsGroupProgressMemberOrStaff,
     IsParticipationOwnerOrStoryOwnerOrStaff,
     IsPlayerTrustOwnerOrStaff,
     IsReviewerOrStoryOwnerOrStaff,
+    IsSessionRequestParticipantOrStaff,
     IsStoryOwnerOrStaff,
 )
 from world.stories.serializers import (
+    AggregateBeatContributionSerializer,
+    AssistantGMClaimSerializer,
+    BeatSerializer,
     ChapterCreateSerializer,
     ChapterDetailSerializer,
     ChapterListSerializer,
@@ -47,7 +69,10 @@ from world.stories.serializers import (
     EpisodeDetailSerializer,
     EpisodeListSerializer,
     EpisodeSceneSerializer,
+    GlobalStoryProgressSerializer,
+    GroupStoryProgressSerializer,
     PlayerTrustSerializer,
+    SessionRequestSerializer,
     StoryCreateSerializer,
     StoryDetailSerializer,
     StoryFeedbackCreateSerializer,
@@ -339,3 +364,183 @@ class StoryFeedbackViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(feedback, many=True)
         return Response(serializer.data)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 ViewSets
+# ---------------------------------------------------------------------------
+
+
+class GroupStoryProgressViewSet(viewsets.ModelViewSet):
+    """ViewSet for GroupStoryProgress — per-GMTable progress pointer.
+
+    Read access: active members of the GMTable.
+    Write access: Lead GM (GMTable.gm) and staff.
+    """
+
+    queryset = GroupStoryProgress.objects.select_related(
+        "story",
+        "gm_table",
+        "current_episode",
+    )
+    serializer_class = GroupStoryProgressSerializer
+    permission_classes = [IsGroupProgressMemberOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = GroupStoryProgressFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["started_at", "last_advanced_at", "is_active"]
+    ordering = ["-last_advanced_at"]
+
+    def get_queryset(self) -> QuerySet[GroupStoryProgress]:
+        qs = super().get_queryset()
+        if self.request.user.is_staff:
+            return qs
+        gm_profile = getattr(self.request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        # Active members: Persona -> character_sheet -> character (ObjectDB) -> db_account.
+        member_q = models.Q(
+            gm_table__memberships__persona__character_sheet__character__db_account=self.request.user,
+            gm_table__memberships__left_at__isnull=True,
+        )
+        # Lead GMs can also see records for their own tables.
+        lead_gm_q = models.Q(gm_table__gm=gm_profile) if gm_profile is not None else models.Q()
+        return qs.filter(member_q | lead_gm_q).distinct()
+
+
+class GlobalStoryProgressViewSet(viewsets.ModelViewSet):
+    """ViewSet for GlobalStoryProgress — singleton metaplot progress pointer.
+
+    Read access: any authenticated user (metaplot is public).
+    Write access: staff only.
+    """
+
+    queryset = GlobalStoryProgress.objects.select_related("story", "current_episode")
+    serializer_class = GlobalStoryProgressSerializer
+    permission_classes = [IsGlobalProgressReadableOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = GlobalStoryProgressFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["started_at", "last_advanced_at", "is_active"]
+    ordering = ["-last_advanced_at"]
+
+
+class AggregateBeatContributionViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only ViewSet for AggregateBeatContribution.
+
+    Writes go through record_aggregate_contribution service (Wave 11 action endpoints).
+    Read access: the contributing character's account, story Lead GM (owner), or staff.
+    """
+
+    queryset = AggregateBeatContribution.objects.select_related(
+        "beat__episode__chapter__story",
+        "character_sheet__character",
+        "roster_entry",
+        "era",
+    )
+    serializer_class = AggregateBeatContributionSerializer
+    permission_classes = [IsContributorOrLeadGMOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = AggregateBeatContributionFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["recorded_at", "points"]
+    ordering = ["-recorded_at"]
+
+    def get_queryset(self) -> QuerySet[AggregateBeatContribution]:
+        qs = super().get_queryset()
+        if self.request.user.is_staff:
+            return qs
+        # Limit to contributions for characters this user owns, or stories they own
+        return qs.filter(
+            models.Q(character_sheet__character__db_account=self.request.user)
+            | models.Q(beat__episode__chapter__story__owners=self.request.user)
+        ).distinct()
+
+
+class AssistantGMClaimViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only ViewSet for AssistantGMClaim.
+
+    State transitions go through service-backed action endpoints (Wave 11).
+    Read access: the claiming AGM (assistant_gm.account), Lead GM (story owner), or staff.
+    """
+
+    queryset = AssistantGMClaim.objects.select_related(
+        "beat__episode__chapter__story",
+        "assistant_gm__account",
+        "approved_by__account",
+    )
+    serializer_class = AssistantGMClaimSerializer
+    permission_classes = [IsClaimantOrLeadGMOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = AssistantGMClaimFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["requested_at", "updated_at", "status"]
+    ordering = ["-requested_at"]
+
+    def get_queryset(self) -> QuerySet[AssistantGMClaim]:
+        qs = super().get_queryset()
+        if self.request.user.is_staff:
+            return qs
+        gm_profile = getattr(self.request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        filters_q = models.Q(beat__episode__chapter__story__owners=self.request.user)
+        if gm_profile is not None:
+            filters_q |= models.Q(assistant_gm=gm_profile)
+        return qs.filter(filters_q).distinct()
+
+
+class SessionRequestViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only ViewSet for SessionRequest.
+
+    Wave 7 auto-creates requests; manual creation is admin-only.
+    State transitions go through service-backed action endpoints (Wave 11).
+    Read access: players with StoryParticipation, assigned/story-owning GMs, staff.
+    """
+
+    queryset = SessionRequest.objects.select_related(
+        "episode__chapter__story",
+        "event",
+        "assigned_gm__account",
+        "initiated_by_account",
+    )
+    serializer_class = SessionRequestSerializer
+    permission_classes = [IsSessionRequestParticipantOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = SessionRequestFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["created_at", "updated_at", "status"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self) -> QuerySet[SessionRequest]:
+        qs = super().get_queryset()
+        if self.request.user.is_staff:
+            return qs
+        gm_profile = getattr(self.request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        filters_q = models.Q(
+            episode__chapter__story__participants__character__db_account=self.request.user,
+            episode__chapter__story__participants__is_active=True,
+        ) | models.Q(episode__chapter__story__owners=self.request.user)
+        if gm_profile is not None:
+            filters_q |= models.Q(assigned_gm=gm_profile)
+        return qs.filter(filters_q).distinct()
+
+
+class BeatViewSet(viewsets.ModelViewSet):
+    """ViewSet for Beat — includes all Phase 2 predicate config fields.
+
+    Access delegated to episode story ownership (same as EpisodeViewSet).
+    """
+
+    queryset = Beat.objects.select_related(
+        "episode__chapter__story",
+        "required_achievement",
+        "required_condition_template",
+        "required_codex_entry",
+        "referenced_story",
+        "referenced_chapter",
+        "referenced_episode",
+    )
+    serializer_class = BeatSerializer
+    permission_classes = [IsBeatStoryOwnerOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = None
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["order", "created_at", "updated_at"]
+    ordering = ["episode", "order"]
