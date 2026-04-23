@@ -246,3 +246,38 @@ class BeatTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             beat.full_clean()
+
+    # --- AGGREGATE_THRESHOLD invariants ---
+
+    def test_clean_rejects_aggregate_without_required_points(self):
+        """AGGREGATE_THRESHOLD with required_points=None raises ValidationError."""
+        episode = EpisodeFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.AGGREGATE_THRESHOLD,
+            required_points=None,
+        )
+        with self.assertRaises(ValidationError):
+            beat.full_clean()
+
+    def test_clean_rejects_non_aggregate_with_required_points(self):
+        """GM_MARKED with required_points set raises ValidationError."""
+        episode = EpisodeFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.GM_MARKED,
+            required_points=100,
+        )
+        with self.assertRaises(ValidationError):
+            beat.full_clean()
+
+    def test_aggregate_threshold_valid_with_required_points(self):
+        """AGGREGATE_THRESHOLD with required_points passes validation."""
+        episode = EpisodeFactory()
+        beat = BeatFactory.build(
+            episode=episode,
+            predicate_type=BeatPredicateType.AGGREGATE_THRESHOLD,
+            required_points=50,
+        )
+        # Should not raise.
+        beat.full_clean()

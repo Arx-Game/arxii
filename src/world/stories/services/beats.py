@@ -7,6 +7,10 @@ Public API:
 
     record_gm_marked_outcome(*, progress, beat, outcome, gm_notes) — GM's manual
         call to mark a GM_MARKED beat with SUCCESS or FAILURE.
+
+    record_aggregate_contribution(*, beat, character_sheet, points, source_note) —
+        records a per-character contribution toward an AGGREGATE_THRESHOLD beat and
+        re-evaluates the beat within the same atomic transaction.
 """
 
 from __future__ import annotations
@@ -19,7 +23,7 @@ from world.character_sheets.models import CharacterSheet
 from world.roster.models import RosterEntry
 from world.stories.constants import BeatOutcome, BeatPredicateType, StoryMilestoneType
 from world.stories.exceptions import BeatNotResolvableError
-from world.stories.models import Beat, BeatCompletion, Era, StoryProgress
+from world.stories.models import AggregateBeatContribution, Beat, BeatCompletion, Era, StoryProgress
 from world.stories.types import StoryStatus
 
 if TYPE_CHECKING:
@@ -124,6 +128,61 @@ def record_gm_marked_outcome(
     )
 
 
+def record_aggregate_contribution(
+    *,
+    beat: Beat,
+    character_sheet: CharacterSheet,
+    points: int,
+    source_note: str = "",
+) -> AggregateBeatContribution:
+    """Record a character's contribution toward an AGGREGATE_THRESHOLD beat.
+
+    After recording, re-evaluates the beat and flips its outcome to SUCCESS
+    if the threshold is met, creating a BeatCompletion row atomically.
+
+    Idempotent with respect to completions: if the beat is already SUCCESS,
+    the contribution row is still recorded but no additional BeatCompletion
+    is created.
+
+    Raises:
+        BeatNotResolvableError: if beat.predicate_type is not AGGREGATE_THRESHOLD,
+            or if points <= 0.
+    """
+    if beat.predicate_type != BeatPredicateType.AGGREGATE_THRESHOLD:
+        msg = "Only AGGREGATE_THRESHOLD beats accept contributions."
+        raise BeatNotResolvableError(msg)
+    if points <= 0:
+        msg = "Contribution points must be positive."
+        raise BeatNotResolvableError(msg)
+
+    era = Era.objects.get_active()
+    roster_entry = _current_roster_entry(character_sheet)
+
+    with transaction.atomic():
+        contrib = AggregateBeatContribution.objects.create(
+            beat=beat,
+            character_sheet=character_sheet,
+            roster_entry=roster_entry,
+            era=era,
+            points=points,
+            source_note=source_note,
+        )
+        # Re-evaluate only when the beat hasn't already crossed the threshold.
+        if beat.outcome != BeatOutcome.SUCCESS:
+            new_outcome = _evaluate_aggregate_beat(beat)
+            if new_outcome == BeatOutcome.SUCCESS:
+                beat.outcome = new_outcome
+                beat.save(update_fields=["outcome", "updated_at"])
+                BeatCompletion.objects.create(
+                    beat=beat,
+                    character_sheet=character_sheet,
+                    roster_entry=roster_entry,
+                    outcome=new_outcome,
+                    era=era,
+                )
+    return contrib
+
+
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
@@ -134,6 +193,11 @@ def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
 
     Returns UNSATISFIED when the predicate is not yet met or the type is
     unknown to this evaluator (e.g., GM_MARKED, future types).
+
+    Note: AGGREGATE_THRESHOLD is intentionally excluded here. Aggregate beats
+    are write-path-triggered: record_aggregate_contribution re-evaluates them
+    directly when a contribution is recorded. They should not flip silently
+    during evaluate_auto_beats, since no contribution event has fired.
     """
     ptype = beat.predicate_type
     sheet = progress.character_sheet
@@ -149,7 +213,7 @@ def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
     if ptype == BeatPredicateType.STORY_AT_MILESTONE:
         return _evaluate_story_at_milestone(beat)
 
-    # GM_MARKED and any future types not handled here.
+    # GM_MARKED, AGGREGATE_THRESHOLD (write-path only), and future types.
     return BeatOutcome.UNSATISFIED
 
 
@@ -274,6 +338,18 @@ def _milestone_episode_reached(beat: Beat, current_episode: Episode) -> BeatOutc
             else BeatOutcome.UNSATISFIED
         )
     return BeatOutcome.UNSATISFIED
+
+
+def _evaluate_aggregate_beat(beat: Beat) -> BeatOutcome:
+    """Evaluate an AGGREGATE_THRESHOLD beat by summing its contribution ledger.
+
+    Used exclusively by record_aggregate_contribution. Does not require a
+    StoryProgress argument because aggregate beats read the ledger directly.
+    """
+    if beat.required_points is None:
+        return BeatOutcome.UNSATISFIED
+    total = AggregateBeatContribution.objects.total_for_beat(beat)
+    return BeatOutcome.SUCCESS if total >= beat.required_points else BeatOutcome.UNSATISFIED
 
 
 def _character_level(sheet: CharacterSheet) -> int:

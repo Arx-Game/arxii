@@ -19,8 +19,12 @@ from world.stories.factories import (
     StoryFactory,
     StoryProgressFactory,
 )
-from world.stories.models import BeatCompletion
-from world.stories.services.beats import evaluate_auto_beats, record_gm_marked_outcome
+from world.stories.models import AggregateBeatContribution, BeatCompletion
+from world.stories.services.beats import (
+    evaluate_auto_beats,
+    record_aggregate_contribution,
+    record_gm_marked_outcome,
+)
 from world.stories.types import StoryStatus
 
 
@@ -767,3 +771,137 @@ class EvaluateAutoBeatsIdempotencyTests(EvenniaTestCase):
             BeatCompletion.objects.filter(beat=beat, character_sheet=sheet).count(),
             1,
         )
+
+
+class RecordAggregateContributionTests(EvenniaTestCase):
+    """Tests for record_aggregate_contribution and AGGREGATE_THRESHOLD evaluation."""
+
+    def _make_aggregate_beat(self, required_points: int = 100) -> "Beat":
+        return BeatFactory(
+            predicate_type=BeatPredicateType.AGGREGATE_THRESHOLD,
+            required_points=required_points,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+    def test_evaluate_aggregate_below_threshold_unsatisfied(self) -> None:
+        """Three contributions totalling 50 leave the beat UNSATISFIED (threshold 100)."""
+        beat = self._make_aggregate_beat(required_points=100)
+        sheet = CharacterSheetFactory()
+        for pts in (10, 15, 25):
+            record_aggregate_contribution(beat=beat, character_sheet=sheet, points=pts)
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+    def test_evaluate_aggregate_meeting_threshold_success(self) -> None:
+        """Contributions meeting the threshold flip the beat to SUCCESS."""
+        beat = self._make_aggregate_beat(required_points=30)
+        sheet = CharacterSheetFactory()
+        record_aggregate_contribution(beat=beat, character_sheet=sheet, points=20)
+        record_aggregate_contribution(beat=beat, character_sheet=sheet, points=10)
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+
+    def test_record_aggregate_contribution_creates_row(self) -> None:
+        """Service call creates an AggregateBeatContribution row."""
+        beat = self._make_aggregate_beat(required_points=100)
+        sheet = CharacterSheetFactory()
+
+        contrib = record_aggregate_contribution(
+            beat=beat,
+            character_sheet=sheet,
+            points=15,
+            source_note="siege victory",
+        )
+
+        self.assertIsInstance(contrib, AggregateBeatContribution)
+        self.assertEqual(contrib.beat, beat)
+        self.assertEqual(contrib.character_sheet, sheet)
+        self.assertEqual(contrib.points, 15)
+        self.assertEqual(contrib.source_note, "siege victory")
+        self.assertTrue(
+            AggregateBeatContribution.objects.filter(beat=beat, character_sheet=sheet).exists()
+        )
+
+    def test_record_aggregate_contribution_crosses_threshold_flips_outcome(self) -> None:
+        """Threshold crossing flips beat to SUCCESS and creates a BeatCompletion."""
+        beat = self._make_aggregate_beat(required_points=50)
+        sheet = CharacterSheetFactory()
+
+        record_aggregate_contribution(beat=beat, character_sheet=sheet, points=30)
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+
+        record_aggregate_contribution(beat=beat, character_sheet=sheet, points=20)
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+
+        self.assertEqual(BeatCompletion.objects.filter(beat=beat, character_sheet=sheet).count(), 1)
+
+    def test_record_aggregate_contribution_past_threshold_does_not_double_record(self) -> None:
+        """Post-threshold contributions add a row but do not create a second BeatCompletion."""
+        beat = self._make_aggregate_beat(required_points=10)
+        sheet = CharacterSheetFactory()
+
+        record_aggregate_contribution(beat=beat, character_sheet=sheet, points=10)
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+        self.assertEqual(BeatCompletion.objects.filter(beat=beat).count(), 1)
+
+        # Second contribution — beat already SUCCESS, should not create another completion.
+        record_aggregate_contribution(beat=beat, character_sheet=sheet, points=5)
+
+        self.assertEqual(BeatCompletion.objects.filter(beat=beat).count(), 1)
+        self.assertEqual(AggregateBeatContribution.objects.filter(beat=beat).count(), 2)
+
+    def test_record_aggregate_rejects_non_aggregate_beat(self) -> None:
+        """Passing a GM_MARKED beat raises BeatNotResolvableError."""
+        beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
+        sheet = CharacterSheetFactory()
+
+        with self.assertRaises(BeatNotResolvableError):
+            record_aggregate_contribution(beat=beat, character_sheet=sheet, points=10)
+
+    def test_record_aggregate_rejects_zero_points(self) -> None:
+        """points=0 raises BeatNotResolvableError."""
+        beat = self._make_aggregate_beat()
+        sheet = CharacterSheetFactory()
+
+        with self.assertRaises(BeatNotResolvableError):
+            record_aggregate_contribution(beat=beat, character_sheet=sheet, points=0)
+
+    def test_record_aggregate_rejects_negative_points(self) -> None:
+        """points=-1 raises BeatNotResolvableError."""
+        beat = self._make_aggregate_beat()
+        sheet = CharacterSheetFactory()
+
+        with self.assertRaises(BeatNotResolvableError):
+            record_aggregate_contribution(beat=beat, character_sheet=sheet, points=-1)
+
+    def test_record_aggregate_contribution_captures_era(self) -> None:
+        """Contribution row captures the active era."""
+        era = EraFactory(status=EraStatus.ACTIVE)
+        beat = self._make_aggregate_beat(required_points=100)
+        sheet = CharacterSheetFactory()
+
+        contrib = record_aggregate_contribution(beat=beat, character_sheet=sheet, points=10)
+
+        self.assertEqual(contrib.era, era)
+
+    def test_evaluate_auto_beats_skips_aggregate_threshold_beats(self) -> None:
+        """evaluate_auto_beats does not touch AGGREGATE_THRESHOLD beats (write-path only)."""
+        sheet = CharacterSheetFactory()
+        episode = EpisodeFactory()
+        progress = StoryProgressFactory(character_sheet=sheet, current_episode=episode)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.AGGREGATE_THRESHOLD,
+            required_points=0,  # threshold already met with 0 points
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        evaluate_auto_beats(progress)
+
+        beat.refresh_from_db()
+        # Must remain UNSATISFIED — aggregate beats are not auto-evaluated.
+        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+        self.assertFalse(BeatCompletion.objects.filter(beat=beat).exists())
