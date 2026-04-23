@@ -11,6 +11,9 @@ Public API:
     record_aggregate_contribution(*, beat, character_sheet, points, source_note) —
         records a per-character contribution toward an AGGREGATE_THRESHOLD beat and
         re-evaluates the beat within the same atomic transaction.
+
+    expire_overdue_beats(now) — flips UNSATISFIED beats with past deadlines to
+        EXPIRED outcome. Idempotent; safe for a cron hook.
 """
 
 from __future__ import annotations
@@ -27,6 +30,8 @@ from world.stories.models import AggregateBeatContribution, Beat, BeatCompletion
 from world.stories.types import StoryStatus
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from world.stories.models import Episode
 
 
@@ -181,6 +186,35 @@ def record_aggregate_contribution(
                     era=era,
                 )
     return contrib
+
+
+def expire_overdue_beats(now: datetime | None = None) -> int:
+    """Flip outcome to EXPIRED for every UNSATISFIED beat whose deadline has passed.
+
+    Returns count of beats expired. Idempotent — repeated calls do nothing
+    to already-expired beats. Safe for a cron hook.
+
+    No BeatCompletion row is created — expiry is system-caused and not
+    attributable to a specific character. The beat's updated_at timestamp
+    records when the flip happened.
+    """
+    from django.utils import timezone  # noqa: PLC0415
+
+    if now is None:
+        now = timezone.now()
+
+    overdue_qs = Beat.objects.filter(
+        outcome=BeatOutcome.UNSATISFIED,
+        deadline__isnull=False,
+        deadline__lt=now,
+    )
+    count = 0
+    with transaction.atomic():
+        for beat in overdue_qs:
+            beat.outcome = BeatOutcome.EXPIRED
+            beat.save(update_fields=["outcome", "updated_at"])
+            count += 1
+    return count
 
 
 # ---------------------------------------------------------------------------

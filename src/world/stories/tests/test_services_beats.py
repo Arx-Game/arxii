@@ -1,5 +1,8 @@
 """Tests for world.stories.services.beats."""
 
+from datetime import timedelta
+
+from django.utils import timezone
 from evennia.utils.test_resources import EvenniaTestCase
 
 from world.achievements.factories import AchievementFactory, CharacterAchievementFactory
@@ -22,6 +25,7 @@ from world.stories.factories import (
 from world.stories.models import AggregateBeatContribution, BeatCompletion
 from world.stories.services.beats import (
     evaluate_auto_beats,
+    expire_overdue_beats,
     record_aggregate_contribution,
     record_gm_marked_outcome,
 )
@@ -904,4 +908,106 @@ class RecordAggregateContributionTests(EvenniaTestCase):
         beat.refresh_from_db()
         # Must remain UNSATISFIED — aggregate beats are not auto-evaluated.
         self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+        self.assertFalse(BeatCompletion.objects.filter(beat=beat).exists())
+
+
+class ExpireOverdueBeatsTests(EvenniaTestCase):
+    """Tests for expire_overdue_beats service function."""
+
+    def _past(self, hours: int = 1):
+        """Return a datetime that is `hours` hours in the past."""
+        return timezone.now() - timedelta(hours=hours)
+
+    def _future(self, hours: int = 1):
+        """Return a datetime that is `hours` hours in the future."""
+        return timezone.now() + timedelta(hours=hours)
+
+    def test_expires_beats_with_past_deadlines(self) -> None:
+        """Only the beat with a past deadline flips to EXPIRED; others are unchanged."""
+        past_beat = BeatFactory(
+            outcome=BeatOutcome.UNSATISFIED,
+            deadline=self._past(),
+        )
+        future_beat = BeatFactory(
+            outcome=BeatOutcome.UNSATISFIED,
+            deadline=self._future(),
+        )
+        no_deadline_beat = BeatFactory(
+            outcome=BeatOutcome.UNSATISFIED,
+            deadline=None,
+        )
+
+        expire_overdue_beats()
+
+        past_beat.refresh_from_db()
+        future_beat.refresh_from_db()
+        no_deadline_beat.refresh_from_db()
+
+        self.assertEqual(past_beat.outcome, BeatOutcome.EXPIRED)
+        self.assertEqual(future_beat.outcome, BeatOutcome.UNSATISFIED)
+        self.assertEqual(no_deadline_beat.outcome, BeatOutcome.UNSATISFIED)
+
+    def test_skips_already_resolved_beats(self) -> None:
+        """A beat with a past deadline but outcome=SUCCESS is not changed."""
+        success_beat = BeatFactory(
+            outcome=BeatOutcome.SUCCESS,
+            deadline=self._past(),
+        )
+
+        expire_overdue_beats()
+
+        success_beat.refresh_from_db()
+        self.assertEqual(success_beat.outcome, BeatOutcome.SUCCESS)
+
+    def test_idempotent_on_repeat_call(self) -> None:
+        """Second call returns 0 — already-expired beats are not touched again."""
+        BeatFactory(outcome=BeatOutcome.UNSATISFIED, deadline=self._past())
+
+        first_count = expire_overdue_beats()
+        second_count = expire_overdue_beats()
+
+        self.assertEqual(first_count, 1)
+        self.assertEqual(second_count, 0)
+
+    def test_now_parameter_override(self) -> None:
+        """Passing an explicit `now` makes beats whose deadline is before that instant expire."""
+        # Create a beat with a deadline 3 hours ago relative to real now.
+        # We call expire_overdue_beats with a `now` that is 2 hours ago —
+        # so the beat's deadline (3 h ago) is still in the past relative to the overridden now.
+        beat_past = BeatFactory(
+            outcome=BeatOutcome.UNSATISFIED,
+            deadline=timezone.now() - timedelta(hours=3),
+        )
+        # A beat whose deadline is 1 hour ago — but we pass now=2 hours ago,
+        # so this deadline is actually in the "future" relative to our override.
+        beat_not_yet = BeatFactory(
+            outcome=BeatOutcome.UNSATISFIED,
+            deadline=timezone.now() - timedelta(hours=1),
+        )
+
+        custom_now = timezone.now() - timedelta(hours=2)
+        count = expire_overdue_beats(now=custom_now)
+
+        beat_past.refresh_from_db()
+        beat_not_yet.refresh_from_db()
+
+        self.assertEqual(count, 1)
+        self.assertEqual(beat_past.outcome, BeatOutcome.EXPIRED)
+        self.assertEqual(beat_not_yet.outcome, BeatOutcome.UNSATISFIED)
+
+    def test_returns_count_of_expired(self) -> None:
+        """Returns the exact count of beats that were flipped."""
+        for _ in range(5):
+            BeatFactory(outcome=BeatOutcome.UNSATISFIED, deadline=self._past())
+
+        count = expire_overdue_beats()
+
+        self.assertEqual(count, 5)
+
+    def test_no_beatcompletion_rows_created(self) -> None:
+        """Expiry does not create any BeatCompletion audit rows."""
+        beat = BeatFactory(outcome=BeatOutcome.UNSATISFIED, deadline=self._past())
+
+        expire_overdue_beats()
+
         self.assertFalse(BeatCompletion.objects.filter(beat=beat).exists())
