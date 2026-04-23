@@ -1,6 +1,6 @@
 # Stories & GM Tables
 
-**Status:** phase-1-complete
+**Status:** phase-2-wave-8-complete
 **Depends on:** Scenes, Missions, Codex, Relationships, Progression
 
 ## Overview
@@ -45,11 +45,72 @@ The task-gated episode progression engine is fully implemented in `src/world/sto
 - **Services:** `evaluate_auto_beats`, `record_gm_marked_outcome`, `get_eligible_transitions`, `resolve_episode`
 - **End-to-end integration test** — Crucible "Who Am I?" scenario: author builds a two-episode story with a level-gate beat and a GM-marked beat → character's progression is initialized → `evaluate_auto_beats` fires the level check → `record_gm_marked_outcome` marks the GM beat → `get_eligible_transitions` confirms both requirements met → `resolve_episode` advances progress and writes full audit trail (BeatCompletion + EpisodeResolution rows). All 121 stories tests pass; 626 tests pass across the 5-app regression suite on a fresh DB.
 
+### Phase 2 Backend Extensions (Waves 1–8 complete)
+
+All model/service infrastructure for Phase 2 is implemented in `src/world/stories/`. 392 stories tests pass on fresh DB.
+
+**Wave 1 — Foundations:**
+- New `BeatPredicateType` values: `ACHIEVEMENT_HELD`, `CONDITION_HELD`, `CODEX_ENTRY_UNLOCKED`, `STORY_AT_MILESTONE`, `AGGREGATE_THRESHOLD`
+- New `TextChoices`: `StoryMilestoneType`, `AssistantClaimStatus`, `SessionRequestStatus`
+- `ProgressionRequirementNotMetError` wired into `get_eligible_transitions` (previously returned `[]`, now raises typed exception)
+- `StoryProgress` auto-created during CG finalization
+- Legacy `Story.is_personal_story` and `Story.personal_story_character` (ObjectDB FK anti-pattern) dropped
+
+**Wave 2 — GROUP + GLOBAL progress models:**
+- `GroupStoryProgress(story, gm_table, current_episode)` — one row per GROUP-scope story; whole GMTable shares the trail; enforced by unique constraint
+- `GlobalStoryProgress(story, current_episode)` — singleton per GLOBAL-scope story; enforced by OneToOneField
+- Scope-aware helpers: `get_active_progress_for_story`, `advance_progress_to_episode` in `services/progress.py`
+- `AnyStoryProgress` type alias widening `resolve_episode` to all three scope progress types
+
+**Wave 3 — New beat predicate types:**
+- `ACHIEVEMENT_HELD` — evaluates against `CharacterSheet.cached_achievements_held`
+- `CONDITION_HELD` — evaluates against active `ConditionInstance` via `CharacterSheet.cached_active_conditions`
+- `CODEX_ENTRY_UNLOCKED` — evaluates against `CodexEntry` per-character discovery
+- `STORY_AT_MILESTONE` — cross-story reference with `referenced_story`, `referenced_milestone_type` (STORY_RESOLVED / CHAPTER_REACHED / EPISODE_REACHED), `referenced_chapter`, `referenced_episode`
+- All types follow the flat-Beat discriminator pattern: nullable config FKs, `_REQUIRED_CONFIG` dict, `clean()` invariant enforcement
+
+**Wave 4 — Aggregate contribution ledger:**
+- `AggregateBeatContribution(beat, character_sheet, roster_entry, points, era, source_note)` — per-character ledger
+- `AggregateBeatContributionManager.total_for_beat()` convenience method
+- `AGGREGATE_THRESHOLD` predicate type evaluating sum via ledger
+- `record_aggregate_contribution` service auto-flips beat outcome when threshold crossed
+
+**Wave 5 — Deadline expiry lifecycle:**
+- `expire_overdue_beats(now?)` — idempotent bulk sweep service; flips UNSATISFIED beats past deadline to EXPIRED
+- Lazy invocation in `get_eligible_transitions` sweeps current episode's overdue beats before evaluating eligibility
+
+**Wave 6 — Assistant GM claim flow:**
+- `AssistantGMClaim(beat, assistant_gm, status, approved_by, framing_note)` model with partial unique constraint (no duplicate active claims per beat-AGM pair)
+- `Beat.agm_eligible` flag added
+- Services: `request_claim`, `approve_claim`, `reject_claim`, `cancel_claim`, `complete_claim`
+- Typed exceptions: `AssistantClaimError`, `AssistantClaimNotApprovableError`, `BeatNotAGMEligibleError`
+
+**Wave 7 — SessionRequest + Events integration:**
+- `SessionRequest(episode, story, status, event, open_to_any_gm, assigned_gm, initiated_by_account)` model
+- Auto-created via `_maybe_create_session_request(progress)` called from write-side services (mark outcome, record contribution, evaluate auto beats) — no expensive read-path checks
+- `create_event_from_session_request` service bridges to the Events system
+
+**Wave 8 — API ViewSets (base CRUD):**
+- `GroupStoryProgressViewSet` — CRUD; Lead-GM-gated writes; member-filtered queryset
+- `GlobalStoryProgressViewSet` — reads for all authenticated; writes staff-only
+- `AggregateBeatContributionViewSet` (read-only) — player sees their own; story owner sees all; staff sees all
+- `AssistantGMClaimViewSet` (read-only) — AGM sees their own claims; story owner sees beat-level claims; staff sees all
+- `SessionRequestViewSet` (read-only) — participant-filtered per scope; staff sees all
+- `BeatViewSet` — full CRUD; `BeatSerializer` expanded with all Phase 2 predicate config fields; `validate()` mirrors `Beat.clean()` surfacing 400s for predicate-type invariant violations
+- New permission classes: `IsGroupProgressMemberOrStaff`, `IsGlobalProgressReadableOrStaff`, `IsAggregateBeatContributionReadableOrStaff`, `IsAssistantGMClaimReadableOrStaff`, `IsSessionRequestReadableOrStaff`, `IsBeatStoryOwnerOrStaff`
+- New filter classes: `GroupStoryProgressFilter`, `GlobalStoryProgressFilter`, `AggregateBeatContributionFilter`, `AssistantGMClaimFilter`, `SessionRequestFilter`
+- All new ViewSets registered in `urls.py`
+
 ## What's Needed for MVP
 
-### Phase 2 (next up): Basic REST API + Dashboards
+### Phase 2 Remaining: API Surface + Dashboards + Actions (Waves 9–12)
 
-- ViewSets for Story, Chapter, Episode, Transition, Beat, StoryProgress
+- **Wave 9:** Story log visibility-filtered serializer (HINTED/SECRET/VISIBLE rules per requester role)
+- **Wave 10:** Dashboard endpoints — player active-stories (`/api/stories/my-active/`), Lead GM queue (`/api/stories/gm-queue/`), staff workload (`/api/stories/staff-workload/`)
+- **Wave 11:** Action endpoints — episode resolve, beat mark, beat contribute, AGM claim lifecycle, session-request event creation, staff expire-overdue-beats trigger
+- **Wave 12:** Phase 2 end-to-end integration test + docs update + MODEL_MAP regen
+
+- (Previously listed) ViewSets for Story, Chapter, Episode, Transition, Beat, StoryProgress
   - Read-only for players (their own stories and beats)
   - CRUD for Lead GMs on their assigned stories
   - Full CRUD for staff
