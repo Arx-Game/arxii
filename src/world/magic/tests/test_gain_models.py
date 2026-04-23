@@ -146,3 +146,35 @@ class ResonanceGrantTests(TestCase):
             source_staff_account=None,
         )
         self.assertIsNone(grant.source_staff_account)
+
+
+class PoseEndorsementTests(TestCase):
+    def test_unique_endorser_interaction(self) -> None:
+        from django.db import IntegrityError
+
+        from world.magic.factories import (
+            PoseEndorsementFactory,
+            ResonanceFactory,
+        )
+
+        first = PoseEndorsementFactory()
+        with self.assertRaises(IntegrityError):
+            PoseEndorsementFactory(
+                endorser_sheet=first.endorser_sheet,
+                interaction=first.interaction,
+                resonance=ResonanceFactory(),
+            )
+
+    def test_settled_at_defaults_none(self) -> None:
+        from world.magic.factories import PoseEndorsementFactory
+
+        endorsement = PoseEndorsementFactory()
+        self.assertIsNone(endorsement.settled_at)
+        self.assertIsNone(endorsement.granted_amount)
+
+    def test_related_name_access(self) -> None:
+        """Confirm `interaction.endorsements` related manager works."""
+        from world.magic.factories import PoseEndorsementFactory
+
+        endorsement = PoseEndorsementFactory()
+        self.assertIn(endorsement, endorsement.interaction.endorsements.all())
