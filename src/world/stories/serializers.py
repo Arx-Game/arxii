@@ -1,3 +1,4 @@
+import dataclasses
 from typing import Any, cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -776,3 +777,27 @@ class BeatSerializer(serializers.ModelSerializer):
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.message_dict) from exc
         return attrs
+
+
+class StoryLogSerializer(serializers.Serializer):
+    """Thin wrapper that renders a list of StoryLogBeatEntry / StoryLogEpisodeEntry dataclasses.
+
+    Usage::
+
+        entries = serialize_story_log(story=story, progress=progress, viewer_role=role)
+        return Response(StoryLogSerializer(entries).data)
+
+    The serializer converts each dataclass to a dict via ``dataclasses.asdict``.
+    The ``entry_type`` field on each dict distinguishes beat_completion from
+    episode_resolution for frontend rendering.
+    """
+
+    entries = serializers.SerializerMethodField()
+
+    def get_entries(self, log_entries: list) -> list[dict[str, Any]]:
+        """Convert each dataclass entry to a plain dict."""
+        return [dataclasses.asdict(entry) for entry in log_entries]
+
+    def to_representation(self, instance: list) -> dict[str, Any]:
+        """Accept the log entries list as the instance."""
+        return {"entries": self.get_entries(instance)}

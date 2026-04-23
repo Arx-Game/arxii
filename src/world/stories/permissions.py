@@ -9,8 +9,9 @@ from rest_framework.request import Request
 from rest_framework.views import APIView
 
 from world.gm.models import GMTable
+from world.stories.constants import StoryScope
 from world.stories.models import Story
-from world.stories.types import StoryPrivacy
+from world.stories.types import AnyStoryProgress, StoryPrivacy
 
 
 class IsStoryOwnerOrStaff(permissions.BasePermission):
@@ -487,3 +488,90 @@ class IsSessionRequestParticipantOrStaff(permissions.BasePermission):
             character__db_account=request.user,
             is_active=True,
         ).exists()
+
+
+# ---------------------------------------------------------------------------
+# Story log viewer role classifier
+# ---------------------------------------------------------------------------
+
+# Viewer role constants for story log visibility filtering.
+VIEWER_ROLE_STAFF = "staff"
+VIEWER_ROLE_LEAD_GM = "lead_gm"
+VIEWER_ROLE_PLAYER = "player"
+VIEWER_ROLE_NO_ACCESS = "no_access"
+
+
+def classify_story_log_viewer_role(
+    user: AbstractBaseUser | AnonymousUser,
+    story: Story,
+    progress: "AnyStoryProgress | None" = None,
+) -> str:
+    """Return the viewer's role for story log visibility filtering.
+
+    Returns one of: 'staff' | 'lead_gm' | 'player' | 'no_access'.
+
+    Priority order:
+    - staff: user.is_staff
+    - lead_gm: user has a GMProfile and is the Lead GM of story.primary_table
+    - player: user has access to the story (participant, owner, or appropriate scope)
+    - no_access: none of the above
+    """
+    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+        return VIEWER_ROLE_NO_ACCESS
+
+    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
+        return VIEWER_ROLE_STAFF
+
+    gm_profile = getattr(user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+    if (
+        gm_profile is not None
+        and story.primary_table_id is not None
+        and story.primary_table.gm_id == gm_profile.pk
+    ):
+        return VIEWER_ROLE_LEAD_GM
+
+    if _story_log_user_has_access(user, story, progress):
+        return VIEWER_ROLE_PLAYER
+
+    return VIEWER_ROLE_NO_ACCESS
+
+
+def _story_log_user_has_access(
+    user: AbstractBaseUser | AnonymousUser,
+    story: Story,
+    progress: "AnyStoryProgress | None",
+) -> bool:
+    """Return True if ``user`` is a player-tier viewer of this story."""
+    # CHARACTER scope: the character's ObjectDB account is this user.
+    if story.scope == StoryScope.CHARACTER and story.character_sheet_id is not None:
+        if story.character_sheet.character.db_account == user:
+            return True
+
+    # GROUP scope: user is an active member of the GMTable with progress.
+    if story.scope == StoryScope.GROUP and progress is not None:
+        gm_table = getattr(progress, "gm_table", None)  # noqa: GETATTR_LITERAL
+        if gm_table is not None:
+            return (
+                cast(Any, gm_table)
+                .memberships.filter(
+                    persona__character_sheet__character__db_account=user,
+                    left_at__isnull=True,
+                )
+                .exists()
+            )
+
+    # GLOBAL scope: any authenticated user has player-tier access.
+    if story.scope == StoryScope.GLOBAL:
+        return True
+
+    # Fallback: explicit StoryParticipation covers non-owner participants
+    # on CHARACTER stories that belong to a different character, and
+    # any edge cases not covered by scope rules above.
+    return (
+        cast(Any, story)
+        .participants.filter(
+            character__db_account=user,
+            is_active=True,
+        )
+        .exists()
+    )

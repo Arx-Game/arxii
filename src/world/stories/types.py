@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Union
 
 from django.db import models
@@ -75,3 +76,46 @@ class EpisodeSummary:
     summary: str
     consequences: list[str]
     next_episode_setup: str | None
+
+
+# Entry type constants for story log entries.
+LOG_ENTRY_BEAT_COMPLETION = "beat_completion"
+LOG_ENTRY_EPISODE_RESOLUTION = "episode_resolution"
+
+
+@dataclass
+class StoryLogBeatEntry:
+    """One beat-completion entry in a story log.
+
+    Fields are pre-filtered for the requester's viewer role:
+    - Player: internal_description is None; player_hint / player_resolution_text
+      reflect the beat's visibility rules.
+    - Lead GM / Staff: internal_description populated; all fields visible.
+    """
+
+    entry_type: str  # "beat_completion"
+    beat_id: int
+    episode_id: int
+    recorded_at: datetime
+    outcome: str
+    visibility: str  # passthrough for frontend rendering
+    player_hint: str
+    player_resolution_text: str
+    internal_description: str | None  # None for player viewers
+    gm_notes: str | None  # None for player viewers
+
+
+@dataclass
+class StoryLogEpisodeEntry:
+    """One episode-resolution entry in a story log."""
+
+    entry_type: str  # "episode_resolution"
+    episode_id: int
+    episode_title: str
+    resolved_at: datetime
+    transition_id: int | None
+    target_episode_id: int | None
+    target_episode_title: str | None
+    connection_type: str  # "therefore", "but", or empty
+    connection_summary: str
+    internal_notes: str | None  # Lead GM / staff only
