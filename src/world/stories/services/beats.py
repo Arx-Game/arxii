@@ -48,6 +48,9 @@ def evaluate_auto_beats(progress: StoryProgress) -> None:
     ``record_gm_marked_outcome`` call.
 
     Does nothing and returns cleanly when ``progress.current_episode`` is None.
+
+    After beat evaluation, idempotently opens a SessionRequest when the episode
+    is now ready-to-run and requires GM involvement.
     """
     if progress.current_episode is None:
         return
@@ -83,6 +86,12 @@ def evaluate_auto_beats(progress: StoryProgress) -> None:
                 outcome=new_outcome,
                 era=era,
             )
+
+        # Write-path hook: open a SessionRequest if the episode is now ready-to-run
+        # and requires a GM session. Idempotent — safe to call unconditionally.
+        from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
+
+        maybe_create_session_request(progress)
 
 
 def record_gm_marked_outcome(
@@ -123,7 +132,7 @@ def record_gm_marked_outcome(
     beat.outcome = outcome
     beat.save(update_fields=["outcome", "updated_at"])
 
-    return BeatCompletion.objects.create(
+    completion = BeatCompletion.objects.create(
         beat=beat,
         character_sheet=sheet,
         roster_entry=roster_entry,
@@ -131,6 +140,14 @@ def record_gm_marked_outcome(
         era=era,
         gm_notes=gm_notes,
     )
+
+    # Write-path hook: open a SessionRequest if the episode is now ready-to-run
+    # and requires a GM session. Idempotent — safe to call unconditionally.
+    from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
+
+    maybe_create_session_request(progress)
+
+    return completion
 
 
 def record_aggregate_contribution(
@@ -185,6 +202,18 @@ def record_aggregate_contribution(
                     outcome=new_outcome,
                     era=era,
                 )
+
+        # Write-path hook: open a SessionRequest if the episode is now ready-to-run
+        # and requires a GM session. Walk beat -> episode -> chapter -> story to
+        # find the active progress record, then check eligibility.
+        from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
+        from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
+
+        story = beat.episode.chapter.story
+        progress = get_active_progress_for_story(story)
+        if progress is not None:
+            maybe_create_session_request(progress)
+
     return contrib
 
 

@@ -42,3 +42,7 @@ class ClaimApprovalPermissionError(AssistantClaimError):
 
 class ClaimStateTransitionError(AssistantClaimError):
     _SAFE_MESSAGE = "This claim cannot transition to the requested state."
+
+
+class SessionRequestNotOpenError(StoryError):
+    _SAFE_MESSAGE = "This session request cannot be scheduled in its current state."
