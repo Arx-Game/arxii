@@ -108,16 +108,14 @@ class ResonanceGainConfig(SharedMemoryModel):
 
     updated_at = DateTimeField(auto_now=True)
     updated_by = ForeignKey(AccountDB, null=True, on_delete=SET_NULL)
-
-    class Meta:
-        constraints = [
-            # Singleton — enforced by service layer, documented via unique index
-            # on a constant value if we want DB-level enforcement (optional).
-        ]
 ```
 
-Service helper: `get_resonance_gain_config()` lazily creates the row on
-first read. This is the only resonance-gain config model in the system.
+**Singleton enforcement:** singleton-by-convention, enforced at the service
+layer via `get_resonance_gain_config()` (get-or-create on a reserved pk=1).
+No DB-level constraint — matches the lightweight singleton pattern used
+elsewhere in the codebase. `get_resonance_gain_config()` lazily creates
+the row on first read. This is the only resonance-gain config model in
+the system.
 
 ### 2.2 `PoseEndorsement` (weekly deferred)
 
@@ -246,11 +244,23 @@ source-type-to-model mapping, which is a reasonable ledger burden; the
 audit model can be extended with typed FKs later if query ergonomics
 require it.
 
-**Invariant:** `sum(ResonanceGrant.amount WHERE character_sheet=X AND
-resonance=Y) == CharacterResonance.lifetime_earned WHERE character_sheet=X
-AND resonance=Y`. `grant_resonance` writes both transactionally. No
-drift-detection infrastructure — a staff reconciliation query handles the
-rare case of drift.
+**Invariant (modulo reversals — see §8.4 / §11.4):**
+
+At launch, with no retraction model yet resolved, the invariant is
+`sum(ResonanceGrant.amount WHERE character_sheet=X AND resonance=Y) ==
+CharacterResonance.lifetime_earned WHERE character_sheet=X AND resonance=Y`.
+`grant_resonance` writes both transactionally.
+
+Once retraction lands (§11.4 chooses between option (a) separate
+`ResonanceGrantReversal` model vs. option (b) signed `IntegerField`),
+the invariant restates to either `sum(grants) - sum(reversals) ==
+lifetime_earned` (option a) or `sum(amount)` with signed ints (option b).
+Implementers: do NOT codify the current simple-sum invariant into a test
+that will break when reversals are added. Reference this section's
+variable form.
+
+No drift-detection infrastructure — a staff reconciliation query handles
+the rare case of drift.
 
 ### 2.5 `RoomAuraProfile` (room's magical character)
 
@@ -304,6 +314,17 @@ current_residence = ForeignKey(
               "resonance tags matching the character's claimed resonances.",
 )
 ```
+
+**Why on CharacterSheet directly and not a dedicated `CharacterResidence`
+extension model?** `current_residence` is a single nullable FK — no
+per-row data hangs off it today (set_at / set_by audit lives on a future
+change-log if needed, not on the residence itself). A OneToOne extension
+model would be one-row-per-sheet with a single FK column, effectively a
+table with no payload. The residence is also a property of "this
+character" — natural to store alongside other character state. If future
+residence-specific fields appear (move cooldowns, historical residence
+tracking, multi-residence ownership), extraction to a
+`CharacterResidence` model is a mechanical refactor. YAGNI applies.
 
 **`Interaction.pose_kind`** — new TextChoices field:
 
@@ -438,8 +459,10 @@ def get_residence_resonances(sheet: CharacterSheet) -> set[Resonance]:
 def resonance_daily_tick() -> ResonanceDailyTickSummary:
     """Master daily tick. Runs residence + outfit trickle.
 
-    Registered on the world-clock scheduler alongside anima_regen_tick
-    and decay_all_conditions_tick (Scope 6 pattern).
+    Registered in ``src/world/game_clock/tasks.py`` alongside
+    ``anima_regen_tick`` and ``decay_all_conditions_tick`` (Scope 6
+    pattern — see `CronDefinition(task_key="magic.anima_regen_daily", ...)`
+    at approximately line 316 of that file).
 
     Each per-character step is atomic (one transaction per character);
     a failure on one character does not poison the tick.
@@ -449,10 +472,11 @@ def resonance_daily_tick() -> ResonanceDailyTickSummary:
 def resonance_weekly_settlement_tick() -> ResonanceWeeklySettlementSummary:
     """Master weekly tick. Runs pose-endorsement settlement.
 
-    Fires on config.settlement_day_of_week (default Monday). Actual gate
-    is 'sheet has unsettled endorsements' (not date comparison) so server
-    downtime on settlement day doesn't skip a week; the tick fires on the
-    next daily pass and finds the overdue work.
+    Registered in ``src/world/game_clock/tasks.py``. Fires on
+    config.settlement_day_of_week (default Monday). Actual gate is 'sheet
+    has unsettled endorsements' (not date comparison) so server downtime
+    on settlement day doesn't skip a week; the tick fires on the next
+    daily pass and finds the overdue work.
     """
 ```
 
@@ -489,7 +513,7 @@ permission classes, DRF serializers.
 | DELETE | `/api/pose-endorsements/<id>/` | Retract an unsettled endorsement. 404 if already settled. Permission: requester owns the endorser_sheet. |
 | DELETE | `/api/scene-entry-endorsements/<id>/` | Retract an entry endorsement. Also claws back the ResonanceGrant + updates balance/lifetime_earned. Permission: requester owns the endorser_sheet. Time-window optional (config-tunable). |
 | GET | `/api/resonance-grants/?character_sheet=<id>` | Paginated ledger viewer. Filterable by source, resonance, date range. Endorsee-private by default. |
-| PUT | `/api/character-residences/<sheet_id>/` | Set or clear current_residence. Body: `{room_profile_id}` or `{room_profile_id: null}`. |
+| PATCH | `/api/character-sheets/<sheet_id>/` | Update `current_residence_id` as a partial field update. Body: `{current_residence_id: <int>}` or `{current_residence_id: null}`. Uses the existing CharacterSheet viewset — no new endpoint. |
 
 ### 4.2 Permissions
 
@@ -498,7 +522,7 @@ permission classes, DRF serializers.
 - Resonance-grants GET: requester must own the character_sheet OR be staff.
   Future leaderboard flag `ResonanceGrant.is_public` (unused at launch)
   leaves room for opt-in public visibility.
-- Residence PUT: requester must own the sheet.
+- Residence PATCH (on CharacterSheet): requester must own the sheet — handled by the existing CharacterSheet viewset permissions, no new permission class needed. The serializer needs `current_residence` added to its `fields` with appropriate write access.
 
 ### 4.3 Serializers
 
