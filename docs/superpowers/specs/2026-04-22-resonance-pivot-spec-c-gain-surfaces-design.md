@@ -203,6 +203,10 @@ Every `grant_resonance` call writes one row here. This is the source of
 truth for "how did this character earn this resonance" — the audit feed
 that populates the player-facing ledger and any future leaderboard.
 
+**Discriminator + typed-FK pattern**, matching Spec A's `Thread`,
+`ThreadWeavingUnlock`, and other polymorphic-join models in this
+codebase. No raw-int source references; no generic foreign keys.
+
 ```python
 class GainSource(TextChoices):
     POSE_ENDORSEMENT = "POSE_ENDORSEMENT", "Pose endorsement"
@@ -217,14 +221,36 @@ class ResonanceGrant(SharedMemoryModel):
                                   related_name="resonance_grants")
     resonance = ForeignKey(Resonance, on_delete=PROTECT)
     amount = PositiveIntegerField()
-    source = CharField(max_length=24, choices=GainSource.choices)
-    source_ref_id = BigIntegerField(null=True, blank=True,
-                                     help_text="PK of the row in the source-specific "
-                                               "table (PoseEndorsement, SceneEntryEndorsement, "
-                                               "etc.). Not a typed FK — the grant_resonance "
-                                               "service already accepts this as a raw int "
-                                               "per Spec A §3.1.")
+    source = CharField(max_length=24, choices=GainSource.choices,
+                       help_text="Discriminator. Identifies which source_* FK is "
+                                 "populated.")
     granted_at = DateTimeField(auto_now_add=True, db_index=True)
+
+    # Typed source FKs — exactly one populated per row, matching `source`.
+    source_pose_endorsement = ForeignKey(
+        "magic.PoseEndorsement", null=True, blank=True,
+        on_delete=PROTECT, related_name="resonance_grants",
+    )
+    source_scene_entry_endorsement = ForeignKey(
+        "magic.SceneEntryEndorsement", null=True, blank=True,
+        on_delete=PROTECT, related_name="resonance_grants",
+    )
+    source_room_aura_profile = ForeignKey(
+        "magic.RoomAuraProfile", null=True, blank=True,
+        on_delete=PROTECT, related_name="resonance_grants",
+    )
+    # Future: populated once the Items system ships. Nullable by design;
+    # outfit grants before item content exists simply won't fire.
+    source_item_instance = ForeignKey(
+        "items.ItemInstance", null=True, blank=True,  # string ref; app not yet built
+        on_delete=PROTECT, related_name="resonance_grants",
+    )
+    # Staff grants: the acting staff account; SET_NULL so account retirement
+    # doesn't cascade into the audit log.
+    source_staff_account = ForeignKey(
+        "accounts.AccountDB", null=True, blank=True,
+        on_delete=SET_NULL, related_name="resonance_grants_issued",
+    )
 
     class Meta:
         indexes = [
@@ -233,16 +259,82 @@ class ResonanceGrant(SharedMemoryModel):
             Index(fields=["character_sheet", "source", "granted_at"],
                   name="resonance_grant_sheet_source_idx"),
         ]
+        constraints = [
+            # Per-discriminator CheckConstraints — matches Spec A's Thread
+            # model (`thread_pose_endorsement_shape`, etc.). Each constraint
+            # enforces "matching source FK is NOT NULL and all other source
+            # FKs ARE NULL" for one discriminator value.
+            CheckConstraint(
+                name="resonance_grant_pose_endorsement_shape",
+                check=(
+                    Q(source="POSE_ENDORSEMENT")
+                    & Q(source_pose_endorsement__isnull=False)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_item_instance__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                ) | ~Q(source="POSE_ENDORSEMENT"),
+            ),
+            CheckConstraint(
+                name="resonance_grant_scene_entry_shape",
+                check=(
+                    Q(source="SCENE_ENTRY")
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=False)
+                    & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_item_instance__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                ) | ~Q(source="SCENE_ENTRY"),
+            ),
+            CheckConstraint(
+                name="resonance_grant_residence_shape",
+                check=(
+                    Q(source="ROOM_RESIDENCE")
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(source_room_aura_profile__isnull=False)
+                    & Q(source_item_instance__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                ) | ~Q(source="ROOM_RESIDENCE"),
+            ),
+            CheckConstraint(
+                name="resonance_grant_outfit_shape",
+                check=(
+                    Q(source="OUTFIT_ITEM")
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_item_instance__isnull=False)
+                    & Q(source_staff_account__isnull=True)
+                ) | ~Q(source="OUTFIT_ITEM"),
+            ),
+            CheckConstraint(
+                name="resonance_grant_staff_shape",
+                check=(
+                    Q(source="STAFF_GRANT")
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_item_instance__isnull=True)
+                    # Staff account is typically populated but nullable
+                    # (SET_NULL on retirement) so we don't require NOT NULL.
+                ) | ~Q(source="STAFF_GRANT"),
+            ),
+        ]
 ```
 
-**Why not typed FKs?** `grant_resonance` already accepts `source_ref: int`
-per Spec A's locked interface. Typed FKs would require either changing
-the service signature (out of scope — Spec A shipped) or building a
-router inside the ledger (complexity). Raw `source_ref_id` matches the
-service contract directly. Looking up the originating row requires
-source-type-to-model mapping, which is a reasonable ledger burden; the
-audit model can be extended with typed FKs later if query ergonomics
-require it.
+**Model-level `clean()`** additionally validates shape pre-save for
+friendly errors during admin/test creation (matches Thread's pattern).
+
+**Outfit FK caveat.** `source_item_instance` uses a string app reference
+to `items.ItemInstance`, an app that doesn't exist yet. Spec C ships
+with this FK *commented out* and re-added by the Items system's first
+migration when that app lands. The `OUTFIT_ITEM` enum value is preserved
+(reserved), but the CheckConstraint for outfit shape is also held back
+until the FK can be declared. The outfit trickle function stays stubbed
+(§5.4) so no `OUTFIT_ITEM` rows are ever written at launch — keeping the
+missing FK a non-issue. This is the cleanest way to preserve typed-FK
+discipline without forward-referencing a non-existent app.
 
 **Invariant (modulo reversals — see §8.4 / §11.4):**
 
@@ -353,6 +445,44 @@ match the migration. Flagged for the implementation plan.
 
 All services in `world/magic/services/` (new submodule
 `world/magic/services/gain.py` to keep the file focused).
+
+### 3.0 `grant_resonance` signature update (Spec A carry-over)
+
+Spec A shipped `grant_resonance` with `source: str` and `source_ref: int | None`
+kwargs flagged as "reserved for Phase 12 audit hook" (i.e., this spec).
+Spec C replaces them with the discriminator + typed-FK shape:
+
+```python
+def grant_resonance(
+    character_sheet: CharacterSheet,
+    resonance: Resonance,
+    amount: int,
+    *,  # kwargs-only from here
+    source: GainSource,
+    pose_endorsement: PoseEndorsement | None = None,
+    scene_entry_endorsement: SceneEntryEndorsement | None = None,
+    room_aura_profile: RoomAuraProfile | None = None,
+    item_instance: "ItemInstance | None" = None,  # future; unused at launch
+    staff_account: AccountDB | None = None,
+) -> CharacterResonance:
+    """Atomically grant resonance AND write the ResonanceGrant ledger row.
+
+    Validates:
+      - amount > 0
+      - exactly one typed source kwarg is populated, matching `source`
+        (except STAFF_GRANT, where staff_account is optional — retirement
+        can null it)
+
+    Persists the CharacterResonance update (balance + lifetime_earned) and
+    the ResonanceGrant row in one transaction.
+    """
+```
+
+**Migration path for existing callers.** Only test files currently call
+`grant_resonance` (`src/world/magic/tests/test_resonance_services.py`,
+`src/world/magic/tests/test_ritual_dispatch.py` — all use
+`source="test"` ad-hoc strings). Those tests update alongside the
+signature change. No production call sites exist today.
 
 ### 3.1 Endorsement creation
 
@@ -885,14 +1015,22 @@ Scope 6's daily ticks.
 
 ### 11.4 Negative-amount audit rows
 
-Scene-entry retraction needs a compensating ledger row. `amount =
+Scene-entry retraction needs a compensating ledger entry. `amount =
 PositiveIntegerField` forbids negatives. Impl phase resolves by either:
-- (a) Adding `ResonanceGrantReversal` sibling model (explicit reversal
-  records, preserves grant positivity invariant), or
-- (b) Changing `amount` to `IntegerField` with service-layer invariant.
+- (a) Adding `ResonanceGrantReversal` sibling model (its own discriminator
+  + typed FKs pointing at the original `ResonanceGrant` being reversed,
+  plus a `reason` field). Preserves grant positivity invariant; gives
+  reversals a first-class audit entity.
+- (b) Changing `ResonanceGrant.amount` to `IntegerField` with service-layer
+  invariant "only reversal service calls produce negative rows"; each
+  reversal row's typed source FK points at the same source as the grant
+  being reversed, so the typed-FK discriminator pattern still holds.
 
-Design leans (a) for cleaner audit semantics, flagged for impl-phase
-confirmation.
+Design leans (a) for cleaner audit semantics — reversals are a meaningfully
+distinct event, not just "negative grants," and giving them their own model
+makes the ledger query "what did this character earn" (positive only) vs.
+"what was reversed" (reversal model only) trivially separable. Flagged for
+impl-phase confirmation.
 
 ### 11.5 Pose endorsement weight asymmetry
 
