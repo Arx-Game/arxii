@@ -976,14 +976,6 @@ class BeatViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # record_gm_marked_outcome only supports CHARACTER-scope (StoryProgress).
-        # GROUP/GLOBAL scope is not currently supported for GM_MARKED beats.
-        if not isinstance(progress, StoryProgress):
-            return Response(
-                {"detail": "Beat marking is only supported for CHARACTER-scope stories."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         try:
             completion = record_gm_marked_outcome(
                 progress=progress,

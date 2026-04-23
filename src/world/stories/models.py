@@ -1021,7 +1021,14 @@ class AggregateBeatContribution(SharedMemoryModel):
 
 
 class BeatCompletion(SharedMemoryModel):
-    """Audit ledger row for each beat outcome applied to a character's progress."""
+    """Audit ledger row for each beat outcome applied to a progress record.
+
+    Exactly one of character_sheet / gm_table / neither must be populated,
+    matching the story's scope:
+      - CHARACTER scope → character_sheet non-null, gm_table null.
+      - GROUP scope     → gm_table non-null, character_sheet null.
+      - GLOBAL scope    → both null (the story itself is the identifier).
+    """
 
     beat = models.ForeignKey(
         Beat,
@@ -1030,8 +1037,21 @@ class BeatCompletion(SharedMemoryModel):
     )
     character_sheet = models.ForeignKey(
         "character_sheets.CharacterSheet",
+        null=True,
+        blank=True,
         on_delete=models.CASCADE,
         related_name="beat_completions",
+        help_text=(
+            "For CHARACTER-scope stories: the character whose progress recorded this completion."
+        ),
+    )
+    gm_table = models.ForeignKey(
+        "gm.GMTable",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="beat_completions",
+        help_text=("For GROUP-scope stories: the GMTable whose progress recorded this completion."),
     )
     roster_entry = models.ForeignKey(
         "roster.RosterEntry",
@@ -1061,7 +1081,24 @@ class BeatCompletion(SharedMemoryModel):
         indexes = [
             models.Index(fields=["beat", "character_sheet"]),
             models.Index(fields=["character_sheet", "-recorded_at"]),
+            models.Index(fields=["gm_table", "-recorded_at"]),
         ]
+
+    def clean(self) -> None:
+        super().clean()
+        scope = self.beat.episode.chapter.story.scope
+        if scope == StoryScope.CHARACTER and not self.character_sheet_id:
+            raise ValidationError({"character_sheet": "Required for CHARACTER-scope stories."})
+        if scope == StoryScope.GROUP and not self.gm_table_id:
+            raise ValidationError({"gm_table": "Required for GROUP-scope stories."})
+        if scope == StoryScope.CHARACTER and self.gm_table_id:
+            raise ValidationError({"gm_table": "Must be null for CHARACTER-scope stories."})
+        if scope == StoryScope.GROUP and self.character_sheet_id:
+            raise ValidationError({"character_sheet": "Must be null for GROUP-scope stories."})
+        if scope == StoryScope.GLOBAL and self.character_sheet_id:
+            raise ValidationError({"character_sheet": "Must be null for GLOBAL-scope stories."})
+        if scope == StoryScope.GLOBAL and self.gm_table_id:
+            raise ValidationError({"gm_table": "Must be null for GLOBAL-scope stories."})
 
     def __str__(self) -> str:
         return (

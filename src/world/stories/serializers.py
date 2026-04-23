@@ -831,6 +831,7 @@ class BeatCompletionSerializer(serializers.ModelSerializer):
             "id",
             "beat",
             "character_sheet",
+            "gm_table",
             "roster_entry",
             "outcome",
             "era",

@@ -39,6 +39,7 @@ from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
+    GroupStoryProgressFactory,
     SessionRequestFactory,
     StoryFactory,
     StoryProgressFactory,
@@ -342,6 +343,44 @@ class BeatMarkActionTest(APITestCase):
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_lead_gm_can_mark_beat_for_group_scope(self):
+        """Lead GM can mark a GM_MARKED beat on a GROUP-scope story."""
+        group_story = StoryFactory(
+            owners=[self.lead_gm_account],
+            scope=StoryScope.GROUP,
+            primary_table=self.gm_table,
+        )
+        chapter = ChapterFactory(story=group_story)
+        episode = EpisodeFactory(chapter=chapter)
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.GM_MARKED,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        gm_table = GMTableFactory()
+        group_progress = GroupStoryProgressFactory(
+            story=group_story,
+            gm_table=gm_table,
+            current_episode=episode,
+            is_active=True,
+        )
+
+        self.beat.outcome = BeatOutcome.UNSATISFIED
+        self.beat.save()
+
+        self.client.force_authenticate(user=self.lead_gm_account)
+        url = reverse("beat-mark", kwargs={"pk": beat.pk})
+        response = self.client.post(
+            url,
+            json.dumps({"outcome": BeatOutcome.SUCCESS, "progress_id": group_progress.pk}),
+            content_type="application/json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        completion = BeatCompletion.objects.filter(beat=beat).first()
+        assert completion is not None
+        assert completion.gm_table == gm_table
+        assert completion.character_sheet is None
 
 
 # ---------------------------------------------------------------------------

@@ -11,14 +11,23 @@ from world.classes.factories import CharacterClassFactory, CharacterClassLevelFa
 from world.codex.constants import CodexKnowledgeStatus
 from world.codex.factories import CharacterCodexKnowledgeFactory, CodexEntryFactory
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
+from world.gm.factories import GMTableFactory
 from world.roster.factories import RosterEntryFactory, RosterFactory
-from world.stories.constants import BeatOutcome, BeatPredicateType, EraStatus, StoryMilestoneType
+from world.stories.constants import (
+    BeatOutcome,
+    BeatPredicateType,
+    EraStatus,
+    StoryMilestoneType,
+    StoryScope,
+)
 from world.stories.exceptions import BeatNotResolvableError
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
     EpisodeFactory,
     EraFactory,
+    GlobalStoryProgressFactory,
+    GroupStoryProgressFactory,
     StoryFactory,
     StoryProgressFactory,
 )
@@ -745,6 +754,66 @@ class RecordGmMarkedOutcomeTests(EvenniaTestCase):
                         beat=beat,
                         outcome=bad_outcome,
                     )
+
+    def test_record_gm_marked_outcome_group_scope_records_gm_table(self):
+        """GROUP-scope: BeatCompletion has gm_table set, character_sheet null."""
+        story = StoryFactory(scope=StoryScope.GROUP)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        gm_table = GMTableFactory()
+        progress = GroupStoryProgressFactory(
+            story=story,
+            gm_table=gm_table,
+            current_episode=episode,
+        )
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.GM_MARKED,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        completion = record_gm_marked_outcome(
+            progress=progress,
+            beat=beat,
+            outcome=BeatOutcome.SUCCESS,
+            gm_notes="Group beat done",
+        )
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+        self.assertIsInstance(completion, BeatCompletion)
+        self.assertEqual(completion.gm_table, gm_table)
+        self.assertIsNone(completion.character_sheet)
+        self.assertEqual(completion.gm_notes, "Group beat done")
+
+    def test_record_gm_marked_outcome_global_scope_both_null(self):
+        """GLOBAL-scope: BeatCompletion has both character_sheet and gm_table null."""
+        story = StoryFactory(scope=StoryScope.GLOBAL)
+        chapter = ChapterFactory(story=story)
+        episode = EpisodeFactory(chapter=chapter)
+        progress = GlobalStoryProgressFactory(
+            story=story,
+            current_episode=episode,
+        )
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.GM_MARKED,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        completion = record_gm_marked_outcome(
+            progress=progress,
+            beat=beat,
+            outcome=BeatOutcome.FAILURE,
+            gm_notes="Global beat failed",
+        )
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.FAILURE)
+        self.assertIsInstance(completion, BeatCompletion)
+        self.assertIsNone(completion.character_sheet)
+        self.assertIsNone(completion.gm_table)
+        self.assertEqual(completion.gm_notes, "Global beat failed")
 
 
 class EvaluateAutoBeatsIdempotencyTests(EvenniaTestCase):

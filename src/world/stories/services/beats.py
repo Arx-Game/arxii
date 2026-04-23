@@ -18,16 +18,16 @@ Public API:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from django.db import transaction
 
 from world.character_sheets.models import CharacterSheet
 from world.roster.models import RosterEntry
-from world.stories.constants import BeatOutcome, BeatPredicateType, StoryMilestoneType
+from world.stories.constants import BeatOutcome, BeatPredicateType, StoryMilestoneType, StoryScope
 from world.stories.exceptions import BeatNotResolvableError
 from world.stories.models import AggregateBeatContribution, Beat, BeatCompletion, Era, StoryProgress
-from world.stories.types import StoryStatus
+from world.stories.types import AnyStoryProgress, StoryStatus
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -35,11 +35,13 @@ if TYPE_CHECKING:
     from world.stories.models import Episode
 
 
-def evaluate_auto_beats(progress: StoryProgress) -> None:
+def evaluate_auto_beats(progress: AnyStoryProgress) -> None:
     """Re-evaluate all auto-detectable beats in the progress's current episode.
 
     For each beat whose predicate_type is not GM_MARKED:
-        - Evaluate the predicate against the progress's character.
+        - Evaluate the predicate against the progress's character (CHARACTER scope)
+          or skip character-specific checks (GROUP / GLOBAL scope, where auto-beats
+          must be non-character predicates such as STORY_AT_MILESTONE).
         - If the beat is currently UNSATISFIED and the predicate now yields a
           resolved outcome (SUCCESS / FAILURE / EXPIRED), flip the outcome
           in-place and write a BeatCompletion row.
@@ -55,37 +57,20 @@ def evaluate_auto_beats(progress: StoryProgress) -> None:
     if progress.current_episode is None:
         return
 
-    sheet: CharacterSheet = progress.character_sheet
-
+    scope = progress.story.scope
     era = Era.objects.get_active()
-    roster_entry = _current_roster_entry(sheet)
+
+    # CHARACTER scope: we need the character sheet for predicate evaluation.
+    sheet: CharacterSheet | None = None
+    roster_entry = None
+    if scope == StoryScope.CHARACTER:
+        sheet = progress.character_sheet
+        roster_entry = _current_roster_entry(sheet)
 
     beats = Beat.objects.filter(episode=progress.current_episode)
     with transaction.atomic():
         for beat in beats:
-            # GM_MARKED beats are never auto-evaluated.
-            if beat.predicate_type == BeatPredicateType.GM_MARKED:
-                continue
-
-            # Only transition beats that are still UNSATISFIED.
-            if beat.outcome != BeatOutcome.UNSATISFIED:
-                continue
-
-            new_outcome = _evaluate_predicate(beat, progress)
-            if new_outcome == BeatOutcome.UNSATISFIED:
-                continue
-
-            # Flip the outcome in-place and persist.
-            beat.outcome = new_outcome
-            beat.save(update_fields=["outcome", "updated_at"])
-
-            BeatCompletion.objects.create(
-                beat=beat,
-                character_sheet=sheet,
-                roster_entry=roster_entry,
-                outcome=new_outcome,
-                era=era,
-            )
+            _evaluate_and_record_beat(beat, progress, scope, sheet, roster_entry, era)
 
         # Write-path hook: open a SessionRequest if the episode is now ready-to-run
         # and requires a GM session. Idempotent — safe to call unconditionally.
@@ -94,14 +79,22 @@ def evaluate_auto_beats(progress: StoryProgress) -> None:
         maybe_create_session_request(progress)
 
 
+_GM_MARKED_VALID_OUTCOMES = {BeatOutcome.SUCCESS, BeatOutcome.FAILURE}
+
+
 def record_gm_marked_outcome(
     *,
-    progress: StoryProgress,
+    progress: AnyStoryProgress,
     beat: Beat,
     outcome: BeatOutcome,
     gm_notes: str = "",
 ) -> BeatCompletion:
     """Record a GM's manual outcome on a GM_MARKED beat.
+
+    Works across all three scopes:
+      - CHARACTER: writes character_sheet (from StoryProgress).
+      - GROUP:     writes gm_table (from GroupStoryProgress).
+      - GLOBAL:    writes neither (the beat's story scope is the sole identifier).
 
     Validates:
         - beat.predicate_type == GM_MARKED  (else BeatNotResolvableError)
@@ -116,36 +109,42 @@ def record_gm_marked_outcome(
         )
         raise BeatNotResolvableError(msg)
 
-    _VALID_GM_OUTCOMES = {BeatOutcome.SUCCESS, BeatOutcome.FAILURE}
-    if outcome not in _VALID_GM_OUTCOMES:
+    if outcome not in _GM_MARKED_VALID_OUTCOMES:
         msg = (
             f"Outcome {outcome!r} is not valid for a GM-marked resolution; "
-            f"must be one of {_VALID_GM_OUTCOMES}."
+            f"must be one of {_GM_MARKED_VALID_OUTCOMES}."
         )
         raise BeatNotResolvableError(msg)
 
-    sheet: CharacterSheet = progress.character_sheet
+    scope = progress.story.scope
     era = Era.objects.get_active()
-    roster_entry = _current_roster_entry(sheet)
 
-    # Flip the outcome in-place and persist.
-    beat.outcome = outcome
-    beat.save(update_fields=["outcome", "updated_at"])
+    completion_kwargs: dict = {
+        "beat": beat,
+        "outcome": outcome,
+        "era": era,
+        "gm_notes": gm_notes,
+    }
+    if scope == StoryScope.CHARACTER:
+        sheet: CharacterSheet = progress.character_sheet
+        completion_kwargs["character_sheet"] = sheet
+        completion_kwargs["roster_entry"] = _current_roster_entry(sheet)
+    elif scope == StoryScope.GROUP:
+        completion_kwargs["gm_table"] = progress.gm_table
+    # GLOBAL: no scope-specific FK
 
-    completion = BeatCompletion.objects.create(
-        beat=beat,
-        character_sheet=sheet,
-        roster_entry=roster_entry,
-        outcome=outcome,
-        era=era,
-        gm_notes=gm_notes,
-    )
+    with transaction.atomic():
+        # Flip the outcome in-place and persist.
+        beat.outcome = outcome
+        beat.save(update_fields=["outcome", "updated_at"])
 
-    # Write-path hook: open a SessionRequest if the episode is now ready-to-run
-    # and requires a GM session. Idempotent — safe to call unconditionally.
-    from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
+        completion = BeatCompletion.objects.create(**completion_kwargs)
 
-    maybe_create_session_request(progress)
+        # Write-path hook: open a SessionRequest if the episode is now ready-to-run
+        # and requires a GM session. Idempotent — safe to call unconditionally.
+        from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
+
+        maybe_create_session_request(progress)
 
     return completion
 
@@ -180,6 +179,9 @@ def record_aggregate_contribution(
     era = Era.objects.get_active()
     roster_entry = _current_roster_entry(character_sheet)
 
+    story = beat.episode.chapter.story
+    scope = story.scope
+
     with transaction.atomic():
         contrib = AggregateBeatContribution.objects.create(
             beat=beat,
@@ -195,13 +197,31 @@ def record_aggregate_contribution(
             if new_outcome == BeatOutcome.SUCCESS:
                 beat.outcome = new_outcome
                 beat.save(update_fields=["outcome", "updated_at"])
-                BeatCompletion.objects.create(
-                    beat=beat,
-                    character_sheet=character_sheet,
-                    roster_entry=roster_entry,
-                    outcome=new_outcome,
-                    era=era,
-                )
+
+                # BeatCompletion for aggregate threshold crossing is scope-aware:
+                # - CHARACTER: attribute to the character who crossed it.
+                # - GROUP: attribute to the group (gm_table); individual contributions
+                #   are already in the AggregateBeatContribution ledger.
+                # - GLOBAL: no FK required.
+                completion_kwargs: dict = {
+                    "beat": beat,
+                    "outcome": new_outcome,
+                    "era": era,
+                }
+                if scope == StoryScope.CHARACTER:
+                    completion_kwargs["character_sheet"] = character_sheet
+                    completion_kwargs["roster_entry"] = roster_entry
+                elif scope == StoryScope.GROUP:
+                    from world.stories.services.progress import (  # noqa: PLC0415
+                        get_active_progress_for_story,
+                    )
+
+                    group_progress = get_active_progress_for_story(story)
+                    if group_progress is not None:
+                        completion_kwargs["gm_table"] = group_progress.gm_table
+                # GLOBAL: no scope-specific FK
+
+                BeatCompletion.objects.create(**completion_kwargs)
 
         # Write-path hook: open a SessionRequest if the episode is now ready-to-run
         # and requires a GM session. Walk beat -> episode -> chapter -> story to
@@ -209,7 +229,6 @@ def record_aggregate_contribution(
         from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
         from world.stories.services.scheduling import maybe_create_session_request  # noqa: PLC0415
 
-        story = beat.episode.chapter.story
         progress = get_active_progress_for_story(story)
         if progress is not None:
             maybe_create_session_request(progress)
@@ -249,6 +268,82 @@ def expire_overdue_beats(now: datetime | None = None) -> int:
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+
+def _evaluate_and_record_beat(  # noqa: PLR0913 — scope/sheet/roster_entry/era are tightly coupled
+    beat: Beat,
+    progress: AnyStoryProgress,
+    scope: str,
+    sheet: CharacterSheet | None,
+    roster_entry: RosterEntry | None,
+    era: Era | None,
+) -> None:
+    """Evaluate a single beat within evaluate_auto_beats and record a completion if resolved.
+
+    Called once per beat in the episode. Skips GM_MARKED and already-resolved beats.
+    Must be called inside an atomic transaction (evaluate_auto_beats owns the transaction).
+    """
+    # GM_MARKED beats are never auto-evaluated.
+    if beat.predicate_type == BeatPredicateType.GM_MARKED:
+        return
+
+    # Only transition beats that are still UNSATISFIED.
+    if beat.outcome != BeatOutcome.UNSATISFIED:
+        return
+
+    # For non-CHARACTER scopes, only evaluate predicates that do not
+    # require a character sheet (e.g. STORY_AT_MILESTONE).
+    if scope != StoryScope.CHARACTER and _requires_character_sheet(beat):
+        return
+
+    # Evaluate: CHARACTER scope passes the full progress; others use a
+    # character-free evaluation path (only STORY_AT_MILESTONE for now).
+    if scope == StoryScope.CHARACTER and sheet is not None:
+        new_outcome = _evaluate_predicate(beat, cast(StoryProgress, progress))
+    else:
+        new_outcome = _evaluate_predicate_no_sheet(beat)
+    if new_outcome == BeatOutcome.UNSATISFIED:
+        return
+
+    # Flip the outcome in-place and persist.
+    beat.outcome = new_outcome
+    beat.save(update_fields=["outcome", "updated_at"])
+
+    completion_kwargs: dict = {"beat": beat, "outcome": new_outcome, "era": era}
+    if scope == StoryScope.CHARACTER and sheet is not None:
+        completion_kwargs["character_sheet"] = sheet
+        completion_kwargs["roster_entry"] = roster_entry
+    elif scope == StoryScope.GROUP:
+        completion_kwargs["gm_table"] = progress.gm_table
+    # GLOBAL: no scope-specific FK
+
+    BeatCompletion.objects.create(**completion_kwargs)
+
+
+# Predicate types that require a CharacterSheet to evaluate.
+_CHARACTER_SHEET_PREDICATES = {
+    BeatPredicateType.CHARACTER_LEVEL_AT_LEAST,
+    BeatPredicateType.ACHIEVEMENT_HELD,
+    BeatPredicateType.CONDITION_HELD,
+    BeatPredicateType.CODEX_ENTRY_UNLOCKED,
+}
+
+
+def _requires_character_sheet(beat: Beat) -> bool:
+    """Return True when this beat's predicate type needs a CharacterSheet to evaluate."""
+    return beat.predicate_type in _CHARACTER_SHEET_PREDICATES
+
+
+def _evaluate_predicate_no_sheet(beat: Beat) -> BeatOutcome:
+    """Evaluate predicates that do not require a CharacterSheet.
+
+    Currently only STORY_AT_MILESTONE is supported here; all other types
+    return UNSATISFIED (they require a character sheet and should be guarded
+    by _requires_character_sheet before calling this).
+    """
+    if beat.predicate_type == BeatPredicateType.STORY_AT_MILESTONE:
+        return _evaluate_story_at_milestone(beat)
+    return BeatOutcome.UNSATISFIED
 
 
 def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:

@@ -376,13 +376,19 @@ class TransitionRequiredOutcomeFactory(factory_django.DjangoModelFactory):
 
 
 class BeatCompletionFactory(factory_django.DjangoModelFactory):
-    """Factory for creating BeatCompletion audit ledger entries."""
+    """Factory for creating BeatCompletion audit ledger entries.
+
+    Defaults to CHARACTER-scope (character_sheet populated, gm_table null).
+    For GROUP-scope completions override beat and set gm_table; for GLOBAL-scope
+    override beat and leave both character_sheet and gm_table as None.
+    """
 
     class Meta:
         model = BeatCompletion
 
     beat = factory.SubFactory(BeatFactory)
     character_sheet = factory.SubFactory(CharacterSheetFactory)
+    gm_table = None
     roster_entry = None
     era = None
     outcome = BeatOutcome.SUCCESS
