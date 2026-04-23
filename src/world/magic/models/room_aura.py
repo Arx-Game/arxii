@@ -26,3 +26,37 @@ class RoomAuraProfile(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"RoomAuraProfile(room={self.room_profile_id})"
+
+
+class RoomResonance(SharedMemoryModel):
+    """Through-model for RoomAuraProfile ↔ Resonance M2M (Spec C §2.6)."""
+
+    room_aura_profile = models.ForeignKey(
+        RoomAuraProfile,
+        on_delete=models.CASCADE,
+        related_name="room_resonances",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        related_name="room_tags",
+    )
+    set_by = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        help_text="Staff/player who tagged this resonance.",
+    )
+    set_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["room_aura_profile", "resonance"],
+                name="unique_room_resonance_per_profile",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"RoomResonance(aura={self.room_aura_profile_id}, res={self.resonance_id})"

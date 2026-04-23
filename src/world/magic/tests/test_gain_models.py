@@ -57,3 +57,34 @@ class RoomAuraProfileTests(TestCase):
         aura = RoomAuraProfile.objects.create(room_profile=rp)
         self.assertEqual(aura.pk, rp.pk)
         self.assertEqual(rp.room_aura_profile, aura)
+
+
+class RoomResonanceTests(TestCase):
+    def test_tag_is_unique_per_profile_resonance(self) -> None:
+        from django.db import IntegrityError
+
+        from world.magic.factories import (
+            ResonanceFactory,
+            RoomAuraProfileFactory,
+        )
+        from world.magic.models import RoomResonance
+
+        aura = RoomAuraProfileFactory()
+        res = ResonanceFactory()
+        RoomResonance.objects.create(room_aura_profile=aura, resonance=res)
+        with self.assertRaises(IntegrityError):
+            RoomResonance.objects.create(room_aura_profile=aura, resonance=res)
+
+    def test_multiple_resonances_per_profile(self) -> None:
+        from world.magic.factories import (
+            ResonanceFactory,
+            RoomAuraProfileFactory,
+        )
+        from world.magic.models import RoomResonance
+
+        aura = RoomAuraProfileFactory()
+        r1 = ResonanceFactory()
+        r2 = ResonanceFactory()
+        RoomResonance.objects.create(room_aura_profile=aura, resonance=r1)
+        RoomResonance.objects.create(room_aura_profile=aura, resonance=r2)
+        self.assertEqual(aura.room_resonances.count(), 2)
