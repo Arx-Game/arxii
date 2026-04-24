@@ -74,10 +74,11 @@ from world.magic.models import (
     ResonanceGainConfig,
     RoomAuraProfile,
     RoomResonance,
+    SceneEntryEndorsement,
 )
 from world.magic.types import SettlementResult
 from world.scenes.constants import InteractionMode, InteractionVisibility
-from world.scenes.models import Interaction, Persona, SceneParticipation
+from world.scenes.models import Interaction, Persona, Scene, SceneParticipation
 from world.scenes.place_models import InteractionReceiver
 
 
@@ -324,3 +325,86 @@ def settle_weekly_pot(endorser_sheet: CharacterSheet) -> SettlementResult:
         endorsements_settled=n,
         total_granted=total_granted,
     )
+
+
+@transaction.atomic
+def create_scene_entry_endorsement(
+    endorser_sheet: CharacterSheet,
+    endorsee_sheet: CharacterSheet,
+    scene: Scene,
+    resonance: Resonance,
+) -> SceneEntryEndorsement:
+    """Validate, persist, and fire scene-entry grant in one transaction (Spec C §2.3, §7)."""
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+    from world.scenes.constants import PoseKind  # noqa: PLC0415
+
+    if endorser_sheet == endorsee_sheet:
+        msg = "Cannot endorse your own entry"
+        raise EndorsementValidationError(msg)
+
+    endorser_account = account_for_sheet(endorser_sheet)
+    endorsee_account = account_for_sheet(endorsee_sheet)
+    if (
+        endorser_account is not None
+        and endorsee_account is not None
+        and endorser_account == endorsee_account
+    ):
+        msg = "Cannot endorse an alt character"
+        raise EndorsementValidationError(msg)
+
+    if endorser_account is None:
+        msg = "Endorser has no current account"
+        raise EndorsementValidationError(msg)
+    if not SceneParticipation.objects.filter(scene=scene, account=endorser_account).exists():
+        msg = "Endorser never participated in this scene"
+        raise EndorsementValidationError(msg)
+
+    if not CharacterResonance.objects.filter(
+        character_sheet=endorsee_sheet, resonance=resonance
+    ).exists():
+        msg = "Endorsee has not claimed this resonance"
+        raise EndorsementValidationError(msg)
+
+    # Find the endorsee's entry pose in this scene.
+    # Interaction.persona FK → Persona; Persona.character_sheet FK → CharacterSheet
+    entry_interaction = (
+        Interaction.objects.filter(
+            scene=scene,
+            persona__character_sheet=endorsee_sheet,
+            pose_kind=PoseKind.ENTRY,
+        )
+        .order_by("timestamp")
+        .first()
+    )
+    if entry_interaction is None:
+        msg = "Endorsee has no entry pose in this scene"
+        raise EndorsementValidationError(msg)
+
+    if SceneEntryEndorsement.objects.filter(
+        endorser_sheet=endorser_sheet,
+        endorsee_sheet=endorsee_sheet,
+        scene=scene,
+    ).exists():
+        msg = "Already endorsed this entry"
+        raise EndorsementValidationError(msg)
+
+    cfg = get_resonance_gain_config()
+    endorsement = SceneEntryEndorsement.objects.create(
+        endorser_sheet=endorser_sheet,
+        endorsee_sheet=endorsee_sheet,
+        scene=scene,
+        entry_interaction=entry_interaction,
+        entry_interaction_timestamp=entry_interaction.timestamp,
+        resonance=resonance,
+        persona_snapshot=entry_interaction.persona,
+        granted_amount=cfg.scene_entry_grant,
+    )
+    grant_resonance(
+        endorsee_sheet,
+        resonance,
+        cfg.scene_entry_grant,
+        source=GainSource.SCENE_ENTRY,
+        scene_entry_endorsement=endorsement,
+    )
+    return endorsement

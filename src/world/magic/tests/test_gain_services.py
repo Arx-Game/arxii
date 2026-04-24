@@ -397,3 +397,155 @@ class SettleWeeklyPotTests(TestCase):
                 character_sheet=ep.endorsee_sheet, resonance=ep.resonance
             )
             self.assertGreater(cr.balance, 0)
+
+
+class CreateSceneEntryEndorsementTests(TestCase):
+    """Covers Spec C §2.3 + §7 preconditions for scene entry endorsement."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import (
+            CharacterResonanceFactory,
+            ResonanceFactory,
+        )
+        from world.roster.factories import RosterTenureFactory
+        from world.scenes.factories import (
+            InteractionFactory,
+            SceneFactory,
+            SceneParticipationFactory,
+        )
+
+        cls.CharacterSheetFactory = CharacterSheetFactory
+        cls.CharacterResonanceFactory = CharacterResonanceFactory
+        cls.ResonanceFactory = ResonanceFactory
+        cls.RosterTenureFactory = RosterTenureFactory
+        cls.SceneFactory = SceneFactory
+        cls.SceneParticipationFactory = SceneParticipationFactory
+        cls.InteractionFactory = InteractionFactory
+
+    def _build_scenario(self, *, same_account=False, with_entry_pose=True):
+        """Build endorser + endorsee + scene + (optional) entry interaction.
+
+        Returns: (endorser_sheet, endorsee_sheet, scene, resonance)
+        """
+        from world.magic.services.gain import account_for_sheet
+        from world.scenes.constants import PoseKind
+
+        if same_account:
+            endorser_tenure = self.RosterTenureFactory()
+            endorser_sheet = endorser_tenure.roster_entry.character_sheet
+            endorsee_tenure = self.RosterTenureFactory(
+                player_data=endorser_tenure.player_data,
+            )
+            endorsee_sheet = endorsee_tenure.roster_entry.character_sheet
+        else:
+            endorser_tenure = self.RosterTenureFactory()
+            endorser_sheet = endorser_tenure.roster_entry.character_sheet
+            endorsee_tenure = self.RosterTenureFactory()
+            endorsee_sheet = endorsee_tenure.roster_entry.character_sheet
+
+        scene = self.SceneFactory()
+        endorser_account = account_for_sheet(endorser_sheet)
+        if endorser_account is not None:
+            self.SceneParticipationFactory(scene=scene, account=endorser_account)
+
+        resonance = self.ResonanceFactory()
+        self.CharacterResonanceFactory(character_sheet=endorsee_sheet, resonance=resonance)
+
+        if with_entry_pose:
+            endorsee_persona = endorsee_sheet.primary_persona
+            self.InteractionFactory(
+                scene=scene,
+                persona=endorsee_persona,
+                pose_kind=PoseKind.ENTRY,
+            )
+
+        return endorser_sheet, endorsee_sheet, scene, resonance
+
+    def test_fires_grant_immediately(self) -> None:
+        from world.magic.models import CharacterResonance
+        from world.magic.services.gain import (
+            create_scene_entry_endorsement,
+            get_resonance_gain_config,
+        )
+
+        endorser, endorsee, scene, resonance = self._build_scenario()
+        create_scene_entry_endorsement(endorser, endorsee, scene, resonance)
+
+        cfg = get_resonance_gain_config()
+        cr = CharacterResonance.objects.get(character_sheet=endorsee, resonance=resonance)
+        self.assertEqual(cr.balance, cfg.scene_entry_grant)
+
+    def test_writes_ledger_row(self) -> None:
+        from world.magic.constants import GainSource
+        from world.magic.models import ResonanceGrant
+        from world.magic.services.gain import create_scene_entry_endorsement
+
+        endorser, endorsee, scene, resonance = self._build_scenario()
+        create_scene_entry_endorsement(endorser, endorsee, scene, resonance)
+        self.assertEqual(
+            ResonanceGrant.objects.filter(
+                source=GainSource.SCENE_ENTRY, character_sheet=endorsee
+            ).count(),
+            1,
+        )
+
+    def test_captures_persona_snapshot(self) -> None:
+        from world.magic.services.gain import create_scene_entry_endorsement
+
+        endorser, endorsee, scene, resonance = self._build_scenario()
+        endorsement = create_scene_entry_endorsement(endorser, endorsee, scene, resonance)
+        self.assertEqual(endorsement.persona_snapshot, endorsee.primary_persona)
+
+    def test_requires_entry_pose(self) -> None:
+        from world.magic.exceptions import EndorsementValidationError
+        from world.magic.services.gain import create_scene_entry_endorsement
+
+        endorser, endorsee, scene, resonance = self._build_scenario(with_entry_pose=False)
+        with self.assertRaises(EndorsementValidationError):
+            create_scene_entry_endorsement(endorser, endorsee, scene, resonance)
+
+    def test_once_per_pair_per_scene(self) -> None:
+        from world.magic.exceptions import EndorsementValidationError
+        from world.magic.services.gain import create_scene_entry_endorsement
+
+        endorser, endorsee, scene, resonance = self._build_scenario()
+        create_scene_entry_endorsement(endorser, endorsee, scene, resonance)
+        with self.assertRaises(EndorsementValidationError):
+            create_scene_entry_endorsement(endorser, endorsee, scene, resonance)
+
+    def test_blocks_self(self) -> None:
+        from world.magic.exceptions import EndorsementValidationError
+        from world.magic.services.gain import create_scene_entry_endorsement
+
+        endorser, _, scene, resonance = self._build_scenario()
+        with self.assertRaises(EndorsementValidationError):
+            create_scene_entry_endorsement(endorser, endorser, scene, resonance)
+
+    def test_blocks_alt(self) -> None:
+        from world.magic.exceptions import EndorsementValidationError
+        from world.magic.services.gain import create_scene_entry_endorsement
+
+        endorser, endorsee, scene, resonance = self._build_scenario(same_account=True)
+        with self.assertRaises(EndorsementValidationError):
+            create_scene_entry_endorsement(endorser, endorsee, scene, resonance)
+
+    def test_requires_participation(self) -> None:
+        from world.magic.exceptions import EndorsementValidationError
+        from world.magic.services.gain import account_for_sheet, create_scene_entry_endorsement
+
+        endorser, endorsee, scene, resonance = self._build_scenario()
+        # Wipe scene participation
+        scene.participations.filter(account=account_for_sheet(endorser)).delete()
+        with self.assertRaises(EndorsementValidationError):
+            create_scene_entry_endorsement(endorser, endorsee, scene, resonance)
+
+    def test_requires_claimed_resonance(self) -> None:
+        from world.magic.exceptions import EndorsementValidationError
+        from world.magic.services.gain import create_scene_entry_endorsement
+
+        endorser, endorsee, scene, _ = self._build_scenario()
+        fresh_resonance = self.ResonanceFactory()
+        with self.assertRaises(EndorsementValidationError):
+            create_scene_entry_endorsement(endorser, endorsee, scene, fresh_resonance)
