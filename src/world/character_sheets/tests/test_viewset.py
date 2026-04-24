@@ -2074,3 +2074,50 @@ class TestPrefetchCompleteness(TestCase):
         sheet = self._get_sheet()
         with self.assertNumQueries(0):
             _build_profile_picture(sheet)
+
+
+class TestCurrentResidenceField(TestCase):
+    """Tests for current_residence field in CharacterSheet serializer."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        """Create a character with optional residence."""
+        cls.player = PlayerDataFactory()
+        cls.character = CharacterFactory(db_key="ResidenceChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
+        RosterTenureFactory(
+            player_data=cls.player,
+            roster_entry=cls.roster_entry,
+            player_number=1,
+        )
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.player.account)
+
+    def test_current_residence_null_in_response(self) -> None:
+        """current_residence is null when no residence is set."""
+        url = f"/api/character-sheets/{self.character.pk}/"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["current_residence"])
+
+    def test_current_residence_set_in_response(self) -> None:
+        """current_residence is {id, name} when a residence is set."""
+        from evennia_extensions.factories import RoomProfileFactory
+
+        rp = RoomProfileFactory()
+        rp.objectdb.db_key = "Grand Hall"
+        rp.objectdb.save(update_fields=["db_key"])
+
+        self.sheet.current_residence = rp
+        self.sheet.save(update_fields=["current_residence"])
+
+        url = f"/api/character-sheets/{self.character.pk}/"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["current_residence"],
+            {"id": rp.pk, "name": "Grand Hall"},
+        )
