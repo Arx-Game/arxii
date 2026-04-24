@@ -212,3 +212,108 @@ class SceneEntryEndorsementViewTests(APITestCase):
         response = self.client.delete(f"/api/magic/scene-entry-endorsements/{endorsement.pk}/")
         # Create-only viewset — DELETE returns 405 Method Not Allowed
         self.assertEqual(response.status_code, 405)
+
+
+class ResonanceGrantListTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceFactory
+        from world.roster.factories import RosterTenureFactory
+
+        cls.CharacterSheetFactory = CharacterSheetFactory
+        cls.RosterTenureFactory = RosterTenureFactory
+        cls.ResonanceFactory = ResonanceFactory
+
+    def _account_with_grant(self):
+        """Build account + sheet with one staff-grant row."""
+        from world.magic.constants import GainSource
+        from world.magic.services.gain import account_for_sheet
+        from world.magic.services.resonance import grant_resonance
+
+        tenure = self.RosterTenureFactory()
+        sheet = tenure.roster_entry.character_sheet
+        account = account_for_sheet(sheet)
+        resonance = self.ResonanceFactory()
+        grant_resonance(sheet, resonance, 5, source=GainSource.STAFF_GRANT)
+        return account, sheet, resonance
+
+    def test_user_sees_own_grants(self) -> None:
+        account, _, _ = self._account_with_grant()
+        self.client.force_authenticate(user=account)
+
+        response = self.client.get("/api/magic/resonance-grants/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        # Paginated: either {results: [...]} or a list
+        results = data["results"] if isinstance(data, dict) and "results" in data else data
+        self.assertEqual(len(results), 1)
+
+    def test_user_does_not_see_others_grants(self) -> None:
+        # Set up two accounts, each with a grant
+        alice_account, _, _ = self._account_with_grant()
+        bob_account, _, _ = self._account_with_grant()
+
+        # Alice's view
+        self.client.force_authenticate(user=alice_account)
+        response = self.client.get("/api/magic/resonance-grants/")
+        data = response.json()
+        results = data["results"] if isinstance(data, dict) and "results" in data else data
+        self.assertEqual(len(results), 1)
+        # Bob's view
+        self.client.force_authenticate(user=bob_account)
+        response = self.client.get("/api/magic/resonance-grants/")
+        data = response.json()
+        results = data["results"] if isinstance(data, dict) and "results" in data else data
+        self.assertEqual(len(results), 1)
+
+    def test_filter_by_source(self) -> None:
+        from world.magic.constants import GainSource
+        from world.magic.factories import RoomAuraProfileFactory
+        from world.magic.services.resonance import grant_resonance
+
+        account, sheet, resonance = self._account_with_grant()
+        # Add a second grant of a different source
+        aura = RoomAuraProfileFactory()
+        grant_resonance(
+            sheet,
+            resonance,
+            1,
+            source=GainSource.ROOM_RESIDENCE,
+            room_aura_profile=aura,
+        )
+
+        self.client.force_authenticate(user=account)
+        response = self.client.get("/api/magic/resonance-grants/?source=STAFF_GRANT")
+        data = response.json()
+        results = data["results"] if isinstance(data, dict) and "results" in data else data
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["source"], "STAFF_GRANT")
+
+    def test_staff_sees_all(self) -> None:
+        self._account_with_grant()  # Alice's grant
+        self._account_with_grant()  # Bob's grant
+
+        from evennia.accounts.models import AccountDB
+
+        staff = AccountDB.objects.create_superuser(
+            "specc_staff_admin", "staff@example.com", "password"
+        )
+        self.client.force_authenticate(user=staff)
+
+        response = self.client.get("/api/magic/resonance-grants/")
+        data = response.json()
+        results = data["results"] if isinstance(data, dict) and "results" in data else data
+        self.assertEqual(len(results), 2)
+
+    def test_delete_not_supported(self) -> None:
+        account, _, _ = self._account_with_grant()
+        self.client.force_authenticate(user=account)
+
+        response = self.client.get("/api/magic/resonance-grants/")
+        data = response.json()
+        results = data["results"] if isinstance(data, dict) and "results" in data else data
+        grant_pk = results[0]["id"]
+
+        response = self.client.delete(f"/api/magic/resonance-grants/{grant_pk}/")
+        self.assertEqual(response.status_code, 405)

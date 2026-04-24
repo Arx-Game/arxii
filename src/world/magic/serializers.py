@@ -31,6 +31,7 @@ from world.magic.models import (
     PendingAlteration,
     PoseEndorsement,
     Resonance,
+    ResonanceGrant,
     Restriction,
     Ritual,
     SceneEntryEndorsement,
@@ -1128,3 +1129,28 @@ class SceneEntryEndorsementSerializer(serializers.ModelSerializer):
             return create_scene_entry_endorsement(endorser_sheet, endorsee_sheet, scene, resonance)
         except EndorsementValidationError as exc:
             raise serializers.ValidationError({"detail": exc.user_message}) from exc
+
+
+# =============================================================================
+# Resonance Pivot Spec C — ResonanceGrant read-only ledger (Task 25)
+# =============================================================================
+
+
+class ResonanceGrantSerializer(serializers.ModelSerializer):
+    """Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25)."""
+
+    class Meta:
+        model = ResonanceGrant
+        fields = [
+            "id",
+            "character_sheet",
+            "resonance",
+            "amount",
+            "source",
+            "granted_at",
+            "source_room_aura_profile",
+            "source_staff_account",
+            "source_pose_endorsement",
+            "source_scene_entry_endorsement",
+        ]
+        read_only_fields = fields

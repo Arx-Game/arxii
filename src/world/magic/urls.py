@@ -22,6 +22,7 @@ from world.magic.views import (
     GiftViewSet,
     PendingAlterationViewSet,
     PoseEndorsementViewSet,
+    ResonanceGrantViewSet,
     RestrictionViewSet,
     RitualPerformView,
     SceneEntryEndorsementViewSet,
@@ -82,6 +83,11 @@ router.register(
     "scene-entry-endorsements",
     SceneEntryEndorsementViewSet,
     basename="scene-entry-endorsement",
+)
+router.register(
+    "resonance-grants",
+    ResonanceGrantViewSet,
+    basename="resonance-grant",
 )
 
 urlpatterns = [

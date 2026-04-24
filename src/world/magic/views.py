@@ -41,6 +41,7 @@ from world.magic.exceptions import (
 )
 from world.magic.filters import (
     CantripFilter,
+    ResonanceGrantFilterSet,
     ThreadFilter,
     ThreadWeavingTeachingOfferFilter,
 )
@@ -59,6 +60,7 @@ from world.magic.models import (
     PendingAlteration,
     PoseEndorsement,
     Resonance,
+    ResonanceGrant,
     Restriction,
     SceneEntryEndorsement,
     Technique,
@@ -85,6 +87,7 @@ from world.magic.serializers import (
     LibraryEntrySerializer,
     PendingAlterationSerializer,
     PoseEndorsementSerializer,
+    ResonanceGrantSerializer,
     RestrictionSerializer,
     RitualPerformRequestSerializer,
     SceneEntryEndorsementSerializer,
@@ -892,3 +895,44 @@ class SceneEntryEndorsementViewSet(
     def perform_create(self, serializer: SceneEntryEndorsementSerializer) -> None:
         """Resolve the endorser sheet from the requesting account and save."""
         serializer.save(endorser_sheet=_resolve_endorser_sheet(self.request))
+
+
+# =============================================================================
+# Resonance Pivot Spec C — ResonanceGrant read-only ledger (Task 25)
+# =============================================================================
+
+
+class ResonanceGrantViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Read-only audit ledger of all grants. User-scoped; staff see all.
+
+    GET  /api/magic/resonance-grants/       — list (user-scoped or staff-all)
+    GET  /api/magic/resonance-grants/<pk>/  — retrieve one row
+
+    Ordering: newest-first (descending granted_at). This is a timeline surface
+    and ordering is justified per CLAUDE.md policy.
+
+    Filter params: source, resonance (PK), granted_after, granted_before.
+    """
+
+    serializer_class = ResonanceGrantSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ResonanceGrantFilterSet
+    queryset = ResonanceGrant.objects.select_related(
+        "character_sheet",
+        "resonance",
+    ).order_by("-granted_at")
+
+    def get_queryset(self):  # type: ignore[override]
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return qs
+        return qs.filter(
+            character_sheet__roster_entry__tenures__player_data__account=user,
+            character_sheet__roster_entry__tenures__end_date__isnull=True,
+        ).distinct()
