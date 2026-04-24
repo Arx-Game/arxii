@@ -303,12 +303,27 @@ Roleplay session recording with participant tracking and message logging.
 - **Source:** `src/world/scenes/`
 - **Details:** [scenes.md](scenes.md)
 ### Stories
-Player-driven narrative campaign system with hierarchical structure.
+Player-driven narrative campaign system with hierarchical structure and task-gated progression.
 
-- **Models:** `Story`, `Chapter`, `Episode`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`
-- **Integrates with:** scenes (episode content), roster (participants)
+- **Models:** `Story`, `Chapter`, `Episode`, `Transition`, `Beat`, `BeatCompletion`, `EpisodeResolution`, `StoryProgress`, `GroupStoryProgress`, `GlobalStoryProgress`, `AggregateBeatContribution`, `AssistantGMClaim`, `SessionRequest`, `Era`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`
+- **Reactivity entry points (Phase 3):** `stories.services.reactivity.on_character_level_changed` / `on_achievement_earned` / `on_condition_applied` / `on_condition_expired` / `on_codex_entry_unlocked` / `on_story_advanced`
+- **Key Services:** `evaluate_auto_beats`, `record_gm_marked_outcome`, `record_aggregate_contribution`, `get_eligible_transitions`, `resolve_episode`, `create_character_progress` / `create_group_progress` / `create_global_progress`, `catch_up_character_stories` (called from `Character.at_post_puppet`)
+- **Integrates with:** scenes (episode content), roster (participants), achievements / conditions / codex / classes (predicate evaluation + reactivity hooks fire from their services), narrative (beat completions and episode resolutions emit NarrativeMessages)
 - **Source:** `src/world/stories/`
 - **Details:** [stories.md](stories.md)
+
+### Narrative
+General-purpose IC message delivery — GM/Staff/automated messages to characters. Used by stories for beat and episode-resolution informs; also available for atmosphere, visions, happenstance.
+
+- **Models:** `NarrativeMessage` (body, ooc_note, category, sender_account, optional related_story / related_beat_completion / related_episode_resolution FKs), `NarrativeMessageDelivery` (message + recipient_character_sheet, delivered_at, acknowledged_at)
+- **Categories:** STORY, ATMOSPHERE, VISIONS, HAPPENSTANCE, SYSTEM
+- **Key Services:**
+  - `send_narrative_message(recipients, body, category, ...)` — atomic create + fan-out + real-time push to puppeted recipients via `character.msg()` with `|R[NARRATIVE]|n` color tag; offline recipients stay queued
+  - `deliver_queued_messages(sheet)` — drains queued deliveries at login (called from `at_post_puppet` via stories login service)
+- **Pattern:** One message fans out to many recipients via NarrativeMessageDelivery rows (e.g., GM sends covenant message to 5 of 8 members — one message, five delivery rows). Messages are immutable; delivery rows track per-recipient state.
+- **API Endpoints:** `GET /api/narrative/my-messages/` (paginated, filterable by category / related_story / acknowledged), `POST /api/narrative/deliveries/{id}/acknowledge/`
+- **Integrates with:** stories (beat completions + episode resolutions emit messages via `stories.services.narrative`), character_sheets (recipient), accounts (sender)
+- **Source:** `src/world/narrative/`
 ### Mechanics
 Unified modifier system — categories, types, sources, and per-character modifier values.
 

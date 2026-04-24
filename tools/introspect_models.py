@@ -29,6 +29,7 @@ TARGET_APPS = [
     "world.goals",
     "world.magic",
     "world.mechanics",
+    "world.narrative",
     "world.progression",
     "world.realms",
     "world.relationships",
