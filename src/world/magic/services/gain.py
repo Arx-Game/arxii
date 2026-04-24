@@ -63,12 +63,18 @@ from evennia.accounts.models import AccountDB
 
 from evennia_extensions.models import RoomProfile
 from world.character_sheets.models import CharacterSheet
+from world.magic.exceptions import EndorsementValidationError
 from world.magic.models import (
+    CharacterResonance,
+    PoseEndorsement,
     Resonance,
     ResonanceGainConfig,
     RoomAuraProfile,
     RoomResonance,
 )
+from world.scenes.constants import InteractionMode, InteractionVisibility
+from world.scenes.models import Interaction, Persona, SceneParticipation
+from world.scenes.place_models import InteractionReceiver
 
 
 def account_for_sheet(sheet: CharacterSheet) -> AccountDB | None:
@@ -161,3 +167,104 @@ def get_residence_resonances(sheet: CharacterSheet) -> set[Resonance]:
     claimed_ids = set(sheet.resonances.values_list("resonance_id", flat=True))
     matched_ids = tagged_ids & claimed_ids
     return set(Resonance.objects.filter(pk__in=matched_ids))
+
+
+@transaction.atomic
+def create_pose_endorsement(
+    endorser_sheet: CharacterSheet,
+    interaction: Interaction,
+    resonance: Resonance,
+) -> PoseEndorsement:
+    """Validate and persist a pose endorsement (Spec C §2.2 + §7).
+
+    Preconditions (raises EndorsementValidationError on failure):
+    1. Interaction author (persona field) has a character sheet
+    2. Endorser != endorsee (no self-endorsement)
+    3. Endorser's account != endorsee's account (no alt-endorsement)
+    4. Interaction is not a whisper
+    5. Interaction is not VERY_PRIVATE
+    6. Endorser was present (scene participation OR interaction receiver)
+    7. Endorsee has claimed this resonance
+    8. No duplicate (endorser × interaction already endorsed)
+    """
+    endorsee_persona = interaction.persona
+    if endorsee_persona is None:
+        msg = "Interaction has no author persona"
+        raise EndorsementValidationError(msg)
+    endorsee_sheet = endorsee_persona.character_sheet
+    if endorsee_sheet is None:
+        msg = "Interaction author has no character sheet"
+        raise EndorsementValidationError(msg)
+
+    if endorser_sheet == endorsee_sheet:
+        msg = "Cannot endorse your own pose"
+        raise EndorsementValidationError(msg)
+
+    endorser_account = account_for_sheet(endorser_sheet)
+    endorsee_account = account_for_sheet(endorsee_sheet)
+    if (
+        endorser_account is not None
+        and endorsee_account is not None
+        and endorser_account == endorsee_account
+    ):
+        msg = "Cannot endorse an alt character"
+        raise EndorsementValidationError(msg)
+
+    if interaction.mode == InteractionMode.WHISPER:
+        msg = "Whispers cannot be endorsed"
+        raise EndorsementValidationError(msg)
+
+    if interaction.visibility == InteractionVisibility.VERY_PRIVATE:
+        msg = "Very-private interactions cannot be endorsed"
+        raise EndorsementValidationError(msg)
+
+    if not _endorser_was_present(endorser_sheet, endorser_account, interaction):
+        msg = "Endorser was not present for this interaction"
+        raise EndorsementValidationError(msg)
+
+    if not CharacterResonance.objects.filter(
+        character_sheet=endorsee_sheet, resonance=resonance
+    ).exists():
+        msg = "Endorsee has not claimed this resonance"
+        raise EndorsementValidationError(msg)
+
+    existing = PoseEndorsement.objects.filter(
+        endorser_sheet=endorser_sheet, interaction=interaction
+    ).first()
+    if existing is not None:
+        msg = "Already endorsed this pose"
+        raise EndorsementValidationError(msg)
+
+    return PoseEndorsement.objects.create(
+        endorser_sheet=endorser_sheet,
+        endorsee_sheet=endorsee_sheet,
+        interaction=interaction,
+        timestamp=interaction.timestamp,
+        resonance=resonance,
+        persona_snapshot=endorsee_persona,
+    )
+
+
+def _endorser_was_present(
+    endorser_sheet: CharacterSheet,
+    endorser_account: AccountDB | None,
+    interaction: Interaction,
+) -> bool:
+    """True if the endorser participated in the scene or received the interaction.
+
+    - Scene RP: SceneParticipation row for (scene, account).
+    - Organic grid RP (no scene): InteractionReceiver row for (interaction, persona).
+    """
+    scene = interaction.scene
+    if scene is not None:
+        if endorser_account is None:
+            return False
+        return SceneParticipation.objects.filter(scene=scene, account=endorser_account).exists()
+    # Organic grid RP — check receivers. Need endorser's primary Persona.
+    try:
+        endorser_persona = endorser_sheet.primary_persona
+    except Persona.DoesNotExist:
+        return False
+    return InteractionReceiver.objects.filter(
+        interaction=interaction, persona=endorser_persona
+    ).exists()
