@@ -320,6 +320,10 @@ class CharacterCodexKnowledge(SharedMemoryModel):
 
         Returns:
             True if learning completed, False otherwise.
+
+        When learning completes (status transitions to KNOWN), notifies
+        the stories reactivity service so any CODEX_ENTRY_UNLOCKED beats
+        on the character's active stories re-evaluate.
         """
         if self.status != self.Status.UNCOVERED:
             return False
@@ -329,10 +333,24 @@ class CharacterCodexKnowledge(SharedMemoryModel):
             self.status = self.Status.KNOWN
             self.learned_at = timezone.now()
             self.save(update_fields=["learning_progress", "status", "learned_at"])
+            self._notify_stories_unlocked()
             return True
 
         self.save(update_fields=["learning_progress"])
         return False
+
+    def _notify_stories_unlocked(self) -> None:
+        """Fire the stories reactivity hook on KNOWN transition.
+
+        Resolves sheet via roster_entry.character_sheet. Cross-app lazy
+        import avoids circular imports and keeps codex decoupled at module
+        load time.
+        """
+        from world.stories.services.reactivity import on_codex_entry_unlocked  # noqa: PLC0415
+
+        sheet = self.roster_entry.character_sheet
+        if sheet is not None:
+            on_codex_entry_unlocked(sheet, self.entry)
 
     def is_complete(self) -> bool:
         """Check if this knowledge is fully learned."""
