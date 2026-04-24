@@ -29,6 +29,7 @@ from world.stories.models import AggregateBeatContribution, Beat, BeatCompletion
 from world.stories.types import AnyStoryProgress, StoryStatus
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from datetime import datetime
 
     from world.stories.models import Episode
@@ -293,15 +294,16 @@ def _evaluate_and_record_beat(  # noqa: PLR0913 — scope/sheet/roster_entry/era
     if beat.outcome != BeatOutcome.UNSATISFIED:
         return
 
-    # For non-CHARACTER scopes, only evaluate predicates that do not
-    # require a character sheet (e.g. STORY_AT_MILESTONE).
-    if scope != StoryScope.CHARACTER and _requires_character_sheet(beat):
-        return
-
-    # Evaluate: CHARACTER scope passes the full progress; others use a
-    # character-free evaluation path (only STORY_AT_MILESTONE for now).
+    # Dispatch by scope:
+    #   CHARACTER + character-state predicate → evaluate against the owner's sheet.
+    #   GROUP/GLOBAL + character-state predicate → ANY-member semantics
+    #       (iterate active members; SUCCESS on first match).
+    #   Any scope + non-character predicate (STORY_AT_MILESTONE, GM_MARKED skipped above)
+    #       → evaluate via the no-sheet path.
     if scope == StoryScope.CHARACTER and sheet is not None:
         new_outcome = _evaluate_predicate(beat, cast(StoryProgress, progress))
+    elif _requires_character_sheet(beat):
+        new_outcome = _evaluate_predicate_any_member(beat, progress)
     else:
         new_outcome = _evaluate_predicate_no_sheet(beat)
     if new_outcome == BeatOutcome.UNSATISFIED:
@@ -346,6 +348,78 @@ def _evaluate_predicate_no_sheet(beat: Beat) -> BeatOutcome:
     if beat.predicate_type == BeatPredicateType.STORY_AT_MILESTONE:
         return _evaluate_story_at_milestone(beat)
     return BeatOutcome.UNSATISFIED
+
+
+def _evaluate_predicate_any_member(beat: Beat, progress: AnyStoryProgress) -> BeatOutcome:
+    """Evaluate character-state predicates for GROUP/GLOBAL scope stories.
+
+    Semantics: "ANY active member satisfies the predicate" — iterate the
+    scope's active members and short-circuit on first SUCCESS. Returns
+    UNSATISFIED when no member matches.
+
+    SUCCESS is sticky at the caller level — _evaluate_and_record_beat only
+    reaches this function for beats still in UNSATISFIED state, so a
+    member leaving the group after the beat flipped cannot un-flip it.
+
+    Uses the per-sheet predicate helpers (_evaluate_achievement_held etc.)
+    so the member-check logic stays consistent with CHARACTER scope.
+    """
+    for member_sheet in _members_for_beat(beat, progress):
+        match beat.predicate_type:
+            case BeatPredicateType.ACHIEVEMENT_HELD:
+                if _evaluate_achievement_held(beat, member_sheet) == BeatOutcome.SUCCESS:
+                    return BeatOutcome.SUCCESS
+            case BeatPredicateType.CONDITION_HELD:
+                if _evaluate_condition_held(beat, member_sheet) == BeatOutcome.SUCCESS:
+                    return BeatOutcome.SUCCESS
+            case BeatPredicateType.CODEX_ENTRY_UNLOCKED:
+                if _evaluate_codex_entry_unlocked(beat, member_sheet) == BeatOutcome.SUCCESS:
+                    return BeatOutcome.SUCCESS
+            case BeatPredicateType.CHARACTER_LEVEL_AT_LEAST:
+                if _evaluate_character_level(beat, member_sheet) == BeatOutcome.SUCCESS:
+                    return BeatOutcome.SUCCESS
+            case _:
+                return BeatOutcome.UNSATISFIED
+    return BeatOutcome.UNSATISFIED
+
+
+def _members_for_beat(
+    beat: Beat,
+    progress: AnyStoryProgress,
+) -> Iterator[CharacterSheet]:
+    """Yield active member CharacterSheets for the beat's story scope.
+
+    GROUP scope: walk progress.gm_table.memberships filtering on
+        left_at__isnull=True (active) → persona → character_sheet.
+    GLOBAL scope: walk the story's participants (StoryParticipation with
+        is_active=True) → character (ObjectDB) → sheet_data.
+    CHARACTER scope: yield the single owning sheet (progress.character_sheet).
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    story = beat.episode.chapter.story
+    match story.scope:
+        case StoryScope.CHARACTER:
+            if progress.character_sheet_id:
+                yield progress.character_sheet
+        case StoryScope.GROUP:
+            table = progress.gm_table
+            memberships = table.memberships.filter(left_at__isnull=True).select_related(
+                "persona__character_sheet",
+            )
+            for membership in memberships:
+                persona = membership.persona
+                if persona.character_sheet_id:
+                    yield persona.character_sheet
+        case StoryScope.GLOBAL:
+            participations = story.participants.filter(is_active=True).select_related(
+                "character",
+            )
+            for participation in participations:
+                try:
+                    yield participation.character.sheet_data
+                except CharacterSheet.DoesNotExist:
+                    continue
 
 
 def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:

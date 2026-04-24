@@ -277,33 +277,21 @@ class Phase2FullLoopIntegrationTest(EvenniaTestCase):
         CharacterAchievementFactory(character_sheet=sheet1, achievement=achievement)
         sheet1.invalidate_achievement_cache()
 
-        # evaluate_auto_beats operates on the GROUP scope; achievement_beat requires a
-        # character sheet. In GROUP scope, _requires_character_sheet predicates are
-        # skipped by evaluate_auto_beats — they are character-specific. The beat must be
-        # evaluated indirectly. Check implementation path:
-        # beats.py _evaluate_and_record_beat skips CHARACTER_SHEET_PREDICATES for GROUP.
-        # For the integration test, we verify this skip and manually check the predicate.
-        # Then test that calling evaluate_auto_beats on a CHARACTER-scope progress picks it up.
-        # (See architecture note in beats.py line ~296.)
-        #
-        # For GROUP scope: achievement/condition/codex beats must be resolved via
-        # record_gm_marked_outcome or by the GM confirming via a CHARACTER-scope check.
-        # The intended production flow is that the GM marks these based on player actions.
-        # We simulate that here by using record_gm_marked_outcome for the GM-confirmed beats.
-        # First confirm: evaluate_auto_beats leaves them UNSATISFIED for GROUP scope.
+        # Wave 5: GROUP-scope character-state predicates use ANY-member semantics.
+        # evaluate_auto_beats iterates active group members and flips SUCCESS on
+        # the first member that satisfies the predicate.
         evaluate_auto_beats(group_progress)
 
         achievement_beat.refresh_from_db()
         self.assertEqual(
             achievement_beat.outcome,
-            BeatOutcome.UNSATISFIED,
-            "achievement_beat remains UNSATISFIED after evaluate_auto_beats on GROUP scope "
-            "(character-sheet predicates are skipped for GROUP scope by design — "
-            "the GM must confirm them via record_gm_marked_outcome).",
+            BeatOutcome.SUCCESS,
+            "achievement_beat flips to SUCCESS for GROUP scope when ANY active "
+            "member has the achievement (Wave 5 ANY-member semantics).",
         )
 
         # ------------------------------------------------------------------ #
-        # Step 4: Condition predicate — attach condition, confirm GROUP skip.  #
+        # Step 4: Condition predicate — attach condition, ANY-member flip.    #
         # ------------------------------------------------------------------ #
         # Attach a Scarred ConditionInstance to sheet2's character (ObjectDB).
         ConditionInstanceFactory(
@@ -317,13 +305,13 @@ class Phase2FullLoopIntegrationTest(EvenniaTestCase):
         condition_beat.refresh_from_db()
         self.assertEqual(
             condition_beat.outcome,
-            BeatOutcome.UNSATISFIED,
-            "condition_beat remains UNSATISFIED after evaluate_auto_beats on GROUP scope "
-            "(character-sheet predicates are skipped for GROUP scope by design).",
+            BeatOutcome.SUCCESS,
+            "condition_beat flips to SUCCESS for GROUP scope when ANY active "
+            "member has the condition (Wave 5).",
         )
 
         # ------------------------------------------------------------------ #
-        # Step 5: Codex predicate — unlock entry, confirm GROUP skip.          #
+        # Step 5: Codex predicate — unlock entry, ANY-member flip.            #
         # ------------------------------------------------------------------ #
         # Unlock the codex entry for sheet1 via CharacterCodexKnowledge.
         CharacterCodexKnowledgeFactory(
@@ -336,35 +324,16 @@ class Phase2FullLoopIntegrationTest(EvenniaTestCase):
         codex_beat.refresh_from_db()
         self.assertEqual(
             codex_beat.outcome,
-            BeatOutcome.UNSATISFIED,
-            "codex_beat remains UNSATISFIED after evaluate_auto_beats on GROUP scope "
-            "(character-sheet predicates are skipped for GROUP scope by design).",
+            BeatOutcome.SUCCESS,
+            "codex_beat flips to SUCCESS for GROUP scope when ANY active "
+            "member has the codex entry unlocked (Wave 5).",
         )
 
         # ------------------------------------------------------------------ #
-        # Step 6: GM resolves character-sheet beats for GROUP scope.           #
-        # In production, the GM reviews character states and marks these beats #
-        # manually after confirming the conditions are true.                   #
-        # Note: achievement/condition/codex beats have predicate_type set to   #
-        # their respective types (not GM_MARKED), so record_gm_marked_outcome  #
-        # cannot be used directly. The GROUP-scope flow requires the GM to     #
-        # trigger re-evaluation manually (or the beats must be GM_MARKED).     #
-        #                                                                       #
-        # Design insight: GROUP-scope stories with character-sheet predicates  #
-        # are intentionally GM-driven: the service layer skips auto-evaluation #
-        # for these predicates to avoid false positives (which character's     #
-        # achievement satisfies the GROUP beat?). The GM confirms via:         #
-        #   (a) flip the beat's outcome directly (admin), or                   #
-        #   (b) use a GM-MARKED beat in production (the GM observes and marks).#
-        #                                                                       #
-        # For this integration test, we simulate GM confirmation by calling    #
-        # a CHARACTER-scope evaluate_auto_beats via a temporary StoryProgress  #
-        # on sheet1, then manually marking the group beats. This demonstrates  #
-        # that the CHARACTER-scope path correctly auto-evaluates the predicates #
-        # while GROUP-scope skips them (by design).                            #
+        # Step 6: Parallel check — CHARACTER-scope auto-evaluation works too. #
+        # Confirms the per-sheet predicate helpers are the same code path     #
+        # the Wave 5 ANY-member dispatcher reuses under the hood.              #
         # ------------------------------------------------------------------ #
-
-        # Verify CHARACTER-scope auto evaluation works correctly for these predicates.
         char_story = StoryFactory(
             scope=StoryScope.CHARACTER,
             character_sheet=sheet1,
@@ -388,7 +357,7 @@ class Phase2FullLoopIntegrationTest(EvenniaTestCase):
             story=char_story, character_sheet=sheet1, current_episode=char_ep
         )
 
-        # evaluate_auto_beats for CHARACTER scope should detect achievement and codex.
+        # evaluate_auto_beats for CHARACTER scope detects achievement and codex.
         evaluate_auto_beats(char_progress)
 
         char_achievement_beat.refresh_from_db()
@@ -428,26 +397,9 @@ class Phase2FullLoopIntegrationTest(EvenniaTestCase):
             "condition_beat must flip to SUCCESS for CHARACTER scope when condition is held",
         )
 
-        # Now the GM manually resolves the GROUP-scope character-sheet beats.
-        # Since these beats are not GM_MARKED type, we update them directly
-        # (simulating an admin action or future GM-confirmation API).
-        achievement_beat.outcome = BeatOutcome.SUCCESS
-        achievement_beat.save(update_fields=["outcome", "updated_at"])
-        BeatCompletion.objects.create(
-            beat=achievement_beat, gm_table=table, outcome=BeatOutcome.SUCCESS, era=era
-        )
-
-        condition_beat.outcome = BeatOutcome.SUCCESS
-        condition_beat.save(update_fields=["outcome", "updated_at"])
-        BeatCompletion.objects.create(
-            beat=condition_beat, gm_table=table, outcome=BeatOutcome.SUCCESS, era=era
-        )
-
-        codex_beat.outcome = BeatOutcome.SUCCESS
-        codex_beat.save(update_fields=["outcome", "updated_at"])
-        BeatCompletion.objects.create(
-            beat=codex_beat, gm_table=table, outcome=BeatOutcome.SUCCESS, era=era
-        )
+        # The GROUP-scope achievement/condition/codex beats are already SUCCESS
+        # (auto-flipped by Wave 5 ANY-member evaluation above); no manual GM
+        # resolution step is needed here.
 
         # ------------------------------------------------------------------ #
         # Step 7: Eligibility check — all progression requirements met,        #
