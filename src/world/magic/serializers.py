@@ -33,6 +33,7 @@ from world.magic.models import (
     Resonance,
     Restriction,
     Ritual,
+    SceneEntryEndorsement,
     Technique,
     TechniqueStyle,
     Thread,
@@ -1072,5 +1073,58 @@ class PoseEndorsementSerializer(serializers.ModelSerializer):
         resonance = validated_data["resonance"]
         try:
             return create_pose_endorsement(endorser_sheet, interaction, resonance)
+        except EndorsementValidationError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+
+
+# =============================================================================
+# Resonance Pivot Spec C — Scene Entry Endorsement API serializer (Task 24)
+# =============================================================================
+
+
+class SceneEntryEndorsementSerializer(serializers.ModelSerializer):
+    """Serializer for SceneEntryEndorsement create + read (Spec C Task 24).
+
+    Write: accepts ``endorsee_sheet`` + ``scene`` + ``resonance`` PKs from the
+    request body. The ``endorser_sheet`` is resolved from the requesting account
+    in the view (``SceneEntryEndorsementViewSet.perform_create``) and injected
+    via ``serializer.save(endorser_sheet=sheet)``.
+
+    No DELETE — scene-entry endorsements are immutable at creation (grant fires
+    immediately). Reversal is deferred to the ResonanceGrantReversal PR.
+    """
+
+    class Meta:
+        model = SceneEntryEndorsement
+        fields = [
+            "id",
+            "endorser_sheet",
+            "endorsee_sheet",
+            "scene",
+            "entry_interaction",
+            "resonance",
+            "persona_snapshot",
+            "granted_amount",
+            "created_at",
+        ]
+        read_only_fields = [
+            "endorser_sheet",
+            "entry_interaction",
+            "persona_snapshot",
+            "granted_amount",
+            "created_at",
+        ]
+
+    def create(self, validated_data: dict) -> SceneEntryEndorsement:
+        """Delegate to ``create_scene_entry_endorsement``; surface errors as 400."""
+        from world.magic.exceptions import EndorsementValidationError  # noqa: PLC0415
+        from world.magic.services.gain import create_scene_entry_endorsement  # noqa: PLC0415
+
+        endorser_sheet = validated_data.pop("endorser_sheet")
+        endorsee_sheet = validated_data["endorsee_sheet"]
+        scene = validated_data["scene"]
+        resonance = validated_data["resonance"]
+        try:
+            return create_scene_entry_endorsement(endorser_sheet, endorsee_sheet, scene, resonance)
         except EndorsementValidationError as exc:
             raise serializers.ValidationError({"detail": exc.user_message}) from exc

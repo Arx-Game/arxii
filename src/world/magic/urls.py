@@ -24,6 +24,7 @@ from world.magic.views import (
     PoseEndorsementViewSet,
     RestrictionViewSet,
     RitualPerformView,
+    SceneEntryEndorsementViewSet,
     TechniqueStyleViewSet,
     TechniqueViewSet,
     ThreadPullPreviewView,
@@ -76,6 +77,11 @@ router.register(
     "pose-endorsements",
     PoseEndorsementViewSet,
     basename="pose-endorsement",
+)
+router.register(
+    "scene-entry-endorsements",
+    SceneEntryEndorsementViewSet,
+    basename="scene-entry-endorsement",
 )
 
 urlpatterns = [

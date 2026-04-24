@@ -60,6 +60,7 @@ from world.magic.models import (
     PoseEndorsement,
     Resonance,
     Restriction,
+    SceneEntryEndorsement,
     Technique,
     TechniqueStyle,
     Thread,
@@ -86,6 +87,7 @@ from world.magic.serializers import (
     PoseEndorsementSerializer,
     RestrictionSerializer,
     RitualPerformRequestSerializer,
+    SceneEntryEndorsementSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
     ThreadPullPreviewRequestSerializer,
@@ -775,7 +777,7 @@ class ThreadWeavingTeachingOfferViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 # =============================================================================
-# Resonance Pivot Spec C — Pose Endorsement surface (Task 23)
+# Resonance Pivot Spec C — Pose + Scene Entry Endorsement surfaces (Tasks 23, 24)
 # =============================================================================
 
 # Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
@@ -785,6 +787,38 @@ _ERR_ENDORSER_SHEET_REQUIRED = (
 )
 _ERR_ENDORSER_SHEET_INVALID = "Requested endorser_sheet_id is not among your active tenures."
 _ERR_ENDORSEMENT_SETTLED = "Endorsement already settled."
+
+
+def _resolve_endorser_sheet(request: Request) -> CharacterSheet:
+    """Return the CharacterSheet to use as endorser for an incoming request.
+
+    Single active tenure → return that sheet.
+    Multiple active tenures → require explicit ``endorser_sheet_id`` in the POST
+    body (alt system guard — no implicit first-sheet selection per project
+    conventions).
+    No active tenures → raise PermissionDenied.
+
+    Shared by PoseEndorsementViewSet and SceneEntryEndorsementViewSet.
+    """
+    account = request.user
+    sheets = list(
+        CharacterSheet.objects.filter(
+            roster_entry__tenures__player_data__account=account,
+            roster_entry__tenures__end_date__isnull=True,
+        )
+    )
+    if not sheets:
+        raise PermissionDenied(_ERR_NO_ACTIVE_SHEET)
+    if len(sheets) == 1:
+        return sheets[0]
+    # Multiple active tenures — explicit sheet required.
+    requested_pk = request.data.get("endorser_sheet_id")  # noqa: STRING_LITERAL — HTTP request body key
+    if requested_pk is None:
+        raise serializers.ValidationError({"endorser_sheet_id": _ERR_ENDORSER_SHEET_REQUIRED})
+    try:
+        return next(s for s in sheets if s.pk == int(requested_pk))
+    except (StopIteration, ValueError) as exc:
+        raise PermissionDenied(_ERR_ENDORSER_SHEET_INVALID) from exc
 
 
 class PoseEndorsementViewSet(
@@ -812,8 +846,7 @@ class PoseEndorsementViewSet(
 
     def perform_create(self, serializer: PoseEndorsementSerializer) -> None:
         """Resolve the endorser sheet from the requesting account and save."""
-        endorser_sheet = self._endorser_sheet_for_request()
-        serializer.save(endorser_sheet=endorser_sheet)
+        serializer.save(endorser_sheet=_resolve_endorser_sheet(self.request))
 
     def destroy(self, request: Request, *args: object, **kwargs: object) -> Response:
         """Delete an unsettled endorsement.
@@ -830,31 +863,32 @@ class PoseEndorsementViewSet(
         endorsement.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-    def _endorser_sheet_for_request(self) -> CharacterSheet:
-        """Return the CharacterSheet to use as endorser for this request.
 
-        Single active tenure → return that sheet.
-        Multiple active tenures → require explicit ``endorser_sheet_id`` in
-        the POST body (Brand's alt system guard — no implicit first-sheet
-        selection per project conventions).
-        No active tenures → raise PermissionDenied.
-        """
-        account = self.request.user
-        sheets = list(
-            CharacterSheet.objects.filter(
-                roster_entry__tenures__player_data__account=account,
-                roster_entry__tenures__end_date__isnull=True,
-            )
-        )
-        if not sheets:
-            raise PermissionDenied(_ERR_NO_ACTIVE_SHEET)
-        if len(sheets) == 1:
-            return sheets[0]
-        # Multiple active tenures — explicit sheet required.
-        requested_pk = self.request.data.get("endorser_sheet_id")  # noqa: STRING_LITERAL — HTTP request body key
-        if requested_pk is None:
-            raise serializers.ValidationError({"endorser_sheet_id": _ERR_ENDORSER_SHEET_REQUIRED})
-        try:
-            return next(s for s in sheets if s.pk == int(requested_pk))
-        except (StopIteration, ValueError) as exc:
-            raise PermissionDenied(_ERR_ENDORSER_SHEET_INVALID) from exc
+class SceneEntryEndorsementViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    GenericViewSet,
+):
+    """Create + retrieve — scene-entry endorsements are immutable (Spec C Task 24).
+
+    DELETE is deferred until ResonanceGrantReversal ships. Grant fires
+    immediately at creation time — no weekly settlement step. Retrieve is
+    exposed so the detail URL is registered, which means DELETE returns 405
+    (Method Not Allowed) rather than 404 (not found).
+
+    POST /api/magic/scene-entry-endorsements/ — create an endorsement.
+    GET  /api/magic/scene-entry-endorsements/<pk>/ — retrieve an endorsement.
+    """
+
+    queryset = SceneEntryEndorsement.objects.select_related(
+        "endorser_sheet",
+        "endorsee_sheet",
+        "scene",
+        "resonance",
+    )
+    serializer_class = SceneEntryEndorsementSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer: SceneEntryEndorsementSerializer) -> None:
+        """Resolve the endorser sheet from the requesting account and save."""
+        serializer.save(endorser_sheet=_resolve_endorser_sheet(self.request))
