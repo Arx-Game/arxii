@@ -181,6 +181,12 @@ class Character(ObjectParent, DefaultCharacter):
         for session in self.sessions.all():
             session.msg(commands=(payload, {}))
 
+        # Stories login catch-up: re-evaluate active stories and deliver
+        # any queued narrative messages that accumulated while offline.
+        from world.stories.services.login import catch_up_character_stories
+
+        catch_up_character_stories(self)
+
         # Execute look command to send room state to frontend via flow system
         self.execute_cmd("look")
 
