@@ -52,6 +52,13 @@ class ResonanceGrant(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="resonance_grants_issued",
     )
+    source_pose_endorsement = models.ForeignKey(
+        "magic.PoseEndorsement",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="resonance_grants",
+    )
 
     class Meta:
         indexes = [
@@ -65,21 +72,38 @@ class ResonanceGrant(SharedMemoryModel):
             ),
         ]
         constraints = [
-            # ROOM_RESIDENCE — room_aura_profile NOT NULL, staff NULL
+            # ROOM_RESIDENCE: exactly room_aura_profile populated, others null
             models.CheckConstraint(
                 name="res_grant_residence_shape",
                 check=(
                     Q(source="ROOM_RESIDENCE")
                     & Q(source_room_aura_profile__isnull=False)
                     & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
                 )
                 | ~Q(source="ROOM_RESIDENCE"),
             ),
-            # STAFF_GRANT — room_aura_profile NULL (account nullable by design)
+            # STAFF_GRANT: room_aura_profile null, pose_endorsement null
+            # (staff_account remains nullable by design — retirement can null it)
             models.CheckConstraint(
                 name="res_grant_staff_shape",
-                check=(Q(source="STAFF_GRANT") & Q(source_room_aura_profile__isnull=True))
+                check=(
+                    Q(source="STAFF_GRANT")
+                    & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                )
                 | ~Q(source="STAFF_GRANT"),
+            ),
+            # POSE_ENDORSEMENT: exactly pose_endorsement populated, others null
+            models.CheckConstraint(
+                name="res_grant_pose_endorsement_shape",
+                check=(
+                    Q(source="POSE_ENDORSEMENT")
+                    & Q(source_pose_endorsement__isnull=False)
+                    & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                )
+                | ~Q(source="POSE_ENDORSEMENT"),
             ),
         ]
 

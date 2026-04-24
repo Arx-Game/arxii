@@ -178,3 +178,73 @@ class PoseEndorsementTests(TestCase):
 
         endorsement = PoseEndorsementFactory()
         self.assertIn(endorsement, endorsement.interaction.endorsements.all())
+
+
+class ResonanceGrantPoseEndorsementShapeTests(TestCase):
+    def test_pose_endorsement_grant_requires_fk(self) -> None:
+        from django.db import IntegrityError
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        with self.assertRaises(IntegrityError):
+            ResonanceGrant.objects.create(
+                character_sheet=sheet,
+                resonance=res,
+                amount=3,
+                source=GainSource.POSE_ENDORSEMENT,
+                # missing source_pose_endorsement
+            )
+
+    def test_pose_endorsement_grant_happy_path(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import (
+            PoseEndorsementFactory,
+            ResonanceFactory,
+        )
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        endorsement = PoseEndorsementFactory(endorsee_sheet=sheet, resonance=res)
+
+        grant = ResonanceGrant.objects.create(
+            character_sheet=sheet,
+            resonance=res,
+            amount=4,
+            source=GainSource.POSE_ENDORSEMENT,
+            source_pose_endorsement=endorsement,
+        )
+        self.assertEqual(grant.source_pose_endorsement, endorsement)
+
+    def test_residence_rejects_pose_fk(self) -> None:
+        """ROOM_RESIDENCE source must NOT have source_pose_endorsement set."""
+        from django.db import IntegrityError
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import (
+            PoseEndorsementFactory,
+            ResonanceFactory,
+            RoomAuraProfileFactory,
+        )
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        aura = RoomAuraProfileFactory()
+        endorsement = PoseEndorsementFactory(endorsee_sheet=sheet, resonance=res)
+        with self.assertRaises(IntegrityError):
+            ResonanceGrant.objects.create(
+                character_sheet=sheet,
+                resonance=res,
+                amount=1,
+                source=GainSource.ROOM_RESIDENCE,
+                source_room_aura_profile=aura,
+                source_pose_endorsement=endorsement,  # forbidden
+            )
