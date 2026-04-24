@@ -28,13 +28,20 @@ def get_active_progress_for_story(story: Story) -> AnyStoryProgress | None:
     story has multiple GMTables assigned, callers should query more
     specifically.
     """
-    if story.scope == StoryScope.CHARACTER:
-        return story.progress_records.filter(is_active=True).first()
-    if story.scope == StoryScope.GROUP:
-        return story.group_progress_records.filter(is_active=True).first()
-    if story.scope == StoryScope.GLOBAL:
-        return getattr(story, "global_progress", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor raises RelatedObjectDoesNotExist when absent; getattr default is the idiomatic guard
-    return None
+    from world.stories.models import GlobalStoryProgress  # noqa: PLC0415
+
+    match story.scope:
+        case StoryScope.CHARACTER:
+            return story.progress_records.filter(is_active=True).first()
+        case StoryScope.GROUP:
+            return story.group_progress_records.filter(is_active=True).first()
+        case StoryScope.GLOBAL:
+            try:
+                return story.global_progress
+            except GlobalStoryProgress.DoesNotExist:
+                return None
+        case _:
+            return None
 
 
 def advance_progress_to_episode(

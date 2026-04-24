@@ -8,7 +8,7 @@ from rest_framework import permissions
 from rest_framework.request import Request
 from rest_framework.views import APIView
 
-from world.gm.models import GMTable
+from world.gm.models import GMProfile, GMTable
 from world.stories.constants import AssistantClaimStatus, StoryScope
 from world.stories.models import AssistantGMClaim, Story
 from world.stories.types import AnyStoryProgress, StoryPrivacy
@@ -345,8 +345,9 @@ class IsGroupProgressMemberOrStaff(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         # Writes (create/update/delete): must be a Lead GM of at least one table.
-        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
-        if gm_profile is None:
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
             return False
         return cast(Any, GMTable).objects.filter(gm=gm_profile).exists()
 
@@ -369,8 +370,11 @@ class IsGroupProgressMemberOrStaff(permissions.BasePermission):
             ).exists()
 
         # Write: Lead GM only (GMTable.gm is the Lead GM's GMProfile)
-        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
-        return gm_profile is not None and gm_table.gm_id == gm_profile.pk
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return False
+        return gm_table.gm_id == gm_profile.pk
 
 
 class IsGlobalProgressReadableOrStaff(permissions.BasePermission):
@@ -528,8 +532,11 @@ class IsLeadGMOnStoryOrStaff(permissions.BasePermission):
             else:
                 story = episode.story
 
-        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
-        if gm_profile is None or not story.primary_table_id:
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return False
+        if not story.primary_table_id:
             return False
         return story.primary_table.gm_id == gm_profile.pk
 
@@ -558,23 +565,24 @@ class CanMarkBeat(permissions.BasePermission):
 
         # Walk beat -> episode -> chapter -> story to find Lead GM.
         story = obj.episode.chapter.story
-        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return False
 
-        if gm_profile is not None and story.primary_table_id:
-            if story.primary_table.gm_id == gm_profile.pk:
-                return True
+        if story.primary_table_id and story.primary_table.gm_id == gm_profile.pk:
+            return True
 
         # AGM with an APPROVED claim on this beat.
-        if gm_profile is not None:
-            return (
-                cast(Any, AssistantGMClaim)
-                .objects.filter(
-                    beat=obj,
-                    assistant_gm=gm_profile,
-                    status=AssistantClaimStatus.APPROVED,
-                )
-                .exists()
+        return (
+            cast(Any, AssistantGMClaim)
+            .objects.filter(
+                beat=obj,
+                assistant_gm=gm_profile,
+                status=AssistantClaimStatus.APPROVED,
             )
+            .exists()
+        )
 
         return False
 
@@ -594,8 +602,9 @@ class IsClaimOwnerOrStaff(permissions.BasePermission):
             return False
         if request.user.is_staff:
             return True
-        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
-        if gm_profile is None:
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
             return False
         return obj.assistant_gm_id == gm_profile.pk
 
@@ -615,8 +624,9 @@ class IsLeadGMOnClaimStoryOrStaff(permissions.BasePermission):
             return False
         if request.user.is_staff:
             return True
-        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
-        if gm_profile is None:
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
             return False
         story = obj.beat.episode.chapter.story
         if not story.primary_table_id:
@@ -671,19 +681,19 @@ def classify_story_log_viewer_role(
     - player: user has access to the story (participant, owner, or appropriate scope)
     - no_access: none of the above
     """
-    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL
+    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
         return VIEWER_ROLE_NO_ACCESS
 
-    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL
+    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
         return VIEWER_ROLE_STAFF
 
-    gm_profile = getattr(user, "gm_profile", None)  # noqa: GETATTR_LITERAL
-    if (
-        gm_profile is not None
-        and story.primary_table_id is not None
-        and story.primary_table.gm_id == gm_profile.pk
-    ):
-        return VIEWER_ROLE_LEAD_GM
+    # user is authenticated (AbstractBaseUser = AccountDB) — gm_profile is a OneToOne reverse.
+    try:
+        gm_profile = user.gm_profile
+        if story.primary_table_id is not None and story.primary_table.gm_id == gm_profile.pk:
+            return VIEWER_ROLE_LEAD_GM
+    except GMProfile.DoesNotExist:
+        pass
 
     if _story_log_user_has_access(user, story, progress):
         return VIEWER_ROLE_PLAYER

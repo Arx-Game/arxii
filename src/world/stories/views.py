@@ -103,7 +103,7 @@ from world.stories.serializers import (
     StoryListSerializer,
     StoryParticipationSerializer,
 )
-from world.stories.services.dashboards import STALE_STORY_DAYS, compute_story_status_line
+from world.stories.services.dashboards import STALE_STORY_DAYS, compute_story_status
 from world.stories.types import AnyStoryProgress
 
 
@@ -315,7 +315,12 @@ class EpisodeViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            gm_profile = None
 
         try:
             resolution = resolve_episode(
@@ -349,18 +354,21 @@ def _get_progress_for_episode_action(
 
     if progress_id is not None:
         # Explicit progress_id — find it in whichever scope table holds it.
-        scope = story.scope
-        if scope == StoryScope.CHARACTER:
-            return StoryProgress.objects.filter(pk=progress_id, story=story, is_active=True).first()
-        if scope == StoryScope.GROUP:
-            return GroupStoryProgress.objects.filter(
-                pk=progress_id, story=story, is_active=True
-            ).first()
-        if scope == StoryScope.GLOBAL:
-            return GlobalStoryProgress.objects.filter(
-                pk=progress_id, story=story, is_active=True
-            ).first()
-        return None
+        match story.scope:
+            case StoryScope.CHARACTER:
+                return StoryProgress.objects.filter(
+                    pk=progress_id, story=story, is_active=True
+                ).first()
+            case StoryScope.GROUP:
+                return GroupStoryProgress.objects.filter(
+                    pk=progress_id, story=story, is_active=True
+                ).first()
+            case StoryScope.GLOBAL:
+                return GlobalStoryProgress.objects.filter(
+                    pk=progress_id, story=story, is_active=True
+                ).first()
+            case _:
+                return None
 
     # Infer progress from scope.
     from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
@@ -509,10 +517,15 @@ class GroupStoryProgressViewSet(viewsets.ModelViewSet):
     ordering = ["-last_advanced_at"]
 
     def get_queryset(self) -> QuerySet[GroupStoryProgress]:
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
         qs = super().get_queryset()
         if self.request.user.is_staff:
             return qs
-        gm_profile = getattr(self.request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        try:
+            gm_profile = self.request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            gm_profile = None
         # Active members: Persona -> character_sheet -> character (ObjectDB) -> db_account.
         member_q = models.Q(
             gm_table__memberships__persona__character_sheet__character__db_account=self.request.user,
@@ -600,10 +613,15 @@ class AssistantGMClaimViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ["-requested_at"]
 
     def get_queryset(self) -> QuerySet[AssistantGMClaim]:
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
         qs = super().get_queryset()
         if self.request.user.is_staff:
             return qs
-        gm_profile = getattr(self.request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        try:
+            gm_profile = self.request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            gm_profile = None
         filters_q = models.Q(beat__episode__chapter__story__owners=self.request.user)
         if gm_profile is not None:
             filters_q |= models.Q(assistant_gm=gm_profile)
@@ -621,9 +639,13 @@ class AssistantGMClaimViewSet(viewsets.ReadOnlyModelViewSet):
         The requesting user must have a GMProfile. Wraps request_claim service.
         Returns 201 with the claim on success.
         """
+        from world.gm.models import GMProfile  # noqa: PLC0415
         from world.stories.services.assistant_gm import request_claim  # noqa: PLC0415
 
-        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            gm_profile = None
         if gm_profile is None:
             return Response(
                 {"detail": "You must have a GM profile to request a claim."},
@@ -664,10 +686,14 @@ class AssistantGMClaimViewSet(viewsets.ReadOnlyModelViewSet):
 
         Wraps approve_claim. Returns 200 with the updated claim.
         """
+        from world.gm.models import GMProfile  # noqa: PLC0415
         from world.stories.services.assistant_gm import approve_claim  # noqa: PLC0415
 
         claim = self.get_object()
-        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            gm_profile = None
         if gm_profile is None and not request.user.is_staff:
             return Response(
                 {"detail": "You must have a GM profile to approve a claim."},
@@ -708,10 +734,14 @@ class AssistantGMClaimViewSet(viewsets.ReadOnlyModelViewSet):
 
         Wraps reject_claim. Returns 200 with the updated claim.
         """
+        from world.gm.models import GMProfile  # noqa: PLC0415
         from world.stories.services.assistant_gm import reject_claim  # noqa: PLC0415
 
         claim = self.get_object()
-        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            gm_profile = None
         if gm_profile is None:
             return Response(
                 {"detail": "A GM profile is required to reject claims."},
@@ -767,10 +797,14 @@ class AssistantGMClaimViewSet(viewsets.ReadOnlyModelViewSet):
 
         Wraps complete_claim. Returns 200 with the updated claim.
         """
+        from world.gm.models import GMProfile  # noqa: PLC0415
         from world.stories.services.assistant_gm import complete_claim  # noqa: PLC0415
 
         claim = self.get_object()
-        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            gm_profile = None
         if gm_profile is None:
             return Response(
                 {"detail": "A GM profile is required to complete claims."},
@@ -813,10 +847,15 @@ class SessionRequestViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ["-created_at"]
 
     def get_queryset(self) -> QuerySet[SessionRequest]:
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
         qs = super().get_queryset()
         if self.request.user.is_staff:
             return qs
-        gm_profile = getattr(self.request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        try:
+            gm_profile = self.request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            gm_profile = None
         filters_q = models.Q(
             episode__chapter__story__participants__character__db_account=self.request.user,
             episode__chapter__story__participants__is_active=True,
@@ -1064,46 +1103,28 @@ def _get_progress_for_beat_action(
 
 def _serialize_progress_entry(progress: AnyStoryProgress, scope: str) -> dict[str, Any]:
     """Build the dict shape shared by all three scope collectors in MyActiveStoriesView."""
+    from world.stories.constants import StoryEpisodeStatus  # noqa: PLC0415
+
     story = progress.story
     episode = progress.current_episode
-    status_line = compute_story_status_line(progress)
+    summary = compute_story_status(progress)
 
-    open_session_request_id: int | None = None
-    scheduled_event_id: int | None = None
-
-    if episode is not None:
-        session_req = (
-            SessionRequest.objects.filter(
-                episode=episode,
-                status__in=[SessionRequestStatus.OPEN, SessionRequestStatus.SCHEDULED],
-            )
-            .select_related("event")
-            .first()
-        )
-        if session_req is not None:
-            open_session_request_id = session_req.pk
-            if session_req.event_id is not None:
-                scheduled_event_id = session_req.event_id
-
-    chapter_title: str | None = None
-    current_episode_id: int | None = None
-    current_episode_title: str | None = None
-
-    if episode is not None:
-        current_episode_id = episode.pk
-        current_episode_title = episode.title
-        chapter_title = episode.chapter.title
+    current_episode_id: int | None = episode.pk if episode is not None else None
 
     return {
         "story_id": story.pk,
         "story_title": story.title,
         "scope": scope,
         "current_episode_id": current_episode_id,
-        "current_episode_title": current_episode_title,
-        "chapter_title": chapter_title,
-        "status_line": status_line,
-        "open_session_request_id": open_session_request_id,
-        "scheduled_event_id": scheduled_event_id,
+        "current_episode_title": summary.episode_title,
+        "chapter_title": summary.chapter_title,
+        "status": summary.status,
+        "status_label": StoryEpisodeStatus(summary.status).label,
+        "chapter_order": summary.chapter_order,
+        "episode_order": summary.episode_order,
+        "open_session_request_id": summary.open_session_request_id,
+        "scheduled_event_id": summary.scheduled_event_id,
+        "scheduled_real_time": summary.scheduled_real_time,
     }
 
 
@@ -1187,9 +1208,15 @@ class IsGMProfile(permissions.BasePermission):
     message = "Only users with a GMProfile can access GM dashboards."
 
     def has_permission(self, request: Request, view: APIView) -> bool:
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
         if not request.user.is_authenticated:
             return False
-        return getattr(request.user, "gm_profile", None) is not None  # noqa: GETATTR_LITERAL
+        try:
+            _ = request.user.gm_profile
+            return True
+        except GMProfile.DoesNotExist:
+            return False
 
 
 def _serialize_eligible_transitions(transitions: list) -> list[dict[str, Any]]:
@@ -1209,22 +1236,31 @@ def _build_gm_queue_for_story(
     from world.stories.services.transitions import get_eligible_transitions  # noqa: PLC0415
 
     # Collect all active progress records for this story (may be multiple for GROUP).
-    if story.scope == StoryScope.CHARACTER:
-        progress_qs: QuerySet[Any] = story.progress_records.filter(is_active=True).select_related(
-            "current_episode__chapter",
-        )
-        progress_type = StoryScope.CHARACTER
-    elif story.scope == StoryScope.GROUP:
-        progress_qs = story.group_progress_records.filter(is_active=True).select_related(
-            "current_episode__chapter",
-        )
-        progress_type = StoryScope.GROUP
-    else:
-        global_progress = getattr(story, "global_progress", None)  # noqa: GETATTR_LITERAL
-        progress_qs = []
-        if global_progress is not None and global_progress.is_active:
-            progress_qs = [global_progress]
-        progress_type = StoryScope.GLOBAL
+    match story.scope:
+        case StoryScope.CHARACTER:
+            progress_qs: QuerySet[Any] = story.progress_records.filter(
+                is_active=True
+            ).select_related(
+                "current_episode__chapter",
+            )
+            progress_type = StoryScope.CHARACTER
+        case StoryScope.GROUP:
+            progress_qs = story.group_progress_records.filter(is_active=True).select_related(
+                "current_episode__chapter",
+            )
+            progress_type = StoryScope.GROUP
+        case _:
+            # GLOBAL scope: singleton progress record.
+            try:
+                global_progress = story.global_progress
+            except GlobalStoryProgress.DoesNotExist:
+                global_progress = None
+            progress_qs = (
+                [global_progress]
+                if global_progress is not None and global_progress.is_active
+                else []
+            )
+            progress_type = StoryScope.GLOBAL
 
     for progress in progress_qs:
         if progress.current_episode is None:
@@ -1303,7 +1339,12 @@ class GMQueueView(APIView):
 
     def get(self, request: Request) -> Response:
         """Return the GM's current work queue."""
-        gm_profile = getattr(request.user, "gm_profile", None)  # noqa: GETATTR_LITERAL
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            gm_profile = None
 
         episodes_ready: list[dict[str, Any]] = []
         pending_claims: list[dict[str, Any]] = []

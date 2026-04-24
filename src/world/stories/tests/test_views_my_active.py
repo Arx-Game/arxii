@@ -3,12 +3,12 @@
 Scenarios covered:
 - Unauthenticated → 401/403.
 - Account with no stories → all three lists empty.
-- CHARACTER story at frontier (no episode) → status_line "on hold".
-- CHARACTER story with unmet progression requirement → "waiting on you".
-- CHARACTER story at episode edge (no transitions authored) → "on hold".
-- CHARACTER story ready to schedule → "ready to schedule".
-- CHARACTER story with scheduled session → "scheduled for …".
-- CHARACTER story auto-resolvable → "ready to resolve".
+- CHARACTER story at frontier (no episode) → status "on_hold".
+- CHARACTER story with unmet progression requirement → status "waiting_on_beats".
+- CHARACTER story at episode edge (no transitions authored) → status "on_hold".
+- CHARACTER story ready to schedule → status "ready_to_schedule".
+- CHARACTER story with scheduled session → status "scheduled".
+- CHARACTER story auto-resolvable → status "ready_to_resolve".
 - GROUP story → appears in group_stories, not character_stories.
 - GLOBAL story with StoryParticipation → appears in global_stories.
 - Only active progress records are returned.
@@ -23,7 +23,7 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory, GMTableMembershipFactory
 from world.scenes.factories import PersonaFactory
-from world.stories.constants import BeatOutcome, StoryScope, TransitionMode
+from world.stories.constants import BeatOutcome, StoryEpisodeStatus, StoryScope, TransitionMode
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
@@ -107,17 +107,19 @@ class MyActiveStoriesCharacterScopeTest(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         return response.data["character_stories"]
 
-    def test_frontier_progress_status_line(self):
-        """Progress with no current_episode → 'on hold'."""
+    def test_frontier_progress_status(self):
+        """Progress with no current_episode → status 'on_hold'."""
         StoryProgressFactory(story=self.story, character_sheet=self.sheet, current_episode=None)
         entries = self._get_character_stories()
         matching = [e for e in entries if e["story_id"] == self.story.pk]
         assert len(matching) == 1
-        assert matching[0]["status_line"] == "on hold"
+        assert matching[0]["status"] == StoryEpisodeStatus.ON_HOLD
         assert matching[0]["current_episode_id"] is None
+        assert matching[0]["chapter_order"] is None
+        assert matching[0]["episode_order"] is None
 
-    def test_episode_with_unmet_requirement_status_line(self):
-        """Unmet EpisodeProgressionRequirement → 'waiting on you'."""
+    def test_episode_with_unmet_requirement_status(self):
+        """Unmet EpisodeProgressionRequirement → status 'waiting_on_beats'."""
         progress = StoryProgressFactory(
             story=self.story, character_sheet=self.sheet, current_episode=self.episode
         )
@@ -129,12 +131,14 @@ class MyActiveStoriesCharacterScopeTest(APITestCase):
         entries = self._get_character_stories()
         matching = [e for e in entries if e["story_id"] == self.story.pk]
         assert len(matching) == 1
-        assert matching[0]["status_line"] == "Ch1 Ep2 — waiting on you"
+        assert matching[0]["status"] == StoryEpisodeStatus.WAITING_ON_BEATS
+        assert matching[0]["chapter_order"] == 1
+        assert matching[0]["episode_order"] == 2
         progress.delete()
         beat.delete()
 
-    def test_episode_with_no_transitions_status_line(self):
-        """No beats blocking AND no transitions authored → 'on hold'."""
+    def test_episode_with_no_transitions_status(self):
+        """No beats blocking AND no transitions authored → status 'on_hold' with position."""
         progress = StoryProgressFactory(
             story=self.story, character_sheet=self.sheet, current_episode=self.episode
         )
@@ -142,11 +146,13 @@ class MyActiveStoriesCharacterScopeTest(APITestCase):
         entries = self._get_character_stories()
         matching = [e for e in entries if e["story_id"] == self.story.pk]
         assert len(matching) == 1
-        assert matching[0]["status_line"] == "Ch1 Ep2 — on hold"
+        assert matching[0]["status"] == StoryEpisodeStatus.ON_HOLD
+        assert matching[0]["chapter_order"] == 1
+        assert matching[0]["episode_order"] == 2
         progress.delete()
 
-    def test_episode_ready_to_schedule_status_line(self):
-        """Open SessionRequest → 'ready to schedule'."""
+    def test_episode_ready_to_schedule_status(self):
+        """Open SessionRequest → status 'ready_to_schedule'."""
         next_ep = EpisodeFactory(chapter=self.chapter, order=3)
         TransitionFactory(
             source_episode=self.episode, target_episode=next_ep, mode=TransitionMode.AUTO
@@ -158,13 +164,16 @@ class MyActiveStoriesCharacterScopeTest(APITestCase):
         entries = self._get_character_stories()
         matching = [e for e in entries if e["story_id"] == self.story.pk]
         assert len(matching) == 1
-        assert matching[0]["status_line"] == "Ch1 Ep2 — ready to schedule"
+        assert matching[0]["status"] == StoryEpisodeStatus.READY_TO_SCHEDULE
+        assert matching[0]["status_label"] == StoryEpisodeStatus.READY_TO_SCHEDULE.label
         assert matching[0]["open_session_request_id"] is not None
+        assert matching[0]["chapter_order"] == 1
+        assert matching[0]["episode_order"] == 2
         progress.delete()
         next_ep.delete()
 
-    def test_episode_ready_to_resolve_status_line(self):
-        """Eligible transition and no SessionRequest → 'ready to resolve'."""
+    def test_episode_ready_to_resolve_status(self):
+        """Eligible transition and no SessionRequest → status 'ready_to_resolve'."""
         next_ep = EpisodeFactory(chapter=self.chapter, order=4)
         TransitionFactory(
             source_episode=self.episode, target_episode=next_ep, mode=TransitionMode.AUTO
@@ -175,8 +184,10 @@ class MyActiveStoriesCharacterScopeTest(APITestCase):
         entries = self._get_character_stories()
         matching = [e for e in entries if e["story_id"] == self.story.pk]
         assert len(matching) == 1
-        assert matching[0]["status_line"] == "Ch1 Ep2 — ready to resolve"
+        assert matching[0]["status"] == StoryEpisodeStatus.READY_TO_RESOLVE
         assert matching[0]["open_session_request_id"] is None
+        assert matching[0]["chapter_order"] == 1
+        assert matching[0]["episode_order"] == 2
         progress.delete()
         next_ep.delete()
 
@@ -208,9 +219,13 @@ class MyActiveStoriesCharacterScopeTest(APITestCase):
             "current_episode_id",
             "current_episode_title",
             "chapter_title",
-            "status_line",
+            "status",
+            "status_label",
+            "chapter_order",
+            "episode_order",
             "open_session_request_id",
             "scheduled_event_id",
+            "scheduled_real_time",
         ]:
             assert field in entry, f"Missing field: {field}"
         assert entry["scope"] == StoryScope.CHARACTER

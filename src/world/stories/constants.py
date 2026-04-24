@@ -63,3 +63,17 @@ class BeatVisibility(models.TextChoices):
 class TransitionMode(models.TextChoices):
     AUTO = "auto", "Auto"
     GM_CHOICE = "gm_choice", "GM Choice"
+
+
+class StoryEpisodeStatus(models.TextChoices):
+    """Coarse status of a story's current episode, exposed via dashboards.
+
+    Callers consume the status code and render their own labels / UI;
+    the service does not return human-readable strings.
+    """
+
+    ON_HOLD = "on_hold", "On hold (frontier — unauthored next)"
+    WAITING_ON_BEATS = "waiting_on_beats", "Waiting on progression beats"
+    READY_TO_RESOLVE = "ready_to_resolve", "Ready to resolve (auto-advance possible)"
+    READY_TO_SCHEDULE = "ready_to_schedule", "Ready to schedule GM session"
+    SCHEDULED = "scheduled", "GM session scheduled"

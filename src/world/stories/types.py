@@ -59,6 +59,25 @@ class ConnectionType(models.TextChoices):
 
 
 @dataclass
+class StoryStatusSummary:
+    """Structured status of a story's current episode, for dashboard consumption.
+
+    Callers render their own presentation (player dashboard, GM queue,
+    staff workload) from this structure — the service does not return
+    rendered strings.
+    """
+
+    status: str  # StoryEpisodeStatus value
+    chapter_order: int | None
+    chapter_title: str | None
+    episode_order: int | None
+    episode_title: str | None
+    open_session_request_id: int | None
+    scheduled_event_id: int | None
+    scheduled_real_time: datetime | None
+
+
+@dataclass
 class SceneConnection:
     """Represents how one scene connects to another using 'but'/'therefore' logic"""
 
