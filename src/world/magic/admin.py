@@ -30,6 +30,8 @@ from world.magic.models import (
     Restriction,
     Ritual,
     RitualComponentRequirement,
+    RoomAuraProfile,
+    RoomResonance,
     SoulfrayConfig,
     Technique,
     TechniqueCapabilityGrant,
@@ -541,3 +543,20 @@ class ThreadWeavingTeachingOfferAdmin(admin.ModelAdmin):
     ]
     raw_id_fields = ["teacher", "unlock"]
     readonly_fields = ["created_at"]
+
+
+class RoomResonanceInline(admin.TabularInline):
+    model = RoomResonance
+    fields = ("resonance", "set_by", "set_at")
+    readonly_fields = ("set_at",)
+    extra = 0
+
+
+@admin.register(RoomAuraProfile)
+class RoomAuraProfileAdmin(admin.ModelAdmin):
+    list_display = ("room_profile", "tag_count")
+    inlines = [RoomResonanceInline]
+
+    @admin.display(description="Tags")
+    def tag_count(self, obj: RoomAuraProfile) -> int:
+        return obj.room_resonances.count()
