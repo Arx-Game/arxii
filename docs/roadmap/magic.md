@@ -326,11 +326,66 @@ completion note):
 - **Mage Scars rename (§7.2).** Display-only — class names and table
   names unchanged; verbose_names + CLI strings + docs updated.
 
-Not in Spec A (authored separately): Spec B (Relational Resilience,
-Soul Tether, Ritual Capstones), Spec C (Resonance gain surfaces — the
-sites that call `grant_resonance`), Spec D (Ritual-grade items + ITEM /
-ROOM anchor cap formulas — Imbuing against ITEM/ROOM currently raises
-`AnchorCapNotImplemented`).
+**Resonance Pivot — Spec C (Resonance Gain Surfaces) — DONE:**
+
+**Spec:** `docs/superpowers/specs/2026-04-23-resonance-pivot-spec-c-gain-surfaces-design.md`
+**Plan:** `docs/superpowers/plans/2026-04-23-resonance-pivot-spec-c-gain-surfaces.md`
+
+Spec C implements the gain surfaces — the authored systems where characters earn resonance
+through IC roleplay (pose endorsements, scene entry, residence trickle, outfit wear).
+Complements Spec A's resonance-as-currency spending pipeline. Pairs endorsements with
+an audit ledger (typed-FK `ResonanceGrant`), configurable tuning, and daily/weekly schedulers.
+
+What was built:
+
+- **Models:** `ResonanceGainConfig` (singleton per-site tuning: weekly pot, scene-entry
+  grant, residence/outfit trickling, same-pair daily cap, settlement day), `PoseEndorsement`
+  (character A endorses pose by character B; 8-check precondition gate), `SceneEntryEndorsement`
+  (immediate flat grant on room entry, captures persona snapshot), `ResonanceGrant` (typed-FK
+  audit ledger keyed on source: POSE_ENDORSEMENT, SCENE_ENTRY, RESIDENCE_TRICKLE, OUTFIT_TRICKLE;
+  discriminator pattern ensures atomic grant journaling), `RoomAuraProfile` (FK to RoomProfile;
+  one-to-one), `RoomResonance` (through-M2M from `RoomAuraProfile` to `ResidualResonance`).
+- **Services:** `grant_resonance(..., source=GainSource.X, typed_fk_kwargs)` — typed-FK signature
+  with atomic ledger write; `create_pose_endorsement` — 8 preconditions (not self/alt/whisper/
+  private/claimed/duplicate/active-engagement/masqueraded); `create_scene_entry_endorsement`
+  — immediate flat grant, persona_snapshot capture; `settle_weekly_pot` — ceil-divide budget
+  across earning characters, idempotent; `residence_trickle_tick` — daily residence trickle
+  orchestrator; `resonance_daily_tick` — master daily tick (residence + outfit stub);
+  `resonance_weekly_settlement_tick` — weekly pose-settlement orchestrator;
+  `tag_room_resonance` / `untag_room_resonance` — aura profile management;
+  `set_residence` / `get_residence_resonances` — residence FK + intersection queries;
+  `account_for_sheet` / `get_resonance_gain_config` — helpers.
+- **APIs:** `PoseEndorsementViewSet` (POST to create with precondition gate; DELETE if unsettled);
+  `SceneEntryEndorsementViewSet` (POST to create only; DELETE deferred with `ResonanceGrantReversal`);
+  `ResonanceGrantViewSet` (read-only, user-scoped with staff bypass for audit);
+  `CharacterSheet` serializer exposes `current_residence` FK.
+- **Admin:** `ResonanceGainConfig` singleton admin (has_add_permission False when row exists);
+  `RoomAuraProfile` with inline `RoomResonance`; read-only ledger admin for `ResonanceGrant`;
+  read-only admins for endorsements; staff-grant admin action on `CharacterResonance`.
+- **Scheduler:** `magic.resonance_daily` (24h interval); `magic.resonance_weekly_settlement`
+  (7d interval, settable day via config).
+- **Tuning knobs** (on `ResonanceGainConfig`): `weekly_pot_per_character` (default 20),
+  `scene_entry_grant` (default 4), `residence_daily_trickle_per_resonance` (default 1),
+  `outfit_daily_trickle_per_item_resonance` (default 1, unused until Items),
+  `same_pair_daily_cap` (default 0 = disabled), `settlement_day_of_week` (default 0 = Monday).
+- **Test coverage:** 9 integration tests exercising the full pipeline (pose settlement,
+  scene entry grant, alt guard, masquerade, residence trickle, outfit stub, tuning,
+  whisper exclusion, DELETE lifecycle); 50+ unit tests across models, services, API, admin.
+
+Deferred (follow-up PRs):
+
+- Scene-entry endorsement retraction (`ResonanceGrantReversal` sibling model — pose
+  endorsement DELETE already ships).
+- `+enter` command implementation (Spec C only reads `pose_kind=ENTRY`).
+- Item authoring + outfit tick activation (ships with Items system).
+- Public leaderboard (default-private ledger now, opt-in public later).
+
+Decoupling: Standalone. Does NOT depend on Scope 5.5 (reactive layer) or Scope 6
+(Soulfray recovery). Shipped on the `resonance-spec-c-gain-surfaces` branch.
+
+Not in Spec C (authored separately): Spec B (Relational Resilience, Soul Tether,
+Ritual Capstones), Spec D (Ritual-grade items + ITEM / ROOM anchor cap formulas —
+Imbuing against ITEM/ROOM currently raises `AnchorCapNotImplemented`).
 
 **Scope #5.5 — Reactive Foundations (DONE — branch `design/reactive-layer`):**
 
