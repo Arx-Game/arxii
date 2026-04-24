@@ -59,6 +59,13 @@ class ResonanceGrant(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="resonance_grants",
     )
+    source_scene_entry_endorsement = models.ForeignKey(
+        "magic.SceneEntryEndorsement",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="resonance_grants",
+    )
 
     class Meta:
         indexes = [
@@ -80,10 +87,11 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_room_aura_profile__isnull=False)
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
                 )
                 | ~Q(source="ROOM_RESIDENCE"),
             ),
-            # STAFF_GRANT: room_aura_profile null, pose_endorsement null
+            # STAFF_GRANT: room_aura_profile null, pose_endorsement null, scene_entry null
             # (staff_account remains nullable by design — retirement can null it)
             models.CheckConstraint(
                 name="res_grant_staff_shape",
@@ -91,6 +99,7 @@ class ResonanceGrant(SharedMemoryModel):
                     Q(source="STAFF_GRANT")
                     & Q(source_room_aura_profile__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
                 )
                 | ~Q(source="STAFF_GRANT"),
             ),
@@ -102,8 +111,21 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_pose_endorsement__isnull=False)
                     & Q(source_room_aura_profile__isnull=True)
                     & Q(source_staff_account__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
                 )
                 | ~Q(source="POSE_ENDORSEMENT"),
+            ),
+            # SCENE_ENTRY: exactly scene_entry_endorsement populated, others null
+            models.CheckConstraint(
+                name="res_grant_scene_entry_shape",
+                check=(
+                    Q(source="SCENE_ENTRY")
+                    & Q(source_scene_entry_endorsement__isnull=False)
+                    & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                )
+                | ~Q(source="SCENE_ENTRY"),
             ),
         ]
 

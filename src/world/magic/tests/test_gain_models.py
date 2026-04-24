@@ -283,3 +283,98 @@ class SceneEntryEndorsementTests(TestCase):
 
         ep = SceneEntryEndorsementFactory()
         self.assertIn(ep, ep.scene.entry_endorsements.all())
+
+
+class ResonanceGrantSceneEntryShapeTests(TestCase):
+    def test_scene_entry_grant_requires_fk(self) -> None:
+        from django.db import IntegrityError
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        with self.assertRaises(IntegrityError):
+            ResonanceGrant.objects.create(
+                character_sheet=sheet,
+                resonance=res,
+                amount=4,
+                source=GainSource.SCENE_ENTRY,
+                # missing source_scene_entry_endorsement
+            )
+
+    def test_scene_entry_grant_happy_path(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import (
+            ResonanceFactory,
+            SceneEntryEndorsementFactory,
+        )
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        endorsement = SceneEntryEndorsementFactory(endorsee_sheet=sheet, resonance=res)
+
+        grant = ResonanceGrant.objects.create(
+            character_sheet=sheet,
+            resonance=res,
+            amount=4,
+            source=GainSource.SCENE_ENTRY,
+            source_scene_entry_endorsement=endorsement,
+        )
+        self.assertEqual(grant.source_scene_entry_endorsement, endorsement)
+
+    def test_residence_rejects_scene_entry_fk(self) -> None:
+        from django.db import IntegrityError
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import (
+            ResonanceFactory,
+            RoomAuraProfileFactory,
+            SceneEntryEndorsementFactory,
+        )
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        aura = RoomAuraProfileFactory()
+        endorsement = SceneEntryEndorsementFactory(endorsee_sheet=sheet, resonance=res)
+        with self.assertRaises(IntegrityError):
+            ResonanceGrant.objects.create(
+                character_sheet=sheet,
+                resonance=res,
+                amount=1,
+                source=GainSource.ROOM_RESIDENCE,
+                source_room_aura_profile=aura,
+                source_scene_entry_endorsement=endorsement,  # forbidden
+            )
+
+    def test_pose_endorsement_rejects_scene_entry_fk(self) -> None:
+        from django.db import IntegrityError
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import (
+            PoseEndorsementFactory,
+            ResonanceFactory,
+            SceneEntryEndorsementFactory,
+        )
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        pose_ep = PoseEndorsementFactory(endorsee_sheet=sheet, resonance=res)
+        entry_ep = SceneEntryEndorsementFactory(endorsee_sheet=sheet, resonance=res)
+        with self.assertRaises(IntegrityError):
+            ResonanceGrant.objects.create(
+                character_sheet=sheet,
+                resonance=res,
+                amount=1,
+                source=GainSource.POSE_ENDORSEMENT,
+                source_pose_endorsement=pose_ep,
+                source_scene_entry_endorsement=entry_ep,  # forbidden
+            )
