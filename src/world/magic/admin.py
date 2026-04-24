@@ -24,14 +24,17 @@ from world.magic.models import (
     MishapPoolTier,
     Motif,
     MotifResonance,
+    PoseEndorsement,
     Reincarnation,
     Resonance,
     ResonanceGainConfig,
+    ResonanceGrant,
     Restriction,
     Ritual,
     RitualComponentRequirement,
     RoomAuraProfile,
     RoomResonance,
+    SceneEntryEndorsement,
     SoulfrayConfig,
     Technique,
     TechniqueCapabilityGrant,
@@ -162,6 +165,26 @@ class CharacterAuraAdmin(admin.ModelAdmin):
         return obj.dominant_affinity.label
 
 
+@admin.action(description="Staff grant resonance to this row")
+def grant_resonance_action(modeladmin, request, queryset):  # type: ignore[no-untyped-def]  # noqa: ARG001 — Django admin action protocol requires this positional arg
+    """Admin action: grant each selected row 1 resonance via STAFF_GRANT.
+
+    Quick form-less grant. For nuanced grants (custom amount / reason) use
+    a proper Django admin intermediate page — future enhancement.
+    """
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    for cr in queryset:
+        grant_resonance(
+            cr.character_sheet,
+            cr.resonance,
+            1,
+            source=GainSource.STAFF_GRANT,
+            staff_account=request.user,
+        )
+
+
 @admin.register(CharacterResonance)
 class CharacterResonanceAdmin(admin.ModelAdmin):
     list_display = [
@@ -179,6 +202,7 @@ class CharacterResonanceAdmin(admin.ModelAdmin):
         "resonance",
         "resonance__affinity",
     ]
+    actions = [grant_resonance_action]
 
 
 @admin.register(Gift)
@@ -560,3 +584,77 @@ class RoomAuraProfileAdmin(admin.ModelAdmin):
     @admin.display(description="Tags")
     def tag_count(self, obj: RoomAuraProfile) -> int:
         return obj.room_resonances.count()
+
+
+@admin.register(ResonanceGrant)
+class ResonanceGrantAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "character_sheet",
+        "resonance",
+        "amount",
+        "source",
+        "granted_at",
+    )
+    list_filter = ("source", "resonance")
+    search_fields = ("character_sheet__id",)
+    readonly_fields = (
+        "character_sheet",
+        "resonance",
+        "amount",
+        "source",
+        "granted_at",
+        "source_room_aura_profile",
+        "source_staff_account",
+        "source_pose_endorsement",
+        "source_scene_entry_endorsement",
+    )
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+        return False
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+        return False
+
+
+@admin.register(PoseEndorsement)
+class PoseEndorsementAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "endorser_sheet",
+        "endorsee_sheet",
+        "resonance",
+        "created_at",
+        "settled_at",
+    )
+    list_filter = ("settled_at",)
+    readonly_fields = tuple(f.name for f in PoseEndorsement._meta.fields)  # noqa: SLF001 — standard Django admin pattern for dynamic readonly_fields from model meta
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+        return False
+
+
+@admin.register(SceneEntryEndorsement)
+class SceneEntryEndorsementAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "endorser_sheet",
+        "endorsee_sheet",
+        "scene",
+        "resonance",
+        "created_at",
+        "granted_amount",
+    )
+    readonly_fields = tuple(f.name for f in SceneEntryEndorsement._meta.fields)  # noqa: SLF001 — standard Django admin pattern for dynamic readonly_fields from model meta
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+        return False
