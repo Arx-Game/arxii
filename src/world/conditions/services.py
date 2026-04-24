@@ -598,6 +598,9 @@ def apply_condition(  # noqa: PLR0913
             location=target_location,
         )
 
+    if result.success and result.instance is not None:
+        _notify_stories_condition_applied(target, result.instance)
+
     return result
 
 
@@ -674,9 +677,52 @@ def bulk_apply_conditions(  # noqa: PLR0913
                 location=target_location,
             )
 
+        if result.success and result.instance is not None:
+            _notify_stories_condition_applied(target, result.instance)
+
         results.append(result)
 
     return results
+
+
+def _notify_stories_condition_applied(
+    target: "ObjectDB",
+    instance: ConditionInstance,
+) -> None:
+    """Route condition-applied events to the stories reactivity module.
+
+    Only fires when the target is a playable character with a sheet; if
+    the target has no CharacterSheet (e.g., an NPC ObjectDB that isn't on
+    the roster), silently skip — nothing to re-evaluate.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.stories.services.reactivity import on_condition_applied  # noqa: PLC0415
+
+    try:
+        sheet = target.sheet_data
+    except CharacterSheet.DoesNotExist:
+        return
+    on_condition_applied(sheet, instance)
+
+
+def _notify_stories_condition_expired(
+    target: "ObjectDB",
+    condition: ConditionTemplate,
+) -> None:
+    """Route condition-removed events to the stories reactivity module.
+
+    Covers Task 3.4 — the hook exists so future inverse/blocker-lifted
+    predicates can flip on condition removal. Current CONDITION_HELD
+    predicates don't un-flip on removal (SUCCESS is sticky).
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.stories.services.reactivity import on_condition_expired  # noqa: PLC0415
+
+    try:
+        sheet = target.sheet_data
+    except CharacterSheet.DoesNotExist:
+        return
+    on_condition_expired(sheet, condition)
 
 
 @transaction.atomic
@@ -722,6 +768,8 @@ def remove_condition(
                 ),
                 location=target_location,
             )
+        # Single-stack reduction does not fully lift the condition; no
+        # stories re-evaluation needed until the condition is gone.
         return True
 
     instance.delete()
@@ -736,6 +784,7 @@ def remove_condition(
             ),
             location=target_location,
         )
+    _notify_stories_condition_expired(target, condition)
     return True
 
 
