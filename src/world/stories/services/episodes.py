@@ -95,4 +95,11 @@ def resolve_episode(
         resolution = EpisodeResolution.objects.create(**resolution_kwargs)
         advance_progress_to_episode(progress, selected.target_episode)
 
+    # Internal cascade: any other story's beat with STORY_AT_MILESTONE
+    # referencing the advanced story should re-evaluate now. The hook is
+    # idempotent and safe to call after commit.
+    from world.stories.services.reactivity import on_story_advanced  # noqa: PLC0415
+
+    on_story_advanced(progress.story)
+
     return resolution
