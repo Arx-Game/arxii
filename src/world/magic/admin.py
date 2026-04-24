@@ -26,6 +26,7 @@ from world.magic.models import (
     MotifResonance,
     Reincarnation,
     Resonance,
+    ResonanceGainConfig,
     Restriction,
     Ritual,
     RitualComponentRequirement,
@@ -361,6 +362,28 @@ class SoulfrayConfigAdmin(admin.ModelAdmin):
         "resilience_check_type",
         "base_check_difficulty",
     ]
+
+
+@admin.register(ResonanceGainConfig)
+class ResonanceGainConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config — one row per environment."""
+
+    list_display = (
+        "pk",
+        "weekly_pot_per_character",
+        "scene_entry_grant",
+        "residence_daily_trickle_per_resonance",
+        "outfit_daily_trickle_per_item_resonance",
+        "same_pair_daily_cap",
+        "settlement_day_of_week",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
+        return not ResonanceGainConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+        return False
 
 
 @admin.register(MishapPoolTier)
