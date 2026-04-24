@@ -248,3 +248,38 @@ class ResonanceGrantPoseEndorsementShapeTests(TestCase):
                 source_room_aura_profile=aura,
                 source_pose_endorsement=endorsement,  # forbidden
             )
+
+
+class SceneEntryEndorsementTests(TestCase):
+    def test_unique_pair_per_scene(self) -> None:
+        from django.db import IntegrityError
+
+        from world.magic.factories import (
+            ResonanceFactory,
+            SceneEntryEndorsementFactory,
+        )
+
+        first = SceneEntryEndorsementFactory()
+        with self.assertRaises(IntegrityError):
+            SceneEntryEndorsementFactory(
+                endorser_sheet=first.endorser_sheet,
+                endorsee_sheet=first.endorsee_sheet,
+                scene=first.scene,
+                resonance=ResonanceFactory(),
+            )
+
+    def test_factory_produces_valid_row(self) -> None:
+        from world.magic.factories import SceneEntryEndorsementFactory
+
+        ep = SceneEntryEndorsementFactory()
+        self.assertIsNotNone(ep.granted_amount)
+        self.assertIsNotNone(ep.scene)
+        self.assertIsNotNone(ep.endorser_sheet)
+        self.assertIsNotNone(ep.endorsee_sheet)
+
+    def test_related_name_access(self) -> None:
+        """Confirm `scene.entry_endorsements` related manager works."""
+        from world.magic.factories import SceneEntryEndorsementFactory
+
+        ep = SceneEntryEndorsementFactory()
+        self.assertIn(ep, ep.scene.entry_endorsements.all())

@@ -1047,6 +1047,17 @@ class PoseEndorsementFactory(factory.django.DjangoModelFactory):
     resonance = factory.SubFactory(ResonanceFactory)
 
 
+class SceneEntryEndorsementFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.SceneEntryEndorsement"
+
+    endorser_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    endorsee_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    scene = factory.SubFactory("world.scenes.factories.SceneFactory")
+    resonance = factory.SubFactory(ResonanceFactory)
+    granted_amount = 4
+
+
 def wire_soulfray_aftermath(content: SoulfrayContent) -> None:
     """Create ConditionStageOnEntry rows for Soulfray aftermath per spec §8.3.
 

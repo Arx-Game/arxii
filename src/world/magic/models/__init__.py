@@ -56,7 +56,7 @@ from world.magic.models.aura import (
     CharacterResonance,
 )
 from world.magic.models.cantrips import Cantrip
-from world.magic.models.endorsement import PoseEndorsement
+from world.magic.models.endorsement import PoseEndorsement, SceneEntryEndorsement
 from world.magic.models.gain_config import ResonanceGainConfig
 from world.magic.models.gifts import (
     CharacterGift,
@@ -170,6 +170,8 @@ __all__ = [
     # room aura (Spec C §2.5, §2.6)
     "RoomAuraProfile",
     "RoomResonance",
+    # endorsement (Spec C §2.3)
+    "SceneEntryEndorsement",
     "SoulfrayConfig",
     "Technique",
     "TechniqueCapabilityGrant",
