@@ -34,6 +34,7 @@ TYPED_DIRS = [
     "src/world/vitals",
     "src/world/combat",
     "src/world/covenants",
+    "src/world/narrative",
 ]
 
 # File/directory names to skip (matches ty's exclude patterns).

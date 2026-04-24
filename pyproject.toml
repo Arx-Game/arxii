@@ -409,6 +409,7 @@ include = [
     "src/world/vitals",               # Character life states and health
     "src/world/combat",               # Party combat system
     "src/world/covenants",             # Covenant roles and speed ranks
+    "src/world/narrative",             # Narrative messages (IC deliveries to characters)
 ]
 exclude = [
     "**/tests/**",
