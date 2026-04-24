@@ -135,7 +135,7 @@ def untag_room_resonance(
     resonance: Resonance,
 ) -> None:
     """Remove a resonance tag. No-op if absent."""
-    aura = getattr(room_profile, "room_aura_profile", None)  # noqa: GETATTR_LITERAL
+    aura = getattr(room_profile, "room_aura_profile", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor, raises RelatedObjectDoesNotExist if missing
     if aura is None:
         return
     RoomResonance.objects.filter(
@@ -163,7 +163,7 @@ def get_residence_resonances(sheet: CharacterSheet) -> set[Resonance]:
     rp = sheet.current_residence
     if rp is None:
         return set()
-    aura = getattr(rp, "room_aura_profile", None)  # noqa: GETATTR_LITERAL
+    aura = getattr(rp, "room_aura_profile", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor, raises RelatedObjectDoesNotExist if missing
     if aura is None:
         return set()
     tagged_ids = set(
@@ -433,7 +433,7 @@ def residence_trickle_tick() -> ResonanceDailyTickSummary:
         sheets_processed += 1
         matched = get_residence_resonances(sheet)
         rp = sheet.current_residence
-        aura = getattr(rp, "room_aura_profile", None)  # noqa: GETATTR_LITERAL
+        aura = getattr(rp, "room_aura_profile", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor, raises RelatedObjectDoesNotExist if missing
         if aura is None or not matched:
             continue
 
