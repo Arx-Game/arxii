@@ -15,7 +15,15 @@ from typing import TYPE_CHECKING
 from world.stories.constants import StoryScope
 
 if TYPE_CHECKING:
-    from world.stories.models import Episode, Story
+    from world.character_sheets.models import CharacterSheet
+    from world.gm.models import GMTable
+    from world.stories.models import (
+        Episode,
+        GlobalStoryProgress,
+        GroupStoryProgress,
+        Story,
+        StoryProgress,
+    )
     from world.stories.types import AnyStoryProgress
 
 
@@ -56,3 +64,68 @@ def advance_progress_to_episode(
     """
     progress.current_episode = target_episode
     progress.save(update_fields=["current_episode", "last_advanced_at"])
+
+
+def create_character_progress(
+    *,
+    story: Story,
+    character_sheet: CharacterSheet,
+    current_episode: Episode | None = None,
+) -> StoryProgress:
+    """Create a StoryProgress and immediately evaluate auto-beats.
+
+    Catches retroactive matches — e.g., a character already has the
+    required achievement when the story is created. Without the snapshot,
+    the beat would stay UNSATISFIED until some unrelated trigger fires.
+    """
+    from world.stories.models import StoryProgress  # noqa: PLC0415
+    from world.stories.services.beats import evaluate_auto_beats  # noqa: PLC0415
+
+    progress = StoryProgress.objects.create(
+        story=story,
+        character_sheet=character_sheet,
+        current_episode=current_episode,
+    )
+    evaluate_auto_beats(progress)
+    return progress
+
+
+def create_group_progress(
+    *,
+    story: Story,
+    gm_table: GMTable,
+    current_episode: Episode | None = None,
+) -> GroupStoryProgress:
+    """Create a GroupStoryProgress and immediately evaluate auto-beats.
+
+    Mirrors create_character_progress for GROUP scope — catches retroactive
+    matches where a group member already satisfies the beat when the group
+    story is created (with Wave 5 ANY-member evaluation).
+    """
+    from world.stories.models import GroupStoryProgress  # noqa: PLC0415
+    from world.stories.services.beats import evaluate_auto_beats  # noqa: PLC0415
+
+    progress = GroupStoryProgress.objects.create(
+        story=story,
+        gm_table=gm_table,
+        current_episode=current_episode,
+    )
+    evaluate_auto_beats(progress)
+    return progress
+
+
+def create_global_progress(
+    *,
+    story: Story,
+    current_episode: Episode | None = None,
+) -> GlobalStoryProgress:
+    """Create a GlobalStoryProgress singleton and immediately evaluate auto-beats."""
+    from world.stories.models import GlobalStoryProgress  # noqa: PLC0415
+    from world.stories.services.beats import evaluate_auto_beats  # noqa: PLC0415
+
+    progress = GlobalStoryProgress.objects.create(
+        story=story,
+        current_episode=current_episode,
+    )
+    evaluate_auto_beats(progress)
+    return progress

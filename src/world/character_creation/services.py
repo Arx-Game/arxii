@@ -1206,7 +1206,8 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
             or missing story_title.
     """
     from world.stories.constants import StoryScope  # noqa: PLC0415
-    from world.stories.models import Story, StoryParticipation, StoryProgress  # noqa: PLC0415
+    from world.stories.models import Story, StoryParticipation  # noqa: PLC0415
+    from world.stories.services.progress import create_character_progress  # noqa: PLC0415
 
     if not draft.is_gm_creation:
         msg = "Draft is not a GM creation draft."
@@ -1268,7 +1269,9 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
 
     # Create a progress pointer so the Phase 2 dashboard has something to show.
     # current_episode starts null (pre-story / frontier); GM sets the first episode later.
-    StoryProgress.objects.create(
+    # Uses create_character_progress to evaluate auto-beats at snapshot time —
+    # catches retroactive matches if the character already satisfies a beat.
+    create_character_progress(
         story=story,
         character_sheet=sheet,
         current_episode=None,
