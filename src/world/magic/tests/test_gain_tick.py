@@ -149,3 +149,48 @@ class ResonanceDailyTickTests(TestCase):
         self.assertEqual(summary.residence_grants_issued, 1)
         self.assertEqual(summary.outfit_grants_issued, 0)
         self.assertEqual(summary.sheets_processed, 1)
+
+
+class ResonanceWeeklySettlementTickTests(TestCase):
+    def test_noop_when_no_unsettled(self) -> None:
+        from world.magic.services.gain import resonance_weekly_settlement_tick
+
+        summary = resonance_weekly_settlement_tick()
+        self.assertEqual(summary.endorsers_settled, 0)
+        self.assertEqual(summary.total_endorsements_settled, 0)
+        self.assertEqual(summary.total_granted, 0)
+
+    def test_settles_all_endorsers_with_unsettled(self) -> None:
+        """Create 3 endorsers × 2 unsettled each → after tick, all 6 settled."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import (
+            CharacterResonanceFactory,
+            PoseEndorsementFactory,
+            ResonanceFactory,
+        )
+        from world.magic.models import PoseEndorsement
+        from world.magic.services.gain import resonance_weekly_settlement_tick
+        from world.scenes.factories import InteractionFactory
+
+        def _make_pair(endorser):
+            resonance = ResonanceFactory()
+            endorsee = CharacterSheetFactory()
+            CharacterResonanceFactory(character_sheet=endorsee, resonance=resonance)
+            PoseEndorsementFactory(
+                endorser_sheet=endorser,
+                endorsee_sheet=endorsee,
+                interaction=InteractionFactory(),
+                resonance=resonance,
+            )
+
+        endorsers = [CharacterSheetFactory() for _ in range(3)]
+        for endorser in endorsers:
+            _make_pair(endorser)
+            _make_pair(endorser)
+
+        self.assertEqual(PoseEndorsement.objects.filter(settled_at__isnull=True).count(), 6)
+
+        summary = resonance_weekly_settlement_tick()
+        self.assertEqual(summary.endorsers_settled, 3)
+        self.assertEqual(summary.total_endorsements_settled, 6)
+        self.assertEqual(PoseEndorsement.objects.filter(settled_at__isnull=True).count(), 0)

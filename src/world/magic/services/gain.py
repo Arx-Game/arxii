@@ -76,7 +76,11 @@ from world.magic.models import (
     RoomResonance,
     SceneEntryEndorsement,
 )
-from world.magic.types import ResonanceDailyTickSummary, SettlementResult
+from world.magic.types import (
+    ResonanceDailyTickSummary,
+    ResonanceWeeklySettlementSummary,
+    SettlementResult,
+)
 from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.models import Interaction, Persona, Scene, SceneParticipation
 from world.scenes.place_models import InteractionReceiver
@@ -489,4 +493,38 @@ def resonance_daily_tick() -> ResonanceDailyTickSummary:
         residence_grants_issued=residence_summary.residence_grants_issued,
         outfit_grants_issued=0,
         sheets_processed=residence_summary.sheets_processed,
+    )
+
+
+def resonance_weekly_settlement_tick() -> ResonanceWeeklySettlementSummary:
+    """Master weekly settlement tick (Spec C §5).
+
+    Finds all endorsers with any unsettled PoseEndorsement rows, calls
+    settle_weekly_pot on each. Per-endorser settlement wrapped in try/except
+    so a single failure doesn't poison the whole tick.
+    """
+    endorser_ids = (
+        PoseEndorsement.objects.filter(settled_at__isnull=True)
+        .values_list("endorser_sheet_id", flat=True)
+        .distinct()
+    )
+    endorsers_settled = 0
+    total_endorsements = 0
+    total_granted = 0
+
+    for sheet_id in endorser_ids:
+        sheet = CharacterSheet.objects.get(pk=sheet_id)
+        try:
+            result = settle_weekly_pot(sheet)
+        except Exception:  # noqa: BLE001, S112 — isolate per-endorser failures so one bad row doesn't poison the tick
+            continue
+        if result.endorsements_settled:
+            endorsers_settled += 1
+            total_endorsements += result.endorsements_settled
+            total_granted += result.total_granted
+
+    return ResonanceWeeklySettlementSummary(
+        endorsers_settled=endorsers_settled,
+        total_endorsements_settled=total_endorsements,
+        total_granted=total_granted,
     )
