@@ -426,54 +426,61 @@ reactions, cursed items, environmental hazards, divine wrath, allergies, observe
 reactions, and any future "something happens when X" feature flows through
 this PR's plumbing.
 
-**Scope #6 — Soulfray Recovery & Decay (TODO):**
+**Scope #6 — Soulfray Recovery & Decay (DONE):**
+**Spec:** `docs/superpowers/specs/2026-04-21-magic-scope-6-soulfray-recovery-design.md`
 
-Soulfray severity currently only accumulates — there is no mechanism for it to go down.
-This scope adds the recovery side: time-based decay, ritual-driven recovery, and the
-"anima fade out of combat" behavior the world-clock roadmap has been waiting on.
+What was built:
+- **Generalised condition-level decay** — `ConditionTemplate.passive_decay_per_day`,
+  `passive_decay_max_severity`, and `passive_decay_blocked_in_engagement` data-drive
+  the scheduler. `decay_condition_severity()` retreats through stages when severity
+  falls below the current stage's threshold (inverse of `advance_condition_severity`).
+  `decay_all_conditions_tick()` iterates every opted-in condition, skipping anyone in
+  an active `CharacterEngagement`. No Soulfray-specific code in the scheduler path.
+- **Stage-entry aftermath** — `ConditionStage.on_entry_conditions` M2M grants other
+  conditions when a stage is entered. `ConditionTemplate.parent_condition` FK anchors
+  aftermath templates to their originator. Soulfray stages 2–5 wire to `soul_ache`,
+  `arcane_tremor`, and `aura_bleed`; `decay_condition_severity` + `resolve_condition`
+  handle cleanup as stages retreat.
+- **Generic Treatment system** — `TreatmentTemplate` + `TreatmentAttempt` + `TreatmentTargetKind`
+  (`AFTERMATH_CONDITION` | `PENDING_ALTERATION`). `perform_treatment()` handles both
+  paths: aftermath severity reduction, and Mage Scar `PendingAlteration` tier reduction
+  (`reduce_pending_alteration_tier`). Helper-gated (once per helper/target/scene),
+  bond-gated via an existing Thread anchored to a relationship track/capstone,
+  resonance-cost via `CharacterResonance.balance`, and scene-gated (participants only,
+  no active engagement). Failure risks giving the helper Soulfray severity of their own.
+- **Anima Ritual service** — `perform_anima_ritual()` in `magic/services/anima.py`
+  rolls a CheckOutcome-tiered budget and spends it on (a) reducing Soulfray severity
+  (priority), then (b) refilling the character's anima pool. Crit forces anima to max
+  regardless of leftover budget. Once-per-scene per-character; scene-active and
+  out-of-engagement gates. Returns a frozen `RitualOutcome` dataclass.
+- **Daily anima regen tick** — `anima_regen_tick()` refills each `CharacterAnima` by
+  a configured amount. Blocked for any character whose active condition stages carry
+  the `blocks_anima_regen` property; also blocked while the character is in a
+  `CharacterEngagement`. Returns a frozen `AnimaRegenTickSummary`.
+- **Scheduler integration** — both ticks registered as daily tasks on the
+  world-clock scheduler, matching the AP-regen shape. Idempotent and data-driven;
+  no Soulfray FK in the scheduler.
+- **5-stage Soulfray + re-seeded Audere gate** — Soulfray's authored stage list
+  extended from 3 to 5 (Fraying → Tearing → Ripping → Sundering → Unravelling) for
+  tuning headroom. Stages 2+ carry `blocks_anima_regen`. `AudereThreshold.minimum_warp_stage`
+  re-seeds to Ripping (stage 3+) so Audere's gate semantics are unchanged.
+- **`magic/models.py`, `services.py`, `types.py` → packages** — split the three
+  monoliths into thematic submodules (`models/`, `services/`, `types/`) to keep the
+  new ritual/regen code tidy alongside existing thread/weaving content.
+- **Seed content factories** — `SoulfrayContentFactory`, `SoulfrayStabilizeAftermathTreatmentFactory`,
+  `MageScarReductionTreatmentFactory`, aftermath condition factories
+  (`SoulAcheTemplateFactory`, `ArcaneTremorTemplateFactory`, `AuraBleedTemplateFactory`),
+  and `wire_soulfray_aftermath()` for tests and future admin seeding.
+- **End-to-end integration test** in `src/world/magic/tests/integration/test_soulfray_recovery_flow.py`
+  covering accumulation → aftermath application → stabilization → ritual recovery →
+  anima regen gating → decay-alone-cannot-recover-stage-2 boundary.
 
-What to build:
-- **`decay_soulfray_severity(character)`** service — decrements severity by a configured
-  amount per tick, retreating through stages when severity drops below the current
-  stage's threshold. Inverse of `advance_condition_severity()` from Scope 3.
-- **`SoulfrayConfig.decay_rate`** — authored field for base decay per unit time.
-  Consider separate rates for in-scene vs out-of-scene vs post-ritual.
-- **Weekly / periodic hook** — wire decay into the `weekly_rollover` orchestrator
-  (or a faster tick) via the world-clock scheduler. Task registry pattern, idempotent,
-  matches AP regen shape.
-- **Ritual-driven recovery** — `AnimaRitualPerformance.apply_recovery()` (or similar)
-  consumes the existing CharacterAnimaRitual + AnimaRitualPerformance records and
-  decrements Soulfray severity as one of the outcomes. Scene-linked, so ritual
-  performance in RP has a concrete mechanical effect.
-- **`CharacterAnima` anima recovery too** — while we're here, make the existing
-  `last_recovery` field actually drive anima pool recovery on the same scheduler tick.
-  This is the "anima fade out of combat" item from the world-clock deferred list.
-- **Engagement-aware recovery** — Soulfray should NOT decay while a character has an
-  active high-stakes CharacterEngagement (combat, mission). Recovery is a between-scenes
-  phenomenon, not a mid-fight one.
-- **Integration test** in `src/integration_tests/pipeline/` exercising: character
-  overburns into Soulfray stage 2, performs a ritual (factory-built), severity drops,
-  stage retreats to 1. A second test covers time-based decay via the scheduler tick.
-  A third covers engagement blocking decay.
-
-Key design questions to resolve during brainstorm:
-- Does decay ever fully clear Soulfray, or does it asymptote toward stage 1 so some
-  lingering magical fatigue remains until a proper ritual?
-- Does ritual recovery require the character to be OUT of engagement, or can it happen
-  mid-arc as a dramatic pause?
-- Should decay rate scale with resonance/affinity (some characters recover faster)?
-- Does the scheduler hook run weekly (GameWeek-aligned) or daily (AP-regen-aligned)?
-  This affects how "spiky" recovery feels.
-- Do we need a "soulfray history" audit trail, or is live severity enough?
-
-Dependencies:
-- World-clock scheduler (live — `GameWeek`, `weekly_rollover`, task registry exist)
-- CharacterAnimaRitual / AnimaRitualPerformance (live)
-- Soulfray stage progression from Scope 3 (live — reuse `ConditionStage.severity_threshold`)
-
-Decoupling: Standalone. Does NOT depend on Scope 5 (alteration resolution). A separate PR.
+Decoupling: Standalone. Does NOT depend on Scope 5.5 (reactive layer). Shipped on the
+`scope-6-soulfray-recovery` branch.
 
 Deferred to later scopes:
+- No healing magic (post-scene restoration beyond anima ritual)
+- Web/CLI surfaces for ritual + stabilization (service-layer only for now)
 - Abyssal corruption as long-term consequence of abyssal magic overuse
 - Character loss deferral during Audere (needs combat/mission lifecycle)
 

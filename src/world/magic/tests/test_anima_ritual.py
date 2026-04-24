@@ -3,6 +3,7 @@
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.magic.factories import (
     AnimaRitualPerformanceFactory,
     CharacterAnimaRitualFactory,
@@ -24,6 +25,7 @@ class CharacterAnimaRitualModelTests(TestCase):
         cls.stat = TraitFactory(name="Composure", trait_type=TraitType.STAT)
         cls.skill = SkillFactory()
         cls.resonance = ResonanceFactory()
+        cls.check_type = CheckTypeFactory()
 
     def test_anima_ritual_creation(self):
         """Test creation of a character anima ritual with all fields."""
@@ -32,12 +34,14 @@ class CharacterAnimaRitualModelTests(TestCase):
             stat=self.stat,
             skill=self.skill,
             resonance=self.resonance,
+            check_type=self.check_type,
             description="Sitting quietly, communing with nature.",
         )
         self.assertEqual(ritual.character, self.sheet)
         self.assertEqual(ritual.stat, self.stat)
         self.assertEqual(ritual.skill, self.skill)
         self.assertEqual(ritual.resonance, self.resonance)
+        self.assertEqual(ritual.check_type, self.check_type)
         self.assertEqual(ritual.description, "Sitting quietly, communing with nature.")
         self.assertIsNone(ritual.specialization)
 
@@ -50,6 +54,7 @@ class CharacterAnimaRitualModelTests(TestCase):
             skill=self.skill,
             specialization=specialization,
             resonance=self.resonance,
+            check_type=self.check_type,
             description="A specialized recovery ritual.",
         )
         self.assertEqual(ritual.specialization, specialization)
@@ -61,6 +66,7 @@ class CharacterAnimaRitualModelTests(TestCase):
             stat=self.stat,
             skill=self.skill,
             resonance=self.resonance,
+            check_type=self.check_type,
             description="Test ritual.",
         )
         self.assertEqual(str(ritual), f"Anima Ritual of {self.sheet}")
@@ -77,11 +83,13 @@ class AnimaRitualPerformanceModelTests(TestCase):
         cls.stat = TraitFactory(name="Performance Stat", trait_type=TraitType.STAT)
         cls.skill = SkillFactory()
         cls.resonance = ResonanceFactory()
+        cls.check_type = CheckTypeFactory()
         cls.ritual = CharacterAnimaRitual.objects.create(
             character=cls.sheet,
             stat=cls.stat,
             skill=cls.skill,
             resonance=cls.resonance,
+            check_type=cls.check_type,
             description="A test ritual.",
         )
 

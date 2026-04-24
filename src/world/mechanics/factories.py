@@ -153,6 +153,18 @@ class PropertyFactory(DjangoModelFactory):
     category = factory.SubFactory(PropertyCategoryFactory)
 
 
+class BlocksAnimaRegenPropertyFactory(PropertyFactory):
+    """Named factory for the 'blocks_anima_regen' property tag.
+
+    Used by ConditionStage.properties on Soulfray stages 2+ (§8.4).
+    ``django_get_or_create = ("name",)`` is inherited from PropertyFactory,
+    so repeated calls return the same row.
+    """
+
+    name = "blocks_anima_regen"
+    description = "Blocks daily anima regeneration while this stage is active."
+
+
 class ObjectPropertyFactory(DjangoModelFactory):
     """Factory for creating ObjectProperty instances."""
 

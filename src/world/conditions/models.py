@@ -22,6 +22,7 @@ from world.conditions.constants import (
     DamageTickTiming,
     DurationType,
     StackBehavior,
+    TreatmentTargetKind,
 )
 
 # =============================================================================
@@ -266,6 +267,22 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
 
+    # === Aftermath / Decay (Scope 6 §4.1) ===
+    parent_condition = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="aftermath_children",
+        help_text=(
+            "Aftermath conditions point at their primary parent (e.g. soul_ache → soulfray). "
+            "FK is authoritative even before the aftermath is wired into any stage."
+        ),
+    )
+    passive_decay_per_day = models.PositiveIntegerField(default=0)
+    passive_decay_max_severity = models.PositiveIntegerField(null=True, blank=True)
+    passive_decay_blocked_in_engagement = models.BooleanField(default=True)
+
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
@@ -356,6 +373,19 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
         help_text="Consequence pool that fires per action while at this stage.",
     )
 
+    # === Stage-level tags / on-entry hooks (Scope 6 §4.1) ===
+    properties = models.ManyToManyField(
+        "mechanics.Property",
+        blank=True,
+        related_name="condition_stages_carrying",
+    )
+    on_entry_conditions = models.ManyToManyField(
+        "conditions.ConditionTemplate",
+        through="conditions.ConditionStageOnEntry",
+        related_name="applied_on_entry_of",
+        blank=True,
+    )
+
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
@@ -368,6 +398,32 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.condition.name} - {self.name}"
+
+
+class ConditionStageOnEntry(SharedMemoryModel):
+    """Through model: conditions applied when a target enters a stage (Scope 6 §4.1)."""
+
+    stage = models.ForeignKey(
+        ConditionStage,
+        on_delete=models.CASCADE,
+        related_name="on_entry_assocs",
+    )
+    condition = models.ForeignKey(
+        ConditionTemplate,
+        on_delete=models.PROTECT,
+    )
+    severity = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["stage", "condition"],
+                name="unique_on_entry_condition_per_stage",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.stage} → {self.condition} (sev {self.severity})"
 
 
 # =============================================================================
@@ -878,6 +934,13 @@ class ConditionInstance(SharedMemoryModel):
         blank=True,
     )
 
+    # === Resolution (Scope 6 §4.1) ===
+    resolved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when severity decays to 0. Used to filter out completed instances.",
+    )
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
@@ -887,6 +950,7 @@ class ConditionInstance(SharedMemoryModel):
         ]
         indexes = [
             models.Index(fields=["expires_at"]),
+            models.Index(fields=["resolved_at"]),
         ]
 
     def __str__(self) -> str:
@@ -907,3 +971,164 @@ class ConditionInstance(SharedMemoryModel):
         if self.current_stage:
             return int(self.severity * self.current_stage.severity_multiplier)
         return self.severity
+
+
+# =============================================================================
+# Treatments (Scope 6 §4.2)
+# =============================================================================
+
+
+class TreatmentTemplate(SharedMemoryModel):
+    """
+    Authorable recipe for attempting to treat a condition or pending alteration.
+
+    Treatments come in three flavors (see ``target_kind``):
+      - PRIMARY: reduce a primary condition's severity
+      - AFTERMATH: reduce an aftermath child condition's severity
+      - PENDING_ALTERATION: reduce a Mage Scar's pending alteration tier
+
+    ``clean()`` enforces the narrative rule that any treatment with a resonance
+    cost also requires a supporting bond thread (you can't spend bond resonance
+    without a bond).
+    """
+
+    key = models.SlugField(unique=True, max_length=64)
+    name = models.CharField(max_length=128)
+    description = models.TextField(blank=True)
+
+    target_condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.PROTECT,
+        related_name="treatments",
+    )
+    target_kind = models.CharField(
+        max_length=32,
+        choices=TreatmentTargetKind.choices,
+    )
+
+    check_type = models.ForeignKey("checks.CheckType", on_delete=models.PROTECT)
+    target_difficulty = models.PositiveIntegerField(default=0)
+    requires_bond = models.BooleanField(default=False)
+
+    resonance_cost = models.PositiveIntegerField(default=0)
+    anima_cost = models.PositiveIntegerField(default=0)
+
+    once_per_scene_per_helper = models.BooleanField(default=True)
+    scene_required = models.BooleanField(default=True)
+
+    backlash_severity_on_failure = models.PositiveIntegerField(default=0)
+    backlash_target_condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="treatment_backlash_source",
+        help_text="When null, perform_treatment falls back to target_condition.",
+    )
+
+    reduction_on_crit = models.PositiveIntegerField(default=0)
+    reduction_on_success = models.PositiveIntegerField(default=0)
+    reduction_on_partial = models.PositiveIntegerField(default=0)
+    reduction_on_failure = models.PositiveIntegerField(default=0)
+
+    def clean(self) -> None:
+        super().clean()
+        if self.resonance_cost > 0 and not self.requires_bond:
+            from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+            raise ValidationError(
+                {"resonance_cost": "resonance_cost > 0 requires requires_bond=True."},
+            )
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class TreatmentAttempt(SharedMemoryModel):
+    """
+    Historical record of one helper attempting one treatment on one target in one scene.
+
+    The partial UniqueConstraint enforces once-per-scene-per-helper only for
+    treatments authored with ``once_per_scene_per_helper=True`` (Postgres partial
+    index — project is PG-only per CLAUDE.md).
+    """
+
+    helper = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.PROTECT,
+        related_name="treatment_attempts_as_helper",
+    )
+    target = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.PROTECT,
+        related_name="treatment_attempts_as_target",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.PROTECT,
+        related_name="treatment_attempts",
+    )
+    treatment = models.ForeignKey(
+        "conditions.TreatmentTemplate",
+        on_delete=models.PROTECT,
+        related_name="attempts",
+    )
+
+    thread_used = models.ForeignKey(
+        "magic.Thread",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="treatment_attempts",
+    )
+
+    target_condition_instance = models.ForeignKey(
+        "conditions.ConditionInstance",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="treatment_attempts_targeting_instance",
+    )
+    target_pending_alteration = models.ForeignKey(
+        "magic.PendingAlteration",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="treatment_attempts_targeting_alteration",
+    )
+
+    # CheckOutcome lookup row — FK to the catalog row, not a choices string.
+    outcome = models.ForeignKey(
+        "traits.CheckOutcome",
+        on_delete=models.PROTECT,
+        related_name="treatment_attempts",
+    )
+    severity_reduced = models.IntegerField(default=0)
+    tiers_reduced = models.IntegerField(default=0)
+    helper_backlash_applied = models.IntegerField(default=0)
+    resonance_spent = models.IntegerField(default=0)
+    anima_spent = models.IntegerField(default=0)
+
+    created_at = models.DateTimeField(
+        help_text="Stamped at save with get_ic_now() fallback in the service.",
+    )
+
+    class Meta:
+        # NOTE: The plan specified a partial UniqueConstraint keyed on
+        # ``treatment__once_per_scene_per_helper=True``, but Django rejects
+        # joined fields in UniqueConstraint conditions (models.E041), and a
+        # Postgres partial index can't reference columns of a related table
+        # either. This plain UniqueConstraint is strictly stricter than the
+        # plan: it unconditionally blocks duplicate (helper, target, scene,
+        # treatment) rows. Treatments authored with once_per_scene_per_helper
+        # = False would need a discriminator column to allow repeats; none
+        # exist in Scope 6, so this is the pragmatic enforcement point.
+        constraints = [
+            models.UniqueConstraint(
+                fields=["helper", "target", "scene", "treatment"],
+                name="unique_treatment_attempt_per_helper_scene",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.treatment} on {self.target} by {self.helper}"

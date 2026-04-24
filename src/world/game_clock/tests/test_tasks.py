@@ -257,3 +257,42 @@ class BatchConditionExpirationTests(TestCase):
         self.assertNotIn(expired.pk, remaining_pks)
         self.assertIn(active.pk, remaining_pks)
         self.assertIn(no_expiry.pk, remaining_pks)
+
+
+class Scope6TaskRegistrationTests(TestCase):
+    """Phase 10: anima regen and condition decay scheduler tasks registered."""
+
+    def setUp(self) -> None:
+        from world.game_clock.task_registry import clear_registry
+
+        clear_registry()
+
+    def test_scope6_tasks_registered(self) -> None:
+        from world.game_clock.task_registry import get_registered_tasks
+        from world.game_clock.tasks import register_all_tasks
+
+        register_all_tasks()
+
+        keys = {t.task_key for t in get_registered_tasks()}
+        self.assertIn("magic.anima_regen_daily", keys)
+        self.assertIn("conditions.decay_daily", keys)
+
+    def test_scope6_tasks_callables_runnable(self) -> None:
+        """Smoke test: both new tasks' callables can be invoked without error."""
+        from world.conditions.services import decay_all_conditions_tick
+        from world.magic.models.anima import AnimaConfig
+        from world.magic.services.anima import anima_regen_tick
+        from world.mechanics.factories import PropertyFactory
+
+        # Create the blocking property before calling anima_regen_tick
+        config = AnimaConfig.get_singleton()
+        PropertyFactory(name=config.daily_regen_blocking_property_key)
+
+        # Empty DB is a fine smoke test — both functions bulk-query and return
+        # summary dataclasses; no fixtures are required for a crash check.
+        anima_summary = anima_regen_tick()
+        self.assertEqual(anima_summary.examined, 0)
+
+        decay_summary = decay_all_conditions_tick()
+        # Just assert it returned something truthy-typed without raising.
+        self.assertIsNotNone(decay_summary)

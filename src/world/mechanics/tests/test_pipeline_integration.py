@@ -959,7 +959,7 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
         self.anima.refresh_from_db()
         assert self.anima.current == 20 - 11  # 9
 
-    @patch("world.magic.services.get_soulfray_warning")
+    @patch("world.magic.services.techniques.get_soulfray_warning")
     @patch("world.mechanics.challenge_resolution.perform_check")
     def test_soulfray_warning_cancelled_no_resolution(
         self,
@@ -1016,7 +1016,7 @@ class TechniqueUseFlowTests(PipelineTestMixin, TestCase):
         self.anima.refresh_from_db()
         assert self.anima.current == 0
 
-    @patch("world.magic.services.select_mishap_pool")
+    @patch("world.magic.services.techniques.select_mishap_pool")
     @patch("world.mechanics.challenge_resolution.perform_check")
     def test_mishap_fires_when_intensity_exceeds_control(
         self,
