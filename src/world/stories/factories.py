@@ -4,14 +4,18 @@ import factory.fuzzy
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.stories.constants import (
+    AssistantClaimStatus,
     BeatOutcome,
     BeatPredicateType,
     BeatVisibility,
     EraStatus,
+    SessionRequestStatus,
     StoryScope,
     TransitionMode,
 )
 from world.stories.models import (
+    AggregateBeatContribution,
+    AssistantGMClaim,
     Beat,
     BeatCompletion,
     Chapter,
@@ -20,8 +24,11 @@ from world.stories.models import (
     EpisodeResolution,
     EpisodeScene,
     Era,
+    GlobalStoryProgress,
+    GroupStoryProgress,
     PlayerTrust,
     PlayerTrustLevel,
+    SessionRequest,
     Story,
     StoryFeedback,
     StoryParticipation,
@@ -63,8 +70,6 @@ class StoryFactory(factory_django.DjangoModelFactory):
     scope = StoryScope.CHARACTER
     character_sheet = None  # Tests that need character-scoped stories set this explicitly.
     created_in_era = None
-    is_personal_story = False
-    personal_story_character = None
 
     @factory.post_generation
     def owners(self, create, extracted, **kwargs):
@@ -88,12 +93,12 @@ class StoryFactory(factory_django.DjangoModelFactory):
 
 
 class PersonalStoryFactory(StoryFactory):
-    """Factory for creating personal stories"""
+    """Factory for creating CHARACTER-scope stories (personal arcs).
 
-    is_personal_story = True
-    # Note: personal_story_character must be set manually due to cross-app
-    # dependencies
-    personal_story_character = None
+    scope=CHARACTER is already the StoryFactory default; this subclass exists
+    as a named alias for tests that historically referenced PersonalStoryFactory.
+    Set character_sheet explicitly when a FK to CharacterSheet is needed.
+    """
 
 
 class PrivateStoryFactory(StoryFactory):
@@ -338,6 +343,14 @@ class BeatFactory(factory_django.DjangoModelFactory):
     player_hint = factory.Faker("sentence")
     player_resolution_text = factory.Faker("sentence")
     required_level = None
+    required_achievement = None
+    required_condition_template = None
+    required_codex_entry = None
+    referenced_story = None
+    referenced_milestone_type = ""
+    referenced_chapter = None
+    referenced_episode = None
+    required_points = None
 
 
 class EpisodeProgressionRequirementFactory(factory_django.DjangoModelFactory):
@@ -363,27 +376,52 @@ class TransitionRequiredOutcomeFactory(factory_django.DjangoModelFactory):
 
 
 class BeatCompletionFactory(factory_django.DjangoModelFactory):
-    """Factory for creating BeatCompletion audit ledger entries."""
+    """Factory for creating BeatCompletion audit ledger entries.
+
+    Defaults to CHARACTER-scope (character_sheet populated, gm_table null).
+    For GROUP-scope completions override beat and set gm_table; for GLOBAL-scope
+    override beat and leave both character_sheet and gm_table as None.
+    """
 
     class Meta:
         model = BeatCompletion
 
     beat = factory.SubFactory(BeatFactory)
     character_sheet = factory.SubFactory(CharacterSheetFactory)
+    gm_table = None
     roster_entry = None
     era = None
     outcome = BeatOutcome.SUCCESS
     gm_notes = ""
 
 
+class AggregateBeatContributionFactory(factory_django.DjangoModelFactory):
+    """Factory for creating AggregateBeatContribution ledger rows."""
+
+    class Meta:
+        model = AggregateBeatContribution
+
+    beat = factory.SubFactory(BeatFactory)
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    roster_entry = None
+    era = None
+    points = 10
+    source_note = factory.Faker("sentence")
+
+
 class EpisodeResolutionFactory(factory_django.DjangoModelFactory):
-    """Factory for creating EpisodeResolution audit ledger entries."""
+    """Factory for creating EpisodeResolution audit ledger entries.
+
+    Defaults to a CHARACTER-scope episode/story with character_sheet populated.
+    For GROUP or GLOBAL scope tests, override episode and set the appropriate FK.
+    """
 
     class Meta:
         model = EpisodeResolution
 
     episode = factory.SubFactory(EpisodeFactory)
     character_sheet = factory.SubFactory(CharacterSheetFactory)
+    gm_table = None
     chosen_transition = None
     resolved_by = None
     era = None
@@ -400,6 +438,60 @@ class StoryProgressFactory(factory_django.DjangoModelFactory):
     character_sheet = factory.SubFactory(CharacterSheetFactory)
     current_episode = None
     is_active = True
+
+
+class GroupStoryProgressFactory(factory_django.DjangoModelFactory):
+    """Factory for creating GroupStoryProgress per-group progress pointer instances."""
+
+    class Meta:
+        model = GroupStoryProgress
+
+    story = factory.SubFactory(StoryFactory, scope=StoryScope.GROUP)
+    gm_table = factory.SubFactory("world.gm.factories.GMTableFactory")
+    current_episode = None
+    is_active = True
+
+
+class GlobalStoryProgressFactory(factory_django.DjangoModelFactory):
+    """Factory for creating GlobalStoryProgress singleton-per-story progress instances."""
+
+    class Meta:
+        model = GlobalStoryProgress
+
+    story = factory.SubFactory(StoryFactory, scope=StoryScope.GLOBAL)
+    current_episode = None
+    is_active = True
+
+
+class AssistantGMClaimFactory(factory_django.DjangoModelFactory):
+    """Factory for creating AssistantGMClaim instances."""
+
+    class Meta:
+        model = AssistantGMClaim
+
+    beat = factory.SubFactory(
+        BeatFactory, agm_eligible=True, predicate_type=BeatPredicateType.GM_MARKED
+    )
+    assistant_gm = factory.SubFactory("world.gm.factories.GMProfileFactory")
+    status = AssistantClaimStatus.REQUESTED
+    approved_by = None
+    rejection_note = ""
+    framing_note = factory.Faker("paragraph")
+
+
+class SessionRequestFactory(factory_django.DjangoModelFactory):
+    """Factory for creating SessionRequest instances."""
+
+    class Meta:
+        model = SessionRequest
+
+    episode = factory.SubFactory(EpisodeFactory)
+    status = SessionRequestStatus.OPEN
+    event = None
+    open_to_any_gm = False
+    assigned_gm = None
+    initiated_by_account = None
+    notes = ""
 
 
 # Convenience functions for common test scenarios

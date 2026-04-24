@@ -5,7 +5,11 @@ from evennia.utils.test_resources import EvenniaTestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory
 from world.stories.constants import BeatOutcome, EraStatus, TransitionMode
-from world.stories.exceptions import AmbiguousTransitionError, NoEligibleTransitionError
+from world.stories.exceptions import (
+    AmbiguousTransitionError,
+    NoEligibleTransitionError,
+    ProgressionRequirementNotMetError,
+)
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
@@ -187,7 +191,7 @@ class ResolveEpisodeTests(EvenniaTestCase):
             resolve_episode(progress=progress)
 
     def test_no_eligible_transition_raises_when_progression_unmet(self):
-        """Episode whose gating beat is unmet raises NoEligibleTransitionError."""
+        """Episode whose gating beat is unmet propagates ProgressionRequirementNotMetError."""
         source, target = self._make_story_structure()
         progress = self._make_progress(source)
 
@@ -198,7 +202,7 @@ class ResolveEpisodeTests(EvenniaTestCase):
         )
         TransitionFactory(source_episode=source, target_episode=target)
 
-        with self.assertRaises(NoEligibleTransitionError):
+        with self.assertRaises(ProgressionRequirementNotMetError):
             resolve_episode(progress=progress)
 
     def test_chosen_transition_not_in_eligible_set_raises(self):

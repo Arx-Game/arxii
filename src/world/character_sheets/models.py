@@ -15,7 +15,9 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from world.achievements.handlers import StatHandler
+    from world.achievements.models import Achievement
     from world.classes.models import CharacterClassLevel
+    from world.conditions.models import ConditionTemplate
     from world.scenes.models import Persona
 
 from django.core.exceptions import ValidationError
@@ -344,6 +346,90 @@ class CharacterSheet(SharedMemoryModel):
         """
         self.__dict__.pop("cached_character_class_levels", None)
         self.__dict__.pop("current_level", None)
+
+    @cached_property
+    def cached_achievements_held(self) -> set[Achievement]:
+        """Set of Achievement instances this character has earned.
+
+        Serves as the ``to_attr`` target for::
+
+            Prefetch(
+                "achievements__achievement",
+                queryset=CharacterAchievement.objects.select_related("achievement"),
+                to_attr="cached_achievements_held",
+            )
+
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+
+        To invalidate after granting or revoking an achievement::
+
+            sheet.invalidate_achievement_cache()
+        """
+
+        return {ca.achievement for ca in self.achievements.select_related("achievement").all()}
+
+    def invalidate_achievement_cache(self) -> None:
+        """Clear the cached achievement data.
+
+        Call this after any code path that grants or revokes a
+        ``CharacterAchievement`` for this sheet.  Achievement services and
+        admin actions must call this so subsequent reads of
+        ``cached_achievements_held`` reflect the mutation.
+
+        Example::
+
+            CharacterAchievement.objects.create(character_sheet=sheet, ...)
+            sheet.invalidate_achievement_cache()
+        """
+        self.__dict__.pop("cached_achievements_held", None)
+
+    @cached_property
+    def cached_active_condition_templates(self) -> set[ConditionTemplate]:
+        """Set of ConditionTemplate instances currently active on this character.
+
+        Queries ConditionInstance rows where target == self.character (ObjectDB).
+        Only non-suppressed instances are included.
+
+        Serves as the ``to_attr`` target for::
+
+            Prefetch(
+                "character__condition_instances",
+                queryset=ConditionInstance.objects.filter(
+                    is_suppressed=False
+                ).select_related("condition"),
+                to_attr="cached_active_condition_templates",
+            )
+
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query.
+
+        To invalidate after applying or removing a condition::
+
+            sheet.invalidate_condition_cache()
+        """
+        from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+        return {
+            ci.condition
+            for ci in ConditionInstance.objects.filter(
+                target=self.character,
+                is_suppressed=False,
+            ).select_related("condition")
+        }
+
+    def invalidate_condition_cache(self) -> None:
+        """Clear the cached active-condition data.
+
+        Call this after any code path that applies, removes, or suppresses
+        a ``ConditionInstance`` for this character.
+
+        Example::
+
+            ConditionInstance.objects.filter(target=sheet.character, ...).delete()
+            sheet.invalidate_condition_cache()
+        """
+        self.__dict__.pop("cached_active_condition_templates", None)
 
     def display_ic(self) -> str:
         """Delegate to primary_persona.display_ic()."""

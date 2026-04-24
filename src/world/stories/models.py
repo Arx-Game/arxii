@@ -6,10 +6,13 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.stories.constants import (
+    AssistantClaimStatus,
     BeatOutcome,
     BeatPredicateType,
     BeatVisibility,
     EraStatus,
+    SessionRequestStatus,
+    StoryMilestoneType,
     StoryScope,
     TransitionMode,
 )
@@ -141,20 +144,6 @@ class Story(SharedMemoryModel):
         through="StoryTrustRequirement",
         blank=True,
         help_text="Trust categories required to participate in this story",
-    )
-
-    # Story metadata
-    is_personal_story = models.BooleanField(
-        default=False,
-        help_text="True if this is a character's personal story arc",
-    )
-    personal_story_character = models.ForeignKey(
-        "objects.ObjectDB",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="personal_story",
-        help_text="Character this personal story belongs to",
     )
 
     # Timestamps
@@ -755,6 +744,72 @@ class Beat(SharedMemoryModel):
         blank=True,
         help_text="For CHARACTER_LEVEL_AT_LEAST predicates.",
     )
+    required_achievement = models.ForeignKey(
+        "achievements.Achievement",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For ACHIEVEMENT_HELD predicates.",
+    )
+    required_condition_template = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For CONDITION_HELD predicates.",
+    )
+    required_codex_entry = models.ForeignKey(
+        "codex.CodexEntry",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For CODEX_ENTRY_UNLOCKED predicates.",
+    )
+    referenced_story = models.ForeignKey(
+        "stories.Story",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="referenced_by_beats",
+        help_text="For STORY_AT_MILESTONE predicates.",
+    )
+    referenced_milestone_type = models.CharField(
+        max_length=30,
+        choices=StoryMilestoneType.choices,
+        blank=True,
+        default="",
+        help_text="Which kind of milestone to check on referenced_story.",
+    )
+    referenced_chapter = models.ForeignKey(
+        "stories.Chapter",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For referenced_milestone_type=CHAPTER_REACHED.",
+    )
+    referenced_episode = models.ForeignKey(
+        "stories.Episode",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text="For referenced_milestone_type=EPISODE_REACHED.",
+    )
+    required_points = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="For AGGREGATE_THRESHOLD predicates — total contribution points required.",
+    )
+
+    # AGM eligibility flag — Lead GM may expose specific beats to AGM pool.
+    agm_eligible = models.BooleanField(
+        default=False,
+        help_text="Lead GM may flag this beat to be claimable by Assistant GMs.",
+    )
 
     # Scaffolding for future phases (not wired yet):
     deadline = models.DateTimeField(
@@ -773,23 +828,55 @@ class Beat(SharedMemoryModel):
             models.Index(fields=["episode", "outcome"]),
         ]
 
-    # Invariant mapping: predicate_type -> required config field names
+    # Invariant mapping: predicate_type -> required config field names.
+    # For STORY_AT_MILESTONE, use _required_config_fields() which is milestone-type-aware.
     _REQUIRED_CONFIG: dict[str, tuple[str, ...]] = {
         BeatPredicateType.GM_MARKED: (),
         BeatPredicateType.CHARACTER_LEVEL_AT_LEAST: ("required_level",),
+        BeatPredicateType.ACHIEVEMENT_HELD: ("required_achievement",),
+        BeatPredicateType.CONDITION_HELD: ("required_condition_template",),
+        BeatPredicateType.CODEX_ENTRY_UNLOCKED: ("required_codex_entry",),
+        BeatPredicateType.AGGREGATE_THRESHOLD: ("required_points",),
     }
+
+    def _required_config_fields(self) -> tuple[str, ...]:
+        """Return the set of config fields required for this beat's predicate_type.
+
+        For STORY_AT_MILESTONE, the required fields depend on referenced_milestone_type.
+        All other types delegate to _REQUIRED_CONFIG.
+        """
+        if self.predicate_type == BeatPredicateType.STORY_AT_MILESTONE:
+            base: tuple[str, ...] = ("referenced_story", "referenced_milestone_type")
+            if self.referenced_milestone_type == StoryMilestoneType.CHAPTER_REACHED:
+                return (*base, "referenced_chapter")
+            if self.referenced_milestone_type == StoryMilestoneType.EPISODE_REACHED:
+                return (*base, "referenced_episode")
+            # STORY_RESOLVED needs only the story reference.
+            return base
+        return self._REQUIRED_CONFIG.get(self.predicate_type, ())
 
     def clean(self) -> None:
         super().clean()
-        required = self._REQUIRED_CONFIG.get(self.predicate_type, ())
+        required = self._required_config_fields()
         errors: dict[str, str] = {}
         for field_name in required:
             if getattr(self, field_name) in (None, ""):
                 errors[field_name] = f"Required when predicate_type is {self.predicate_type}."
         # All non-required config fields must be null for this predicate_type.
-        all_config_fields = {"required_level"}
+        all_config_fields = {
+            "required_level",
+            "required_achievement",
+            "required_condition_template",
+            "required_codex_entry",
+            "referenced_story",
+            "referenced_milestone_type",
+            "referenced_chapter",
+            "referenced_episode",
+            "required_points",
+        }
         for field_name in all_config_fields - set(required):
-            if getattr(self, field_name) is not None:
+            val = getattr(self, field_name)
+            if val is not None and val != "":
                 errors[field_name] = f"Must be null when predicate_type is {self.predicate_type}."
         if errors:
             raise ValidationError(errors)
@@ -862,8 +949,86 @@ class TransitionRequiredOutcome(SharedMemoryModel):
         )
 
 
+class AggregateBeatContributionManager(models.Manager):
+    def total_for_beat(self, beat: "Beat") -> int:
+        """Sum contributions for a beat; returns 0 when no rows exist."""
+        return self.filter(beat=beat).aggregate(total=models.Sum("points"))["total"] or 0
+
+
+class AggregateBeatContribution(SharedMemoryModel):
+    """Per-character contribution toward an AGGREGATE_THRESHOLD beat.
+
+    Different gameplay events (siege battle won, research mission completed,
+    etc.) produce contributions; the beat flips to SUCCESS when total
+    contributions cross the beat's required_points threshold.
+
+    Each row records the character, their current roster tenure (audit
+    trail), the era active at contribution time, the points, and a brief
+    source note explaining what the contribution was for.
+    """
+
+    beat = models.ForeignKey(
+        Beat,
+        on_delete=models.CASCADE,
+        related_name="aggregate_contributions",
+    )
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="aggregate_contributions",
+    )
+    roster_entry = models.ForeignKey(
+        "roster.RosterEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        help_text=(
+            "Which roster tenure was active when this contribution was made. For audit only."
+        ),
+    )
+    points = models.PositiveIntegerField(
+        help_text="Contribution points toward the beat's required_points threshold.",
+    )
+    era = models.ForeignKey(
+        Era,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="aggregate_contributions",
+    )
+    source_note = models.TextField(
+        blank=True,
+        help_text=(
+            "Brief description of what produced this contribution (siege battle, mission, etc.)."
+        ),
+    )
+    recorded_at = models.DateTimeField(auto_now_add=True)
+
+    objects = AggregateBeatContributionManager()
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["beat", "character_sheet"]),
+            models.Index(fields=["beat", "-recorded_at"]),
+            models.Index(fields=["character_sheet", "-recorded_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"AggregateBeatContribution(beat=#{self.beat_id},"
+            f" char=#{self.character_sheet_id}, points={self.points})"
+        )
+
+
 class BeatCompletion(SharedMemoryModel):
-    """Audit ledger row for each beat outcome applied to a character's progress."""
+    """Audit ledger row for each beat outcome applied to a progress record.
+
+    Exactly one of character_sheet / gm_table / neither must be populated,
+    matching the story's scope:
+      - CHARACTER scope → character_sheet non-null, gm_table null.
+      - GROUP scope     → gm_table non-null, character_sheet null.
+      - GLOBAL scope    → both null (the story itself is the identifier).
+    """
 
     beat = models.ForeignKey(
         Beat,
@@ -872,8 +1037,21 @@ class BeatCompletion(SharedMemoryModel):
     )
     character_sheet = models.ForeignKey(
         "character_sheets.CharacterSheet",
+        null=True,
+        blank=True,
         on_delete=models.CASCADE,
         related_name="beat_completions",
+        help_text=(
+            "For CHARACTER-scope stories: the character whose progress recorded this completion."
+        ),
+    )
+    gm_table = models.ForeignKey(
+        "gm.GMTable",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="beat_completions",
+        help_text=("For GROUP-scope stories: the GMTable whose progress recorded this completion."),
     )
     roster_entry = models.ForeignKey(
         "roster.RosterEntry",
@@ -903,7 +1081,24 @@ class BeatCompletion(SharedMemoryModel):
         indexes = [
             models.Index(fields=["beat", "character_sheet"]),
             models.Index(fields=["character_sheet", "-recorded_at"]),
+            models.Index(fields=["gm_table", "-recorded_at"]),
         ]
+
+    def clean(self) -> None:
+        super().clean()
+        scope = self.beat.episode.chapter.story.scope
+        if scope == StoryScope.CHARACTER and not self.character_sheet_id:
+            raise ValidationError({"character_sheet": "Required for CHARACTER-scope stories."})
+        if scope == StoryScope.GROUP and not self.gm_table_id:
+            raise ValidationError({"gm_table": "Required for GROUP-scope stories."})
+        if scope == StoryScope.CHARACTER and self.gm_table_id:
+            raise ValidationError({"gm_table": "Must be null for CHARACTER-scope stories."})
+        if scope == StoryScope.GROUP and self.character_sheet_id:
+            raise ValidationError({"character_sheet": "Must be null for GROUP-scope stories."})
+        if scope == StoryScope.GLOBAL and self.character_sheet_id:
+            raise ValidationError({"character_sheet": "Must be null for GLOBAL-scope stories."})
+        if scope == StoryScope.GLOBAL and self.gm_table_id:
+            raise ValidationError({"gm_table": "Must be null for GLOBAL-scope stories."})
 
     def __str__(self) -> str:
         return (
@@ -913,7 +1108,14 @@ class BeatCompletion(SharedMemoryModel):
 
 
 class EpisodeResolution(SharedMemoryModel):
-    """Audit record when an episode is resolved and (optionally) a transition fires."""
+    """Audit record when an episode is resolved and (optionally) a transition fires.
+
+    Exactly one of character_sheet / gm_table / neither must be populated,
+    matching the story's scope:
+      - CHARACTER scope → character_sheet non-null, gm_table null.
+      - GROUP scope     → gm_table non-null, character_sheet null.
+      - GLOBAL scope    → both null (the story itself is the identifier).
+    """
 
     episode = models.ForeignKey(
         Episode,
@@ -922,8 +1124,19 @@ class EpisodeResolution(SharedMemoryModel):
     )
     character_sheet = models.ForeignKey(
         "character_sheets.CharacterSheet",
+        null=True,
+        blank=True,
         on_delete=models.CASCADE,
         related_name="episode_resolutions",
+        help_text="For CHARACTER-scope stories: the character whose progress advanced.",
+    )
+    gm_table = models.ForeignKey(
+        "gm.GMTable",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="episode_resolutions",
+        help_text="For GROUP-scope stories: the GMTable whose progress advanced.",
     )
     chosen_transition = models.ForeignKey(
         Transition,
@@ -954,7 +1167,23 @@ class EpisodeResolution(SharedMemoryModel):
         indexes = [
             models.Index(fields=["episode", "-resolved_at"]),
             models.Index(fields=["character_sheet", "-resolved_at"]),
+            models.Index(fields=["gm_table", "-resolved_at"]),
         ]
+
+    def clean(self) -> None:
+        super().clean()
+        scope = self.episode.chapter.story.scope
+        if scope == StoryScope.CHARACTER and not self.character_sheet_id:
+            raise ValidationError({"character_sheet": "Required for CHARACTER-scope stories."})
+        if scope == StoryScope.GROUP and not self.gm_table_id:
+            raise ValidationError({"gm_table": "Required for GROUP-scope stories."})
+        if scope == StoryScope.CHARACTER and self.gm_table_id:
+            raise ValidationError({"gm_table": "Must be null for CHARACTER-scope stories."})
+        if scope == StoryScope.GROUP and self.character_sheet_id:
+            raise ValidationError({"character_sheet": "Must be null for GROUP-scope stories."})
+        if scope == StoryScope.GLOBAL and (self.character_sheet_id or self.gm_table_id):
+            msg = "Both character_sheet and gm_table must be null for GLOBAL-scope stories."
+            raise ValidationError(msg)
 
     def __str__(self) -> str:
         if self.chosen_transition and self.chosen_transition.target_episode:
@@ -962,6 +1191,109 @@ class EpisodeResolution(SharedMemoryModel):
         else:
             dest = "(frontier)"
         return f"EpisodeResolution({self.episode.title} -> {dest})"
+
+
+class GroupStoryProgress(SharedMemoryModel):
+    """Per-group pointer into a GROUP-scope story's current state.
+
+    One row per story — the entire GMTable shares the progression trail.
+    Group members never diverge onto separate branches; the group resolves
+    episodes as a unit.
+
+    For individual character contributions within a group story, see
+    AggregateBeatContribution (Phase 2 Wave 4) and BeatCompletion.
+    """
+
+    story = models.ForeignKey(
+        Story,
+        on_delete=models.CASCADE,
+        related_name="group_progress_records",
+    )
+    gm_table = models.ForeignKey(
+        "gm.GMTable",
+        on_delete=models.CASCADE,
+        related_name="story_progress",
+    )
+    current_episode = models.ForeignKey(
+        Episode,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="active_group_progress_records",
+        help_text="Null while the story is at the frontier (unauthored) or before start.",
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+    last_advanced_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["story", "gm_table"],
+                name="unique_group_progress_per_story_per_table",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["gm_table", "is_active"]),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.story_id and self.story.scope != StoryScope.GROUP:
+            raise ValidationError({"story": "GroupStoryProgress requires a GROUP-scope story."})
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        ep = self.current_episode.title if self.current_episode else "(frontier)"
+        return f"GroupStoryProgress({self.gm_table.name} in {self.story.title} @ {ep})"
+
+
+class GlobalStoryProgress(SharedMemoryModel):
+    """Singleton pointer into a GLOBAL-scope story's current state.
+
+    One row per story — the whole server shares the progression trail for
+    the metaplot. Characters opt-in/out via StoryParticipation, but the
+    progression itself is a single thread. OneToOne on story enforces
+    the singleton invariant at the DB level.
+    """
+
+    story = models.OneToOneField(
+        Story,
+        on_delete=models.CASCADE,
+        related_name="global_progress",
+    )
+    current_episode = models.ForeignKey(
+        Episode,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="active_global_progress_records",
+        help_text="Null while the story is at the frontier or before start.",
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+    last_advanced_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["is_active"]),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.story_id and self.story.scope != StoryScope.GLOBAL:
+            raise ValidationError({"story": "GlobalStoryProgress requires a GLOBAL-scope story."})
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        ep = self.current_episode.title if self.current_episode else "(frontier)"
+        return f"GlobalStoryProgress({self.story.title} @ {ep})"
 
 
 class StoryProgress(SharedMemoryModel):
@@ -1024,3 +1356,156 @@ class StoryProgress(SharedMemoryModel):
         episode_title = self.current_episode.title if self.current_episode else "(frontier)"
         char_label = self.character_sheet.character.db_key if self.character_sheet_id else "?"
         return f"StoryProgress({char_label} in {self.story.title} @ {episode_title})"
+
+
+class AssistantGMClaim(SharedMemoryModel):
+    """An Assistant GM's claim on a specific beat session.
+
+    Flow: AGM submits (status=REQUESTED) -> Lead GM or Staff approves or
+    rejects -> AGM runs the session and marks the beat outcome ->
+    Lead GM marks COMPLETED.
+
+    Scope: the AGM sees only this beat + Lead-GM-flagged notes + the
+    framing_note written for the session. They do NOT see the rest of
+    the story plan.
+    """
+
+    beat = models.ForeignKey(
+        Beat,
+        on_delete=models.CASCADE,
+        related_name="assistant_claims",
+    )
+    assistant_gm = models.ForeignKey(
+        "gm.GMProfile",
+        on_delete=models.CASCADE,
+        related_name="assistant_claims_made",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=AssistantClaimStatus.choices,
+        default=AssistantClaimStatus.REQUESTED,
+    )
+    approved_by = models.ForeignKey(
+        "gm.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="assistant_claims_approved",
+        help_text="The Lead GM or Staff member who approved/rejected.",
+    )
+    rejection_note = models.TextField(
+        blank=True,
+        help_text="Reason for rejection (shown to AGM).",
+    )
+    framing_note = models.TextField(
+        blank=True,
+        help_text=(
+            "Lead GM's one-paragraph framing for the AGM session. Sets the "
+            "scene without exposing the rest of the story."
+        ),
+    )
+    requested_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["beat", "assistant_gm"],
+                condition=models.Q(
+                    status__in=[AssistantClaimStatus.REQUESTED, AssistantClaimStatus.APPROVED]
+                ),
+                name="unique_active_claim_per_beat_per_agm",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["status", "requested_at"]),
+            models.Index(fields=["beat", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"AssistantGMClaim(beat=#{self.beat_id},"
+            f" agm=#{self.assistant_gm_id}, status={self.status})"
+        )
+
+
+class SessionRequest(SharedMemoryModel):
+    """A scheduling request generated when an episode becomes ready-to-run.
+
+    Flow:
+        Episode becomes eligible -> SessionRequest(status=OPEN) created
+        -> Lead GM / player (per scope) turns it into an Event via the
+        events app -> SessionRequest.status=SCHEDULED, event populated
+        -> session runs, beats marked, episode resolved
+        -> SessionRequest.status=RESOLVED
+
+    Player-scope interaction:
+        CHARACTER: initiator is the story's character's account; may open
+        to first-available GM via open_to_any_gm=True.
+        GROUP: initiator is the Lead GM coordinating the group.
+        GLOBAL: initiator is staff; open_to_any_gm typically True.
+    """
+
+    episode = models.ForeignKey(
+        Episode,
+        on_delete=models.CASCADE,
+        related_name="session_requests",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=SessionRequestStatus.choices,
+        default=SessionRequestStatus.OPEN,
+    )
+    event = models.ForeignKey(
+        "events.Event",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="session_requests",
+        help_text=(
+            "Populated when the Lead GM schedules this via create_event_from_session_request."
+        ),
+    )
+    open_to_any_gm = models.BooleanField(
+        default=False,
+        help_text=(
+            "Player opted for first-available GM (CHARACTER scope only), or "
+            "staff opened a metaplot event to any GM."
+        ),
+    )
+    assigned_gm = models.ForeignKey(
+        "gm.GMProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="assigned_session_requests",
+        help_text="The GM currently expected to run this session.",
+    )
+    initiated_by_account = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="initiated_session_requests",
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="Player or staff notes (scheduling preferences, etc.).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["episode", "status"]),
+            models.Index(fields=["assigned_gm", "status"]),
+        ]
+
+    @property
+    def story(self) -> "Story":
+        """Walk episode -> chapter -> story. Free via SharedMemoryModel identity map."""
+        return self.episode.chapter.story
+
+    def __str__(self) -> str:
+        return f"SessionRequest({self.episode.title} status={self.status})"

@@ -2,6 +2,8 @@ from django.contrib import admin
 from django.utils.html import format_html
 
 from world.stories.models import (
+    AggregateBeatContribution,
+    AssistantGMClaim,
     Beat,
     BeatCompletion,
     Chapter,
@@ -10,7 +12,10 @@ from world.stories.models import (
     EpisodeResolution,
     EpisodeScene,
     Era,
+    GlobalStoryProgress,
+    GroupStoryProgress,
     PlayerTrustLevel,
+    SessionRequest,
     Story,
     StoryFeedback,
     StoryParticipation,
@@ -29,23 +34,23 @@ class StoryAdmin(admin.ModelAdmin):
         "title",
         "status",
         "privacy",
-        "is_personal_story",
+        "scope",
         "active_gms_count",
         "participants_count",
         "created_at",
     ]
-    list_filter = ["status", "privacy", "is_personal_story", "created_at"]
+    list_filter = ["status", "privacy", "scope", "created_at"]
     search_fields = ["title", "description"]
     filter_horizontal = ["owners", "active_gms"]
     readonly_fields = ["created_at", "updated_at"]
 
     fieldsets = (
-        (None, {"fields": ("title", "description", "status", "privacy")}),
+        (None, {"fields": ("title", "description", "status", "privacy", "scope")}),
         ("Ownership & Management", {"fields": ("owners", "active_gms")}),
         (
-            "Personal Story",
+            "Character / Group Link",
             {
-                "fields": ("is_personal_story", "personal_story_character"),
+                "fields": ("character_sheet",),
                 "classes": ("collapse",),
             },
         ),
@@ -152,6 +157,7 @@ class TransitionInline(admin.TabularInline):
 class BeatInline(admin.TabularInline):
     model = Beat
     extra = 0
+    fk_name = "episode"
     fields = ["predicate_type", "outcome", "visibility", "required_level", "order"]
 
 
@@ -443,3 +449,50 @@ class StoryProgressAdmin(admin.ModelAdmin):
     list_filter = ("is_active",)
     search_fields = ("story__title", "character_sheet__name")
     readonly_fields = ("started_at", "last_advanced_at")
+
+
+@admin.register(GroupStoryProgress)
+class GroupStoryProgressAdmin(admin.ModelAdmin):
+    list_display = ("story", "gm_table", "current_episode", "is_active", "last_advanced_at")
+    list_filter = ("is_active",)
+    search_fields = ("story__title", "gm_table__name")
+    readonly_fields = ("started_at", "last_advanced_at")
+
+
+@admin.register(GlobalStoryProgress)
+class GlobalStoryProgressAdmin(admin.ModelAdmin):
+    list_display = ("story", "current_episode", "is_active", "last_advanced_at")
+    list_filter = ("is_active",)
+    search_fields = ("story__title",)
+    readonly_fields = ("started_at", "last_advanced_at")
+
+
+@admin.register(AggregateBeatContribution)
+class AggregateBeatContributionAdmin(admin.ModelAdmin):
+    list_display = ("beat", "character_sheet", "points", "era", "recorded_at")
+    list_filter = ("era",)
+    search_fields = ("beat__internal_description", "source_note")
+    readonly_fields = tuple(f.name for f in AggregateBeatContribution._meta.fields)  # noqa: SLF001
+    ordering = ("-recorded_at",)
+
+
+@admin.register(SessionRequest)
+class SessionRequestAdmin(admin.ModelAdmin):
+    list_display = ("episode", "status", "assigned_gm", "event", "open_to_any_gm", "created_at")
+    list_filter = ("status", "open_to_any_gm")
+    search_fields = ("episode__title", "notes")
+    readonly_fields = ("created_at", "updated_at")
+    raw_id_fields = ("episode", "event", "assigned_gm", "initiated_by_account")
+
+
+@admin.register(AssistantGMClaim)
+class AssistantGMClaimAdmin(admin.ModelAdmin):
+    list_display = ("beat", "assistant_gm", "status", "approved_by", "requested_at")
+    list_filter = ("status",)
+    search_fields = (
+        "beat__internal_description",
+        "assistant_gm__account__username",
+        "framing_note",
+    )
+    readonly_fields = ("requested_at", "updated_at")
+    raw_id_fields = ("beat", "assistant_gm", "approved_by")

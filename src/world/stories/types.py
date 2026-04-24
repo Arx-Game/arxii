@@ -1,6 +1,22 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+from datetime import datetime
+from typing import TYPE_CHECKING, Union
 
 from django.db import models
+
+if TYPE_CHECKING:
+    from world.stories.models import (
+        Beat,
+        BeatCompletion,
+        EpisodeResolution,
+        GlobalStoryProgress,
+        GroupStoryProgress,
+        StoryProgress,
+    )
+
+AnyStoryProgress = Union["StoryProgress", "GroupStoryProgress", "GlobalStoryProgress"]
 
 
 class StoryStatus(models.TextChoices):
@@ -46,6 +62,25 @@ class ConnectionType(models.TextChoices):
 
 
 @dataclass
+class StoryStatusSummary:
+    """Structured status of a story's current episode, for dashboard consumption.
+
+    Callers render their own presentation (player dashboard, GM queue,
+    staff workload) from this structure — the service does not return
+    rendered strings.
+    """
+
+    status: str  # StoryEpisodeStatus value
+    chapter_order: int | None
+    chapter_title: str | None
+    episode_order: int | None
+    episode_title: str | None
+    open_session_request_id: int | None
+    scheduled_event_id: int | None
+    scheduled_real_time: datetime | None
+
+
+@dataclass
 class SceneConnection:
     """Represents how one scene connects to another using 'but'/'therefore' logic"""
 
@@ -63,3 +98,43 @@ class EpisodeSummary:
     summary: str
     consequences: list[str]
     next_episode_setup: str | None
+
+
+@dataclass
+class StoryLogBeatEntry:
+    """One beat-completion entry in a story log.
+
+    Carries the Beat and its BeatCompletion model instances directly so
+    consumers can walk FKs as needed. The visibility-filtered text fields
+    are pre-computed by serialize_story_log based on the viewer role:
+    - Player viewer: visible_internal_description is None;
+      visible_player_hint is empty for SECRET beats (still active)
+      but visible_player_resolution_text is populated on completion.
+    - Lead GM / Staff: all fields populated from the underlying models.
+    """
+
+    beat: Beat
+    completion: BeatCompletion
+
+    # Pre-filtered text the serializer will surface. These are NOT
+    # denormalized copies of model fields — they are the post-filtering
+    # view tailored to the requester's role.
+    visible_player_hint: str
+    visible_player_resolution_text: str
+    visible_internal_description: str | None  # None hides it for player viewers
+    visible_gm_notes: str | None  # None hides it for player viewers
+
+
+@dataclass
+class StoryLogEpisodeEntry:
+    """One episode-resolution entry in a story log.
+
+    Carries the EpisodeResolution model instance directly; consumers walk
+    FKs (resolution.episode, resolution.chosen_transition, etc.) rather
+    than reading denormalized copies from this dataclass.
+    """
+
+    resolution: EpisodeResolution
+
+    # Pre-filtered field: GM notes hidden from player viewers
+    visible_internal_notes: str | None

@@ -25,6 +25,7 @@ from world.stories.constants import (
     StoryScope,
     TransitionMode,
 )
+from world.stories.exceptions import ProgressionRequirementNotMetError
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
@@ -126,12 +127,12 @@ class FullLoopPhase1IntegrationTest(EvenniaTestCase):
             "gating_beat must remain UNSATISFIED before the character levels up",
         )
 
-        # No transitions eligible yet because progression requirement is unmet.
-        self.assertEqual(
-            list(get_eligible_transitions(progress)),
-            [],
-            "No transitions should be eligible while gating_beat is UNSATISFIED",
-        )
+        # Progression requirement is unmet → get_eligible_transitions raises.
+        with self.assertRaises(
+            ProgressionRequirementNotMetError,
+            msg="ProgressionRequirementNotMetError expected while gating_beat is UNSATISFIED",
+        ):
+            get_eligible_transitions(progress)
 
         # ------------------------------------------------------------------ #
         # Act 2: Level up — auto beat satisfies.                              #

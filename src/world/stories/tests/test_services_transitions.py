@@ -1,9 +1,13 @@
 """Tests for world.stories.services.transitions."""
 
+from datetime import timedelta
+
+from django.utils import timezone
 from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.stories.constants import BeatOutcome, TransitionMode
+from world.stories.exceptions import ProgressionRequirementNotMetError
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
@@ -39,7 +43,7 @@ class GetEligibleTransitionsTests(EvenniaTestCase):
     # ------------------------------------------------------------------
 
     def test_no_transitions_eligible_when_progression_requirement_unmet(self):
-        """All transitions are blocked when a gating beat is still UNSATISFIED."""
+        """ProgressionRequirementNotMetError raised when a gating beat is still UNSATISFIED."""
         episode = EpisodeFactory()
         progress = self._make_progress(episode=episode)
 
@@ -52,8 +56,19 @@ class GetEligibleTransitionsTests(EvenniaTestCase):
         # A perfectly fine transition with no routing requirements.
         TransitionFactory(source_episode=episode)
 
-        result = get_eligible_transitions(progress)
-        self.assertEqual(result, [])
+        with self.assertRaises(ProgressionRequirementNotMetError):
+            get_eligible_transitions(progress)
+
+    def test_no_progression_requirements_no_routing_requirements_returns_empty(self):
+        """Frontier pause: episode has no progression or routing requirements → returns [].
+
+        This is the authorless-frontier case. The caller can distinguish it from
+        ProgressionRequirementNotMetError because no exception is raised.
+        """
+        episode = EpisodeFactory()
+        progress = self._make_progress(episode=episode)
+        # No EpisodeProgressionRequirements, no outbound Transitions.
+        self.assertEqual(get_eligible_transitions(progress), [])
 
     def test_transition_eligible_when_requirements_met(self):
         """Single transition is returned when all requirements are satisfied."""
@@ -197,3 +212,71 @@ class GetEligibleTransitionsTests(EvenniaTestCase):
         # order=1 entries before order=2; within order=1, lower pk first.
         expected = [*sorted([t2, t3], key=lambda t: t.pk), t1]
         self.assertEqual(result, expected)
+
+
+class LazyDeadlineExpiryTests(EvenniaTestCase):
+    """Tests for lazy beat expiry triggered by get_eligible_transitions."""
+
+    def _make_progress(self, episode=None):
+        """Build a StoryProgress pointing at the given episode."""
+        sheet = CharacterSheetFactory()
+        return StoryProgressFactory(character_sheet=sheet, current_episode=episode)
+
+    def test_overdue_beat_expired_lazily_during_eligibility_check(self):
+        """A beat with a past deadline is expired in-place before eligibility is evaluated.
+
+        The transition is gated on EXPIRED; it becomes eligible because the lazy
+        expiry flips the beat from UNSATISFIED to EXPIRED during the call.
+        """
+        episode = EpisodeFactory()
+        progress = self._make_progress(episode=episode)
+
+        # Beat whose deadline has already passed — still UNSATISFIED in the DB.
+        gating_beat = BeatFactory(
+            episode=episode,
+            outcome=BeatOutcome.UNSATISFIED,
+            deadline=timezone.now() - timedelta(hours=1),
+        )
+
+        # Transition that is only eligible when the beat is EXPIRED.
+        transition = TransitionFactory(source_episode=episode)
+        TransitionRequiredOutcomeFactory(
+            transition=transition,
+            beat=gating_beat,
+            required_outcome=BeatOutcome.EXPIRED,
+        )
+
+        result = get_eligible_transitions(progress)
+
+        # The lazy sweep should have flipped the beat.
+        gating_beat.refresh_from_db()
+        self.assertEqual(gating_beat.outcome, BeatOutcome.EXPIRED)
+        self.assertEqual(result, [transition])
+
+    def test_eligibility_check_does_not_re_expire(self):
+        """Calling get_eligible_transitions twice leaves the beat stable at EXPIRED."""
+        episode = EpisodeFactory()
+        progress = self._make_progress(episode=episode)
+
+        gating_beat = BeatFactory(
+            episode=episode,
+            outcome=BeatOutcome.EXPIRED,
+            deadline=timezone.now() - timedelta(hours=1),
+        )
+
+        transition = TransitionFactory(source_episode=episode)
+        TransitionRequiredOutcomeFactory(
+            transition=transition,
+            beat=gating_beat,
+            required_outcome=BeatOutcome.EXPIRED,
+        )
+
+        # First call.
+        result1 = get_eligible_transitions(progress)
+        # Second call — should not raise, beat remains EXPIRED.
+        result2 = get_eligible_transitions(progress)
+
+        gating_beat.refresh_from_db()
+        self.assertEqual(gating_beat.outcome, BeatOutcome.EXPIRED)
+        self.assertEqual(result1, [transition])
+        self.assertEqual(result2, [transition])
