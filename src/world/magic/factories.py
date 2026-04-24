@@ -1013,6 +1013,51 @@ class _SoulfrayContentFactory:
 SoulfrayContentFactory = _SoulfrayContentFactory()
 
 
+class ResonanceGainConfigFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.ResonanceGainConfig"
+        django_get_or_create = ("pk",)
+
+    pk = 1
+
+
+class RoomAuraProfileFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.RoomAuraProfile"
+
+    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
+
+
+class RoomResonanceFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.RoomResonance"
+
+    room_aura_profile = factory.SubFactory(RoomAuraProfileFactory)
+    resonance = factory.SubFactory(ResonanceFactory)
+
+
+class PoseEndorsementFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.PoseEndorsement"
+
+    endorser_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    endorsee_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    interaction = factory.SubFactory("world.scenes.factories.InteractionFactory")
+    timestamp = factory.LazyAttribute(lambda o: o.interaction.timestamp)
+    resonance = factory.SubFactory(ResonanceFactory)
+
+
+class SceneEntryEndorsementFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.SceneEntryEndorsement"
+
+    endorser_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    endorsee_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    scene = factory.SubFactory("world.scenes.factories.SceneFactory")
+    resonance = factory.SubFactory(ResonanceFactory)
+    granted_amount = 4
+
+
 def wire_soulfray_aftermath(content: SoulfrayContent) -> None:
     """Create ConditionStageOnEntry rows for Soulfray aftermath per spec §8.3.
 

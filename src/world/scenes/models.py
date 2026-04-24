@@ -11,6 +11,7 @@ from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
     PersonaType,
+    PoseKind,
     ScenePrivacyMode,
     SummaryAction,
     SummaryStatus,
@@ -401,6 +402,17 @@ class Interaction(SharedMemoryModel):
         choices=InteractionVisibility.choices,
         default=InteractionVisibility.DEFAULT,
         help_text="Privacy override — can only escalate, never reduce",
+    )
+    pose_kind = models.CharField(
+        max_length=16,
+        choices=PoseKind.choices,
+        default=PoseKind.STANDARD,
+        db_index=True,
+        help_text=(
+            "Classifies the pose as standard, entry, or departure. "
+            "Set by the +enter command (future) or scene-entry hook. "
+            "Spec C reads ENTRY to filter scene-entry-endorsement targets."
+        ),
     )
     vote_count = models.PositiveIntegerField(
         default=0,

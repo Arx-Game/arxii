@@ -4,7 +4,8 @@ from django.db.models import QuerySet
 import django_filters
 from rest_framework.exceptions import ValidationError
 
-from world.magic.models import Cantrip, Thread, ThreadWeavingTeachingOffer
+from world.magic.constants import GainSource
+from world.magic.models import Cantrip, ResonanceGrant, Thread, ThreadWeavingTeachingOffer
 
 
 class CantripFilter(django_filters.FilterSet):
@@ -48,3 +49,16 @@ class ThreadWeavingTeachingOfferFilter(django_filters.FilterSet):
     class Meta:
         model = ThreadWeavingTeachingOffer
         fields = ["target_kind"]
+
+
+class ResonanceGrantFilterSet(django_filters.FilterSet):
+    """Filter for ResonanceGrant read-only ledger (Spec C Task 25)."""
+
+    source = django_filters.ChoiceFilter(choices=GainSource.choices)
+    resonance = django_filters.NumberFilter(field_name="resonance_id")
+    granted_after = django_filters.IsoDateTimeFilter(field_name="granted_at", lookup_expr="gte")
+    granted_before = django_filters.IsoDateTimeFilter(field_name="granted_at", lookup_expr="lte")
+
+    class Meta:
+        model = ResonanceGrant
+        fields = ["source", "resonance", "granted_after", "granted_before"]

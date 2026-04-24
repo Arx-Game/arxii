@@ -56,3 +56,12 @@ class AnimaPoolAtMaximum(MagicError):
 
 class RitualScenePrerequisiteFailed(MagicError):
     user_message = "You cannot perform a ritual right now."
+
+
+class EndorsementValidationError(Exception):
+    """Raised when endorsement preconditions fail."""
+
+    def __init__(self, reason: str, user_message: str | None = None) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.user_message = user_message or reason

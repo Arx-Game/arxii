@@ -550,6 +550,9 @@ def _build_theming(sheet: CharacterSheet) -> ThemingSection:
 _PROFILE_PICTURE_SELECT_RELATED: tuple[str, ...] = ("roster_entry__profile_picture__media",)
 _PROFILE_PICTURE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
+_CURRENT_RESIDENCE_SELECT_RELATED: tuple[str, ...] = ("current_residence__objectdb",)
+_CURRENT_RESIDENCE_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
+
 
 def _build_profile_picture(sheet: CharacterSheet) -> str | None:
     """Return the profile picture URL or ``None``.
@@ -562,6 +565,18 @@ def _build_profile_picture(sheet: CharacterSheet) -> str | None:
     if profile_pic is None:
         return None
     return profile_pic.media.cloudinary_url
+
+
+def _build_current_residence(sheet: CharacterSheet) -> IdNameRef | None:
+    """Build the current_residence field: ``{id, name}`` or ``None``.
+
+    Returns ``None`` when no residence is set. The room name is read from
+    the linked ObjectDB (RoomProfile.objectdb.db_key).
+    """
+    rp = sheet.current_residence
+    if rp is None:
+        return None
+    return IdNameRef(id=rp.pk, name=rp.objectdb.db_key)
 
 
 # --- Section registry for queryset aggregation ---
@@ -580,6 +595,7 @@ _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = 
     (_PERSONAS_SELECT_RELATED, _PERSONAS_PREFETCH_RELATED),
     (_THEMING_SELECT_RELATED, _THEMING_PREFETCH_RELATED),
     (_PROFILE_PICTURE_SELECT_RELATED, _PROFILE_PICTURE_PREFETCH_RELATED),
+    (_CURRENT_RESIDENCE_SELECT_RELATED, _CURRENT_RESIDENCE_PREFETCH_RELATED),
 )
 
 
@@ -640,4 +656,5 @@ class CharacterSheetSerializer(serializers.Serializer):
             "personas": _build_personas(sheet),
             "theming": _build_theming(sheet),
             "profile_picture": _build_profile_picture(sheet),
+            "current_residence": _build_current_residence(sheet),
         }

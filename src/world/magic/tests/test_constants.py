@@ -50,3 +50,19 @@ class ItemTypeclassRegistryTests(SimpleTestCase):
         for path in THREADWEAVING_ITEM_TYPECLASSES:
             self.assertIsInstance(path, str)
             self.assertIn(".", path)  # at least namespaced
+
+
+class GainSourceTests(SimpleTestCase):
+    def test_gain_source_values(self) -> None:
+        from world.magic.constants import GainSource
+
+        self.assertEqual(GainSource.POSE_ENDORSEMENT, "POSE_ENDORSEMENT")
+        self.assertEqual(GainSource.SCENE_ENTRY, "SCENE_ENTRY")
+        self.assertEqual(GainSource.ROOM_RESIDENCE, "ROOM_RESIDENCE")
+        self.assertEqual(GainSource.OUTFIT_ITEM, "OUTFIT_ITEM")
+        self.assertEqual(GainSource.STAFF_GRANT, "STAFF_GRANT")
+
+    def test_gain_source_label_present(self) -> None:
+        from world.magic.constants import GainSource
+
+        self.assertTrue(all(len(label) > 0 for _, label in GainSource.choices))

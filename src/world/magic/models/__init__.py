@@ -21,6 +21,7 @@ Submodules (see Scope 6 §4.4):
   ThreadWeavingTeachingOffer
 - rituals: Ritual, RitualComponentRequirement, ImbuingProseTemplate
 - reincarnation: Reincarnation
+- grant: ResonanceGrant
 
 Additionally: ``AudereThreshold`` lives in ``world.magic.audere`` but is
 re-exported here so Django's model registry sees it via the ``magic.models``
@@ -55,6 +56,8 @@ from world.magic.models.aura import (
     CharacterResonance,
 )
 from world.magic.models.cantrips import Cantrip
+from world.magic.models.endorsement import PoseEndorsement, SceneEntryEndorsement
+from world.magic.models.gain_config import ResonanceGainConfig
 from world.magic.models.gifts import (
     CharacterGift,
     CharacterTradition,
@@ -63,6 +66,7 @@ from world.magic.models.gifts import (
     Tradition,
     TraditionManager,
 )
+from world.magic.models.grant import ResonanceGrant
 from world.magic.models.motifs import (
     CharacterFacet,
     Facet,
@@ -77,6 +81,7 @@ from world.magic.models.rituals import (
     Ritual,
     RitualComponentRequirement,
 )
+from world.magic.models.room_aura import RoomAuraProfile, RoomResonance
 from world.magic.models.soulfray import MishapPoolTier, SoulfrayConfig
 from world.magic.models.techniques import (
     CharacterTechnique,
@@ -148,14 +153,25 @@ __all__ = [
     "MotifResonance",
     "MotifResonanceAssociation",
     "PendingAlteration",
+    # endorsement (Spec C §2.2)
+    "PoseEndorsement",
     # reincarnation
     "Reincarnation",
     "Resonance",
+    # gain config (Spec C §2.1)
+    "ResonanceGainConfig",
+    # gain ledger (Spec C §2.4)
+    "ResonanceGrant",
     "ResonanceManager",
     "Restriction",
     "RestrictionManager",
     "Ritual",
     "RitualComponentRequirement",
+    # room aura (Spec C §2.5, §2.6)
+    "RoomAuraProfile",
+    "RoomResonance",
+    # endorsement (Spec C §2.3)
+    "SceneEntryEndorsement",
     "SoulfrayConfig",
     "Technique",
     "TechniqueCapabilityGrant",

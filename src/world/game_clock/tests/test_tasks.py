@@ -296,3 +296,40 @@ class Scope6TaskRegistrationTests(TestCase):
         decay_summary = decay_all_conditions_tick()
         # Just assert it returned something truthy-typed without raising.
         self.assertIsNotNone(decay_summary)
+
+
+class SpecCResonanceGainTaskRegistrationTests(TestCase):
+    """Task 22: resonance daily + weekly settlement ticks registered in game_clock."""
+
+    def setUp(self) -> None:
+        from world.game_clock.task_registry import clear_registry
+
+        clear_registry()
+
+    def test_daily_tick_registered(self) -> None:
+        from world.game_clock.task_registry import get_registered_tasks
+        from world.game_clock.tasks import register_all_tasks
+
+        register_all_tasks()
+
+        keys = {t.task_key for t in get_registered_tasks()}
+        self.assertIn("magic.resonance_daily", keys)
+
+    def test_weekly_settlement_registered(self) -> None:
+        from world.game_clock.task_registry import get_registered_tasks
+        from world.game_clock.tasks import register_all_tasks
+
+        register_all_tasks()
+
+        keys = {t.task_key for t in get_registered_tasks()}
+        self.assertIn("magic.resonance_weekly_settlement", keys)
+
+    def test_resonance_tasks_callables_runnable(self) -> None:
+        """Smoke test: both resonance task callables run without error on an empty DB."""
+        from world.magic.services.gain import resonance_daily_tick, resonance_weekly_settlement_tick
+
+        daily_summary = resonance_daily_tick()
+        self.assertIsNotNone(daily_summary)
+
+        weekly_summary = resonance_weekly_settlement_tick()
+        self.assertIsNotNone(weekly_summary)
