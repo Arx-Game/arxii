@@ -148,6 +148,8 @@ def record_gm_marked_outcome(
 
         maybe_create_session_request(progress)
 
+    _notify_beat_completion(completion, progress)
+
     return completion
 
 
@@ -224,7 +226,17 @@ def record_aggregate_contribution(
                         completion_kwargs["gm_table"] = group_progress.gm_table
                 # GLOBAL: no scope-specific FK
 
-                BeatCompletion.objects.create(**completion_kwargs)
+                aggregate_completion = BeatCompletion.objects.create(**completion_kwargs)
+
+                # Narrative notification for the aggregate threshold crossing.
+                # Resolve an active progress to fan out recipients per scope.
+                from world.stories.services.progress import (  # noqa: PLC0415
+                    get_active_progress_for_story,
+                )
+
+                agg_progress = get_active_progress_for_story(story)
+                if agg_progress is not None:
+                    _notify_beat_completion(aggregate_completion, agg_progress)
 
         # Write-path hook: open a SessionRequest if the episode is now ready-to-run
         # and requires a GM session. Walk beat -> episode -> chapter -> story to
@@ -271,6 +283,20 @@ def expire_overdue_beats(now: datetime | None = None) -> int:
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+
+def _notify_beat_completion(
+    completion: BeatCompletion,
+    progress: AnyStoryProgress,
+) -> None:
+    """Lazy-import bridge to stories.services.narrative.notify_beat_completion.
+
+    Centralises the call site so tests can monkey-patch a single helper
+    when they want to suppress narrative side effects.
+    """
+    from world.stories.services.narrative import notify_beat_completion  # noqa: PLC0415
+
+    notify_beat_completion(completion, progress)
 
 
 def _evaluate_and_record_beat(  # noqa: PLR0913 — scope/sheet/roster_entry/era are tightly coupled
@@ -321,7 +347,8 @@ def _evaluate_and_record_beat(  # noqa: PLR0913 — scope/sheet/roster_entry/era
         completion_kwargs["gm_table"] = progress.gm_table
     # GLOBAL: no scope-specific FK
 
-    BeatCompletion.objects.create(**completion_kwargs)
+    completion = BeatCompletion.objects.create(**completion_kwargs)
+    _notify_beat_completion(completion, progress)
 
 
 # Predicate types that require a CharacterSheet to evaluate.

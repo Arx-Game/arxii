@@ -95,6 +95,11 @@ def resolve_episode(
         resolution = EpisodeResolution.objects.create(**resolution_kwargs)
         advance_progress_to_episode(progress, selected.target_episode)
 
+    # Narrative notification — fans out a NarrativeMessage per recipient.
+    from world.stories.services.narrative import notify_episode_resolution  # noqa: PLC0415
+
+    notify_episode_resolution(resolution, progress)
+
     # Internal cascade: any other story's beat with STORY_AT_MILESTONE
     # referencing the advanced story should re-evaluate now. The hook is
     # idempotent and safe to call after commit.

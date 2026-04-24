@@ -107,16 +107,13 @@ class OnAchievementEarnedTests(EvenniaTestCase):
             required_achievement=achievement,
             outcome=BeatOutcome.UNSATISFIED,
         )
-        # Member earns the achievement — Wave 5 (ANY-member) is required
-        # for the GROUP flip, so this test only verifies the reactivity
-        # entry point executes without error and completes its cache
-        # invalidation step.
+        # Member earns the achievement; Wave 5 ANY-member semantics flip
+        # GROUP-scope ACHIEVEMENT_HELD beats as soon as any active member
+        # has the achievement.
         CharacterAchievementFactory(character_sheet=sheet, achievement=achievement)
         on_achievement_earned(sheet, achievement)
         beat.refresh_from_db()
-        # Wave 2: GROUP-scope achievement beats stay UNSATISFIED; Wave 5
-        # will flip them.
-        self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
 
     def test_invalidates_achievement_cache(self) -> None:
         sheet = CharacterSheetFactory()
