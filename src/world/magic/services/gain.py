@@ -135,7 +135,7 @@ def untag_room_resonance(
     resonance: Resonance,
 ) -> None:
     """Remove a resonance tag. No-op if absent."""
-    aura = getattr(room_profile, "room_aura_profile", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor, raised RelatedObjectDoesNotExist if missing
+    aura = getattr(room_profile, "room_aura_profile", None)  # noqa: GETATTR_LITERAL
     if aura is None:
         return
     RoomResonance.objects.filter(
@@ -163,7 +163,7 @@ def get_residence_resonances(sheet: CharacterSheet) -> set[Resonance]:
     rp = sheet.current_residence
     if rp is None:
         return set()
-    aura = getattr(rp, "room_aura_profile", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor, raises RelatedObjectDoesNotExist if missing
+    aura = getattr(rp, "room_aura_profile", None)  # noqa: GETATTR_LITERAL
     if aura is None:
         return set()
     tagged_ids = set(
@@ -433,7 +433,7 @@ def residence_trickle_tick() -> ResonanceDailyTickSummary:
         sheets_processed += 1
         matched = get_residence_resonances(sheet)
         rp = sheet.current_residence
-        aura = getattr(rp, "room_aura_profile", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor, raises RelatedObjectDoesNotExist if missing
+        aura = getattr(rp, "room_aura_profile", None)  # noqa: GETATTR_LITERAL
         if aura is None or not matched:
             continue
 
@@ -455,4 +455,38 @@ def residence_trickle_tick() -> ResonanceDailyTickSummary:
     return ResonanceDailyTickSummary(
         residence_grants_issued=grants_issued,
         sheets_processed=sheets_processed,
+    )
+
+
+def get_outfit_resonance_contributions(
+    sheet: CharacterSheet,  # noqa: ARG001
+) -> list[tuple[Resonance, int]]:
+    """Stub — empty until Items app ships (Spec C §5.4).
+
+    Placeholder argument preserves the future signature when the Items app ships.
+    When Items lands, returns a list of (resonance, per_item_count) tuples
+    aggregated across the character's worn item instances.
+    """
+    return []
+
+
+def outfit_trickle_tick() -> int:
+    """Outfit trickle tick. Currently a no-op (Items app not yet present).
+
+    Returns: count of grants issued (always 0 at launch).
+    """
+    # When Items lands, iterate sheets × worn items × resonance tags, grant
+    # per-item. Guarded so nothing is granted with OUTFIT_ITEM source value
+    # before the source_item_instance FK exists in the schema.
+    return 0
+
+
+def resonance_daily_tick() -> ResonanceDailyTickSummary:
+    """Master daily tick (Spec C §5). Runs residence + outfit trickle."""
+    residence_summary = residence_trickle_tick()
+    _outfit_grants = outfit_trickle_tick()  # always 0 at launch
+    return ResonanceDailyTickSummary(
+        residence_grants_issued=residence_summary.residence_grants_issued,
+        outfit_grants_issued=0,
+        sheets_processed=residence_summary.sheets_processed,
     )
