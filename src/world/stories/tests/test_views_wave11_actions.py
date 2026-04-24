@@ -169,16 +169,20 @@ class EpisodeResolveActionTest(APITestCase):
         url = reverse("episode-resolve", kwargs={"pk": self.ep1.pk})
         response = self.client.post(
             url,
-            json.dumps(
-                {"progress_id": self.progress.pk, "chosen_transition_id": wrong_transition.pk}
-            ),
+            json.dumps({"progress_id": self.progress.pk, "chosen_transition": wrong_transition.pk}),
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "detail" in response.data
+        # DRF validation error shape: {"chosen_transition": [...]}
+        assert "chosen_transition" in response.data
 
     def test_no_transitions_returns_400(self):
-        """If the progress has no eligible transitions (frontier), returns 400."""
+        """If the progress has no eligible transitions (frontier), returns 400.
+
+        NoEligibleTransitionError fires inside resolve_episode() and is caught
+        in the view as a service-layer runtime error (cannot be pre-validated by
+        the serializer without duplicating get_eligible_transitions logic).
+        """
         # Use the story's episode but point progress to ep2 (which has no outbound transitions).
         self.progress.current_episode = self.ep2
         self.progress.save(update_fields=["current_episode", "last_advanced_at"])
@@ -315,7 +319,7 @@ class BeatMarkActionTest(APITestCase):
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_wrong_predicate_type_returns_400(self):
-        """Marking a non-GM_MARKED beat returns 400."""
+        """Marking a non-GM_MARKED beat returns 400 (serializer validation)."""
         agg_beat = BeatFactory(
             episode=self.episode,
             predicate_type=BeatPredicateType.AGGREGATE_THRESHOLD,
@@ -331,7 +335,8 @@ class BeatMarkActionTest(APITestCase):
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "detail" in response.data
+        # Serializer raises non_field_errors for this case.
+        assert "non_field_errors" in response.data
 
     def test_invalid_outcome_returns_400(self):
         """Passing an invalid outcome value returns 400 (serializer validation)."""
@@ -421,7 +426,7 @@ class BeatContributeActionTest(APITestCase):
         url = reverse("beat-contribute", kwargs={"pk": self.beat.pk})
         response = self.client.post(
             url,
-            json.dumps({"character_sheet_id": self.player_sheet.pk, "points": 10}),
+            json.dumps({"character_sheet": self.player_sheet.pk, "points": 10}),
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -435,24 +440,29 @@ class BeatContributeActionTest(APITestCase):
         url = reverse("beat-contribute", kwargs={"pk": self.beat.pk})
         response = self.client.post(
             url,
-            json.dumps({"character_sheet_id": other_sheet.pk, "points": 5}),
+            json.dumps({"character_sheet": other_sheet.pk, "points": 5}),
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_201_CREATED
 
-    @suppress_permission_errors
     def test_player_cannot_contribute_for_other_character(self):
-        """A player cannot record contributions for a different character."""
+        """A player cannot record contributions for a different character.
+
+        The ownership check is enforced by the serializer (validation error 400),
+        not by a permission class (403). The response is 400 with a 'character_sheet'
+        field error indicating the user may only contribute for their own character.
+        """
         other_sheet = CharacterSheetFactory()
 
         self.client.force_authenticate(user=self.player_account)
         url = reverse("beat-contribute", kwargs={"pk": self.beat.pk})
         response = self.client.post(
             url,
-            json.dumps({"character_sheet_id": other_sheet.pk, "points": 5}),
+            json.dumps({"character_sheet": other_sheet.pk, "points": 5}),
             content_type="application/json",
         )
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "character_sheet" in response.data
 
     def test_wrong_predicate_type_returns_400(self):
         """Contributing to a non-AGGREGATE beat returns 400."""
@@ -464,7 +474,7 @@ class BeatContributeActionTest(APITestCase):
         url = reverse("beat-contribute", kwargs={"pk": gm_beat.pk})
         response = self.client.post(
             url,
-            json.dumps({"character_sheet_id": self.player_sheet.pk, "points": 5}),
+            json.dumps({"character_sheet": self.player_sheet.pk, "points": 5}),
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -475,7 +485,7 @@ class BeatContributeActionTest(APITestCase):
         url = reverse("beat-contribute", kwargs={"pk": self.beat.pk})
         response = self.client.post(
             url,
-            json.dumps({"character_sheet_id": self.player_sheet.pk, "points": 0}),
+            json.dumps({"character_sheet": self.player_sheet.pk, "points": 0}),
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -522,7 +532,7 @@ class AssistantGMClaimActionsTest(APITestCase):
         url = reverse("assistantgmclaim-request-claim")
         response = self.client.post(
             url,
-            json.dumps({"beat_id": self.beat.pk, "framing_note": "My plan"}),
+            json.dumps({"beat": self.beat.pk, "framing_note": "My plan"}),
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -537,24 +547,25 @@ class AssistantGMClaimActionsTest(APITestCase):
         url = reverse("assistantgmclaim-request-claim")
         response = self.client.post(
             url,
-            json.dumps({"beat_id": self.beat.pk}),
+            json.dumps({"beat": self.beat.pk}),
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_request_on_ineligible_beat_returns_400(self):
-        """Requesting a claim on a non-agm_eligible beat returns 400."""
+        """Requesting a claim on a non-agm_eligible beat returns 400 (serializer validation)."""
         non_eligible = BeatFactory(episode=self.episode, agm_eligible=False)
 
         self.client.force_authenticate(user=self.agm_account)
         url = reverse("assistantgmclaim-request-claim")
         response = self.client.post(
             url,
-            json.dumps({"beat_id": non_eligible.pk}),
+            json.dumps({"beat": non_eligible.pk}),
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "detail" in response.data
+        # Serializer raises field-level error on "beat" field.
+        assert "beat" in response.data
 
     # --- approve ---
 
@@ -631,7 +642,7 @@ class AssistantGMClaimActionsTest(APITestCase):
         assert claim.status == AssistantClaimStatus.CANCELLED
 
     def test_cancel_approved_claim_returns_400(self):
-        """Cancelling an already-approved claim returns 400 (ClaimStateTransitionError)."""
+        """Cancelling an already-approved claim returns 400 (serializer validation)."""
         claim = AssistantGMClaimFactory(
             beat=self.beat,
             assistant_gm=self.agm_profile,
@@ -673,7 +684,7 @@ class AssistantGMClaimActionsTest(APITestCase):
         assert claim.status == AssistantClaimStatus.COMPLETED
 
     def test_complete_requested_claim_returns_400(self):
-        """Completing a REQUESTED (non-approved) claim returns 400."""
+        """Completing a REQUESTED (non-approved) claim returns 400 (serializer validation)."""
         claim = self._make_requested_claim()
 
         self.client.force_authenticate(user=self.lead_gm_account)
@@ -741,7 +752,7 @@ class SessionRequestActionsTest(APITestCase):
         assert response.status_code in (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND)
 
     def test_cancel_non_open_returns_400(self):
-        """Cancelling a non-OPEN request returns 400."""
+        """Cancelling a non-OPEN request returns 400 (serializer validation)."""
         # Create a scheduled request to try cancelling.
         scheduled_req = SessionRequestFactory(
             episode=self.episode, status=SessionRequestStatus.SCHEDULED
@@ -751,7 +762,8 @@ class SessionRequestActionsTest(APITestCase):
         url = reverse("sessionrequest-cancel", kwargs={"pk": scheduled_req.pk})
         response = self.client.post(url, json.dumps({}), content_type="application/json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "detail" in response.data
+        # Serializer raises non_field_errors for status check.
+        assert "non_field_errors" in response.data
 
     # --- resolve ---
 

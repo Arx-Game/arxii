@@ -4,9 +4,8 @@ Flow:
     request_claim -> approve_claim / reject_claim / cancel_claim
     approved -> complete_claim (after session runs)
 
-All state transitions validate current state and permissions. Raises
-typed AssistantClaimError subclasses so API views can surface
-user_message safely.
+State and permission validation is now handled by input serializers and permission
+classes in the view layer. Services contain only defensive programmer-error guards.
 """
 
 from __future__ import annotations
@@ -15,11 +14,6 @@ from django.db import transaction
 
 from world.gm.models import GMProfile
 from world.stories.constants import AssistantClaimStatus
-from world.stories.exceptions import (
-    BeatNotAGMEligibleError,
-    ClaimApprovalPermissionError,
-    ClaimStateTransitionError,
-)
 from world.stories.models import AssistantGMClaim, Beat
 
 
@@ -29,9 +23,17 @@ def request_claim(
     assistant_gm: GMProfile,
     framing_note: str = "",
 ) -> AssistantGMClaim:
-    """AGM requests to run this beat. Beat must be flagged agm_eligible."""
+    """AGM requests to run this beat.
+
+    Defensive guard: RequestClaimInputSerializer validates agm_eligible for API callers.
+    If called directly with an ineligible beat, raises ValueError.
+    """
     if not beat.agm_eligible:
-        raise BeatNotAGMEligibleError
+        msg = (
+            f"Beat {beat.pk} is not flagged as agm_eligible; "
+            "RequestClaimInputSerializer should have rejected this."
+        )
+        raise ValueError(msg)
     return AssistantGMClaim.objects.create(
         beat=beat,
         assistant_gm=assistant_gm,
@@ -46,15 +48,25 @@ def approve_claim(
     approver: GMProfile,
     framing_note: str | None = None,
 ) -> AssistantGMClaim:
-    """Lead GM or Staff approves the claim.
+    """Lead GM approves the claim.
 
     If framing_note is provided, update the claim's framing_note (Lead GM
     authors the framing here, AFTER the AGM has requested).
+
+    Defensive guards: ApproveClaimInputSerializer validates status for API callers.
+    Permission is enforced by IsLeadGMOnClaimStoryOrStaff + IsGMProfile.
+    Race condition: if claim status changes between serializer validation and this call,
+    the guard fires — acceptable for an infrequent edge case.
     """
     if claim.status != AssistantClaimStatus.REQUESTED:
-        raise ClaimStateTransitionError
+        msg = (
+            f"Claim {claim.pk} is not REQUESTED (status={claim.status!r}); "
+            "ApproveClaimInputSerializer should have rejected this."
+        )
+        raise ValueError(msg)
     if not _can_approve(claim=claim, approver=approver):
-        raise ClaimApprovalPermissionError
+        msg = f"Approver {approver.pk} is not authorized to approve claim {claim.pk}."
+        raise ValueError(msg)
     update_fields = ["status", "approved_by", "updated_at"]
     if framing_note is not None:
         update_fields.append("framing_note")
@@ -73,11 +85,21 @@ def reject_claim(
     approver: GMProfile,
     note: str = "",
 ) -> AssistantGMClaim:
-    """Reject the claim with an optional note."""
+    """Reject the claim with an optional note.
+
+    Defensive guards: RejectClaimInputSerializer validates status for API callers.
+    Race condition: if claim status changes between serializer validation and this call,
+    the guard fires — acceptable for an infrequent edge case.
+    """
     if claim.status != AssistantClaimStatus.REQUESTED:
-        raise ClaimStateTransitionError
+        msg = (
+            f"Claim {claim.pk} is not REQUESTED (status={claim.status!r}); "
+            "RejectClaimInputSerializer should have rejected this."
+        )
+        raise ValueError(msg)
     if not _can_approve(claim=claim, approver=approver):
-        raise ClaimApprovalPermissionError
+        msg = f"Approver {approver.pk} is not authorized to reject claim {claim.pk}."
+        raise ValueError(msg)
     with transaction.atomic():
         claim.status = AssistantClaimStatus.REJECTED
         claim.approved_by = approver
@@ -89,11 +111,16 @@ def reject_claim(
 def cancel_claim(*, claim: AssistantGMClaim) -> AssistantGMClaim:
     """The requesting AGM cancels their own claim before approval.
 
-    Only allowed while status is REQUESTED. Once APPROVED, the Lead GM
-    completes or rejects via different paths.
+    Defensive guard: CancelClaimInputSerializer validates status for API callers.
+    Race condition: if claim status changes between serializer validation and this call,
+    the guard fires — acceptable for an infrequent edge case.
     """
     if claim.status != AssistantClaimStatus.REQUESTED:
-        raise ClaimStateTransitionError
+        msg = (
+            f"Claim {claim.pk} is not REQUESTED (status={claim.status!r}); "
+            "CancelClaimInputSerializer should have rejected this."
+        )
+        raise ValueError(msg)
     claim.status = AssistantClaimStatus.CANCELLED
     claim.save(update_fields=["status", "updated_at"])
     return claim
@@ -106,12 +133,19 @@ def complete_claim(
 ) -> AssistantGMClaim:
     """Mark an approved claim COMPLETED after the session has run.
 
-    Typically called by the Lead GM after reviewing the AGM's session.
+    Defensive guards: CompleteClaimInputSerializer validates status for API callers.
+    Race condition: if claim status changes between serializer validation and this call,
+    the guard fires — acceptable for an infrequent edge case.
     """
     if claim.status != AssistantClaimStatus.APPROVED:
-        raise ClaimStateTransitionError
+        msg = (
+            f"Claim {claim.pk} is not APPROVED (status={claim.status!r}); "
+            "CompleteClaimInputSerializer should have rejected this."
+        )
+        raise ValueError(msg)
     if not _can_approve(claim=claim, approver=completer):
-        raise ClaimApprovalPermissionError
+        msg = f"Completer {completer.pk} is not authorized to complete claim {claim.pk}."
+        raise ValueError(msg)
     claim.status = AssistantClaimStatus.COMPLETED
     claim.save(update_fields=["status", "updated_at"])
     return claim

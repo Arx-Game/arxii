@@ -5,11 +5,6 @@ from django.test import TestCase, TransactionTestCase
 
 from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.stories.constants import AssistantClaimStatus
-from world.stories.exceptions import (
-    BeatNotAGMEligibleError,
-    ClaimApprovalPermissionError,
-    ClaimStateTransitionError,
-)
 from world.stories.factories import AssistantGMClaimFactory, BeatFactory, StoryFactory
 from world.stories.models import AssistantGMClaim
 from world.stories.services.assistant_gm import (
@@ -61,7 +56,7 @@ class RequestClaimTests(TestCase):
     def test_beat_not_eligible_raises(self) -> None:
         beat = BeatFactory(agm_eligible=False)
         agm = GMProfileFactory()
-        with self.assertRaises(BeatNotAGMEligibleError):
+        with self.assertRaises(ValueError):
             request_claim(beat=beat, assistant_gm=agm)
 
     def test_claim_persisted_to_db(self) -> None:
@@ -116,27 +111,27 @@ class ApproveClaimTests(TestCase):
         claim, lead_gm, _ = _make_lead_gm_claim()
         claim.status = AssistantClaimStatus.APPROVED
         claim.save(update_fields=["status"])
-        with self.assertRaises(ClaimStateTransitionError):
+        with self.assertRaises(ValueError):
             approve_claim(claim=claim, approver=lead_gm)
 
     def test_state_transition_error_when_rejected(self) -> None:
         claim, lead_gm, _ = _make_lead_gm_claim()
         claim.status = AssistantClaimStatus.REJECTED
         claim.save(update_fields=["status"])
-        with self.assertRaises(ClaimStateTransitionError):
+        with self.assertRaises(ValueError):
             approve_claim(claim=claim, approver=lead_gm)
 
     def test_state_transition_error_when_cancelled(self) -> None:
         claim, lead_gm, _ = _make_lead_gm_claim()
         claim.status = AssistantClaimStatus.CANCELLED
         claim.save(update_fields=["status"])
-        with self.assertRaises(ClaimStateTransitionError):
+        with self.assertRaises(ValueError):
             approve_claim(claim=claim, approver=lead_gm)
 
     def test_permission_error_for_non_lead_gm(self) -> None:
         claim, _, _ = _make_lead_gm_claim()
         outsider = GMProfileFactory()
-        with self.assertRaises(ClaimApprovalPermissionError):
+        with self.assertRaises(ValueError):
             approve_claim(claim=claim, approver=outsider)
 
     def test_staff_account_can_approve(self) -> None:
@@ -169,13 +164,13 @@ class RejectClaimTests(TestCase):
         claim, lead_gm, _ = _make_lead_gm_claim()
         claim.status = AssistantClaimStatus.APPROVED
         claim.save(update_fields=["status"])
-        with self.assertRaises(ClaimStateTransitionError):
+        with self.assertRaises(ValueError):
             reject_claim(claim=claim, approver=lead_gm)
 
     def test_permission_error_for_non_lead_gm(self) -> None:
         claim, _, _ = _make_lead_gm_claim()
         outsider = GMProfileFactory()
-        with self.assertRaises(ClaimApprovalPermissionError):
+        with self.assertRaises(ValueError):
             reject_claim(claim=claim, approver=outsider)
 
     def test_staff_account_can_reject(self) -> None:
@@ -206,14 +201,14 @@ class CancelClaimTests(TestCase):
         # Manually force to APPROVED (bypass service to test cancel guard)
         claim.status = AssistantClaimStatus.APPROVED
         claim.save(update_fields=["status"])
-        with self.assertRaises(ClaimStateTransitionError):
+        with self.assertRaises(ValueError):
             cancel_claim(claim=claim)
 
     def test_state_transition_error_when_completed(self) -> None:
         claim = AssistantGMClaimFactory(status=AssistantClaimStatus.REQUESTED)
         claim.status = AssistantClaimStatus.COMPLETED
         claim.save(update_fields=["status"])
-        with self.assertRaises(ClaimStateTransitionError):
+        with self.assertRaises(ValueError):
             cancel_claim(claim=claim)
 
 
@@ -240,20 +235,20 @@ class CompleteClaimTests(TestCase):
     def test_state_transition_error_when_not_approved(self) -> None:
         claim, lead_gm, _ = _make_lead_gm_claim()
         # Claim is REQUESTED, not APPROVED
-        with self.assertRaises(ClaimStateTransitionError):
+        with self.assertRaises(ValueError):
             complete_claim(claim=claim, completer=lead_gm)
 
     def test_state_transition_error_when_cancelled(self) -> None:
         claim, lead_gm, _ = _make_lead_gm_claim()
         claim.status = AssistantClaimStatus.CANCELLED
         claim.save(update_fields=["status"])
-        with self.assertRaises(ClaimStateTransitionError):
+        with self.assertRaises(ValueError):
             complete_claim(claim=claim, completer=lead_gm)
 
     def test_permission_error_for_non_lead_gm(self) -> None:
         claim, _, _ = self._make_approved_claim()
         outsider = GMProfileFactory()
-        with self.assertRaises(ClaimApprovalPermissionError):
+        with self.assertRaises(ValueError):
             complete_claim(claim=claim, completer=outsider)
 
     def test_staff_account_can_complete(self) -> None:

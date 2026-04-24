@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.stories.constants import BeatPredicateType, SessionRequestStatus, TransitionMode
-from world.stories.exceptions import ProgressionRequirementNotMetError, SessionRequestNotOpenError
+from world.stories.exceptions import ProgressionRequirementNotMetError
 from world.stories.models import SessionRequest
 
 if TYPE_CHECKING:
@@ -138,13 +138,21 @@ def create_event_from_session_request(  # noqa: PLR0913 — event scheduling req
         The newly created Event.
 
     Raises:
-        SessionRequestNotOpenError: If session_request.status != OPEN.
         EventError: If the location time slot is unavailable (from events.services).
+
+    Defensive assertion: CreateEventFromSessionRequestInputSerializer validates OPEN status
+    for API callers. Race condition: assertion fires if status changes between validation
+    and this call — acceptable for an infrequent edge case.
     """
     from world.events.services import create_event  # noqa: PLC0415
 
     if session_request.status != SessionRequestStatus.OPEN:
-        raise SessionRequestNotOpenError
+        msg = (
+            f"SessionRequest {session_request.pk} is not OPEN "
+            f"(status={session_request.status!r}); "
+            "CreateEventFromSessionRequestInputSerializer should have rejected this."
+        )
+        raise ValueError(msg)
 
     with transaction.atomic():
         event = create_event(
@@ -163,13 +171,19 @@ def create_event_from_session_request(  # noqa: PLR0913 — event scheduling req
 
 
 def cancel_session_request(*, session_request: SessionRequest) -> SessionRequest:
-    """Mark a SessionRequest as CANCELLED. Only allowed while OPEN.
+    """Mark a SessionRequest as CANCELLED.
 
-    Raises:
-        SessionRequestNotOpenError: If session_request.status != OPEN.
+    Defensive assertion: CancelSessionRequestInputSerializer validates OPEN status
+    for API callers. Race condition: assertion fires if status changes between
+    validation and this call — acceptable for an infrequent edge case.
     """
     if session_request.status != SessionRequestStatus.OPEN:
-        raise SessionRequestNotOpenError
+        msg = (
+            f"SessionRequest {session_request.pk} is not OPEN "
+            f"(status={session_request.status!r}); "
+            "CancelSessionRequestInputSerializer should have rejected this."
+        )
+        raise ValueError(msg)
     session_request.status = SessionRequestStatus.CANCELLED
     session_request.save(update_fields=["status", "updated_at"])
     return session_request
@@ -178,11 +192,17 @@ def cancel_session_request(*, session_request: SessionRequest) -> SessionRequest
 def resolve_session_request(*, session_request: SessionRequest) -> SessionRequest:
     """Mark a scheduled SessionRequest as RESOLVED after the session ran.
 
-    Raises:
-        SessionRequestNotOpenError: If session_request.status != SCHEDULED.
+    Defensive assertion: ResolveSessionRequestInputSerializer validates SCHEDULED status
+    for API callers. Race condition: assertion fires if status changes between
+    validation and this call — acceptable for an infrequent edge case.
     """
     if session_request.status != SessionRequestStatus.SCHEDULED:
-        raise SessionRequestNotOpenError
+        msg = (
+            f"SessionRequest {session_request.pk} is not SCHEDULED "
+            f"(status={session_request.status!r}); "
+            "ResolveSessionRequestInputSerializer should have rejected this."
+        )
+        raise ValueError(msg)
     session_request.status = SessionRequestStatus.RESOLVED
     session_request.save(update_fields=["status", "updated_at"])
     return session_request

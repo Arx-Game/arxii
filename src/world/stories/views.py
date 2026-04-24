@@ -15,7 +15,6 @@ from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
 
 from world.stories.constants import AssistantClaimStatus, SessionRequestStatus, StoryScope
-from world.stories.exceptions import StoryError
 from world.stories.filters import (
     AggregateBeatContributionFilter,
     AssistantGMClaimFilter,
@@ -45,7 +44,6 @@ from world.stories.models import (
     StoryFeedback,
     StoryParticipation,
     StoryProgress,
-    Transition,
 )
 from world.stories.pagination import (
     LargeResultsSetPagination,
@@ -55,6 +53,7 @@ from world.stories.pagination import (
 from world.stories.permissions import (
     CanMarkBeat,
     CanParticipateInStory,
+    IsAccountOfCharacterSheet,
     IsBeatStoryOwnerOrStaff,
     IsChapterStoryOwnerOrStaff,
     IsClaimantOrLeadGMOrStaff,
@@ -62,6 +61,7 @@ from world.stories.permissions import (
     IsContributorOrLeadGMOrStaff,
     IsEpisodeStoryOwnerOrStaff,
     IsGlobalProgressReadableOrStaff,
+    IsGMProfile,
     IsGroupProgressMemberOrStaff,
     IsLeadGMOnClaimStoryOrStaff,
     IsLeadGMOnStoryOrStaff,
@@ -78,9 +78,12 @@ from world.stories.serializers import (
     AssistantGMClaimSerializer,
     BeatCompletionSerializer,
     BeatSerializer,
+    CancelClaimInputSerializer,
+    CancelSessionRequestInputSerializer,
     ChapterCreateSerializer,
     ChapterDetailSerializer,
     ChapterListSerializer,
+    CompleteClaimInputSerializer,
     ContributeBeatInputSerializer,
     CreateEventFromSessionRequestInputSerializer,
     EpisodeCreateSerializer,
@@ -95,6 +98,7 @@ from world.stories.serializers import (
     RejectClaimInputSerializer,
     RequestClaimInputSerializer,
     ResolveEpisodeInputSerializer,
+    ResolveSessionRequestInputSerializer,
     SessionRequestSerializer,
     StoryCreateSerializer,
     StoryDetailSerializer,
@@ -284,38 +288,23 @@ class EpisodeViewSet(viewsets.ModelViewSet):
     def resolve(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/episodes/{id}/resolve/ — resolve the current progress for an episode.
 
-        Lead GM or staff posts {progress_id?, chosen_transition_id?, gm_notes?} to
-        advance the story's progress record past the current episode. Wraps resolve_episode.
-        Typed exceptions map to 400 with user_message; 201 on success.
+        Lead GM or staff posts {progress_id?, chosen_transition?, gm_notes?} to
+        advance the story's progress record past the current episode. Returns 201 on success.
+
+        Note: NoEligibleTransitionError and AmbiguousTransitionError can fire from
+        resolve_episode() for cases the serializer cannot pre-validate without
+        duplicating get_eligible_transitions() logic. These are caught here and
+        surfaced as 400 responses. They are genuine runtime errors, not
+        user-input-validation errors.
         """
+        from world.gm.models import GMProfile  # noqa: PLC0415
+        from world.stories.exceptions import StoryError  # noqa: PLC0415
         from world.stories.services.episodes import resolve_episode  # noqa: PLC0415
 
         episode = self.get_object()
-
-        input_ser = ResolveEpisodeInputSerializer(data=request.data)
-        input_ser.is_valid(raise_exception=True)
-        data = input_ser.validated_data
-
-        # Resolve the progress record to use.
-        progress = _get_progress_for_episode_action(episode, request.user, data.get("progress_id"))
-        if progress is None:
-            return Response(
-                {"detail": "No active progress record found for this episode."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        chosen_transition: Transition | None = None
-        chosen_id = data.get("chosen_transition_id")
-        if chosen_id is not None:
-            try:
-                chosen_transition = Transition.objects.get(pk=chosen_id)
-            except Transition.DoesNotExist:
-                return Response(
-                    {"detail": "chosen_transition_id does not exist."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-        from world.gm.models import GMProfile  # noqa: PLC0415
+        ser = ResolveEpisodeInputSerializer(data=request.data, context={"episode": episode})
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
 
         try:
             gm_profile = request.user.gm_profile
@@ -324,56 +313,22 @@ class EpisodeViewSet(viewsets.ModelViewSet):
 
         try:
             resolution = resolve_episode(
-                progress=progress,
-                chosen_transition=chosen_transition,
-                gm_notes=data.get("gm_notes", ""),
+                progress=data["progress"],
+                chosen_transition=data.get("chosen_transition"),
+                gm_notes=data["gm_notes"],
                 resolved_by=gm_profile,
             )
         except StoryError as exc:
+            # Race condition / service-layer runtime errors:
+            # NoEligibleTransitionError — no transitions are eligible (episode frontier).
+            # AmbiguousTransitionError — multiple eligible transitions, GM must pick one.
+            # These cannot be pre-validated by the serializer without duplicating
+            # get_eligible_transitions() logic.
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(
             EpisodeResolutionSerializer(resolution).data, status=status.HTTP_201_CREATED
         )
-
-
-def _get_progress_for_episode_action(
-    episode: Episode,
-    user: AbstractBaseUser | AnonymousUser,  # noqa: ARG001 — reserved for future scope filtering
-    progress_id: int | None,
-) -> AnyStoryProgress | None:
-    """Return the progress record appropriate for the episode resolve action.
-
-    If progress_id is provided, fetch it directly (any scope).
-    Otherwise, dispatch on story scope:
-    - CHARACTER: StoryProgress for the user's character on this story.
-    - GROUP: GroupStoryProgress for the story's active group.
-    - GLOBAL: GlobalStoryProgress for the story.
-    """
-    story = episode.chapter.story
-
-    if progress_id is not None:
-        # Explicit progress_id — find it in whichever scope table holds it.
-        match story.scope:
-            case StoryScope.CHARACTER:
-                return StoryProgress.objects.filter(
-                    pk=progress_id, story=story, is_active=True
-                ).first()
-            case StoryScope.GROUP:
-                return GroupStoryProgress.objects.filter(
-                    pk=progress_id, story=story, is_active=True
-                ).first()
-            case StoryScope.GLOBAL:
-                return GlobalStoryProgress.objects.filter(
-                    pk=progress_id, story=story, is_active=True
-                ).first()
-            case _:
-                return None
-
-    # Infer progress from scope.
-    from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
-
-    return get_active_progress_for_story(story)
 
 
 class EpisodeSceneViewSet(viewsets.ModelViewSet):
@@ -631,136 +586,82 @@ class AssistantGMClaimViewSet(viewsets.ReadOnlyModelViewSet):
         detail=False,
         methods=[HTTPMethod.POST],
         url_path="request",
-        permission_classes=[permissions.IsAuthenticated],
+        permission_classes=[IsGMProfile],
     )
     def request_claim(self, request: Request) -> Response:
         """POST /api/assistant-gm-claims/request/ — an AGM requests to run a beat.
 
-        The requesting user must have a GMProfile. Wraps request_claim service.
+        Requires a GMProfile (enforced by IsGMProfile). Beat existence and
+        agm_eligible validation handled by RequestClaimInputSerializer.
         Returns 201 with the claim on success.
         """
-        from world.gm.models import GMProfile  # noqa: PLC0415
         from world.stories.services.assistant_gm import request_claim  # noqa: PLC0415
 
-        try:
-            gm_profile = request.user.gm_profile
-        except GMProfile.DoesNotExist:
-            gm_profile = None
-        if gm_profile is None:
-            return Response(
-                {"detail": "You must have a GM profile to request a claim."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        ser = RequestClaimInputSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
 
-        input_ser = RequestClaimInputSerializer(data=request.data)
-        input_ser.is_valid(raise_exception=True)
-        data = input_ser.validated_data
-
-        try:
-            beat = Beat.objects.get(pk=data["beat_id"])
-        except Beat.DoesNotExist:
-            return Response(
-                {"detail": "Beat not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            claim = request_claim(
-                beat=beat,
-                assistant_gm=gm_profile,
-                framing_note=data.get("framing_note", ""),
-            )
-        except StoryError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-
+        claim = request_claim(
+            beat=data["beat"],
+            assistant_gm=request.user.gm_profile,
+            framing_note=data["framing_note"],
+        )
         return Response(AssistantGMClaimSerializer(claim).data, status=status.HTTP_201_CREATED)
 
     @action(
         detail=True,
         methods=[HTTPMethod.POST],
         url_path="approve",
-        permission_classes=[IsLeadGMOnClaimStoryOrStaff],
+        permission_classes=[IsGMProfile, IsLeadGMOnClaimStoryOrStaff],
     )
     def approve(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/assistant-gm-claims/{id}/approve/ — Lead GM approves the claim.
 
-        Wraps approve_claim. Returns 200 with the updated claim.
+        IsGMProfile ensures request.user.gm_profile is always accessible.
+        IsLeadGMOnClaimStoryOrStaff confirms Lead GM role on the claim's story.
+        Status validation handled by ApproveClaimInputSerializer.
+        Returns 200 with the updated claim.
         """
-        from world.gm.models import GMProfile  # noqa: PLC0415
         from world.stories.services.assistant_gm import approve_claim  # noqa: PLC0415
 
         claim = self.get_object()
-        try:
-            gm_profile = request.user.gm_profile
-        except GMProfile.DoesNotExist:
-            gm_profile = None
-        if gm_profile is None and not request.user.is_staff:
-            return Response(
-                {"detail": "You must have a GM profile to approve a claim."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        ser = ApproveClaimInputSerializer(data=request.data, context={"claim": claim})
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
 
-        input_ser = ApproveClaimInputSerializer(data=request.data)
-        input_ser.is_valid(raise_exception=True)
-        data = input_ser.validated_data
-
-        # For staff without a GM profile, we still need a GMProfile to pass as approver.
-        # Staff approval is handled inside _can_approve via approver.account.is_staff.
-        if gm_profile is None:
-            return Response(
-                {"detail": "A GM profile is required to approve claims."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        try:
-            updated = approve_claim(
-                claim=claim,
-                approver=gm_profile,
-                framing_note=data.get("framing_note"),
-            )
-        except StoryError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-
+        updated = approve_claim(
+            claim=claim,
+            approver=request.user.gm_profile,
+            framing_note=data.get("framing_note"),
+        )
         return Response(AssistantGMClaimSerializer(updated).data, status=status.HTTP_200_OK)
 
     @action(
         detail=True,
         methods=[HTTPMethod.POST],
         url_path="reject",
-        permission_classes=[IsLeadGMOnClaimStoryOrStaff],
+        permission_classes=[IsGMProfile, IsLeadGMOnClaimStoryOrStaff],
     )
     def reject(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/assistant-gm-claims/{id}/reject/ — Lead GM rejects the claim.
 
-        Wraps reject_claim. Returns 200 with the updated claim.
+        IsGMProfile ensures request.user.gm_profile is always accessible.
+        IsLeadGMOnClaimStoryOrStaff confirms Lead GM role on the claim's story.
+        Status validation handled by RejectClaimInputSerializer.
+        Returns 200 with the updated claim.
         """
-        from world.gm.models import GMProfile  # noqa: PLC0415
         from world.stories.services.assistant_gm import reject_claim  # noqa: PLC0415
 
         claim = self.get_object()
-        try:
-            gm_profile = request.user.gm_profile
-        except GMProfile.DoesNotExist:
-            gm_profile = None
-        if gm_profile is None:
-            return Response(
-                {"detail": "A GM profile is required to reject claims."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        ser = RejectClaimInputSerializer(data=request.data, context={"claim": claim})
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
 
-        input_ser = RejectClaimInputSerializer(data=request.data)
-        input_ser.is_valid(raise_exception=True)
-        data = input_ser.validated_data
-
-        try:
-            updated = reject_claim(
-                claim=claim,
-                approver=gm_profile,
-                note=data.get("note", ""),
-            )
-        except StoryError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-
+        updated = reject_claim(
+            claim=claim,
+            approver=request.user.gm_profile,
+            note=data["note"],
+        )
         return Response(AssistantGMClaimSerializer(updated).data, status=status.HTTP_200_OK)
 
     @action(
@@ -772,50 +673,39 @@ class AssistantGMClaimViewSet(viewsets.ReadOnlyModelViewSet):
     def cancel(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/assistant-gm-claims/{id}/cancel/ — the AGM cancels their own claim.
 
-        Only allowed while status is REQUESTED. Wraps cancel_claim.
+        Status validation (must be REQUESTED) handled by CancelClaimInputSerializer.
         Returns 200 with the updated claim.
         """
         from world.stories.services.assistant_gm import cancel_claim  # noqa: PLC0415
 
         claim = self.get_object()
+        ser = CancelClaimInputSerializer(data=request.data, context={"claim": claim})
+        ser.is_valid(raise_exception=True)
 
-        try:
-            updated = cancel_claim(claim=claim)
-        except StoryError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-
+        updated = cancel_claim(claim=claim)
         return Response(AssistantGMClaimSerializer(updated).data, status=status.HTTP_200_OK)
 
     @action(
         detail=True,
         methods=[HTTPMethod.POST],
         url_path="complete",
-        permission_classes=[IsLeadGMOnClaimStoryOrStaff],
+        permission_classes=[IsGMProfile, IsLeadGMOnClaimStoryOrStaff],
     )
     def complete(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/assistant-gm-claims/{id}/complete/ — Lead GM marks an approved claim done.
 
-        Wraps complete_claim. Returns 200 with the updated claim.
+        IsGMProfile ensures request.user.gm_profile is always accessible.
+        IsLeadGMOnClaimStoryOrStaff confirms Lead GM role on the claim's story.
+        Status validation (must be APPROVED) handled by CompleteClaimInputSerializer.
+        Returns 200 with the updated claim.
         """
-        from world.gm.models import GMProfile  # noqa: PLC0415
         from world.stories.services.assistant_gm import complete_claim  # noqa: PLC0415
 
         claim = self.get_object()
-        try:
-            gm_profile = request.user.gm_profile
-        except GMProfile.DoesNotExist:
-            gm_profile = None
-        if gm_profile is None:
-            return Response(
-                {"detail": "A GM profile is required to complete claims."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+        ser = CompleteClaimInputSerializer(data=request.data, context={"claim": claim})
+        ser.is_valid(raise_exception=True)
 
-        try:
-            updated = complete_claim(claim=claim, completer=gm_profile)
-        except StoryError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-
+        updated = complete_claim(claim=claim, completer=request.user.gm_profile)
         return Response(AssistantGMClaimSerializer(updated).data, status=status.HTTP_200_OK)
 
 
@@ -873,46 +763,30 @@ class SessionRequestViewSet(viewsets.ReadOnlyModelViewSet):
     def create_event(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/session-requests/{id}/create-event/ — schedule a session by creating an Event.
 
-        Bridges an OPEN SessionRequest to the events system. Wraps
-        create_event_from_session_request. Returns 201 with the SessionRequest on success.
+        Bridges an OPEN SessionRequest to the events system. Status and host_persona
+        FK validated by CreateEventFromSessionRequestInputSerializer.
+        Returns 201 with the SessionRequest on success.
         """
-        from world.scenes.models import Persona  # noqa: PLC0415
         from world.stories.services.scheduling import (  # noqa: PLC0415
             create_event_from_session_request,
         )
 
         session_request = self.get_object()
+        ser = CreateEventFromSessionRequestInputSerializer(
+            data=request.data, context={"session_request": session_request}
+        )
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
 
-        input_ser = CreateEventFromSessionRequestInputSerializer(data=request.data)
-        input_ser.is_valid(raise_exception=True)
-        data = input_ser.validated_data
-
-        try:
-            host_persona = Persona.objects.get(pk=data["host_persona_id"])
-        except Persona.DoesNotExist:
-            return Response(
-                {"detail": "host_persona_id not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            create_event_from_session_request(
-                session_request=session_request,
-                name=data["name"],
-                scheduled_real_time=data["scheduled_real_time"],
-                host_persona=host_persona,
-                location_id=data["location_id"],
-                description=data.get("description", ""),
-                is_public=data.get("is_public", True),
-            )
-        except StoryError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        except Exception as exc:  # EventError from events app — not a StoryError
-            user_msg = getattr(exc, "user_message", None)  # noqa: GETATTR_LITERAL
-            if user_msg:
-                return Response({"detail": user_msg}, status=status.HTTP_400_BAD_REQUEST)
-            raise
-
+        create_event_from_session_request(
+            session_request=session_request,
+            name=data["name"],
+            scheduled_real_time=data["scheduled_real_time"],
+            host_persona=data["host_persona"],
+            location_id=data["location_id"],
+            description=data["description"],
+            is_public=data["is_public"],
+        )
         session_request.refresh_from_db()
         return Response(
             SessionRequestSerializer(session_request).data, status=status.HTTP_201_CREATED
@@ -927,17 +801,18 @@ class SessionRequestViewSet(viewsets.ReadOnlyModelViewSet):
     def cancel(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/session-requests/{id}/cancel/ — cancel an OPEN session request.
 
-        Wraps cancel_session_request. Returns 200 with the updated SessionRequest.
+        Status validation (must be OPEN) handled by CancelSessionRequestInputSerializer.
+        Returns 200 with the updated SessionRequest.
         """
         from world.stories.services.scheduling import cancel_session_request  # noqa: PLC0415
 
         session_request = self.get_object()
+        ser = CancelSessionRequestInputSerializer(
+            data=request.data, context={"session_request": session_request}
+        )
+        ser.is_valid(raise_exception=True)
 
-        try:
-            updated = cancel_session_request(session_request=session_request)
-        except StoryError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-
+        updated = cancel_session_request(session_request=session_request)
         return Response(SessionRequestSerializer(updated).data, status=status.HTTP_200_OK)
 
     @action(
@@ -949,17 +824,18 @@ class SessionRequestViewSet(viewsets.ReadOnlyModelViewSet):
     def resolve(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/session-requests/{id}/resolve/ — mark a scheduled session as resolved.
 
-        Wraps resolve_session_request. Returns 200 with the updated SessionRequest.
+        Status validation (must be SCHEDULED) handled by ResolveSessionRequestInputSerializer.
+        Returns 200 with the updated SessionRequest.
         """
         from world.stories.services.scheduling import resolve_session_request  # noqa: PLC0415
 
         session_request = self.get_object()
+        ser = ResolveSessionRequestInputSerializer(
+            data=request.data, context={"session_request": session_request}
+        )
+        ser.is_valid(raise_exception=True)
 
-        try:
-            updated = resolve_session_request(session_request=session_request)
-        except StoryError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-
+        updated = resolve_session_request(session_request=session_request)
         return Response(SessionRequestSerializer(updated).data, status=status.HTTP_200_OK)
 
 
@@ -996,104 +872,55 @@ class BeatViewSet(viewsets.ModelViewSet):
         """POST /api/beats/{id}/mark/ — GM marks the outcome of a GM_MARKED beat.
 
         Lead GM, staff, or an AGM with an approved claim on this beat may call this.
-        Wraps record_gm_marked_outcome. Returns 201 with BeatCompletion on success,
-        400 with user_message on failure.
+        Wraps record_gm_marked_outcome. Returns 201 with BeatCompletion on success.
         """
         from world.stories.services.beats import record_gm_marked_outcome  # noqa: PLC0415
 
         beat = self.get_object()
+        ser = MarkBeatInputSerializer(data=request.data, context={"beat": beat})
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
 
-        input_ser = MarkBeatInputSerializer(data=request.data)
-        input_ser.is_valid(raise_exception=True)
-        data = input_ser.validated_data
-
-        # Resolve the progress record.
-        progress = _get_progress_for_beat_action(beat, request.user, data.get("progress_id"))
-        if progress is None:
-            return Response(
-                {"detail": "No active progress record found for this beat's story."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        try:
-            completion = record_gm_marked_outcome(
-                progress=progress,
-                beat=beat,
-                outcome=data["outcome"],
-                gm_notes=data.get("gm_notes", ""),
-            )
-        except StoryError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-
+        completion = record_gm_marked_outcome(
+            progress=data["progress"],
+            beat=beat,
+            outcome=data["outcome"],
+            gm_notes=data["gm_notes"],
+        )
         return Response(BeatCompletionSerializer(completion).data, status=status.HTTP_201_CREATED)
 
     @action(
         detail=True,
         methods=[HTTPMethod.POST],
         url_path="contribute",
-        permission_classes=[permissions.IsAuthenticated],
+        permission_classes=[IsAccountOfCharacterSheet],
     )
     def contribute(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/beats/{id}/contribute/ — record a character contribution to an AGGREGATE beat.
 
-        The requesting user must own the character_sheet (or be staff).
-        Wraps record_aggregate_contribution. Returns 201 with contribution on success.
+        The requesting user must own the character_sheet (or be staff), validated
+        by ContributeBeatInputSerializer. Wraps record_aggregate_contribution.
+        Returns 201 with contribution on success.
         """
-        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
         from world.stories.services.beats import record_aggregate_contribution  # noqa: PLC0415
 
         beat = self.get_object()
+        ser = ContributeBeatInputSerializer(
+            data=request.data, context={"beat": beat, "request": request}
+        )
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
 
-        input_ser = ContributeBeatInputSerializer(data=request.data)
-        input_ser.is_valid(raise_exception=True)
-        data = input_ser.validated_data
-
-        character_sheet_id: int = data["character_sheet_id"]
-
-        # Verify the requesting user owns this character_sheet (or is staff).
-        try:
-            character_sheet = CharacterSheet.objects.select_related("character").get(
-                pk=character_sheet_id
-            )
-        except CharacterSheet.DoesNotExist:
-            return Response(
-                {"detail": "Character sheet not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if not request.user.is_staff:
-            if character_sheet.character.db_account_id != request.user.pk:
-                return Response(
-                    {"detail": "You may only contribute for your own character."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-
-        try:
-            contribution = record_aggregate_contribution(
-                beat=beat,
-                character_sheet=character_sheet,
-                points=data["points"],
-                source_note=data.get("source_note", ""),
-            )
-        except StoryError as exc:
-            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-
+        contribution = record_aggregate_contribution(
+            beat=beat,
+            character_sheet=data["character_sheet"],
+            points=data["points"],
+            source_note=data["source_note"],
+        )
         return Response(
             AggregateBeatContributionSerializer(contribution).data,
             status=status.HTTP_201_CREATED,
         )
-
-
-def _get_progress_for_beat_action(
-    beat: Beat,
-    user: AbstractBaseUser | AnonymousUser,
-    progress_id: int | None,
-) -> AnyStoryProgress | None:
-    """Return the active progress record for a beat's story.
-
-    Dispatches to _get_progress_for_episode_action using the beat's episode.
-    """
-    return _get_progress_for_episode_action(beat.episode, user, progress_id)
 
 
 # ---------------------------------------------------------------------------
@@ -1200,23 +1027,6 @@ class MyActiveStoriesView(APIView):
                 "global_stories": global_stories,
             }
         )
-
-
-class IsGMProfile(permissions.BasePermission):
-    """Only users with a GMProfile can access GM dashboards."""
-
-    message = "Only users with a GMProfile can access GM dashboards."
-
-    def has_permission(self, request: Request, view: APIView) -> bool:
-        from world.gm.models import GMProfile  # noqa: PLC0415
-
-        if not request.user.is_authenticated:
-            return False
-        try:
-            _ = request.user.gm_profile
-            return True
-        except GMProfile.DoesNotExist:
-            return False
 
 
 def _serialize_eligible_transitions(transitions: list) -> list[dict[str, Any]]:

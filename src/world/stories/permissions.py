@@ -655,6 +655,48 @@ class IsSessionRequestGMOrStaff(permissions.BasePermission):
         return story.owners.filter(id=request.user.id).exists()
 
 
+class IsGMProfile(permissions.BasePermission):
+    """The requesting user must have a GMProfile (be a registered GM).
+
+    Used for action endpoints that require GM identity (e.g. request_claim).
+    """
+
+    message = "You must have a GM profile to perform this action."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Check that the user is authenticated and has a GMProfile."""
+        if not request.user or not request.user.is_authenticated:
+            return False
+        try:
+            _ = request.user.gm_profile
+            return True
+        except GMProfile.DoesNotExist:
+            return False
+
+
+class IsAccountOfCharacterSheet(permissions.BasePermission):
+    """For BeatViewSet.contribute: the requesting user owns the character sheet,
+    or is staff.
+
+    Object-level check: obj is the Beat, but the character_sheet comes from
+    request.data. This permission is evaluated BEFORE the serializer runs, so
+    it cannot reliably resolve the FK at has_object_permission time. Instead
+    we keep it as a view-level guard that delegates ownership enforcement to
+    the serializer's validate() method. Presence here ensures the action is
+    clearly documented as requiring either ownership or staff access.
+
+    In practice: ContributeBeatInputSerializer.validate() enforces the
+    ownership rule. This class only ensures the user is authenticated
+    (detailed ownership is checked by the serializer).
+    """
+
+    message = "You may only contribute for your own character, or be a staff member."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Authenticated users only; serializer handles ownership."""
+        return bool(request.user and request.user.is_authenticated)
+
+
 # ---------------------------------------------------------------------------
 # Story log viewer role classifier
 # ---------------------------------------------------------------------------

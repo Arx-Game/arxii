@@ -14,7 +14,6 @@ from world.events.constants import EventStatus
 from world.events.factories import EventFactory
 from world.scenes.factories import PersonaFactory
 from world.stories.constants import SessionRequestStatus
-from world.stories.exceptions import SessionRequestNotOpenError
 from world.stories.factories import (
     ChapterFactory,
     EpisodeFactory,
@@ -83,13 +82,13 @@ class CreateEventFromSessionRequestTests(TestCase):
         self.assertEqual(primary_hosts[0].persona_id, host.pk)
 
     def test_raises_when_session_request_not_open(self) -> None:
-        """Raises SessionRequestNotOpenError when the request is not OPEN."""
+        """Raises ValueError when the request is not OPEN."""
         room = RoomProfileFactory()
         host = PersonaFactory()
         sr = SessionRequestFactory(episode=self.episode, status=SessionRequestStatus.SCHEDULED)
         scheduled_time = timezone.now() + timedelta(days=3)
 
-        with self.assertRaises(SessionRequestNotOpenError):
+        with self.assertRaises(ValueError):
             create_event_from_session_request(
                 session_request=sr,
                 name="Should Fail",
@@ -103,13 +102,13 @@ class CreateEventFromSessionRequestTests(TestCase):
         self.assertEqual(sr.status, SessionRequestStatus.SCHEDULED)
 
     def test_raises_for_cancelled_request(self) -> None:
-        """Raises SessionRequestNotOpenError when the request is CANCELLED."""
+        """Raises ValueError when the request is CANCELLED."""
         room = RoomProfileFactory()
         host = PersonaFactory()
         sr = SessionRequestFactory(episode=self.episode, status=SessionRequestStatus.CANCELLED)
         scheduled_time = timezone.now() + timedelta(days=3)
 
-        with self.assertRaises(SessionRequestNotOpenError):
+        with self.assertRaises(ValueError):
             create_event_from_session_request(
                 session_request=sr,
                 name="Should Fail",
@@ -119,13 +118,13 @@ class CreateEventFromSessionRequestTests(TestCase):
             )
 
     def test_raises_for_resolved_request(self) -> None:
-        """Raises SessionRequestNotOpenError when the request is RESOLVED."""
+        """Raises ValueError when the request is RESOLVED."""
         room = RoomProfileFactory()
         host = PersonaFactory()
         sr = SessionRequestFactory(episode=self.episode, status=SessionRequestStatus.RESOLVED)
         scheduled_time = timezone.now() + timedelta(days=3)
 
-        with self.assertRaises(SessionRequestNotOpenError):
+        with self.assertRaises(ValueError):
             create_event_from_session_request(
                 session_request=sr,
                 name="Should Fail",
@@ -177,21 +176,21 @@ class CancelSessionRequestTests(TestCase):
         self.assertEqual(result.pk, sr.pk)
 
     def test_cancel_already_cancelled_raises(self) -> None:
-        """Cancelling an already-CANCELLED request raises SessionRequestNotOpenError."""
+        """Cancelling an already-CANCELLED request raises ValueError."""
         sr = SessionRequestFactory(episode=self.episode, status=SessionRequestStatus.CANCELLED)
-        with self.assertRaises(SessionRequestNotOpenError):
+        with self.assertRaises(ValueError):
             cancel_session_request(session_request=sr)
 
     def test_cancel_scheduled_raises(self) -> None:
-        """Cancelling a SCHEDULED request raises SessionRequestNotOpenError."""
+        """Cancelling a SCHEDULED request raises ValueError."""
         sr = SessionRequestFactory(episode=self.episode, status=SessionRequestStatus.SCHEDULED)
-        with self.assertRaises(SessionRequestNotOpenError):
+        with self.assertRaises(ValueError):
             cancel_session_request(session_request=sr)
 
     def test_cancel_resolved_raises(self) -> None:
-        """Cancelling a RESOLVED request raises SessionRequestNotOpenError."""
+        """Cancelling a RESOLVED request raises ValueError."""
         sr = SessionRequestFactory(episode=self.episode, status=SessionRequestStatus.RESOLVED)
-        with self.assertRaises(SessionRequestNotOpenError):
+        with self.assertRaises(ValueError):
             cancel_session_request(session_request=sr)
 
 
@@ -226,19 +225,19 @@ class ResolveSessionRequestTests(TestCase):
         self.assertEqual(result.pk, sr.pk)
 
     def test_resolve_open_raises(self) -> None:
-        """Resolving an OPEN (not yet scheduled) request raises SessionRequestNotOpenError."""
+        """Resolving an OPEN (not yet scheduled) request raises ValueError."""
         sr = SessionRequestFactory(episode=self.episode, status=SessionRequestStatus.OPEN)
-        with self.assertRaises(SessionRequestNotOpenError):
+        with self.assertRaises(ValueError):
             resolve_session_request(session_request=sr)
 
     def test_resolve_already_resolved_raises(self) -> None:
-        """Resolving an already-RESOLVED request raises SessionRequestNotOpenError."""
+        """Resolving an already-RESOLVED request raises ValueError."""
         sr = SessionRequestFactory(episode=self.episode, status=SessionRequestStatus.RESOLVED)
-        with self.assertRaises(SessionRequestNotOpenError):
+        with self.assertRaises(ValueError):
             resolve_session_request(session_request=sr)
 
     def test_resolve_cancelled_raises(self) -> None:
-        """Resolving a CANCELLED request raises SessionRequestNotOpenError."""
+        """Resolving a CANCELLED request raises ValueError."""
         sr = SessionRequestFactory(episode=self.episode, status=SessionRequestStatus.CANCELLED)
-        with self.assertRaises(SessionRequestNotOpenError):
+        with self.assertRaises(ValueError):
             resolve_session_request(session_request=sr)

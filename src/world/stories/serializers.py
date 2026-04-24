@@ -3,8 +3,16 @@ from typing import Any, cast
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
+from world.character_sheets.models import CharacterSheet
 from world.gm.serializers import GMProfileSerializer
-from world.stories.constants import BeatOutcome
+from world.scenes.models import Persona
+from world.stories.constants import (
+    AssistantClaimStatus,
+    BeatOutcome,
+    BeatPredicateType,
+    SessionRequestStatus,
+    StoryScope,
+)
 from world.stories.models import (
     AggregateBeatContribution,
     AssistantGMClaim,
@@ -22,11 +30,13 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryParticipation,
+    StoryProgress,
     StoryTrustRequirement,
+    Transition,
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
-from world.stories.types import StoryLogBeatEntry, StoryLogEpisodeEntry
+from world.stories.types import AnyStoryProgress, StoryLogBeatEntry, StoryLogEpisodeEntry
 
 
 class StoryListSerializer(serializers.ModelSerializer):
@@ -787,12 +797,73 @@ class BeatSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 
 
+def _resolve_progress(episode: "Episode", progress_id: int | None) -> "AnyStoryProgress | None":
+    """Return the active progress record for the episode's story.
+
+    If progress_id is supplied, fetch it directly from the scope-appropriate
+    table and require it to belong to this story and be active.
+    Otherwise dispatch on story.scope via get_active_progress_for_story.
+    """
+    from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
+
+    story = episode.chapter.story
+    if progress_id is not None:
+        match story.scope:
+            case StoryScope.CHARACTER:
+                return StoryProgress.objects.filter(
+                    pk=progress_id, story=story, is_active=True
+                ).first()
+            case StoryScope.GROUP:
+                return GroupStoryProgress.objects.filter(
+                    pk=progress_id, story=story, is_active=True
+                ).first()
+            case StoryScope.GLOBAL:
+                return GlobalStoryProgress.objects.filter(
+                    pk=progress_id, story=story, is_active=True
+                ).first()
+            case _:
+                return None
+    return get_active_progress_for_story(story)
+
+
 class ResolveEpisodeInputSerializer(serializers.Serializer):
-    """Input for POST /api/episodes/{id}/resolve/."""
+    """Input for POST /api/episodes/{id}/resolve/.
+
+    Context required:
+        episode (Episode): the episode being resolved.
+
+    Validates:
+        - chosen_transition belongs to this episode (if provided).
+        - An active progress record exists for the episode's story.
+
+    Stores resolved ``progress`` and ``chosen_transition`` in validated_data.
+    """
 
     progress_id = serializers.IntegerField(required=False, allow_null=True, default=None)
-    chosen_transition_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    chosen_transition = serializers.PrimaryKeyRelatedField(
+        queryset=Transition.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None,
+    )
     gm_notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        episode: Episode = self.context["episode"]
+
+        transition: Transition | None = attrs.get("chosen_transition")
+        if transition is not None and transition.source_episode_id != episode.pk:
+            raise serializers.ValidationError(
+                {"chosen_transition": "Transition does not belong to this episode."}
+            )
+
+        progress = _resolve_progress(episode, attrs.get("progress_id"))
+        if progress is None:
+            raise serializers.ValidationError(
+                {"non_field_errors": "No active progress record found for this episode's story."}
+            )
+        attrs["progress"] = progress
+        return attrs
 
 
 class EpisodeResolutionSerializer(serializers.ModelSerializer):
@@ -815,11 +886,41 @@ class EpisodeResolutionSerializer(serializers.ModelSerializer):
 
 
 class MarkBeatInputSerializer(serializers.Serializer):
-    """Input for POST /api/beats/{id}/mark/."""
+    """Input for POST /api/beats/{id}/mark/.
+
+    Context required:
+        beat (Beat): the beat being marked.
+
+    Validates:
+        - beat.predicate_type == GM_MARKED.
+        - An active progress record exists for the beat's story.
+
+    Stores ``progress`` in validated_data.
+    """
 
     outcome = serializers.ChoiceField(choices=BeatOutcome.choices)
     gm_notes = serializers.CharField(required=False, allow_blank=True, default="")
     progress_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        beat: Beat = self.context["beat"]
+
+        if beat.predicate_type != BeatPredicateType.GM_MARKED:
+            raise serializers.ValidationError(
+                {
+                    "non_field_errors": (
+                        "Only GM_MARKED beats can be resolved via the mark endpoint."
+                    )
+                }
+            )
+
+        progress = _resolve_progress(beat.episode, attrs.get("progress_id"))
+        if progress is None:
+            raise serializers.ValidationError(
+                {"non_field_errors": "No active progress record found for this beat's story."}
+            )
+        attrs["progress"] = progress
+        return attrs
 
 
 class BeatCompletionSerializer(serializers.ModelSerializer):
@@ -842,41 +943,210 @@ class BeatCompletionSerializer(serializers.ModelSerializer):
 
 
 class ContributeBeatInputSerializer(serializers.Serializer):
-    """Input for POST /api/beats/{id}/contribute/."""
+    """Input for POST /api/beats/{id}/contribute/.
 
-    character_sheet_id = serializers.IntegerField()
+    Context required:
+        beat (Beat): the beat being contributed to.
+        request: the DRF request (for is_staff and user ownership check).
+
+    Validates:
+        - beat.predicate_type == AGGREGATE_THRESHOLD.
+        - character_sheet exists (PrimaryKeyRelatedField).
+        - The requesting user owns the character_sheet, or is staff.
+
+    Stores ``character_sheet`` instance in validated_data.
+    """
+
+    character_sheet = serializers.PrimaryKeyRelatedField(
+        queryset=CharacterSheet.objects.select_related("character"),
+    )
     points = serializers.IntegerField(min_value=1)
     source_note = serializers.CharField(required=False, allow_blank=True, default="")
 
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        beat: Beat = self.context["beat"]
+        request = self.context["request"]
+        character_sheet = attrs["character_sheet"]
+
+        if beat.predicate_type != BeatPredicateType.AGGREGATE_THRESHOLD:
+            raise serializers.ValidationError(
+                {"non_field_errors": "Only AGGREGATE_THRESHOLD beats accept contributions."}
+            )
+
+        if not request.user.is_staff:
+            if character_sheet.character.db_account_id != request.user.pk:
+                raise serializers.ValidationError(
+                    {"character_sheet": "You may only contribute for your own character."}
+                )
+
+        return attrs
+
 
 class RequestClaimInputSerializer(serializers.Serializer):
-    """Input for POST /api/assistant-gm-claims/ (create / request_claim)."""
+    """Input for POST /api/assistant-gm-claims/request/.
 
-    beat_id = serializers.IntegerField()
+    Validates:
+        - beat exists (PrimaryKeyRelatedField).
+        - beat.agm_eligible is True.
+
+    Stores ``beat`` instance in validated_data.
+    """
+
+    beat = serializers.PrimaryKeyRelatedField(queryset=Beat.objects.all())
     framing_note = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_beat(self, beat: Beat) -> Beat:
+        if not beat.agm_eligible:
+            msg = "This beat is not flagged as available for Assistant GM claims."
+            raise serializers.ValidationError(msg)
+        return beat
 
 
 class ApproveClaimInputSerializer(serializers.Serializer):
-    """Input for POST /api/assistant-gm-claims/{id}/approve/."""
+    """Input for POST /api/assistant-gm-claims/{id}/approve/.
+
+    Context required:
+        claim (AssistantGMClaim): the claim being approved.
+
+    Validates:
+        - claim.status == REQUESTED.
+    """
 
     framing_note = serializers.CharField(required=False, allow_null=True, default=None)
 
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        claim: AssistantGMClaim = self.context["claim"]
+        if claim.status != AssistantClaimStatus.REQUESTED:
+            raise serializers.ValidationError(
+                {"non_field_errors": "Only REQUESTED claims can be approved."}
+            )
+        return attrs
+
 
 class RejectClaimInputSerializer(serializers.Serializer):
-    """Input for POST /api/assistant-gm-claims/{id}/reject/."""
+    """Input for POST /api/assistant-gm-claims/{id}/reject/.
+
+    Context required:
+        claim (AssistantGMClaim): the claim being rejected.
+
+    Validates:
+        - claim.status == REQUESTED.
+    """
 
     note = serializers.CharField(required=False, allow_blank=True, default="")
 
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        claim: AssistantGMClaim = self.context["claim"]
+        if claim.status != AssistantClaimStatus.REQUESTED:
+            raise serializers.ValidationError(
+                {"non_field_errors": "Only REQUESTED claims can be rejected."}
+            )
+        return attrs
+
+
+class CancelClaimInputSerializer(serializers.Serializer):
+    """Input for POST /api/assistant-gm-claims/{id}/cancel/.
+
+    Context required:
+        claim (AssistantGMClaim): the claim being cancelled.
+
+    Validates:
+        - claim.status == REQUESTED (can only cancel before approval).
+    """
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        claim: AssistantGMClaim = self.context["claim"]
+        if claim.status != AssistantClaimStatus.REQUESTED:
+            raise serializers.ValidationError(
+                {"non_field_errors": "Only REQUESTED claims can be cancelled."}
+            )
+        return attrs
+
+
+class CompleteClaimInputSerializer(serializers.Serializer):
+    """Input for POST /api/assistant-gm-claims/{id}/complete/.
+
+    Context required:
+        claim (AssistantGMClaim): the claim being completed.
+
+    Validates:
+        - claim.status == APPROVED (can only complete approved claims).
+    """
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        claim: AssistantGMClaim = self.context["claim"]
+        if claim.status != AssistantClaimStatus.APPROVED:
+            raise serializers.ValidationError(
+                {"non_field_errors": "Only APPROVED claims can be completed."}
+            )
+        return attrs
+
+
+class CancelSessionRequestInputSerializer(serializers.Serializer):
+    """Input for POST /api/session-requests/{id}/cancel/.
+
+    Context required:
+        session_request (SessionRequest): the request being cancelled.
+
+    Validates:
+        - session_request.status == OPEN.
+    """
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        session_request: SessionRequest = self.context["session_request"]
+        if session_request.status != SessionRequestStatus.OPEN:
+            raise serializers.ValidationError(
+                {"non_field_errors": "Only OPEN session requests can be cancelled."}
+            )
+        return attrs
+
+
+class ResolveSessionRequestInputSerializer(serializers.Serializer):
+    """Input for POST /api/session-requests/{id}/resolve/.
+
+    Context required:
+        session_request (SessionRequest): the request being resolved.
+
+    Validates:
+        - session_request.status == SCHEDULED.
+    """
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        session_request: SessionRequest = self.context["session_request"]
+        if session_request.status != SessionRequestStatus.SCHEDULED:
+            raise serializers.ValidationError(
+                {"non_field_errors": "Only SCHEDULED session requests can be resolved."}
+            )
+        return attrs
+
 
 class CreateEventFromSessionRequestInputSerializer(serializers.Serializer):
-    """Input for POST /api/session-requests/{id}/create-event/."""
+    """Input for POST /api/session-requests/{id}/create-event/.
+
+    Context required:
+        session_request (SessionRequest): the request being scheduled.
+
+    Validates:
+        - session_request.status == OPEN.
+        - host_persona exists (PrimaryKeyRelatedField).
+
+    Stores ``host_persona`` instance in validated_data.
+    """
 
     name = serializers.CharField()
     scheduled_real_time = serializers.DateTimeField()
-    host_persona_id = serializers.IntegerField()
+    host_persona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
     location_id = serializers.IntegerField()
     description = serializers.CharField(required=False, allow_blank=True, default="")
     is_public = serializers.BooleanField(required=False, default=True)
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        session_request: SessionRequest = self.context["session_request"]
+        if session_request.status != SessionRequestStatus.OPEN:
+            raise serializers.ValidationError(
+                {"non_field_errors": "Only OPEN session requests can be scheduled."}
+            )
+        return attrs
 
 
 class StoryLogSerializer(serializers.Serializer):

@@ -25,7 +25,6 @@ from django.db import transaction
 from world.character_sheets.models import CharacterSheet
 from world.roster.models import RosterEntry
 from world.stories.constants import BeatOutcome, BeatPredicateType, StoryMilestoneType, StoryScope
-from world.stories.exceptions import BeatNotResolvableError
 from world.stories.models import AggregateBeatContribution, Beat, BeatCompletion, Era, StoryProgress
 from world.stories.types import AnyStoryProgress, StoryStatus
 
@@ -96,25 +95,27 @@ def record_gm_marked_outcome(
       - GROUP:     writes gm_table (from GroupStoryProgress).
       - GLOBAL:    writes neither (the beat's story scope is the sole identifier).
 
-    Validates:
-        - beat.predicate_type == GM_MARKED  (else BeatNotResolvableError)
-        - outcome in {SUCCESS, FAILURE}      (else BeatNotResolvableError)
+    Defensive assertions (programmer errors — the API serializer validates these
+    for user-facing calls; assertions guard direct service callers):
+        - beat.predicate_type == GM_MARKED
+        - outcome in {SUCCESS, FAILURE}
 
     Flips beat.outcome in-place, creates and returns a BeatCompletion row.
     """
+    # Defensive guard: MarkBeatInputSerializer validates this for API callers.
     if beat.predicate_type != BeatPredicateType.GM_MARKED:
         msg = (
             f"Beat {beat.pk} is not GM_MARKED (type={beat.predicate_type}); "
             "only GM_MARKED beats can be resolved via record_gm_marked_outcome."
         )
-        raise BeatNotResolvableError(msg)
-
+        raise ValueError(msg)
+    # Defensive guard: ChoiceField in MarkBeatInputSerializer validates this.
     if outcome not in _GM_MARKED_VALID_OUTCOMES:
         msg = (
             f"Outcome {outcome!r} is not valid for a GM-marked resolution; "
             f"must be one of {_GM_MARKED_VALID_OUTCOMES}."
         )
-        raise BeatNotResolvableError(msg)
+        raise ValueError(msg)
 
     scope = progress.story.scope
     era = Era.objects.get_active()
@@ -169,12 +170,13 @@ def record_aggregate_contribution(
         BeatNotResolvableError: if beat.predicate_type is not AGGREGATE_THRESHOLD,
             or if points <= 0.
     """
+    # Defensive guards: ContributeBeatInputSerializer validates these for API callers.
     if beat.predicate_type != BeatPredicateType.AGGREGATE_THRESHOLD:
         msg = "Only AGGREGATE_THRESHOLD beats accept contributions."
-        raise BeatNotResolvableError(msg)
+        raise ValueError(msg)
     if points <= 0:
         msg = "Contribution points must be positive."
-        raise BeatNotResolvableError(msg)
+        raise ValueError(msg)
 
     era = Era.objects.get_active()
     roster_entry = _current_roster_entry(character_sheet)

@@ -20,7 +20,6 @@ from world.stories.constants import (
     StoryMilestoneType,
     StoryScope,
 )
-from world.stories.exceptions import BeatNotResolvableError
 from world.stories.factories import (
     BeatFactory,
     ChapterFactory,
@@ -721,7 +720,7 @@ class RecordGmMarkedOutcomeTests(EvenniaTestCase):
         self.assertEqual(completion.outcome, BeatOutcome.FAILURE)
 
     def test_record_gm_marked_outcome_rejects_non_gm_marked_beat(self):
-        """BeatNotResolvableError raised when beat is CHARACTER_LEVEL_AT_LEAST."""
+        """ValueError raised when beat is CHARACTER_LEVEL_AT_LEAST (defensive guard)."""
         sheet = CharacterSheetFactory()
         episode = EpisodeFactory()
         progress = StoryProgressFactory(character_sheet=sheet, current_episode=episode)
@@ -731,7 +730,7 @@ class RecordGmMarkedOutcomeTests(EvenniaTestCase):
             required_level=5,
         )
 
-        with self.assertRaises(BeatNotResolvableError):
+        with self.assertRaises(ValueError):
             record_gm_marked_outcome(
                 progress=progress,
                 beat=level_beat,
@@ -739,7 +738,7 @@ class RecordGmMarkedOutcomeTests(EvenniaTestCase):
             )
 
     def test_record_gm_marked_outcome_rejects_invalid_outcome(self):
-        """BeatNotResolvableError raised for UNSATISFIED, EXPIRED, PENDING_GM_REVIEW."""
+        """ValueError raised for UNSATISFIED, EXPIRED, PENDING_GM_REVIEW (defensive guard)."""
         progress, beat, _sheet = self._make_gm_beat_and_progress()
 
         for bad_outcome in (
@@ -748,7 +747,7 @@ class RecordGmMarkedOutcomeTests(EvenniaTestCase):
             BeatOutcome.PENDING_GM_REVIEW,
         ):
             with self.subTest(outcome=bad_outcome):
-                with self.assertRaises(BeatNotResolvableError):
+                with self.assertRaises(ValueError):
                     record_gm_marked_outcome(
                         progress=progress,
                         beat=beat,
@@ -927,27 +926,27 @@ class RecordAggregateContributionTests(EvenniaTestCase):
         self.assertEqual(AggregateBeatContribution.objects.filter(beat=beat).count(), 2)
 
     def test_record_aggregate_rejects_non_aggregate_beat(self) -> None:
-        """Passing a GM_MARKED beat raises BeatNotResolvableError."""
+        """Passing a GM_MARKED beat raises ValueError (defensive guard)."""
         beat = BeatFactory(predicate_type=BeatPredicateType.GM_MARKED)
         sheet = CharacterSheetFactory()
 
-        with self.assertRaises(BeatNotResolvableError):
+        with self.assertRaises(ValueError):
             record_aggregate_contribution(beat=beat, character_sheet=sheet, points=10)
 
     def test_record_aggregate_rejects_zero_points(self) -> None:
-        """points=0 raises BeatNotResolvableError."""
+        """points=0 raises ValueError (defensive guard)."""
         beat = self._make_aggregate_beat()
         sheet = CharacterSheetFactory()
 
-        with self.assertRaises(BeatNotResolvableError):
+        with self.assertRaises(ValueError):
             record_aggregate_contribution(beat=beat, character_sheet=sheet, points=0)
 
     def test_record_aggregate_rejects_negative_points(self) -> None:
-        """points=-1 raises BeatNotResolvableError."""
+        """points=-1 raises ValueError (defensive guard)."""
         beat = self._make_aggregate_beat()
         sheet = CharacterSheetFactory()
 
-        with self.assertRaises(BeatNotResolvableError):
+        with self.assertRaises(ValueError):
             record_aggregate_contribution(beat=beat, character_sheet=sheet, points=-1)
 
     def test_record_aggregate_contribution_captures_era(self) -> None:
