@@ -1,5 +1,6 @@
 """API view tests for Spec C pose endorsement."""
 
+from django.test import TestCase
 from rest_framework.test import APITestCase
 
 
@@ -317,3 +318,39 @@ class ResonanceGrantListTests(APITestCase):
 
         response = self.client.delete(f"/api/magic/resonance-grants/{grant_pk}/")
         self.assertEqual(response.status_code, 405)
+
+
+class StaffGrantActionTests(TestCase):
+    def test_action_writes_ledger_row(self) -> None:
+        from django.contrib.admin.sites import AdminSite
+        from evennia.accounts.models import AccountDB
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.admin import CharacterResonanceAdmin, grant_resonance_action
+        from world.magic.constants import GainSource
+        from world.magic.factories import (
+            CharacterResonanceFactory,
+            ResonanceFactory,
+        )
+        from world.magic.models import CharacterResonance, ResonanceGrant
+
+        staff = AccountDB.objects.create_superuser(
+            "specc_admin_action_staff", "staff@example.com", "password"
+        )
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        cr = CharacterResonanceFactory(character_sheet=sheet, resonance=resonance)
+
+        site = AdminSite()
+        admin_instance = CharacterResonanceAdmin(CharacterResonance, site)
+
+        class _FakeRequest:
+            def __init__(self, user):
+                self.user = user
+
+        request = _FakeRequest(staff)
+        grant_resonance_action(admin_instance, request, CharacterResonance.objects.filter(pk=cr.pk))
+
+        grant = ResonanceGrant.objects.get(character_sheet=sheet)
+        self.assertEqual(grant.source, GainSource.STAFF_GRANT)
+        self.assertEqual(grant.source_staff_account, staff)
