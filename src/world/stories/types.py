@@ -8,6 +8,9 @@ from django.db import models
 
 if TYPE_CHECKING:
     from world.stories.models import (
+        Beat,
+        BeatCompletion,
+        EpisodeResolution,
         GlobalStoryProgress,
         GroupStoryProgress,
         StoryProgress,
@@ -97,44 +100,41 @@ class EpisodeSummary:
     next_episode_setup: str | None
 
 
-# Entry type constants for story log entries.
-LOG_ENTRY_BEAT_COMPLETION = "beat_completion"
-LOG_ENTRY_EPISODE_RESOLUTION = "episode_resolution"
-
-
 @dataclass
 class StoryLogBeatEntry:
     """One beat-completion entry in a story log.
 
-    Fields are pre-filtered for the requester's viewer role:
-    - Player: internal_description is None; player_hint / player_resolution_text
-      reflect the beat's visibility rules.
-    - Lead GM / Staff: internal_description populated; all fields visible.
+    Carries the Beat and its BeatCompletion model instances directly so
+    consumers can walk FKs as needed. The visibility-filtered text fields
+    are pre-computed by serialize_story_log based on the viewer role:
+    - Player viewer: visible_internal_description is None;
+      visible_player_hint is empty for SECRET beats (still active)
+      but visible_player_resolution_text is populated on completion.
+    - Lead GM / Staff: all fields populated from the underlying models.
     """
 
-    entry_type: str  # "beat_completion"
-    beat_id: int
-    episode_id: int
-    recorded_at: datetime
-    outcome: str
-    visibility: str  # passthrough for frontend rendering
-    player_hint: str
-    player_resolution_text: str
-    internal_description: str | None  # None for player viewers
-    gm_notes: str | None  # None for player viewers
+    beat: Beat
+    completion: BeatCompletion
+
+    # Pre-filtered text the serializer will surface. These are NOT
+    # denormalized copies of model fields — they are the post-filtering
+    # view tailored to the requester's role.
+    visible_player_hint: str
+    visible_player_resolution_text: str
+    visible_internal_description: str | None  # None hides it for player viewers
+    visible_gm_notes: str | None  # None hides it for player viewers
 
 
 @dataclass
 class StoryLogEpisodeEntry:
-    """One episode-resolution entry in a story log."""
+    """One episode-resolution entry in a story log.
 
-    entry_type: str  # "episode_resolution"
-    episode_id: int
-    episode_title: str
-    resolved_at: datetime
-    transition_id: int | None
-    target_episode_id: int | None
-    target_episode_title: str | None
-    connection_type: str  # "therefore", "but", or empty
-    connection_summary: str
-    internal_notes: str | None  # Lead GM / staff only
+    Carries the EpisodeResolution model instance directly; consumers walk
+    FKs (resolution.episode, resolution.chosen_transition, etc.) rather
+    than reading denormalized copies from this dataclass.
+    """
+
+    resolution: EpisodeResolution
+
+    # Pre-filtered field: GM notes hidden from player viewers
+    visible_internal_notes: str | None

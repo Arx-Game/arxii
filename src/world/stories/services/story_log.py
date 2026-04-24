@@ -22,8 +22,6 @@ from world.stories.permissions import (
     VIEWER_ROLE_STAFF,
 )
 from world.stories.types import (
-    LOG_ENTRY_BEAT_COMPLETION,
-    LOG_ENTRY_EPISODE_RESOLUTION,
     AnyStoryProgress,
     StoryLogBeatEntry,
     StoryLogEpisodeEntry,
@@ -56,8 +54,8 @@ def serialize_story_log(
 
     def _sort_key(entry: StoryLogBeatEntry | StoryLogEpisodeEntry) -> datetime:
         if isinstance(entry, StoryLogBeatEntry):
-            return entry.recorded_at
-        return entry.resolved_at
+            return entry.completion.recorded_at
+        return entry.resolution.resolved_at
 
     return sorted([*beat_entries, *episode_entries], key=_sort_key)
 
@@ -70,7 +68,7 @@ def _collect_beat_entries(
 ) -> list[StoryLogBeatEntry]:
     completions_qs = BeatCompletion.objects.filter(
         beat__episode__chapter__story=story,
-    ).select_related("beat")
+    ).select_related("beat", "beat__episode", "beat__episode__chapter")
 
     # For players, scope to their own character's completions.
     if viewer_role == VIEWER_ROLE_PLAYER and progress is not None:
@@ -93,16 +91,12 @@ def _collect_beat_entries(
 
         entries.append(
             StoryLogBeatEntry(
-                entry_type=LOG_ENTRY_BEAT_COMPLETION,
-                beat_id=beat.pk,
-                episode_id=beat.episode_id,
-                recorded_at=completion.recorded_at,
-                outcome=completion.outcome,
-                visibility=beat.visibility,
-                player_hint=player_hint,
-                player_resolution_text=beat.player_resolution_text,
-                internal_description=beat.internal_description if is_privileged else None,
-                gm_notes=completion.gm_notes if is_privileged else None,
+                beat=beat,
+                completion=completion,
+                visible_player_hint=player_hint,
+                visible_player_resolution_text=beat.player_resolution_text,
+                visible_internal_description=beat.internal_description if is_privileged else None,
+                visible_gm_notes=completion.gm_notes if is_privileged else None,
             )
         )
     return entries
@@ -116,7 +110,13 @@ def _collect_episode_entries(
 ) -> list[StoryLogEpisodeEntry]:
     resolutions_qs = EpisodeResolution.objects.filter(
         episode__chapter__story=story,
-    ).select_related("episode", "chosen_transition", "chosen_transition__target_episode")
+    ).select_related(
+        "episode",
+        "episode__chapter",
+        "chosen_transition",
+        "chosen_transition__target_episode",
+        "chosen_transition__target_episode__chapter",
+    )
 
     # For players, scope to their own character's resolutions.
     if viewer_role == VIEWER_ROLE_PLAYER and progress is not None:
@@ -126,22 +126,10 @@ def _collect_episode_entries(
 
     is_privileged = viewer_role in _PRIVILEGED_ROLES
 
-    entries: list[StoryLogEpisodeEntry] = []
-    for resolution in resolutions_qs:
-        trans = resolution.chosen_transition
-        target = trans.target_episode if trans else None
-        entries.append(
-            StoryLogEpisodeEntry(
-                entry_type=LOG_ENTRY_EPISODE_RESOLUTION,
-                episode_id=resolution.episode_id,
-                episode_title=resolution.episode.title,
-                resolved_at=resolution.resolved_at,
-                transition_id=trans.pk if trans else None,
-                target_episode_id=target.pk if target else None,
-                target_episode_title=target.title if target else None,
-                connection_type=trans.connection_type if trans else "",
-                connection_summary=trans.connection_summary if trans else "",
-                internal_notes=resolution.gm_notes if is_privileged else None,
-            )
+    return [
+        StoryLogEpisodeEntry(
+            resolution=resolution,
+            visible_internal_notes=resolution.gm_notes if is_privileged else None,
         )
-    return entries
+        for resolution in resolutions_qs
+    ]

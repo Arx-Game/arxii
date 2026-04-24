@@ -6,7 +6,7 @@ and 2 EpisodeResolutions.
 
 Viewer tiers exercised:
 - staff            → sees everything
-- lead_gm          → sees everything (internal_description + gm_notes)
+- lead_gm          → sees everything (visible_internal_description + visible_gm_notes)
 - player           → sees player-facing text; secrets suppressed pre-completion;
                      filtered to their own character's completions
 - no_access / anon → empty list
@@ -33,8 +33,6 @@ from world.stories.factories import (
 from world.stories.permissions import classify_story_log_viewer_role
 from world.stories.services.story_log import serialize_story_log
 from world.stories.types import (
-    LOG_ENTRY_BEAT_COMPLETION,
-    LOG_ENTRY_EPISODE_RESOLUTION,
     StoryLogBeatEntry,
     StoryLogEpisodeEntry,
 )
@@ -240,64 +238,71 @@ class SerializeStoryLogTests(EvenniaTestCase):
     # ------------------------------------------------------------------
 
     def test_player_sees_hinted_beat_resolution_text(self):
-        """Player sees HINTED beat's player_hint and player_resolution_text on completion."""
+        """Player sees HINTED beat's visible_player_hint and visible_player_resolution_text."""
         entries = serialize_story_log(
             story=self.story, progress=self.progress, viewer_role="player"
         )
         beat_entries = [e for e in entries if isinstance(e, StoryLogBeatEntry)]
-        hinted = next(e for e in beat_entries if e.beat_id == self.beat_hinted.pk)
-        self.assertEqual(hinted.player_hint, self.beat_hinted.player_hint)
-        self.assertEqual(hinted.player_resolution_text, self.beat_hinted.player_resolution_text)
+        hinted = next(e for e in beat_entries if e.beat == self.beat_hinted)
+        self.assertEqual(hinted.visible_player_hint, self.beat_hinted.player_hint)
+        self.assertEqual(
+            hinted.visible_player_resolution_text, self.beat_hinted.player_resolution_text
+        )
 
     def test_player_does_not_see_internal_description(self):
-        """Player viewer gets internal_description=None on all beat entries."""
+        """Player viewer gets visible_internal_description=None on all beat entries."""
         entries = serialize_story_log(
             story=self.story, progress=self.progress, viewer_role="player"
         )
         for entry in entries:
             if isinstance(entry, StoryLogBeatEntry):
                 self.assertIsNone(
-                    entry.internal_description,
-                    f"Player should not see internal_description on beat {entry.beat_id}",
+                    entry.visible_internal_description,
+                    f"Player should not see internal_description on beat {entry.beat.pk}",
                 )
 
     def test_player_does_not_see_gm_notes_on_beats(self):
-        """Player viewer gets gm_notes=None on all beat entries."""
+        """Player viewer gets visible_gm_notes=None on all beat entries."""
         entries = serialize_story_log(
             story=self.story, progress=self.progress, viewer_role="player"
         )
         for entry in entries:
             if isinstance(entry, StoryLogBeatEntry):
                 self.assertIsNone(
-                    entry.gm_notes,
-                    f"Player should not see gm_notes on beat {entry.beat_id}",
+                    entry.visible_gm_notes,
+                    f"Player should not see gm_notes on beat {entry.beat.pk}",
                 )
 
     def test_player_sees_secret_resolution_text_on_completion(self):
-        """SECRET beats surface player_resolution_text on completion (author-controlled vagueness).
+        """SECRET beats surface visible_player_resolution_text on completion.
 
-        The player_hint is suppressed (empty string) because SECRET beats should not
-        reveal the hint retroactively. Only player_resolution_text is shown.
+        The visible_player_hint is suppressed (empty string) because SECRET beats
+        should not reveal the hint retroactively. Only visible_player_resolution_text
+        is shown.
         """
         entries = serialize_story_log(
             story=self.story, progress=self.progress, viewer_role="player"
         )
         beat_entries = [e for e in entries if isinstance(e, StoryLogBeatEntry)]
-        secret = next(e for e in beat_entries if e.beat_id == self.beat_secret.pk)
+        secret = next(e for e in beat_entries if e.beat == self.beat_secret)
         # hint is suppressed for SECRET beats (player shouldn't see the original hint)
-        self.assertEqual(secret.player_hint, "")
+        self.assertEqual(secret.visible_player_hint, "")
         # resolution text surfaces (author-controlled vagueness)
-        self.assertEqual(secret.player_resolution_text, self.beat_secret.player_resolution_text)
+        self.assertEqual(
+            secret.visible_player_resolution_text, self.beat_secret.player_resolution_text
+        )
 
     def test_player_sees_visible_beat_hints_and_resolution(self):
-        """VISIBLE beat's player_hint and player_resolution_text both appear for player."""
+        """VISIBLE beat's visible_player_hint and visible_player_resolution_text both appear."""
         entries = serialize_story_log(
             story=self.story, progress=self.progress, viewer_role="player"
         )
         beat_entries = [e for e in entries if isinstance(e, StoryLogBeatEntry)]
-        visible = next(e for e in beat_entries if e.beat_id == self.beat_visible.pk)
-        self.assertEqual(visible.player_hint, self.beat_visible.player_hint)
-        self.assertEqual(visible.player_resolution_text, self.beat_visible.player_resolution_text)
+        visible = next(e for e in beat_entries if e.beat == self.beat_visible)
+        self.assertEqual(visible.visible_player_hint, self.beat_visible.player_hint)
+        self.assertEqual(
+            visible.visible_player_resolution_text, self.beat_visible.player_resolution_text
+        )
 
     def test_player_only_sees_own_completions(self):
         """Player viewer is scoped to their own character_sheet — other players' completions hidden.
@@ -308,23 +313,24 @@ class SerializeStoryLogTests(EvenniaTestCase):
             story=self.story, progress=self.progress, viewer_role="player"
         )
         beat_entries = [e for e in entries if isinstance(e, StoryLogBeatEntry)]
-        beat_ids = [e.beat_id for e in beat_entries]
+        beats_seen = [e.beat for e in beat_entries]
         self.assertNotIn(
-            self.beat_hinted2.pk,
-            beat_ids,
+            self.beat_hinted2,
+            beats_seen,
             "Player should not see another character's beat completion",
         )
 
     def test_player_does_not_see_internal_notes_on_episode_entries(self):
-        """Player viewer gets internal_notes=None on EpisodeResolution entries."""
+        """Player viewer gets visible_internal_notes=None on EpisodeResolution entries."""
         entries = serialize_story_log(
             story=self.story, progress=self.progress, viewer_role="player"
         )
         for entry in entries:
             if isinstance(entry, StoryLogEpisodeEntry):
                 self.assertIsNone(
-                    entry.internal_notes,
-                    f"Player should not see internal_notes on episode {entry.episode_id}",
+                    entry.visible_internal_notes,
+                    f"Player should not see internal_notes on episode "
+                    f"{entry.resolution.episode_id}",
                 )
 
     # ------------------------------------------------------------------
@@ -332,33 +338,33 @@ class SerializeStoryLogTests(EvenniaTestCase):
     # ------------------------------------------------------------------
 
     def test_lead_gm_sees_internal_description(self):
-        """Lead GM viewer gets all internal_descriptions populated."""
+        """Lead GM viewer gets all visible_internal_descriptions populated."""
         entries = serialize_story_log(story=self.story, progress=None, viewer_role="lead_gm")
         beat_entries = [e for e in entries if isinstance(e, StoryLogBeatEntry)]
-        hinted = next(e for e in beat_entries if e.beat_id == self.beat_hinted.pk)
-        self.assertEqual(hinted.internal_description, self.beat_hinted.internal_description)
+        hinted = next(e for e in beat_entries if e.beat == self.beat_hinted)
+        self.assertEqual(hinted.visible_internal_description, self.beat_hinted.internal_description)
 
     def test_lead_gm_sees_gm_notes(self):
-        """Lead GM viewer gets gm_notes on beat completion entries."""
+        """Lead GM viewer gets visible_gm_notes on beat completion entries."""
         entries = serialize_story_log(story=self.story, progress=None, viewer_role="lead_gm")
         beat_entries = [e for e in entries if isinstance(e, StoryLogBeatEntry)]
-        hinted = next(e for e in beat_entries if e.beat_id == self.beat_hinted.pk)
-        self.assertEqual(hinted.gm_notes, self.comp_hinted.gm_notes)
+        hinted = next(e for e in beat_entries if e.beat == self.beat_hinted)
+        self.assertEqual(hinted.visible_gm_notes, self.comp_hinted.gm_notes)
 
     def test_lead_gm_sees_internal_notes_on_episode_entries(self):
-        """Lead GM viewer gets gm_notes on EpisodeResolution entries."""
+        """Lead GM viewer gets visible_internal_notes on EpisodeResolution entries."""
         entries = serialize_story_log(story=self.story, progress=None, viewer_role="lead_gm")
         episode_entries = [e for e in entries if isinstance(e, StoryLogEpisodeEntry)]
-        ep1_entry = next(e for e in episode_entries if e.episode_id == self.ep1.pk)
-        self.assertEqual(ep1_entry.internal_notes, self.res_ep1.gm_notes)
+        ep1_entry = next(e for e in episode_entries if e.resolution.episode_id == self.ep1.pk)
+        self.assertEqual(ep1_entry.visible_internal_notes, self.res_ep1.gm_notes)
 
     def test_lead_gm_sees_all_completions_not_filtered_by_character(self):
         """Lead GM sees all completions regardless of which character (no progress filter)."""
         entries = serialize_story_log(story=self.story, progress=None, viewer_role="lead_gm")
         beat_entries = [e for e in entries if isinstance(e, StoryLogBeatEntry)]
-        beat_ids = [e.beat_id for e in beat_entries]
+        beats_seen = [e.beat for e in beat_entries]
         # Should include the other player's beat_hinted2 completion
-        self.assertIn(self.beat_hinted2.pk, beat_ids)
+        self.assertIn(self.beat_hinted2, beats_seen)
 
     # ------------------------------------------------------------------
     # staff visibility rules
@@ -369,12 +375,12 @@ class SerializeStoryLogTests(EvenniaTestCase):
         entries = serialize_story_log(story=self.story, progress=None, viewer_role="staff")
         beat_entries = [e for e in entries if isinstance(e, StoryLogBeatEntry)]
         for entry in beat_entries:
-            self.assertIsNotNone(entry.internal_description)
-            self.assertIsNotNone(entry.gm_notes)
+            self.assertIsNotNone(entry.visible_internal_description)
+            self.assertIsNotNone(entry.visible_gm_notes)
 
         episode_entries = [e for e in entries if isinstance(e, StoryLogEpisodeEntry)]
         for entry in episode_entries:
-            self.assertIsNotNone(entry.internal_notes)
+            self.assertIsNotNone(entry.visible_internal_notes)
 
     # ------------------------------------------------------------------
     # chronological ordering
@@ -386,9 +392,9 @@ class SerializeStoryLogTests(EvenniaTestCase):
         timestamps = []
         for entry in entries:
             if isinstance(entry, StoryLogBeatEntry):
-                timestamps.append(entry.recorded_at)
+                timestamps.append(entry.completion.recorded_at)
             else:
-                timestamps.append(entry.resolved_at)
+                timestamps.append(entry.resolution.resolved_at)
 
         self.assertEqual(
             timestamps,
@@ -397,41 +403,43 @@ class SerializeStoryLogTests(EvenniaTestCase):
         )
 
     # ------------------------------------------------------------------
-    # entry_type field
+    # type-based dispatch (replaces entry_type string tag)
     # ------------------------------------------------------------------
 
-    def test_beat_entries_have_correct_entry_type(self):
-        """StoryLogBeatEntry.entry_type is always 'beat_completion'."""
+    def test_beat_entries_are_story_log_beat_entry_instances(self):
+        """Service returns StoryLogBeatEntry instances for beat completions."""
         entries = serialize_story_log(story=self.story, progress=None, viewer_role="staff")
+        # Every entry wrapping a completion must be a StoryLogBeatEntry
         for entry in entries:
             if isinstance(entry, StoryLogBeatEntry):
-                self.assertEqual(entry.entry_type, LOG_ENTRY_BEAT_COMPLETION)
+                self.assertIsNotNone(entry.beat)
+                self.assertIsNotNone(entry.completion)
 
-    def test_episode_entries_have_correct_entry_type(self):
-        """StoryLogEpisodeEntry.entry_type is always 'episode_resolution'."""
+    def test_episode_entries_are_story_log_episode_entry_instances(self):
+        """Service returns StoryLogEpisodeEntry instances for episode resolutions."""
         entries = serialize_story_log(story=self.story, progress=None, viewer_role="staff")
         for entry in entries:
             if isinstance(entry, StoryLogEpisodeEntry):
-                self.assertEqual(entry.entry_type, LOG_ENTRY_EPISODE_RESOLUTION)
+                self.assertIsNotNone(entry.resolution)
 
     # ------------------------------------------------------------------
     # transition data on episode entries
     # ------------------------------------------------------------------
 
     def test_episode_entry_with_transition_has_target_info(self):
-        """EpisodeResolution with a chosen_transition populates target episode fields."""
+        """EpisodeResolution with a chosen_transition — resolution FK carries the transition."""
         entries = serialize_story_log(story=self.story, progress=None, viewer_role="staff")
         episode_entries = [e for e in entries if isinstance(e, StoryLogEpisodeEntry)]
-        ep1_entry = next(e for e in episode_entries if e.episode_id == self.ep1.pk)
-        self.assertEqual(ep1_entry.transition_id, self.trans.pk)
-        self.assertEqual(ep1_entry.target_episode_id, self.ep2.pk)
-        self.assertEqual(ep1_entry.target_episode_title, self.ep2.title)
+        ep1_entry = next(e for e in episode_entries if e.resolution.episode_id == self.ep1.pk)
+        trans = ep1_entry.resolution.chosen_transition
+        self.assertIsNotNone(trans)
+        self.assertEqual(trans.pk, self.trans.pk)
+        self.assertEqual(trans.target_episode.pk, self.ep2.pk)
+        self.assertEqual(trans.target_episode.title, self.ep2.title)
 
-    def test_episode_entry_without_transition_has_null_target(self):
-        """EpisodeResolution with no transition → frontier: target fields are None."""
+    def test_episode_entry_without_transition_has_null_transition(self):
+        """EpisodeResolution with no transition → frontier: chosen_transition is None."""
         entries = serialize_story_log(story=self.story, progress=None, viewer_role="staff")
         episode_entries = [e for e in entries if isinstance(e, StoryLogEpisodeEntry)]
-        ep2_entry = next(e for e in episode_entries if e.episode_id == self.ep2.pk)
-        self.assertIsNone(ep2_entry.transition_id)
-        self.assertIsNone(ep2_entry.target_episode_id)
-        self.assertIsNone(ep2_entry.target_episode_title)
+        ep2_entry = next(e for e in episode_entries if e.resolution.episode_id == self.ep2.pk)
+        self.assertIsNone(ep2_entry.resolution.chosen_transition)

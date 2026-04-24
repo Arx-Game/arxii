@@ -1,4 +1,3 @@
-import dataclasses
 from typing import Any, cast
 
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -27,6 +26,7 @@ from world.stories.models import (
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
+from world.stories.types import StoryLogBeatEntry, StoryLogEpisodeEntry
 
 
 class StoryListSerializer(serializers.ModelSerializer):
@@ -880,23 +880,60 @@ class CreateEventFromSessionRequestInputSerializer(serializers.Serializer):
 
 
 class StoryLogSerializer(serializers.Serializer):
-    """Thin wrapper that renders a list of StoryLogBeatEntry / StoryLogEpisodeEntry dataclasses.
+    """Renders a list of StoryLogBeatEntry / StoryLogEpisodeEntry dataclasses to JSON.
 
     Usage::
 
         entries = serialize_story_log(story=story, progress=progress, viewer_role=role)
         return Response(StoryLogSerializer(entries).data)
 
-    The serializer converts each dataclass to a dict via ``dataclasses.asdict``.
-    The ``entry_type`` field on each dict distinguishes beat_completion from
-    episode_resolution for frontend rendering.
+    Each entry is serialized per-type via isinstance dispatch. The ``entry_type``
+    field distinguishes beat_completion from episode_resolution for frontend rendering.
     """
 
     entries = serializers.SerializerMethodField()
 
     def get_entries(self, log_entries: list) -> list[dict[str, Any]]:
-        """Convert each dataclass entry to a plain dict."""
-        return [dataclasses.asdict(entry) for entry in log_entries]
+        """Serialize each entry using per-type logic."""
+        return [self._serialize_entry(e) for e in log_entries]
+
+    def _serialize_entry(self, entry: StoryLogBeatEntry | StoryLogEpisodeEntry) -> dict[str, Any]:
+        if isinstance(entry, StoryLogBeatEntry):
+            return self._serialize_beat(entry)
+        return self._serialize_episode(entry)
+
+    def _serialize_beat(self, entry: StoryLogBeatEntry) -> dict[str, Any]:
+        beat = entry.beat
+        completion = entry.completion
+        return {
+            "entry_type": "beat_completion",
+            "beat_id": beat.pk,
+            "episode_id": beat.episode_id,
+            "recorded_at": completion.recorded_at,
+            "outcome": completion.outcome,
+            "visibility": beat.visibility,
+            "player_hint": entry.visible_player_hint,
+            "player_resolution_text": entry.visible_player_resolution_text,
+            "internal_description": entry.visible_internal_description,
+            "gm_notes": entry.visible_gm_notes,
+        }
+
+    def _serialize_episode(self, entry: StoryLogEpisodeEntry) -> dict[str, Any]:
+        resolution = entry.resolution
+        trans = resolution.chosen_transition
+        target = trans.target_episode if trans else None
+        return {
+            "entry_type": "episode_resolution",
+            "episode_id": resolution.episode_id,
+            "episode_title": resolution.episode.title,
+            "resolved_at": resolution.resolved_at,
+            "transition_id": trans.pk if trans else None,
+            "target_episode_id": target.pk if target else None,
+            "target_episode_title": target.title if target else None,
+            "connection_type": trans.connection_type if trans else "",
+            "connection_summary": trans.connection_summary if trans else "",
+            "internal_notes": entry.visible_internal_notes,
+        }
 
     def to_representation(self, instance: list) -> dict[str, Any]:
         """Accept the log entries list as the instance."""
