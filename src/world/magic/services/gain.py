@@ -76,7 +76,7 @@ from world.magic.models import (
     RoomResonance,
     SceneEntryEndorsement,
 )
-from world.magic.types import SettlementResult
+from world.magic.types import ResonanceDailyTickSummary, SettlementResult
 from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.models import Interaction, Persona, Scene, SceneParticipation
 from world.scenes.place_models import InteractionReceiver
@@ -408,3 +408,51 @@ def create_scene_entry_endorsement(
         scene_entry_endorsement=endorsement,
     )
     return endorsement
+
+
+def residence_trickle_tick() -> ResonanceDailyTickSummary:
+    """Daily residence-trickle tick (Spec C §5.3).
+
+    Iterates sheets with a declared residence; for each matching
+    (residence-tagged ∩ sheet-claimed) resonance, fires a single
+    grant_resonance call worth cfg.residence_daily_trickle_per_resonance.
+
+    Per-character grants are wrapped in nested atomic blocks so a single
+    failure doesn't poison the whole tick. Non-residence sheets are skipped.
+    """
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    cfg = get_resonance_gain_config()
+    grants_issued = 0
+    sheets_processed = 0
+
+    sheets_with_residence = CharacterSheet.objects.exclude(current_residence__isnull=True)
+
+    for sheet in sheets_with_residence.iterator():
+        sheets_processed += 1
+        matched = get_residence_resonances(sheet)
+        rp = sheet.current_residence
+        aura = getattr(rp, "room_aura_profile", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor, raises RelatedObjectDoesNotExist if missing
+        if aura is None or not matched:
+            continue
+
+        for resonance in matched:
+            try:
+                with transaction.atomic():
+                    grant_resonance(
+                        sheet,
+                        resonance,
+                        cfg.residence_daily_trickle_per_resonance,
+                        source=GainSource.ROOM_RESIDENCE,
+                        room_aura_profile=aura,
+                    )
+                    grants_issued += 1
+            except Exception:  # noqa: BLE001, S112 — log + continue to avoid tick poison
+                # TODO: structured log via Evennia logger.
+                continue
+
+    return ResonanceDailyTickSummary(
+        residence_grants_issued=grants_issued,
+        sheets_processed=sheets_processed,
+    )
