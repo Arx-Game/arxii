@@ -58,7 +58,10 @@ Accessor reference (verified 2026-04-23 during implementation):
 
 from __future__ import annotations
 
+import math
+
 from django.db import transaction
+from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
 from evennia_extensions.models import RoomProfile
@@ -72,6 +75,7 @@ from world.magic.models import (
     RoomAuraProfile,
     RoomResonance,
 )
+from world.magic.types import SettlementResult
 from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.models import Interaction, Persona, SceneParticipation
 from world.scenes.place_models import InteractionReceiver
@@ -268,3 +272,55 @@ def _endorser_was_present(
     return InteractionReceiver.objects.filter(
         interaction=interaction, persona=endorser_persona
     ).exists()
+
+
+@transaction.atomic
+def settle_weekly_pot(endorser_sheet: CharacterSheet) -> SettlementResult:
+    """Settle all unsettled PoseEndorsement rows for one endorser.
+
+    Distributes the weekly pot across the endorser's unsettled endorsements
+    using ceiling division, writes grants via grant_resonance (ledger rows
+    auto-written), and marks each endorsement settled_at=now.
+
+    Idempotent — a second call with no new unsettled rows is a no-op.
+    """
+    # Inner import to avoid circular with services/resonance.py
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    unsettled = list(
+        PoseEndorsement.objects.select_for_update().filter(
+            endorser_sheet=endorser_sheet, settled_at__isnull=True
+        )
+    )
+    if not unsettled:
+        return SettlementResult(
+            endorser_sheet=endorser_sheet,
+            endorsements_settled=0,
+            total_granted=0,
+        )
+
+    cfg = get_resonance_gain_config()
+    n = len(unsettled)
+    share = math.ceil(cfg.weekly_pot_per_character / n)
+    now = timezone.now()
+    total_granted = 0
+
+    for endorsement in unsettled:
+        grant_resonance(
+            endorsement.endorsee_sheet,
+            endorsement.resonance,
+            share,
+            source=GainSource.POSE_ENDORSEMENT,
+            pose_endorsement=endorsement,
+        )
+        endorsement.granted_amount = share
+        endorsement.settled_at = now
+        endorsement.save(update_fields=["granted_amount", "settled_at"])
+        total_granted += share
+
+    return SettlementResult(
+        endorser_sheet=endorser_sheet,
+        endorsements_settled=n,
+        total_granted=total_granted,
+    )

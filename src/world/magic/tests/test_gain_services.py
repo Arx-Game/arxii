@@ -288,3 +288,112 @@ class CreatePoseEndorsementTests(TestCase):
         create_pose_endorsement(endorser, interaction, resonance)
         with self.assertRaises(EndorsementValidationError):
             create_pose_endorsement(endorser, interaction, resonance)
+
+
+class SettleWeeklyPotTests(TestCase):
+    def _make_unsettled(self, endorser_sheet, count):
+        """Helper: create `count` unsettled PoseEndorsements by endorser_sheet.
+
+        Each endorsement has a distinct interaction + endorsee + resonance.
+        Endorsees claim the resonance so the ledger write passes FK checks.
+        """
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import (
+            CharacterResonanceFactory,
+            PoseEndorsementFactory,
+            ResonanceFactory,
+        )
+        from world.scenes.factories import InteractionFactory
+
+        endorsements = []
+        for _ in range(count):
+            endorsee = CharacterSheetFactory()
+            resonance = ResonanceFactory()
+            CharacterResonanceFactory(character_sheet=endorsee, resonance=resonance)
+            interaction = InteractionFactory()
+            ep = PoseEndorsementFactory(
+                endorser_sheet=endorser_sheet,
+                endorsee_sheet=endorsee,
+                interaction=interaction,
+                resonance=resonance,
+            )
+            endorsements.append(ep)
+        return endorsements
+
+    def test_noop_when_no_unsettled(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.services.gain import settle_weekly_pot
+
+        sheet = CharacterSheetFactory()
+        result = settle_weekly_pot(sheet)
+        self.assertEqual(result.endorsements_settled, 0)
+        self.assertEqual(result.total_granted, 0)
+
+    def test_divides_pot_ceil(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.services.gain import (
+            get_resonance_gain_config,
+            settle_weekly_pot,
+        )
+
+        endorser = CharacterSheetFactory()
+        self._make_unsettled(endorser, 3)
+        cfg = get_resonance_gain_config()
+        # 3 endorsements, pot=20 → ceil(20/3) = 7 each
+        expected_share = -(-cfg.weekly_pot_per_character // 3)  # ceil divide
+
+        result = settle_weekly_pot(endorser)
+        self.assertEqual(result.endorsements_settled, 3)
+        self.assertEqual(result.total_granted, expected_share * 3)
+
+    def test_writes_ledger_rows(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.models import ResonanceGrant
+        from world.magic.services.gain import settle_weekly_pot
+
+        endorser = CharacterSheetFactory()
+        self._make_unsettled(endorser, 2)
+        settle_weekly_pot(endorser)
+        self.assertEqual(
+            ResonanceGrant.objects.filter(source=GainSource.POSE_ENDORSEMENT).count(),
+            2,
+        )
+
+    def test_marks_settled_at(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.services.gain import settle_weekly_pot
+
+        endorser = CharacterSheetFactory()
+        endorsements = self._make_unsettled(endorser, 2)
+        settle_weekly_pot(endorser)
+        for ep in endorsements:
+            ep.refresh_from_db()
+            self.assertIsNotNone(ep.settled_at)
+            self.assertIsNotNone(ep.granted_amount)
+
+    def test_idempotent_rerun(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.services.gain import settle_weekly_pot
+
+        endorser = CharacterSheetFactory()
+        self._make_unsettled(endorser, 2)
+        first = settle_weekly_pot(endorser)
+        second = settle_weekly_pot(endorser)
+        self.assertEqual(first.endorsements_settled, 2)
+        self.assertEqual(second.endorsements_settled, 0)
+
+    def test_settlement_writes_endorsee_balance(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.models import CharacterResonance
+        from world.magic.services.gain import settle_weekly_pot
+
+        endorser = CharacterSheetFactory()
+        endorsements = self._make_unsettled(endorser, 2)
+        settle_weekly_pot(endorser)
+        # Each endorsee's CharacterResonance.balance should be bumped
+        for ep in endorsements:
+            cr = CharacterResonance.objects.get(
+                character_sheet=ep.endorsee_sheet, resonance=ep.resonance
+            )
+            self.assertGreater(cr.balance, 0)

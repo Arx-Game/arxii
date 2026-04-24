@@ -20,6 +20,11 @@ from world.magic.types.alterations import (
     PendingAlterationTierReduction,
 )
 from world.magic.types.aura import AffinityType, AuraPercentages
+from world.magic.types.gain import (
+    ResonanceDailyTickSummary,
+    ResonanceWeeklySettlementSummary,
+    SettlementResult,
+)
 from world.magic.types.pull import (
     PullActionContext,
     PullPreviewResult,
@@ -57,9 +62,12 @@ __all__ = [
     "PullActionContext",
     "PullPreviewResult",
     "ResolvedPullEffect",
+    "ResonanceDailyTickSummary",
     "ResonancePullResult",
+    "ResonanceWeeklySettlementSummary",
     "RitualOutcome",
     "RuntimeTechniqueStats",
+    "SettlementResult",
     "SoulfrayContent",
     "SoulfrayResult",
     "SoulfrayWarning",

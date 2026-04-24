@@ -95,6 +95,31 @@ class GrantResonanceTests(TestCase):
         with self.assertRaises(InvalidImbueAmount):
             grant_resonance(sheet, res, 0, source=GainSource.STAFF_GRANT)
 
+    def test_pose_endorsement_grant_writes_ledger(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import (
+            PoseEndorsementFactory,
+            ResonanceFactory,
+        )
+        from world.magic.models import ResonanceGrant
+        from world.magic.services.resonance import grant_resonance
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        endorsement = PoseEndorsementFactory(endorsee_sheet=sheet, resonance=res)
+        cr = grant_resonance(
+            sheet,
+            res,
+            3,
+            source=GainSource.POSE_ENDORSEMENT,
+            pose_endorsement=endorsement,
+        )
+        self.assertEqual(cr.balance, 3)
+        grant = ResonanceGrant.objects.get(character_sheet=sheet)
+        self.assertEqual(grant.source_pose_endorsement, endorsement)
+        self.assertEqual(grant.source, GainSource.POSE_ENDORSEMENT)
+
 
 # =============================================================================
 # 11.2 — spend_resonance_for_imbuing

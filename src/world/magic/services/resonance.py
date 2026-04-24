@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
-    from world.magic.models import Resonance as ResonanceModel
+    from world.magic.models import PoseEndorsement, Resonance as ResonanceModel
     from world.magic.types import PullActionContext
 
 
@@ -57,7 +57,7 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
     amount: int,
     *,
     source: str,
-    pose_endorsement: None = None,  # noqa: ARG001 — reserved stub; raises ValueError in validator
+    pose_endorsement: PoseEndorsement | None = None,
     scene_entry_endorsement: None = None,  # noqa: ARG001 — reserved stub; raises ValueError in validator
     room_aura_profile: RoomAuraProfile | None = None,
     staff_account: AccountDB | None = None,
@@ -65,15 +65,15 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
 
     Validates that the typed source kwarg matches the discriminator. Raises
-    ValueError for POSE_ENDORSEMENT / SCENE_ENTRY / OUTFIT_ITEM sources —
-    those typed FKs ship in Tasks 13/17 and a future Items system.
+    ValueError for SCENE_ENTRY / OUTFIT_ITEM sources — those typed FKs ship in
+    Task 17 and a future Items system.
 
     Args:
         character_sheet: The character receiving resonance.
         resonance: The Resonance being granted.
         amount: Positive integer amount to grant.
         source: GainSource discriminator (keyword-only).
-        pose_endorsement: Reserved — raises ValueError (Task 13).
+        pose_endorsement: Required for POSE_ENDORSEMENT source.
         scene_entry_endorsement: Reserved — raises ValueError (Task 17).
         room_aura_profile: Required for ROOM_RESIDENCE source.
         staff_account: Optional for STAFF_GRANT source (nullable by design).
@@ -89,7 +89,11 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
         msg = "Resonance grant amount must be positive."
         raise InvalidImbueAmount(msg)
 
-    _validate_grant_source_shape(source, room_aura_profile=room_aura_profile)
+    _validate_grant_source_shape(
+        source,
+        room_aura_profile=room_aura_profile,
+        pose_endorsement=pose_endorsement,
+    )
 
     cr, _ = CharacterResonance.objects.get_or_create(
         character_sheet=character_sheet,
@@ -107,6 +111,7 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
         source=source,
         source_room_aura_profile=room_aura_profile,
         source_staff_account=staff_account,
+        source_pose_endorsement=pose_endorsement,
     )
     return cr
 
@@ -115,14 +120,14 @@ def _validate_grant_source_shape(
     source: str,
     *,
     room_aura_profile: RoomAuraProfile | None,
+    pose_endorsement: PoseEndorsement | None = None,
 ) -> None:
     """Raise ValueError if the source discriminator doesn't match the supplied kwargs."""
     if source == GainSource.POSE_ENDORSEMENT:
-        msg = (
-            "POSE_ENDORSEMENT source requires source_pose_endorsement FK; "
-            "ResonanceGrant schema adds that FK in Task 13."
-        )
-        raise ValueError(msg)
+        if pose_endorsement is None:
+            msg = "POSE_ENDORSEMENT source requires pose_endorsement= kwarg."
+            raise ValueError(msg)
+        return
     if source == GainSource.SCENE_ENTRY:
         msg = (
             "SCENE_ENTRY source requires source_scene_entry_endorsement FK; "
