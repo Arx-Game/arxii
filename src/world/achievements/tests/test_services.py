@@ -173,3 +173,85 @@ class GrantAchievementTest(TestCase):
             ).count(),
             1,
         )
+
+
+class GrantAchievementStoryReactivityTest(TestCase):
+    """grant_achievement fires the stories reactivity hook on newly-earned rows."""
+
+    def test_flips_character_scope_achievement_beat(self) -> None:
+        from world.stories.constants import (
+            BeatOutcome,
+            BeatPredicateType,
+            StoryScope,
+        )
+        from world.stories.factories import (
+            BeatFactory,
+            ChapterFactory,
+            EpisodeFactory,
+            StoryFactory,
+            StoryProgressFactory,
+        )
+        from world.stories.models import BeatCompletion
+
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        episode = EpisodeFactory(chapter=ChapterFactory(story=story))
+        StoryProgressFactory(
+            story=story,
+            character_sheet=sheet,
+            current_episode=episode,
+        )
+        achievement = AchievementFactory()
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.ACHIEVEMENT_HELD,
+            required_achievement=achievement,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        grant_achievement(achievement, [sheet])
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+        self.assertTrue(
+            BeatCompletion.objects.filter(beat=beat, character_sheet=sheet).exists(),
+        )
+
+    def test_duplicate_grant_does_not_refire_hook(self) -> None:
+        """Re-granting an already-earned achievement doesn't create new
+        BeatCompletion rows via the reactivity hook."""
+        from world.stories.constants import (
+            BeatOutcome,
+            BeatPredicateType,
+            StoryScope,
+        )
+        from world.stories.factories import (
+            BeatFactory,
+            ChapterFactory,
+            EpisodeFactory,
+            StoryFactory,
+            StoryProgressFactory,
+        )
+        from world.stories.models import BeatCompletion
+
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        episode = EpisodeFactory(chapter=ChapterFactory(story=story))
+        StoryProgressFactory(
+            story=story,
+            character_sheet=sheet,
+            current_episode=episode,
+        )
+        achievement = AchievementFactory()
+        BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.ACHIEVEMENT_HELD,
+            required_achievement=achievement,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        grant_achievement(achievement, [sheet])
+        count_after_first = BeatCompletion.objects.count()
+        grant_achievement(achievement, [sheet])
+        count_after_second = BeatCompletion.objects.count()
+        self.assertEqual(count_after_first, count_after_second)

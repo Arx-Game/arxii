@@ -51,7 +51,13 @@ def grant_achievement(
 
     If no CharacterAchievement exists for this achievement yet, creates a
     Discovery and links all characters as co-discoverers.
+
+    After commit, notifies the stories reactivity service so any active
+    stories with ACHIEVEMENT_HELD beats for this achievement are
+    re-evaluated (and flip SUCCESS when the requirement is met).
     """
+    from world.stories.services.reactivity import on_achievement_earned  # noqa: PLC0415
+
     with transaction.atomic():
         is_first_discovery = not CharacterAchievement.objects.filter(
             achievement=achievement
@@ -62,15 +68,22 @@ def grant_achievement(
             discovery = Discovery.objects.create(achievement=achievement)
 
         results: list[CharacterAchievement] = []
+        newly_earned: list[CharacterSheet] = []
         for sheet in character_sheets:
-            char_achievement, _ = CharacterAchievement.objects.get_or_create(
+            char_achievement, created = CharacterAchievement.objects.get_or_create(
                 character_sheet=sheet,
                 achievement=achievement,
                 defaults={"discovery": discovery},
             )
             results.append(char_achievement)
+            if created:
+                newly_earned.append(sheet)
 
-        return results
+    # Reactivity hook fires per newly-earned sheet. Idempotent — safe on replay.
+    for sheet in newly_earned:
+        on_achievement_earned(sheet, achievement)
+
+    return results
 
 
 def _check_achievements(character_sheet: CharacterSheet, stat: StatDefinition) -> None:
