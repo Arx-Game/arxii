@@ -310,7 +310,9 @@ def reduce_corruption(
     stage_after = stage_before
 
     if instance is not None and not _from_decay:
-        decay_result = decay_condition_severity(instance, actual_reduction)
+        decay_result = decay_condition_severity(
+            instance, actual_reduction, _skip_corruption_sync=True
+        )
         condition_resolved = decay_result.resolved
         stage_after = decay_result.new_stage.stage_order if decay_result.new_stage else 0
 

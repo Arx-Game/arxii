@@ -1671,15 +1671,44 @@ def apply_stage_entry_aftermath(payload: ConditionStageChangedPayload) -> None:
         # else: existing severity >= assoc.severity — leave alone.
 
 
+def _resolve_character_sheet_for_target(
+    target: "ObjectDB",
+) -> "CharacterSheet | None":
+    """Walk an ObjectDB target back to its CharacterSheet, or None.
+
+    CharacterSheet uses OneToOneField(ObjectDB, primary_key=True), so
+    CharacterSheet.pk == ObjectDB.pk for all character objects. Non-character
+    ObjectDB rows (rooms, items, exits) have no CharacterSheet row; the
+    DoesNotExist exception is caught and returns None.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    try:
+        return CharacterSheet.objects.get(pk=target.pk)
+    except CharacterSheet.DoesNotExist:
+        return None
+
+
 def decay_condition_severity(
     instance: ConditionInstance,
     amount: int,
+    *,
+    _skip_corruption_sync: bool = False,
 ) -> SeverityDecayResult:
     """Inverse of advance_condition_severity. Walks stage down if threshold crossed.
 
     Per spec Scope 6 §5.3. Emits CONDITION_STAGE_CHANGED only when the stage
     actually changes; consumers derive descending-vs-ascending from
     stage_order comparison. Sets resolved_at when severity reaches 0.
+
+    Per spec §3.4 (passive decay integration): if the condition's template is
+    Corruption-kind (corruption_resonance is not None), calls reduce_corruption
+    with _from_decay=True to keep CharacterResonance.corruption_current in sync.
+    The _from_decay flag prevents re-entrant calls back into this function.
+
+    ``_skip_corruption_sync``: internal flag set by reduce_corruption when it
+    calls this function directly (having already decremented corruption_current),
+    preventing double-decrement.
     """
     previous_stage = instance.current_stage
     new_severity = max(0, instance.severity - amount)
@@ -1716,6 +1745,25 @@ def decay_condition_severity(
                     new_stage=new_stage,
                 ),
                 location=target_location,
+            )
+
+    # Field sync for Corruption-kind conditions (spec §3.4).
+    # _skip_corruption_sync is set by reduce_corruption when it calls this function
+    # directly (having already decremented corruption_current), preventing double-decrement.
+    # _from_decay=True on the reduce_corruption call prevents recursion back into
+    # decay_condition_severity from the reduce_corruption side.
+    if not _skip_corruption_sync and instance.condition.corruption_resonance is not None:
+        from world.magic.services.corruption import reduce_corruption  # noqa: PLC0415
+        from world.magic.types.corruption import CorruptionRecoverySource  # noqa: PLC0415
+
+        sheet = _resolve_character_sheet_for_target(instance.target)
+        if sheet is not None:
+            reduce_corruption(
+                character_sheet=sheet,
+                resonance=instance.condition.corruption_resonance,
+                amount=amount,
+                source=CorruptionRecoverySource.PASSIVE_DECAY,
+                _from_decay=True,
             )
 
     return SeverityDecayResult(
