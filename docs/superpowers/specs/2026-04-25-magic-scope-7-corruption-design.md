@@ -467,8 +467,16 @@ flooring back to the threshold.
 - `CorruptionConfig` singleton-by-convention; no DB constraint.
 - Per-resonance `ConditionTemplate` rows are content; standard ConditionTemplate
   validation applies.
-- `ConditionStage.advancement_*` fields are nullable/defaulted to preserve
-  existing behavior for unmodified conditions.
+- `ConditionStage.advancement_resist_failure_kind` defaults to
+  `ADVANCE_AT_THRESHOLD`, preserving existing behavior for every unmodified
+  condition. The existing `resist_check_type` (nullable) and `resist_difficulty`
+  (default 10) fields keep their existing schema; this scope only wires them
+  into `advance_condition_severity` when the failure_kind opts in. Existing
+  content authored against `resist_check_type` for non-advancement reasons
+  (if any) continues to work unchanged.
+- The new `ConditionTemplate.corruption_resonance` FK (§3.4) is nullable and
+  defaults to NULL, so every existing ConditionTemplate row remains valid
+  post-migration.
 
 ---
 
@@ -1208,7 +1216,7 @@ their effect step. Foundation primitive, Spec B content.
 ### 11.3 Stage advancement check intervention
 
 Spec B's Soul Tether registers triggers that listen on
-`condition_stage_advance_check_about_to_fire` for the Abyssal partner. Triggers
+`EventName.CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE` for the Abyssal partner. Triggers
 apply the Sineater's contribution to the resist roll — bonus, co-roll, or
 forced-pass depending on tether tier and Sineater affinity. Standard
 reactive-layer authoring.
