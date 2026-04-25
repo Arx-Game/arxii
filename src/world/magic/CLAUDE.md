@@ -136,6 +136,69 @@ system. Anima rituals are set up post-CG. CharacterAnimaRitual references Resona
 **Note:** Affinity and Resonance are proper domain models in this app, each with an
 optional OneToOne FK back to ModifierTarget for modifier system integration.
 
+### Resonance Gain Surfaces (Resonance Pivot Spec C)
+
+**Models (new):**
+- `ResonanceGainConfig` - Singleton tuning config (pk=1). Fields: `weekly_pot_per_character`,
+  `scene_entry_grant`, `residence_daily_trickle_per_resonance`, etc. Lazy-created via
+  `get_resonance_gain_config()`.
+- `PoseEndorsement` - Unsettled endorsement of a pose; settles at weekly tick. FK to
+  `endorser_sheet`, M2M to `Resonance`. Unique per `(endorser_sheet, interaction)`.
+  Captures `persona_snapshot` (CharField) for masquerade audit. Fields: `created_at`,
+  `settled_at` (NULL until weekly settlement).
+- `SceneEntryEndorsement` - Immediate flat grant for endorsing a character's scene entry
+  pose. FK `endorser_sheet`, FK `endorsee_sheet`, FK `scene`, M2M `resonance`. Unique per
+  `(endorser_sheet, endorsee_sheet, scene)`. Fires `grant_resonance` synchronously on creation.
+- `ResonanceGrant` - Universal audit ledger. Discriminator `source` (TextChoice: POSE_ENDORSEMENT,
+  SCENE_ENTRY, ROOM_RESIDENCE, OUTFIT_ITEM, STAFF_GRANT) + typed FKs: `source_room_aura_profile`,
+  `source_staff_account`, `source_pose_endorsement`, `source_scene_entry_endorsement`. FK
+  `character_sheet`, FK `resonance`, `amount`. CheckConstraints enforce shape per source.
+- `RoomAuraProfile` - OneToOne extension of RoomProfile; hosts magical-character metadata.
+  Non-magical rooms have no row. FK `room_profile`, M2M `resonances` (through RoomResonance).
+- `RoomResonance` - Through-model for RoomAuraProfile ↔ Resonance M2M. Unique per
+  `(profile, resonance)`. Tracks set-by timestamp for audit.
+
+**Services (`services/gain.py` — new module):**
+- `grant_resonance(sheet, resonance, amount, *, source, typed_fk_kwargs)` - Typed-FK signature.
+  Writes CharacterResonance + ResonanceGrant atomically. `source` is a GainSource TextChoice.
+  Matching typed FK kwarg required per source: ROOM_RESIDENCE → `room_aura_profile=`,
+  POSE_ENDORSEMENT → `pose_endorsement=`, SCENE_ENTRY → `scene_entry_endorsement=`,
+  STAFF_GRANT → optional `staff_account=`, OUTFIT_ITEM reserved.
+- `create_pose_endorsement(endorser_sheet, interaction, resonance)` - 8 preconditions
+  (self, alt, whisper, private, participation, unclaimed resonance, duplicate). Raises
+  `EndorsementValidationError` on failure.
+- `create_scene_entry_endorsement(endorser_sheet, endorsee_sheet, scene, resonance)` -
+  Immediate-grant sibling with participation + alt checks.
+- `settle_weekly_pot(endorser_sheet)` - Settles all unsettled PoseEndorsement rows for one
+  endorser. Distributes `ceil(weekly_pot_per_character / N)` resonance per endorsement.
+  Idempotent.
+- `residence_trickle_tick()` - Daily pass: for each sheet with residence, grant per matching
+  (aura-tagged ∩ sheet-claimed) resonance. Per-character atomic.
+- `resonance_daily_tick()` - Master daily tick (residence trickle + outfit stub).
+- `resonance_weekly_settlement_tick()` - Master weekly tick (settle all endorsers).
+- `tag_room_resonance(room_profile, resonance, set_by=None)` / `untag_room_resonance(room_profile, resonance)` -
+  Idempotent room aura management.
+- `set_residence(sheet, room_profile | None)` / `get_residence_resonances(sheet) -> set[Resonance]` -
+  Residence declaration + resonance intersection query.
+- `account_for_sheet(sheet) -> AccountDB | None` - Walks CharacterSheet → RosterEntry →
+  current RosterTenure → PlayerData → Account. Single source of truth for alt-guard.
+- `get_resonance_gain_config() -> ResonanceGainConfig` - Lazy-create singleton (pk=1).
+
+**Ticks registered in `game_clock/tasks.py`:**
+- `magic.resonance_daily` - 24h
+- `magic.resonance_weekly_settlement` - 7d
+
+**API surfaces (`views.py`):**
+- `PoseEndorsementViewSet` - POST /api/magic/pose-endorsements/ + DELETE-if-unsettled
+- `SceneEntryEndorsementViewSet` - POST-only (delete deferred with ResonanceGrantReversal)
+- `ResonanceGrantViewSet` - Read-only, user-scoped. FilterSet on source/resonance/date range.
+
+**Related changes:**
+- `CharacterSheet.current_residence` FK to RoomProfile (narrative declaration; mechanical
+  trickle fires only on RoomAuraProfile match)
+- `Interaction.pose_kind` CharField - STANDARD / ENTRY / DEPARTURE
+- `GainSource` TextChoice - POSE_ENDORSEMENT / SCENE_ENTRY / ROOM_RESIDENCE / OUTFIT_ITEM / STAFF_GRANT
+
 ## Removed Models (deprecated)
 
 The following models have been removed and replaced:
@@ -160,6 +223,7 @@ The following models have been removed and replaced:
 - `docs/plans/2026-03-04-path-cantrip-filtering-design.md` - path-based cantrip filtering design
 - `docs/superpowers/specs/2026-04-18-resonance-pivot-spec-a-threads-and-currency-design.md` - Resonance Pivot Spec A (Threads + Currency + Rituals + Mage Scars rename)
 - `docs/superpowers/plans/2026-04-19-resonance-pivot-spec-a-threads-and-currency.md` - 19-phase implementation plan for Spec A
+- `docs/superpowers/specs/2026-04-22-resonance-pivot-spec-c-gain-surfaces-design.md` - Resonance Pivot Spec C (Endorsements + Room Aura + Residence Trickle)
 
 ## Key Rules
 

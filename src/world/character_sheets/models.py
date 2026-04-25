@@ -186,6 +186,21 @@ class CharacterSheet(SharedMemoryModel):
         help_text="Character's species (may have parent for subspecies)",
     )
 
+    # Residence & Trickle
+    current_residence = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="residents",
+        help_text=(
+            "Character's declared residence. Narrative declaration; mechanical "
+            "resonance trickle fires only if the room also has a RoomAuraProfile "
+            "with matching resonance tags. Deliberately separate from ObjectDB "
+            "db_home (which is a respawn-location concern)."
+        ),
+    )
+
     # Social & Identity
     concept = models.CharField(
         max_length=255,

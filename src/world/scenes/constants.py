@@ -73,3 +73,11 @@ class PlaceStatus(models.TextChoices):
     ACTIVE = "active", "Active"
     REMOVED = "removed", "Removed"
     HIDDEN = "hidden", "Hidden"
+
+
+class PoseKind(models.TextChoices):
+    """Classifies an Interaction pose for scene-entry endorsement filtering (Spec C)."""
+
+    STANDARD = "standard", "Standard"
+    ENTRY = "entry", "Entry"
+    DEPARTURE = "departure", "Departure"  # reserved — future departure mechanic

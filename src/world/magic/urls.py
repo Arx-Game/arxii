@@ -21,8 +21,11 @@ from world.magic.views import (
     FacetViewSet,
     GiftViewSet,
     PendingAlterationViewSet,
+    PoseEndorsementViewSet,
+    ResonanceGrantViewSet,
     RestrictionViewSet,
     RitualPerformView,
+    SceneEntryEndorsementViewSet,
     TechniqueStyleViewSet,
     TechniqueViewSet,
     ThreadPullPreviewView,
@@ -68,6 +71,23 @@ router.register(
     "teaching-offers",
     ThreadWeavingTeachingOfferViewSet,
     basename="thread-weaving-teaching-offer",
+)
+
+# Resonance Pivot Spec C — Gain surfaces
+router.register(
+    "pose-endorsements",
+    PoseEndorsementViewSet,
+    basename="pose-endorsement",
+)
+router.register(
+    "scene-entry-endorsements",
+    SceneEntryEndorsementViewSet,
+    basename="scene-entry-endorsement",
+)
+router.register(
+    "resonance-grants",
+    ResonanceGrantViewSet,
+    basename="resonance-grant",
 )
 
 urlpatterns = [

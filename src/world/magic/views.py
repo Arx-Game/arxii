@@ -14,12 +14,14 @@ from dataclasses import asdict
 from typing import cast
 
 from django.db.models import Count, Prefetch
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
-from rest_framework import status, viewsets
+from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.permissions import IsAuthenticated
@@ -39,6 +41,7 @@ from world.magic.exceptions import (
 )
 from world.magic.filters import (
     CantripFilter,
+    ResonanceGrantFilterSet,
     ThreadFilter,
     ThreadWeavingTeachingOfferFilter,
 )
@@ -55,8 +58,11 @@ from world.magic.models import (
     Gift,
     MagicalAlterationTemplate,
     PendingAlteration,
+    PoseEndorsement,
     Resonance,
+    ResonanceGrant,
     Restriction,
+    SceneEntryEndorsement,
     Technique,
     TechniqueStyle,
     Thread,
@@ -80,8 +86,11 @@ from world.magic.serializers import (
     GiftSerializer,
     LibraryEntrySerializer,
     PendingAlterationSerializer,
+    PoseEndorsementSerializer,
+    ResonanceGrantSerializer,
     RestrictionSerializer,
     RitualPerformRequestSerializer,
+    SceneEntryEndorsementSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
     ThreadPullPreviewRequestSerializer,
@@ -94,6 +103,7 @@ from world.magic.services import (
     preview_resonance_pull,
     resolve_pending_alteration,
 )
+from world.magic.services.gain import account_for_sheet
 from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -767,3 +777,162 @@ class ThreadWeavingTeachingOfferViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = ThreadWeavingTeachingOfferFilter
+
+
+# =============================================================================
+# Resonance Pivot Spec C — Pose + Scene Entry Endorsement surfaces (Tasks 23, 24)
+# =============================================================================
+
+# Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
+_ERR_NO_ACTIVE_SHEET = "No active character sheet for this account."
+_ERR_ENDORSER_SHEET_REQUIRED = (
+    "endorser_sheet_id is required when account has multiple active tenures."
+)
+_ERR_ENDORSER_SHEET_INVALID = "Requested endorser_sheet_id is not among your active tenures."
+_ERR_ENDORSEMENT_SETTLED = "Endorsement already settled."
+
+
+def _resolve_endorser_sheet(request: Request) -> CharacterSheet:
+    """Return the CharacterSheet to use as endorser for an incoming request.
+
+    Single active tenure → return that sheet.
+    Multiple active tenures → require explicit ``endorser_sheet_id`` in the POST
+    body (alt system guard — no implicit first-sheet selection per project
+    conventions).
+    No active tenures → raise PermissionDenied.
+
+    Shared by PoseEndorsementViewSet and SceneEntryEndorsementViewSet.
+    """
+    account = request.user
+    sheets = list(
+        CharacterSheet.objects.filter(
+            roster_entry__tenures__player_data__account=account,
+            roster_entry__tenures__end_date__isnull=True,
+        )
+    )
+    if not sheets:
+        raise PermissionDenied(_ERR_NO_ACTIVE_SHEET)
+    if len(sheets) == 1:
+        return sheets[0]
+    # Multiple active tenures — explicit sheet required.
+    requested_pk = request.data.get("endorser_sheet_id")  # noqa: STRING_LITERAL — HTTP request body key
+    if requested_pk is None:
+        raise serializers.ValidationError({"endorser_sheet_id": _ERR_ENDORSER_SHEET_REQUIRED})
+    try:
+        return next(s for s in sheets if s.pk == int(requested_pk))
+    except (StopIteration, ValueError) as exc:
+        raise PermissionDenied(_ERR_ENDORSER_SHEET_INVALID) from exc
+
+
+class PoseEndorsementViewSet(
+    mixins.CreateModelMixin,
+    mixins.DestroyModelMixin,
+    GenericViewSet,
+):
+    """Create + delete-if-unsettled pose endorsements (Spec C Task 23).
+
+    Listing is not supported here — use ResonanceGrantViewSet (Task 25) for
+    audit queries.
+
+    POST /api/magic/pose-endorsements/ — create an endorsement.
+    DELETE /api/magic/pose-endorsements/<pk>/ — retract an unsettled endorsement.
+    """
+
+    queryset = PoseEndorsement.objects.select_related(
+        "endorser_sheet",
+        "endorsee_sheet",
+        "interaction",
+        "resonance",
+    )
+    serializer_class = PoseEndorsementSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer: PoseEndorsementSerializer) -> None:
+        """Resolve the endorser sheet from the requesting account and save."""
+        serializer.save(endorser_sheet=_resolve_endorser_sheet(self.request))
+
+    def destroy(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """Delete an unsettled endorsement.
+
+        Settled endorsements are hidden behind 404 — they are immutable once
+        the weekly tick has run. Only the endorsing account can delete.
+        """
+        endorsement = self.get_object()
+        if endorsement.settled_at is not None:
+            raise Http404(_ERR_ENDORSEMENT_SETTLED)
+        # Alt-guard: only the endorsing account can retract.
+        if account_for_sheet(endorsement.endorser_sheet) != request.user:
+            raise PermissionDenied
+        endorsement.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SceneEntryEndorsementViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    GenericViewSet,
+):
+    """Create + retrieve — scene-entry endorsements are immutable (Spec C Task 24).
+
+    DELETE is deferred until ResonanceGrantReversal ships. Grant fires
+    immediately at creation time — no weekly settlement step. Retrieve is
+    exposed so the detail URL is registered, which means DELETE returns 405
+    (Method Not Allowed) rather than 404 (not found).
+
+    POST /api/magic/scene-entry-endorsements/ — create an endorsement.
+    GET  /api/magic/scene-entry-endorsements/<pk>/ — retrieve an endorsement.
+    """
+
+    queryset = SceneEntryEndorsement.objects.select_related(
+        "endorser_sheet",
+        "endorsee_sheet",
+        "scene",
+        "resonance",
+    )
+    serializer_class = SceneEntryEndorsementSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer: SceneEntryEndorsementSerializer) -> None:
+        """Resolve the endorser sheet from the requesting account and save."""
+        serializer.save(endorser_sheet=_resolve_endorser_sheet(self.request))
+
+
+# =============================================================================
+# Resonance Pivot Spec C — ResonanceGrant read-only ledger (Task 25)
+# =============================================================================
+
+
+class ResonanceGrantViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Read-only audit ledger of all grants. User-scoped; staff see all.
+
+    GET  /api/magic/resonance-grants/       — list (user-scoped or staff-all)
+    GET  /api/magic/resonance-grants/<pk>/  — retrieve one row
+
+    Ordering: newest-first (descending granted_at). This is a timeline surface
+    and ordering is justified per CLAUDE.md policy.
+
+    Filter params: source, resonance (PK), granted_after, granted_before.
+    """
+
+    serializer_class = ResonanceGrantSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ResonanceGrantFilterSet
+    queryset = ResonanceGrant.objects.select_related(
+        "character_sheet",
+        "resonance",
+    ).order_by("-granted_at")
+
+    def get_queryset(self):  # type: ignore[override]
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return qs
+        return qs.filter(
+            character_sheet__roster_entry__tenures__player_data__account=user,
+            character_sheet__roster_entry__tenures__end_date__isnull=True,
+        ).distinct()

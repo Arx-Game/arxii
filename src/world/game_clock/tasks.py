@@ -312,6 +312,7 @@ def register_all_tasks() -> None:
 
     from world.conditions.services import decay_all_conditions_tick
     from world.magic.services.anima import anima_regen_tick
+    from world.magic.services.gain import resonance_daily_tick, resonance_weekly_settlement_tick
 
     register_task(
         CronDefinition(
@@ -330,6 +331,25 @@ def register_all_tasks() -> None:
             callable=decay_all_conditions_tick,
             interval=timedelta(hours=24),
             description="Passive decay for conditions with passive_decay_per_day > 0.",
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="magic.resonance_daily",
+            callable=resonance_daily_tick,
+            interval=timedelta(hours=24),
+            description="Daily resonance trickle (residence + outfit stub).",
+        )
+    )
+    register_task(
+        CronDefinition(
+            task_key="magic.resonance_weekly_settlement",
+            callable=resonance_weekly_settlement_tick,
+            interval=timedelta(days=7),
+            description=(
+                "Weekly pose-endorsement settlement. Idempotent — only sheets with "
+                "unsettled endorsements are processed."
+            ),
         )
     )
 

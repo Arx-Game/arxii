@@ -109,3 +109,14 @@ THREADWEAVING_ITEM_TYPECLASSES: tuple[str, ...] = (
     # references: swords, daggers, polearms, holy symbols, tomes, etc.
     # The exact list is content; the registry shape is the contract.
 )
+
+
+class GainSource(models.TextChoices):
+    """Discriminator for ResonanceGrant audit rows. Identifies which
+    typed source FK is populated on a given grant row."""
+
+    POSE_ENDORSEMENT = "POSE_ENDORSEMENT", "Pose endorsement"
+    SCENE_ENTRY = "SCENE_ENTRY", "Scene entry endorsement"
+    ROOM_RESIDENCE = "ROOM_RESIDENCE", "Room residence trickle"
+    OUTFIT_ITEM = "OUTFIT_ITEM", "Outfit item trickle (reserved — stubbed)"
+    STAFF_GRANT = "STAFF_GRANT", "Staff grant"
