@@ -92,9 +92,10 @@ values are applied, so tuning is a config change rather than a code change.
   on `CharacterResonance`; affinity coefficient reads through `Resonance.affinity`.
 - `get_runtime_technique_stats` (Scope 2) — used to measure resonance stat
   contribution per cast.
-- Reactive layer (Scope 5.5) — `condition_stage_advance_check_about_to_fire`
-  event surface for resist-check intervention; `corruption_accruing` event for
-  Spec B's redirect interception.
+- Reactive layer (Scope 5.5) — used as the event surface; this scope adds new
+  `EventName` variants (§3.5). The reactive infrastructure (TriggerHandler,
+  emit_event, filter DSL) is the prior work; the event names listed in §3.5 are
+  introduced here and added to the `EventName` TextChoices in `flows/constants.py`.
 - `AlterationGateError` pattern (Scope 5) — extended to `ProtagonismLockedError`
   for consumer-system gates.
 
@@ -223,7 +224,7 @@ the design intent (placeholder defaults; staff tune):
 
 | Stage | Name | severity_threshold | Effects |
 |---|---|---|---|
-| 1 | Whispers | 50 | `on_entry_conditions`: minor cosmetic affliction (e.g., "Whispers Heard," fast-decaying, RP-flag only). No alteration queued. |
+| 1 | Whispers | 50 | `on_entry_conditions`: minor cosmetic affliction (e.g., "Whispers Heard," fast-decaying, RP-flag only). No alteration queued. The cosmetic ConditionTemplate carries `parent_condition` pointing back at this Corruption template (Scope 6 aftermath pattern); the Corruption template itself has `parent_condition=null`. |
 | 2 | Manifestation | 200 | `on_entry_conditions`: queue first Corruption Twist alteration via the existing `MAGICAL_SCARS`-style effect handler with `kind=CORRUPTION_TWIST`. |
 | 3 | Erosion | 500 | Second Corruption Twist queued + `corruption_warning` reactive event with severity ADVISORY. |
 | 4 | Subsumption-Adjacent | 1000 | Third Corruption Twist queued + `corruption_warning` reactive event with severity URGENT ("character loss likely without intervention"). |
@@ -279,12 +280,31 @@ class CharacterSheet(...):
         return self._has_corruption_terminal_stage()
 
     def _has_corruption_terminal_stage(self) -> bool:
+        # ConditionInstance.target FKs to ObjectDB (the character typeclass);
+        # CharacterSheet links to its character via the existing sheet→character
+        # path (the resolver is the standard sheet→character helper used by
+        # other magic services — see Spec A's CharacterCorruptionHandler usage
+        # patterns for the canonical resolution).
+        character = self.character  # implementation detail: actual attribute
+                                    # / helper resolved per existing sheet
+                                    # patterns
+        if character is None:
+            return False
         return ConditionInstance.objects.filter(
-            character_sheet=self,
-            template__corruption_resonance__isnull=False,
-            stage_number=5,
+            target=character,
+            condition__corruption_resonance__isnull=False,
+            current_stage__stage_order=5,
         ).exists()
 ```
+
+`ConditionInstance.target` FKs to `objects.ObjectDB` (the character typeclass)
+per the existing conditions model. The query walks
+`CharacterSheet → character (ObjectDB) → condition_instances`; the helper that
+resolves `sheet → character` exists on the existing CharacterSheet (used by
+other magic services). The query filter uses
+`current_stage__stage_order=5` (the actual `ConditionStage.stage_order` field;
+not "stage_number") and `condition__corruption_resonance` (the marker FK on
+`ConditionTemplate` formalized in §3.4).
 
 `corruption_current` and `corruption_lifetime` are real fields on
 `CharacterResonance` per §2.1 — no method needed for them.
@@ -297,65 +317,143 @@ Future autonomy-loss systems (berserker, possession) extend
 `is_protagonism_locked` by adding their own `_has_X` predicate and OR-ing it in.
 No handler infrastructure to refactor.
 
-### 2.6 Generalized `ConditionStage` advancement-check extension
+### 2.6 Wiring `ConditionStage` resist checks into stage advancement
 
 Scope 3's `advance_condition_severity` currently advances stages deterministically
-on threshold crossing. This scope adds a resist-check gate at advancement so the
-character can roll to avoid escalation. The check-failure path is severity-aware
-to support the "pushing yourself fails fast" design intent.
+on threshold crossing. This scope wires the existing — but unused —
+`ConditionStage.resist_check_type` and `ConditionStage.resist_difficulty` fields
+into the advancement path so the character can roll to avoid escalation. The
+check-failure path is severity-aware to support the "pushing yourself fails fast"
+design intent.
 
-**Field additions on `ConditionStage`** (Scope 3 model; affects all stage-driven
-conditions, not just Corruption):
+**Existing fields on `ConditionStage` (already in the codebase, currently
+unused by `advance_condition_severity`):**
 
 ```
-advancement_check_type           FK CheckType   null=True
-                                    null = no resist check (default; existing behavior)
-advancement_check_difficulty     PositiveSmallIntegerField  default=0
+resist_check_type      FK CheckType  null=True   "Check type to resist progression"
+resist_difficulty      PositiveIntegerField  default=10  "Difficulty to resist progression"
+```
+
+These were authored at Scope 3 landing as a hook for resist-on-advance behavior
+but never wired into `advance_condition_severity`. This scope wires them.
+
+**Field addition on `ConditionStage` (only one new field):**
+
+```
 advancement_resist_failure_kind  TextChoices  default=ADVANCE_AT_THRESHOLD
-                                    ADVANCE_AT_THRESHOLD: existing behavior, advance immediately
-                                    HOLD_OVERFLOW: severity accumulates over threshold;
-                                                   each accrual rolls; pass holds, fail advances
+   ADVANCE_AT_THRESHOLD = existing behavior; advance on threshold crossing
+                          (the resist check, if any, is ignored — preserves
+                          back-compat for any existing content that authored
+                          resist_check_type for non-advancement reasons).
+   HOLD_OVERFLOW         = severity accumulates over threshold; each accrual
+                          that crosses or holds-above the next stage's threshold
+                          rolls a resist check via resist_check_type +
+                          resist_difficulty. Pass holds, fail advances.
 ```
 
-Existing conditions (everything outside Soulfray and Corruption) keep working
-unchanged because `advancement_check_type` defaults to NULL. Per-content
-authoring opts into the resist check.
+Existing conditions outside Soulfray and Corruption keep working unchanged —
+`advancement_resist_failure_kind` defaults to ADVANCE_AT_THRESHOLD, which is
+the current behavior even if `resist_check_type` is non-null. Per-content
+authoring opts into the resist-check gate by setting failure_kind=HOLD_OVERFLOW.
 
 **Service extension to `advance_condition_severity`:**
 
+The function gains an `outcome: AdvancementOutcome` field on its
+`SeverityAdvanceResult` return type:
+
 ```python
-def advance_condition_severity(condition, amount, *, source_event=None):
-    new_severity = condition.severity + amount
-    new_stage = compute_stage_from_severity(condition.template, new_severity)
+class AdvancementOutcome(TextChoices):
+    NO_CHANGE = "NO_CHANGE", "No stage change"
+    HELD = "HELD", "Threshold crossed but resist check passed"
+    ADVANCED = "ADVANCED", "Stage advanced"
 
-    if new_stage > condition.stage:
-        next_stage = condition.template.stages.get(stage_number=condition.stage + 1)
-        if next_stage.advancement_check_type is not None:
-            check_result = perform_advancement_check(
-                condition, next_stage, source_event=source_event,
-            )
-            if check_result.passed:
-                condition.severity = new_severity
-                condition.save(update_fields=["severity"])
-                return AdvancementResult.HELD
-        advance_to_stage(condition, next_stage, new_severity)
-        return AdvancementResult.ADVANCED
 
-    condition.severity = new_severity
-    condition.save(update_fields=["severity"])
-    return AdvancementResult.NO_CHANGE
+@dataclass
+class SeverityAdvanceResult:
+    previous_stage: "ConditionStage | None"
+    new_stage: "ConditionStage | None"
+    stage_changed: bool
+    total_severity: int
+    outcome: AdvancementOutcome  # NEW field, this scope
 ```
 
-`perform_advancement_check` emits a `condition_stage_advance_check_about_to_fire`
-reactive event before resolving. Triggers (Soul Tether mediation, Kudos rerolls,
-ally interventions, future content) listen on this event and can modify the
-roll's bonus, force a reroll, or prompt the player. Standard Scope 5.5 pattern.
+The function logic is extended (sketch — exact integration with the existing
+function body):
+
+```python
+def advance_condition_severity(
+    instance: ConditionInstance,
+    amount: int,
+) -> SeverityAdvanceResult:
+    instance.severity += amount
+
+    next_stage = (
+        instance.condition.stages.filter(
+            severity_threshold__isnull=False,
+            severity_threshold__lte=instance.severity,
+        )
+        .order_by("-severity_threshold")
+        .first()
+    )
+
+    if next_stage and next_stage != instance.current_stage:
+        if (next_stage.advancement_resist_failure_kind == HOLD_OVERFLOW
+                and next_stage.resist_check_type is not None):
+            # Fire reactive event so triggers can intervene
+            check_result = perform_advancement_resist_check(
+                instance, next_stage,
+            )
+            if check_result.passed:
+                # Hold at current stage; severity persists over threshold
+                instance.save(update_fields=["severity"])
+                return SeverityAdvanceResult(
+                    previous_stage=instance.current_stage,
+                    new_stage=instance.current_stage,
+                    stage_changed=False,
+                    total_severity=instance.severity,
+                    outcome=AdvancementOutcome.HELD,
+                )
+        # Advance + fire on_entry aftermath (existing path)
+        instance.current_stage = next_stage
+        instance.save(...)
+        # ... existing stage-change emission + apply_stage_entry_aftermath ...
+        return SeverityAdvanceResult(
+            ...,
+            outcome=AdvancementOutcome.ADVANCED,
+        )
+
+    instance.save(update_fields=["severity"])
+    return SeverityAdvanceResult(..., outcome=AdvancementOutcome.NO_CHANGE)
+```
+
+`perform_advancement_resist_check` emits the new
+`EventName.CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE` reactive event
+(introduced in this scope, §3.5) before resolving. Triggers (Soul Tether
+mediation, Kudos rerolls, ally interventions, future content) listen on this
+event and can modify the roll's bonus, force a reroll, or prompt the player.
+Standard Scope 5.5 pattern.
+
+**Backward compatibility for existing callers:** `SeverityAdvanceResult` gains
+the `outcome` field but retains all existing fields. Existing destructuring
+callers (e.g., `SoulfrayProgressionTests`) continue to read `previous_stage`,
+`new_stage`, `stage_changed`, `total_severity`. The new field is additive; tests
+that need to verify HELD vs ADVANCED behavior add `result.outcome` assertions.
 
 **HOLD_OVERFLOW semantics:** When severity exceeds threshold but the resist
 check passed, severity persists on the condition row at the over-threshold
-value. The next accrual triggers another check (pressure mounts; cumulative
-resists become harder via authored modifiers, e.g., per-prior-pass penalty). The
-character "holds the line" but the line keeps creeping; eventually they fail.
+value (the sync to `corruption_current` per §2.1 also keeps that field above
+threshold). The next accrual triggers another check (pressure mounts; cumulative
+resists become harder via authored modifiers — e.g., a stage-keyed
+ConditionCheckModifier per Scope 3's pattern, or per-prior-pass scaling).
+The character "holds the line" but the line keeps creeping; eventually they fail.
+
+**Severity is not clamped at the threshold under HOLD_OVERFLOW.** A character
+who passed the stage 1→2 check at 200 severity (threshold 200) can hold at
+stage 1 with severity=200, and the next accrual lands them at severity=210
+still rolling for stage 2 advancement. `corruption_current` mirrors this
+unbounded value. If they later fail, the new stage's `severity` starts at the
+overflowed value — they jump straight into deep-stage-2 territory rather than
+flooring back to the threshold.
 
 ### 2.7 Constraints & integrity summary
 
@@ -469,7 +567,11 @@ def accrue_corruption(
          no condition row written.
       4. Sync ConditionInstance.severity to corruption_current. Call
          advance_condition_severity (which handles resist checks per
-         §2.6 and stage-entry on_entry_conditions firing).
+         §2.6 and stage-entry on_entry_conditions firing). Under
+         HOLD_OVERFLOW failure_kind, severity is NOT clamped at threshold
+         on a passing resist check — both severity and corruption_current
+         persist at the over-threshold value, so the next accrual rolls
+         from the elevated baseline (pressure mounts).
       5. Emit corruption_accrued event with a frozen payload.
       6. If stage transition resolves to a warning stage (3 or 4), emit
          corruption_warning event with appropriate severity.
@@ -538,7 +640,24 @@ def reduce_corruption(
     """
 ```
 
-### 3.4 Passive decay integration
+### 3.4 Passive decay integration & `ConditionTemplate.corruption_resonance` FK
+
+**`ConditionTemplate.corruption_resonance` field addition (required, this scope):**
+
+```
+corruption_resonance   FK Resonance  null=True, blank=True, on_delete=PROTECT
+                       help_text="Non-null marks this template as a per-resonance
+                                  Corruption ConditionTemplate. Drives is_protagonism_locked
+                                  detection (§2.5) and decay-time field sync (§3.4)."
+```
+
+Authored non-null on per-resonance Corruption ConditionTemplates (one per
+resonance with Corruption authored). Null on every other ConditionTemplate
+(Soulfray, aftermath, magical alterations, etc.). Single FK addition; serves
+as the marker for both the protagonism-lock detection query (§2.5) and the
+decay-time field sync below.
+
+**Decay integration:**
 
 Decay rides Scope 6's `decay_all_conditions_tick` unchanged. Per-resonance
 Corruption ConditionTemplates author `passive_decay_per_day` (default 1),
@@ -546,36 +665,44 @@ Corruption ConditionTemplates author `passive_decay_per_day` (default 1),
 `passive_decay_blocked_in_engagement=True`.
 
 Scope 6's `decay_condition_severity` is extended (small additive change) to
-also decrement `CharacterResonance.corruption_current` for Corruption-kind
-conditions. Implementation: `decay_condition_severity` calls `reduce_corruption`
-internally when the condition's template is identified as Corruption-kind, so
-the field-syncing path is the same one rituals use. Single canonical mutation
-path.
-
-Identification of Corruption-kind ConditionTemplates: by the presence of an
-authored corruption-specific marker. Recommended implementation: a
-`corruption_resonance` FK on `ConditionTemplate` (non-null for Corruption
-templates, null otherwise) — the same marker referenced by `_has_corruption_terminal_stage`
-in §2.5. Adding a single FK to `ConditionTemplate` is preferable to scanning
-template names or maintaining a separate registry.
+also decrement `CharacterResonance.corruption_current` when the condition's
+template has `corruption_resonance` non-null. Implementation:
+`decay_condition_severity` calls `reduce_corruption` internally for
+Corruption-kind conditions, so the field-syncing path is the same one rituals
+use. Single canonical mutation path. Non-Corruption templates' decay paths
+are unchanged.
 
 ### 3.5 Risk-transparency events
 
-`accrue_corruption` emits the following reactive events (Scope 5.5 surface):
+`accrue_corruption` and the advancement-check path emit the following reactive
+events. **All seven names are added to `EventName` TextChoices in
+`flows/constants.py` as part of this scope** — the reactive layer (Scope 5.5)
+binds `TriggerDefinition.event_name` to this enum, so events authored only as
+bare strings cannot be used in trigger filters. The data migration adds these
+seven variants in the same migration that introduces the corruption models.
 
-| Event | When | Payload |
+| `EventName` variant | When | Payload |
 |---|---|---|
-| `corruption_accruing` | Pre-mutation (interception) | character_sheet, resonance, amount, source |
-| `corruption_accrued` | Post-mutation | CorruptionAccrualResult fields |
-| `corruption_warning` | On entry to stage 3 or 4 | character_sheet, resonance, stage, severity (ADVISORY \| URGENT) |
-| `protagonism_locked` | On entry to stage 5 | character_sheet, resonance, cause=CorruptionCause.STAGE_5_SUBSUMPTION |
-| `protagonism_restored` | On exit from stage 5 | character_sheet, cause=CorruptionCause.STAGE_5_RECOVERED |
-| `corruption_reduced` | Post-mutation in `reduce_corruption` | CorruptionRecoveryResult fields |
-| `condition_stage_advance_check_about_to_fire` | Inside `perform_advancement_check`, pre-roll | condition, target_stage, base_difficulty (modifiable by triggers) |
+| `CORRUPTION_ACCRUING` | Pre-mutation (interception) | character_sheet, resonance, amount, source |
+| `CORRUPTION_ACCRUED` | Post-mutation | `CorruptionAccrualResult` fields |
+| `CORRUPTION_WARNING` | On entry to stage 3 or 4 | character_sheet, resonance, stage, severity (ADVISORY \| URGENT) — character-loss-possible at stage 3, character-loss-likely at stage 4 |
+| `PROTAGONISM_LOCKED` | On entry to stage 5 | character_sheet, resonance, cause (TextChoices) — character-loss explicit |
+| `PROTAGONISM_RESTORED` | On exit from stage 5 | character_sheet, cause |
+| `CORRUPTION_REDUCED` | Post-mutation in `reduce_corruption` | `CorruptionRecoveryResult` fields |
+| `CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE` | Inside `perform_advancement_resist_check`, pre-roll | condition, target_stage, base_difficulty (modifiable by triggers) |
+
+The existing `EventName.CONDITION_STAGE_CHANGED` event continues to fire from
+Scope 3's stage-change emission inside `advance_condition_severity` (already
+implemented at lines ~1481–1493 of `world/conditions/services.py`). This scope
+does not retitle that event; it adds the new ones above for the corruption-
+specific and resist-check-specific moments.
 
 UI surfaces (warning prompts, character-loss notices) are authored content
-listening on these events. The Audere offer flow (Scope 2) gains a pre-Audere
-advisory if the character has any resonance at corruption stage 3+.
+listening on these events. The user-facing copy on `CORRUPTION_WARNING`
+(stages 3 and 4) and `PROTAGONISM_LOCKED` (stage 5) MUST use the exact phrase
+"character loss" rather than euphemisms — surfaced to player at the moment of
+risk, not buried in tooltips. The Audere offer flow (Scope 2) gains a
+pre-Audere advisory if the character has any resonance at corruption stage 3+.
 
 ### 3.6 Service summary table
 
@@ -801,8 +928,8 @@ Reference templates ship at scope landing for at least one resonance per
 non-Celestial affinity (e.g., one Primal + one Abyssal). Each authored template
 provides:
 
-- 5 ConditionStage rows with severity_threshold, advancement_check_type,
-  advancement_check_difficulty, advancement_resist_failure_kind=HOLD_OVERFLOW
+- 5 ConditionStage rows with severity_threshold, resist_check_type,
+  resist_difficulty, advancement_resist_failure_kind=HOLD_OVERFLOW
 - on_entry_conditions for stage 1 (cosmetic/RP flag), stages 2–4 (queue
   Corruption Twist alterations), stage 5 (subsumption marker — typically empty
   since `is_protagonism_locked` is derived)
@@ -829,6 +956,10 @@ Stage 3→4 authored at higher difficulty (DC 25 for Abyssal). Crossing into
 stage 4 should be a real character-defining event the player can fight against.
 
 All values are placeholders; staff tunes via per-stage ConditionStage rows.
+Soulfray's stage DCs (§7.1) and Corruption's stage DCs are independently
+authored — the difficulties differ in the retrofit table because the two
+conditions have different intended progression curves. Implementers should
+not assume the values match.
 
 ---
 
@@ -842,10 +973,13 @@ infrastructure.
 
 ### 7.1 Data migration
 
-A single data migration adds advancement-check parameters to existing Soulfray
-ConditionStage rows:
+A single data migration sets resist-check parameters on existing Soulfray
+ConditionStage rows. The `resist_check_type` and `resist_difficulty` fields
+already exist on ConditionStage (Scope 3 authored them as a hook); the
+migration populates them and sets the new `advancement_resist_failure_kind`
+field to opt the stages into resist-gated advancement:
 
-| Stage | advancement_check_type | advancement_check_difficulty | advancement_resist_failure_kind |
+| Stage | resist_check_type | resist_difficulty | advancement_resist_failure_kind |
 |---|---|---|---|
 | 1→2 (Tearing) | magical endurance | 8 | HOLD_OVERFLOW |
 | 2→3 (Ripping) | magical endurance | 10 | HOLD_OVERFLOW |
@@ -1103,17 +1237,28 @@ requiring a Celestial third party.
 For implementation reference, the names introduced or finalized:
 
 **Models / fields:**
-- `CharacterResonance.corruption_current`
-- `CharacterResonance.corruption_lifetime`
-- `MagicalAlterationTemplate.kind` (extended TextChoices)
-- `MagicalAlterationTemplate.resonance` (FK, nullable)
-- `MagicalAlterationTemplate.stage_threshold` (nullable)
-- `ConditionTemplate.corruption_resonance` (FK to Resonance, nullable; marker
-  for Corruption-kind templates)
-- `ConditionStage.advancement_check_type` (FK CheckType, nullable)
-- `ConditionStage.advancement_check_difficulty`
-- `ConditionStage.advancement_resist_failure_kind` (TextChoices)
-- `CorruptionConfig` (singleton model)
+
+*New:*
+- `CharacterResonance.corruption_current` (PositiveIntegerField)
+- `CharacterResonance.corruption_lifetime` (PositiveIntegerField)
+- `MagicalAlterationTemplate.kind` (extended TextChoices: MAGE_SCAR / CORRUPTION_TWIST)
+- `MagicalAlterationTemplate.resonance` (FK Resonance, nullable)
+- `MagicalAlterationTemplate.stage_threshold` (PositiveSmallIntegerField, nullable)
+- `ConditionTemplate.corruption_resonance` (FK Resonance, nullable, on_delete=PROTECT;
+  marker for Corruption-kind templates per §3.4)
+- `ConditionStage.advancement_resist_failure_kind` (TextChoices, default ADVANCE_AT_THRESHOLD)
+- `SeverityAdvanceResult.outcome` (new field on existing dataclass; AdvancementOutcome enum)
+- `CorruptionConfig` (singleton model, pk=1)
+
+*Existing — referenced but not added:*
+- `ConditionStage.resist_check_type` (FK CheckType, nullable; existed at Scope 3
+  landing, wired into advancement by this scope)
+- `ConditionStage.resist_difficulty` (PositiveIntegerField, default 10; existed,
+  wired into advancement by this scope)
+- `ConditionStage.stage_order` (existing field; the spec's queries filter on
+  `current_stage__stage_order=5` — the field is `stage_order`, not `stage_number`)
+- `ConditionInstance.target` (existing FK to ObjectDB; the protagonism-lock
+  query filters via this field)
 
 **Enums / TextChoices:**
 - `AlterationKind.MAGE_SCAR`, `AlterationKind.CORRUPTION_TWIST`
@@ -1125,9 +1270,11 @@ For implementation reference, the names introduced or finalized:
   `CorruptionRecoverySource.STAFF_GRANT`
 - `CorruptionCause.STAGE_5_SUBSUMPTION`, `CorruptionCause.STAGE_5_RECOVERED`
 - `AdvancementResistFailureKind.ADVANCE_AT_THRESHOLD`,
-  `AdvancementResistFailureKind.HOLD_OVERFLOW`
+  `AdvancementResistFailureKind.HOLD_OVERFLOW` (TextChoices on
+  ConditionStage.advancement_resist_failure_kind)
 - `AdvancementOutcome.NO_CHANGE`, `AdvancementOutcome.HELD`,
-  `AdvancementOutcome.ADVANCED`
+  `AdvancementOutcome.ADVANCED` (TextChoices used as the
+  `SeverityAdvanceResult.outcome` field type)
 
 **Services:**
 - `accrue_corruption_for_cast(...)`
@@ -1140,14 +1287,18 @@ For implementation reference, the names introduced or finalized:
 - `is_protagonism_locked` (cached_property)
 - `_has_corruption_terminal_stage()` (private)
 
-**Reactive events (Scope 5.5 surface):**
-- `corruption_accruing`
-- `corruption_accrued`
-- `corruption_warning`
-- `corruption_reduced`
-- `protagonism_locked`
-- `protagonism_restored`
-- `condition_stage_advance_check_about_to_fire`
+**Reactive events (added to `flows.constants.EventName` TextChoices in this scope):**
+- `EventName.CORRUPTION_ACCRUING`
+- `EventName.CORRUPTION_ACCRUED`
+- `EventName.CORRUPTION_WARNING`
+- `EventName.CORRUPTION_REDUCED`
+- `EventName.PROTAGONISM_LOCKED`
+- `EventName.PROTAGONISM_RESTORED`
+- `EventName.CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE`
+
+**Existing events referenced (not added by this scope):**
+- `EventName.CONDITION_STAGE_CHANGED` (existing Scope 3 emission; continues
+  firing from `advance_condition_severity`)
 
 **Errors:**
 - `CorruptionError` (base)
