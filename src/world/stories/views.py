@@ -108,6 +108,7 @@ from world.stories.serializers import (
     StoryParticipationSerializer,
 )
 from world.stories.services.dashboards import STALE_STORY_DAYS, compute_story_status
+from world.stories.services.participation import create_story_participation
 from world.stories.types import AnyStoryProgress
 
 
@@ -166,11 +167,23 @@ class StoryViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        participation = StoryParticipation.objects.create(
-            story=story,
-            character_id=character_id,
-            participation_level=participation_level,
-        )
+        from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+        from world.magic.exceptions import ProtagonismLockedError  # noqa: PLC0415
+
+        try:
+            character = ObjectDB.objects.get(pk=character_id)
+        except ObjectDB.DoesNotExist:
+            return Response({"error": "Character not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            participation = create_story_participation(
+                story=story,
+                character=character,
+                participation_level=participation_level,
+            )
+        except ProtagonismLockedError as exc:
+            return Response({"error": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
 
         serializer = StoryParticipationSerializer(participation)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
