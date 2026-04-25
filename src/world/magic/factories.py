@@ -1021,6 +1021,14 @@ class ResonanceGainConfigFactory(factory.django.DjangoModelFactory):
     pk = 1
 
 
+class CorruptionConfigFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.CorruptionConfig"
+        django_get_or_create = ("pk",)
+
+    pk = 1
+
+
 class RoomAuraProfileFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "magic.RoomAuraProfile"
