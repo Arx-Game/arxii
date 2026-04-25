@@ -28,6 +28,7 @@ from flows.events.payloads import (
     ConditionStageChangedPayload,
 )
 from world.checks.models import CheckType
+from world.checks.services import perform_check
 from world.conditions.constants import (
     ConditionInteractionOutcome,
     ConditionInteractionTrigger,
@@ -52,9 +53,12 @@ from world.conditions.models import (
     TreatmentTemplate,
 )
 from world.conditions.types import (
+    AdvancementOutcome,
+    AdvancementResistFailureKind,
     ApplyConditionResult,
     CapabilityStatus,
     CheckModifierResult,
+    ConditionStageAdvanceCheckPayload,
     DamageInteractionResult,
     DecayTickSummary,
     InteractionResult,
@@ -1509,6 +1513,10 @@ def advance_condition_severity(
 
     Stages with severity_threshold=None are ignored (time-based only).
     Can skip multiple stages if the severity jump is large enough.
+
+    If the next stage opts into HOLD_OVERFLOW with a resist_check_type,
+    a resist check fires before advancement. Pass = stage holds (severity
+    persists over threshold). Fail = stage advances normally.
     """
     previous_stage = instance.current_stage
     instance.severity += amount
@@ -1524,9 +1532,32 @@ def advance_condition_severity(
     )
 
     stage_changed = False
+    outcome = AdvancementOutcome.NO_CHANGE
+
     if new_stage and new_stage != previous_stage:
+        if (
+            new_stage.advancement_resist_failure_kind == AdvancementResistFailureKind.HOLD_OVERFLOW
+            and new_stage.resist_check_type is not None
+        ):
+            check_passed = _perform_advancement_resist_check(instance, new_stage)
+            if check_passed:
+                # Severity persists over threshold; stage does not advance.
+                update_fields: list[str] = ["severity", "current_stage"]
+                if instance.severity > 0 and instance.resolved_at is not None:
+                    instance.resolved_at = None
+                    update_fields.append("resolved_at")
+                instance.save(update_fields=update_fields)
+                return SeverityAdvanceResult(
+                    previous_stage=previous_stage,
+                    new_stage=previous_stage,
+                    stage_changed=False,
+                    total_severity=instance.severity,
+                    outcome=AdvancementOutcome.HELD,
+                )
+        # ADVANCE_AT_THRESHOLD or HOLD_OVERFLOW resist failed — advance.
         instance.current_stage = new_stage
         stage_changed = True
+        outcome = AdvancementOutcome.ADVANCED
 
     update_fields = ["severity", "current_stage"]
     if instance.severity > 0 and instance.resolved_at is not None:
@@ -1562,7 +1593,42 @@ def advance_condition_severity(
         new_stage=instance.current_stage,
         stage_changed=stage_changed,
         total_severity=instance.severity,
+        outcome=outcome,
     )
+
+
+def _perform_advancement_resist_check(
+    instance: ConditionInstance,
+    next_stage: ConditionStage,
+) -> bool:
+    """Fire the reactive event, run the resist check, return True if the resist succeeded.
+
+    Emits CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE so triggers can modify the
+    difficulty before resolution (MODIFY_PAYLOAD pattern). The payload is mutable,
+    so triggers adjust base_difficulty in-place.
+
+    Returns True if the resist check passed (success_level >= 0), False otherwise.
+    """
+    payload = ConditionStageAdvanceCheckPayload(
+        instance=instance,
+        target_stage=next_stage,
+        base_difficulty=next_stage.resist_difficulty,
+    )
+    location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL
+    if location is not None:
+        emit_event(
+            EventName.CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE,
+            payload,
+            location=location,
+        )
+
+    result = perform_check(
+        character=instance.target,
+        check_type=next_stage.resist_check_type,
+        target_difficulty=payload.base_difficulty,
+    )
+    # success_level >= 0 means partial success or better — resist holds.
+    return int(result.success_level) >= 0
 
 
 def apply_stage_entry_aftermath(payload: ConditionStageChangedPayload) -> None:
