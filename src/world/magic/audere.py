@@ -66,6 +66,7 @@ class AudereOfferResult:
     accepted: bool
     intensity_bonus_applied: int = 0
     anima_pool_expanded_by: int = 0
+    advisory_text: str = ""
 
 
 def _check_intensity_gate(runtime_intensity: int, minimum_tier_threshold: int) -> bool:
@@ -130,6 +131,33 @@ def check_audere_eligibility(character: ObjectDB, runtime_intensity: int) -> boo
     )
 
 
+def _corruption_advisory_for_character(character: ObjectDB) -> str:
+    """Return a character-loss advisory string if the character has corruption at stage 3+.
+
+    Returns an empty string when no advisory is warranted (no corruption at warning stages).
+    Per spec §3.5: at stage 3+ the advisory must contain the explicit phrase "character loss".
+    """
+    from world.conditions.models import ConditionInstance
+
+    instances = ConditionInstance.objects.filter(
+        target=character,
+        condition__corruption_resonance__isnull=False,
+        current_stage__stage_order__gte=3,
+    ).select_related("condition__corruption_resonance", "current_stage")
+    resonance_names = [
+        i.condition.corruption_resonance.name
+        for i in instances
+        if i.condition.corruption_resonance is not None
+    ]
+    if not resonance_names:
+        return ""
+    names = ", ".join(resonance_names)
+    return (
+        f"Entering Audere will accelerate corruption on {names} — "
+        "character loss is possible if accumulated corruption advances to terminal stage."
+    )
+
+
 def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     """Process a player's Audere offer decision.
 
@@ -141,12 +169,14 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
     from world.magic.models import CharacterAnima
     from world.mechanics.engagement import CharacterEngagement
 
+    advisory = _corruption_advisory_for_character(character)
+
     if not accept:
-        return AudereOfferResult(accepted=False)
+        return AudereOfferResult(accepted=False, advisory_text=advisory)
 
     threshold = AudereThreshold.objects.first()
     if threshold is None:
-        return AudereOfferResult(accepted=False)
+        return AudereOfferResult(accepted=False, advisory_text=advisory)
 
     audere_template = ConditionTemplate.objects.get(name=AUDERE_CONDITION_NAME)
 
@@ -171,6 +201,7 @@ def offer_audere(character: ObjectDB, *, accept: bool) -> AudereOfferResult:
         accepted=True,
         intensity_bonus_applied=threshold.intensity_bonus,
         anima_pool_expanded_by=threshold.anima_pool_bonus,
+        advisory_text=advisory,
     )
 
 

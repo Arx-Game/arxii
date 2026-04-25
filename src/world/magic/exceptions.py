@@ -1,6 +1,8 @@
 """Spec A magic-app exceptions. Each carries a user_message allowlist
 per the project's no-str(exc)-in-API rule (CLAUDE.md)."""
 
+from typing import ClassVar
+
 
 class MagicError(Exception):
     user_message = "An error occurred."
@@ -65,3 +67,31 @@ class EndorsementValidationError(Exception):
         super().__init__(reason)
         self.reason = reason
         self.user_message = user_message or reason
+
+
+# =============================================================================
+# Corruption exceptions (Scope #7)
+# =============================================================================
+
+
+class CorruptionError(Exception):
+    """Base for corruption-related typed exceptions."""
+
+    user_message: str = "Corruption operation failed."
+    SAFE_MESSAGES: ClassVar[set[str]] = {
+        "Corruption operation failed.",
+    }
+
+    def __init__(self, user_message: str | None = None) -> None:
+        if user_message is not None:
+            self.user_message = user_message
+        super().__init__(self.user_message)
+
+
+class ProtagonismLockedError(CorruptionError):
+    """Raised when a service is invoked on a sheet that is mechanically locked from protagonism."""
+
+    user_message = "Character is currently locked from protagonism and cannot perform this action."
+    SAFE_MESSAGES: ClassVar[set[str]] = {
+        "Character is currently locked from protagonism and cannot perform this action.",
+    }

@@ -125,6 +125,22 @@ class CharacterResonance(SharedMemoryModel):
         blank=True,
         help_text="Optional player-defined description of how this resonance manifests.",
     )
+    corruption_current = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Current corruption load on this resonance for this character. "
+            "Mutable — increments via accrue_corruption, decrements via "
+            "reduce_corruption / Scope 6 decay. Drives stage progression "
+            "on the per-resonance Corruption ConditionInstance."
+        ),
+    )
+    corruption_lifetime = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Monotonic audit of total corruption ever ticked to this "
+            "resonance. Achievement-tracking surface. Never decremented."
+        ),
+    )
 
     class Meta:
         unique_together = (("character_sheet", "resonance"),)

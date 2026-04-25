@@ -56,6 +56,7 @@ from world.magic.models.aura import (
     CharacterResonance,
 )
 from world.magic.models.cantrips import Cantrip
+from world.magic.models.corruption_config import CorruptionConfig
 from world.magic.models.endorsement import PoseEndorsement, SceneEntryEndorsement
 from world.magic.models.gain_config import ResonanceGainConfig
 from world.magic.models.gifts import (
@@ -135,6 +136,8 @@ __all__ = [
     # weaving
     "CharacterThreadWeavingUnlock",
     "CharacterTradition",
+    # corruption config (Scope 7 §2.3)
+    "CorruptionConfig",
     "EffectType",
     "EffectTypeManager",
     "Facet",

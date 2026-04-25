@@ -27,3 +27,15 @@ class EventName(models.TextChoices):
     TECHNIQUE_PRE_CAST = "technique_pre_cast", "Technique Pre-Cast"
     TECHNIQUE_CAST = "technique_cast", "Technique Cast"
     TECHNIQUE_AFFECTED = "technique_affected", "Technique Affected"
+    # Corruption (Magic Scope #7) — see
+    # docs/superpowers/specs/2026-04-25-magic-scope-7-corruption-design.md §3.5
+    CORRUPTION_ACCRUING = "corruption_accruing", "Corruption accruing (pre-mutation)"
+    CORRUPTION_ACCRUED = "corruption_accrued", "Corruption accrued (post-mutation)"
+    CORRUPTION_WARNING = "corruption_warning", "Corruption warning (stage 3-4)"
+    CORRUPTION_REDUCED = "corruption_reduced", "Corruption reduced"
+    PROTAGONISM_LOCKED = "protagonism_locked", "Protagonism locked (stage 5 entry)"
+    PROTAGONISM_RESTORED = "protagonism_restored", "Protagonism restored (stage 5 exit)"
+    CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE = (
+        "condition_stage_advance_check_about_to_fire",
+        "Condition stage advance resist check about to fire",
+    )

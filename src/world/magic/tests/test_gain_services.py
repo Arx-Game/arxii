@@ -549,3 +549,212 @@ class CreateSceneEntryEndorsementTests(TestCase):
         fresh_resonance = self.ResonanceFactory()
         with self.assertRaises(EndorsementValidationError):
             create_scene_entry_endorsement(endorser, endorsee, scene, fresh_resonance)
+
+
+class ProtagonismLockResonanceGainTests(TestCase):
+    """Gate 10.1 — protagonism-locked sheets cannot endorse or receive resonance gains."""
+
+    def _make_subsumed_sheet(self):
+        """Return a CharacterSheet at corruption stage 5 (protagonism locked)."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceFactory, with_corruption_at_stage
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        with_corruption_at_stage(sheet, resonance, stage=5)
+        # Bust the cached_property so is_protagonism_locked reflects DB state.
+        sheet.__dict__.pop("is_protagonism_locked", None)
+        return sheet
+
+    def _make_normal_sheet_with_tenure(self):
+        """Return a CharacterSheet with a RosterTenure (has an Account)."""
+        from world.roster.factories import RosterTenureFactory
+
+        tenure = RosterTenureFactory()
+        return tenure.roster_entry.character_sheet
+
+    # --- create_pose_endorsement gates ---
+
+    def test_locked_endorser_cannot_endorse_pose(self) -> None:
+        from world.magic.exceptions import EndorsementValidationError
+        from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+        from world.magic.services.gain import create_pose_endorsement
+        from world.roster.factories import RosterTenureFactory
+        from world.scenes.factories import (
+            InteractionFactory,
+            SceneFactory,
+        )
+
+        endorser = self._make_subsumed_sheet()
+        endorsee_tenure = RosterTenureFactory()
+        endorsee = endorsee_tenure.roster_entry.character_sheet
+
+        scene = SceneFactory()
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=endorsee, resonance=resonance)
+        interaction = InteractionFactory(scene=scene, persona=endorsee.primary_persona)
+
+        # Ensure endorser has an account so participation check would pass if lock didn't fire
+        # (no need — lock fires before participation check)
+        with self.assertRaises(EndorsementValidationError) as ctx:
+            create_pose_endorsement(endorser, interaction, resonance)
+        self.assertIn("locked", ctx.exception.reason.lower())
+
+    def test_locked_endorsee_cannot_receive_pose_endorsement(self) -> None:
+        from world.magic.exceptions import EndorsementValidationError
+        from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+        from world.magic.services.gain import account_for_sheet, create_pose_endorsement
+        from world.roster.factories import RosterTenureFactory
+        from world.scenes.factories import (
+            InteractionFactory,
+            SceneFactory,
+            SceneParticipationFactory,
+        )
+
+        endorser_tenure = RosterTenureFactory()
+        endorser = endorser_tenure.roster_entry.character_sheet
+        endorsee = self._make_subsumed_sheet()
+
+        scene = SceneFactory()
+        endorser_account = account_for_sheet(endorser)
+        if endorser_account is not None:
+            SceneParticipationFactory(scene=scene, account=endorser_account)
+
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=endorsee, resonance=resonance)
+        interaction = InteractionFactory(scene=scene, persona=endorsee.primary_persona)
+
+        with self.assertRaises(EndorsementValidationError) as ctx:
+            create_pose_endorsement(endorser, interaction, resonance)
+        self.assertIn("locked", ctx.exception.reason.lower())
+
+    # --- create_scene_entry_endorsement gates ---
+
+    def test_locked_endorser_cannot_endorse_scene_entry(self) -> None:
+        from world.magic.exceptions import EndorsementValidationError
+        from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+        from world.magic.services.gain import create_scene_entry_endorsement
+        from world.roster.factories import RosterTenureFactory
+        from world.scenes.constants import PoseKind
+        from world.scenes.factories import (
+            InteractionFactory,
+            SceneFactory,
+        )
+
+        endorser = self._make_subsumed_sheet()
+        endorsee_tenure = RosterTenureFactory()
+        endorsee = endorsee_tenure.roster_entry.character_sheet
+
+        scene = SceneFactory()
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=endorsee, resonance=resonance)
+        InteractionFactory(scene=scene, persona=endorsee.primary_persona, pose_kind=PoseKind.ENTRY)
+
+        with self.assertRaises(EndorsementValidationError) as ctx:
+            create_scene_entry_endorsement(endorser, endorsee, scene, resonance)
+        self.assertIn("locked", ctx.exception.reason.lower())
+
+    def test_locked_endorsee_cannot_receive_scene_entry_endorsement(self) -> None:
+        from world.magic.exceptions import EndorsementValidationError
+        from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+        from world.magic.services.gain import account_for_sheet, create_scene_entry_endorsement
+        from world.roster.factories import RosterTenureFactory
+        from world.scenes.constants import PoseKind
+        from world.scenes.factories import (
+            InteractionFactory,
+            SceneFactory,
+            SceneParticipationFactory,
+        )
+
+        endorser_tenure = RosterTenureFactory()
+        endorser = endorser_tenure.roster_entry.character_sheet
+        endorsee = self._make_subsumed_sheet()
+
+        scene = SceneFactory()
+        endorser_account = account_for_sheet(endorser)
+        if endorser_account is not None:
+            SceneParticipationFactory(scene=scene, account=endorser_account)
+
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=endorsee, resonance=resonance)
+        InteractionFactory(scene=scene, persona=endorsee.primary_persona, pose_kind=PoseKind.ENTRY)
+
+        with self.assertRaises(EndorsementValidationError) as ctx:
+            create_scene_entry_endorsement(endorser, endorsee, scene, resonance)
+        self.assertIn("locked", ctx.exception.reason.lower())
+
+    # --- residence_trickle_tick skip ---
+
+    def test_locked_sheet_skipped_in_residence_trickle(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+        from world.magic.models import ResonanceGrant
+        from world.magic.services.gain import (
+            residence_trickle_tick,
+            set_residence,
+            tag_room_resonance,
+        )
+
+        locked_sheet = self._make_subsumed_sheet()
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=locked_sheet, resonance=resonance)
+        rp = RoomProfileFactory()
+        tag_room_resonance(rp, resonance)
+        set_residence(locked_sheet, rp)
+
+        residence_trickle_tick()
+
+        # No grant should have been issued for the locked sheet
+        self.assertEqual(
+            ResonanceGrant.objects.filter(character_sheet=locked_sheet).count(),
+            0,
+        )
+
+    # --- settle_weekly_pot skip for locked endorsee ---
+
+    def test_locked_endorsee_skipped_in_weekly_settlement(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import (
+            CharacterResonanceFactory,
+            PoseEndorsementFactory,
+            ResonanceFactory,
+        )
+        from world.magic.models import CharacterResonance, ResonanceGrant
+        from world.magic.services.gain import settle_weekly_pot
+        from world.scenes.factories import InteractionFactory
+
+        endorser = CharacterSheetFactory()
+        locked_endorsee = self._make_subsumed_sheet()
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=locked_endorsee, resonance=resonance)
+        interaction = InteractionFactory()
+
+        ep = PoseEndorsementFactory(
+            endorser_sheet=endorser,
+            endorsee_sheet=locked_endorsee,
+            interaction=interaction,
+            resonance=resonance,
+        )
+
+        result = settle_weekly_pot(endorser)
+
+        # Endorsement should be marked settled (not left pending)
+        ep.refresh_from_db()
+        self.assertIsNotNone(ep.settled_at)
+        self.assertEqual(ep.granted_amount, 0)
+
+        # No resonance grant should exist for the locked endorsee
+        self.assertEqual(
+            ResonanceGrant.objects.filter(character_sheet=locked_endorsee).count(),
+            0,
+        )
+
+        # Locked endorsee's balance should remain 0
+        cr = CharacterResonance.objects.filter(
+            character_sheet=locked_endorsee, resonance=resonance
+        ).first()
+        if cr:
+            self.assertEqual(cr.balance, 0)
+
+        # The settlement result should reflect 1 settled endorsement
+        self.assertEqual(result.endorsements_settled, 1)

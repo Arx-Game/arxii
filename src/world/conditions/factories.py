@@ -95,11 +95,13 @@ class ConditionStageFactory(DjangoModelFactory):
         model = ConditionStage
 
     condition = factory.SubFactory(ConditionTemplateFactory, has_progression=True)
-    stage_order = factory.Sequence(lambda n: n + 1)
+    stage_order = factory.Sequence(lambda n: (n % 5) + 1)  # cycle 1..5 to prevent overflow
     name = factory.Sequence(lambda n: f"Stage {n + 1}")
     description = "Test stage"
     rounds_to_next = 2
-    severity_multiplier = factory.LazyAttribute(lambda o: 1.0 + (o.stage_order - 1) * 0.5)
+    severity_multiplier = factory.LazyAttribute(
+        lambda o: round(1.0 + ((o.stage_order - 1) * 0.5), 2)
+    )
     severity_threshold = None
     consequence_pool = None
 

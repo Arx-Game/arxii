@@ -8,10 +8,12 @@ Class and table names retain the "MagicalAlteration" prefix for DB
 stability; the player-facing label is "Mage Scar".
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.magic.constants import AlterationTier, PendingAlterationStatus
+from world.magic.constants import AlterationKind, AlterationTier, PendingAlterationStatus
 from world.magic.models.affinity import Affinity, Resonance
 from world.magic.models.techniques import Technique
 
@@ -101,10 +103,60 @@ class MagicalAlterationTemplate(SharedMemoryModel):
         ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    kind = models.CharField(
+        max_length=24,
+        choices=AlterationKind.choices,
+        default=AlterationKind.MAGE_SCAR,
+        help_text="Discriminator: MAGE_SCAR (Scope 5) vs CORRUPTION_TWIST (Scope 7).",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="corruption_twist_templates",
+        help_text="Required for CORRUPTION_TWIST; null for MAGE_SCAR.",
+    )
+    stage_threshold = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Required for CORRUPTION_TWIST; null for MAGE_SCAR. Range 1-5.",
+    )
 
     class Meta:
         verbose_name = "mage scar"
         verbose_name_plural = "mage scars"
+        constraints = [
+            models.CheckConstraint(
+                name="alteration_template_mage_scar_shape",
+                check=(
+                    Q(kind=AlterationKind.MAGE_SCAR)
+                    & Q(resonance__isnull=True)
+                    & Q(stage_threshold__isnull=True)
+                )
+                | ~Q(kind=AlterationKind.MAGE_SCAR),
+            ),
+            models.CheckConstraint(
+                name="alteration_template_corruption_twist_shape",
+                check=(
+                    Q(kind=AlterationKind.CORRUPTION_TWIST)
+                    & Q(resonance__isnull=False)
+                    & Q(stage_threshold__isnull=False)
+                )
+                | ~Q(kind=AlterationKind.CORRUPTION_TWIST),
+            ),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.kind == AlterationKind.MAGE_SCAR:
+            if self.resonance is not None or self.stage_threshold is not None:
+                msg = "MAGE_SCAR templates must not specify resonance/stage_threshold."
+                raise ValidationError(msg)
+        elif self.kind == AlterationKind.CORRUPTION_TWIST:
+            if self.resonance is None or self.stage_threshold is None:
+                msg = "CORRUPTION_TWIST templates require resonance AND stage_threshold."
+                raise ValidationError(msg)
 
     def __str__(self) -> str:
         return f"{self.condition_template.name} (Tier {self.tier})"

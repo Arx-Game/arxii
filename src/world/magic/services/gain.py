@@ -179,7 +179,7 @@ def get_residence_resonances(sheet: CharacterSheet) -> set[Resonance]:
 
 
 @transaction.atomic
-def create_pose_endorsement(
+def create_pose_endorsement(  # noqa: C901 — sequential endorsement guards including protagonism lock, complexity is inherent
     endorser_sheet: CharacterSheet,
     interaction: Interaction,
     resonance: Resonance,
@@ -196,6 +196,10 @@ def create_pose_endorsement(
     7. Endorsee has claimed this resonance
     8. No duplicate (endorser × interaction already endorsed)
     """
+    if endorser_sheet.is_protagonism_locked:
+        msg = "Endorser is locked from protagonism and cannot endorse poses"
+        raise EndorsementValidationError(msg)
+
     endorsee_persona = interaction.persona
     if endorsee_persona is None:
         msg = "Interaction has no author persona"
@@ -203,6 +207,10 @@ def create_pose_endorsement(
     endorsee_sheet = endorsee_persona.character_sheet
     if endorsee_sheet is None:
         msg = "Interaction author has no character sheet"
+        raise EndorsementValidationError(msg)
+
+    if endorsee_sheet.is_protagonism_locked:
+        msg = "Endorsee is locked from protagonism and cannot receive endorsements"
         raise EndorsementValidationError(msg)
 
     if endorser_sheet == endorsee_sheet:
@@ -312,6 +320,12 @@ def settle_weekly_pot(endorser_sheet: CharacterSheet) -> SettlementResult:
     total_granted = 0
 
     for endorsement in unsettled:
+        if endorsement.endorsee_sheet.is_protagonism_locked:
+            # Endorsee is subsumed — skip resonance grant for this tick.
+            endorsement.granted_amount = 0
+            endorsement.settled_at = now
+            endorsement.save(update_fields=["granted_amount", "settled_at"])
+            continue
         grant_resonance(
             endorsement.endorsee_sheet,
             endorsement.resonance,
@@ -342,6 +356,13 @@ def create_scene_entry_endorsement(
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
     from world.scenes.constants import PoseKind  # noqa: PLC0415
+
+    if endorser_sheet.is_protagonism_locked:
+        msg = "Endorser is locked from protagonism and cannot endorse scene entries"
+        raise EndorsementValidationError(msg)
+    if endorsee_sheet.is_protagonism_locked:
+        msg = "Endorsee is locked from protagonism and cannot receive scene-entry endorsements"
+        raise EndorsementValidationError(msg)
 
     if endorser_sheet == endorsee_sheet:
         msg = "Cannot endorse your own entry"
@@ -434,6 +455,8 @@ def residence_trickle_tick() -> ResonanceDailyTickSummary:
     sheets_with_residence = CharacterSheet.objects.exclude(current_residence__isnull=True)
 
     for sheet in sheets_with_residence.iterator():
+        if sheet.is_protagonism_locked:
+            continue
         sheets_processed += 1
         matched = get_residence_resonances(sheet)
         rp = sheet.current_residence

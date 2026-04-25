@@ -7,6 +7,8 @@ Dataclasses and type definitions for the conditions service layer.
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from django.db import models
+
 if TYPE_CHECKING:
     from django.db.models import Q
 
@@ -18,6 +20,21 @@ if TYPE_CHECKING:
         TreatmentAttempt,
     )
     from world.traits.models import CheckOutcome
+
+
+class AdvancementOutcome(models.TextChoices):
+    """Outcome of a stage-advancement check on a ConditionInstance."""
+
+    NO_CHANGE = "NO_CHANGE", "No stage change"
+    HELD = "HELD", "Threshold crossed but resist check passed"
+    ADVANCED = "ADVANCED", "Stage advanced"
+
+
+class AdvancementResistFailureKind(models.TextChoices):
+    """Behavior when severity reaches a stage's threshold."""
+
+    ADVANCE_AT_THRESHOLD = "ADVANCE_AT_THRESHOLD", "Advance immediately on threshold crossing"
+    HOLD_OVERFLOW = "HOLD_OVERFLOW", "Severity accumulates over threshold; each accrual rolls"
 
 
 @dataclass
@@ -113,6 +130,20 @@ class SeverityAdvanceResult:
     new_stage: "ConditionStage | None"
     stage_changed: bool
     total_severity: int
+    outcome: AdvancementOutcome = AdvancementOutcome.NO_CHANGE  # NEW field, defaulted
+
+
+@dataclass
+class ConditionStageAdvanceCheckPayload:
+    """Payload for the CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE event.
+
+    Mutable so reactive triggers can adjust difficulty or bonuses before
+    the resist check resolves (Scope 5.5 MODIFY_PAYLOAD pattern).
+    """
+
+    instance: "ConditionInstance"
+    target_stage: "ConditionStage"
+    base_difficulty: int
 
 
 @dataclass(frozen=True)

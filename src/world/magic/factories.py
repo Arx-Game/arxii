@@ -6,6 +6,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.magic.audere import SOULFRAY_CONDITION_NAME, AudereThreshold
 from world.magic.constants import (
+    AlterationKind,
     AlterationTier,
     CantripArchetype,
     EffectKind,
@@ -649,6 +650,36 @@ class ImbuingRitualFactory(RitualFactory):
     flow = None
 
 
+class AtonementRitualFactory(RitualFactory):
+    """Seed factory for the canonical 'Rite of Atonement' ritual.
+
+    SERVICE-dispatched (deviation from spec §4.1 FLOW recommendation — see
+    services/atonement.py for rationale).  Uses django_get_or_create so
+    repeated calls in tests return the same row.  Scope #7 Phase 8.
+    """
+
+    class Meta:
+        model = Ritual
+        django_get_or_create = ("name",)
+
+    name = "Rite of Atonement"
+    description = (
+        "A ritual of self-cleansing for those touched by corruption. "
+        "Effective only at stages 1-2; requires Celestial or Primal affinity."
+    )
+    narrative_prose = (
+        "The performer kneels at a consecrated site and speaks the words of "
+        "unbinding, drawing the corruption out of themselves through sustained "
+        "focus and will. The process is painful and requires witnesses to anchor "
+        "the soul."
+    )
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.magic.services.atonement.perform_atonement_rite"
+    flow = None
+    hedge_accessible = False
+    glimpse_eligible = False
+
+
 class RitualComponentRequirementFactory(factory.django.DjangoModelFactory):
     """Factory for RitualComponentRequirement."""
 
@@ -1021,6 +1052,14 @@ class ResonanceGainConfigFactory(factory.django.DjangoModelFactory):
     pk = 1
 
 
+class CorruptionConfigFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "magic.CorruptionConfig"
+        django_get_or_create = ("pk",)
+
+    pk = 1
+
+
 class RoomAuraProfileFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "magic.RoomAuraProfile"
@@ -1056,6 +1095,58 @@ class SceneEntryEndorsementFactory(factory.django.DjangoModelFactory):
     scene = factory.SubFactory("world.scenes.factories.SceneFactory")
     resonance = factory.SubFactory(ResonanceFactory)
     granted_amount = 4
+
+
+def with_corruption_at_stage(sheet, resonance, stage: int):
+    """Test helper: set up a corrupted character at a given stage.
+
+    Creates the per-resonance Corruption ConditionTemplate (or reuses one),
+    creates 5 stages with default severity thresholds (50, 200, 500, 1000, 1500),
+    sets corruption_current to the stage's threshold, and creates the
+    ConditionInstance with the appropriate current_stage. Returns the instance.
+
+    Uses ``sheet.character`` (ObjectDB) as the ConditionInstance target,
+    consistent with the canonical sheet→character path on CharacterSheet.
+    """
+    from world.conditions.factories import (
+        ConditionInstanceFactory,
+        ConditionStageFactory,
+        ConditionTemplateFactory,
+    )
+
+    template = ConditionTemplateFactory(
+        name=f"Corrupted by {resonance.name}",
+        has_progression=True,
+        corruption_resonance=resonance,
+    )
+    thresholds = [50, 200, 500, 1000, 1500]
+    stage_rows = []
+    for i, threshold in enumerate(thresholds, start=1):
+        stage_rows.append(
+            ConditionStageFactory(
+                condition=template,
+                stage_order=i,
+                severity_threshold=threshold,
+            )
+        )
+
+    target_stage_row = stage_rows[stage - 1]
+    severity = target_stage_row.severity_threshold
+
+    char_res, _ = CharacterResonance.objects.get_or_create(
+        character_sheet=sheet,
+        resonance=resonance,
+    )
+    char_res.corruption_current = severity
+    char_res.corruption_lifetime = severity
+    char_res.save()
+
+    return ConditionInstanceFactory(
+        target=sheet.character,
+        condition=template,
+        current_stage=target_stage_row,
+        severity=severity,
+    )
 
 
 def wire_soulfray_aftermath(content: SoulfrayContent) -> None:
@@ -1102,3 +1193,156 @@ def wire_soulfray_aftermath(content: SoulfrayContent) -> None:
     ConditionStageOnEntry.objects.get_or_create(
         stage=unravelling, condition=aura_bleed, defaults={"severity": 2}
     )
+
+
+# =============================================================================
+# Scope #7 Phase 9 — Reference Corruption content factories
+# =============================================================================
+
+_ABYSSAL_AFFINITY_NAME: str = "abyssal"
+
+
+def _make_magical_endurance_check_type():
+    """Return a 'Magical Endurance' CheckType, creating it if absent."""
+    from world.checks.factories import CheckTypeFactory
+
+    return CheckTypeFactory(name="Magical Endurance")
+
+
+class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
+    """Factory for a per-resonance Corruption ConditionTemplate with 5 stages.
+
+    Authors the full 5-stage shape per spec §6.2 / §6.3:
+    - HOLD_OVERFLOW on all stages (resist check gates each advancement)
+    - Primal DCs: 8, 12, 18, 22, 28
+    - Abyssal DCs: 12, 18, 25, 30, 35  (harder to resist)
+    - passive_decay_max_severity set to stage-2 threshold so decay only runs
+      at stages 1-2
+
+    The affinity is inferred from corruption_resonance.affinity.name.lower().
+    """
+
+    class Meta:
+        model = "conditions.ConditionTemplate"
+        django_get_or_create = ("corruption_resonance",)
+
+    name = factory.LazyAttribute(lambda o: f"Corrupted by {o.corruption_resonance.name}")
+    category = factory.SubFactory("world.conditions.factories.ConditionCategoryFactory")
+    description = factory.LazyAttribute(
+        lambda o: f"Corruption from the {o.corruption_resonance.name} resonance."
+    )
+    has_progression = True
+    passive_decay_per_day = 1
+    passive_decay_blocked_in_engagement = True
+    corruption_resonance = factory.SubFactory(ResonanceFactory)
+
+    @factory.post_generation  # type: ignore[misc]
+    def stages(self, create: bool, extracted: object, **kwargs: object) -> None:
+        """Author 5 ConditionStage rows with HOLD_OVERFLOW + resist params.
+
+        Idempotent: skips stage creation if stages already exist (handles
+        the django_get_or_create case where the template row is reused).
+        """
+        if not create:
+            return
+        # If stages already exist (e.g. template was get_or_created), skip.
+        if self.stages.exists():
+            return
+        from world.conditions.factories import ConditionStageFactory
+        from world.conditions.types import AdvancementResistFailureKind
+
+        thresholds = [50, 200, 500, 1000, 1500]
+        is_abyssal = self.corruption_resonance.affinity.name.lower() == _ABYSSAL_AFFINITY_NAME
+        difficulties = [12, 18, 25, 30, 35] if is_abyssal else [8, 12, 18, 22, 28]
+        check_type = _make_magical_endurance_check_type()
+
+        for i, (threshold, dc) in enumerate(zip(thresholds, difficulties, strict=True), start=1):
+            ConditionStageFactory(
+                condition=self,
+                stage_order=i,
+                severity_threshold=threshold,
+                resist_check_type=check_type,
+                resist_difficulty=dc,
+                advancement_resist_failure_kind=AdvancementResistFailureKind.HOLD_OVERFLOW,
+            )
+
+        # passive_decay only at stages 1-2: set max_severity = stage-2 threshold
+        stage_2_threshold = thresholds[1]  # 200
+        self.passive_decay_max_severity = stage_2_threshold
+        self.save(update_fields=["passive_decay_max_severity"])
+
+
+class CorruptionTwistTemplateFactory(factory.django.DjangoModelFactory):
+    """Factory for a CORRUPTION_TWIST MagicalAlterationTemplate.
+
+    Requires an existing ConditionTemplate (created separately — the twist
+    layers magic-specific metadata on top of a condition).  Defaults produce
+    a stage-2 twist for the given resonance.
+    """
+
+    class Meta:
+        model = MagicalAlterationTemplate
+
+    condition_template = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
+    tier = AlterationTier.MARKED
+    origin_affinity = factory.LazyAttribute(lambda o: o.resonance.affinity)
+    origin_resonance = factory.SubFactory(ResonanceFactory)
+    resonance = factory.LazyAttribute(lambda o: o.origin_resonance)
+    stage_threshold = 2
+    kind = AlterationKind.CORRUPTION_TWIST
+    weakness_magnitude = 0
+    resonance_bonus_magnitude = 0
+    social_reactivity_magnitude = 0
+    is_visible_at_rest = False
+    is_library_entry = False
+
+    class Params:
+        # Convenience: build a twist wired to a specific resonance without
+        # setting origin_affinity manually.
+        for_resonance = factory.Trait(
+            origin_resonance=factory.SubFactory(ResonanceFactory),
+            resonance=factory.SelfAttribute("origin_resonance"),
+            origin_affinity=factory.LazyAttribute(lambda o: o.origin_resonance.affinity),
+        )
+
+
+def author_reference_corruption_content() -> None:
+    """Seed 1 Primal + 1 Abyssal reference Corruption content set.
+
+    Creates (or reuses) two reference resonances — "Wild Hunt" (Primal) and
+    "Web of Spiders" (Abyssal) — and for each:
+    - one per-resonance Corruption ConditionTemplate with 5 stages
+    - 6 CORRUPTION_TWIST MagicalAlterationTemplate rows (stages 2, 3, 4 × 2)
+
+    Idempotent: safe to call repeatedly.  CorruptionConditionTemplateFactory
+    uses django_get_or_create on corruption_resonance; twist factories create
+    new rows each time, so the twist-exists check below prevents duplication.
+    """
+    primal_affinity = AffinityFactory(name="Primal")
+    abyssal_affinity = AffinityFactory(name="Abyssal")
+    wild_hunt = ResonanceFactory(name="Wild Hunt", affinity=primal_affinity)
+    web_of_spiders = ResonanceFactory(name="Web of Spiders", affinity=abyssal_affinity)
+
+    for resonance in (wild_hunt, web_of_spiders):
+        # ConditionTemplate (idempotent via django_get_or_create on corruption_resonance)
+        CorruptionConditionTemplateFactory(corruption_resonance=resonance)
+
+        # CORRUPTION_TWIST templates — 2 per stage 2/3/4
+        for stage in (2, 3, 4):
+            existing = MagicalAlterationTemplate.objects.filter(
+                kind=AlterationKind.CORRUPTION_TWIST,
+                resonance=resonance,
+                stage_threshold=stage,
+            ).count()
+            for _i in range(max(0, 2 - existing)):
+                from world.conditions.factories import ConditionTemplateFactory
+
+                twist_condition = ConditionTemplateFactory()
+                CorruptionTwistTemplateFactory(
+                    condition_template=twist_condition,
+                    origin_resonance=resonance,
+                    resonance=resonance,
+                    origin_affinity=resonance.affinity,
+                    stage_threshold=stage,
+                    kind=AlterationKind.CORRUPTION_TWIST,
+                )

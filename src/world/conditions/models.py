@@ -24,6 +24,7 @@ from world.conditions.constants import (
     StackBehavior,
     TreatmentTargetKind,
 )
+from world.conditions.types import AdvancementResistFailureKind
 
 # =============================================================================
 # Lookup Tables (SharedMemoryModel - cached, rarely change)
@@ -283,6 +284,20 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
     passive_decay_max_severity = models.PositiveIntegerField(null=True, blank=True)
     passive_decay_blocked_in_engagement = models.BooleanField(default=True)
 
+    # === Corruption (Scope 7) ===
+    corruption_resonance = models.ForeignKey(
+        "magic.Resonance",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="corruption_condition_templates",
+        help_text=(
+            "Non-null marks this template as a per-resonance Corruption "
+            "ConditionTemplate. Drives is_protagonism_locked detection and "
+            "decay-time field sync for the resonance's corruption_current."
+        ),
+    )
+
     objects = NaturalKeyManager()
 
     class NaturalKeyConfig:
@@ -360,6 +375,18 @@ class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
         help_text=(
             "When accumulated severity reaches this value, "
             "condition advances to this stage. Null = time-based only."
+        ),
+    )
+
+    advancement_resist_failure_kind = models.CharField(
+        max_length=24,
+        choices=AdvancementResistFailureKind.choices,
+        default=AdvancementResistFailureKind.ADVANCE_AT_THRESHOLD,
+        help_text=(
+            "Behavior when severity reaches this stage's threshold. "
+            "ADVANCE_AT_THRESHOLD preserves existing behavior. "
+            "HOLD_OVERFLOW gates advancement on a resist check using "
+            "this stage's resist_check_type + resist_difficulty."
         ),
     )
 

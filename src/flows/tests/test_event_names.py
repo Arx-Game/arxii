@@ -29,5 +29,12 @@ class EventNameTests(TestCase):
             "technique_pre_cast",
             "technique_cast",
             "technique_affected",
+            "corruption_accruing",
+            "corruption_accrued",
+            "corruption_warning",
+            "corruption_reduced",
+            "protagonism_locked",
+            "protagonism_restored",
+            "condition_stage_advance_check_about_to_fire",
         }
         self.assertEqual(set(EventName.values), expected)

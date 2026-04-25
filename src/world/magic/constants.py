@@ -9,6 +9,13 @@ class CantripArchetype(models.TextChoices):
     UTILITY = "utility", "Utility"
 
 
+class AlterationKind(models.TextChoices):
+    """Discriminator on MagicalAlterationTemplate (MAGE_SCAR vs CORRUPTION_TWIST)."""
+
+    MAGE_SCAR = "MAGE_SCAR", "Mage Scar"
+    CORRUPTION_TWIST = "CORRUPTION_TWIST", "Corruption Twist"
+
+
 class AlterationTier(models.IntegerChoices):
     """Severity tier for magical alterations. Higher = more dramatic."""
 

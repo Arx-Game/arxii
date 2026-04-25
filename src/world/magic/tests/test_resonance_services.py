@@ -504,3 +504,50 @@ class ThreadsBlockedByCapTests(TestCase):
         thread = ThreadFactory(owner=sheet, resonance=res, level=5, _trait_value=100)
         result = threads_blocked_by_cap(sheet)
         self.assertNotIn(thread, result)
+
+
+# =============================================================================
+# Gate 10.6 — ProtagonismLockedError for resonance currency spends
+# =============================================================================
+
+
+class ProtagonismLockResonanceSpendTests(TestCase):
+    """spend_resonance_for_imbuing and spend_resonance_for_pull raise ProtagonismLockedError
+    when the character's sheet is at terminal corruption stage."""
+
+    def _make_subsumed_sheet(self):
+        """Return a CharacterSheet at corruption stage 5 (protagonism locked)."""
+        from world.magic.factories import with_corruption_at_stage
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        with_corruption_at_stage(sheet, res, stage=5)
+        sheet.__dict__.pop("is_protagonism_locked", None)
+        return sheet
+
+    def test_spend_resonance_for_imbuing_blocked(self) -> None:
+        from world.magic.exceptions import ProtagonismLockedError
+        from world.magic.services import spend_resonance_for_imbuing
+
+        sheet = self._make_subsumed_sheet()
+        res = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=sheet, resonance=res, balance=100)
+        thread = ThreadFactory(owner=sheet, resonance=res)
+
+        with self.assertRaises(ProtagonismLockedError):
+            spend_resonance_for_imbuing(sheet, thread, 10)
+
+    def test_spend_resonance_for_pull_blocked(self) -> None:
+        from world.magic.exceptions import ProtagonismLockedError
+        from world.magic.services import spend_resonance_for_pull
+        from world.magic.types import PullActionContext
+
+        sheet = self._make_subsumed_sheet()
+        res = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=sheet, resonance=res, balance=100)
+        thread = ThreadFactory(owner=sheet, resonance=res)
+
+        ctx = PullActionContext()
+
+        with self.assertRaises(ProtagonismLockedError):
+            spend_resonance_for_pull(sheet, res, 1, [thread], ctx)

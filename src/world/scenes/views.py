@@ -75,7 +75,29 @@ class SceneViewSet(viewsets.ModelViewSet):
             return SceneListSerializer
         return SceneDetailSerializer
 
+    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
+        from world.magic.exceptions import ProtagonismLockedError  # noqa: PLC0415
+
+        try:
+            return super().create(request, *args, **kwargs)
+        except ProtagonismLockedError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_403_FORBIDDEN)
+
     def perform_create(self, serializer: BaseSerializer[Scene]) -> None:
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.magic.exceptions import ProtagonismLockedError  # noqa: PLC0415
+
+        # Raise if the requesting account's active character sheet is protagonism-locked.
+        try:
+            active_sheet = CharacterSheet.objects.get(
+                roster_entry__tenures__player_data__account=self.request.user,
+                roster_entry__tenures__end_date__isnull=True,
+            )
+            if active_sheet.is_protagonism_locked:
+                raise ProtagonismLockedError
+        except CharacterSheet.DoesNotExist:
+            pass  # No active sheet — allow the scene to proceed
+
         location = serializer.validated_data.get("location")
         name = serializer.validated_data.get("name")
         if location and Scene.objects.filter(location=location, is_active=True).exists():
