@@ -269,6 +269,7 @@ def use_technique(  # noqa: PLR0913, C901 — kw-only args are intentional, targ
             anima_cost=cost,
             soulfray_warning=soulfray_warning,
             confirmed=False,
+            technique=technique,
         )
 
     # --- TECHNIQUE_PRE_CAST (cancellable, before anima deduction) ---
@@ -290,6 +291,7 @@ def use_technique(  # noqa: PLR0913, C901 — kw-only args are intentional, targ
             return TechniqueUseResult(
                 anima_cost=cost,
                 confirmed=False,
+                technique=technique,
             )
 
     # Step 4: Deduct anima
