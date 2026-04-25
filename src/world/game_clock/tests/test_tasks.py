@@ -259,6 +259,54 @@ class BatchConditionExpirationTests(TestCase):
         self.assertIn(no_expiry.pk, remaining_pks)
 
 
+class ProtagonismLockApRegenTests(TestCase):
+    """Gate 10.3 — protagonism-locked characters do not receive AP regen."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.action_points.factories import ActionPointConfigFactory
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+
+        ActionPointConfigFactory(daily_regen=5, weekly_regen=100, is_active=True)
+        ap_category = ModifierCategoryFactory(name="action_points")
+        ModifierTargetFactory(name="ap_daily_regen", category=ap_category)
+        ModifierTargetFactory(name="ap_weekly_regen", category=ap_category)
+        ModifierTargetFactory(name="ap_maximum", category=ap_category)
+
+    def _make_subsumed_pool(self):
+        """Create an ActionPointPool for a protagonism-locked character."""
+        from world.action_points.factories import ActionPointPoolFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceFactory, with_corruption_at_stage
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        with_corruption_at_stage(sheet, resonance, stage=5)
+        return ActionPointPoolFactory(character=sheet.character, current=50, maximum=200)
+
+    def test_locked_sheet_skipped_by_daily_regen(self) -> None:
+        pool = self._make_subsumed_pool()
+        original_current = pool.current
+
+        from world.game_clock.tasks import batch_ap_daily_regen
+
+        batch_ap_daily_regen()
+
+        pool.refresh_from_db()
+        self.assertEqual(pool.current, original_current)
+
+    def test_locked_sheet_skipped_by_weekly_regen(self) -> None:
+        pool = self._make_subsumed_pool()
+        original_current = pool.current
+
+        from world.game_clock.tasks import batch_ap_weekly_regen
+
+        batch_ap_weekly_regen()
+
+        pool.refresh_from_db()
+        self.assertEqual(pool.current, original_current)
+
+
 class Scope6TaskRegistrationTests(TestCase):
     """Phase 10: anima regen and condition decay scheduler tasks registered."""
 

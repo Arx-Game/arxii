@@ -109,12 +109,25 @@ def _apply_ap_regen(regen_target_name: str, base_regen: int) -> int:
 
     Fetches all pools, computes per-character effective regen/max with modifiers,
     and bulk-updates in 3 queries total. Returns the number of pools updated.
+
+    Protagonism-locked characters (terminal corruption stage 5) are skipped
+    silently — their AP does not regenerate while subsumed.
     """
     from world.action_points.models import ActionPointPool
+    from world.conditions.models import ConditionInstance
 
     pools = list(ActionPointPool.objects.all())
     if not pools:
         return 0
+
+    # Resolve the set of character ObjectDB PKs whose sheet is protagonism-locked.
+    # One query: ConditionInstance rows where the target is at stage 5 of a Corruption condition.
+    locked_character_ids: set[int] = set(
+        ConditionInstance.objects.filter(
+            condition__corruption_resonance__isnull=False,
+            current_stage__stage_order=5,
+        ).values_list("target_id", flat=True)
+    )
 
     mod_lookup, pks = _fetch_ap_modifier_map([regen_target_name, "ap_maximum"])
     regen_pk = pks.get(regen_target_name)
@@ -122,6 +135,9 @@ def _apply_ap_regen(regen_target_name: str, base_regen: int) -> int:
 
     to_update: list[ActionPointPool] = []
     for pool in pools:
+        if pool.character_id in locked_character_ids:
+            continue
+
         mods = mod_lookup.get(pool.character_id, {})
         effective_regen = max(0, base_regen + (mods.get(regen_pk, 0) if regen_pk else 0))
         effective_max = max(1, pool.maximum + (mods.get(max_pk, 0) if max_pk else 0))
