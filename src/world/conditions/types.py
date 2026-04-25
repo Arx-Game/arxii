@@ -7,6 +7,8 @@ Dataclasses and type definitions for the conditions service layer.
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from django.db import models
+
 if TYPE_CHECKING:
     from django.db.models import Q
 
@@ -18,6 +20,12 @@ if TYPE_CHECKING:
         TreatmentAttempt,
     )
     from world.traits.models import CheckOutcome
+
+
+class AdvancementOutcome(models.TextChoices):
+    NO_CHANGE = "NO_CHANGE", "No stage change"
+    HELD = "HELD", "Threshold crossed but resist check passed"
+    ADVANCED = "ADVANCED", "Stage advanced"
 
 
 @dataclass
@@ -113,6 +121,7 @@ class SeverityAdvanceResult:
     new_stage: "ConditionStage | None"
     stage_changed: bool
     total_severity: int
+    outcome: AdvancementOutcome = AdvancementOutcome.NO_CHANGE  # NEW field, defaulted
 
 
 @dataclass(frozen=True)
