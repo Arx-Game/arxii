@@ -231,7 +231,7 @@ def calculate_effective_anima_cost(
     )
 
 
-def use_technique(  # noqa: PLR0913, C901 — kw-only args are intentional, targets is new for reactive layer
+def use_technique(  # noqa: PLR0913, PLR0912, C901 — kw-only args are intentional; step 9 added a branch
     *,
     character: ObjectDB,
     technique: Technique,
@@ -354,6 +354,18 @@ def use_technique(  # noqa: PLR0913, C901 — kw-only args are intentional, targ
         was_audere=_character_is_in_audere(character),
         resonance_involvements=resonance_involvements,
     )
+
+    # Step 9: Per-cast corruption accrual (Magic Scope #7)
+    # Defensive sheet lookup: NPCs without a CharacterSheet skip corruption
+    # accrual silently (the orchestrator requires a sheet to write to).
+    sheet = _get_character_sheet(character)
+    if sheet is not None:
+        from world.magic.services.corruption import accrue_corruption_for_cast  # noqa: PLC0415
+
+        technique_result.corruption_summary = accrue_corruption_for_cast(
+            caster_sheet=sheet,
+            technique_use_result=technique_result,
+        )
 
     # --- TECHNIQUE_CAST (post-resolve, frozen) ---
     if caster_room is not None:
