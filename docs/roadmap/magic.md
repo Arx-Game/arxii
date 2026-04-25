@@ -539,6 +539,155 @@ Deferred to later scopes:
 - Abyssal corruption as long-term consequence of abyssal magic overuse
 - Character loss deferral during Audere (needs combat/mission lifecycle)
 
+**Scope #7 — Corruption (DONE — branch `scope-7-corruption`):**
+**Spec:** `docs/superpowers/specs/2026-04-25-magic-scope-7-corruption-design.md`
+
+Foundation for resonance-corruption — the identity-loss risk parallel to
+Soulfray's exhaustion injury. Non-Celestial casting accrues per-resonance
+corruption; staging mirrors Scope 3+6's condition machinery; terminal
+stage (Subsumption) locks the character from protagonism without removing
+them from play. Lays the interception hooks Spec B (Soul Tether) will
+mediate against.
+
+What was built:
+- **Per-resonance counters on `CharacterResonance`** — `corruption_current`
+  (mutable; drives stage progression) and `corruption_lifetime` (monotonic
+  audit; achievement-tracking surface). Mirrors the existing
+  `balance` / `lifetime_earned` pattern.
+- **`MagicalAlterationTemplate` kind discriminator** — extended Scope 5's
+  alteration model with `kind: TextChoices(MAGE_SCAR | CORRUPTION_TWIST)`,
+  plus nullable `resonance` FK + `stage_threshold` populated only for
+  CORRUPTION_TWIST rows. Per-discriminator CheckConstraints + `clean()`
+  enforce shape. Existing PendingAlteration / library-pick-or-author
+  resolution flow handles both kinds without code changes; the XP-spend
+  gate (`AlterationGateError`) blocks pendings of either kind.
+- **`CorruptionConfig` singleton tuning surface** — affinity coefficients
+  (Celestial 0, Primal 0.2, Abyssal 1.0), per-tier coefficients (1× …
+  16× from tier 1 to tier 5), push multipliers (deficit / mishap / Audere).
+  All staff-tunable via Django admin; no code changes for retuning.
+- **Generalized resist-checked stage advancement** — wired the
+  existing-but-unused `ConditionStage.resist_check_type` and
+  `resist_difficulty` fields into `advance_condition_severity`. Added one
+  new field `advancement_resist_failure_kind` (TextChoices,
+  ADVANCE_AT_THRESHOLD default for back-compat; HOLD_OVERFLOW for new
+  resist-gated content). When HOLD_OVERFLOW + non-null resist_check_type,
+  threshold crossings fire a `CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE`
+  reactive event (Scope 5.5 surface, mutable payload for trigger-driven
+  difficulty adjustment), then run a resist check; pass holds at the
+  prior stage with severity over threshold (pressure mounts), fail
+  advances. `SeverityAdvanceResult` gained an `outcome: AdvancementOutcome`
+  field (NO_CHANGE / HELD / ADVANCED) — additive; existing destructuring
+  callers untouched.
+- **Soulfray retrofit** — single data migration sets resist_check_type
+  ("Magical Endurance"), per-stage difficulties (8 / 10 / 18 / 25 for
+  stages 2-5), and HOLD_OVERFLOW on Soulfray's existing stages. Audere
+  remains accessible because stages 1→2 and 2→3 carry low DCs by design;
+  the resist check meaningfully gates only the Sundering / Unravelling
+  cascade. Reversible.
+- **Atomic accrual + reduction services in
+  `world/magic/services/corruption.py`** — `accrue_corruption(*, sheet,
+  resonance, amount, source, ...)` increments both fields,
+  lazy-creates the per-resonance Corruption ConditionInstance only when
+  stage 1 threshold is first crossed (sub-threshold accrual leaves no
+  condition row), advances the condition via the new resist-check path,
+  emits CORRUPTION_ACCRUING (pre-mutation, for Spec B interception),
+  CORRUPTION_ACCRUED, CORRUPTION_WARNING (stage 3-4 with explicit
+  "character loss" copy), PROTAGONISM_LOCKED (stage 5 entry).
+  `reduce_corruption(...)` decrements `corruption_current` (clamped),
+  syncs the condition via Scope 6's `decay_condition_severity` (with
+  `_skip_corruption_sync=True` guard to prevent recursion when called
+  from decay), emits PROTAGONISM_RESTORED on lock exit. Both atomic
+  with `select_for_update`.
+- **Scope 6 decay extension** — `decay_condition_severity` now calls
+  `reduce_corruption` (with `_from_decay=True`) when the condition's
+  template has non-null `corruption_resonance`, keeping
+  `corruption_current` synced as severity decays. Clean recursion guard
+  via the two complementary `_from_decay` / `_skip_corruption_sync`
+  flags. Non-Corruption conditions decay unchanged.
+- **`ConditionTemplate.corruption_resonance` FK** — non-null marks a
+  template as Corruption-kind, drives both the `is_protagonism_locked`
+  detection query and the decay-time field sync. Single FK addition;
+  preserves backward compat (defaults to NULL).
+- **`CharacterSheet.is_protagonism_locked` cached_property** —
+  aggregates over future autonomy-loss systems (today: stage-5 Corruption
+  ConditionInstance presence; future: berserker terminal, possession,
+  etc. extend the OR). Consumer-system gates check the aggregate, not
+  the corruption-specific query.
+- **Atonement Rite content** — authored Ritual + service function
+  (SERVICE-dispatched; FLOW dispatch deferred until the flow system's
+  vocabulary covers affinity-in-set checks natively). Self-targeting
+  only; performer must be Celestial-affinity-primary or Primal-affinity-
+  primary (Abyssal cannot lead); effective only at stages 1-2 (stage 3+
+  recovery deferred to Spec B / future Mission rituals). Refusal paths
+  raise typed exceptions (`AtonementAffinityError`,
+  `AtonementStageOutOfRange`, `AtonementTargetError`) with
+  `user_message` / SAFE_MESSAGES allowlist per project pattern.
+- **Reference Corruption ConditionTemplate factories** — `Wild Hunt`
+  (Primal) and `Web of Spiders` (Abyssal) reference content with full
+  5-stage authoring (per-stage severity_threshold, resist_check_type,
+  HOLD_OVERFLOW failure_kind, per-affinity DC curves), plus 2
+  CORRUPTION_TWIST `MagicalAlterationTemplate` rows per
+  (resonance, stage 2/3/4) for the Pending alteration library pool.
+  `author_reference_corruption_content()` is the idempotent seeder.
+- **Six consumer-system gates** for `is_protagonism_locked` — Spec C
+  resonance gain (endorsements raise validation errors for either-side
+  lock; trickle/settlement ticks skip locked sheets), progression XP
+  spend (raises `ProtagonismLockedError`), AP regen tick (pre-fetches
+  locked-character IDs once, skips silently — no N+1), stories
+  participation (raises on protagonist-add; existing all-or-nothing
+  participation level — no PROTAGONIST/NPC distinction yet),
+  scene initiation (raises on player-driven scene creation), resonance
+  currency spends (`spend_resonance_for_imbuing` and
+  `spend_resonance_for_pull` raise).
+- **Audere advisory** — Audere offer flow now includes an explicit
+  `advisory_text` containing the literal phrase "character loss" when
+  the casting character has any resonance at corruption stage 3+. Stage
+  3+ resonances are surfaced by name so the player can make an informed
+  push-or-back-off choice.
+- **Integration test suite** — 13 scenarios in
+  `src/world/magic/tests/integration/test_corruption_flow.py`: lazy
+  condition creation, lifetime monotonicity across accrue+reduce, no-
+  template no-op, lock entry/exit, Atonement happy paths + refusal
+  paths, decay sync, risk-transparency event emission. Per-cast accrual
+  scenarios are excluded pending the deferred per-cast hook (see below).
+- **Pre-existing factory bug fix exposed during integration testing** —
+  `ConditionStageFactory.severity_multiplier` formula was tied to
+  factory.Sequence's `stage_order` value, overflowing
+  DecimalField(max_digits=4, decimal_places=2) once the sequence climbed
+  past ~199. Cycled stage_order in 1..5 via modulo. Existing tests that
+  set stage_order explicitly are unaffected; the modulo only governs the
+  auto-generated default.
+
+Decoupling: Standalone for foundation work (does NOT depend on Spec B,
+Scope 5.5 reactive layer is leveraged but not required). Spec B (Soul
+Tether) builds on this scope's interception hooks: `CORRUPTION_ACCRUING`
+event for redirect, `CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE` for
+tether-mediated resist support, `reduce_corruption` for tether-mediated
+rescue rituals, and trace-corruption-to-Sineater via the same
+`accrue_corruption` primitive.
+
+Deferred (gated on a follow-up that extends `TechniqueUseResult`):
+- **Per-cast accrual hook into `use_technique`** — `accrue_corruption_for_cast`
+  per-cast orchestrator and the wiring into the technique pipeline. Spec
+  §10.1 flagged the risk: `TechniqueUseResult` does not expose
+  per-resonance involvement (stat_bonus contribution + thread-pull
+  resonance spent). Implementing the orchestrator requires extending
+  `TechniqueUseResult` (and `use_technique` itself) to surface that
+  breakdown. The per-resonance formula is fully specified in §3.1 and
+  the service shape is sketched in the plan; just unblocks once the
+  technique pipeline exposes the inputs. No architectural changes
+  needed in the corruption foundation — just the missing input.
+- **Soul Tether (Spec B)** — the redirect mechanic, Sineater asymmetry,
+  rescue rituals.
+- **Cast-pipeline integration tests** — wait on the per-cast hook above.
+
+Not in this scope (deferred): non-Corruption stage 3+ recovery rituals
+(Spec B authors via the same `reduce_corruption` primitive), public
+corruption leaderboards (`corruption_lifetime` enables this surface but
+no API ships now), Mission-driven cleansing quests, and other
+autonomy-loss systems (berserker, possession, mind-control) which
+share the protagonism-lock aggregator but design independently.
+
 **Key design principles (apply across all scopes):**
 - Anima is a safety margin, not a gate. Magic always works. Deficit costs life force.
 - Risk is always explicit. Character death warnings use those exact words.
