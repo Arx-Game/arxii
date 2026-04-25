@@ -30,6 +30,13 @@ class AdvancementOutcome(models.TextChoices):
     ADVANCED = "ADVANCED", "Stage advanced"
 
 
+class AdvancementResistFailureKind(models.TextChoices):
+    """Behavior when severity reaches a stage's threshold."""
+
+    ADVANCE_AT_THRESHOLD = "ADVANCE_AT_THRESHOLD", "Advance immediately on threshold crossing"
+    HOLD_OVERFLOW = "HOLD_OVERFLOW", "Severity accumulates over threshold; each accrual rolls"
+
+
 @dataclass
 class ApplyConditionResult:
     """Result of attempting to apply a condition."""
@@ -124,6 +131,19 @@ class SeverityAdvanceResult:
     stage_changed: bool
     total_severity: int
     outcome: AdvancementOutcome = AdvancementOutcome.NO_CHANGE  # NEW field, defaulted
+
+
+@dataclass
+class ConditionStageAdvanceCheckPayload:
+    """Payload for the CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE event.
+
+    Mutable so reactive triggers can adjust difficulty or bonuses before
+    the resist check resolves (Scope 5.5 MODIFY_PAYLOAD pattern).
+    """
+
+    instance: "ConditionInstance"
+    target_stage: "ConditionStage"
+    base_difficulty: int
 
 
 @dataclass(frozen=True)
