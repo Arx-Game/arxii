@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from django.db import models
 
 if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
     from world.conditions.models import ConditionInstance
     from world.conditions.types import AdvancementOutcome
     from world.magic.models.affinity import Resonance
@@ -74,3 +75,60 @@ class CorruptionAccrualSummary:
     caster_sheet_id: int
     technique_id: int
     per_resonance: tuple[CorruptionAccrualResult, ...]
+
+
+# ---------------------------------------------------------------------------
+# Event payload dataclasses
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CorruptionAccruingPayload:
+    """Payload for the CORRUPTION_ACCRUING event (pre-mutation)."""
+
+    character_sheet: "CharacterSheet"
+    resonance: "Resonance"
+    amount: int
+    source: "CorruptionSource"
+    redirect_origin: "CharacterSheet | None" = None
+
+
+@dataclass(frozen=True)
+class CorruptionAccruedPayload:
+    """Payload for the CORRUPTION_ACCRUED event (post-mutation)."""
+
+    result: "CorruptionAccrualResult"
+
+
+@dataclass(frozen=True)
+class CorruptionWarningPayload:
+    """Payload for CORRUPTION_WARNING events (stage 3 / 4 entry)."""
+
+    character_sheet: "CharacterSheet"
+    resonance: "Resonance"
+    stage: int  # 3 or 4
+    severity_label: str  # "ADVISORY" | "URGENT"
+
+
+@dataclass(frozen=True)
+class ProtagonismLockedPayload:
+    """Payload for the PROTAGONISM_LOCKED event (stage 5 entry — character loss)."""
+
+    character_sheet: "CharacterSheet"
+    resonance: "Resonance"
+    cause: "CorruptionCause"
+
+
+@dataclass(frozen=True)
+class ProtagonismRestoredPayload:
+    """Payload for the PROTAGONISM_RESTORED event."""
+
+    character_sheet: "CharacterSheet"
+    cause: "CorruptionCause"
+
+
+@dataclass(frozen=True)
+class CorruptionReducedPayload:
+    """Payload for the CORRUPTION_REDUCED event."""
+
+    result: "CorruptionRecoveryResult"
