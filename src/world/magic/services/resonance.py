@@ -180,6 +180,11 @@ def spend_resonance_for_imbuing(  # noqa: C901 — sequential guards + greedy lo
         AnchorCapExceeded: If thread is already at effective cap.
         ResonanceInsufficient: If balance < amount.
     """
+    from world.magic.exceptions import ProtagonismLockedError  # noqa: PLC0415
+
+    if character_sheet.is_protagonism_locked:
+        raise ProtagonismLockedError
+
     if amount < 0:
         msg = "Imbue amount must be non-negative."
         raise InvalidImbueAmount(msg)
@@ -487,6 +492,11 @@ def spend_resonance_for_pull(  # noqa: C901 — sequential guards + combat/ephem
             an anchor that is not in-action.
         ResonanceInsufficient: balance below cost or insufficient anima.
     """
+    from world.magic.exceptions import ProtagonismLockedError  # noqa: PLC0415
+
+    if character_sheet.is_protagonism_locked:
+        raise ProtagonismLockedError
+
     if not threads:
         msg = "Must pull at least one thread."
         raise InvalidImbueAmount(msg)
