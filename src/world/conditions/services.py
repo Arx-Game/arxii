@@ -806,6 +806,8 @@ def remove_conditions_by_category(
     instances = get_active_conditions(target, category=category)
     removed = [i.condition for i in instances]
     instances.delete()
+    for template in removed:
+        _notify_stories_condition_expired(target, template)
     return removed
 
 
@@ -1344,8 +1346,15 @@ def clear_all_conditions(
     if only_category:
         qs = qs.filter(condition__category=only_category)
 
-    count = qs.count()
+    removed_template_ids = list(qs.values_list("condition", flat=True))
+    count = len(removed_template_ids)
     qs.delete()
+    for template_id in removed_template_ids:
+        try:
+            template = ConditionTemplate.objects.get(pk=template_id)
+        except ConditionTemplate.DoesNotExist:
+            continue
+        _notify_stories_condition_expired(target, template)
     return count
 
 

@@ -372,9 +372,11 @@ def _evaluate_predicate_no_sheet(beat: Beat) -> BeatOutcome:
     return UNSATISFIED (they require a character sheet and should be guarded
     by _requires_character_sheet before calling this).
     """
-    if beat.predicate_type == BeatPredicateType.STORY_AT_MILESTONE:
-        return _evaluate_story_at_milestone(beat)
-    return BeatOutcome.UNSATISFIED
+    match beat.predicate_type:
+        case BeatPredicateType.STORY_AT_MILESTONE:
+            return _evaluate_story_at_milestone(beat)
+        case _:
+            return BeatOutcome.UNSATISFIED
 
 
 def _evaluate_predicate_any_member(beat: Beat, progress: AnyStoryProgress) -> BeatOutcome:
@@ -460,22 +462,22 @@ def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
     directly when a contribution is recorded. They should not flip silently
     during evaluate_auto_beats, since no contribution event has fired.
     """
-    ptype = beat.predicate_type
     sheet = progress.character_sheet
 
-    if ptype == BeatPredicateType.CHARACTER_LEVEL_AT_LEAST:
-        return _evaluate_character_level(beat, sheet)
-    if ptype == BeatPredicateType.ACHIEVEMENT_HELD:
-        return _evaluate_achievement_held(beat, sheet)
-    if ptype == BeatPredicateType.CONDITION_HELD:
-        return _evaluate_condition_held(beat, sheet)
-    if ptype == BeatPredicateType.CODEX_ENTRY_UNLOCKED:
-        return _evaluate_codex_entry_unlocked(beat, sheet)
-    if ptype == BeatPredicateType.STORY_AT_MILESTONE:
-        return _evaluate_story_at_milestone(beat)
-
-    # GM_MARKED, AGGREGATE_THRESHOLD (write-path only), and future types.
-    return BeatOutcome.UNSATISFIED
+    match beat.predicate_type:
+        case BeatPredicateType.CHARACTER_LEVEL_AT_LEAST:
+            return _evaluate_character_level(beat, sheet)
+        case BeatPredicateType.ACHIEVEMENT_HELD:
+            return _evaluate_achievement_held(beat, sheet)
+        case BeatPredicateType.CONDITION_HELD:
+            return _evaluate_condition_held(beat, sheet)
+        case BeatPredicateType.CODEX_ENTRY_UNLOCKED:
+            return _evaluate_codex_entry_unlocked(beat, sheet)
+        case BeatPredicateType.STORY_AT_MILESTONE:
+            return _evaluate_story_at_milestone(beat)
+        case _:
+            # GM_MARKED, AGGREGATE_THRESHOLD (write-path only), and future types.
+            return BeatOutcome.UNSATISFIED
 
 
 def _evaluate_character_level(beat: Beat, sheet: CharacterSheet) -> BeatOutcome:

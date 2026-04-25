@@ -181,7 +181,24 @@ Real-time reactivity: six mutation-time hooks flip beats when gameplay state cha
 - **Authoring UX polish** — a dedicated author editor for GMs to build beats, wire transitions, and preview the episode DAG in-browser. Currently dependent on Django admin.
 - **Covenant leadership model** — required for GROUP-scope stories to have meaningful player-driven agency. PC leader / group vote / assigned GM model is TBD. Not blocking GROUP-scope backend (GMTable is the current owner), but required for full player autonomy.
 - **Character-scope progress invariant enforcement beyond clean()** — `StoryProgress.clean()` validates `story.character_sheet == progress.character_sheet`. Service-layer guards (catching programmer errors at creation time) have not been added to all service paths.
-- **Progression-side level-up service + invalidation of cached_current_level** — once a production `CharacterClassLevel` mutation path exists, wire it to call `sheet.invalidate_class_level_cache()` and `stories.services.reactivity.on_character_level_changed` (reactivity hook already defensively invalidates). Pending progression work beyond Phase 3 scope.
+- **Progression-side level-up service + invalidation of cached_current_level** — once a production `CharacterClassLevel` mutation path exists, wire it to call `sheet.invalidate_class_level_cache()` and `stories.services.reactivity.on_character_level_changed` (reactivity hook already defensively invalidates). Pending progression work beyond Phase 3 scope. See "Pending wiring" note below.
 - **Condition round-tick / decay expiry hooks** — `_notify_stories_condition_expired` currently fires only from `remove_condition`; the round-tick expiry (`_process_duration_and_progression`) and passive decay (`decay_all_conditions_tick`) paths can be wired when an inverse/blocker-lifted predicate lands.
 - **Era lifecycle tooling** — advancing to a new era, handling stories that span eras, admin UI for era transitions
 - **Dispute / withdrawal state transitions** — personal-story GM change, story transfer, player withdrawal from GROUP stories
+
+### Pending Wiring
+
+**`on_character_level_changed` is implemented but unwired in production.**
+
+`stories.services.reactivity.on_character_level_changed(sheet)` exists and correctly
+invalidates `sheet.cached_current_level` before re-evaluating `CHARACTER_LEVEL_AT_LEAST`
+beats across all active stories. However, no production service currently mutates
+`CharacterClassLevel`, so the hook is never called outside tests.
+
+When the progression-services pass creates a `CharacterClassLevel` mutation site, it **must**:
+1. Call `sheet.invalidate_class_level_cache()` after the level mutation.
+2. Call `stories.services.reactivity.on_character_level_changed(sheet)` to re-evaluate beats.
+
+Until that wiring exists, `CHARACTER_LEVEL_AT_LEAST` predicates only evaluate at login
+catch-up (via `catch_up_character_stories`) and when new story progress is created
+(retroactive match). Real-time level-up beat flips require the production hook to be wired.

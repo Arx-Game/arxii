@@ -150,19 +150,27 @@ def _active_progress_for_character(sheet: CharacterSheet) -> Iterator[AnyStoryPr
     yield from StoryProgress.objects.filter(
         character_sheet=sheet,
         is_active=True,
+    ).select_related("story", "current_episode__chapter__story")
+
+    yield from (
+        GroupStoryProgress.objects.filter(
+            gm_table__memberships__persona__character_sheet=sheet,
+            gm_table__memberships__left_at__isnull=True,
+            is_active=True,
+        )
+        .distinct()
+        .select_related("story", "gm_table", "current_episode__chapter__story")
     )
 
-    yield from GroupStoryProgress.objects.filter(
-        gm_table__memberships__persona__character_sheet=sheet,
-        gm_table__memberships__left_at__isnull=True,
-        is_active=True,
-    ).distinct()
-
-    yield from GlobalStoryProgress.objects.filter(
-        story__participants__character=sheet.character,
-        story__participants__is_active=True,
-        is_active=True,
-    ).distinct()
+    yield from (
+        GlobalStoryProgress.objects.filter(
+            story__participants__character=sheet.character,
+            story__participants__is_active=True,
+            is_active=True,
+        )
+        .distinct()
+        .select_related("story", "current_episode__chapter__story")
+    )
 
 
 def _active_progress_for_story(story: Story) -> Iterator[AnyStoryProgress]:

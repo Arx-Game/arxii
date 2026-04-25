@@ -1,6 +1,6 @@
 """Tests for codex → stories reactivity wiring.
 
-CharacterCodexKnowledge.add_progress notifies the stories reactivity
+``world.codex.services.add_codex_progress`` notifies the stories reactivity
 service when status transitions to KNOWN, so active stories with
 CODEX_ENTRY_UNLOCKED beats auto-flip.
 """
@@ -9,6 +9,7 @@ from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.codex.factories import CharacterCodexKnowledgeFactory, CodexEntryFactory
+from world.codex.services import add_codex_progress
 from world.roster.factories import RosterEntryFactory, RosterFactory
 from world.stories.constants import BeatOutcome, BeatPredicateType, StoryScope
 from world.stories.factories import (
@@ -46,8 +47,8 @@ class CodexAddProgressReactivityTests(EvenniaTestCase):
             entry=codex_entry,
             learning_progress=5,
         )
-        # Flip to KNOWN via add_progress — this is the hook site.
-        knowledge.add_progress(5)
+        # Flip to KNOWN via the service — the hook fires here.
+        add_codex_progress(knowledge=knowledge, amount=5)
 
         beat.refresh_from_db()
         self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
@@ -76,7 +77,7 @@ class CodexAddProgressReactivityTests(EvenniaTestCase):
             entry=codex_entry,
             learning_progress=0,
         )
-        knowledge.add_progress(3)  # still UNCOVERED
+        add_codex_progress(knowledge=knowledge, amount=3)  # still UNCOVERED
 
         beat.refresh_from_db()
         self.assertEqual(beat.outcome, BeatOutcome.UNSATISFIED)
