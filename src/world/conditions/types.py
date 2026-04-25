@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
 
 class AdvancementOutcome(models.TextChoices):
+    """Outcome of a stage-advancement check on a ConditionInstance."""
+
     NO_CHANGE = "NO_CHANGE", "No stage change"
     HELD = "HELD", "Threshold crossed but resist check passed"
     ADVANCED = "ADVANCED", "Stage advanced"

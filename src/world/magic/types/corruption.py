@@ -15,12 +15,16 @@ if TYPE_CHECKING:
 
 
 class CorruptionSource(models.TextChoices):
+    """Source classifier for an accrue_corruption call."""
+
     TECHNIQUE_USE = "TECHNIQUE_USE", "Technique use"
     SPEC_B_REDIRECT = "SPEC_B_REDIRECT", "Soul Tether redirect"
     STAFF_GRANT = "STAFF_GRANT", "Staff grant"
 
 
 class CorruptionRecoverySource(models.TextChoices):
+    """Source classifier for a reduce_corruption call."""
+
     ATONEMENT_RITE = "ATONEMENT_RITE", "Rite of Atonement"
     SPEC_B_RESCUE = "SPEC_B_RESCUE", "Soul Tether rescue"
     PASSIVE_DECAY = "PASSIVE_DECAY", "Passive decay tick"
@@ -28,6 +32,8 @@ class CorruptionRecoverySource(models.TextChoices):
 
 
 class CorruptionCause(models.TextChoices):
+    """Reason payload for protagonism_locked / protagonism_restored events."""
+
     STAGE_5_SUBSUMPTION = "STAGE_5_SUBSUMPTION", "Stage 5 entry — character loss"
     STAGE_5_RECOVERED = "STAGE_5_RECOVERED", "Stage 5 exit — protagonism restored"
 
