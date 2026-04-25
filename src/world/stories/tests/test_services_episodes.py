@@ -332,3 +332,58 @@ class ResolveEpisodeTests(EvenniaTestCase):
         progress.refresh_from_db()
         self.assertEqual(progress.current_episode, other_target)
         self.assertEqual(resolution.chosen_transition, gm_t)
+
+
+class ResolveEpisodeStoryCascadeTests(EvenniaTestCase):
+    """resolve_episode cascades to STORY_AT_MILESTONE beats referencing the advanced story."""
+
+    def test_cascade_flips_gated_story_beat_on_advance(self) -> None:
+        from world.stories.constants import (
+            BeatPredicateType,
+            StoryMilestoneType,
+            StoryScope,
+        )
+
+        # The referenced story (ref_story) starts at ch1, will advance to ch2.
+        ref_sheet = CharacterSheetFactory()
+        ref_story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=ref_sheet)
+        ref_ch1 = ChapterFactory(story=ref_story, order=1)
+        ref_ch2 = ChapterFactory(story=ref_story, order=2)
+        ref_ep1 = EpisodeFactory(chapter=ref_ch1)
+        ref_ep2 = EpisodeFactory(chapter=ref_ch2)
+        TransitionFactory(
+            source_episode=ref_ep1,
+            target_episode=ref_ep2,
+            mode=TransitionMode.AUTO,
+        )
+        ref_progress = StoryProgressFactory(
+            story=ref_story,
+            character_sheet=ref_sheet,
+            current_episode=ref_ep1,
+        )
+
+        # The gated story has a STORY_AT_MILESTONE beat on ref_ch2.
+        gated_sheet = CharacterSheetFactory()
+        gated_story = StoryFactory(
+            scope=StoryScope.CHARACTER,
+            character_sheet=gated_sheet,
+        )
+        gated_episode = EpisodeFactory(chapter=ChapterFactory(story=gated_story))
+        StoryProgressFactory(
+            story=gated_story,
+            character_sheet=gated_sheet,
+            current_episode=gated_episode,
+        )
+        beat = BeatFactory(
+            episode=gated_episode,
+            predicate_type=BeatPredicateType.STORY_AT_MILESTONE,
+            referenced_story=ref_story,
+            referenced_milestone_type=StoryMilestoneType.CHAPTER_REACHED,
+            referenced_chapter=ref_ch2,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+
+        resolve_episode(progress=ref_progress)
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)

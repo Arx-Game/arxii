@@ -1,6 +1,6 @@
 # Stories & GM Tables
 
-**Status:** phase-2-complete
+**Status:** phase-3-complete
 **Depends on:** Scenes, Missions, Codex, Relationships, Progression
 
 ## Overview
@@ -123,16 +123,82 @@ All Phase 2 model/service/API infrastructure is implemented. 510 stories tests p
 - `test_integration_phase2.py` — comprehensive GROUP-scope integration test walking all 5 new predicate types, aggregate contributions, deadline expiry, AGM claim flow, and cross-story STORY_AT_MILESTONE reference
 - Roadmap, systems index, and MODEL_MAP updated
 
+### Phase 3 Backend Completion (Waves 1–9 complete)
+
+Real-time reactivity: six mutation-time hooks flip beats when gameplay state changes, login catch-up covers offline mutations, and a new general-purpose `world.narrative` app carries IC messages (story updates, atmosphere, visions, happenstance) to characters online and offline.
+
+**Wave 1 — `world.narrative` app foundation:**
+- New `world.narrative` app registered under `INSTALLED_APPS`, typed apps list, and `tools/check_type_annotations.py`
+- `NarrativeCategory` TextChoices: STORY / ATMOSPHERE / VISIONS / HAPPENSTANCE / SYSTEM
+- `NarrativeMessage(body, ooc_note, category, sender_account, related_story, related_beat_completion, related_episode_resolution, sent_at)` — immutable after send
+- `NarrativeMessageDelivery(message, recipient_character_sheet, delivered_at, acknowledged_at)` — join table; one message fans out to many recipients; unique per (message, recipient)
+- `send_narrative_message(...)` service: atomic create + real-time push to puppeted recipients via `character.msg()` with `|R[NARRATIVE]|n` color tag; offline recipients stay queued
+- `deliver_queued_messages(sheet)` — drains queued deliveries at login
+- Read API: `GET /api/narrative/my-messages/` (paginated, filterable by category/related_story/acknowledged), `POST /api/narrative/deliveries/{id}/acknowledge/`
+
+**Wave 2 — Stories reactivity service module + story-join snapshot:**
+- New `stories.services.reactivity` module exposing five external entry points: `on_character_level_changed` / `on_achievement_earned` / `on_condition_applied` / `on_condition_expired` / `on_codex_entry_unlocked` — each invalidates the relevant cached_property and re-evaluates auto-beats across the character's active stories in all three scopes
+- Internal entry point `on_story_advanced(story)` used by Wave 4 cascade
+- `create_character_progress` / `create_group_progress` / `create_global_progress` helpers in `services/progress.py` — each creates the progress row and immediately evaluates auto-beats to catch retroactive matches (character already has achievement when story is created)
+- `finalize_gm_character` uses `create_character_progress` instead of `StoryProgress.objects.create`
+
+**Wave 3 — External mutation hook wiring:**
+- `achievements.services.grant_achievement` fires `on_achievement_earned` for each newly-created CharacterAchievement (idempotent)
+- `conditions.services.apply_condition` and `bulk_apply_conditions` fire `on_condition_applied` after ConditionInstance creation
+- `conditions.services.remove_condition` fires `on_condition_expired` after instance delete
+- `codex.models.CharacterCodexKnowledge.add_progress` fires `on_codex_entry_unlocked` when status transitions from UNCOVERED to KNOWN
+- Task 3.1 (progression → stories level-up hook) deferred: no production `CharacterClassLevel` mutation site exists yet; the reactivity entry point is in place for future wiring
+
+**Wave 4 — Internal cascade on `resolve_episode`:**
+- `resolve_episode` calls `on_story_advanced(progress.story)` after committing the EpisodeResolution. The hook scans beats with `predicate_type=STORY_AT_MILESTONE` referencing the advanced story and re-evaluates any progress currently on those beats' episodes. Closes the cross-story gate auto-clears design requirement.
+
+**Wave 5 — GROUP/GLOBAL "ANY member" auto-evaluation:**
+- `ACHIEVEMENT_HELD`, `CONDITION_HELD`, `CODEX_ENTRY_UNLOCKED`, `CHARACTER_LEVEL_AT_LEAST` now auto-detect for GROUP/GLOBAL scope — the beat flips SUCCESS when any active group member (GROUP) or story participant (GLOBAL) satisfies the predicate. SUCCESS is sticky: a member leaving does not un-flip the beat.
+- Reuses the per-sheet predicate helpers so semantics match CHARACTER scope exactly.
+
+**Wave 6 — Stories → narrative integration:**
+- New `stories.services.narrative` module composes and fans out `NarrativeMessage` deliveries after BeatCompletion and EpisodeResolution rows are committed
+- All three BeatCompletion creation sites (auto-eval, GM-mark, aggregate-threshold crossing) and `resolve_episode` call the notifier
+- Beat bodies default to `player_resolution_text`; episode resolution bodies use `transition.connection_summary` with fallback to `episode.summary`
+- Recipients resolve per scope: CHARACTER → owning sheet; GROUP → active GMTableMembership personas' sheets; GLOBAL → active StoryParticipation members' sheets
+
+**Wave 7 — Login catch-up:**
+- `stories.services.login.catch_up_character_stories(character)` re-evaluates active stories and delivers queued narrative messages
+- `Character.at_post_puppet` calls the catch-up service after session puppeting — safety net for any mutation whose real-time hook didn't fire (direct admin action, data import, race condition)
+
+**Wave 8 — Progression-side cache invalidation:**
+- No-op for Phase 3: no production service mutates `CharacterClassLevel` yet. The reactivity hook (`on_character_level_changed`) already invalidates the cache defensively, so progression wiring is ready for a future mutation site.
+
+**Wave 9 — End-to-end integration test:**
+- `test_integration_phase3.py` — single scenario walking offline mutation → login catch-up → condition apply → resolve_episode cascade → atmosphere message → offline queue → next login delivers. Exercises the complete reactivity + narrative-integration surface.
+
 ## What's Needed for MVP
 
-### Phase 3+: Frontend, MISSION_COMPLETE Predicate, and Polish
+### Phase 4+: Frontend, MISSION_COMPLETE Predicate, and Polish
 
-- **React frontend** — all UI for player dashboard (story log reader, active episode panel, beat progress), GM queue (episodes ready to run, session scheduling), and story author editor (beat/transition wiring beyond Django admin). The backend is structurally complete; Phase 3 is the web-first interface.
+- **React frontend** — UI for player dashboard (story log reader, active episode panel, beat progress), GM queue (episodes ready to run, session scheduling), story author editor (beat/transition wiring beyond Django admin), and the narrative messages surface (inline `|R` display in main text, messages section of character sheet, unread counter, acknowledge button). The backend is structurally complete; Phase 4 is the web-first interface.
 - **MISSION_COMPLETE predicate** — blocked by the Missions system; beat predicate type and `Beat.required_mission` FK are scaffolded, but the Missions system does not exist yet
 - **Authoring UX polish** — a dedicated author editor for GMs to build beats, wire transitions, and preview the episode DAG in-browser. Currently dependent on Django admin.
 - **Covenant leadership model** — required for GROUP-scope stories to have meaningful player-driven agency. PC leader / group vote / assigned GM model is TBD. Not blocking GROUP-scope backend (GMTable is the current owner), but required for full player autonomy.
 - **Character-scope progress invariant enforcement beyond clean()** — `StoryProgress.clean()` validates `story.character_sheet == progress.character_sheet`. Service-layer guards (catching programmer errors at creation time) have not been added to all service paths.
-- **"Any member has it" auto-evaluation for character-state predicates in GROUP/GLOBAL scope** — `evaluate_auto_beats` currently skips `ACHIEVEMENT_HELD`, `CONDITION_HELD`, `CODEX_ENTRY_UNLOCKED`, `CHARACTER_LEVEL_AT_LEAST` for non-CHARACTER scopes because "which character" is ambiguous. Decision: default semantics should be "ANY" — if any active member of the group (GROUP) or any StoryParticipation (GLOBAL) meets the criterion, the beat flips SUCCESS. "All members must have it" cases stay GM-marked for the narrative checkpoint. Historical edge case: only currently-active members count; a character who earned the achievement then left the table does not count. Implementation scope: expand the predicate evaluator cases, add cached_property for members on progress records (invalidated on membership change), tests for both scopes. Small change (~3-4 tasks).
-- **Progression-side invalidation of cached_current_level** — follow-up from Phase 1 review: progression services should call `sheet.invalidate_class_level_cache()` after mutating `CharacterClassLevel`, rather than relying on callers to invalidate. Currently the caller must invalidate manually.
+- **Progression-side level-up service + invalidation of cached_current_level** — once a production `CharacterClassLevel` mutation path exists, wire it to call `sheet.invalidate_class_level_cache()` and `stories.services.reactivity.on_character_level_changed` (reactivity hook already defensively invalidates). Pending progression work beyond Phase 3 scope. See "Pending wiring" note below.
+- **Condition round-tick / decay expiry hooks** — `_notify_stories_condition_expired` currently fires only from `remove_condition`; the round-tick expiry (`_process_duration_and_progression`) and passive decay (`decay_all_conditions_tick`) paths can be wired when an inverse/blocker-lifted predicate lands.
 - **Era lifecycle tooling** — advancing to a new era, handling stories that span eras, admin UI for era transitions
 - **Dispute / withdrawal state transitions** — personal-story GM change, story transfer, player withdrawal from GROUP stories
+
+### Pending Wiring
+
+**`on_character_level_changed` is implemented but unwired in production.**
+
+`stories.services.reactivity.on_character_level_changed(sheet)` exists and correctly
+invalidates `sheet.cached_current_level` before re-evaluating `CHARACTER_LEVEL_AT_LEAST`
+beats across all active stories. However, no production service currently mutates
+`CharacterClassLevel`, so the hook is never called outside tests.
+
+When the progression-services pass creates a `CharacterClassLevel` mutation site, it **must**:
+1. Call `sheet.invalidate_class_level_cache()` after the level mutation.
+2. Call `stories.services.reactivity.on_character_level_changed(sheet)` to re-evaluate beats.
+
+Until that wiring exists, `CHARACTER_LEVEL_AT_LEAST` predicates only evaluate at login
+catch-up (via `catch_up_character_stories`) and when new story progress is created
+(retroactive match). Real-time level-up beat flips require the production hook to be wired.

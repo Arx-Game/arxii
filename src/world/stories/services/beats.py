@@ -29,6 +29,7 @@ from world.stories.models import AggregateBeatContribution, Beat, BeatCompletion
 from world.stories.types import AnyStoryProgress, StoryStatus
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from datetime import datetime
 
     from world.stories.models import Episode
@@ -147,6 +148,8 @@ def record_gm_marked_outcome(
 
         maybe_create_session_request(progress)
 
+    _notify_beat_completion(completion, progress)
+
     return completion
 
 
@@ -223,7 +226,17 @@ def record_aggregate_contribution(
                         completion_kwargs["gm_table"] = group_progress.gm_table
                 # GLOBAL: no scope-specific FK
 
-                BeatCompletion.objects.create(**completion_kwargs)
+                aggregate_completion = BeatCompletion.objects.create(**completion_kwargs)
+
+                # Narrative notification for the aggregate threshold crossing.
+                # Resolve an active progress to fan out recipients per scope.
+                from world.stories.services.progress import (  # noqa: PLC0415
+                    get_active_progress_for_story,
+                )
+
+                agg_progress = get_active_progress_for_story(story)
+                if agg_progress is not None:
+                    _notify_beat_completion(aggregate_completion, agg_progress)
 
         # Write-path hook: open a SessionRequest if the episode is now ready-to-run
         # and requires a GM session. Walk beat -> episode -> chapter -> story to
@@ -272,6 +285,20 @@ def expire_overdue_beats(now: datetime | None = None) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _notify_beat_completion(
+    completion: BeatCompletion,
+    progress: AnyStoryProgress,
+) -> None:
+    """Lazy-import bridge to stories.services.narrative.notify_beat_completion.
+
+    Centralises the call site so tests can monkey-patch a single helper
+    when they want to suppress narrative side effects.
+    """
+    from world.stories.services.narrative import notify_beat_completion  # noqa: PLC0415
+
+    notify_beat_completion(completion, progress)
+
+
 def _evaluate_and_record_beat(  # noqa: PLR0913 — scope/sheet/roster_entry/era are tightly coupled
     beat: Beat,
     progress: AnyStoryProgress,
@@ -293,15 +320,16 @@ def _evaluate_and_record_beat(  # noqa: PLR0913 — scope/sheet/roster_entry/era
     if beat.outcome != BeatOutcome.UNSATISFIED:
         return
 
-    # For non-CHARACTER scopes, only evaluate predicates that do not
-    # require a character sheet (e.g. STORY_AT_MILESTONE).
-    if scope != StoryScope.CHARACTER and _requires_character_sheet(beat):
-        return
-
-    # Evaluate: CHARACTER scope passes the full progress; others use a
-    # character-free evaluation path (only STORY_AT_MILESTONE for now).
+    # Dispatch by scope:
+    #   CHARACTER + character-state predicate → evaluate against the owner's sheet.
+    #   GROUP/GLOBAL + character-state predicate → ANY-member semantics
+    #       (iterate active members; SUCCESS on first match).
+    #   Any scope + non-character predicate (STORY_AT_MILESTONE, GM_MARKED skipped above)
+    #       → evaluate via the no-sheet path.
     if scope == StoryScope.CHARACTER and sheet is not None:
         new_outcome = _evaluate_predicate(beat, cast(StoryProgress, progress))
+    elif _requires_character_sheet(beat):
+        new_outcome = _evaluate_predicate_any_member(beat, progress)
     else:
         new_outcome = _evaluate_predicate_no_sheet(beat)
     if new_outcome == BeatOutcome.UNSATISFIED:
@@ -319,7 +347,8 @@ def _evaluate_and_record_beat(  # noqa: PLR0913 — scope/sheet/roster_entry/era
         completion_kwargs["gm_table"] = progress.gm_table
     # GLOBAL: no scope-specific FK
 
-    BeatCompletion.objects.create(**completion_kwargs)
+    completion = BeatCompletion.objects.create(**completion_kwargs)
+    _notify_beat_completion(completion, progress)
 
 
 # Predicate types that require a CharacterSheet to evaluate.
@@ -343,9 +372,83 @@ def _evaluate_predicate_no_sheet(beat: Beat) -> BeatOutcome:
     return UNSATISFIED (they require a character sheet and should be guarded
     by _requires_character_sheet before calling this).
     """
-    if beat.predicate_type == BeatPredicateType.STORY_AT_MILESTONE:
-        return _evaluate_story_at_milestone(beat)
+    match beat.predicate_type:
+        case BeatPredicateType.STORY_AT_MILESTONE:
+            return _evaluate_story_at_milestone(beat)
+        case _:
+            return BeatOutcome.UNSATISFIED
+
+
+def _evaluate_predicate_any_member(beat: Beat, progress: AnyStoryProgress) -> BeatOutcome:
+    """Evaluate character-state predicates for GROUP/GLOBAL scope stories.
+
+    Semantics: "ANY active member satisfies the predicate" — iterate the
+    scope's active members and short-circuit on first SUCCESS. Returns
+    UNSATISFIED when no member matches.
+
+    SUCCESS is sticky at the caller level — _evaluate_and_record_beat only
+    reaches this function for beats still in UNSATISFIED state, so a
+    member leaving the group after the beat flipped cannot un-flip it.
+
+    Uses the per-sheet predicate helpers (_evaluate_achievement_held etc.)
+    so the member-check logic stays consistent with CHARACTER scope.
+    """
+    for member_sheet in _members_for_beat(beat, progress):
+        match beat.predicate_type:
+            case BeatPredicateType.ACHIEVEMENT_HELD:
+                if _evaluate_achievement_held(beat, member_sheet) == BeatOutcome.SUCCESS:
+                    return BeatOutcome.SUCCESS
+            case BeatPredicateType.CONDITION_HELD:
+                if _evaluate_condition_held(beat, member_sheet) == BeatOutcome.SUCCESS:
+                    return BeatOutcome.SUCCESS
+            case BeatPredicateType.CODEX_ENTRY_UNLOCKED:
+                if _evaluate_codex_entry_unlocked(beat, member_sheet) == BeatOutcome.SUCCESS:
+                    return BeatOutcome.SUCCESS
+            case BeatPredicateType.CHARACTER_LEVEL_AT_LEAST:
+                if _evaluate_character_level(beat, member_sheet) == BeatOutcome.SUCCESS:
+                    return BeatOutcome.SUCCESS
+            case _:
+                return BeatOutcome.UNSATISFIED
     return BeatOutcome.UNSATISFIED
+
+
+def _members_for_beat(
+    beat: Beat,
+    progress: AnyStoryProgress,
+) -> Iterator[CharacterSheet]:
+    """Yield active member CharacterSheets for the beat's story scope.
+
+    GROUP scope: walk progress.gm_table.memberships filtering on
+        left_at__isnull=True (active) → persona → character_sheet.
+    GLOBAL scope: walk the story's participants (StoryParticipation with
+        is_active=True) → character (ObjectDB) → sheet_data.
+    CHARACTER scope: yield the single owning sheet (progress.character_sheet).
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    story = beat.episode.chapter.story
+    match story.scope:
+        case StoryScope.CHARACTER:
+            if progress.character_sheet_id:
+                yield progress.character_sheet
+        case StoryScope.GROUP:
+            table = progress.gm_table
+            memberships = table.memberships.filter(left_at__isnull=True).select_related(
+                "persona__character_sheet",
+            )
+            for membership in memberships:
+                persona = membership.persona
+                if persona.character_sheet_id:
+                    yield persona.character_sheet
+        case StoryScope.GLOBAL:
+            participations = story.participants.filter(is_active=True).select_related(
+                "character",
+            )
+            for participation in participations:
+                try:
+                    yield participation.character.sheet_data
+                except CharacterSheet.DoesNotExist:
+                    continue
 
 
 def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
@@ -359,22 +462,22 @@ def _evaluate_predicate(beat: Beat, progress: StoryProgress) -> BeatOutcome:
     directly when a contribution is recorded. They should not flip silently
     during evaluate_auto_beats, since no contribution event has fired.
     """
-    ptype = beat.predicate_type
     sheet = progress.character_sheet
 
-    if ptype == BeatPredicateType.CHARACTER_LEVEL_AT_LEAST:
-        return _evaluate_character_level(beat, sheet)
-    if ptype == BeatPredicateType.ACHIEVEMENT_HELD:
-        return _evaluate_achievement_held(beat, sheet)
-    if ptype == BeatPredicateType.CONDITION_HELD:
-        return _evaluate_condition_held(beat, sheet)
-    if ptype == BeatPredicateType.CODEX_ENTRY_UNLOCKED:
-        return _evaluate_codex_entry_unlocked(beat, sheet)
-    if ptype == BeatPredicateType.STORY_AT_MILESTONE:
-        return _evaluate_story_at_milestone(beat)
-
-    # GM_MARKED, AGGREGATE_THRESHOLD (write-path only), and future types.
-    return BeatOutcome.UNSATISFIED
+    match beat.predicate_type:
+        case BeatPredicateType.CHARACTER_LEVEL_AT_LEAST:
+            return _evaluate_character_level(beat, sheet)
+        case BeatPredicateType.ACHIEVEMENT_HELD:
+            return _evaluate_achievement_held(beat, sheet)
+        case BeatPredicateType.CONDITION_HELD:
+            return _evaluate_condition_held(beat, sheet)
+        case BeatPredicateType.CODEX_ENTRY_UNLOCKED:
+            return _evaluate_codex_entry_unlocked(beat, sheet)
+        case BeatPredicateType.STORY_AT_MILESTONE:
+            return _evaluate_story_at_milestone(beat)
+        case _:
+            # GM_MARKED, AGGREGATE_THRESHOLD (write-path only), and future types.
+            return BeatOutcome.UNSATISFIED
 
 
 def _evaluate_character_level(beat: Beat, sheet: CharacterSheet) -> BeatOutcome:

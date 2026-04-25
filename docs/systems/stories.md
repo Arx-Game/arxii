@@ -1,8 +1,8 @@
 # Stories System
 
-Structured narrative campaign management: task-gated episode progression, multi-scope (CHARACTER / GROUP / GLOBAL) story arcs, and a full GM workflow (scheduling, AGM delegation, session requests).
+Structured narrative campaign management: task-gated episode progression, multi-scope (CHARACTER / GROUP / GLOBAL) story arcs, full GM workflow (scheduling, AGM delegation, session requests), and real-time reactivity wired into external systems (achievements, conditions, codex) with login catch-up as a safety net.
 
-**Phase 2 complete.** All backend models, services, and API endpoints are implemented. Phase 3 is the React frontend.
+**Phase 3 complete.** All backend models, services, reactivity hooks, and API endpoints are implemented. Phase 4 is the React frontend (including the narrative message UI).
 
 **Source:** `src/world/stories/`
 **API Base:** `/api/stories/`, `/api/chapters/`, `/api/episodes/`, `/api/beats/`, `/api/transitions/`, `/api/story-progress/`, `/api/group-story-progress/`, `/api/global-story-progress/`, `/api/aggregate-beat-contributions/`, `/api/assistant-gm-claims/`, `/api/session-requests/`
@@ -377,6 +377,42 @@ All services in `src/world/stories/services/`.
 |----------|-----------|-------------|
 | `get_active_progress_for_story` | `(story: Story) -> AnyStoryProgress \| None` | Dispatches on scope: CHARACTER → first active StoryProgress; GROUP → first active GroupStoryProgress; GLOBAL → global_progress OneToOne accessor |
 | `advance_progress_to_episode` | `(progress, target_episode) -> None` | Updates `current_episode` and auto-stamps `last_advanced_at` |
+| `create_character_progress` | `(*, story, character_sheet, current_episode=None) -> StoryProgress` | Creates progress + immediately `evaluate_auto_beats` to catch retroactive matches (Phase 3) |
+| `create_group_progress` | `(*, story, gm_table, current_episode=None) -> GroupStoryProgress` | GROUP equivalent of `create_character_progress` |
+| `create_global_progress` | `(*, story, current_episode=None) -> GlobalStoryProgress` | GLOBAL equivalent |
+
+### reactivity.py (Phase 3)
+
+External-facing entry points called by achievements, conditions, codex, and (future) progression services after mutations. Each hook invalidates the relevant `CharacterSheet` cache and re-evaluates auto-beats across the character's active stories across all three scopes (CHARACTER via `StoryProgress`; GROUP via `GMTableMembership.left_at__isnull=True`; GLOBAL via active `StoryParticipation`).
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `on_character_state_changed` | `(sheet) -> None` | General-purpose re-evaluation entry point; called by the specific hooks below |
+| `on_character_level_changed` | `(sheet) -> None` | Called by progression after `CharacterClassLevel` mutation; invalidates class-level cache |
+| `on_achievement_earned` | `(sheet, achievement) -> None` | Called by `achievements.services.grant_achievement`; invalidates achievement cache |
+| `on_condition_applied` | `(sheet, condition_instance) -> None` | Called by `conditions.services.apply_condition` after instance creation |
+| `on_condition_expired` | `(sheet, condition_template) -> None` | Called by `conditions.services.remove_condition` after instance delete |
+| `on_codex_entry_unlocked` | `(sheet, codex_entry) -> None` | Called by `CharacterCodexKnowledge.add_progress` when status flips UNCOVERED→KNOWN |
+| `on_story_advanced` | `(story) -> None` | Internal cascade called by `resolve_episode`; re-evaluates STORY_AT_MILESTONE beats referencing the advanced story |
+
+### login.py (Phase 3)
+
+Hook called from `Character.at_post_puppet`.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `catch_up_character_stories` | `(character) -> None` | Re-evaluates auto-beats across active stories and drains queued `NarrativeMessageDelivery` rows via `narrative.services.deliver_queued_messages`; safety net for mutations whose real-time hook didn't fire while offline |
+
+### narrative.py (Phase 3)
+
+Stories → narrative integration. Composes and fans out `NarrativeMessage` deliveries after BeatCompletion and EpisodeResolution rows are committed.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `notify_beat_completion` | `(completion, progress) -> None` | Fans out a NarrativeMessage with `category=STORY`, `related_beat_completion` populated, body defaulting to `beat.player_resolution_text` |
+| `notify_episode_resolution` | `(resolution, progress) -> None` | Fans out a NarrativeMessage with `related_episode_resolution` populated, body using `transition.connection_summary` with fallback to `episode.summary` |
+
+Called from all three BeatCompletion creation sites (`_evaluate_and_record_beat`, `record_gm_marked_outcome`, `record_aggregate_contribution`) and `resolve_episode`.
 
 ### assistant_gm.py
 

@@ -2,16 +2,25 @@
 
 from evennia.utils.test_resources import EvenniaTestCase
 
-from world.stories.constants import StoryScope
+from world.achievements.factories import AchievementFactory, CharacterAchievementFactory
+from world.character_sheets.factories import CharacterSheetFactory
+from world.gm.factories import GMTableFactory
+from world.stories.constants import BeatOutcome, BeatPredicateType, StoryScope
 from world.stories.factories import (
+    BeatFactory,
+    ChapterFactory,
     EpisodeFactory,
     GlobalStoryProgressFactory,
     GroupStoryProgressFactory,
     StoryFactory,
     StoryProgressFactory,
 )
+from world.stories.models import BeatCompletion
 from world.stories.services.progress import (
     advance_progress_to_episode,
+    create_character_progress,
+    create_global_progress,
+    create_group_progress,
     get_active_progress_for_story,
 )
 
@@ -110,3 +119,57 @@ class AdvanceProgressToEpisodeTests(EvenniaTestCase):
         advance_progress_to_episode(progress, None)
         progress.refresh_from_db()
         self.assertIsNone(progress.current_episode)
+
+
+class CreateCharacterProgressSnapshotTests(EvenniaTestCase):
+    """create_character_progress must evaluate auto-beats at creation time."""
+
+    def test_retroactive_achievement_beat_auto_satisfies(self) -> None:
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        episode = EpisodeFactory(chapter=ChapterFactory(story=story))
+        achievement = AchievementFactory()
+        beat = BeatFactory(
+            episode=episode,
+            predicate_type=BeatPredicateType.ACHIEVEMENT_HELD,
+            required_achievement=achievement,
+            outcome=BeatOutcome.UNSATISFIED,
+        )
+        CharacterAchievementFactory(character_sheet=sheet, achievement=achievement)
+
+        progress = create_character_progress(
+            story=story,
+            character_sheet=sheet,
+            current_episode=episode,
+        )
+
+        beat.refresh_from_db()
+        self.assertEqual(beat.outcome, BeatOutcome.SUCCESS)
+        self.assertTrue(
+            BeatCompletion.objects.filter(beat=beat, character_sheet=sheet).exists(),
+        )
+        self.assertEqual(progress.current_episode, episode)
+
+    def test_no_episode_just_creates_progress(self) -> None:
+        sheet = CharacterSheetFactory()
+        story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=sheet)
+        progress = create_character_progress(story=story, character_sheet=sheet)
+        self.assertIsNone(progress.current_episode)
+
+
+class CreateGroupProgressSnapshotTests(EvenniaTestCase):
+    def test_creates_and_evaluates(self) -> None:
+        story = StoryFactory(scope=StoryScope.GROUP, character_sheet=None)
+        table = GMTableFactory()
+        progress = create_group_progress(story=story, gm_table=table)
+        self.assertIsNotNone(progress.pk)
+        self.assertEqual(progress.gm_table, table)
+
+
+class CreateGlobalProgressSnapshotTests(EvenniaTestCase):
+    def test_creates_and_evaluates(self) -> None:
+        story = StoryFactory(scope=StoryScope.GLOBAL, character_sheet=None)
+        episode = EpisodeFactory(chapter=ChapterFactory(story=story))
+        progress = create_global_progress(story=story, current_episode=episode)
+        self.assertIsNotNone(progress.pk)
+        self.assertEqual(progress.current_episode, episode)

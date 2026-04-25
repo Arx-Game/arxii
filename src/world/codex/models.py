@@ -319,7 +319,13 @@ class CharacterCodexKnowledge(SharedMemoryModel):
             amount: Progress to add.
 
         Returns:
-            True if learning completed, False otherwise.
+            True if learning completed (status transitioned to KNOWN),
+            False otherwise.
+
+        Note: Direct calls to this method do NOT fire the stories
+        reactivity hook. Use ``world.codex.services.add_codex_progress``
+        instead when the caller needs CODEX_ENTRY_UNLOCKED beats to
+        re-evaluate on completion.
         """
         if self.status != self.Status.UNCOVERED:
             return False

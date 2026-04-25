@@ -120,9 +120,13 @@
   - magical_alteration -> magic.MagicalAlterationTemplate [OneToOne] (nullable)
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
+  - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
+  - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
+  - applied_on_entry_of <- conditions.ConditionStage
+  - conditionstageonentry_set <- conditions.ConditionStageOnEntry
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
@@ -133,6 +137,8 @@
   - interactions_as_secondary <- conditions.ConditionConditionInteraction
   - created_by_interaction <- conditions.ConditionConditionInteraction
   - conditioninstance_set <- conditions.ConditionInstance
+  - treatments <- conditions.TreatmentTemplate
+  - treatment_backlash_source <- conditions.TreatmentTemplate
   - consequence_effects <- checks.ConsequenceEffect
   - threat_pool_entries <- combat.ThreatPoolEntry
 
@@ -144,11 +150,17 @@
 **Pointed to by:**
   - stage_triggers <- flows.Trigger
   - auderethreshold_set <- magic.AudereThreshold
+  - on_entry_assocs <- conditions.ConditionStageOnEntry
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditioninstance_set <- conditions.ConditionInstance
+
+### ConditionStageOnEntry
+**Foreign Keys:**
+  - stage -> conditions.ConditionStage [FK]
+  - condition -> conditions.ConditionTemplate [FK]
 
 ### ConditionCapabilityEffect
 **Foreign Keys:**
@@ -196,7 +208,27 @@
 **Pointed to by:**
   - triggers <- flows.Trigger
   - alteration_events <- magic.MagicalAlterationEvent
+  - treatment_attempts_targeting_instance <- conditions.TreatmentAttempt
   - granted_properties <- mechanics.ObjectProperty
+
+### TreatmentTemplate
+**Foreign Keys:**
+  - target_condition -> conditions.ConditionTemplate [FK]
+  - check_type -> checks.CheckType [FK]
+  - backlash_target_condition -> conditions.ConditionTemplate [FK] (nullable)
+**Pointed to by:**
+  - attempts <- conditions.TreatmentAttempt
+
+### TreatmentAttempt
+**Foreign Keys:**
+  - helper -> objects.ObjectDB [FK]
+  - target -> objects.ObjectDB [FK]
+  - scene -> scenes.Scene [FK]
+  - treatment -> conditions.TreatmentTemplate [FK]
+  - thread_used -> magic.Thread [FK] (nullable)
+  - target_condition_instance -> conditions.ConditionInstance [FK] (nullable)
+  - target_pending_alteration -> magic.PendingAlteration [FK] (nullable)
+  - outcome -> traits.CheckOutcome [FK]
 
 
 ## evennia_extensions
@@ -420,18 +452,18 @@
   - development_points <- progression.DevelopmentPoints
   - development_transactions <- progression.DevelopmentTransaction
   - weekly_skill_usage <- progression.WeeklySkillUsage
-  - resonances <- magic.CharacterResonance
   - created_gifts <- magic.Gift
   - character_gifts <- magic.CharacterGift
   - character_traditions <- magic.CharacterTradition
-  - anima_ritual_participations <- magic.AnimaRitualPerformance
   - authored_techniques <- magic.Technique
   - character_techniques <- magic.CharacterTechnique
-  - character_facets <- magic.CharacterFacet
-  - affinity_totals <- magic.CharacterAffinityTotal
-  - reincarnations <- magic.Reincarnation
   - pending_alterations <- magic.PendingAlteration
   - alteration_events <- magic.MagicalAlterationEvent
+  - anima_ritual_participations <- magic.AnimaRitualPerformance
+  - resonances <- magic.CharacterResonance
+  - affinity_totals <- magic.CharacterAffinityTotal
+  - character_facets <- magic.CharacterFacet
+  - reincarnations <- magic.Reincarnation
   - threads <- magic.Thread
   - thread_weaving_unlocks <- magic.CharacterThreadWeavingUnlock
   - personas <- scenes.Persona
@@ -454,6 +486,7 @@
   - journal_entries <- journals.JournalEntry
   - combo_learnings <- combat.ComboLearning
   - combat_participations <- combat.CombatParticipant
+  - narrative_message_deliveries <- narrative.NarrativeMessageDelivery
 
 ### Characteristic
 **Pointed to by:**
@@ -498,10 +531,12 @@
 **Pointed to by:**
   - action_templates <- actions.ActionTemplate
   - action_template_gates <- actions.ActionTemplateGate
+  - anima_rituals <- magic.CharacterAnimaRitual
   - soulfrayconfig_set <- magic.SoulfrayConfig
   - cures_conditions <- conditions.ConditionTemplate
   - conditionstage_set <- conditions.ConditionStage
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
+  - treatmenttemplate_set <- conditions.TreatmentTemplate
   - challenge_approaches <- mechanics.ChallengeApproach
   - context_consequence_pools <- mechanics.ContextConsequencePool
   - traits <- checks.CheckTypeTrait
@@ -696,9 +731,13 @@
   - magical_alteration -> magic.MagicalAlterationTemplate [OneToOne] (nullable)
   - category -> conditions.ConditionCategory [FK]
   - cure_check_type -> checks.CheckType [FK] (nullable)
+  - parent_condition -> conditions.ConditionTemplate [FK] (nullable)
 **Pointed to by:**
   - action_enhancements <- actions.ActionEnhancement
+  - aftermath_children <- conditions.ConditionTemplate
   - stages <- conditions.ConditionStage
+  - applied_on_entry_of <- conditions.ConditionStage
+  - conditionstageonentry_set <- conditions.ConditionStageOnEntry
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
@@ -709,6 +748,8 @@
   - interactions_as_secondary <- conditions.ConditionConditionInteraction
   - created_by_interaction <- conditions.ConditionConditionInteraction
   - conditioninstance_set <- conditions.ConditionInstance
+  - treatments <- conditions.TreatmentTemplate
+  - treatment_backlash_source <- conditions.TreatmentTemplate
   - consequence_effects <- checks.ConsequenceEffect
   - threat_pool_entries <- combat.ThreatPoolEntry
 
@@ -720,11 +761,17 @@
 **Pointed to by:**
   - stage_triggers <- flows.Trigger
   - auderethreshold_set <- magic.AudereThreshold
+  - on_entry_assocs <- conditions.ConditionStageOnEntry
   - conditioncapabilityeffect_set <- conditions.ConditionCapabilityEffect
   - conditioncheckmodifier_set <- conditions.ConditionCheckModifier
   - conditionresistancemodifier_set <- conditions.ConditionResistanceModifier
   - conditiondamageovertime_set <- conditions.ConditionDamageOverTime
   - conditioninstance_set <- conditions.ConditionInstance
+
+### ConditionStageOnEntry
+**Foreign Keys:**
+  - stage -> conditions.ConditionStage [FK]
+  - condition -> conditions.ConditionTemplate [FK]
 
 ### ConditionCapabilityEffect
 **Foreign Keys:**
@@ -772,16 +819,39 @@
 **Pointed to by:**
   - triggers <- flows.Trigger
   - alteration_events <- magic.MagicalAlterationEvent
+  - treatment_attempts_targeting_instance <- conditions.TreatmentAttempt
   - granted_properties <- mechanics.ObjectProperty
+
+### TreatmentTemplate
+**Foreign Keys:**
+  - target_condition -> conditions.ConditionTemplate [FK]
+  - check_type -> checks.CheckType [FK]
+  - backlash_target_condition -> conditions.ConditionTemplate [FK] (nullable)
+**Pointed to by:**
+  - attempts <- conditions.TreatmentAttempt
+
+### TreatmentAttempt
+**Foreign Keys:**
+  - helper -> objects.ObjectDB [FK]
+  - target -> objects.ObjectDB [FK]
+  - scene -> scenes.Scene [FK]
+  - treatment -> conditions.TreatmentTemplate [FK]
+  - thread_used -> magic.Thread [FK] (nullable)
+  - target_condition_instance -> conditions.ConditionInstance [FK] (nullable)
+  - target_pending_alteration -> magic.PendingAlteration [FK] (nullable)
+  - outcome -> traits.CheckOutcome [FK]
 
 ### Service Functions
 - `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult — Increment a condition's severity and advance stage if threshold crossed.`
 - `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult — Apply a condition to a target, handling stacking and interactions.`
+- `apply_stage_entry_aftermath(payload: flows.events.payloads.ConditionStageChangedPayload) -> None — On ascending stage changes, apply the stage's on_entry_conditions.`
 - `bulk_apply_conditions(applications: list[tuple['ObjectDB', world.conditions.models.ConditionTemplate]], *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> list[world.conditions.types.ApplyConditionResult] — Apply multiple conditions in a single transaction with batched queries.`
 - `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int — Remove all conditions from a target.`
 - `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) — Add dunder methods based on the fields defined in the class.`
+- `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary — Scheduler entry point. Decays all opt-in conditions by one tick.`
+- `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityDecayResult — Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x000001D06114A120>, default_factory=<dataclasses._MISSING_TYPE object at 0x000001D06114A120>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x000001D06114A120>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x0000017FBA84A120>, default_factory=<dataclasses._MISSING_TYPE object at 0x0000017FBA84A120>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x0000017FBA84A120>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(target: 'ObjectDB') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(target: 'ObjectDB') -> dict[int, int] — Get all capability values for a character.`
@@ -792,9 +862,11 @@
 - `get_condition_instance(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> world.conditions.models.ConditionInstance | None — Get a specific condition instance on a target.`
 - `get_condition_intensity_percent_modifier(target: 'ObjectDB', condition_name: str) -> int — Get percentage modifier to intensity gain for a condition.`
 - `get_condition_penalty_percent_modifier(target: 'ObjectDB', condition_name: str) -> int — Get percentage modifier to check penalties for a condition.`
+- `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None — Return the current IC datetime, or None if no clock exists.`
 - `get_resistance_modifier(target: 'ObjectDB', damage_type: world.conditions.models.DamageType | None = None) -> world.conditions.types.ResistanceModifierResult — Get the total resistance modifier for a damage type from active conditions.`
 - `get_turn_order_modifier(target: 'ObjectDB') -> int — Get the total turn order modifier from all conditions.`
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool — Check if target has a specific condition.`
+- `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None) -> world.conditions.types.TreatmentOutcome — Resolve a TreatmentTemplate against an effect instance.`
 - `process_action_tick(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process on-action damage for conditions (when target takes an action).`
 - `process_damage_interactions(target: 'ObjectDB', damage_type: world.conditions.models.DamageType) -> world.conditions.types.DamageInteractionResult — Process condition interactions when target takes damage.`
 - `process_round_end(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process end-of-round effects for all conditions on a target.`
@@ -835,26 +907,19 @@
 
 ## world.magic
 
-### EffectType
-**Pointed to by:**
-  - available_restrictions <- magic.Restriction
-  - techniques <- magic.Technique
-  - cantrips <- magic.Cantrip
-  - combo_slots <- combat.ComboSlot
-
-### TechniqueStyle
-**Pointed to by:**
-  - techniques <- magic.Technique
-  - cantrips <- magic.Cantrip
+### AudereThreshold
+**Foreign Keys:**
+  - minimum_intensity_tier -> magic.IntensityTier [FK]
+  - minimum_warp_stage -> conditions.ConditionStage [FK]
 
 ### Affinity
 **Foreign Keys:**
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
 **Pointed to by:**
   - resonances <- magic.Resonance
-  - character_totals <- magic.CharacterAffinityTotal
   - alteration_templates <- magic.MagicalAlterationTemplate
   - pending_alteration_origins <- magic.PendingAlteration
+  - character_totals <- magic.CharacterAffinityTotal
 
 ### Resonance
 **Foreign Keys:**
@@ -864,27 +929,18 @@
   - affinity -> magic.Affinity [FK]
   - opposite -> magic.Resonance [OneToOne] (nullable)
 **Pointed to by:**
-  - character_resonances <- magic.CharacterResonance
   - gifts <- magic.Gift
-  - anima_rituals <- magic.CharacterAnimaRitual
-  - character_facets <- magic.CharacterFacet
-  - motif_resonances <- magic.MotifResonance
   - alteration_templates <- magic.MagicalAlterationTemplate
   - pending_alteration_origins <- magic.PendingAlteration
-  - pull_effects <- magic.ThreadPullEffect
+  - anima_rituals <- magic.CharacterAnimaRitual
+  - character_resonances <- magic.CharacterResonance
+  - character_facets <- magic.CharacterFacet
+  - motif_resonances <- magic.MotifResonance
   - imbuing_prose <- magic.ImbuingProseTemplate
+  - pull_effects <- magic.ThreadPullEffect
   - threads <- magic.Thread
   - combo_slots <- combat.ComboSlot
   - combat_pulls <- combat.CombatPull
-
-### CharacterAura
-**Foreign Keys:**
-  - character -> objects.ObjectDB [OneToOne]
-
-### CharacterResonance
-**Foreign Keys:**
-  - character_sheet -> character_sheets.CharacterSheet [FK]
-  - resonance -> magic.Resonance [FK]
 
 ### Gift
 **Foreign Keys:**
@@ -914,25 +970,17 @@
   - character -> character_sheets.CharacterSheet [FK]
   - tradition -> magic.Tradition [FK]
 
-### CharacterAnima
-**Foreign Keys:**
-  - character -> objects.ObjectDB [OneToOne]
-
-### CharacterAnimaRitual
-**Foreign Keys:**
-  - character -> character_sheets.CharacterSheet [OneToOne]
-  - stat -> traits.Trait [FK]
-  - skill -> skills.Skill [FK]
-  - specialization -> skills.Specialization [FK] (nullable)
-  - resonance -> magic.Resonance [FK]
+### EffectType
 **Pointed to by:**
-  - performances <- magic.AnimaRitualPerformance
+  - available_restrictions <- magic.Restriction
+  - techniques <- magic.Technique
+  - cantrips <- magic.Cantrip
+  - combo_slots <- combat.ComboSlot
 
-### AnimaRitualPerformance
-**Foreign Keys:**
-  - ritual -> magic.CharacterAnimaRitual [FK]
-  - target_character -> character_sheets.CharacterSheet [FK] (nullable)
-  - scene -> scenes.Scene [FK] (nullable)
+### TechniqueStyle
+**Pointed to by:**
+  - techniques <- magic.Technique
+  - cantrips <- magic.Cantrip
 
 ### Restriction
 **Pointed to by:**
@@ -971,64 +1019,6 @@
   - character -> character_sheets.CharacterSheet [FK]
   - technique -> magic.Technique [FK]
 
-### Facet
-**Foreign Keys:**
-  - parent -> magic.Facet [FK] (nullable)
-**Pointed to by:**
-  - children <- magic.Facet
-  - character_assignments <- magic.CharacterFacet
-  - motif_usages <- magic.MotifResonanceAssociation
-  - cantrips <- magic.Cantrip
-
-### CharacterFacet
-**Foreign Keys:**
-  - character -> character_sheets.CharacterSheet [FK]
-  - facet -> magic.Facet [FK]
-  - resonance -> magic.Resonance [FK]
-
-### CharacterAffinityTotal
-**Foreign Keys:**
-  - character -> character_sheets.CharacterSheet [FK]
-  - affinity -> magic.Affinity [FK]
-
-### Motif
-**Foreign Keys:**
-  - character -> character_sheets.CharacterSheet [OneToOne]
-**Pointed to by:**
-  - resonances <- magic.MotifResonance
-
-### MotifResonance
-**Foreign Keys:**
-  - motif -> magic.Motif [FK]
-  - resonance -> magic.Resonance [FK]
-**Pointed to by:**
-  - facet_assignments <- magic.MotifResonanceAssociation
-
-### MotifResonanceAssociation
-**Foreign Keys:**
-  - motif_resonance -> magic.MotifResonance [FK]
-  - facet -> magic.Facet [FK]
-
-### Reincarnation
-**Foreign Keys:**
-  - character -> character_sheets.CharacterSheet [FK]
-  - gift -> magic.Gift [OneToOne]
-
-### Cantrip
-**Foreign Keys:**
-  - effect_type -> magic.EffectType [FK]
-  - style -> magic.TechniqueStyle [FK]
-**Pointed to by:**
-  - created_techniques <- magic.Technique
-
-### SoulfrayConfig
-**Foreign Keys:**
-  - resilience_check_type -> checks.CheckType [FK]
-
-### MishapPoolTier
-**Foreign Keys:**
-  - consequence_pool -> actions.ConsequencePool [FK]
-
 ### TechniqueOutcomeModifier
 **Foreign Keys:**
   - outcome -> traits.CheckOutcome [OneToOne]
@@ -1055,6 +1045,8 @@
   - origin_resonance -> magic.Resonance [FK]
   - resolved_alteration -> magic.MagicalAlterationTemplate [FK] (nullable)
   - resolved_by -> accounts.AccountDB [FK] (nullable)
+**Pointed to by:**
+  - treatment_attempts_targeting_alteration <- conditions.TreatmentAttempt
 
 ### MagicalAlterationEvent
 **Foreign Keys:**
@@ -1064,14 +1056,88 @@
   - triggering_scene -> scenes.Scene [FK] (nullable)
   - triggering_technique -> magic.Technique [FK] (nullable)
 
-### ThreadPullCost
-
-### ThreadXPLockedLevel
-
-### ThreadPullEffect
+### CharacterAnima
 **Foreign Keys:**
+  - character -> objects.ObjectDB [OneToOne]
+
+### CharacterAnimaRitual
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [OneToOne]
+  - stat -> traits.Trait [FK]
+  - skill -> skills.Skill [FK]
+  - specialization -> skills.Specialization [FK] (nullable)
   - resonance -> magic.Resonance [FK]
-  - capability_grant -> conditions.CapabilityType [FK] (nullable)
+  - check_type -> checks.CheckType [FK]
+**Pointed to by:**
+  - performances <- magic.AnimaRitualPerformance
+
+### AnimaRitualPerformance
+**Foreign Keys:**
+  - ritual -> magic.CharacterAnimaRitual [FK]
+  - target_character -> character_sheets.CharacterSheet [FK] (nullable)
+  - scene -> scenes.Scene [FK] (nullable)
+  - outcome -> traits.CheckOutcome [FK] (nullable)
+
+### AnimaConfig
+
+### CharacterAura
+**Foreign Keys:**
+  - character -> objects.ObjectDB [OneToOne]
+
+### CharacterResonance
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - resonance -> magic.Resonance [FK]
+
+### CharacterAffinityTotal
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [FK]
+  - affinity -> magic.Affinity [FK]
+
+### Cantrip
+**Foreign Keys:**
+  - effect_type -> magic.EffectType [FK]
+  - style -> magic.TechniqueStyle [FK]
+**Pointed to by:**
+  - created_techniques <- magic.Technique
+
+### Facet
+**Foreign Keys:**
+  - parent -> magic.Facet [FK] (nullable)
+**Pointed to by:**
+  - cantrips <- magic.Cantrip
+  - children <- magic.Facet
+  - character_assignments <- magic.CharacterFacet
+  - motif_usages <- magic.MotifResonanceAssociation
+
+### CharacterFacet
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [FK]
+  - facet -> magic.Facet [FK]
+  - resonance -> magic.Resonance [FK]
+
+### Motif
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [OneToOne]
+**Pointed to by:**
+  - resonances <- magic.MotifResonance
+
+### MotifResonance
+**Foreign Keys:**
+  - motif -> magic.Motif [FK]
+  - resonance -> magic.Resonance [FK]
+**Pointed to by:**
+  - facet_assignments <- magic.MotifResonanceAssociation
+
+### MotifResonanceAssociation
+**Foreign Keys:**
+  - motif_resonance -> magic.MotifResonance [FK]
+  - facet -> magic.Facet [FK]
+
+### Reincarnation
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [FK]
+  - gift -> magic.Gift [OneToOne]
 
 ### ImbuingProseTemplate
 **Foreign Keys:**
@@ -1090,6 +1156,23 @@
   - item_template -> items.ItemTemplate [FK]
   - min_quality_tier -> items.QualityTier [FK] (nullable)
 
+### SoulfrayConfig
+**Foreign Keys:**
+  - resilience_check_type -> checks.CheckType [FK]
+
+### MishapPoolTier
+**Foreign Keys:**
+  - consequence_pool -> actions.ConsequencePool [FK]
+
+### ThreadPullCost
+
+### ThreadXPLockedLevel
+
+### ThreadPullEffect
+**Foreign Keys:**
+  - resonance -> magic.Resonance [FK]
+  - capability_grant -> conditions.CapabilityType [FK] (nullable)
+
 ### Thread
 **Foreign Keys:**
   - owner -> character_sheets.CharacterSheet [FK]
@@ -1101,6 +1184,7 @@
   - target_capstone -> relationships.RelationshipCapstone [FK] (nullable)
 **Pointed to by:**
   - level_unlocks <- magic.ThreadLevelUnlock
+  - treatment_attempts <- conditions.TreatmentAttempt
   - related_journal_entries <- journals.JournalEntry
   - combat_pulls <- combat.CombatPull
   - resolved_pull_effects <- combat.CombatPullResolvedEffect
@@ -1130,11 +1214,6 @@
   - teacher -> roster.RosterTenure [FK]
   - unlock -> magic.ThreadWeavingUnlock [FK]
 
-### AudereThreshold
-**Foreign Keys:**
-  - minimum_intensity_tier -> magic.IntensityTier [FK]
-  - minimum_warp_stage -> conditions.ConditionStage [FK]
-
 ### Service Functions
 - `accept_thread_weaving_unlock(learner: 'CharacterSheet', offer: 'ThreadWeavingTeachingOffer') -> 'CharacterThreadWeavingUnlock' — Accept a ThreadWeavingTeachingOffer on behalf of a learner (Spec A §6.1).`
 - `apply_damage_reduction_from_threads(character: 'ObjectDB', incoming_damage: 'int') -> 'int' — Reduce incoming damage by thread-derived DAMAGE_TAKEN_REDUCTION.`
@@ -1148,7 +1227,6 @@
 - `create_pending_alteration(*, character: 'CharacterSheet', tier: 'int', origin_affinity: 'Affinity', origin_resonance: 'ResonanceModel', scene: 'Scene | None', triggering_technique: 'Technique | None' = None, triggering_intensity: 'int | None' = None, triggering_control: 'int | None' = None, triggering_anima_cost: 'int | None' = None, triggering_anima_deficit: 'int | None' = None, triggering_soulfray_stage: 'int | None' = None, audere_active: 'bool' = False) -> 'PendingAlterationResult' — Create or escalate a PendingAlteration for a character.`
 - `cross_thread_xp_lock(character_sheet: 'CharacterSheet', thread: 'Thread', boundary_level: 'int') -> 'ThreadLevelUnlock' — Pay XP to unlock an XP-locked level boundary on a thread.`
 - `deduct_anima(character: 'ObjectDB', effective_cost: 'int') -> 'int' — Deduct anima from character, returning the overburn deficit.`
-- `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
 - `get_aura_percentages(character_sheet: 'CharacterSheet') -> 'AuraPercentages' — Calculate aura percentages from affinity totals and resonance-targeting modifiers.`
 - `get_library_entries(*, tier: 'int', character_affinity_id: 'int | None' = None) -> 'QuerySet[MagicalAlterationTemplate]' — Return library entries matching the given tier.`
 - `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None') -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
@@ -1227,6 +1305,7 @@
   - ritual_sites <- magic.Ritual
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - condition_templates <- conditions.ConditionTemplate
+  - condition_stages_carrying <- conditions.ConditionStage
   - prerequisites <- mechanics.Prerequisite
   - challenge_template_properties <- mechanics.ChallengeTemplateProperty
   - object_properties <- mechanics.ObjectProperty
@@ -1364,6 +1443,27 @@
 - `get_modifier_total(character, modifier_target: 'ModifierTarget') -> 'int' — Get total modifier value for a target.`
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
+
+
+## world.narrative
+
+### NarrativeMessage
+**Foreign Keys:**
+  - sender_account -> accounts.AccountDB [FK] (nullable)
+  - related_story -> stories.Story [FK] (nullable)
+  - related_beat_completion -> stories.BeatCompletion [FK] (nullable)
+  - related_episode_resolution -> stories.EpisodeResolution [FK] (nullable)
+**Pointed to by:**
+  - deliveries <- narrative.NarrativeMessageDelivery
+
+### NarrativeMessageDelivery
+**Foreign Keys:**
+  - message -> narrative.NarrativeMessage [FK]
+  - recipient_character_sheet -> character_sheets.CharacterSheet [FK]
+
+### Service Functions
+- `deliver_queued_messages(character_sheet: 'CharacterSheet') -> 'int' — Push all undelivered messages for this character and mark delivered.`
+- `send_narrative_message(*, recipients: 'Iterable[CharacterSheet]', body: 'str', category: 'str', sender_account: 'AccountDB | None' = None, ooc_note: 'str' = '', related_story: 'Story | None' = None, related_beat_completion: 'BeatCompletion | None' = None, related_episode_resolution: 'EpisodeResolution | None' = None) -> 'NarrativeMessage' — Create a NarrativeMessage and fan out deliveries to each recipient.`
 
 
 ## world.progression
@@ -1776,9 +1876,9 @@
   - event -> events.Event [FK] (nullable)
 **Pointed to by:**
   - developmenttransaction_set <- progression.DevelopmentTransaction
-  - anima_ritual_performances <- magic.AnimaRitualPerformance
   - triggered_alterations <- magic.PendingAlteration
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
+  - anima_ritual_performances <- magic.AnimaRitualPerformance
   - participations <- scenes.SceneParticipation
   - interactions <- scenes.Interaction
   - summary_revisions <- scenes.SceneSummaryRevision
@@ -1787,6 +1887,7 @@
   - legend_events <- societies.LegendEvent
   - legend_entries <- societies.LegendEntry
   - legend_spreads <- societies.LegendSpread
+  - treatment_attempts <- conditions.TreatmentAttempt
   - situation_instances <- mechanics.SituationInstance
   - relationshipupdate_set <- relationships.RelationshipUpdate
   - relationshipdevelopment_set <- relationships.RelationshipDevelopment
@@ -1952,13 +2053,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x000001D063E34B30>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x0000017FBD500F90>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Get the relationship tier between two characters.`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x000001D063E34B30>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x0000017FBD500F90>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies
@@ -2090,6 +2191,7 @@
   - progress_records <- stories.StoryProgress
   - legend_events <- societies.LegendEvent
   - legend_entries <- societies.LegendEntry
+  - narrative_messages <- narrative.NarrativeMessage
 
 ### StoryTrustRequirement
 **Foreign Keys:**
@@ -2207,6 +2309,8 @@
   - gm_table -> gm.GMTable [FK] (nullable)
   - roster_entry -> roster.RosterEntry [FK] (nullable)
   - era -> stories.Era [FK] (nullable)
+**Pointed to by:**
+  - narrative_messages <- narrative.NarrativeMessage
 
 ### EpisodeResolution
 **Foreign Keys:**
@@ -2216,6 +2320,8 @@
   - chosen_transition -> stories.Transition [FK] (nullable)
   - resolved_by -> gm.GMProfile [FK] (nullable)
   - era -> stories.Era [FK] (nullable)
+**Pointed to by:**
+  - narrative_messages <- narrative.NarrativeMessage
 
 ### GroupStoryProgress
 **Foreign Keys:**
@@ -2288,6 +2394,8 @@
   - technique_warp_modifier -> magic.TechniqueOutcomeModifier [OneToOne] (nullable)
 **Pointed to by:**
   - resultchartoutcome_set <- traits.ResultChartOutcome
+  - anima_ritual_performances <- magic.AnimaRitualPerformance
+  - treatment_attempts <- conditions.TreatmentAttempt
   - challenge_records <- mechanics.CharacterChallengeRecord
   - consequences <- checks.Consequence
 
