@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from world.achievements.models import Achievement
     from world.classes.models import CharacterClassLevel
     from world.conditions.models import ConditionTemplate
+    from world.magic.models.affinity import Resonance
     from world.scenes.models import Persona
 
 from django.core.exceptions import ValidationError
@@ -445,6 +446,49 @@ class CharacterSheet(SharedMemoryModel):
             sheet.invalidate_condition_cache()
         """
         self.__dict__.pop("cached_active_condition_templates", None)
+
+    # ==========================================================================
+    # Corruption helpers (Scope #7)
+    # ==========================================================================
+
+    def get_corruption_stage(self, resonance: Resonance) -> int:
+        """Return current Corruption stage for one resonance (0-5).
+
+        0 = no condition exists or no current stage. 1-5 = current_stage.stage_order.
+        ``sheet.character`` is the ObjectDB target for ConditionInstance rows.
+        """
+        from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+        instance = (
+            ConditionInstance.objects.filter(
+                target=self.character,
+                condition__corruption_resonance=resonance,
+            )
+            .select_related("current_stage")
+            .first()
+        )
+        if instance is None or instance.current_stage is None:
+            return 0
+        return instance.current_stage.stage_order
+
+    @cached_property
+    def is_protagonism_locked(self) -> bool:
+        """True if the character is mechanically locked from protagonism.
+
+        Today: corruption terminal stage (stage_order=5) is the only source.
+        Future: berserker terminal state, possession, etc. extend the OR.
+        """
+        return self._has_corruption_terminal_stage()
+
+    def _has_corruption_terminal_stage(self) -> bool:
+        """Return True if any per-resonance Corruption condition is at stage 5."""
+        from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+        return ConditionInstance.objects.filter(
+            target=self.character,
+            condition__corruption_resonance__isnull=False,
+            current_stage__stage_order=5,
+        ).exists()
 
     def display_ic(self) -> str:
         """Delegate to primary_persona.display_ic()."""

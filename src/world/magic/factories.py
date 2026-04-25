@@ -1066,6 +1066,58 @@ class SceneEntryEndorsementFactory(factory.django.DjangoModelFactory):
     granted_amount = 4
 
 
+def with_corruption_at_stage(sheet, resonance, stage: int):
+    """Test helper: set up a corrupted character at a given stage.
+
+    Creates the per-resonance Corruption ConditionTemplate (or reuses one),
+    creates 5 stages with default severity thresholds (50, 200, 500, 1000, 1500),
+    sets corruption_current to the stage's threshold, and creates the
+    ConditionInstance with the appropriate current_stage. Returns the instance.
+
+    Uses ``sheet.character`` (ObjectDB) as the ConditionInstance target,
+    consistent with the canonical sheet→character path on CharacterSheet.
+    """
+    from world.conditions.factories import (
+        ConditionInstanceFactory,
+        ConditionStageFactory,
+        ConditionTemplateFactory,
+    )
+
+    template = ConditionTemplateFactory(
+        name=f"Corrupted by {resonance.name}",
+        has_progression=True,
+        corruption_resonance=resonance,
+    )
+    thresholds = [50, 200, 500, 1000, 1500]
+    stage_rows = []
+    for i, threshold in enumerate(thresholds, start=1):
+        stage_rows.append(
+            ConditionStageFactory(
+                condition=template,
+                stage_order=i,
+                severity_threshold=threshold,
+            )
+        )
+
+    target_stage_row = stage_rows[stage - 1]
+    severity = target_stage_row.severity_threshold
+
+    char_res, _ = CharacterResonance.objects.get_or_create(
+        character_sheet=sheet,
+        resonance=resonance,
+    )
+    char_res.corruption_current = severity
+    char_res.corruption_lifetime = severity
+    char_res.save()
+
+    return ConditionInstanceFactory(
+        target=sheet.character,
+        condition=template,
+        current_stage=target_stage_row,
+        severity=severity,
+    )
+
+
 def wire_soulfray_aftermath(content: SoulfrayContent) -> None:
     """Create ConditionStageOnEntry rows for Soulfray aftermath per spec §8.3.
 
