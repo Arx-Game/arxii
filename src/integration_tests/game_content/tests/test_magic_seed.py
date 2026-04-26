@@ -94,6 +94,7 @@ class TestSeedMagicConfigIdempotency(TestCase):
         self.second: MagicConfigResult = seed_magic_config()
 
     def _counts(self) -> dict[str, int]:
+        from world.checks.models import CheckCategory, CheckType
         from world.magic.audere import AudereThreshold
         from world.magic.models import AnimaConfig, IntensityTier, MishapPoolTier, SoulfrayConfig
         from world.magic.models.corruption_config import CorruptionConfig
@@ -107,6 +108,8 @@ class TestSeedMagicConfigIdempotency(TestCase):
             "audere_threshold": AudereThreshold.objects.count(),
             "intensity_tiers": IntensityTier.objects.count(),
             "mishap_pool_tiers": MishapPoolTier.objects.count(),
+            "check_types": CheckType.objects.count(),
+            "check_categories": CheckCategory.objects.count(),
         }
 
     def test_row_counts_unchanged(self) -> None:
@@ -118,6 +121,17 @@ class TestSeedMagicConfigIdempotency(TestCase):
         self.assertEqual(counts["audere_threshold"], 1)
         self.assertEqual(counts["intensity_tiers"], 3)
         self.assertGreaterEqual(counts["mishap_pool_tiers"], 1)
+        # Guard against orphan CheckType/CheckCategory rows leaking on re-run
+        self.assertEqual(
+            counts["check_types"],
+            1,
+            "seed_magic_config() must not create extra CheckType rows on second call",
+        )
+        self.assertEqual(
+            counts["check_categories"],
+            1,
+            "seed_magic_config() must not create extra CheckCategory rows on second call",
+        )
 
     def test_same_pks_returned(self) -> None:
         self.assertEqual(self.first.anima_config.pk, self.second.anima_config.pk)

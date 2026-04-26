@@ -452,7 +452,7 @@ def seed_magic_config() -> MagicConfigResult:
         MagicConfigResult dataclass with all created/fetched instances.
     """
     from actions.models.consequence_pools import ConsequencePool  # noqa: PLC0415
-    from world.checks.factories import CheckTypeFactory  # noqa: PLC0415
+    from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
     from world.magic.audere import AudereThreshold  # noqa: PLC0415
     from world.magic.factories import SoulfrayContentFactory  # noqa: PLC0415
     from world.magic.models import (  # noqa: PLC0415
@@ -468,7 +468,14 @@ def seed_magic_config() -> MagicConfigResult:
     anima_config = AnimaConfig.get_singleton()
 
     # --- SoulfrayConfig (singleton, no get_or_create on factory) ---
-    resilience_check_type = CheckTypeFactory(name="Magical Endurance")
+    # Use direct ORM rather than CheckTypeFactory: the factory's SubFactory
+    # generates a fresh CheckCategory on every call, making (name, category)
+    # novel and leaking an orphan CheckType row on each re-run.
+    magic_check_category, _ = CheckCategory.objects.get_or_create(name="Magic")
+    resilience_check_type, _ = CheckType.objects.get_or_create(
+        name="Magical Endurance",
+        defaults={"category": magic_check_category},
+    )
     soulfray_config, _ = SoulfrayConfig.objects.get_or_create(
         pk=1,
         defaults={
