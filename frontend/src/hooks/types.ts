@@ -5,6 +5,7 @@ export const GAME_MESSAGE_TYPE = {
   TEXT: 'text',
   CHANNEL: 'channel',
   ERROR: 'error',
+  NARRATIVE: 'narrative',
 } as const;
 
 export type GameMessageType = (typeof GAME_MESSAGE_TYPE)[keyof typeof GAME_MESSAGE_TYPE];
