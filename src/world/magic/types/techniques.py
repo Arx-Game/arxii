@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.checks.types import CheckResult
+    from world.magic.models import Resonance, Technique
     from world.mechanics.types import AppliedEffect
 
 
@@ -67,6 +68,19 @@ class MishapResult:
     applied_effect_ids: list[int] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class ResonanceInvolvement:
+    """Per-resonance participation summary for one technique cast.
+
+    Used by the per-cast corruption hook (Task 2/3) to compute corruption
+    accrual per resonance.
+    """
+
+    resonance: Resonance
+    stat_bonus_contribution: int  # share of runtime intensity attributable to this resonance
+    thread_pull_resonance_spent: int  # sum of CombatPull.resonance_spent for active pulls
+
+
 @dataclass
 class TechniqueUseResult:
     """Complete result of using a technique."""
@@ -77,3 +91,9 @@ class TechniqueUseResult:
     mishap: MishapResult | None = None
     soulfray_result: SoulfrayResult | None = None
     soulfray_warning: SoulfrayWarning | None = None
+    technique: Technique | None = None  # The cast technique
+    was_deficit: bool = False  # True if the cast triggered anima overburn
+    was_mishap: bool = False  # True if a mishap rider was applied
+    was_audere: bool = False  # True if the character was in Audere during the cast
+    resonance_involvements: tuple[ResonanceInvolvement, ...] = ()
+    corruption_summary: object | None = None  # Placeholder for Task 3 CorruptionAccrualSummary

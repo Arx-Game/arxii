@@ -40,6 +40,7 @@ from world.magic.types.ritual import (
 from world.magic.types.techniques import (
     AnimaCostResult,
     MishapResult,
+    ResonanceInvolvement,
     RuntimeTechniqueStats,
     SoulfrayResult,
     SoulfrayWarning,
@@ -63,6 +64,7 @@ __all__ = [
     "PullPreviewResult",
     "ResolvedPullEffect",
     "ResonanceDailyTickSummary",
+    "ResonanceInvolvement",
     "ResonancePullResult",
     "ResonanceWeeklySettlementSummary",
     "RitualOutcome",

@@ -1,16 +1,8 @@
 """Integration tests for the Corruption foundation (Magic Scope #7).
 
 Each test exercises a multi-step slice of the shipped surfaces rather
-than a single function in isolation.
-
-Excluded scenarios (waiting on Phase 6.4 / 7.1 unblocking — TechniqueUseResult
-extension to expose per-resonance involvement):
-- Per-cast accrual via use_technique
-- Cast pipeline integration
-
-Those scenarios are gated on accrue_corruption_for_cast being wired into
-services/techniques.py, which depends on TechniqueUseResult exposing
-per-resonance stat bonus contributions.
+than a single function in isolation.  Full per-cast pipeline coverage
+(Scenario 11) is now included following Phase 7.1 wiring.
 
 Pattern matches src/world/magic/tests/integration/test_soulfray_recovery_flow.py.
 """
@@ -28,10 +20,15 @@ from world.conditions.models import ConditionInstance
 from world.conditions.services import decay_condition_severity
 from world.magic.exceptions import ProtagonismLockedError
 from world.magic.factories import (
+    AffinityFactory,
+    CharacterAnimaFactory,
+    GiftFactory,
     ResonanceFactory,
+    TechniqueFactory,
     with_corruption_at_stage,
 )
 from world.magic.models.aura import CharacterResonance
+from world.magic.services import use_technique
 from world.magic.services.atonement import (
     AtonementStageOutOfRange,
     perform_atonement_rite,
@@ -419,3 +416,216 @@ class RiskTransparencyEventTests(TestCase):
             )
 
         assert EventName.PROTAGONISM_LOCKED in emitted_event_names
+
+
+# ---------------------------------------------------------------------------
+# Scenario 11: Full per-cast accrual via use_technique
+# ---------------------------------------------------------------------------
+
+
+def _make_abyssal_gift_and_technique(
+    *,
+    intensity: int = 2,
+    control: int = 10,
+    anima_cost: int = 2,
+    level: int = 1,
+) -> tuple:
+    """Create an Abyssal resonance + Gift + Technique for integration tests.
+
+    Returns (resonance, gift, technique).
+    """
+    abyssal_affinity = AffinityFactory(name="Abyssal")
+    resonance = ResonanceFactory(affinity=abyssal_affinity)
+    gift = GiftFactory()
+    gift.resonances.add(resonance)
+    technique = TechniqueFactory(
+        gift=gift,
+        intensity=intensity,
+        control=control,
+        anima_cost=anima_cost,
+        level=level,
+    )
+    return resonance, gift, technique
+
+
+class FullCastPipelineCorruptionTests(TestCase):
+    """Scenario 11: full per-cast accrual via use_technique (Phase 7.1 unblock)."""
+
+    def test_abyssal_cast_increments_corruption_current_and_lifetime(self) -> None:
+        """End-to-end: Abyssal tier-1 cast → corruption_current/lifetime increment.
+
+        Uses the simple template (deterministic stage advancement) so the test
+        isn't gated on RNG.
+        """
+        resonance, _gift, technique = _make_abyssal_gift_and_technique(
+            intensity=2, control=10, anima_cost=2, level=1
+        )
+        _make_simple_template(resonance)
+
+        sheet = CharacterSheetFactory()
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+
+        result = use_technique(
+            character=sheet.character,
+            technique=technique,
+            resolve_fn=lambda: None,
+        )
+
+        # Summary is attached to the result
+        assert result.corruption_summary is not None
+
+        # corruption fields incremented on CharacterResonance
+        char_res = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
+        assert char_res.corruption_current > 0
+        assert char_res.corruption_lifetime > 0
+        assert char_res.corruption_current == char_res.corruption_lifetime
+
+    def test_celestial_cast_does_not_accrue_corruption(self) -> None:
+        """Celestial Gift → no corruption accrual, even with authored content."""
+        celestial_affinity = AffinityFactory(name="Celestial")
+        resonance = ResonanceFactory(affinity=celestial_affinity)
+        gift = GiftFactory()
+        gift.resonances.add(resonance)
+        technique = TechniqueFactory(
+            gift=gift,
+            intensity=2,
+            control=10,
+            anima_cost=2,
+            level=1,
+        )
+        # Author a template for the resonance so it would be picked up if
+        # the celestial-skip logic were absent.
+        _make_simple_template(resonance)
+
+        sheet = CharacterSheetFactory()
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+
+        result = use_technique(
+            character=sheet.character,
+            technique=technique,
+            resolve_fn=lambda: None,
+        )
+
+        # Summary is still attached (orchestrator ran, just skipped Celestial)
+        assert result.corruption_summary is not None
+        # No per-resonance accrual results (Celestial skipped)
+        assert len(result.corruption_summary.per_resonance) == 0
+
+        # No CharacterResonance row created at all (nothing to write)
+        assert not CharacterResonance.objects.filter(
+            character_sheet=sheet, resonance=resonance
+        ).exists()
+
+    def test_lazy_condition_creation_at_threshold(self) -> None:
+        """Repeated tier-1 casts cross stage 1 threshold → ConditionInstance created.
+
+        Pre-loads corruption_current to just below threshold=50, then casts
+        once with intensity=10 to push it over in a single cast.  Avoids a
+        long loop while still exercising the full pipeline.
+        """
+        resonance, _gift, technique = _make_abyssal_gift_and_technique(
+            intensity=10, control=10, anima_cost=2, level=1
+        )
+        _make_simple_template(resonance)
+
+        sheet = CharacterSheetFactory()
+        CharacterAnimaFactory(character=sheet.character, current=50, maximum=50)
+
+        # Pre-load to 40 — below threshold=50 so no condition yet.
+        # Direct DB write bypasses the service to avoid test duplication.
+        char_res, _ = CharacterResonance.objects.get_or_create(
+            character_sheet=sheet, resonance=resonance
+        )
+        char_res.corruption_current = 40
+        char_res.corruption_lifetime = 40
+        char_res.save(update_fields=["corruption_current", "corruption_lifetime"])
+        assert not ConditionInstance.objects.filter(target=sheet.character).exists()
+
+        # A single tier-1 cast with intensity=10 gives stat_bonus_contribution=10.
+        # Abyssal default coefficient=10, tier-1 coefficient=10.
+        # tick = ceil(10 * 10/10 * 10/10 * 1.0) = ceil(10) = 10.
+        # 40 + 10 = 50 ≥ threshold → lazy-create fires.
+        result = use_technique(
+            character=sheet.character,
+            technique=technique,
+            resolve_fn=lambda: None,
+        )
+
+        assert result.corruption_summary is not None
+        char_res.refresh_from_db()
+        assert char_res.corruption_current >= 50
+        # ConditionInstance should now exist
+        assert ConditionInstance.objects.filter(target=sheet.character).exists()
+
+    def test_cast_with_authored_content_at_high_severity_fires_warning(self) -> None:
+        """At stage 2, an Abyssal cast crossing stage 3 threshold emits CORRUPTION_WARNING.
+
+        Pre-loads corruption_current to 490 (just below stage 3 threshold=500),
+        then casts with intensity=10 to cross 500.
+        """
+        from flows.constants import EventName
+
+        resonance, _gift, technique = _make_abyssal_gift_and_technique(
+            intensity=10, control=10, anima_cost=2, level=1
+        )
+        _make_simple_template(resonance)
+
+        sheet = CharacterSheetFactory()
+        CharacterAnimaFactory(character=sheet.character, current=50, maximum=50)
+
+        # Give the character a location so emit_event fires.
+        room = _create_room()
+        sheet.character.location = room
+
+        # Bring to stage 2 via direct service call (threshold=200 to 499).
+        # Use the corruption service so ConditionInstance is created correctly.
+        accrue_corruption(
+            character_sheet=sheet,
+            resonance=resonance,
+            amount=490,
+            source=CorruptionSource.STAFF_GRANT,
+        )
+        char_res = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
+        assert char_res.corruption_current == 490
+
+        emitted_event_names: list[str] = []
+        import world.magic.services.corruption as corruption_mod
+
+        original_emit = corruption_mod.emit_event
+
+        def capturing_emit(event_name, payload, location, **kwargs):
+            emitted_event_names.append(event_name)
+            return original_emit(event_name, payload, location, **kwargs)
+
+        with patch(_EMIT_EVENT_PATH, side_effect=capturing_emit):
+            # Cast crosses 500 (490 + ≥10 tick → ≥500) → stage 3 advancement.
+            use_technique(
+                character=sheet.character,
+                technique=technique,
+                resolve_fn=lambda: None,
+            )
+
+        assert EventName.CORRUPTION_WARNING in emitted_event_names
+
+    def test_no_sheet_character_skips_corruption_silently(self) -> None:
+        """Character without a CharacterSheet → cast succeeds, no corruption attempted."""
+        # Build an ObjectDB character directly — no CharacterSheet row.
+        _resonance, _gift, technique = _make_abyssal_gift_and_technique(
+            intensity=2, control=10, anima_cost=2, level=1
+        )
+        character = ObjectDB.objects.create(
+            db_key="NPCTestChar",
+            db_typeclass_path="typeclasses.characters.Character",
+        )
+        CharacterAnimaFactory(character=character, current=20, maximum=20)
+
+        result = use_technique(
+            character=character,
+            technique=technique,
+            resolve_fn=lambda: None,
+        )
+
+        # Cast succeeded
+        assert result.confirmed is True
+        # No corruption summary (sheet lookup returned None → hook skipped)
+        assert result.corruption_summary is None

@@ -20,7 +20,12 @@ from world.magic.services.soulfray import (
     get_soulfray_warning,
     select_mishap_pool,
 )
-from world.magic.types import AnimaCostResult, RuntimeTechniqueStats, TechniqueUseResult
+from world.magic.types import (
+    AnimaCostResult,
+    ResonanceInvolvement,
+    RuntimeTechniqueStats,
+    TechniqueUseResult,
+)
 from world.mechanics.constants import (
     TECHNIQUE_STAT_CATEGORY_NAME,
     TECHNIQUE_STAT_CONTROL,
@@ -89,6 +94,61 @@ def _get_intensity_tier_control_modifier(runtime_intensity: int) -> int:
     if tier is None:
         return 0
     return tier.control_modifier
+
+
+def _character_is_in_audere(character: ObjectDB) -> bool:
+    """Return True if the character has an active Audere ConditionInstance."""
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.magic.audere import AUDERE_CONDITION_NAME  # noqa: PLC0415
+
+    return ConditionInstance.objects.filter(
+        target=character,
+        condition__name=AUDERE_CONDITION_NAME,
+    ).exists()
+
+
+def _build_resonance_involvements(
+    *,
+    technique: Technique,
+    character: ObjectDB,
+    runtime_intensity: int,
+) -> tuple[ResonanceInvolvement, ...]:
+    """Compute per-resonance involvement for one cast.
+
+    stat_bonus_contribution splits runtime intensity equally across the
+    technique's gift's resonances (the modifier system does not track
+    per-resonance attribution; spec §10.1 acknowledges this as an
+    impl-phase resolution).
+
+    thread_pull_resonance_spent sums CombatPull.resonance_spent for the
+    character's active pulls per resonance.
+    """
+    resonances = list(technique.gift.resonances.all())
+    if not resonances:
+        return ()
+
+    per_resonance_share = runtime_intensity // len(resonances)
+    pulls_by_resonance: dict[int, int] = {}
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    try:
+        active_pulls = character.combat_pulls.active()
+    except ObjectDoesNotExist:
+        # Character has no CharacterSheet (e.g., NPCs); treat as no active pulls.
+        active_pulls = []
+    for pull in active_pulls:
+        pulls_by_resonance[pull.resonance_id] = (
+            pulls_by_resonance.get(pull.resonance_id, 0) + pull.resonance_spent
+        )
+
+    return tuple(
+        ResonanceInvolvement(
+            resonance=r,
+            stat_bonus_contribution=per_resonance_share,
+            thread_pull_resonance_spent=pulls_by_resonance.get(r.pk, 0),
+        )
+        for r in resonances
+    )
 
 
 def get_runtime_technique_stats(
@@ -171,7 +231,7 @@ def calculate_effective_anima_cost(
     )
 
 
-def use_technique(  # noqa: PLR0913, C901 — kw-only args are intentional, targets is new for reactive layer
+def use_technique(  # noqa: PLR0913, PLR0912, C901 — kw-only args are intentional; step 9 added a branch
     *,
     character: ObjectDB,
     technique: Technique,
@@ -209,6 +269,7 @@ def use_technique(  # noqa: PLR0913, C901 — kw-only args are intentional, targ
             anima_cost=cost,
             soulfray_warning=soulfray_warning,
             confirmed=False,
+            technique=technique,
         )
 
     # --- TECHNIQUE_PRE_CAST (cancellable, before anima deduction) ---
@@ -230,6 +291,7 @@ def use_technique(  # noqa: PLR0913, C901 — kw-only args are intentional, targ
             return TechniqueUseResult(
                 anima_cost=cost,
                 confirmed=False,
+                technique=technique,
             )
 
     # Step 4: Deduct anima
@@ -273,6 +335,12 @@ def use_technique(  # noqa: PLR0913, C901 — kw-only args are intentional, targ
         if pool is not None and effective_check_result is not None:
             mishap = _resolve_mishap(character, pool, effective_check_result)
 
+    resonance_involvements = _build_resonance_involvements(
+        technique=technique,
+        character=character,
+        runtime_intensity=stats.intensity,
+    )
+
     technique_result = TechniqueUseResult(
         anima_cost=cost,
         soulfray_warning=soulfray_warning,
@@ -280,7 +348,24 @@ def use_technique(  # noqa: PLR0913, C901 — kw-only args are intentional, targ
         resolution_result=resolution_result,
         soulfray_result=soulfray_result,
         mishap=mishap,
+        technique=technique,
+        was_deficit=cost.deficit > 0,
+        was_mishap=mishap is not None,
+        was_audere=_character_is_in_audere(character),
+        resonance_involvements=resonance_involvements,
     )
+
+    # Step 9: Per-cast corruption accrual (Magic Scope #7)
+    # Defensive sheet lookup: NPCs without a CharacterSheet skip corruption
+    # accrual silently (the orchestrator requires a sheet to write to).
+    sheet = _get_character_sheet(character)
+    if sheet is not None:
+        from world.magic.services.corruption import accrue_corruption_for_cast  # noqa: PLC0415
+
+        technique_result.corruption_summary = accrue_corruption_for_cast(
+            caster_sheet=sheet,
+            technique_use_result=technique_result,
+        )
 
     # --- TECHNIQUE_CAST (post-resolve, frozen) ---
     if caster_room is not None:
