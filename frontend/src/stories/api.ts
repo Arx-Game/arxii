@@ -78,7 +78,11 @@ export async function getMyActiveStories(): Promise<MyActiveStoriesResponse> {
 
 export async function getGMQueue(): Promise<GMQueueResponse> {
   const res = await apiFetch('/api/stories/gm-queue/');
-  if (!res.ok) throw new Error('Failed to load GM queue');
+  if (!res.ok) {
+    const err = new Error('Failed to load GM queue') as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
   return res.json() as Promise<GMQueueResponse>;
 }
 
