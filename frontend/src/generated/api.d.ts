@@ -7277,6 +7277,36 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/stories/{id}/log/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET /api/stories/{id}/log/ — visibility-filtered story log.
+     *
+     *     Returns a chronological list of beat completions and episode resolutions
+     *     for this story, filtered to what the viewer is permitted to see:
+     *
+     *     - staff: sees all fields including internal_description and gm_notes
+     *     - lead_gm (story.primary_table.gm == request.user.gm_profile): same as staff
+     *     - player (participant / story character owner / active group member): sees
+     *       player-facing text; SECRET beat hints suppressed; no internal fields
+     *     - no_access: 403
+     *
+     *     The viewer role is determined by classify_story_log_viewer_role.
+     */
+    get: operations['stories_log_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/stories/{id}/participants/': {
     parameters: {
       query?: never;
@@ -24382,6 +24412,28 @@ export interface operations {
     };
   };
   stories_chapters_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryDetail'];
+        };
+      };
+    };
+  };
+  stories_log_retrieve: {
     parameters: {
       query?: never;
       header?: never;
