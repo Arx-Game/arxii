@@ -22,6 +22,9 @@ const links = [
   { to: '/community', label: 'Community' },
 ];
 
+/** Nav links visible only to authenticated users (account != null). */
+const authLinks = [{ to: '/stories/my-active', label: 'My Stories' }];
+
 export function Header() {
   const account = useAppSelector((state) => state.auth.account);
   const isStaff = account?.is_staff ?? false;
@@ -40,6 +43,14 @@ export function Header() {
                 </Link>
               </NavigationMenuItem>
             ))}
+            {account &&
+              authLinks.map((link) => (
+                <NavigationMenuItem key={link.to}>
+                  <Link to={link.to} className={navigationMenuTriggerStyle()}>
+                    {link.label}
+                  </Link>
+                </NavigationMenuItem>
+              ))}
             {isStaff && (
               <NavigationMenuItem>
                 <Link to="/staff" className={navigationMenuTriggerStyle()}>
@@ -49,6 +60,13 @@ export function Header() {
                       {pendingCount}
                     </Badge>
                   ) : null}
+                </Link>
+              </NavigationMenuItem>
+            )}
+            {isStaff && (
+              <NavigationMenuItem>
+                <Link to="/stories/staff-workload" className={navigationMenuTriggerStyle()}>
+                  Story Workload
                 </Link>
               </NavigationMenuItem>
             )}
@@ -78,9 +96,20 @@ export function Header() {
                     {link.label}
                   </Link>
                 ))}
+                {account &&
+                  authLinks.map((link) => (
+                    <Link key={link.to} to={link.to} className="text-lg">
+                      {link.label}
+                    </Link>
+                  ))}
                 {isStaff && (
                   <Link to="/staff" className="text-lg">
                     Staff {pendingCount && pendingCount > 0 ? `(${pendingCount})` : ''}
+                  </Link>
+                )}
+                {isStaff && (
+                  <Link to="/stories/staff-workload" className="text-lg">
+                    Story Workload
                   </Link>
                 )}
                 <ModeToggle />

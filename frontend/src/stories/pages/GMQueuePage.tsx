@@ -16,6 +16,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getGMQueue } from '../api';
 import { storiesKeys } from '../queries';
@@ -226,7 +227,9 @@ export function GMQueuePage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="mb-8 text-2xl font-bold">GM Queue</h1>
-      <GMQueueInner />
+      <ErrorBoundary>
+        <GMQueueInner />
+      </ErrorBoundary>
     </div>
   );
 }

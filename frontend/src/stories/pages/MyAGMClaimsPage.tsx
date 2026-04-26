@@ -17,6 +17,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { listAssistantGMClaims } from '../api';
 import { storiesKeys } from '../queries';
@@ -163,7 +164,9 @@ export function MyAGMClaimsPage() {
 
       {/* Tab panel */}
       <div role="tabpanel" data-testid="tab-panel">
-        <ClaimsTabContent status={activeStatus} />
+        <ErrorBoundary>
+          <ClaimsTabContent status={activeStatus} />
+        </ErrorBoundary>
       </div>
     </div>
   );

@@ -41,6 +41,10 @@ import { toast } from 'sonner';
 const mockGmMarkedBeat: Beat = {
   id: 200,
   episode: 10,
+  episode_title: 'Test Episode',
+  chapter_title: 'Test Chapter',
+  story_id: 1,
+  story_title: 'Test Story',
   predicate_type: 'gm_marked',
   outcome: 'unsatisfied',
   visibility: 'hinted',

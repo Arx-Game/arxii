@@ -20,6 +20,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getStaffWorkload } from '../api';
 import { storiesKeys } from '../queries';
@@ -271,7 +272,7 @@ export function StaffWorkloadPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="mb-8 text-2xl font-bold">Staff Workload</h1>
-      {content}
+      <ErrorBoundary>{content}</ErrorBoundary>
     </div>
   );
 }

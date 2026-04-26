@@ -14,6 +14,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { listBeats, listAssistantGMClaims } from '../api';
 import { storiesKeys } from '../queries';
@@ -181,7 +182,9 @@ export function AGMOpportunitiesPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="mb-8 text-2xl font-bold">AGM Opportunities</h1>
-      <AGMOpportunitiesInner />
+      <ErrorBoundary>
+        <AGMOpportunitiesInner />
+      </ErrorBoundary>
     </div>
   );
 }

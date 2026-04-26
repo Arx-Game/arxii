@@ -11,6 +11,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -345,7 +346,7 @@ export function StoryAuthorPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="mb-8 text-2xl font-bold">Story Author</h1>
-      {content}
+      <ErrorBoundary>{content}</ErrorBoundary>
 
       <StoryFormDialog
         open={createOpen}

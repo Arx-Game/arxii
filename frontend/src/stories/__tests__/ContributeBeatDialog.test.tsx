@@ -39,6 +39,10 @@ import { toast } from 'sonner';
 const mockAggregateBeat = {
   id: 100,
   episode: 10,
+  episode_title: 'Test Episode',
+  chapter_title: 'Test Chapter',
+  story_id: 1,
+  story_title: 'Test Story',
   predicate_type: 'aggregate_threshold' as const,
   outcome: 'unsatisfied' as const,
   visibility: 'hinted' as const,
