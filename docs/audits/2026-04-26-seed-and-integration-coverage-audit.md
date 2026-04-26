@@ -136,7 +136,7 @@ The right way to drive this work is: define the user stories an L1 player must b
 
 ## Recommended phased program
 
-### Phase B-0: Foundations (one-week sprint)
+### Phase B-0: Foundations
 
 The seed infrastructure itself, callable as `arx seed dev`. Doesn't add any new authored content yet — just builds the harness.
 
@@ -147,7 +147,7 @@ The seed infrastructure itself, callable as `arx seed dev`. Doesn't add any new 
 - Add a regression test: `arx seed dev` on a fresh DB succeeds and is idempotent (second run is a no-op).
 - Add a regression test: `arx seed dev` on a DB with edited content does NOT overwrite edits.
 
-### Phase B-1: Hard CG unblockers (week 1-2)
+### Phase B-1: Hard CG unblockers
 
 The 18 items in the "Hard CG blockers" table, in dependency order. Each gets a `seed_*` function. Some need a content-design decision first (PointConversionRange tuning, distinctions catalog ~20-30 entries).
 
@@ -168,7 +168,7 @@ Recommended order (each batch completes before next starts):
 14. RelationshipTrack + RelationshipTier library
 15. CodexCategory + CodexEntry starter
 
-### Phase B-2: Hard runtime unblockers (week 2-3)
+### Phase B-2: Hard runtime unblockers
 
 The 15 items in the "Hard runtime blockers" table:
 1. FlowDefinition seed library (movement/look/speak minimum)
@@ -181,7 +181,7 @@ The 15 items in the "Hard runtime blockers" table:
 8. 6 goal domain ModifierTargets + AP ModifierTargets
 9. CharacterVitalsFactory + include vitals in character seed
 
-### Phase C: User-story integration tests (weeks 3-5)
+### Phase C: User-story integration tests
 
 Write the 10 missing pipeline tests from the user-story map. Each test starts from a focused seed slice (or `seed_dev_database()`) and walks an actor through the play loop. Tests double as living documentation.
 
@@ -239,6 +239,6 @@ Once user stories work end-to-end at the service level, expose them through Reac
 
 ## Next move
 
-Phase B-0 (build the seed harness) is the right starting point. It's 3-5 days of work, unblocks everything else, and produces a tangible deliverable (`arx seed dev` works). Once that's in, Phase B-1 (hard CG unblockers) is largely mechanical — composing existing factories with canonical content values.
+Phase B-0 (build the seed harness) is the right starting point — it unblocks everything else and produces a tangible deliverable (`arx seed dev` works). Once that's in, Phase B-1 (hard CG unblockers) is largely mechanical — composing existing factories with canonical content values.
 
 The one design pass needed before Phase B-1 starts in earnest: a tuning decision on PointConversionRange/CheckRank/ResultChart values and a content pass on the starter distinction catalog. Both can run in parallel with Phase B-0.

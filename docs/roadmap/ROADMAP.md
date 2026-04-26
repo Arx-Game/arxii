@@ -88,6 +88,10 @@ broken regardless of technical correctness.
 | [GM System](gm-system.md) | in-progress | Phases 0-3 complete: identity, tables, roster/invites. Phase 4 dissolved into Stories; Phase 5 UI deferred until after Stories |
 | [Staff Inbox & Player Submissions](staff-inbox.md) | in-progress | Staff frontend complete; player-facing submission forms pending (Phase 5b) |
 
+### Cross-cutting initiatives
+
+- [Seed Mechanism + Integration Test Coverage](seed-and-integration-tests.md) — making the project clonable and every L1 user story regression-tested. Three phases: magic completeness → integration test framework expansion → seed for clone use. Audit at `docs/audits/2026-04-26-seed-and-integration-coverage-audit.md`. **Sequenced before broad UI work.**
+
 ### Recent Infrastructure Changes
 
 - **ModifierTarget rename (Phase 1 complete):** `ModifierType` has been renamed to `ModifierTarget`
