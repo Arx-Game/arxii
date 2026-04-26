@@ -1,15 +1,22 @@
-"""Tests for seed_magic_config() — Task 1.1.
+"""Tests for seed_magic_config() — Task 1.1 and seed_canonical_rituals() — Task 1.2.
 
 Verifies:
 1. All 5 singletons + IntensityTier rows + MishapPoolTier are created with
-   expected values on the first call.
-2. A second call produces zero new DB writes (idempotent).
-3. Staff edits to existing rows survive a re-run (get_or_create, not update_or_create).
+   expected values on the first call (Task 1.1).
+2. A second call produces zero new DB writes (idempotent) (Task 1.1).
+3. Staff edits to existing rows survive a re-run (get_or_create, not update_or_create) (Task 1.1).
+4. Canonical rituals are created with correct names (Task 1.2).
+5. Ritual seeding is idempotent and preserves edits (Task 1.2).
 """
 
 from django.test import TestCase
 
-from integration_tests.game_content.magic import MagicConfigResult, seed_magic_config
+from integration_tests.game_content.magic import (
+    MagicConfigResult,
+    RitualSeedResult,
+    seed_canonical_rituals,
+    seed_magic_config,
+)
 
 
 class TestSeedMagicConfigCreation(TestCase):
@@ -187,4 +194,53 @@ class TestSeedMagicConfigPreservesEdits(TestCase):
             db_value["daily_regen_percent"],
             15,
             "seed_magic_config() must not overwrite existing rows (get_or_create semantics)",
+        )
+
+
+class TestSeedCanonicalRituals(TestCase):
+    """Task 1.2: seed_canonical_rituals() creates idempotent ritual rows."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.result: RitualSeedResult = seed_canonical_rituals()
+
+    def test_creation(self) -> None:
+        from world.magic.models import Ritual
+
+        self.assertEqual(Ritual.objects.count(), 2)
+        imbuing = Ritual.objects.get(name="Rite of Imbuing")
+        atonement = Ritual.objects.get(name="Rite of Atonement")
+        self.assertIsNotNone(imbuing)
+        self.assertIsNotNone(atonement)
+        self.assertEqual(self.result.rite_of_imbuing.name, "Rite of Imbuing")
+        self.assertEqual(self.result.rite_of_atonement.name, "Rite of Atonement")
+
+    def test_idempotency(self) -> None:
+        from world.magic.models import Ritual
+
+        first = seed_canonical_rituals()
+        second = seed_canonical_rituals()
+
+        self.assertEqual(Ritual.objects.count(), 2)
+        self.assertEqual(first.rite_of_imbuing.pk, second.rite_of_imbuing.pk)
+        self.assertEqual(first.rite_of_atonement.pk, second.rite_of_atonement.pk)
+
+    def test_edit_preserved_on_rerun(self) -> None:
+        from world.magic.models import Ritual
+
+        seed_canonical_rituals()
+
+        # Simulate a staff edit via bulk update (bypasses identity map)
+        Ritual.objects.filter(name="Rite of Imbuing").update(description="custom description")
+
+        # Re-run the seed — must not overwrite the staff edit
+        seed_canonical_rituals()
+
+        # Use .values() to bypass SharedMemoryModel identity-map cache and
+        # read directly from the DB.
+        db_value = Ritual.objects.filter(name="Rite of Imbuing").values("description").get()
+        self.assertEqual(
+            db_value["description"],
+            "custom description",
+            "seed_canonical_rituals() must not overwrite existing rows (get_or_create semantics)",
         )

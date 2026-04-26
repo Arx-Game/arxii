@@ -20,6 +20,7 @@ if TYPE_CHECKING:
         MagicalAlterationTemplate,
         MishapPoolTier,
         Resonance,
+        Ritual,
         SoulfrayConfig,
         Technique,
         TechniqueCapabilityGrant,
@@ -550,3 +551,45 @@ def seed_magic_config() -> MagicConfigResult:
         intensity_tiers=intensity_tiers,
         mishap_pool_tier=mishap_pool_tier,
     )
+
+
+# ---------------------------------------------------------------------------
+# Task 1.2 — seed_canonical_rituals()
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RitualSeedResult:
+    """Returned by seed_canonical_rituals().
+
+    Wraps the canonical Rite of Imbuing and Rite of Atonement rituals.
+    Both are lazy-created via factory django_get_or_create on name,
+    so re-running preserves any edits to existing rows (idempotent).
+    """
+
+    rite_of_imbuing: Ritual
+    rite_of_atonement: Ritual
+
+
+def seed_canonical_rituals() -> RitualSeedResult:
+    """Lazy-create the two canonical rituals: Imbuing and Atonement.
+
+    Both factories use django_get_or_create(name=...) so re-running on a
+    populated DB is a no-op. Existing rows are never modified; staff edits
+    survive repeated calls.
+
+    Creates:
+    - Ritual: "Rite of Imbuing" (SERVICE dispatch to spend_resonance_for_imbuing)
+    - Ritual: "Rite of Atonement" (SERVICE dispatch to atonement service)
+
+    Returns:
+        RitualSeedResult dataclass with both ritual instances.
+    """
+    from world.magic.factories import (  # noqa: PLC0415
+        AtonementRitualFactory,
+        ImbuingRitualFactory,
+    )
+
+    imbuing = ImbuingRitualFactory()
+    atonement = AtonementRitualFactory()
+    return RitualSeedResult(rite_of_imbuing=imbuing, rite_of_atonement=atonement)
