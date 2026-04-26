@@ -644,12 +644,14 @@ What was built:
   the casting character has any resonance at corruption stage 3+. Stage
   3+ resonances are surfaced by name so the player can make an informed
   push-or-back-off choice.
-- **Integration test suite** — 13 scenarios in
+- **Integration test suite** — 18 scenarios in
   `src/world/magic/tests/integration/test_corruption_flow.py`: lazy
   condition creation, lifetime monotonicity across accrue+reduce, no-
   template no-op, lock entry/exit, Atonement happy paths + refusal
-  paths, decay sync, risk-transparency event emission. Per-cast accrual
-  scenarios are excluded pending the deferred per-cast hook (see below).
+  paths, decay sync, risk-transparency event emission, and full per-cast
+  pipeline coverage (Abyssal accrual, Celestial skip, lazy creation
+  through the cast pipeline, CORRUPTION_WARNING emission via cast,
+  no-sheet NPC silent skip).
 - **Pre-existing factory bug fix exposed during integration testing** —
   `ConditionStageFactory.severity_multiplier` formula was tied to
   factory.Sequence's `stage_order` value, overflowing
@@ -666,20 +668,29 @@ tether-mediated resist support, `reduce_corruption` for tether-mediated
 rescue rituals, and trace-corruption-to-Sineater via the same
 `accrue_corruption` primitive.
 
-Deferred (gated on a follow-up that extends `TechniqueUseResult`):
-- **Per-cast accrual hook into `use_technique`** — `accrue_corruption_for_cast`
-  per-cast orchestrator and the wiring into the technique pipeline. Spec
-  §10.1 flagged the risk: `TechniqueUseResult` does not expose
-  per-resonance involvement (stat_bonus contribution + thread-pull
-  resonance spent). Implementing the orchestrator requires extending
-  `TechniqueUseResult` (and `use_technique` itself) to surface that
-  breakdown. The per-resonance formula is fully specified in §3.1 and
-  the service shape is sketched in the plan; just unblocks once the
-  technique pipeline exposes the inputs. No architectural changes
-  needed in the corruption foundation — just the missing input.
+Per-cast hook follow-up (DONE):
+- **`TechniqueUseResult` extended** with `technique`, `was_deficit`,
+  `was_mishap`, `was_audere`, `resonance_involvements`, and
+  `corruption_summary` fields. The per-resonance attribution splits
+  runtime intensity equally across the gift's resonances (impl-phase
+  resolution per spec §10.1 — modifier system does not track
+  per-resonance source attribution; equal split matches the §6.1
+  target curve). `thread_pull_resonance_spent` reads from active
+  `CombatPull` rows for the casting character.
+- **`accrue_corruption_for_cast` per-cast orchestrator** — implements
+  the spec §3.1 formula (affinity coefficient × tier coefficient ×
+  push multipliers, ceil-rounded). Skips Celestial, zero-involvement,
+  and zero-tick cases. Returns `CorruptionAccrualSummary`.
+- **Pipeline wiring** — Step 9 of `use_technique` calls the orchestrator
+  after Soulfray accumulation and mishap rider, before reactive event
+  emission. NPCs without a `CharacterSheet` skip silently.
+- **Cast-pipeline integration tests** in
+  `test_corruption_flow.py:FullCastPipelineCorruptionTests` (5 scenarios,
+  see test suite count above).
+
+Still deferred (gated on Spec B):
 - **Soul Tether (Spec B)** — the redirect mechanic, Sineater asymmetry,
   rescue rituals.
-- **Cast-pipeline integration tests** — wait on the per-cast hook above.
 
 Not in this scope (deferred): non-Corruption stage 3+ recovery rituals
 (Spec B authors via the same `reduce_corruption` primitive), public
