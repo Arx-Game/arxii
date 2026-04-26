@@ -12,13 +12,20 @@ if TYPE_CHECKING:
     from actions.models import ActionEnhancement
     from actions.models.consequence_pools import ConsequencePool
     from world.conditions.models import CapabilityType, ConditionStage
+    from world.magic.audere import AudereThreshold
     from world.magic.models import (
         Affinity,
+        AnimaConfig,
+        IntensityTier,
         MagicalAlterationTemplate,
+        MishapPoolTier,
         Resonance,
+        SoulfrayConfig,
         Technique,
         TechniqueCapabilityGrant,
     )
+    from world.magic.models.corruption_config import CorruptionConfig
+    from world.magic.models.gain_config import ResonanceGainConfig
     from world.mechanics.models import Property
 
 # Maps action_key → technique name (narrative, not mechanical)
@@ -392,3 +399,148 @@ class MagicContent:
             soulfray_consequence_pool=pool,
             soulfray_stage=soulfray_stage,
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 1.1 — seed_magic_config()
+# ---------------------------------------------------------------------------
+
+#: Canonical IntensityTier definitions: (name, threshold, control_modifier)
+_INTENSITY_TIERS: list[tuple[str, int, int]] = [
+    ("Minor", 5, 0),
+    ("Moderate", 10, -2),
+    ("Major", 15, -5),
+]
+
+#: Name for the default mishap consequence pool
+_MISHAP_POOL_NAME: str = "Magic Mishap Pool (default)"
+
+
+@dataclass
+class MagicConfigResult:
+    """Returned by seed_magic_config().
+
+    All singletons are lazy-created via get_or_create.  Re-running preserves
+    any edits to existing rows (idempotent).
+    """
+
+    anima_config: AnimaConfig
+    soulfray_config: SoulfrayConfig
+    resonance_gain_config: ResonanceGainConfig
+    corruption_config: CorruptionConfig
+    audere_threshold: AudereThreshold
+    intensity_tiers: dict[str, IntensityTier]  # name → tier
+    mishap_pool_tier: MishapPoolTier
+
+
+def seed_magic_config() -> MagicConfigResult:
+    """Lazy-create the 5 magic config singletons plus IntensityTier and MishapPoolTier rows.
+
+    All writes use get_or_create so re-running on a populated DB is a no-op.
+    Existing rows are never modified; staff edits survive repeated calls.
+
+    Creates:
+    - AnimaConfig (pk=1)
+    - SoulfrayConfig (pk=1, resilience_check_type="Magical Endurance")
+    - ResonanceGainConfig (pk=1)
+    - CorruptionConfig (pk=1)
+    - IntensityTier rows: Minor (threshold=5), Moderate (threshold=10), Major (threshold=15)
+    - AudereThreshold (minimum_intensity_tier=Major, minimum_warp_stage=Soulfray "Ripping")
+    - MishapPoolTier (min_deficit=1, max_deficit=None) backed by a minimal ConsequencePool
+
+    Returns:
+        MagicConfigResult dataclass with all created/fetched instances.
+    """
+    from actions.models.consequence_pools import ConsequencePool  # noqa: PLC0415
+    from world.checks.factories import CheckTypeFactory  # noqa: PLC0415
+    from world.magic.audere import AudereThreshold  # noqa: PLC0415
+    from world.magic.factories import SoulfrayContentFactory  # noqa: PLC0415
+    from world.magic.models import (  # noqa: PLC0415
+        AnimaConfig,
+        IntensityTier,
+        MishapPoolTier,
+        SoulfrayConfig,
+    )
+    from world.magic.models.corruption_config import CorruptionConfig  # noqa: PLC0415
+    from world.magic.models.gain_config import ResonanceGainConfig  # noqa: PLC0415
+
+    # --- AnimaConfig (has its own get_or_create helper) ---
+    anima_config = AnimaConfig.get_singleton()
+
+    # --- SoulfrayConfig (singleton, no get_or_create on factory) ---
+    resilience_check_type = CheckTypeFactory(name="Magical Endurance")
+    soulfray_config, _ = SoulfrayConfig.objects.get_or_create(
+        pk=1,
+        defaults={
+            "soulfray_threshold_ratio": "0.30",
+            "severity_scale": 10,
+            "deficit_scale": 5,
+            "resilience_check_type": resilience_check_type,
+            "base_check_difficulty": 15,
+            "ritual_budget_critical_success": 10,
+            "ritual_budget_success": 6,
+            "ritual_budget_partial": 3,
+            "ritual_budget_failure": 1,
+            "ritual_severity_cost_per_point": 1,
+        },
+    )
+
+    # --- ResonanceGainConfig (pk=1) ---
+    resonance_gain_config, _ = ResonanceGainConfig.objects.get_or_create(pk=1, defaults={})
+
+    # --- CorruptionConfig (pk=1) ---
+    corruption_config, _ = CorruptionConfig.objects.get_or_create(pk=1, defaults={})
+
+    # --- IntensityTier reference rows ---
+    intensity_tiers: dict[str, IntensityTier] = {}
+    for tier_name, threshold, control_mod in _INTENSITY_TIERS:
+        tier, _ = IntensityTier.objects.get_or_create(
+            name=tier_name,
+            defaults={
+                "threshold": threshold,
+                "control_modifier": control_mod,
+                "description": f"{tier_name} intensity level.",
+            },
+        )
+        intensity_tiers[tier_name] = tier
+
+    major_tier = intensity_tiers["Major"]
+
+    # --- Soulfray condition + stages (needed for AudereThreshold.minimum_warp_stage) ---
+    # SoulfrayContentFactory() is idempotent — uses get_or_create internally.
+    soulfray_content = SoulfrayContentFactory()
+    # "Ripping" is stage index 2 (0-based) = stage_order 3
+    ripping_stage = soulfray_content.stages[2]
+
+    # --- AudereThreshold (singleton, no get_or_create on factory) ---
+    audere_threshold, _ = AudereThreshold.objects.get_or_create(
+        pk=1,
+        defaults={
+            "minimum_intensity_tier": major_tier,
+            "minimum_warp_stage": ripping_stage,
+            "intensity_bonus": 20,
+            "anima_pool_bonus": 30,
+            "warp_multiplier": 2,
+        },
+    )
+
+    # --- MishapPoolTier: one catch-all tier (min_deficit=1, max_deficit=None) ---
+    mishap_pool, _ = ConsequencePool.objects.get_or_create(
+        name=_MISHAP_POOL_NAME,
+        defaults={"description": "Default pool for magic mishaps from control deficit."},
+    )
+    mishap_pool_tier, _ = MishapPoolTier.objects.get_or_create(
+        min_deficit=1,
+        max_deficit=None,
+        defaults={"consequence_pool": mishap_pool},
+    )
+
+    return MagicConfigResult(
+        anima_config=anima_config,
+        soulfray_config=soulfray_config,
+        resonance_gain_config=resonance_gain_config,
+        corruption_config=corruption_config,
+        audere_threshold=audere_threshold,
+        intensity_tiers=intensity_tiers,
+        mishap_pool_tier=mishap_pool_tier,
+    )
