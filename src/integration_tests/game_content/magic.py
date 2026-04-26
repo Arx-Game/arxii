@@ -1,4 +1,15 @@
-"""MagicContent — technique and ActionEnhancement records for social action tests."""
+"""Magic test-infrastructure: seed helpers and MagicContent.
+
+Exports:
+- ``seed_magic_dev()`` — master orchestrator for the entire magic cluster.
+  Composes all Phase 1 seed helpers into a single idempotent call. This is
+  the magic-cluster contribution to Phase 3's ``seed_dev_database()``.
+- ``seed_magic_config()`` — Task 1.1 — singletons + IntensityTier + MishapPoolTier
+- ``seed_canonical_rituals()`` — Task 1.2 — Rite of Imbuing + Rite of Atonement
+- ``seed_thread_pull_catalog()`` — Task 1.3 — ThreadPullCost + ThreadPullEffect catalog
+- ``seed_cantrip_starter_catalog()`` — Task 1.8 — 5 styles × 5 archetypes = 25 cantrips
+- ``MagicContent`` — static factory helpers for integration-test technique wiring
+"""
 
 from __future__ import annotations
 
@@ -11,14 +22,27 @@ if TYPE_CHECKING:
 
     from actions.models import ActionEnhancement
     from actions.models.consequence_pools import ConsequencePool
+    from world.classes.models import Path
     from world.conditions.models import CapabilityType, ConditionStage
+    from world.magic.audere import AudereThreshold
     from world.magic.models import (
         Affinity,
+        AnimaConfig,
+        EffectType,
+        IntensityTier,
         MagicalAlterationTemplate,
+        MishapPoolTier,
         Resonance,
+        Ritual,
+        SoulfrayConfig,
         Technique,
         TechniqueCapabilityGrant,
+        TechniqueStyle,
     )
+    from world.magic.models.cantrips import Cantrip
+    from world.magic.models.corruption_config import CorruptionConfig
+    from world.magic.models.gain_config import ResonanceGainConfig
+    from world.magic.models.threads import ThreadPullCost, ThreadPullEffect
     from world.mechanics.models import Property
 
 # Maps action_key → technique name (narrative, not mechanical)
@@ -89,34 +113,67 @@ class MagicContent:
         The social safety bonus adds +10 control for unengaged characters, giving
         control_delta=10 and effective_cost = max(12 - 10, 0) = 2 per use.
 
+        Idempotent: uses get_or_create on technique name and on
+        (base_action_key, technique) for enhancements, so calling this method
+        twice produces exactly 6 techniques and 6 enhancements.
+
         Safe to call from setUpTestData across multiple test classes.
 
         Returns:
             MagicContentResult with techniques and enhancements dicts.
         """
         from actions.constants import EnhancementSourceType  # noqa: PLC0415
-        from actions.factories import ActionEnhancementFactory  # noqa: PLC0415
-        from world.magic.factories import GiftFactory, TechniqueFactory  # noqa: PLC0415
+        from actions.models import ActionEnhancement  # noqa: PLC0415
+        from world.magic.factories import GiftFactory  # noqa: PLC0415
+        from world.magic.models import EffectType, Technique, TechniqueStyle  # noqa: PLC0415
 
         gift = GiftFactory(name="Social Arts")
+
+        # Ensure a minimal style and effect_type exist for social techniques.
+        # get_or_create so re-runs don't create duplicates.
+        style, _ = TechniqueStyle.objects.get_or_create(
+            name="Social",
+            defaults={"description": "Magic expressed through social interaction."},
+        )
+        effect_type, _ = EffectType.objects.get_or_create(
+            name="Social Influence",
+            defaults={
+                "description": "Magical enhancement of social action.",
+                "base_power": None,
+                "base_anima_cost": 2,
+                "has_power_scaling": False,
+            },
+        )
+
         techniques: dict[str, Technique] = {}
         enhancements: dict[str, ActionEnhancement] = {}
 
         for action_key, technique_name in ACTION_TECHNIQUE_MAP.items():
-            technique = TechniqueFactory(
+            technique, _ = Technique.objects.get_or_create(
                 name=technique_name,
-                gift=gift,
-                intensity=2,
-                control=2,
-                anima_cost=12,
+                defaults={
+                    "gift": gift,
+                    "style": style,
+                    "effect_type": effect_type,
+                    "intensity": 2,
+                    "control": 2,
+                    "anima_cost": 12,
+                    "description": f"Social magic technique: {technique_name}.",
+                },
             )
             techniques[action_key] = technique
 
-            enhancement = ActionEnhancementFactory(
+            variant_name = f"Magical {action_key.title()}"
+            enhancement, _ = ActionEnhancement.objects.get_or_create(
                 base_action_key=action_key,
-                variant_name=f"Magical {action_key.title()}",
-                source_type=EnhancementSourceType.TECHNIQUE,
                 technique=technique,
+                defaults={
+                    "variant_name": variant_name,
+                    "is_involuntary": False,
+                    "source_type": EnhancementSourceType.TECHNIQUE,
+                    "distinction": None,
+                    "condition": None,
+                },
             )
             enhancements[action_key] = enhancement
 
@@ -392,3 +449,784 @@ class MagicContent:
             soulfray_consequence_pool=pool,
             soulfray_stage=soulfray_stage,
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 1.1 — seed_magic_config()
+# ---------------------------------------------------------------------------
+
+#: Canonical IntensityTier definitions: (name, threshold, control_modifier)
+_INTENSITY_TIERS: list[tuple[str, int, int]] = [
+    ("Minor", 5, 0),
+    ("Moderate", 10, -2),
+    ("Major", 15, -5),
+]
+
+#: Name for the default mishap consequence pool
+_MISHAP_POOL_NAME: str = "Magic Mishap Pool (default)"
+
+
+@dataclass
+class MagicConfigResult:
+    """Returned by seed_magic_config().
+
+    All singletons are lazy-created via get_or_create.  Re-running preserves
+    any edits to existing rows (idempotent).
+    """
+
+    anima_config: AnimaConfig
+    soulfray_config: SoulfrayConfig
+    resonance_gain_config: ResonanceGainConfig
+    corruption_config: CorruptionConfig
+    audere_threshold: AudereThreshold
+    intensity_tiers: dict[str, IntensityTier]  # name → tier
+    mishap_pool_tier: MishapPoolTier
+
+
+def seed_magic_config() -> MagicConfigResult:
+    """Lazy-create the 5 magic config singletons plus IntensityTier and MishapPoolTier rows.
+
+    All writes use get_or_create so re-running on a populated DB is a no-op.
+    Existing rows are never modified; staff edits survive repeated calls.
+
+    Creates:
+    - AnimaConfig (pk=1)
+    - SoulfrayConfig (pk=1, resilience_check_type="Magical Endurance")
+    - ResonanceGainConfig (pk=1)
+    - CorruptionConfig (pk=1)
+    - IntensityTier rows: Minor (threshold=5), Moderate (threshold=10), Major (threshold=15)
+    - AudereThreshold (minimum_intensity_tier=Major, minimum_warp_stage=Soulfray "Ripping")
+    - MishapPoolTier (min_deficit=1, max_deficit=None) backed by a minimal ConsequencePool
+
+    Returns:
+        MagicConfigResult dataclass with all created/fetched instances.
+    """
+    from actions.models.consequence_pools import ConsequencePool  # noqa: PLC0415
+    from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
+    from world.magic.audere import AudereThreshold  # noqa: PLC0415
+    from world.magic.factories import SoulfrayContentFactory  # noqa: PLC0415
+    from world.magic.models import (  # noqa: PLC0415
+        AnimaConfig,
+        IntensityTier,
+        MishapPoolTier,
+        SoulfrayConfig,
+    )
+    from world.magic.models.corruption_config import CorruptionConfig  # noqa: PLC0415
+    from world.magic.models.gain_config import ResonanceGainConfig  # noqa: PLC0415
+
+    # --- AnimaConfig (has its own get_or_create helper) ---
+    anima_config = AnimaConfig.get_singleton()
+
+    # --- SoulfrayConfig (singleton, no get_or_create on factory) ---
+    # Use direct ORM rather than CheckTypeFactory: the factory's SubFactory
+    # generates a fresh CheckCategory on every call, making (name, category)
+    # novel and leaking an orphan CheckType row on each re-run.
+    magic_check_category, _ = CheckCategory.objects.get_or_create(name="Magic")
+    resilience_check_type, _ = CheckType.objects.get_or_create(
+        name="Magical Endurance",
+        defaults={"category": magic_check_category},
+    )
+    soulfray_config, _ = SoulfrayConfig.objects.get_or_create(
+        pk=1,
+        defaults={
+            "soulfray_threshold_ratio": Decimal("0.30"),
+            "severity_scale": 10,
+            "deficit_scale": 5,
+            "resilience_check_type": resilience_check_type,
+            "base_check_difficulty": 15,
+            "ritual_budget_critical_success": 10,
+            "ritual_budget_success": 6,
+            "ritual_budget_partial": 3,
+            "ritual_budget_failure": 1,
+            "ritual_severity_cost_per_point": 1,
+        },
+    )
+
+    # --- ResonanceGainConfig (pk=1) ---
+    resonance_gain_config, _ = ResonanceGainConfig.objects.get_or_create(pk=1, defaults={})
+
+    # --- CorruptionConfig (pk=1) ---
+    corruption_config, _ = CorruptionConfig.objects.get_or_create(pk=1, defaults={})
+
+    # --- IntensityTier reference rows ---
+    intensity_tiers: dict[str, IntensityTier] = {}
+    for tier_name, threshold, control_mod in _INTENSITY_TIERS:
+        tier, _ = IntensityTier.objects.get_or_create(
+            name=tier_name,
+            defaults={
+                "threshold": threshold,
+                "control_modifier": control_mod,
+                "description": f"{tier_name} intensity level.",
+            },
+        )
+        intensity_tiers[tier_name] = tier
+
+    major_tier = intensity_tiers["Major"]
+
+    # --- Soulfray condition + stages (needed for AudereThreshold.minimum_warp_stage) ---
+    # SoulfrayContentFactory() is idempotent — uses get_or_create internally.
+    soulfray_content = SoulfrayContentFactory()
+    ripping_stage = next(s for s in soulfray_content.stages if s.name == "Ripping")
+
+    # --- AudereThreshold (singleton, no get_or_create on factory) ---
+    audere_threshold, _ = AudereThreshold.objects.get_or_create(
+        pk=1,
+        defaults={
+            "minimum_intensity_tier": major_tier,
+            "minimum_warp_stage": ripping_stage,
+            "intensity_bonus": 20,
+            "anima_pool_bonus": 30,
+            "warp_multiplier": 2,
+        },
+    )
+
+    # --- MishapPoolTier: one catch-all tier (min_deficit=1, max_deficit=None) ---
+    mishap_pool, _ = ConsequencePool.objects.get_or_create(
+        name=_MISHAP_POOL_NAME,
+        defaults={"description": "Default pool for magic mishaps from control deficit."},
+    )
+    mishap_pool_tier, _ = MishapPoolTier.objects.get_or_create(
+        min_deficit=1,
+        max_deficit=None,
+        defaults={"consequence_pool": mishap_pool},
+    )
+
+    return MagicConfigResult(
+        anima_config=anima_config,
+        soulfray_config=soulfray_config,
+        resonance_gain_config=resonance_gain_config,
+        corruption_config=corruption_config,
+        audere_threshold=audere_threshold,
+        intensity_tiers=intensity_tiers,
+        mishap_pool_tier=mishap_pool_tier,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Task 1.2 — seed_canonical_rituals()
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RitualSeedResult:
+    """Returned by seed_canonical_rituals().
+
+    Wraps the canonical Rite of Imbuing and Rite of Atonement rituals.
+    Both are lazy-created via factory django_get_or_create on name,
+    so re-running preserves any edits to existing rows (idempotent).
+    """
+
+    rite_of_imbuing: Ritual
+    rite_of_atonement: Ritual
+
+
+def seed_canonical_rituals() -> RitualSeedResult:
+    """Lazy-create the two canonical rituals: Imbuing and Atonement.
+
+    Both factories use django_get_or_create(name=...) so re-running on a
+    populated DB is a no-op. Existing rows are never modified; staff edits
+    survive repeated calls.
+
+    Creates:
+    - Ritual: "Rite of Imbuing" (SERVICE dispatch to spend_resonance_for_imbuing)
+    - Ritual: "Rite of Atonement" (SERVICE dispatch to atonement service)
+
+    Returns:
+        RitualSeedResult dataclass with both ritual instances.
+    """
+    from world.magic.factories import (  # noqa: PLC0415
+        AtonementRitualFactory,
+        ImbuingRitualFactory,
+    )
+
+    imbuing = ImbuingRitualFactory()
+    atonement = AtonementRitualFactory()
+    return RitualSeedResult(rite_of_imbuing=imbuing, rite_of_atonement=atonement)
+
+
+# ---------------------------------------------------------------------------
+# Task 1.3 — seed_thread_pull_catalog()
+# ---------------------------------------------------------------------------
+
+#: Canonical resonance name for the thread pull catalog.
+#: Must not collide with names used by other seed helpers
+#: ("Wild Hunt", "Web of Spiders" are claimed by corruption content).
+_CATALOG_RESONANCE_NAME: str = "Tideborne"
+_CATALOG_AFFINITY_NAME: str = "Primal (Tideborne)"
+
+#: Per-tier pull cost definitions: (tier, resonance_cost, anima_per_thread, label)
+_PULL_COST_TIERS: list[tuple[int, int, int, str]] = [
+    (1, 1, 1, "soft"),
+    (2, 3, 2, "medium"),
+    (3, 6, 3, "hard"),
+]
+
+#: Canonical capability name for CAPABILITY_GRANT effect.
+_CATALOG_CAPABILITY_NAME: str = "endurance"
+
+
+@dataclass
+class ThreadPullCatalogResult:
+    """Returned by seed_thread_pull_catalog().
+
+    All rows are lazy-created via get_or_create. Re-running preserves any edits
+    to existing rows (idempotent).
+    """
+
+    pull_costs: dict[int, ThreadPullCost]  # tier → cost row
+    canonical_resonance: Resonance
+    pull_effects: dict[str, ThreadPullEffect]  # EffectKind value → effect row
+
+
+def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
+    """Lazy-create ThreadPullCost rows (tiers 1/2/3) and a 4-row ThreadPullEffect catalog.
+
+    All writes use get_or_create so re-running on a populated DB is a no-op.
+    Existing rows are never modified; staff edits survive repeated calls.
+
+    Creates:
+    - ThreadPullCost rows: tier 1 (soft), tier 2 (medium), tier 3 (hard)
+    - Affinity "Primal (Tideborne)" — shared affinity for the catalog resonance
+    - Resonance "Tideborne" — canonical reference resonance for the catalog
+    - CapabilityType "endurance" — used by the CAPABILITY_GRANT effect
+    - ThreadPullEffect rows:
+        - FLAT_BONUS (tier=1, min_thread_level=0, flat_bonus_amount=2)
+        - INTENSITY_BUMP (tier=2, min_thread_level=0, intensity_bump_amount=1)
+        - VITAL_BONUS (tier=0, min_thread_level=0, vital_bonus_amount=5, MAX_HEALTH)
+        - CAPABILITY_GRANT (tier=3, min_thread_level=5, capability=endurance)
+
+    Returns:
+        ThreadPullCatalogResult dataclass with all created/fetched instances.
+    """
+    from world.conditions.models import CapabilityType  # noqa: PLC0415
+    from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget  # noqa: PLC0415
+    from world.magic.factories import (  # noqa: PLC0415
+        AffinityFactory,
+        ResonanceFactory,
+        ThreadPullCostFactory,
+    )
+    from world.magic.models.threads import ThreadPullEffect  # noqa: PLC0415
+
+    # --- ThreadPullCost rows (tier is the natural key via django_get_or_create) ---
+    pull_costs: dict[int, ThreadPullCost] = {}
+    for tier, resonance_cost, anima_per_thread, label in _PULL_COST_TIERS:
+        cost = ThreadPullCostFactory(
+            tier=tier,
+            resonance_cost=resonance_cost,
+            anima_per_thread=anima_per_thread,
+            label=label,
+        )
+        pull_costs[tier] = cost
+
+    # --- Canonical resonance (both factory calls use django_get_or_create on name) ---
+    affinity = AffinityFactory(name=_CATALOG_AFFINITY_NAME)
+    resonance = ResonanceFactory(name=_CATALOG_RESONANCE_NAME, affinity=affinity)
+
+    # --- CapabilityType for CAPABILITY_GRANT (get_or_create on name) ---
+    capability, _ = CapabilityType.objects.get_or_create(
+        name=_CATALOG_CAPABILITY_NAME,
+        defaults={"description": "Endurance capability — used by thread pull catalog."},
+    )
+
+    # --- ThreadPullEffect rows (natural key: target_kind, resonance, tier, min_thread_level) ---
+    # Using direct ORM get_or_create per task spec to avoid non-idempotent factory calls.
+    pull_effects: dict[str, ThreadPullEffect] = {}
+
+    flat_bonus_effect, _ = ThreadPullEffect.objects.get_or_create(
+        target_kind=TargetKind.TRAIT,
+        resonance=resonance,
+        tier=1,
+        min_thread_level=0,
+        defaults={
+            "effect_kind": EffectKind.FLAT_BONUS,
+            "flat_bonus_amount": 2,
+        },
+    )
+    pull_effects[EffectKind.FLAT_BONUS] = flat_bonus_effect
+
+    intensity_bump_effect, _ = ThreadPullEffect.objects.get_or_create(
+        target_kind=TargetKind.TRAIT,
+        resonance=resonance,
+        tier=2,
+        min_thread_level=0,
+        defaults={
+            "effect_kind": EffectKind.INTENSITY_BUMP,
+            "intensity_bump_amount": 1,
+        },
+    )
+    pull_effects[EffectKind.INTENSITY_BUMP] = intensity_bump_effect
+
+    vital_bonus_effect, _ = ThreadPullEffect.objects.get_or_create(
+        target_kind=TargetKind.TRAIT,
+        resonance=resonance,
+        tier=0,
+        min_thread_level=0,
+        defaults={
+            "effect_kind": EffectKind.VITAL_BONUS,
+            "vital_bonus_amount": 5,
+            "vital_target": VitalBonusTarget.MAX_HEALTH,
+        },
+    )
+    pull_effects[EffectKind.VITAL_BONUS] = vital_bonus_effect
+
+    capability_grant_effect, _ = ThreadPullEffect.objects.get_or_create(
+        target_kind=TargetKind.TRAIT,
+        resonance=resonance,
+        tier=3,
+        min_thread_level=5,
+        defaults={
+            "effect_kind": EffectKind.CAPABILITY_GRANT,
+            "capability_grant": capability,
+        },
+    )
+    pull_effects[EffectKind.CAPABILITY_GRANT] = capability_grant_effect
+
+    return ThreadPullCatalogResult(
+        pull_costs=pull_costs,
+        canonical_resonance=resonance,
+        pull_effects=pull_effects,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Task 1.8 — seed_cantrip_starter_catalog()
+# ---------------------------------------------------------------------------
+#
+# 5×5 grid: 5 CantripArchetype values × 5 TechniqueStyle names = 25 cantrips.
+#
+# Style → PROSPECT Path mapping (per CLAUDE.md / magic CLAUDE.md):
+#   Manifestation → Path of Steel
+#   Subtle        → Path of Whispers
+#   Performance   → Path of Voice
+#   Prayer        → Path of the Chosen
+#   Incantation   → Path of Tomes
+#
+# Archetype → EffectType mapping:
+#   ATTACK  → Ranged Attack  (for Manifestation/Performance/Incantation)
+#             Weapon Enhancement (for Subtle/Prayer)
+#   DEFENSE → Defense
+#   BUFF    → Buff
+#   DEBUFF  → Debuff
+#   UTILITY → Utility
+#
+# Each (archetype, style) pair maps to exactly one cantrip with an evocative name.
+#
+
+#: 5 canonical PROSPECT paths, each with minimal required fields.
+#: (name, description)
+_PROSPECT_PATHS: list[tuple[str, str]] = [
+    ("Path of Steel", "Warriors who temper themselves through hardship and direct action."),
+    ("Path of Whispers", "Those who move unseen, trading in secrets and subtle influence."),
+    ("Path of Voice", "Performers whose magic resonates through song, story, and presence."),
+    ("Path of the Chosen", "Devotees bound to a higher power whose prayers shape reality."),
+    ("Path of Tomes", "Scholars who unlock magic through careful study and written lore."),
+]
+
+#: 5 canonical TechniqueStyle definitions (name, description) and their linked path name.
+_TECHNIQUE_STYLES: list[tuple[str, str, str]] = [
+    (
+        "Manifestation",
+        "Magic made tangible — raw elemental force given shape and weight.",
+        "Path of Steel",
+    ),
+    (
+        "Subtle",
+        "Magic woven into the fabric of things — invisible until it strikes.",
+        "Path of Whispers",
+    ),
+    (
+        "Performance",
+        "Magic amplified through art — voice, gesture, and presence as conduit.",
+        "Path of Voice",
+    ),
+    (
+        "Prayer",
+        "Magic granted by devotion — the higher power answers through the faithful.",
+        "Path of the Chosen",
+    ),
+    (
+        "Incantation",
+        "Magic encoded in language — formulae, glyphs, and spoken true names.",
+        "Path of Tomes",
+    ),
+]
+
+#: 6 canonical EffectType definitions (name, description, base_power, base_anima_cost).
+_EFFECT_TYPES: list[tuple[str, str, int | None, int]] = [
+    ("Weapon Enhancement", "Imbues a held weapon with magical force.", 10, 3),
+    ("Ranged Attack", "Projects destructive energy at a distant target.", 10, 3),
+    ("Buff", "Enhances the caster or an ally with a temporary magical boon.", None, 2),
+    ("Debuff", "Weakens or hampers a target with a magical affliction.", None, 2),
+    ("Defense", "Interposes magical protection between the caster and harm.", 8, 3),
+    ("Utility", "Produces a practical magical effect with no direct combat role.", None, 2),
+]
+
+# Mapping: (archetype_value, style_name) → (cantrip_name, description, effect_type_name)
+# 25 entries covering all 5×5 combinations.
+_CANTRIP_GRID: list[tuple[str, str, str, str, str]] = [
+    # (archetype, style, cantrip_name, description, effect_type)
+    # --- ATTACK ---
+    (
+        "attack",
+        "Manifestation",
+        "Burning Strike",
+        "A lance of raw fire conjured from personal will and hurled at the enemy.",
+        "Ranged Attack",
+    ),
+    (
+        "attack",
+        "Subtle",
+        "Shadow Blade",
+        "A blade wreathed in shadow strikes from an unexpected angle.",
+        "Weapon Enhancement",
+    ),
+    (
+        "attack",
+        "Performance",
+        "Shattering Chorus",
+        "A keening note tears through armor and resolve alike.",
+        "Ranged Attack",
+    ),
+    (
+        "attack",
+        "Prayer",
+        "Smiting Light",
+        "Holy radiance descends on the unworthy, burning like judgment.",
+        "Weapon Enhancement",
+    ),
+    (
+        "attack",
+        "Incantation",
+        "Force Sigil",
+        "A rune of impact is inscribed mid-air, detonating on contact.",
+        "Ranged Attack",
+    ),
+    # --- DEFENSE ---
+    (
+        "defense",
+        "Manifestation",
+        "Iron Skin",
+        "The caster's flesh hardens momentarily into something like cooled metal.",
+        "Defense",
+    ),
+    (
+        "defense",
+        "Subtle",
+        "Blur Step",
+        "Subtle distortions make the caster hard to track — blows glance aside.",
+        "Defense",
+    ),
+    (
+        "defense",
+        "Performance",
+        "Resonant Ward",
+        "A harmonious tone creates a shimmering barrier that absorbs incoming force.",
+        "Defense",
+    ),
+    (
+        "defense",
+        "Prayer",
+        "Sacred Ward",
+        "The devout invoke their patron's shelter; harm slides off like rain.",
+        "Defense",
+    ),
+    (
+        "defense",
+        "Incantation",
+        "Arcane Barrier",
+        "An inscribed ward springs up and deflects the next magical blow.",
+        "Defense",
+    ),
+    # --- BUFF ---
+    (
+        "buff",
+        "Manifestation",
+        "Surge",
+        "Raw vitality floods the target's limbs, sharpening reflexes for a moment.",
+        "Buff",
+    ),
+    (
+        "buff",
+        "Subtle",
+        "Unseen Edge",
+        "Whispered magic gifts the target preternatural awareness of threats.",
+        "Buff",
+    ),
+    (
+        "buff",
+        "Performance",
+        "Inspiring Refrain",
+        "A rousing melody lifts allies' spirits and sharpens their focus.",
+        "Buff",
+    ),
+    (
+        "buff",
+        "Prayer",
+        "Blessing of Strength",
+        "A murmured prayer calls down divine favor onto a willing recipient.",
+        "Buff",
+    ),
+    (
+        "buff",
+        "Incantation",
+        "Empowering Glyph",
+        "A brief formula inscribed on the target's skin grants temporary potency.",
+        "Buff",
+    ),
+    # --- DEBUFF ---
+    (
+        "debuff",
+        "Manifestation",
+        "Leaden Aura",
+        "Palpable magical weight presses down on the target, slowing movement.",
+        "Debuff",
+    ),
+    (
+        "debuff",
+        "Subtle",
+        "Doubt's Touch",
+        "A whisper in the mind erodes the target's certainty at a critical moment.",
+        "Debuff",
+    ),
+    (
+        "debuff",
+        "Performance",
+        "Discordant Note",
+        "A jarring sound disrupts the target's concentration and coordination.",
+        "Debuff",
+    ),
+    (
+        "debuff",
+        "Prayer",
+        "Mark of Penitence",
+        "The caster's deity marks the target, making all blows against them more telling.",
+        "Debuff",
+    ),
+    (
+        "debuff",
+        "Incantation",
+        "Unraveling Hex",
+        "A compact curse formula frays the target's magical and physical defenses.",
+        "Debuff",
+    ),
+    # --- UTILITY ---
+    (
+        "utility",
+        "Manifestation",
+        "Mending Touch",
+        "Elemental force knits broken objects or calms a raging fire with a touch.",
+        "Utility",
+    ),
+    (
+        "utility",
+        "Subtle",
+        "Silent Passage",
+        "The caster's presence dampens sound and scent — ideal for moving unseen.",
+        "Utility",
+    ),
+    (
+        "utility",
+        "Performance",
+        "Lullaby",
+        "A soft melody coaxes fatigue into the listener, easing them toward sleep.",
+        "Utility",
+    ),
+    (
+        "utility",
+        "Prayer",
+        "Gentle Mending",
+        "A prayer of restoration closes minor wounds and soothes pain.",
+        "Utility",
+    ),
+    (
+        "utility",
+        "Incantation",
+        "Light Script",
+        "A luminous glyph provides clean magical light until dismissed.",
+        "Utility",
+    ),
+]
+
+
+@dataclass
+class CantripStarterCatalogResult:
+    """Returned by seed_cantrip_starter_catalog().
+
+    Covers the 5×5 grid of archetypes × styles.  All rows are lazy-created via
+    get_or_create so re-running on a populated DB is a no-op; staff edits survive.
+    """
+
+    styles: dict[str, TechniqueStyle]  # style_name → TechniqueStyle
+    effect_types: dict[str, EffectType]  # effect_type_name → EffectType
+    cantrips: dict[str, Cantrip]  # cantrip_name → Cantrip
+    paths: dict[str, Path]  # path_name → Path (the 5 PROSPECT paths)
+
+
+def seed_cantrip_starter_catalog() -> CantripStarterCatalogResult:
+    """Lazy-create the cantrip starter catalog: 5 styles × 5 archetypes = 25 cantrips.
+
+    All writes use get_or_create so re-running on a populated DB is a no-op.
+    Existing rows are never modified; staff edits survive repeated calls.
+
+    5×5 archetype × style grid
+    ─────────────────────────────────────────────────────────────────────────
+    Style         Path              Archetype coverage
+    ─────────────────────────────────────────────────────────────────────────
+    Manifestation Path of Steel     attack, defense, buff, debuff, utility
+    Subtle        Path of Whispers  attack, defense, buff, debuff, utility
+    Performance   Path of Voice     attack, defense, buff, debuff, utility
+    Prayer        Path of Chosen    attack, defense, buff, debuff, utility
+    Incantation   Path of Tomes     attack, defense, buff, debuff, utility
+    ─────────────────────────────────────────────────────────────────────────
+
+    Creates:
+    - 5 Path rows (PROSPECT stage) — one per style, idempotent on name
+    - 5 TechniqueStyle rows — wired to their corresponding Path via allowed_paths M2M
+    - 6 EffectType rows — Weapon Enhancement, Ranged Attack, Buff, Debuff, Defense, Utility
+    - 25 Cantrip rows — one per (archetype, style) pair, idempotent on name
+
+    Returns:
+        CantripStarterCatalogResult with all created/fetched instances.
+    """
+    from world.classes.models import Path, PathStage  # noqa: PLC0415
+    from world.magic.constants import CantripArchetype  # noqa: PLC0415
+    from world.magic.models import EffectType, TechniqueStyle  # noqa: PLC0415
+    from world.magic.models.cantrips import Cantrip  # noqa: PLC0415
+
+    # --- PROSPECT Paths (idempotent on name) ---
+    paths: dict[str, Path] = {}
+    for path_name, path_description in _PROSPECT_PATHS:
+        path, _ = Path.objects.get_or_create(
+            name=path_name,
+            defaults={
+                "description": path_description,
+                "stage": PathStage.PROSPECT,
+                "minimum_level": 1,
+                "is_active": True,
+                "sort_order": 0,
+            },
+        )
+        paths[path_name] = path
+
+    # --- TechniqueStyle rows + M2M wiring (idempotent on name) ---
+    styles: dict[str, TechniqueStyle] = {}
+    for style_name, style_description, linked_path_name in _TECHNIQUE_STYLES:
+        style, _ = TechniqueStyle.objects.get_or_create(
+            name=style_name,
+            defaults={"description": style_description},
+        )
+        # Wire the path into allowed_paths if not already linked (M2M add is idempotent)
+        linked_path = paths[linked_path_name]
+        style.allowed_paths.add(linked_path)
+        styles[style_name] = style
+
+    # --- EffectType rows (idempotent on name) ---
+    effect_types: dict[str, EffectType] = {}
+    for et_name, et_description, base_power, base_anima_cost in _EFFECT_TYPES:
+        has_scaling = base_power is not None
+        et, _ = EffectType.objects.get_or_create(
+            name=et_name,
+            defaults={
+                "description": et_description,
+                "base_power": base_power,
+                "base_anima_cost": base_anima_cost,
+                "has_power_scaling": has_scaling,
+            },
+        )
+        effect_types[et_name] = et
+
+    # --- Cantrip rows (idempotent on name) ---
+    # Validate all archetype values exist in CantripArchetype
+    valid_archetypes = {choice.value for choice in CantripArchetype}
+    cantrips: dict[str, Cantrip] = {}
+    for sort_idx, (archetype_value, style_name, cantrip_name, description, et_name) in enumerate(
+        _CANTRIP_GRID
+    ):
+        if archetype_value not in valid_archetypes:
+            msg = f"Invalid archetype '{archetype_value}' in _CANTRIP_GRID"
+            raise ValueError(msg)
+        cantrip, _ = Cantrip.objects.get_or_create(
+            name=cantrip_name,
+            defaults={
+                "description": description,
+                "archetype": archetype_value,
+                "effect_type": effect_types[et_name],
+                "style": styles[style_name],
+                "base_intensity": 1,
+                "base_control": 1,
+                "base_anima_cost": 5,
+                "requires_facet": False,
+                "is_active": True,
+                "sort_order": sort_idx,
+            },
+        )
+        cantrips[cantrip_name] = cantrip
+
+    return CantripStarterCatalogResult(
+        styles=styles,
+        effect_types=effect_types,
+        cantrips=cantrips,
+        paths=paths,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Task 1.9 — seed_magic_dev()
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class MagicDevSeedResult:
+    """Returned by seed_magic_dev().
+
+    Composes all Phase 1 seed results into one dataclass.
+    ``author_reference_corruption_content()`` returns None so it is not
+    represented here; callers can query Wild Hunt / Web of Spiders rows directly.
+    """
+
+    config: MagicConfigResult
+    rituals: RitualSeedResult
+    thread_pull_catalog: ThreadPullCatalogResult
+    cantrip_catalog: CantripStarterCatalogResult
+    magic_content: MagicContentResult
+
+
+def seed_magic_dev() -> MagicDevSeedResult:
+    """Seed the entire magic cluster in one idempotent call.
+
+    Composes all Phase 1 seed helpers:
+
+    1. ``seed_magic_config()`` — AnimaConfig, SoulfrayConfig, ResonanceGainConfig,
+       CorruptionConfig, AudereThreshold, IntensityTier × 3, MishapPoolTier
+    2. ``seed_canonical_rituals()`` — Rite of Imbuing, Rite of Atonement
+    3. ``seed_thread_pull_catalog()`` — ThreadPullCost × 3, ThreadPullEffect × 4,
+       canonical Tideborne resonance
+    4. ``seed_cantrip_starter_catalog()`` — 5 TechniqueStyle, 6 EffectType,
+       25 Cantrip, 5 PROSPECT Path rows
+    5. ``author_reference_corruption_content()`` — Wild Hunt (Primal) + Web of
+       Spiders (Abyssal) Corruption ConditionTemplates + CORRUPTION_TWIST entries
+    6. ``MagicContent.create_all()`` — 6 social action Techniques + 6
+       ActionEnhancements
+
+    All writes are idempotent (get_or_create throughout). Re-running on a
+    populated database is a no-op; staff edits to existing rows are preserved.
+
+    Returns:
+        MagicDevSeedResult composing all sub-results.
+    """
+    from world.magic.factories import author_reference_corruption_content  # noqa: PLC0415
+
+    config = seed_magic_config()
+    rituals = seed_canonical_rituals()
+    thread_pull_catalog = seed_thread_pull_catalog()
+    cantrip_catalog = seed_cantrip_starter_catalog()
+    author_reference_corruption_content()
+    magic_content = MagicContent.create_all()
+
+    return MagicDevSeedResult(
+        config=config,
+        rituals=rituals,
+        thread_pull_catalog=thread_pull_catalog,
+        cantrip_catalog=cantrip_catalog,
+        magic_content=magic_content,
+    )
