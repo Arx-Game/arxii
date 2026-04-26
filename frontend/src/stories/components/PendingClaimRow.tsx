@@ -1,12 +1,14 @@
 /**
  * PendingClaimRow — single row for a pending AGM claim in GMQueuePage.
  *
- * Read-only for Wave 5. Action UIs (approve / reject) come in Wave 6.
+ * Wave 6: adds Approve and Reject action dialogs.
  */
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatRelativeTime } from '@/lib/relativeTime';
+import { ApproveClaimDialog } from './ApproveClaimDialog';
+import { RejectClaimDialog } from './RejectClaimDialog';
 import type { GMQueuePendingClaim } from '../types';
 
 interface PendingClaimRowProps {
@@ -38,6 +40,11 @@ export function PendingClaimRow({ claim }: PendingClaimRowProps) {
         <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
           <span>AGM #{claim.assistant_gm_id}</span>
           <span>Requested {formatRelativeTime(claim.requested_at)}</span>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <ApproveClaimDialog claim={claim} />
+          <RejectClaimDialog claim={claim} />
         </div>
       </CardContent>
     </Card>

@@ -1,12 +1,14 @@
 /**
  * AssignedSessionRequestRow — single row for an assigned session request in GMQueuePage.
  *
- * Read-only for Wave 5. Action UIs (schedule, cancel, resolve) come in Wave 6.
+ * Wave 6: OPEN requests show the "Schedule" action dialog; SCHEDULED requests
+ * show a "View Event" link.
  */
 
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ScheduleEventDialog } from './ScheduleEventDialog';
 import type { GMQueueAssignedRequest } from '../types';
 
 interface AssignedSessionRequestRowProps {
@@ -35,16 +37,17 @@ export function AssignedSessionRequestRow({ request }: AssignedSessionRequestRow
 
         <p className="mt-1 text-sm text-muted-foreground">{request.episode_title}</p>
 
-        {request.event_id !== null && (
-          <div className="mt-2">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          {request.status === 'open' && <ScheduleEventDialog request={request} />}
+          {request.event_id !== null && (
             <Link
               to={`/events/${request.event_id}`}
               className="text-sm font-medium text-primary underline-offset-4 hover:underline"
             >
               View event
             </Link>
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
     </Card>
   );
