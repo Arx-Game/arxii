@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { useRosterEntryQuery } from '../queries';
+import { useRosterEntryQuery, useMyRosterEntriesQuery } from '../queries';
 import {
   CharacterPortrait,
   BackgroundSection,
@@ -8,11 +8,16 @@ import {
   GalleriesSection,
   CharacterApplicationForm,
 } from '@/components/character';
+import { MessagesSection } from '@/narrative/components/MessagesSection';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
   const entryId = Number(id);
   const { data: entry, isLoading } = useRosterEntryQuery(entryId);
+  const { data: myEntries } = useMyRosterEntriesQuery();
+
+  // Show messages section only when the viewing user owns this character.
+  const isMyCharacter = myEntries?.some((e) => e.id === entryId) ?? false;
 
   if (isLoading) return <p className="p-4">Loading...</p>;
   if (!entry) return <p className="p-4">Character not found.</p>;
@@ -47,6 +52,11 @@ export function CharacterSheetPage() {
       <RelationshipsSection relationships={entry.character.relationships} />
       <GalleriesSection galleries={entry.character.galleries} />
       {entry.can_apply && <CharacterApplicationForm entryId={entry.id} />}
+      {isMyCharacter && (
+        <div id="messages">
+          <MessagesSection />
+        </div>
+      )}
     </div>
   );
 }
