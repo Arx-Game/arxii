@@ -7,7 +7,34 @@
  * together (Phase 4+).
  *
  * Uses apiFetch from @/evennia_replacements/api and BASE_URL = '/api/narrative'.
- * Functions added in Wave 1 (Task 1.1).
  */
 
-export {};
+import { apiFetch } from '@/evennia_replacements/api';
+import type { MyMessagesQueryParams, NarrativeMessageDelivery, PaginatedDeliveries } from './types';
+
+const BASE_URL = '/api/narrative';
+
+export async function getMyMessages(params?: MyMessagesQueryParams): Promise<PaginatedDeliveries> {
+  const search = new URLSearchParams();
+  if (params?.category) search.set('category', params.category);
+  if (params?.acknowledged !== undefined) {
+    search.set('acknowledged', String(params.acknowledged));
+  }
+  if (params?.page) search.set('page', String(params.page));
+  const qs = search.toString();
+  const res = await apiFetch(`${BASE_URL}/my-messages/${qs ? `?${qs}` : ''}`);
+  if (!res.ok) {
+    throw new Error('Failed to load narrative messages');
+  }
+  return res.json() as Promise<PaginatedDeliveries>;
+}
+
+export async function acknowledgeDelivery(deliveryId: number): Promise<NarrativeMessageDelivery> {
+  const res = await apiFetch(`${BASE_URL}/deliveries/${deliveryId}/acknowledge/`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    throw new Error('Failed to acknowledge message');
+  }
+  return res.json() as Promise<NarrativeMessageDelivery>;
+}
