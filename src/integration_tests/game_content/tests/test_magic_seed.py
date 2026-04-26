@@ -662,3 +662,259 @@ class TestSeedCantripStarterCatalogPreservesEdits(TestCase):
             "staff-edited description",
             "seed_cantrip_starter_catalog() must not overwrite existing rows",
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 1.9 — seed_magic_dev() orchestrator
+# ---------------------------------------------------------------------------
+
+
+class TestSeedMagicDevCheckTypeConvergence(TestCase):
+    """TDD: guard for _make_magical_endurance_check_type() orphan bug.
+
+    This test is written BEFORE the fix so it fails first, confirming the bug,
+    then passes after the fix is applied.
+    """
+
+    def test_check_type_convergence(self) -> None:
+        """Exactly 1 CheckType named 'Magical Endurance' after orchestrator runs.
+
+        Before the fix, author_reference_corruption_content() calls
+        _make_magical_endurance_check_type() which uses CheckTypeFactory with a
+        fresh CheckCategory SubFactory — creating an orphan row on each call.
+        seed_magic_config() independently creates the canonical row via direct ORM.
+        Running both produces 2 CheckType rows.  After the fix, both helpers
+        converge on the same (name='Magical Endurance', category__name='Magic') row.
+        """
+        from integration_tests.game_content.magic import seed_magic_dev
+        from world.checks.models import CheckCategory, CheckType
+
+        seed_magic_dev()
+
+        self.assertEqual(
+            CheckType.objects.filter(name="Magical Endurance").count(),
+            1,
+            "seed_magic_dev() must produce exactly 1 CheckType named 'Magical Endurance'",
+        )
+        self.assertEqual(
+            CheckCategory.objects.filter(name="Magic").count(),
+            1,
+            "seed_magic_dev() must produce exactly 1 CheckCategory named 'Magic'",
+        )
+
+
+class TestSeedMagicDevTechniqueIdempotency(TestCase):
+    """TDD: guard for MagicContent.create_all() duplicate Technique bug.
+
+    This test is written BEFORE the fix so it fails first, confirming the bug,
+    then passes after MagicContent.create_all() switches to get_or_create.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from integration_tests.game_content.magic import seed_magic_dev
+
+        # Two calls — if create_all() is not idempotent, techniques double
+        seed_magic_dev()
+        seed_magic_dev()
+
+    def test_social_techniques_exist_exactly_once(self) -> None:
+        """Each of the 6 social action techniques must appear exactly once."""
+        from integration_tests.game_content.magic import ACTION_TECHNIQUE_MAP
+        from world.magic.models import Technique
+
+        for action_key, technique_name in ACTION_TECHNIQUE_MAP.items():
+            with self.subTest(technique=technique_name):
+                self.assertEqual(
+                    Technique.objects.filter(name=technique_name).count(),
+                    1,
+                    f"Technique '{technique_name}' must exist exactly once after two "
+                    f"seed_magic_dev() calls (action_key={action_key!r})",
+                )
+
+    def test_action_enhancements_exist_exactly_once(self) -> None:
+        """Each of the 6 ActionEnhancement rows must appear exactly once."""
+        from actions.models import ActionEnhancement
+        from integration_tests.game_content.magic import ACTION_TECHNIQUE_MAP
+
+        for action_key in ACTION_TECHNIQUE_MAP:
+            with self.subTest(action_key=action_key):
+                self.assertEqual(
+                    ActionEnhancement.objects.filter(base_action_key=action_key).count(),
+                    1,
+                    f"ActionEnhancement for '{action_key}' must exist exactly once after two "
+                    f"seed_magic_dev() calls",
+                )
+
+
+class TestSeedMagicDev(TestCase):
+    """Verify the master orchestrator composes all Phase 1 seed helpers."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from integration_tests.game_content.magic import seed_magic_dev
+
+        cls.first = seed_magic_dev()
+        cls.second = seed_magic_dev()
+
+    def test_first_call_creates_all_components(self) -> None:
+        """Spot-check: at least one of every authored row family exists."""
+        from world.checks.models import CheckType
+        from world.classes.models import Path
+        from world.conditions.models import ConditionTemplate
+        from world.magic.audere import AudereThreshold
+        from world.magic.models import (
+            AnimaConfig,
+            EffectType,
+            IntensityTier,
+            MishapPoolTier,
+            Ritual,
+            SoulfrayConfig,
+            Technique,
+            TechniqueStyle,
+        )
+        from world.magic.models.cantrips import Cantrip
+        from world.magic.models.corruption_config import CorruptionConfig
+        from world.magic.models.gain_config import ResonanceGainConfig
+        from world.magic.models.threads import ThreadPullCost, ThreadPullEffect
+
+        # --- Task 1.1: config singletons ---
+        self.assertEqual(AnimaConfig.objects.count(), 1)
+        self.assertEqual(SoulfrayConfig.objects.count(), 1)
+        self.assertEqual(ResonanceGainConfig.objects.count(), 1)
+        self.assertEqual(CorruptionConfig.objects.count(), 1)
+        self.assertEqual(AudereThreshold.objects.count(), 1)
+        self.assertGreaterEqual(IntensityTier.objects.count(), 3)
+        self.assertEqual(MishapPoolTier.objects.count(), 1)
+
+        # --- Task 1.2: canonical rituals ---
+        self.assertTrue(Ritual.objects.filter(name="Rite of Imbuing").exists())
+        self.assertTrue(Ritual.objects.filter(name="Rite of Atonement").exists())
+
+        # --- Task 1.3: thread pull catalog ---
+        self.assertEqual(ThreadPullCost.objects.count(), 3)
+        self.assertEqual(ThreadPullEffect.objects.count(), 4)
+
+        # --- Task 1.8: cantrip catalog ---
+        # TechniqueStyle: 5 from cantrip catalog + 1 "Social" from MagicContent.create_all()
+        self.assertGreaterEqual(TechniqueStyle.objects.count(), 5)
+        self.assertTrue(
+            TechniqueStyle.objects.filter(
+                name__in={"Manifestation", "Subtle", "Performance", "Prayer", "Incantation"}
+            ).count()
+            == 5,
+            "All 5 cantrip-catalog styles must exist",
+        )
+        # EffectType: 6 from cantrip catalog + 1 "Social Influence" from MagicContent.create_all()
+        self.assertGreaterEqual(EffectType.objects.count(), 6)
+        self.assertEqual(Cantrip.objects.count(), 25)
+        self.assertEqual(Path.objects.filter(name__startswith="Path of").count(), 5)
+
+        # --- author_reference_corruption_content: Wild Hunt + Web of Spiders ---
+        self.assertTrue(
+            ConditionTemplate.objects.filter(name__icontains="Wild Hunt").exists(),
+            "Wild Hunt Corruption ConditionTemplate must exist",
+        )
+        self.assertTrue(
+            ConditionTemplate.objects.filter(name__icontains="Web of Spiders").exists(),
+            "Web of Spiders Corruption ConditionTemplate must exist",
+        )
+
+        # --- MagicContent.create_all(): 6 social techniques ---
+        from integration_tests.game_content.magic import ACTION_TECHNIQUE_MAP
+
+        for technique_name in ACTION_TECHNIQUE_MAP.values():
+            self.assertTrue(
+                Technique.objects.filter(name=technique_name).exists(),
+                f"Social technique '{technique_name}' must exist",
+            )
+
+        # --- CheckType canonical row (convergence guard) ---
+        self.assertEqual(CheckType.objects.filter(name="Magical Endurance").count(), 1)
+
+    def test_idempotent_full_run(self) -> None:
+        """Row counts must not change on a third call."""
+        from actions.models import ActionEnhancement
+        from world.checks.models import CheckCategory, CheckType
+        from world.classes.models import Path
+        from world.conditions.models import ConditionTemplate
+        from world.magic.audere import AudereThreshold
+        from world.magic.models import (
+            AnimaConfig,
+            EffectType,
+            IntensityTier,
+            MishapPoolTier,
+            Ritual,
+            SoulfrayConfig,
+            Technique,
+            TechniqueStyle,
+        )
+        from world.magic.models.cantrips import Cantrip
+        from world.magic.models.corruption_config import CorruptionConfig
+        from world.magic.models.gain_config import ResonanceGainConfig
+        from world.magic.models.threads import ThreadPullCost, ThreadPullEffect
+
+        def _snapshot() -> dict[str, int]:
+            return {
+                "anima_config": AnimaConfig.objects.count(),
+                "soulfray_config": SoulfrayConfig.objects.count(),
+                "resonance_gain_config": ResonanceGainConfig.objects.count(),
+                "corruption_config": CorruptionConfig.objects.count(),
+                "audere_threshold": AudereThreshold.objects.count(),
+                "intensity_tiers": IntensityTier.objects.count(),
+                "mishap_pool_tiers": MishapPoolTier.objects.count(),
+                "rituals": Ritual.objects.count(),
+                "thread_pull_costs": ThreadPullCost.objects.count(),
+                "thread_pull_effects": ThreadPullEffect.objects.count(),
+                "technique_styles": TechniqueStyle.objects.count(),
+                "effect_types": EffectType.objects.count(),
+                "cantrips": Cantrip.objects.count(),
+                "paths": Path.objects.count(),
+                "condition_templates": ConditionTemplate.objects.count(),
+                "techniques": Technique.objects.count(),
+                "action_enhancements": ActionEnhancement.objects.count(),
+                "check_types": CheckType.objects.count(),
+                "check_categories": CheckCategory.objects.count(),
+            }
+
+        from integration_tests.game_content.magic import seed_magic_dev
+
+        before = _snapshot()
+        seed_magic_dev()
+        after = _snapshot()
+
+        for model_name, count_before in before.items():
+            with self.subTest(model=model_name):
+                self.assertEqual(
+                    after[model_name],
+                    count_before,
+                    f"{model_name}: row count changed from {count_before} to "
+                    f"{after[model_name]} on third seed_magic_dev() call",
+                )
+
+    def test_check_type_convergence(self) -> None:
+        """Exactly 1 CheckType named 'Magical Endurance' after two orchestrator calls."""
+        from world.checks.models import CheckCategory, CheckType
+
+        self.assertEqual(
+            CheckType.objects.filter(name="Magical Endurance").count(),
+            1,
+        )
+        self.assertEqual(
+            CheckCategory.objects.filter(name="Magic").count(),
+            1,
+        )
+
+    def test_technique_idempotency_via_magic_content(self) -> None:
+        """The 6 social techniques must exist exactly once after two orchestrator calls."""
+        from integration_tests.game_content.magic import ACTION_TECHNIQUE_MAP
+        from world.magic.models import Technique
+
+        for action_key, technique_name in ACTION_TECHNIQUE_MAP.items():
+            with self.subTest(technique=technique_name):
+                self.assertEqual(
+                    Technique.objects.filter(name=technique_name).count(),
+                    1,
+                    f"Technique '{technique_name}' (action_key={action_key!r}) must exist "
+                    f"exactly once after two seed_magic_dev() calls",
+                )

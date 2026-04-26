@@ -1203,10 +1203,21 @@ _ABYSSAL_AFFINITY_NAME: str = "abyssal"
 
 
 def _make_magical_endurance_check_type():
-    """Return a 'Magical Endurance' CheckType, creating it if absent."""
-    from world.checks.factories import CheckTypeFactory
+    """Return the canonical 'Magical Endurance' CheckType, creating it if absent.
 
-    return CheckTypeFactory(name="Magical Endurance")
+    Uses direct ORM get_or_create so the call is idempotent and converges with
+    the row authored by seed_magic_config().  The old CheckTypeFactory approach
+    created a fresh CheckCategory SubFactory on every call, making the
+    (name, category) natural key novel each time and leaking orphan CheckType rows.
+    """
+    from world.checks.models import CheckCategory, CheckType
+
+    magic_cat, _ = CheckCategory.objects.get_or_create(name="Magic")
+    check_type, _ = CheckType.objects.get_or_create(
+        name="Magical Endurance",
+        defaults={"category": magic_cat},
+    )
+    return check_type
 
 
 class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):

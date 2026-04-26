@@ -1,4 +1,15 @@
-"""Magic test-infrastructure: MagicContent (technique content) and seed_magic_config()."""
+"""Magic test-infrastructure: seed helpers and MagicContent.
+
+Exports:
+- ``seed_magic_dev()`` — master orchestrator for the entire magic cluster.
+  Composes all Phase 1 seed helpers into a single idempotent call. This is
+  the magic-cluster contribution to Phase 3's ``seed_dev_database()``.
+- ``seed_magic_config()`` — Task 1.1 — singletons + IntensityTier + MishapPoolTier
+- ``seed_canonical_rituals()`` — Task 1.2 — Rite of Imbuing + Rite of Atonement
+- ``seed_thread_pull_catalog()`` — Task 1.3 — ThreadPullCost + ThreadPullEffect catalog
+- ``seed_cantrip_starter_catalog()`` — Task 1.8 — 5 styles × 5 archetypes = 25 cantrips
+- ``MagicContent`` — static factory helpers for integration-test technique wiring
+"""
 
 from __future__ import annotations
 
@@ -102,34 +113,67 @@ class MagicContent:
         The social safety bonus adds +10 control for unengaged characters, giving
         control_delta=10 and effective_cost = max(12 - 10, 0) = 2 per use.
 
+        Idempotent: uses get_or_create on technique name and on
+        (base_action_key, technique) for enhancements, so calling this method
+        twice produces exactly 6 techniques and 6 enhancements.
+
         Safe to call from setUpTestData across multiple test classes.
 
         Returns:
             MagicContentResult with techniques and enhancements dicts.
         """
         from actions.constants import EnhancementSourceType  # noqa: PLC0415
-        from actions.factories import ActionEnhancementFactory  # noqa: PLC0415
-        from world.magic.factories import GiftFactory, TechniqueFactory  # noqa: PLC0415
+        from actions.models import ActionEnhancement  # noqa: PLC0415
+        from world.magic.factories import GiftFactory  # noqa: PLC0415
+        from world.magic.models import EffectType, Technique, TechniqueStyle  # noqa: PLC0415
 
         gift = GiftFactory(name="Social Arts")
+
+        # Ensure a minimal style and effect_type exist for social techniques.
+        # get_or_create so re-runs don't create duplicates.
+        style, _ = TechniqueStyle.objects.get_or_create(
+            name="Social",
+            defaults={"description": "Magic expressed through social interaction."},
+        )
+        effect_type, _ = EffectType.objects.get_or_create(
+            name="Social Influence",
+            defaults={
+                "description": "Magical enhancement of social action.",
+                "base_power": None,
+                "base_anima_cost": 2,
+                "has_power_scaling": False,
+            },
+        )
+
         techniques: dict[str, Technique] = {}
         enhancements: dict[str, ActionEnhancement] = {}
 
         for action_key, technique_name in ACTION_TECHNIQUE_MAP.items():
-            technique = TechniqueFactory(
+            technique, _ = Technique.objects.get_or_create(
                 name=technique_name,
-                gift=gift,
-                intensity=2,
-                control=2,
-                anima_cost=12,
+                defaults={
+                    "gift": gift,
+                    "style": style,
+                    "effect_type": effect_type,
+                    "intensity": 2,
+                    "control": 2,
+                    "anima_cost": 12,
+                    "description": f"Social magic technique: {technique_name}.",
+                },
             )
             techniques[action_key] = technique
 
-            enhancement = ActionEnhancementFactory(
+            variant_name = f"Magical {action_key.title()}"
+            enhancement, _ = ActionEnhancement.objects.get_or_create(
                 base_action_key=action_key,
-                variant_name=f"Magical {action_key.title()}",
-                source_type=EnhancementSourceType.TECHNIQUE,
                 technique=technique,
+                defaults={
+                    "variant_name": variant_name,
+                    "is_involuntary": False,
+                    "source_type": EnhancementSourceType.TECHNIQUE,
+                    "distinction": None,
+                    "condition": None,
+                },
             )
             enhancements[action_key] = enhancement
 
@@ -1123,4 +1167,66 @@ def seed_cantrip_starter_catalog() -> CantripStarterCatalogResult:
         effect_types=effect_types,
         cantrips=cantrips,
         paths=paths,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Task 1.9 — seed_magic_dev()
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class MagicDevSeedResult:
+    """Returned by seed_magic_dev().
+
+    Composes all Phase 1 seed results into one dataclass.
+    ``author_reference_corruption_content()`` returns None so it is not
+    represented here; callers can query Wild Hunt / Web of Spiders rows directly.
+    """
+
+    config: MagicConfigResult
+    rituals: RitualSeedResult
+    thread_pull_catalog: ThreadPullCatalogResult
+    cantrip_catalog: CantripStarterCatalogResult
+    magic_content: MagicContentResult
+
+
+def seed_magic_dev() -> MagicDevSeedResult:
+    """Seed the entire magic cluster in one idempotent call.
+
+    Composes all Phase 1 seed helpers:
+
+    1. ``seed_magic_config()`` — AnimaConfig, SoulfrayConfig, ResonanceGainConfig,
+       CorruptionConfig, AudereThreshold, IntensityTier × 3, MishapPoolTier
+    2. ``seed_canonical_rituals()`` — Rite of Imbuing, Rite of Atonement
+    3. ``seed_thread_pull_catalog()`` — ThreadPullCost × 3, ThreadPullEffect × 4,
+       canonical Tideborne resonance
+    4. ``seed_cantrip_starter_catalog()`` — 5 TechniqueStyle, 6 EffectType,
+       25 Cantrip, 5 PROSPECT Path rows
+    5. ``author_reference_corruption_content()`` — Wild Hunt (Primal) + Web of
+       Spiders (Abyssal) Corruption ConditionTemplates + CORRUPTION_TWIST entries
+    6. ``MagicContent.create_all()`` — 6 social action Techniques + 6
+       ActionEnhancements
+
+    All writes are idempotent (get_or_create throughout). Re-running on a
+    populated database is a no-op; staff edits to existing rows are preserved.
+
+    Returns:
+        MagicDevSeedResult composing all sub-results.
+    """
+    from world.magic.factories import author_reference_corruption_content  # noqa: PLC0415
+
+    config = seed_magic_config()
+    rituals = seed_canonical_rituals()
+    thread_pull_catalog = seed_thread_pull_catalog()
+    cantrip_catalog = seed_cantrip_starter_catalog()
+    author_reference_corruption_content()
+    magic_content = MagicContent.create_all()
+
+    return MagicDevSeedResult(
+        config=config,
+        rituals=rituals,
+        thread_pull_catalog=thread_pull_catalog,
+        cantrip_catalog=cantrip_catalog,
+        magic_content=magic_content,
     )
