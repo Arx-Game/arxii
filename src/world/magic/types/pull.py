@@ -43,7 +43,7 @@ class ResolvedPullEffect:
     kind: str
     authored_value: int | None
     level_multiplier: int
-    scaled_value: int
+    scaled_value: int | None
     vital_target: str | None
     source_thread: Thread
     source_thread_level: int

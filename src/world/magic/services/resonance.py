@@ -305,7 +305,15 @@ def resolve_pull_effects(
                 authored = (
                     row.flat_bonus_amount or row.intensity_bump_amount or row.vital_bonus_amount
                 )
-                base_scaled = (authored or 0) * multiplier
+                # CAPABILITY_GRANT and NARRATIVE_ONLY have no numeric payload;
+                # their scaled_value must be None (DB CheckConstraint forbids 0).
+                has_numeric_payload = row.effect_kind not in (
+                    EffectKind.CAPABILITY_GRANT,
+                    EffectKind.NARRATIVE_ONLY,
+                )
+                base_scaled: int | None = (
+                    (authored or 0) * multiplier if has_numeric_payload else None
+                )
                 inactive = row.effect_kind == EffectKind.VITAL_BONUS and not in_combat
                 resolved.append(
                     ResolvedPullEffect(
