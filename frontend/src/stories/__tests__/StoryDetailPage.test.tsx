@@ -17,6 +17,8 @@ vi.mock('../queries', () => ({
   useBeatList: vi.fn(),
   useAggregateBeatContributions: vi.fn(),
   useStoryLog: vi.fn(),
+  useSessionRequest: vi.fn(),
+  useContributeToBeat: vi.fn(),
 }));
 
 import * as queries from '../queries';
@@ -146,6 +148,32 @@ function setupMocks(
     isSuccess: true,
     error: null,
   } as unknown as ReturnType<typeof queries.useStoryLog>);
+
+  vi.mocked(queries.useSessionRequest).mockReturnValue({
+    data: undefined,
+    isLoading: false,
+    isSuccess: false,
+    error: null,
+  } as unknown as ReturnType<typeof queries.useSessionRequest>);
+
+  vi.mocked(queries.useContributeToBeat).mockReturnValue({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(),
+    isPending: false,
+    isSuccess: false,
+    isError: false,
+    isIdle: true,
+    error: null,
+    data: undefined,
+    variables: undefined,
+    status: 'idle',
+    reset: vi.fn(),
+    context: undefined,
+    failureCount: 0,
+    failureReason: null,
+    isPaused: false,
+    submittedAt: 0,
+  } as unknown as ReturnType<typeof queries.useContributeToBeat>);
 }
 
 // ---------------------------------------------------------------------------

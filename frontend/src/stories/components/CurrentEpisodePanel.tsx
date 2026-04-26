@@ -8,9 +8,14 @@ import { BeatList } from './BeatList';
 
 interface CurrentEpisodePanelProps {
   episodeId: number;
+  /**
+   * Character sheet ID forwarded to BeatList for the contribute action.
+   * Pass story.character_sheet for CHARACTER-scope stories.
+   */
+  characterSheetId?: number | null;
 }
 
-export function CurrentEpisodePanel({ episodeId }: CurrentEpisodePanelProps) {
+export function CurrentEpisodePanel({ episodeId, characterSheetId }: CurrentEpisodePanelProps) {
   const { data: episode, isLoading } = useEpisode(episodeId);
 
   if (isLoading) {
@@ -45,7 +50,7 @@ export function CurrentEpisodePanel({ episodeId }: CurrentEpisodePanelProps) {
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Beats
         </h3>
-        <BeatList episodeId={episodeId} />
+        <BeatList episodeId={episodeId} characterSheetId={characterSheetId} />
       </div>
     </section>
   );

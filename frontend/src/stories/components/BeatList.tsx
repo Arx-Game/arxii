@@ -10,9 +10,14 @@ import { BeatRow } from './BeatRow';
 
 interface BeatListProps {
   episodeId: number;
+  /**
+   * Character sheet ID forwarded to BeatRow for the contribute action.
+   * Pass story.character_sheet for CHARACTER-scope stories.
+   */
+  characterSheetId?: number | null;
 }
 
-export function BeatList({ episodeId }: BeatListProps) {
+export function BeatList({ episodeId, characterSheetId }: BeatListProps) {
   const { data: beatsPage, isLoading: beatsLoading } = useBeatList({ episode: episodeId });
   const beats = beatsPage?.results ?? [];
 
@@ -58,7 +63,12 @@ export function BeatList({ episodeId }: BeatListProps) {
   return (
     <ul className="space-y-2">
       {beats.map((beat) => (
-        <BeatRow key={beat.id} beat={beat} aggregateTotal={totalsByBeatId[beat.id] ?? 0} />
+        <BeatRow
+          key={beat.id}
+          beat={beat}
+          aggregateTotal={totalsByBeatId[beat.id] ?? 0}
+          characterSheetId={characterSheetId}
+        />
       ))}
     </ul>
   );
