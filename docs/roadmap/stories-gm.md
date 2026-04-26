@@ -1,6 +1,6 @@
 # Stories & GM Tables
 
-**Status:** phase-3-complete
+**Status:** phase-4-complete
 **Depends on:** Scenes, Missions, Codex, Relationships, Progression
 
 ## Overview
@@ -172,21 +172,95 @@ Real-time reactivity: six mutation-time hooks flip beats when gameplay state cha
 **Wave 9 — End-to-end integration test:**
 - `test_integration_phase3.py` — single scenario walking offline mutation → login catch-up → condition apply → resolve_episode cascade → atmosphere message → offline queue → next login delivers. Exercises the complete reactivity + narrative-integration surface.
 
+### Phase 4 Frontend Foundation (complete)
+
+The full React UI for the stories + narrative backend is implemented in
+`frontend/src/stories/` and `frontend/src/narrative/`. All 12 waves shipped.
+
+**`frontend/src/narrative/` — IC message delivery UI:**
+- API client and React Query hooks for `/api/narrative/my-messages/` and
+  `/api/narrative/deliveries/{id}/acknowledge/`
+- Inline narrative message rendering in the main game text feed — light red
+  visual treatment for `|R[NARRATIVE]|n` tagged messages
+- Messages section embedded in the character-sheet page — browseable history
+  with category filter and unread-first ordering; acknowledge button per message
+- Unread counter badge in the top-level navigation, decrements on acknowledge
+- 15 Vitest unit tests covering components and queries
+
+**`frontend/src/stories/` — full player, GM, and staff UI:**
+- Player active-stories list (`MyActiveStoriesPage`) — scope group sections
+  (Personal / Group / Global) with filter chips
+- Story detail page (`StoryDetailPage`) — current episode panel, beat list
+  with aggregate progress bar for `AGGREGATE_THRESHOLD` beats, story log
+  timeline (visibility-filtered per player/GM role), session-request status
+- Aggregate-contribute action dialog (`ContributeBeatDialog`)
+- Session-request flow UI: open-to-any-GM and schedule-with-my-GM; status
+  card showing request state + scheduled event date
+- Lead GM queue dashboard (`GMQueuePage`) — episodes ready to run with scope
+  filter, pending AGM claims, assigned session requests
+- Mark-beat dialog (`MarkBeatDialog`) for `GM_MARKED` beats
+- Resolve-episode dialog (`ResolveEpisodeDialog`) — transition selection for
+  `GM_CHOICE` episodes
+- Approve/reject AGM claim dialogs (`ApproveClaimDialog`, `RejectClaimDialog`)
+- Schedule-session dialog (`ScheduleEventDialog`) bridging session requests to
+  the events system
+- AGM opportunities page (`AGMOpportunitiesPage`) — browse + request-claim flow
+- My AGM claims page (`MyAGMClaimsPage`) — status tabs, cancel/complete actions
+- Staff workload dashboard (`StaffWorkloadPage`) — top-line stat cards, per-GM
+  queue depth table, stale stories table, frontier stories table, manual
+  expire-overdue-beats action
+- Story author editor (`StoryAuthorPage`) — full CRUD for Story / Chapter /
+  Episode / Beat / Transition; predicate-type-driven beat config form;
+  progression requirements editor; episode DAG visualization (React Flow,
+  read-only with frontier highlighting)
+- Role-gated navigation: player / GM / staff / author sections visible to the
+  right audience; unread-narrative badge wires into the nav
+- Lazy routing: all page-level imports use `React.lazy()` for route-level code
+  splitting
+- Error boundaries at the page level for graceful fallbacks
+- 173 Vitest unit tests across stories components and queries
+- Playwright e2e smoke tests: `e2e/stories-player.spec.ts` (12 tests) and
+  `e2e/stories-gm.spec.ts` (20 tests) — verify all routes render without JS
+  crash, asset integrity, and no uncaught exceptions
+
+**Known Phase 4 gotchas (for future contributors):**
+- `spectacular` cannot introspect `APIView`-based dashboard endpoints (the
+  `my-active`, `gm-queue`, `staff-workload` views). Types for these were
+  authored manually in `stories/types.ts` rather than generated.
+- `GMProfile` is not included in the `/api/user/` account payload; the GM
+  navigation section is conditionally shown based on the `gm-queue` endpoint
+  returning a non-403 response.
+- `StaffRoute` wraps staff-only pages; `ProtectedRoute` wraps player/GM pages.
+  Unauthenticated access redirects to `/login` — e2e smoke tests account for
+  this by verifying crash-free rendering rather than requiring live auth.
+
 ## What's Needed for MVP
 
-### Phase 4+: Frontend, MISSION_COMPLETE Predicate, and Polish
+### Phase 5: Remaining UI Polish + Missing Lifecycle Tools
 
-- **React frontend** — UI for player dashboard (story log reader, active episode panel, beat progress), GM queue (episodes ready to run, session scheduling), story author editor (beat/transition wiring beyond Django admin), and the narrative messages surface (inline `|R` display in main text, messages section of character sheet, unread counter, acknowledge button). The backend is structurally complete; Phase 4 is the web-first interface.
-- **MISSION_COMPLETE predicate** — blocked by the Missions system; beat predicate type and `Beat.required_mission` FK are scaffolded, but the Missions system does not exist yet
-- **Authoring UX polish** — a dedicated author editor for GMs to build beats, wire transitions, and preview the episode DAG in-browser. Currently dependent on Django admin.
-- **Covenant leadership model** — required for GROUP-scope stories to have meaningful player-driven agency. PC leader / group vote / assigned GM model is TBD. Not blocking GROUP-scope backend (GMTable is the current owner), but required for full player autonomy.
-- **Character-scope progress invariant enforcement beyond clean()** — `StoryProgress.clean()` validates `story.character_sheet == progress.character_sheet`. Service-layer guards (catching programmer errors at creation time) have not been added to all service paths.
-- **Progression-side level-up service + invalidation of cached_current_level** — once a production `CharacterClassLevel` mutation path exists, wire it to call `sheet.invalidate_class_level_cache()` and `stories.services.reactivity.on_character_level_changed` (reactivity hook already defensively invalidates). Pending progression work beyond Phase 3 scope. See "Pending wiring" note below.
-- **Condition round-tick / decay expiry hooks** — `_notify_stories_condition_expired` currently fires only from `remove_condition`; the round-tick expiry (`_process_duration_and_progression`) and passive decay (`decay_all_conditions_tick`) paths can be wired when an inverse/blocker-lifted predicate lands.
-- **Era lifecycle tooling** — advancing to a new era, handling stories that span eras, admin UI for era transitions
-- **Dispute / withdrawal state transitions** — personal-story GM change, story transfer, player withdrawal from GROUP stories
+- **Covenant leadership model** — required for GROUP-scope stories to have
+  meaningful player-driven agency. PC leader / group vote / assigned GM model
+  is TBD. Not blocking GROUP-scope backend (GMTable is the current owner),
+  but required for full player autonomy.
+- **Era lifecycle tooling** — advancing to a new era, handling stories that
+  span eras, staff UI for era-advancement flow and Season-N closing ceremonies
+- **Dispute / withdrawal state transitions** — personal-story GM change, story
+  transfer, player withdrawal from GROUP stories
+- **GM ad-hoc narrative message composer** — backend sender endpoint not yet
+  built; defer until that endpoint lands alongside the composer UI
+- **Mobile-responsive layout polish** — Phase 4 is desktop-first; mobile
+  tweaks deferred
 
-### Pending Wiring
+### Phase 6+ (blocked on other systems)
+
+- **MISSION_COMPLETE predicate UI** — blocked by the Missions system; the
+  `Beat.required_mission` FK scaffold exists in backend, but the Missions
+  system itself does not yet exist. Will land alongside missions.
+- **Authoring UX richer features** — drag-to-add-transitions in the episode
+  DAG, beat-template library, multi-story arc visualizer. Phase 4 delivered
+  read-only DAG with frontier highlighting; edit-mode transitions are deferred.
+
+### Pending Wiring (backend)
 
 **`on_character_level_changed` is implemented but unwired in production.**
 
