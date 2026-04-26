@@ -268,6 +268,8 @@ export async function deleteEpisode(id: number): Promise<void> {
 
 export interface ListBeatsParams {
   episode?: number;
+  story?: number;
+  agm_eligible?: boolean;
   ordering?: string;
   page?: number;
   page_size?: number;
@@ -379,6 +381,9 @@ export async function listAggregateBeatContributions(
 export interface ListClaimsParams {
   status?: string;
   beat?: number;
+  assistant_gm?: number;
+  episode?: number;
+  story?: number;
   page?: number;
   page_size?: number;
 }

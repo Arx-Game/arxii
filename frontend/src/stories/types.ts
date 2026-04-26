@@ -31,7 +31,16 @@ export type EpisodeCreate = components['schemas']['EpisodeCreate'];
 export type Episode = EpisodeDetail;
 
 // Beat — single shape with all Phase 2 predicate config fields.
-export type Beat = components['schemas']['Beat'];
+// The generated type does not yet include the Wave 7 context fields added to
+// BeatSerializer (episode_title, chapter_title, story_id, story_title).
+// We extend it with those fields here until the schema is regenerated.
+export type GeneratedBeat = components['schemas']['Beat'];
+export interface Beat extends GeneratedBeat {
+  episode_title?: string | null;
+  chapter_title?: string | null;
+  story_id?: number | null;
+  story_title?: string | null;
+}
 
 // Progress — CHARACTER scope has no generated type (no ViewSet); only GROUP and GLOBAL do.
 export type GroupStoryProgress = components['schemas']['GroupStoryProgress'];

@@ -19,6 +19,7 @@ from world.stories.constants import AssistantClaimStatus, SessionRequestStatus, 
 from world.stories.filters import (
     AggregateBeatContributionFilter,
     AssistantGMClaimFilter,
+    BeatFilter,
     ChapterFilter,
     EpisodeFilter,
     EpisodeSceneFilter,
@@ -901,7 +902,7 @@ class BeatViewSet(viewsets.ModelViewSet):
     serializer_class = BeatSerializer
     permission_classes = [IsBeatStoryOwnerOrStaff]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_class = None
+    filterset_class = BeatFilter
     pagination_class = StandardResultsSetPagination
     ordering_fields = ["order", "created_at", "updated_at"]
     ordering = ["episode", "order"]

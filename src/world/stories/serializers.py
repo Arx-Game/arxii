@@ -725,11 +725,23 @@ class SessionRequestSerializer(serializers.ModelSerializer):
 class BeatSerializer(serializers.ModelSerializer):
     """Full serializer for Beat including all Phase 2 predicate config fields."""
 
+    # Read-only context fields surfaced for the AGM opportunities browser.
+    # These walk the episode__chapter__story FK chain; no extra queries thanks
+    # to the select_related on BeatViewSet.queryset.
+    episode_title = serializers.CharField(source="episode.title", read_only=True)
+    chapter_title = serializers.CharField(source="episode.chapter.title", read_only=True)
+    story_id = serializers.IntegerField(source="episode.chapter.story_id", read_only=True)
+    story_title = serializers.CharField(source="episode.chapter.story.title", read_only=True)
+
     class Meta:
         model = Beat
         fields = [
             "id",
             "episode",
+            "episode_title",
+            "chapter_title",
+            "story_id",
+            "story_title",
             "predicate_type",
             "outcome",
             "visibility",
@@ -754,7 +766,15 @@ class BeatSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "episode_title",
+            "chapter_title",
+            "story_id",
+            "story_title",
+            "created_at",
+            "updated_at",
+        ]
 
     def validate(self, attrs: Any) -> Any:
         """Mirror Beat.clean() so predicate-type invariants surface as 400 responses."""

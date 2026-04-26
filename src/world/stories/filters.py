@@ -5,6 +5,7 @@ import django_filters
 from world.stories.models import (
     AggregateBeatContribution,
     AssistantGMClaim,
+    Beat,
     Chapter,
     Episode,
     EpisodeScene,
@@ -332,6 +333,18 @@ class AggregateBeatContributionFilter(django_filters.FilterSet):
     class Meta:
         model = AggregateBeatContribution
         fields = ["beat", "character_sheet"]
+
+
+class BeatFilter(django_filters.FilterSet):
+    """Filter for Beat model."""
+
+    episode = django_filters.NumberFilter(field_name="episode_id")
+    story = django_filters.NumberFilter(field_name="episode__chapter__story_id")
+    agm_eligible = django_filters.BooleanFilter(field_name="agm_eligible")
+
+    class Meta:
+        model = Beat
+        fields = ["episode", "agm_eligible"]
 
 
 class AssistantGMClaimFilter(django_filters.FilterSet):
