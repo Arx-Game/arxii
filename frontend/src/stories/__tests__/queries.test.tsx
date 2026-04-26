@@ -120,7 +120,7 @@ const mockGMQueueResponse = {
       episode_title: 'The Final Push',
       progress_type: 'group' as const,
       progress_id: 3,
-      eligible_transitions: [{ transition_id: 7, mode: 'sequential' }],
+      eligible_transitions: [{ transition_id: 7, mode: 'auto' as const }],
       open_session_request_id: 12,
     },
   ],
@@ -316,6 +316,7 @@ describe('Stories Query Hooks', () => {
       await act(async () => {
         await result.current.mutateAsync({
           episodeId: 20,
+          storyId: 5,
           chosen_transition: 7,
           gm_notes: 'Great session.',
         });
@@ -333,6 +334,9 @@ describe('Stories Query Hooks', () => {
       );
       expect(invalidateSpy).toHaveBeenCalledWith(
         expect.objectContaining({ queryKey: storiesKeys.gmQueue() })
+      );
+      expect(invalidateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ queryKey: storiesKeys.storyLog(5) })
       );
     });
   });
@@ -358,6 +362,7 @@ describe('Stories Query Hooks', () => {
       await act(async () => {
         await result.current.mutateAsync({
           beatId: 15,
+          storyId: 3,
           outcome: 'success',
           gm_notes: 'Well done.',
         });
@@ -372,6 +377,9 @@ describe('Stories Query Hooks', () => {
       );
       expect(invalidateSpy).toHaveBeenCalledWith(
         expect.objectContaining({ queryKey: storiesKeys.gmQueue() })
+      );
+      expect(invalidateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ queryKey: storiesKeys.storyLog(3) })
       );
     });
   });

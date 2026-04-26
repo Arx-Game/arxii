@@ -21,7 +21,7 @@ React Query hooks:
 
 - `narrativeKeys` — query key factory (`all`, `myMessages(params)`)
 - `useMyMessages(params?)` — paginated hook with `throwOnError: true`
-- `useUnreadCount()` — derived hook: calls `getMyMessages({ acknowledged: false })`
+- `useUnreadNarrativeCount()` — derived hook: calls `getMyMessages({ acknowledged: false })`
   and returns `data?.count ?? 0`; drives the nav badge
 - `useAcknowledgeMessage()` — mutation that invalidates the `myMessages` cache
   and updates the unread count
@@ -77,11 +77,11 @@ integration points:
 - **Character sheet** (`frontend/src/roster/pages/CharacterSheetPage.tsx`):
   `MessagesSection` is embedded as a named section after the existing sheet data
 - **Navigation** (`frontend/src/components/Header.tsx`): `UnreadNarrativeBadge`
-  uses `useUnreadCount()` and links to the character-sheet messages anchor
+  uses `useUnreadNarrativeCount()` and links to the character-sheet messages anchor
 
 ## Common Gotchas
 
-**Unread count is polled, not pushed (except via WS).** `useUnreadCount()` hits
+**Unread count is polled, not pushed (except via WS).** `useUnreadNarrativeCount()` hits
 `/api/narrative/my-messages/?acknowledged=false` on mount and after each
 acknowledge mutation. Real-time increments arrive via the WebSocket session
 channel and dispatch to the Redux store. If the WebSocket is not connected

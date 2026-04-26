@@ -16,11 +16,11 @@ interface EpisodeReadyCardProps {
 
 function transitionSummary(transitions: GMQueueEpisodeEntry['eligible_transitions']): string {
   if (transitions.length === 0) return 'No eligible transitions';
-  const autoCount = transitions.filter((t) => t.mode === 'AUTO').length;
+  const autoCount = transitions.filter((t) => t.mode === 'auto').length;
   const gmCount = transitions.length - autoCount;
   const parts: string[] = [];
-  if (autoCount > 0) parts.push(`${autoCount} AUTO`);
-  if (gmCount > 0) parts.push(`${gmCount} GM_CHOICE`);
+  if (autoCount > 0) parts.push(`${autoCount} auto`);
+  if (gmCount > 0) parts.push(`${gmCount} gm_choice`);
   return `${transitions.length} transition${transitions.length !== 1 ? 's' : ''} (${parts.join(', ')})`;
 }
 

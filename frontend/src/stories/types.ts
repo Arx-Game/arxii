@@ -154,7 +154,7 @@ export interface GMQueueEpisodeEntry {
   episode_title: string;
   progress_type: StoryScope;
   progress_id: number;
-  eligible_transitions: Array<{ transition_id: number; mode: string }>;
+  eligible_transitions: Array<{ transition_id: number; mode: TransitionMode }>;
   open_session_request_id: number | null;
 }
 

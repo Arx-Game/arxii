@@ -584,8 +584,6 @@ class CanMarkBeat(permissions.BasePermission):
             .exists()
         )
 
-        return False
-
 
 class IsClaimOwnerOrStaff(permissions.BasePermission):
     """The AGM who made the claim (for cancel) or staff."""

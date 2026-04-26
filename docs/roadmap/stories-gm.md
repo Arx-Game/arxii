@@ -251,6 +251,38 @@ The full React UI for the stories + narrative backend is implemented in
 - **Mobile-responsive layout polish** — Phase 4 is desktop-first; mobile
   tweaks deferred
 
+#### Phase 5 Hooks (identified in Phase 4 code review)
+
+Items that are small but deferred because they need backend changes or
+design decisions before the frontend can consume them:
+
+- **Hook B — `BeatSerializer.can_mark` field** — add a `can_mark: bool`
+  computed field to `BeatSerializer` indicating whether the requesting user
+  has permission to mark this beat (Lead GM, staff, or AGM with APPROVED
+  claim). `MarkBeatDialog` currently renders the "Mark" button for all GMs
+  and relies on the 403 for enforcement; hiding the button for unauthorised
+  users requires this backend field.
+
+- **Hook C — `EpisodeFormDialog` chapter-ID threading** — `StoryAuthorPage`
+  passes `chapterId=0` when opening the episode form from a DAG node click
+  (edit mode only, so chapter is unused). Once the DAG gains create-mode
+  support, the actual chapter ID must be threaded through from the DAG node
+  data. Current sentinel is intentional and documented in `StoryAuthorPage`.
+
+- **Hook D — `BeatCreateBody`/`BeatWriteBody` explicit types** — `BeatFormDialog`
+  and related code use `Partial<Beat>` as the write shape, which is over-broad
+  (all Beat read fields become optional write fields). Define dedicated
+  `BeatCreateBody` and `BeatWriteBody` types in `types.ts` (analogous to
+  `StoryCreateBody`) and update the API client and form to use them.
+
+- **Minor #11 — `TransitionFormDialog` two-phase save** — creating a transition
+  and then adding `TransitionRequiredOutcome` rows is two separate API calls
+  with no atomicity guarantee. Either add a backend "save-with-children"
+  endpoint that creates the transition and outcomes in one request, or implement
+  a two-phase save with rollback on the frontend (delete the transition if the
+  outcome creation fails). Current behaviour is last-write-wins with a
+  potential orphaned transition on failure.
+
 ### Phase 6+ (blocked on other systems)
 
 - **MISSION_COMPLETE predicate UI** — blocked by the Missions system; the

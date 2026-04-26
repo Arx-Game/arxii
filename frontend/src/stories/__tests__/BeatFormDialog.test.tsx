@@ -286,6 +286,37 @@ describe('BeatFormDialog', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
+  it('converts deadline to UTC ISO string before submission', async () => {
+    const user = userEvent.setup();
+    const createMock = setupMocks();
+
+    createMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 101 });
+    });
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    const descInput = screen.getByLabelText(/internal description/i);
+    await user.type(descInput, 'Beat with deadline');
+
+    // Fill in the deadline datetime-local input
+    const deadlineInput = screen.getByLabelText(/deadline/i);
+    await user.type(deadlineInput, '2026-05-01T14:00');
+
+    await user.click(screen.getByRole('button', { name: /create beat/i }));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          // Must be a full ISO 8601 string with timezone offset, not a bare local string.
+          deadline: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/),
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
   it('renders in edit mode pre-populated', () => {
     setupMocks();
     const existingBeat = {

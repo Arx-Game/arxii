@@ -180,8 +180,11 @@ export function useDeleteStory() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.deleteStory(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.all });
+    onSuccess: (_, id) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyList() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
+      // Invalidate the deleted story's cache; the refetch will 404 and clear it.
+      void qc.invalidateQueries({ queryKey: storiesKeys.story(id) });
     },
   });
 }
@@ -428,15 +431,19 @@ export function useSessionRequest(id: number) {
 export function useResolveEpisode() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ episodeId, ...body }: { episodeId: number } & ResolveEpisodeBody) =>
+    mutationFn: ({
+      episodeId,
+      storyId: _storyId,
+      ...body
+    }: { episodeId: number; storyId: number } & ResolveEpisodeBody) =>
       api.resolveEpisode(episodeId, body),
-    onSuccess: (_, { episodeId }) => {
+    onSuccess: (_, { episodeId, storyId }) => {
       void qc.invalidateQueries({ queryKey: storiesKeys.episode(episodeId) });
       void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
       void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
       void qc.invalidateQueries({ queryKey: storiesKeys.groupProgress() });
       void qc.invalidateQueries({ queryKey: storiesKeys.globalProgress() });
-      // Story log invalidation deferred — /api/stories/{id}/log/ endpoint doesn't exist yet.
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyLog(storyId) });
     },
   });
 }
@@ -444,13 +451,17 @@ export function useResolveEpisode() {
 export function useMarkBeat() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ beatId, ...body }: { beatId: number } & MarkBeatBody) =>
-      api.markBeat(beatId, body),
-    onSuccess: (_, { beatId }) => {
+    mutationFn: ({
+      beatId,
+      storyId: _storyId,
+      ...body
+    }: { beatId: number; storyId: number } & MarkBeatBody) => api.markBeat(beatId, body),
+    onSuccess: (_, { beatId, storyId }) => {
       void qc.invalidateQueries({ queryKey: storiesKeys.beat(beatId) });
       void qc.invalidateQueries({ queryKey: storiesKeys.beatList() });
       void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
       void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyLog(storyId) });
     },
   });
 }
@@ -581,7 +592,13 @@ export function useExpireOverdueBeats() {
   return useMutation({
     mutationFn: api.expireOverdueBeats,
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: storiesKeys.all });
+      // Expire affects beats across all stories/episodes; invalidate beat lists,
+      // dashboards, and workload view. Story/chapter/episode detail queries are
+      // left untouched — beat expiry doesn't change episode or story structure.
+      void qc.invalidateQueries({ queryKey: storiesKeys.beatList() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.staffWorkload() });
     },
   });
 }

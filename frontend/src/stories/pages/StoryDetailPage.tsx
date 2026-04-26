@@ -137,7 +137,18 @@ function StoryDetailInner({ storyId }: StoryDetailInnerProps) {
 
 export function StoryDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const storyId = id ? parseInt(id, 10) : 0;
+  const parsed = id ? Number(id) : NaN;
+  const storyId = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+
+  if (storyId === 0) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="py-16 text-center">
+          <p className="text-muted-foreground">Story not found.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">

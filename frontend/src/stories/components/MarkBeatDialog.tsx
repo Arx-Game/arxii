@@ -90,6 +90,7 @@ export function MarkBeatDialog({ beat }: MarkBeatDialogProps) {
     markMutation.mutate(
       {
         beatId: beat.id,
+        storyId: beat.story_id,
         outcome,
         gm_notes: gmNotes.trim() || undefined,
       },

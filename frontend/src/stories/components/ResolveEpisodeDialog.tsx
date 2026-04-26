@@ -49,7 +49,7 @@ interface DRFFieldErrors {
 // ---------------------------------------------------------------------------
 
 function transitionLabel(t: GMQueueEpisodeEntry['eligible_transitions'][number]): string {
-  return t.mode === 'AUTO' ? `Auto transition (mode: AUTO)` : `GM Choice (mode: GM_CHOICE)`;
+  return t.mode === 'auto' ? `Auto transition (mode: auto)` : `GM Choice (mode: gm_choice)`;
 }
 
 // ---------------------------------------------------------------------------
@@ -59,8 +59,8 @@ function transitionLabel(t: GMQueueEpisodeEntry['eligible_transitions'][number])
 export function ResolveEpisodeDialog({ entry }: ResolveEpisodeDialogProps) {
   const [open, setOpen] = useState(false);
   const [selectedTransition, setSelectedTransition] = useState<number | null>(() => {
-    // Pre-select if exactly one AUTO transition
-    if (entry.eligible_transitions.length === 1 && entry.eligible_transitions[0].mode === 'AUTO') {
+    // Pre-select if exactly one auto transition
+    if (entry.eligible_transitions.length === 1 && entry.eligible_transitions[0].mode === 'auto') {
       return entry.eligible_transitions[0].transition_id;
     }
     return null;
@@ -74,7 +74,7 @@ export function ResolveEpisodeDialog({ entry }: ResolveEpisodeDialogProps) {
     setSelectedTransition(() => {
       if (
         entry.eligible_transitions.length === 1 &&
-        entry.eligible_transitions[0].mode === 'AUTO'
+        entry.eligible_transitions[0].mode === 'auto'
       ) {
         return entry.eligible_transitions[0].transition_id;
       }
@@ -96,8 +96,10 @@ export function ResolveEpisodeDialog({ entry }: ResolveEpisodeDialogProps) {
     resolveMutation.mutate(
       {
         episodeId: entry.episode_id,
+        storyId: entry.story_id,
         chosen_transition: selectedTransition ?? undefined,
         gm_notes: gmNotes.trim() || undefined,
+        progress_id: entry.progress_id,
       },
       {
         onSuccess: () => {

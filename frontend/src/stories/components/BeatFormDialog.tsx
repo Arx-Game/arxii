@@ -466,7 +466,7 @@ export function BeatFormDialog({
       player_resolution_text: playerResolutionText.trim() || undefined,
       visibility,
       order: order !== '' ? Number(order) : undefined,
-      deadline: deadline || undefined,
+      deadline: deadline ? new Date(deadline).toISOString() : undefined,
       agm_eligible: agmEligible,
     };
 

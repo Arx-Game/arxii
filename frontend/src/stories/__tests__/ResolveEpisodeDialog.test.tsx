@@ -3,8 +3,9 @@
  *
  * Covers:
  *  - Dialog opens/closes on trigger
- *  - Auto transition pre-selection when exactly one AUTO transition
- *  - Submit happy path → mutation called with right payload, dialog closes, toast shown
+ *  - Auto transition pre-selection when exactly one 'auto' transition
+ *  - Submit happy path → mutation called with right payload (including
+ *    progress_id and storyId), dialog closes, toast shown
  *  - Validation error rendering (non_field_errors banner)
  *  - Mutation error doesn't close the dialog
  */
@@ -46,15 +47,15 @@ const entryOneAuto: GMQueueEpisodeEntry = {
   episode_title: 'The Reckoning',
   progress_type: 'character',
   progress_id: 5,
-  eligible_transitions: [{ transition_id: 1, mode: 'AUTO' }],
+  eligible_transitions: [{ transition_id: 1, mode: 'auto' }],
   open_session_request_id: null,
 };
 
 const entryMultiTransition: GMQueueEpisodeEntry = {
   ...entryOneAuto,
   eligible_transitions: [
-    { transition_id: 1, mode: 'AUTO' },
-    { transition_id: 2, mode: 'GM_CHOICE' },
+    { transition_id: 1, mode: 'auto' },
+    { transition_id: 2, mode: 'gm_choice' },
   ],
 };
 
@@ -117,7 +118,7 @@ describe('ResolveEpisodeDialog', () => {
     expect(screen.getByText(/The Long Road/i)).toBeInTheDocument();
   });
 
-  it('pre-selects the single AUTO transition', async () => {
+  it("pre-selects the single 'auto' transition", async () => {
     const user = userEvent.setup();
     makeResolveMock();
     renderWithProviders(<ResolveEpisodeDialog entry={entryOneAuto} />);
@@ -125,7 +126,7 @@ describe('ResolveEpisodeDialog', () => {
     await user.click(screen.getByRole('button', { name: /resolve/i }));
 
     const radioInputs = screen.getAllByRole('radio');
-    // First radio (AUTO transition) should be pre-selected
+    // First radio (auto transition) should be pre-selected
     expect(radioInputs[0]).toBeChecked();
   });
 
@@ -177,8 +178,10 @@ describe('ResolveEpisodeDialog', () => {
     expect(mutateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         episodeId: 10,
+        storyId: 1,
         chosen_transition: 1,
         gm_notes: 'Story resolved!',
+        progress_id: 5,
       }),
       expect.any(Object)
     );
