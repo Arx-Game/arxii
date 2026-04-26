@@ -19,6 +19,8 @@ vi.mock('../queries', () => ({
   useStoryLog: vi.fn(),
   useSessionRequest: vi.fn(),
   useContributeToBeat: vi.fn(),
+  // Required by BeatRow → MarkBeatDialog for gm_marked beats (Wave 6)
+  useMarkBeat: vi.fn(),
 }));
 
 import * as queries from '../queries';
@@ -174,6 +176,25 @@ function setupMocks(
     isPaused: false,
     submittedAt: 0,
   } as unknown as ReturnType<typeof queries.useContributeToBeat>);
+
+  vi.mocked(queries.useMarkBeat).mockReturnValue({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(),
+    isPending: false,
+    isSuccess: false,
+    isError: false,
+    isIdle: true,
+    error: null,
+    data: undefined,
+    variables: undefined,
+    status: 'idle',
+    reset: vi.fn(),
+    context: undefined,
+    failureCount: 0,
+    failureReason: null,
+    isPaused: false,
+    submittedAt: 0,
+  } as unknown as ReturnType<typeof queries.useMarkBeat>);
 }
 
 // ---------------------------------------------------------------------------

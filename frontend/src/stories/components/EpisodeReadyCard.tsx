@@ -1,12 +1,13 @@
 /**
  * EpisodeReadyCard — single row for an episode-ready-to-run entry in GMQueuePage.
  *
- * Read-only for Wave 5. Action UIs (resolve episode, mark beat) come in Wave 6.
+ * Wave 6: adds the "Resolve" action dialog inline on the card.
  */
 
 import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { ScopeBadge } from './ScopeBadge';
+import { ResolveEpisodeDialog } from './ResolveEpisodeDialog';
 import type { GMQueueEpisodeEntry } from '../types';
 
 interface EpisodeReadyCardProps {
@@ -41,7 +42,8 @@ export function EpisodeReadyCard({ entry }: EpisodeReadyCardProps) {
           )}
         </div>
 
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <ResolveEpisodeDialog entry={entry} />
           <Link
             to={`/stories/${entry.story_id}`}
             className="text-sm font-medium text-primary underline-offset-4 hover:underline"

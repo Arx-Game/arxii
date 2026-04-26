@@ -2,6 +2,16 @@ import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 import React from 'react';
 
+// Polyfill ResizeObserver — not available in jsdom but required by Radix UI components
+// (use-size hook in @radix-ui/react-use-size uses it for layout measurements)
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 // Mock framer-motion to disable animations in tests
 vi.mock('framer-motion', async () => {
   const actual = await vi.importActual('framer-motion');

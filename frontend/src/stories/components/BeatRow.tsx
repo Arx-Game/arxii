@@ -4,12 +4,15 @@
  * Shows title/hint, outcome pill, aggregate progress bar, deadline, and
  * resolution text for completed beats.  For AGGREGATE_THRESHOLD beats
  * with a known characterSheetId, also renders the "Contribute" action.
+ * For GM_MARKED beats renders the "Mark" action (optimistic — API 403 if
+ * user lacks permission).
  */
 
 import { formatRelativeTime } from '@/lib/relativeTime';
 import { BeatOutcomeBadge } from './BeatOutcomeBadge';
 import { AggregateProgressBar } from './AggregateProgressBar';
 import { ContributeBeatDialog } from './ContributeBeatDialog';
+import { MarkBeatDialog } from './MarkBeatDialog';
 import type { Beat } from '../types';
 
 interface BeatRowProps {
@@ -26,6 +29,7 @@ interface BeatRowProps {
 
 export function BeatRow({ beat, aggregateTotal = 0, characterSheetId }: BeatRowProps) {
   const isAggregate = beat.predicate_type === 'aggregate_threshold';
+  const isGmMarked = beat.predicate_type === 'gm_marked';
   const hasDeadline = beat.deadline != null;
   const outcome = beat.outcome ?? 'unsatisfied';
   const isResolved = outcome === 'success' || outcome === 'failure' || outcome === 'expired';
@@ -50,6 +54,7 @@ export function BeatRow({ beat, aggregateTotal = 0, characterSheetId }: BeatRowP
               currentTotal={aggregateTotal}
             />
           )}
+          {isGmMarked && !isResolved && <MarkBeatDialog beat={beat} />}
           <BeatOutcomeBadge outcome={outcome} />
         </div>
       </div>
