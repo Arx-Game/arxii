@@ -10,6 +10,7 @@ import { Badge } from './ui/badge';
 import { navigationMenuTriggerStyle } from '@/components/ui/navigation-menu-trigger-style';
 import { useAppSelector } from '@/store/hooks';
 import { useOpenSubmissionCount } from '@/staff/queries';
+import { UnreadNarrativeBadge } from '@/narrative/components/UnreadNarrativeBadge';
 
 const links = [
   { to: '/game', label: 'Play' },
@@ -55,6 +56,9 @@ export function Header() {
               <ModeToggle />
             </NavigationMenuItem>
             <NavigationMenuItem>
+              <UnreadNarrativeBadge />
+            </NavigationMenuItem>
+            <NavigationMenuItem>
               <UserNav />
             </NavigationMenuItem>
           </NavigationMenuList>
@@ -80,6 +84,7 @@ export function Header() {
                   </Link>
                 )}
                 <ModeToggle />
+                <UnreadNarrativeBadge />
                 <UserNav />
               </nav>
             </SheetContent>

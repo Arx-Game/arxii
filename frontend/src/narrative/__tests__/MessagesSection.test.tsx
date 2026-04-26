@@ -66,7 +66,7 @@ function setupMocks(results = [mockDeliveryUnread, mockDeliveryRead]) {
     isLoading: false,
     isSuccess: true,
     error: null,
-  } as ReturnType<typeof queries.useMyMessages>);
+  } as unknown as ReturnType<typeof queries.useMyMessages>);
   vi.mocked(queries.useAcknowledgeDelivery).mockReturnValue({
     mutate: mockMutate,
     isPending: false,
@@ -77,13 +77,7 @@ function setupMocks(results = [mockDeliveryUnread, mockDeliveryRead]) {
     error: null,
     mutateAsync: vi.fn(),
     reset: vi.fn(),
-    context: undefined,
-    failureCount: 0,
-    failureReason: null,
-    status: 'idle',
-    submittedAt: 0,
-    variables: undefined,
-  } as ReturnType<typeof queries.useAcknowledgeDelivery>);
+  } as unknown as ReturnType<typeof queries.useAcknowledgeDelivery>);
   return { mockMutate };
 }
 
@@ -117,20 +111,7 @@ describe('MessagesSection', () => {
     vi.mocked(queries.useAcknowledgeDelivery).mockReturnValue({
       mutate: vi.fn(),
       isPending: false,
-      isSuccess: false,
-      isError: false,
-      isIdle: true,
-      data: undefined,
-      error: null,
-      mutateAsync: vi.fn(),
-      reset: vi.fn(),
-      context: undefined,
-      failureCount: 0,
-      failureReason: null,
-      status: 'idle',
-      submittedAt: 0,
-      variables: undefined,
-    } as ReturnType<typeof queries.useAcknowledgeDelivery>);
+    } as unknown as ReturnType<typeof queries.useAcknowledgeDelivery>);
 
     const { container } = render(<MessagesSection />, { wrapper: createWrapper() });
     // Skeletons use animate-pulse class
