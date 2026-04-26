@@ -9,6 +9,7 @@ from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
@@ -51,6 +52,7 @@ from world.stories.pagination import (
     StandardResultsSetPagination,
 )
 from world.stories.permissions import (
+    VIEWER_ROLE_NO_ACCESS,
     CanMarkBeat,
     CanParticipateInStory,
     IsAccountOfCharacterSheet,
@@ -71,6 +73,7 @@ from world.stories.permissions import (
     IsSessionRequestGMOrStaff,
     IsSessionRequestParticipantOrStaff,
     IsStoryOwnerOrStaff,
+    classify_story_log_viewer_role,
 )
 from world.stories.serializers import (
     AggregateBeatContributionSerializer,
@@ -105,10 +108,13 @@ from world.stories.serializers import (
     StoryFeedbackCreateSerializer,
     StoryFeedbackSerializer,
     StoryListSerializer,
+    StoryLogSerializer,
     StoryParticipationSerializer,
 )
 from world.stories.services.dashboards import STALE_STORY_DAYS, compute_story_status
 from world.stories.services.participation import create_story_participation
+from world.stories.services.progress import get_active_progress_for_story
+from world.stories.services.story_log import serialize_story_log
 from world.stories.types import AnyStoryProgress
 
 
@@ -202,6 +208,31 @@ class StoryViewSet(viewsets.ModelViewSet):
         story = self.get_object()
         chapters = story.chapters.all().order_by("order")
         serializer = ChapterListSerializer(chapters, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="log")
+    def log(self, request: Request, pk: int | None = None) -> Response:
+        """GET /api/stories/{id}/log/ — visibility-filtered story log.
+
+        Returns a chronological list of beat completions and episode resolutions
+        for this story, filtered to what the viewer is permitted to see:
+
+        - staff: sees all fields including internal_description and gm_notes
+        - lead_gm (story.primary_table.gm == request.user.gm_profile): same as staff
+        - player (participant / story character owner / active group member): sees
+          player-facing text; SECRET beat hints suppressed; no internal fields
+        - no_access: 403
+
+        The viewer role is determined by classify_story_log_viewer_role.
+        """
+        story = self.get_object()
+        progress = get_active_progress_for_story(story)
+        viewer_role = classify_story_log_viewer_role(request.user, story, progress)
+        if viewer_role == VIEWER_ROLE_NO_ACCESS:
+            msg = "You do not have access to this story's log."
+            raise PermissionDenied(msg)
+        log_entries = serialize_story_log(story=story, progress=progress, viewer_role=viewer_role)
+        serializer = StoryLogSerializer(log_entries)
         return Response(serializer.data)
 
 
