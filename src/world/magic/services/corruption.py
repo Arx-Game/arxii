@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from django.db import transaction
 
 from flows.constants import EventName
@@ -15,6 +17,7 @@ from world.magic.models.aura import CharacterResonance
 from world.magic.models.corruption_config import CorruptionConfig
 from world.magic.types.corruption import (
     CorruptionAccrualResult,
+    CorruptionAccrualSummary,
     CorruptionAccruedPayload,
     CorruptionAccruingPayload,
     CorruptionCause,
@@ -26,16 +29,154 @@ from world.magic.types.corruption import (
     ProtagonismLockedPayload,
     ProtagonismRestoredPayload,
 )
+from world.magic.types.techniques import TechniqueUseResult
 
 # Stage constants — spec §2.1 terminal stage
 _TERMINAL_STAGE = 5
 _WARNING_STAGES = (3, 4)
+
+# Affinity name strings — used for coefficient lookup (case-insensitive)
+_AFFINITY_CELESTIAL = "celestial"
+_AFFINITY_PRIMAL = "primal"
+_AFFINITY_ABYSSAL = "abyssal"
+
+# Lookup for tier coefficient attribute names
+_TIER_COEF_ATTRS = {
+    1: "tier_1_coefficient",
+    2: "tier_2_coefficient",
+    3: "tier_3_coefficient",
+    4: "tier_4_coefficient",
+    5: "tier_5_coefficient",
+}
 
 
 def get_corruption_config() -> CorruptionConfig:
     """Lazy-create the CorruptionConfig singleton at pk=1."""
     config, _ = CorruptionConfig.objects.get_or_create(pk=1)
     return config
+
+
+def _resolve_affinity_coefficient(resonance: Resonance, config: CorruptionConfig) -> int:
+    """Return the integer-tenths affinity coefficient for a resonance (case-insensitive name match).
+
+    Celestial → config.celestial_coefficient (default 0)
+    Primal    → config.primal_coefficient    (default 2)
+    Abyssal   → config.abyssal_coefficient   (default 10)
+    Unknown   → 0 (treats unknown affinities like Celestial — no corruption)
+    """
+    affinity_name = resonance.affinity.name.lower()
+    if affinity_name == _AFFINITY_CELESTIAL:
+        return config.celestial_coefficient
+    if affinity_name == _AFFINITY_PRIMAL:
+        return config.primal_coefficient
+    if affinity_name == _AFFINITY_ABYSSAL:
+        return config.abyssal_coefficient
+    return 0
+
+
+def _resolve_tier_coefficient(tier: int, config: CorruptionConfig) -> int:
+    """Return the integer-tenths tier coefficient for a technique tier (1–5)."""
+    attr = _TIER_COEF_ATTRS.get(tier, "tier_5_coefficient")
+    return getattr(config, attr)  # noqa: GETATTR_LITERAL
+
+
+def _compute_tick(  # noqa: PLR0913
+    *,
+    involvement: int,
+    affinity_coef: int,
+    tier_coef: int,
+    deficit_multiplier: int,
+    mishap_multiplier: int,
+    audere_multiplier: int,
+    was_deficit: bool,
+    was_mishap: bool,
+    was_audere: bool,
+) -> int:
+    """Compute the per-resonance corruption tick per spec §3.1.
+
+    All coefficients are integer-tenths (× 0.1 in formula).
+    Multipliers default to 10 (× 0.1 → 1.0) when their flag is False.
+
+    base_tick   = involvement × (affinity_coef / 10) × (tier_coef / 10)
+    multipliers = (d × m × a) / 1000   where each of d/m/a is either the
+                  configured integer-tenths value or 10 (neutral)
+    tick        = ceil(base_tick × multipliers)
+    """
+    base_tick = involvement * affinity_coef / 10 * tier_coef / 10
+    d = deficit_multiplier if was_deficit else 10
+    m = mishap_multiplier if was_mishap else 10
+    a = audere_multiplier if was_audere else 10
+    multipliers = d * m * a / 1000
+    return math.ceil(base_tick * multipliers)
+
+
+def accrue_corruption_for_cast(
+    *,
+    caster_sheet: CharacterSheet,
+    technique_use_result: TechniqueUseResult,
+    config: CorruptionConfig | None = None,
+) -> CorruptionAccrualSummary:
+    """Apply per-resonance corruption ticks for one technique cast.
+
+    Walks technique_use_result.resonance_involvements; for each resonance R
+    with non-zero involvement and non-zero tick after Celestial-skip and
+    ceil-rounding, calls accrue_corruption. Returns a CorruptionAccrualSummary.
+
+    Assumption: technique_use_result.technique is not None. The defensive guard
+    for the early-exit case (technique=None) is deferred to Task 3 (the cast hook).
+    """
+    if config is None:
+        config = get_corruption_config()
+
+    per_resonance: list[CorruptionAccrualResult] = []
+
+    for inv in technique_use_result.resonance_involvements:
+        resonance = inv.resonance
+        affinity_coef = _resolve_affinity_coefficient(resonance, config)
+
+        # Celestial always has coefficient 0 — skip entirely (no accrual, no audit noise)
+        if affinity_coef == 0:
+            continue
+
+        involvement = inv.stat_bonus_contribution + inv.thread_pull_resonance_spent
+        if involvement <= 0:
+            continue
+
+        tier = technique_use_result.technique.tier  # type: ignore[union-attr]
+        tier_coef = _resolve_tier_coefficient(tier, config)
+
+        tick = _compute_tick(
+            involvement=involvement,
+            affinity_coef=affinity_coef,
+            tier_coef=tier_coef,
+            deficit_multiplier=config.deficit_multiplier,
+            mishap_multiplier=config.mishap_multiplier,
+            audere_multiplier=config.audere_multiplier,
+            was_deficit=technique_use_result.was_deficit,
+            was_mishap=technique_use_result.was_mishap,
+            was_audere=technique_use_result.was_audere,
+        )
+
+        if tick == 0:
+            continue
+
+        result = accrue_corruption(
+            character_sheet=caster_sheet,
+            resonance=resonance,
+            amount=tick,
+            source=CorruptionSource.TECHNIQUE_USE,
+            technique_use=technique_use_result,
+        )
+        per_resonance.append(result)
+
+    technique = technique_use_result.technique
+    technique_id = technique.pk if technique is not None else 0
+
+    return CorruptionAccrualSummary(
+        caster_sheet_id=caster_sheet.pk,
+        technique_id=technique_id,
+        per_resonance=tuple(per_resonance),
+    )
 
 
 def _resolve_character(character_sheet: CharacterSheet) -> object:
