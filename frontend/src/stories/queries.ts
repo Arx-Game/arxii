@@ -79,6 +79,9 @@ export const storiesKeys = {
   sessionRequests: (params?: ListSessionRequestsParams) =>
     [...storiesKeys.all, 'session-requests', params] as const,
   sessionRequest: (id: number) => [...storiesKeys.all, 'session-request', id] as const,
+
+  // Story log
+  storyLog: (id: number) => [...storiesKeys.all, 'story', id, 'log'] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -540,6 +543,15 @@ export function useResolveSessionRequest() {
       void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
       void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
     },
+  });
+}
+
+export function useStoryLog(storyId: number) {
+  return useQuery({
+    queryKey: storiesKeys.storyLog(storyId),
+    queryFn: () => api.getStoryLog(storyId),
+    enabled: storyId > 0,
+    throwOnError: true,
   });
 }
 

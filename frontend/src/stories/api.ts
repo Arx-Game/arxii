@@ -44,6 +44,7 @@ import type {
   Story,
   StoryCreateBody,
   StoryList,
+  StoryLogResponse,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -595,6 +596,18 @@ export async function resolveSessionRequest(requestId: number): Promise<SessionR
   });
   if (!res.ok) throw new Error('Failed to resolve session request');
   return res.json() as Promise<SessionRequest>;
+}
+
+/**
+ * GET /api/stories/{id}/log/
+ * Returns visibility-filtered story log entries.
+ * The generated type for this endpoint is incorrect (shows StoryDetail);
+ * the actual response is { entries: StoryLogEntry[] }.
+ */
+export async function getStoryLog(storyId: number): Promise<StoryLogResponse> {
+  const res = await apiFetch(`/api/stories/${storyId}/log/`);
+  if (!res.ok) throw new Error('Failed to load story log');
+  return res.json() as Promise<StoryLogResponse>;
 }
 
 /**

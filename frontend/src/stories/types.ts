@@ -282,3 +282,43 @@ export interface EpisodeCreateBody {
   description?: string;
   order?: number;
 }
+
+// ---------------------------------------------------------------------------
+// Story log types — hand-defined from StoryLogSerializer in serializers.py.
+// The generated type for stories_log_retrieve incorrectly returns StoryDetail;
+// the actual response is { entries: StoryLogEntry[] }.
+// ---------------------------------------------------------------------------
+
+export interface StoryLogBeatEntry {
+  entry_type: 'beat_completion';
+  beat_id: number;
+  episode_id: number;
+  recorded_at: string;
+  outcome: BeatOutcome;
+  visibility: BeatVisibility;
+  player_hint: string | null;
+  player_resolution_text: string | null;
+  /** Non-null only for lead GM / staff viewers. */
+  internal_description: string | null;
+  gm_notes: string | null;
+}
+
+export interface StoryLogEpisodeEntry {
+  entry_type: 'episode_resolution';
+  episode_id: number;
+  episode_title: string;
+  resolved_at: string;
+  transition_id: number | null;
+  target_episode_id: number | null;
+  target_episode_title: string | null;
+  connection_type: string;
+  connection_summary: string;
+  /** Non-null only for lead GM / staff viewers. */
+  internal_notes: string | null;
+}
+
+export type StoryLogEntry = StoryLogBeatEntry | StoryLogEpisodeEntry;
+
+export interface StoryLogResponse {
+  entries: StoryLogEntry[];
+}
