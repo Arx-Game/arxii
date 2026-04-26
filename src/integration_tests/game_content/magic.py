@@ -1,4 +1,4 @@
-"""MagicContent — technique and ActionEnhancement records for social action tests."""
+"""Magic test-infrastructure: MagicContent (technique content) and seed_magic_config()."""
 
 from __future__ import annotations
 
@@ -516,8 +516,7 @@ def seed_magic_config() -> MagicConfigResult:
     # --- Soulfray condition + stages (needed for AudereThreshold.minimum_warp_stage) ---
     # SoulfrayContentFactory() is idempotent — uses get_or_create internally.
     soulfray_content = SoulfrayContentFactory()
-    # "Ripping" is stage index 2 (0-based) = stage_order 3
-    ripping_stage = soulfray_content.stages[2]
+    ripping_stage = next(s for s in soulfray_content.stages if s.name == "Ripping")
 
     # --- AudereThreshold (singleton, no get_or_create on factory) ---
     audere_threshold, _ = AudereThreshold.objects.get_or_create(

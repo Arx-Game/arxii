@@ -15,8 +15,9 @@ from integration_tests.game_content.magic import MagicConfigResult, seed_magic_c
 class TestSeedMagicConfigCreation(TestCase):
     """First-call assertions: correct rows exist with expected values."""
 
-    def setUp(self) -> None:
-        self.result: MagicConfigResult = seed_magic_config()
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.result: MagicConfigResult = seed_magic_config()
 
     def test_anima_config_created(self) -> None:
         from world.magic.models import AnimaConfig
@@ -79,7 +80,7 @@ class TestSeedMagicConfigCreation(TestCase):
     def test_mishap_pool_tier_created(self) -> None:
         from world.magic.models import MishapPoolTier
 
-        self.assertGreaterEqual(MishapPoolTier.objects.count(), 1)
+        self.assertEqual(MishapPoolTier.objects.count(), 1)
         tier = MishapPoolTier.objects.get(min_deficit=1, max_deficit__isnull=True)
         self.assertIsNotNone(tier.consequence_pool)
         self.assertEqual(tier.consequence_pool.name, "Magic Mishap Pool (default)")
@@ -89,12 +90,14 @@ class TestSeedMagicConfigCreation(TestCase):
 class TestSeedMagicConfigIdempotency(TestCase):
     """Second-call assertions: row counts unchanged, same PKs returned."""
 
-    def setUp(self) -> None:
-        self.first: MagicConfigResult = seed_magic_config()
-        self.second: MagicConfigResult = seed_magic_config()
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.first: MagicConfigResult = seed_magic_config()
+        cls.second: MagicConfigResult = seed_magic_config()
 
     def _counts(self) -> dict[str, int]:
         from world.checks.models import CheckCategory, CheckType
+        from world.conditions.models import ConditionStage, ConditionTemplate
         from world.magic.audere import AudereThreshold
         from world.magic.models import AnimaConfig, IntensityTier, MishapPoolTier, SoulfrayConfig
         from world.magic.models.corruption_config import CorruptionConfig
@@ -110,6 +113,8 @@ class TestSeedMagicConfigIdempotency(TestCase):
             "mishap_pool_tiers": MishapPoolTier.objects.count(),
             "check_types": CheckType.objects.count(),
             "check_categories": CheckCategory.objects.count(),
+            "condition_templates": ConditionTemplate.objects.count(),
+            "condition_stages": ConditionStage.objects.count(),
         }
 
     def test_row_counts_unchanged(self) -> None:
@@ -120,7 +125,7 @@ class TestSeedMagicConfigIdempotency(TestCase):
         self.assertEqual(counts["corruption_config"], 1)
         self.assertEqual(counts["audere_threshold"], 1)
         self.assertEqual(counts["intensity_tiers"], 3)
-        self.assertGreaterEqual(counts["mishap_pool_tiers"], 1)
+        self.assertEqual(counts["mishap_pool_tiers"], 1)
         # Guard against orphan CheckType/CheckCategory rows leaking on re-run
         self.assertEqual(
             counts["check_types"],
@@ -131,6 +136,17 @@ class TestSeedMagicConfigIdempotency(TestCase):
             counts["check_categories"],
             1,
             "seed_magic_config() must not create extra CheckCategory rows on second call",
+        )
+        # Guard against ConditionTemplate/ConditionStage leaking on re-run
+        self.assertEqual(
+            counts["condition_templates"],
+            1,
+            "seed_magic_config() must not create extra ConditionTemplate rows on second call",
+        )
+        self.assertEqual(
+            counts["condition_stages"],
+            5,
+            "seed_magic_config() must not create extra ConditionStage rows on second call",
         )
 
     def test_same_pks_returned(self) -> None:
