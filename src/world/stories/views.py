@@ -22,6 +22,7 @@ from world.stories.filters import (
     BeatFilter,
     ChapterFilter,
     EpisodeFilter,
+    EpisodeProgressionRequirementFilter,
     EpisodeSceneFilter,
     GlobalStoryProgressFilter,
     GroupStoryProgressFilter,
@@ -30,6 +31,8 @@ from world.stories.filters import (
     StoryFeedbackFilter,
     StoryFilter,
     StoryParticipationFilter,
+    TransitionFilter,
+    TransitionRequiredOutcomeFilter,
 )
 from world.stories.models import (
     AggregateBeatContribution,
@@ -37,6 +40,7 @@ from world.stories.models import (
     Beat,
     Chapter,
     Episode,
+    EpisodeProgressionRequirement,
     EpisodeScene,
     GlobalStoryProgress,
     GroupStoryProgress,
@@ -46,6 +50,8 @@ from world.stories.models import (
     StoryFeedback,
     StoryParticipation,
     StoryProgress,
+    Transition,
+    TransitionRequiredOutcome,
 )
 from world.stories.pagination import (
     LargeResultsSetPagination,
@@ -67,7 +73,9 @@ from world.stories.permissions import (
     IsGMProfile,
     IsGroupProgressMemberOrStaff,
     IsLeadGMOnClaimStoryOrStaff,
+    IsLeadGMOnEpisodeStoryOrStaff,
     IsLeadGMOnStoryOrStaff,
+    IsLeadGMOnTransitionStoryOrStaff,
     IsParticipationOwnerOrStoryOwnerOrStaff,
     IsPlayerTrustOwnerOrStaff,
     IsReviewerOrStoryOwnerOrStaff,
@@ -93,6 +101,7 @@ from world.stories.serializers import (
     EpisodeCreateSerializer,
     EpisodeDetailSerializer,
     EpisodeListSerializer,
+    EpisodeProgressionRequirementSerializer,
     EpisodeResolutionSerializer,
     EpisodeSceneSerializer,
     GlobalStoryProgressSerializer,
@@ -111,6 +120,8 @@ from world.stories.serializers import (
     StoryListSerializer,
     StoryLogSerializer,
     StoryParticipationSerializer,
+    TransitionRequiredOutcomeSerializer,
+    TransitionSerializer,
 )
 from world.stories.services.dashboards import STALE_STORY_DAYS, compute_story_status
 from world.stories.services.participation import create_story_participation
@@ -966,6 +977,80 @@ class BeatViewSet(viewsets.ModelViewSet):
             AggregateBeatContributionSerializer(contribution).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 Wave 9: Author editor ViewSets
+# ---------------------------------------------------------------------------
+
+
+class TransitionViewSet(viewsets.ModelViewSet):
+    """ViewSet for Transition — guarded episode graph edges.
+
+    Read: any authenticated user (Lead GM, players, staff).
+    Write (create/update/delete): Lead GM on the source episode's story, or staff.
+
+    The source episode's story is resolved via source_episode -> chapter -> story ->
+    primary_table.gm.
+    """
+
+    queryset = Transition.objects.select_related(
+        "source_episode__chapter__story__primary_table",
+        "target_episode",
+    )
+    serializer_class = TransitionSerializer
+    permission_classes = [IsLeadGMOnTransitionStoryOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = TransitionFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["order", "created_at"]
+    ordering = ["source_episode", "order"]
+
+
+class EpisodeProgressionRequirementViewSet(viewsets.ModelViewSet):
+    """ViewSet for EpisodeProgressionRequirement.
+
+    Records which beats (and required outcomes) must be satisfied before any
+    outbound transition fires from an episode.
+
+    Read: any authenticated user.
+    Write: Lead GM on the episode's story, or staff.
+    """
+
+    queryset = EpisodeProgressionRequirement.objects.select_related(
+        "episode__chapter__story__primary_table",
+        "beat",
+    )
+    serializer_class = EpisodeProgressionRequirementSerializer
+    permission_classes = [IsLeadGMOnEpisodeStoryOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = EpisodeProgressionRequirementFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["id"]
+    ordering = ["episode", "id"]
+
+
+class TransitionRequiredOutcomeViewSet(viewsets.ModelViewSet):
+    """ViewSet for TransitionRequiredOutcome.
+
+    Records which beat outcomes must be satisfied for a specific transition to
+    be eligible when the source episode is resolved.
+
+    Read: any authenticated user.
+    Write: Lead GM on the transition's source episode's story, or staff.
+    """
+
+    queryset = TransitionRequiredOutcome.objects.select_related(
+        "transition__source_episode__chapter__story__primary_table",
+        "beat",
+    )
+    serializer_class = TransitionRequiredOutcomeSerializer
+    permission_classes = [IsLeadGMOnTransitionStoryOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = TransitionRequiredOutcomeFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["id"]
+    ordering = ["transition", "id"]
 
 
 # ---------------------------------------------------------------------------

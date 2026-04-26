@@ -6,6 +6,7 @@ from world.stories.views import (
     AssistantGMClaimViewSet,
     BeatViewSet,
     ChapterViewSet,
+    EpisodeProgressionRequirementViewSet,
     EpisodeSceneViewSet,
     EpisodeViewSet,
     ExpireOverdueBeatsView,
@@ -19,6 +20,8 @@ from world.stories.views import (
     StoryFeedbackViewSet,
     StoryParticipationViewSet,
     StoryViewSet,
+    TransitionRequiredOutcomeViewSet,
+    TransitionViewSet,
 )
 
 router = DefaultRouter()
@@ -36,6 +39,10 @@ router.register(r"aggregate-beat-contributions", AggregateBeatContributionViewSe
 router.register(r"assistant-gm-claims", AssistantGMClaimViewSet)
 router.register(r"session-requests", SessionRequestViewSet)
 router.register(r"beats", BeatViewSet)
+# Phase 4 Wave 9: Author editor ViewSets
+router.register(r"transitions", TransitionViewSet)
+router.register(r"episode-progression-requirements", EpisodeProgressionRequirementViewSet)
+router.register(r"transition-required-outcomes", TransitionRequiredOutcomeViewSet)
 
 urlpatterns = [
     # Wave 10: Dashboard endpoints (APIView — aggregate, not paginated).

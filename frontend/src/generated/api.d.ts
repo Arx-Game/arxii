@@ -2759,6 +2759,92 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/episode-progression-requirements/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for EpisodeProgressionRequirement.
+     *
+     *     Records which beats (and required outcomes) must be satisfied before any
+     *     outbound transition fires from an episode.
+     *
+     *     Read: any authenticated user.
+     *     Write: Lead GM on the episode's story, or staff.
+     */
+    get: operations['episode_progression_requirements_list'];
+    put?: never;
+    /**
+     * @description ViewSet for EpisodeProgressionRequirement.
+     *
+     *     Records which beats (and required outcomes) must be satisfied before any
+     *     outbound transition fires from an episode.
+     *
+     *     Read: any authenticated user.
+     *     Write: Lead GM on the episode's story, or staff.
+     */
+    post: operations['episode_progression_requirements_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/episode-progression-requirements/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for EpisodeProgressionRequirement.
+     *
+     *     Records which beats (and required outcomes) must be satisfied before any
+     *     outbound transition fires from an episode.
+     *
+     *     Read: any authenticated user.
+     *     Write: Lead GM on the episode's story, or staff.
+     */
+    get: operations['episode_progression_requirements_retrieve'];
+    /**
+     * @description ViewSet for EpisodeProgressionRequirement.
+     *
+     *     Records which beats (and required outcomes) must be satisfied before any
+     *     outbound transition fires from an episode.
+     *
+     *     Read: any authenticated user.
+     *     Write: Lead GM on the episode's story, or staff.
+     */
+    put: operations['episode_progression_requirements_update'];
+    post?: never;
+    /**
+     * @description ViewSet for EpisodeProgressionRequirement.
+     *
+     *     Records which beats (and required outcomes) must be satisfied before any
+     *     outbound transition fires from an episode.
+     *
+     *     Read: any authenticated user.
+     *     Write: Lead GM on the episode's story, or staff.
+     */
+    delete: operations['episode_progression_requirements_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for EpisodeProgressionRequirement.
+     *
+     *     Records which beats (and required outcomes) must be satisfied before any
+     *     outbound transition fires from an episode.
+     *
+     *     Read: any authenticated user.
+     *     Write: Lead GM on the episode's story, or staff.
+     */
+    patch: operations['episode_progression_requirements_partial_update'];
+    trace?: never;
+  };
   '/api/episode-scenes/': {
     parameters: {
       query?: never;
@@ -7629,6 +7715,178 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/transition-required-outcomes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for TransitionRequiredOutcome.
+     *
+     *     Records which beat outcomes must be satisfied for a specific transition to
+     *     be eligible when the source episode is resolved.
+     *
+     *     Read: any authenticated user.
+     *     Write: Lead GM on the transition's source episode's story, or staff.
+     */
+    get: operations['transition_required_outcomes_list'];
+    put?: never;
+    /**
+     * @description ViewSet for TransitionRequiredOutcome.
+     *
+     *     Records which beat outcomes must be satisfied for a specific transition to
+     *     be eligible when the source episode is resolved.
+     *
+     *     Read: any authenticated user.
+     *     Write: Lead GM on the transition's source episode's story, or staff.
+     */
+    post: operations['transition_required_outcomes_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/transition-required-outcomes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for TransitionRequiredOutcome.
+     *
+     *     Records which beat outcomes must be satisfied for a specific transition to
+     *     be eligible when the source episode is resolved.
+     *
+     *     Read: any authenticated user.
+     *     Write: Lead GM on the transition's source episode's story, or staff.
+     */
+    get: operations['transition_required_outcomes_retrieve'];
+    /**
+     * @description ViewSet for TransitionRequiredOutcome.
+     *
+     *     Records which beat outcomes must be satisfied for a specific transition to
+     *     be eligible when the source episode is resolved.
+     *
+     *     Read: any authenticated user.
+     *     Write: Lead GM on the transition's source episode's story, or staff.
+     */
+    put: operations['transition_required_outcomes_update'];
+    post?: never;
+    /**
+     * @description ViewSet for TransitionRequiredOutcome.
+     *
+     *     Records which beat outcomes must be satisfied for a specific transition to
+     *     be eligible when the source episode is resolved.
+     *
+     *     Read: any authenticated user.
+     *     Write: Lead GM on the transition's source episode's story, or staff.
+     */
+    delete: operations['transition_required_outcomes_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for TransitionRequiredOutcome.
+     *
+     *     Records which beat outcomes must be satisfied for a specific transition to
+     *     be eligible when the source episode is resolved.
+     *
+     *     Read: any authenticated user.
+     *     Write: Lead GM on the transition's source episode's story, or staff.
+     */
+    patch: operations['transition_required_outcomes_partial_update'];
+    trace?: never;
+  };
+  '/api/transitions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for Transition — guarded episode graph edges.
+     *
+     *     Read: any authenticated user (Lead GM, players, staff).
+     *     Write (create/update/delete): Lead GM on the source episode's story, or staff.
+     *
+     *     The source episode's story is resolved via source_episode -> chapter -> story ->
+     *     primary_table.gm.
+     */
+    get: operations['transitions_list'];
+    put?: never;
+    /**
+     * @description ViewSet for Transition — guarded episode graph edges.
+     *
+     *     Read: any authenticated user (Lead GM, players, staff).
+     *     Write (create/update/delete): Lead GM on the source episode's story, or staff.
+     *
+     *     The source episode's story is resolved via source_episode -> chapter -> story ->
+     *     primary_table.gm.
+     */
+    post: operations['transitions_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/transitions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for Transition — guarded episode graph edges.
+     *
+     *     Read: any authenticated user (Lead GM, players, staff).
+     *     Write (create/update/delete): Lead GM on the source episode's story, or staff.
+     *
+     *     The source episode's story is resolved via source_episode -> chapter -> story ->
+     *     primary_table.gm.
+     */
+    get: operations['transitions_retrieve'];
+    /**
+     * @description ViewSet for Transition — guarded episode graph edges.
+     *
+     *     Read: any authenticated user (Lead GM, players, staff).
+     *     Write (create/update/delete): Lead GM on the source episode's story, or staff.
+     *
+     *     The source episode's story is resolved via source_episode -> chapter -> story ->
+     *     primary_table.gm.
+     */
+    put: operations['transitions_update'];
+    post?: never;
+    /**
+     * @description ViewSet for Transition — guarded episode graph edges.
+     *
+     *     Read: any authenticated user (Lead GM, players, staff).
+     *     Write (create/update/delete): Lead GM on the source episode's story, or staff.
+     *
+     *     The source episode's story is resolved via source_episode -> chapter -> story ->
+     *     primary_table.gm.
+     */
+    delete: operations['transitions_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for Transition — guarded episode graph edges.
+     *
+     *     Read: any authenticated user (Lead GM, players, staff).
+     *     Write (create/update/delete): Lead GM on the source episode's story, or staff.
+     *
+     *     The source episode's story is resolved via source_episode -> chapter -> story ->
+     *     primary_table.gm.
+     */
+    patch: operations['transitions_partial_update'];
+    trace?: never;
+  };
   '/api/user/': {
     parameters: {
       query?: never;
@@ -7817,6 +8075,10 @@ export interface components {
     Beat: {
       readonly id: number;
       episode: number;
+      readonly episode_title: string;
+      readonly chapter_title: string;
+      readonly story_id: number;
+      readonly story_title: string;
       predicate_type?: components['schemas']['PredicateTypeEnum'];
       /**
        * @description The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
@@ -8890,6 +9152,12 @@ export interface components {
       readonly stages: components['schemas']['ConditionStage'][];
     };
     /**
+     * @description * `therefore` - Therefore
+     *     * `but` - But
+     * @enum {string}
+     */
+    ConnectionTypeEnum: 'therefore' | 'but';
+    /**
      * @description * `1` - Origin
      *     * `2` - Heritage
      *     * `3` - Lineage
@@ -9257,6 +9525,29 @@ export interface components {
       readonly scenes_count: number;
       /** Format: date-time */
       completed_at?: string | null;
+    };
+    /**
+     * @description Full serializer for EpisodeProgressionRequirement.
+     *
+     *     Records a beat that must reach ``required_outcome`` before any outbound
+     *     transition fires from the episode.
+     */
+    EpisodeProgressionRequirement: {
+      readonly id: number;
+      episode: number;
+      beat: number;
+      required_outcome?: components['schemas']['RequiredOutcomeEnum'];
+    };
+    /**
+     * @description Full serializer for EpisodeProgressionRequirement.
+     *
+     *     Records a beat that must reach ``required_outcome`` before any outbound
+     *     transition fires from the episode.
+     */
+    EpisodeProgressionRequirementRequest: {
+      episode: number;
+      beat: number;
+      required_outcome?: components['schemas']['RequiredOutcomeEnum'];
     };
     /** @description Serializer for episode-scene connections */
     EpisodeScene: {
@@ -10003,7 +10294,7 @@ export interface components {
        *     * `shout` - Shout
        *     * `action` - Action
        */
-      mode?: components['schemas']['ModeEnum'];
+      mode?: components['schemas']['Mode3e5Enum'];
       /**
        * @description Privacy override — can only escalate, never reduce
        *
@@ -10060,7 +10351,7 @@ export interface components {
        *     * `shout` - Shout
        *     * `action` - Action
        */
-      mode?: components['schemas']['ModeEnum'];
+      mode?: components['schemas']['Mode3e5Enum'];
       /**
        * @description Privacy override — can only escalate, never reduce
        *
@@ -10098,7 +10389,7 @@ export interface components {
        *     * `shout` - Shout
        *     * `action` - Action
        */
-      mode?: components['schemas']['ModeEnum'];
+      mode?: components['schemas']['Mode3e5Enum'];
       /**
        * @description Privacy override — can only escalate, never reduce
        *
@@ -10219,7 +10510,7 @@ export interface components {
      *     * `action` - Action
      * @enum {string}
      */
-    ModeEnum: 'pose' | 'emit' | 'say' | 'whisper' | 'shout' | 'action';
+    Mode3e5Enum: 'pose' | 'emit' | 'say' | 'whisper' | 'shout' | 'action';
     ModifierCategory: {
       readonly id: number;
       /** @description Category name (e.g., 'stat', 'magic', 'affinity') */
@@ -10605,6 +10896,21 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['EpisodeList'][];
+    };
+    PaginatedEpisodeProgressionRequirementList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['EpisodeProgressionRequirement'][];
     };
     PaginatedEpisodeSceneList: {
       /** @example 123 */
@@ -11166,6 +11472,36 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['ThreadWeavingTeachingOffer'][];
     };
+    PaginatedTransitionList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['Transition'][];
+    };
+    PaginatedTransitionRequiredOutcomeList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['TransitionRequiredOutcome'][];
+    };
     /**
      * @description Read serializer for combat participants.
      *
@@ -11422,6 +11758,17 @@ export interface components {
       consequences?: string;
       /** Format: date-time */
       completed_at?: string | null;
+    };
+    /**
+     * @description Full serializer for EpisodeProgressionRequirement.
+     *
+     *     Records a beat that must reach ``required_outcome`` before any outbound
+     *     transition fires from the episode.
+     */
+    PatchedEpisodeProgressionRequirementRequest: {
+      episode?: number;
+      beat?: number;
+      required_outcome?: components['schemas']['RequiredOutcomeEnum'];
     };
     /** @description Serializer for episode-scene connections */
     PatchedEpisodeSceneRequest: {
@@ -11689,6 +12036,48 @@ export interface components {
       name: string;
       /** @default  */
       description: string;
+    };
+    /**
+     * @description Full serializer for Transition — guarded episode graph edges.
+     *
+     *     Read-only breadcrumb fields (source_episode_title, target_episode_title)
+     *     provide context for the Wave 9 author editor without requiring extra lookups;
+     *     they are served free via TransitionViewSet.queryset.select_related.
+     */
+    PatchedTransitionRequest: {
+      source_episode?: number;
+      /** @description May be null when next episode is unauthored (frontier pause). */
+      target_episode?: number | null;
+      /**
+       * @description AUTO fires when eligibility is satisfied. GM_CHOICE requires a Lead GM to pick from the eligible set.
+       *
+       *     * `auto` - Auto
+       *     * `gm_choice` - GM Choice
+       */
+      mode?: components['schemas']['TransitionModeEnum'];
+      /**
+       * @description Narrative flavor: THEREFORE / BUT.
+       *
+       *     * `therefore` - Therefore
+       *     * `but` - But
+       */
+      connection_type?:
+        | components['schemas']['ConnectionTypeEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description Short narrative description of why this transition fires. */
+      connection_summary?: string;
+      order?: number;
+    };
+    /**
+     * @description Full serializer for TransitionRequiredOutcome.
+     *
+     *     Records a beat outcome that must be satisfied for this specific transition
+     *     to be eligible when the episode is resolved.
+     */
+    PatchedTransitionRequiredOutcomeRequest: {
+      transition?: number;
+      beat?: number;
+      required_outcome?: components['schemas']['RequiredOutcomeEnum'];
     };
     /** @description Serializer for Path in CG context. */
     Path: {
@@ -12367,6 +12756,15 @@ export interface components {
       /** @description Return the name of the current tier, or None if no tier reached. */
       readonly current_tier_name: string | null;
     };
+    /**
+     * @description * `unsatisfied` - Unsatisfied
+     *     * `success` - Success
+     *     * `failure` - Failure
+     *     * `expired` - Expired
+     *     * `pending_gm_review` - Pending GM review
+     * @enum {string}
+     */
+    RequiredOutcomeEnum: 'unsatisfied' | 'success' | 'failure' | 'expired' | 'pending_gm_review';
     /**
      * @description * `destroy` - Destroy (removed for everyone)
      *     * `personal` - Personal (resolved for this character only)
@@ -13519,6 +13917,103 @@ export interface components {
      * @enum {string}
      */
     TraitTraitTypeEnum: 'stat' | 'skill' | 'modifier' | 'other';
+    /**
+     * @description Full serializer for Transition — guarded episode graph edges.
+     *
+     *     Read-only breadcrumb fields (source_episode_title, target_episode_title)
+     *     provide context for the Wave 9 author editor without requiring extra lookups;
+     *     they are served free via TransitionViewSet.queryset.select_related.
+     */
+    Transition: {
+      readonly id: number;
+      source_episode: number;
+      readonly source_episode_title: string;
+      /** @description May be null when next episode is unauthored (frontier pause). */
+      target_episode?: number | null;
+      /** @description Return target episode title, or None when target is null (frontier). */
+      readonly target_episode_title: string | null;
+      /**
+       * @description AUTO fires when eligibility is satisfied. GM_CHOICE requires a Lead GM to pick from the eligible set.
+       *
+       *     * `auto` - Auto
+       *     * `gm_choice` - GM Choice
+       */
+      mode?: components['schemas']['TransitionModeEnum'];
+      /**
+       * @description Narrative flavor: THEREFORE / BUT.
+       *
+       *     * `therefore` - Therefore
+       *     * `but` - But
+       */
+      connection_type?:
+        | components['schemas']['ConnectionTypeEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description Short narrative description of why this transition fires. */
+      connection_summary?: string;
+      order?: number;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description * `auto` - Auto
+     *     * `gm_choice` - GM Choice
+     * @enum {string}
+     */
+    TransitionModeEnum: 'auto' | 'gm_choice';
+    /**
+     * @description Full serializer for Transition — guarded episode graph edges.
+     *
+     *     Read-only breadcrumb fields (source_episode_title, target_episode_title)
+     *     provide context for the Wave 9 author editor without requiring extra lookups;
+     *     they are served free via TransitionViewSet.queryset.select_related.
+     */
+    TransitionRequest: {
+      source_episode: number;
+      /** @description May be null when next episode is unauthored (frontier pause). */
+      target_episode?: number | null;
+      /**
+       * @description AUTO fires when eligibility is satisfied. GM_CHOICE requires a Lead GM to pick from the eligible set.
+       *
+       *     * `auto` - Auto
+       *     * `gm_choice` - GM Choice
+       */
+      mode?: components['schemas']['TransitionModeEnum'];
+      /**
+       * @description Narrative flavor: THEREFORE / BUT.
+       *
+       *     * `therefore` - Therefore
+       *     * `but` - But
+       */
+      connection_type?:
+        | components['schemas']['ConnectionTypeEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description Short narrative description of why this transition fires. */
+      connection_summary?: string;
+      order?: number;
+    };
+    /**
+     * @description Full serializer for TransitionRequiredOutcome.
+     *
+     *     Records a beat outcome that must be satisfied for this specific transition
+     *     to be eligible when the episode is resolved.
+     */
+    TransitionRequiredOutcome: {
+      readonly id: number;
+      transition: number;
+      beat: number;
+      required_outcome: components['schemas']['RequiredOutcomeEnum'];
+    };
+    /**
+     * @description Full serializer for TransitionRequiredOutcome.
+     *
+     *     Records a beat outcome that must be satisfied for this specific transition
+     *     to be eligible when the episode is resolved.
+     */
+    TransitionRequiredOutcomeRequest: {
+      transition: number;
+      beat: number;
+      required_outcome: components['schemas']['RequiredOutcomeEnum'];
+    };
     /** @description Serializer for trust categories */
     TrustCategory: {
       readonly id: number;
@@ -14215,12 +14710,15 @@ export interface operations {
   beats_list: {
     parameters: {
       query?: {
+        agm_eligible?: boolean;
+        episode?: number;
         /** @description Which field to use when ordering the results. */
         ordering?: string;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
+        story?: number;
       };
       header?: never;
       path?: never;
@@ -17063,6 +17561,153 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  episode_progression_requirements_list: {
+    parameters: {
+      query?: {
+        beat?: number;
+        episode?: number;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        story?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedEpisodeProgressionRequirementList'];
+        };
+      };
+    };
+  };
+  episode_progression_requirements_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EpisodeProgressionRequirementRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EpisodeProgressionRequirement'];
+        };
+      };
+    };
+  };
+  episode_progression_requirements_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this episode progression requirement. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EpisodeProgressionRequirement'];
+        };
+      };
+    };
+  };
+  episode_progression_requirements_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this episode progression requirement. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EpisodeProgressionRequirementRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EpisodeProgressionRequirement'];
+        };
+      };
+    };
+  };
+  episode_progression_requirements_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this episode progression requirement. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  episode_progression_requirements_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this episode progression requirement. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedEpisodeProgressionRequirementRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EpisodeProgressionRequirement'];
+        };
       };
     };
   };
@@ -24998,6 +25643,301 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Trait'];
+        };
+      };
+    };
+  };
+  transition_required_outcomes_list: {
+    parameters: {
+      query?: {
+        beat?: number;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        story?: number;
+        transition?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedTransitionRequiredOutcomeList'];
+        };
+      };
+    };
+  };
+  transition_required_outcomes_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TransitionRequiredOutcomeRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TransitionRequiredOutcome'];
+        };
+      };
+    };
+  };
+  transition_required_outcomes_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this transition required outcome. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TransitionRequiredOutcome'];
+        };
+      };
+    };
+  };
+  transition_required_outcomes_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this transition required outcome. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TransitionRequiredOutcomeRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TransitionRequiredOutcome'];
+        };
+      };
+    };
+  };
+  transition_required_outcomes_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this transition required outcome. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  transition_required_outcomes_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this transition required outcome. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedTransitionRequiredOutcomeRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TransitionRequiredOutcome'];
+        };
+      };
+    };
+  };
+  transitions_list: {
+    parameters: {
+      query?: {
+        mode?: string;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        source_episode?: number;
+        story?: number;
+        target_episode?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedTransitionList'];
+        };
+      };
+    };
+  };
+  transitions_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TransitionRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Transition'];
+        };
+      };
+    };
+  };
+  transitions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this transition. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Transition'];
+        };
+      };
+    };
+  };
+  transitions_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this transition. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TransitionRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Transition'];
+        };
+      };
+    };
+  };
+  transitions_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this transition. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  transitions_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this transition. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedTransitionRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Transition'];
         };
       };
     };
