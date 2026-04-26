@@ -5,8 +5,10 @@ import django_filters
 from world.stories.models import (
     AggregateBeatContribution,
     AssistantGMClaim,
+    Beat,
     Chapter,
     Episode,
+    EpisodeProgressionRequirement,
     EpisodeScene,
     GlobalStoryProgress,
     GroupStoryProgress,
@@ -16,6 +18,8 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryParticipation,
+    Transition,
+    TransitionRequiredOutcome,
     TrustCategory,
 )
 
@@ -334,6 +338,18 @@ class AggregateBeatContributionFilter(django_filters.FilterSet):
         fields = ["beat", "character_sheet"]
 
 
+class BeatFilter(django_filters.FilterSet):
+    """Filter for Beat model."""
+
+    episode = django_filters.NumberFilter(field_name="episode_id")
+    story = django_filters.NumberFilter(field_name="episode__chapter__story_id")
+    agm_eligible = django_filters.BooleanFilter(field_name="agm_eligible")
+
+    class Meta:
+        model = Beat
+        fields = ["episode", "agm_eligible"]
+
+
 class AssistantGMClaimFilter(django_filters.FilterSet):
     """Filter for AssistantGMClaim model"""
 
@@ -351,6 +367,47 @@ class AssistantGMClaimFilter(django_filters.FilterSet):
     class Meta:
         model = AssistantGMClaim
         fields = ["beat", "assistant_gm", "status"]
+
+
+class TransitionFilter(django_filters.FilterSet):
+    """Filter for Transition model — guarded episode graph edges."""
+
+    source_episode = django_filters.NumberFilter(field_name="source_episode_id")
+    target_episode = django_filters.NumberFilter(field_name="target_episode_id")
+    story = django_filters.NumberFilter(
+        field_name="source_episode__chapter__story_id",
+    )
+    mode = django_filters.CharFilter(field_name="mode")
+
+    class Meta:
+        model = Transition
+        fields = ["source_episode", "target_episode", "mode"]
+
+
+class EpisodeProgressionRequirementFilter(django_filters.FilterSet):
+    """Filter for EpisodeProgressionRequirement model."""
+
+    episode = django_filters.NumberFilter(field_name="episode_id")
+    story = django_filters.NumberFilter(field_name="episode__chapter__story_id")
+    beat = django_filters.NumberFilter(field_name="beat_id")
+
+    class Meta:
+        model = EpisodeProgressionRequirement
+        fields = ["episode", "beat"]
+
+
+class TransitionRequiredOutcomeFilter(django_filters.FilterSet):
+    """Filter for TransitionRequiredOutcome model."""
+
+    transition = django_filters.NumberFilter(field_name="transition_id")
+    beat = django_filters.NumberFilter(field_name="beat_id")
+    story = django_filters.NumberFilter(
+        field_name="transition__source_episode__chapter__story_id",
+    )
+
+    class Meta:
+        model = TransitionRequiredOutcome
+        fields = ["transition", "beat"]
 
 
 class SessionRequestFilter(django_filters.FilterSet):

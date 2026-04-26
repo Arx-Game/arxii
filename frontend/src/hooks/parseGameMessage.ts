@@ -8,9 +8,14 @@ export function parseGameMessage(parsed: IncomingMessage): GameMessage {
     let messageType: GameMessageType = GAME_MESSAGE_TYPE.SYSTEM;
     if (msgType === WS_MESSAGE_TYPE.TEXT && Array.isArray(args) && args.length > 0) {
       content = String(args[0]);
-      messageType = (kwargs as Record<string, unknown>).from_channel
-        ? GAME_MESSAGE_TYPE.CHANNEL
-        : GAME_MESSAGE_TYPE.TEXT;
+      const kw = kwargs as Record<string, unknown>;
+      if (kw.from_channel) {
+        messageType = GAME_MESSAGE_TYPE.CHANNEL;
+      } else if (kw.type === 'narrative') {
+        messageType = GAME_MESSAGE_TYPE.NARRATIVE;
+      } else {
+        messageType = GAME_MESSAGE_TYPE.TEXT;
+      }
     } else if (msgType === WS_MESSAGE_TYPE.LOGGED_IN) {
       content = 'Successfully logged in!';
     } else if (msgType === WS_MESSAGE_TYPE.VN_MESSAGE) {

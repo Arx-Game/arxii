@@ -8,12 +8,24 @@ import type { RosterEntryData } from '../types';
 
 vi.mock('../queries', () => ({
   useRosterEntryQuery: vi.fn(),
+  useMyRosterEntriesQuery: vi.fn(),
 }));
-import { useRosterEntryQuery } from '../queries';
+import { useRosterEntryQuery, useMyRosterEntriesQuery } from '../queries';
 
 const mockUseRosterEntryQuery = vi.mocked(useRosterEntryQuery);
+const mockUseMyRosterEntriesQuery = vi.mocked(useMyRosterEntriesQuery);
 
 describe('CharacterSheetPage', () => {
+  beforeEach(() => {
+    // Default: user has no characters — so MessagesSection is hidden.
+    mockUseMyRosterEntriesQuery.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isSuccess: true,
+      error: null,
+    } as unknown as ReturnType<typeof useMyRosterEntriesQuery>);
+  });
+
   it('shows loading state', () => {
     mockUseRosterEntryQuery.mockReturnValue({
       data: undefined,

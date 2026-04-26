@@ -20,6 +20,7 @@ from world.stories.models import (
     BeatCompletion,
     Chapter,
     Episode,
+    EpisodeProgressionRequirement,
     EpisodeResolution,
     EpisodeScene,
     GlobalStoryProgress,
@@ -33,6 +34,7 @@ from world.stories.models import (
     StoryProgress,
     StoryTrustRequirement,
     Transition,
+    TransitionRequiredOutcome,
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
@@ -725,11 +727,23 @@ class SessionRequestSerializer(serializers.ModelSerializer):
 class BeatSerializer(serializers.ModelSerializer):
     """Full serializer for Beat including all Phase 2 predicate config fields."""
 
+    # Read-only context fields surfaced for the AGM opportunities browser.
+    # These walk the episode__chapter__story FK chain; no extra queries thanks
+    # to the select_related on BeatViewSet.queryset.
+    episode_title = serializers.CharField(source="episode.title", read_only=True)
+    chapter_title = serializers.CharField(source="episode.chapter.title", read_only=True)
+    story_id = serializers.IntegerField(source="episode.chapter.story_id", read_only=True)
+    story_title = serializers.CharField(source="episode.chapter.story.title", read_only=True)
+
     class Meta:
         model = Beat
         fields = [
             "id",
             "episode",
+            "episode_title",
+            "chapter_title",
+            "story_id",
+            "story_title",
             "predicate_type",
             "outcome",
             "visibility",
@@ -754,7 +768,15 @@ class BeatSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "episode_title",
+            "chapter_title",
+            "story_id",
+            "story_title",
+            "created_at",
+            "updated_at",
+        ]
 
     def validate(self, attrs: Any) -> Any:
         """Mirror Beat.clean() so predicate-type invariants surface as 400 responses."""
@@ -790,6 +812,86 @@ class BeatSerializer(serializers.ModelSerializer):
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.message_dict) from exc
         return attrs
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 Wave 9: Author editor serializers
+# ---------------------------------------------------------------------------
+
+
+class TransitionSerializer(serializers.ModelSerializer):
+    """Full serializer for Transition — guarded episode graph edges.
+
+    Read-only breadcrumb fields (source_episode_title, target_episode_title)
+    provide context for the Wave 9 author editor without requiring extra lookups;
+    they are served free via TransitionViewSet.queryset.select_related.
+    """
+
+    source_episode_title = serializers.CharField(source="source_episode.title", read_only=True)
+    target_episode_title = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Transition
+        fields = [
+            "id",
+            "source_episode",
+            "source_episode_title",
+            "target_episode",
+            "target_episode_title",
+            "mode",
+            "connection_type",
+            "connection_summary",
+            "order",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "source_episode_title",
+            "target_episode_title",
+            "created_at",
+        ]
+
+    def get_target_episode_title(self, obj: Transition) -> str | None:
+        """Return target episode title, or None when target is null (frontier)."""
+        if obj.target_episode_id is None:
+            return None
+        return obj.target_episode.title
+
+
+class EpisodeProgressionRequirementSerializer(serializers.ModelSerializer):
+    """Full serializer for EpisodeProgressionRequirement.
+
+    Records a beat that must reach ``required_outcome`` before any outbound
+    transition fires from the episode.
+    """
+
+    class Meta:
+        model = EpisodeProgressionRequirement
+        fields = [
+            "id",
+            "episode",
+            "beat",
+            "required_outcome",
+        ]
+        read_only_fields = ["id"]
+
+
+class TransitionRequiredOutcomeSerializer(serializers.ModelSerializer):
+    """Full serializer for TransitionRequiredOutcome.
+
+    Records a beat outcome that must be satisfied for this specific transition
+    to be eligible when the episode is resolved.
+    """
+
+    class Meta:
+        model = TransitionRequiredOutcome
+        fields = [
+            "id",
+            "transition",
+            "beat",
+            "required_outcome",
+        ]
+        read_only_fields = ["id"]
 
 
 # ---------------------------------------------------------------------------

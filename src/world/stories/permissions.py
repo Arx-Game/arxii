@@ -584,8 +584,6 @@ class CanMarkBeat(permissions.BasePermission):
             .exists()
         )
 
-        return False
-
 
 class IsClaimOwnerOrStaff(permissions.BasePermission):
     """The AGM who made the claim (for cancel) or staff."""
@@ -653,6 +651,100 @@ class IsSessionRequestGMOrStaff(permissions.BasePermission):
             return True
         story = obj.episode.chapter.story
         return story.owners.filter(id=request.user.id).exists()
+
+
+class IsLeadGMOnEpisodeStoryOrStaff(permissions.BasePermission):
+    """Lead GM (primary_table.gm) of the episode's story, or staff.
+
+    Works for any model whose ``episode`` FK walks episode -> chapter -> story.
+    Used by: EpisodeProgressionRequirementViewSet.
+    """
+
+    message = "Only the Lead GM of this episode's story or staff may perform this action."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Authenticated users can read; Lead GM or staff can write."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        # Writes: require a GMProfile (Lead GM check is at object level).
+        try:
+            _ = request.user.gm_profile
+            return True
+        except GMProfile.DoesNotExist:
+            return False
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Read: anyone authenticated. Write: Lead GM of the episode's story or staff."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        if request.method in permissions.SAFE_METHODS:
+            # Read access mirrors BeatViewSet — anyone authenticated can read.
+            return True
+        # Write: Lead GM of episode -> chapter -> story via primary_table.gm.
+        story = obj.episode.chapter.story
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return False
+        if not story.primary_table_id:
+            return False
+        return story.primary_table.gm_id == gm_profile.pk
+
+
+class IsLeadGMOnTransitionStoryOrStaff(permissions.BasePermission):
+    """Lead GM (primary_table.gm) of the transition's source episode's story, or staff.
+
+    Used by: TransitionViewSet and TransitionRequiredOutcomeViewSet.
+    For Transition objects the story walks transition -> source_episode -> chapter -> story.
+    For TransitionRequiredOutcome objects it walks tro -> transition -> source_episode ->
+    chapter -> story.
+    """
+
+    message = "Only the Lead GM of this story or staff may perform this action."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Authenticated users can read; Lead GM or staff can write."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        try:
+            _ = request.user.gm_profile
+            return True
+        except GMProfile.DoesNotExist:
+            return False
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Read: anyone authenticated. Write: Lead GM of the story or staff."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        # Resolve the story from either a Transition or a TransitionRequiredOutcome.
+        from world.stories.models import Transition as TransitionModel  # noqa: PLC0415
+
+        if isinstance(obj, TransitionModel):
+            story = obj.source_episode.chapter.story
+        else:
+            # TransitionRequiredOutcome: obj.transition -> source_episode -> chapter -> story
+            story = obj.transition.source_episode.chapter.story
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return False
+        if not story.primary_table_id:
+            return False
+        return story.primary_table.gm_id == gm_profile.pk
 
 
 class IsGMProfile(permissions.BasePermission):
