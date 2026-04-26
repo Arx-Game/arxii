@@ -481,7 +481,7 @@ def seed_magic_config() -> MagicConfigResult:
     soulfray_config, _ = SoulfrayConfig.objects.get_or_create(
         pk=1,
         defaults={
-            "soulfray_threshold_ratio": "0.30",
+            "soulfray_threshold_ratio": Decimal("0.30"),
             "severity_scale": 10,
             "deficit_scale": 5,
             "resilience_check_type": resilience_check_type,

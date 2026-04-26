@@ -50,6 +50,32 @@ class TestSeedMagicConfigCreation(TestCase):
         self.assertEqual(cfg.resilience_check_type.name, "Magical Endurance")
         self.assertEqual(self.result.soulfray_config.pk, 1)
 
+    def test_soulfray_threshold_ratio_is_decimal(self) -> None:
+        """Regression: seed_magic_config() must store Decimal, not a string literal.
+
+        SharedMemoryModel's identity map caches the freshly-inserted instance
+        with whatever Python value was passed to get_or_create defaults.  If a
+        string literal like "0.30" is passed instead of Decimal("0.30"), downstream
+        code that does ``Decimal(...) >= soulfray_threshold_ratio`` raises TypeError.
+        """
+        from decimal import Decimal
+
+        from world.magic.models import SoulfrayConfig
+
+        cfg = SoulfrayConfig.objects.get(pk=1)
+        # isinstance check: catches the string-literal bug before any arithmetic
+        self.assertIsInstance(
+            cfg.soulfray_threshold_ratio,
+            Decimal,
+            "soulfray_threshold_ratio must be a Decimal, not a string literal",
+        )
+        # Decimal comparison: fires TypeError if value is a str
+        self.assertGreater(
+            cfg.soulfray_threshold_ratio,
+            Decimal("0.0"),
+            "soulfray_threshold_ratio must be > 0",
+        )
+
     def test_resonance_gain_config_created(self) -> None:
         from world.magic.models.gain_config import ResonanceGainConfig
 

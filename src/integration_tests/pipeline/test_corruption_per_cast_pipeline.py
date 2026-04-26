@@ -46,14 +46,11 @@ from django.test import TestCase
 class TestCorruptionPerCastPipeline(TestCase):
     """Per-cast corruption hook pipeline — Audere, multi-resonance, stacked multipliers.
 
-    setUpTestData lazy-creates only CorruptionConfig(pk=1) with default coefficients
-    (abyssal=10, tier-1=10, audere=15, deficit=20, mishap=15).  We do NOT call
-    seed_magic_config() here because that creates a SoulfrayConfig singleton whose
-    DecimalField value is stored as a string literal in the identity map on fresh
-    get_or_create, causing a TypeError in the soulfray ratio comparison inside
-    use_technique().  Instead, we rely on the absence of a SoulfrayConfig row so
-    use_technique()'s Step 7 guard (``if soulfray_config:``) is a no-op — cleanly
-    isolating the corruption path.
+    setUpTestData calls seed_magic_config() to set up all required singletons
+    (AnimaConfig, SoulfrayConfig, ResonanceGainConfig, CorruptionConfig, etc.)
+    with correct types.  seed_magic_config() now stores SoulfrayConfig's
+    soulfray_threshold_ratio as Decimal("0.30"), so use_technique()'s Step 7
+    soulfray guard no longer raises TypeError.
 
     Individual tests create their own characters, CharacterAnima rows, and
     resonances with ConditionTemplates so each scenario is fully isolated.
@@ -64,11 +61,13 @@ class TestCorruptionPerCastPipeline(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from world.magic.services.corruption import get_corruption_config
+        from integration_tests.game_content.magic import seed_magic_config
 
-        # Lazy-create the CorruptionConfig singleton so accrue_corruption_for_cast
-        # resolves it from a real DB row (default coefficients apply).
-        cls.corruption_config = get_corruption_config()
+        # seed_magic_config() creates all required singletons (including
+        # SoulfrayConfig with Decimal("0.30") for soulfray_threshold_ratio)
+        # and the CorruptionConfig with default coefficients.
+        result = seed_magic_config()
+        cls.corruption_config = result.corruption_config
 
     # -----------------------------------------------------------------------
     # Internal helpers
