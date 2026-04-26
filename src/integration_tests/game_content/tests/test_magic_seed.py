@@ -1,5 +1,5 @@
 """Tests for seed_magic_config() — Task 1.1, seed_canonical_rituals() — Task 1.2,
-and seed_thread_pull_catalog() — Task 1.3.
+seed_thread_pull_catalog() — Task 1.3, and seed_cantrip_starter_catalog() — Task 1.8.
 
 Verifies:
 1. All 5 singletons + IntensityTier rows + MishapPoolTier are created with
@@ -11,15 +11,20 @@ Verifies:
 6. ThreadPullCost + ThreadPullEffect catalog rows are created correctly (Task 1.3).
 7. Thread pull catalog seeding is idempotent (Task 1.3).
 8. Staff edits to ThreadPullEffect survive a re-run (Task 1.3).
+9. Cantrip starter catalog creates 5 styles, 6 effect types, 25 cantrips (Task 1.8).
+10. Cantrip catalog seeding is idempotent (Task 1.8).
+11. Staff edits to Cantrip rows survive a re-run (Task 1.8).
 """
 
 from django.test import TestCase
 
 from integration_tests.game_content.magic import (
+    CantripStarterCatalogResult,
     MagicConfigResult,
     RitualSeedResult,
     ThreadPullCatalogResult,
     seed_canonical_rituals,
+    seed_cantrip_starter_catalog,
     seed_magic_config,
     seed_thread_pull_catalog,
 )
@@ -449,4 +454,211 @@ class TestSeedThreadPullCatalogPreservesEdits(TestCase):
             db_value["flat_bonus_amount"],
             99,
             "seed_thread_pull_catalog() must not overwrite existing rows (get_or_create semantics)",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Task 1.8 — seed_cantrip_starter_catalog()
+# ---------------------------------------------------------------------------
+
+
+class TestSeedCantripStarterCatalogCreation(TestCase):
+    """First-call assertions: correct counts and archetype×style grid exists."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.result: CantripStarterCatalogResult = seed_cantrip_starter_catalog()
+
+    def test_five_styles_created(self) -> None:
+        from world.magic.models import TechniqueStyle
+
+        self.assertEqual(TechniqueStyle.objects.count(), 5)
+        expected_styles = {"Manifestation", "Subtle", "Performance", "Prayer", "Incantation"}
+        actual_styles = set(TechniqueStyle.objects.values_list("name", flat=True))
+        self.assertEqual(actual_styles, expected_styles)
+        self.assertEqual(set(self.result.styles.keys()), expected_styles)
+
+    def test_six_effect_types_created(self) -> None:
+        from world.magic.models import EffectType
+
+        self.assertEqual(EffectType.objects.count(), 6)
+        expected = {
+            "Weapon Enhancement",
+            "Ranged Attack",
+            "Buff",
+            "Debuff",
+            "Defense",
+            "Utility",
+        }
+        actual = set(EffectType.objects.values_list("name", flat=True))
+        self.assertEqual(actual, expected)
+        self.assertEqual(set(self.result.effect_types.keys()), expected)
+
+    def test_twenty_five_cantrips_created(self) -> None:
+        from world.magic.models.cantrips import Cantrip
+
+        self.assertEqual(Cantrip.objects.count(), 25)
+        self.assertEqual(len(self.result.cantrips), 25)
+
+    def test_each_cantrip_has_correct_archetype_and_style(self) -> None:
+        """Every (archetype, style_name) combination must appear exactly once."""
+        from world.magic.constants import CantripArchetype
+        from world.magic.models.cantrips import Cantrip
+
+        expected_archetypes = {
+            CantripArchetype.ATTACK,
+            CantripArchetype.DEFENSE,
+            CantripArchetype.BUFF,
+            CantripArchetype.DEBUFF,
+            CantripArchetype.UTILITY,
+        }
+        expected_style_names = {"Manifestation", "Subtle", "Performance", "Prayer", "Incantation"}
+
+        # Build (archetype, style_name) pairs from the DB
+        pairs = set(Cantrip.objects.select_related("style").values_list("archetype", "style__name"))
+        expected_pairs = {
+            (arch, style) for arch in expected_archetypes for style in expected_style_names
+        }
+        self.assertEqual(
+            pairs,
+            expected_pairs,
+            "Each (archetype, style) pair must appear exactly once",
+        )
+
+    def test_five_prospect_paths_created(self) -> None:
+        from world.classes.models import Path, PathStage
+
+        self.assertEqual(Path.objects.filter(stage=PathStage.PROSPECT).count(), 5)
+        expected_path_names = {
+            "Path of Steel",
+            "Path of Whispers",
+            "Path of Voice",
+            "Path of the Chosen",
+            "Path of Tomes",
+        }
+        actual = set(Path.objects.filter(stage=PathStage.PROSPECT).values_list("name", flat=True))
+        self.assertEqual(actual, expected_path_names)
+        self.assertEqual(set(self.result.paths.keys()), expected_path_names)
+
+    def test_styles_wired_to_paths(self) -> None:
+        """Each TechniqueStyle must have exactly one allowed_path matching the canonical mapping."""
+        style_to_path = {
+            "Manifestation": "Path of Steel",
+            "Subtle": "Path of Whispers",
+            "Performance": "Path of Voice",
+            "Prayer": "Path of the Chosen",
+            "Incantation": "Path of Tomes",
+        }
+        from world.magic.models import TechniqueStyle
+
+        for style_name, path_name in style_to_path.items():
+            style = TechniqueStyle.objects.get(name=style_name)
+            allowed = list(style.allowed_paths.values_list("name", flat=True))
+            self.assertIn(
+                path_name,
+                allowed,
+                f"Style '{style_name}' must have '{path_name}' in allowed_paths",
+            )
+
+    def test_cantrips_are_active(self) -> None:
+        from world.magic.models.cantrips import Cantrip
+
+        inactive = Cantrip.objects.filter(is_active=False).count()
+        self.assertEqual(inactive, 0, "All seeded cantrips must be active")
+
+    def test_cantrip_default_mechanicals(self) -> None:
+        """All cantrips should have starter-level mechanical values."""
+        from world.magic.models.cantrips import Cantrip
+
+        for cantrip in Cantrip.objects.all():
+            self.assertEqual(cantrip.base_intensity, 1, f"{cantrip.name}: base_intensity")
+            self.assertEqual(cantrip.base_control, 1, f"{cantrip.name}: base_control")
+            self.assertEqual(cantrip.base_anima_cost, 5, f"{cantrip.name}: base_anima_cost")
+
+
+class TestSeedCantripStarterCatalogIdempotency(TestCase):
+    """Second-call assertions: row counts unchanged, same PKs returned."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.first: CantripStarterCatalogResult = seed_cantrip_starter_catalog()
+        cls.second: CantripStarterCatalogResult = seed_cantrip_starter_catalog()
+
+    def _counts(self) -> dict[str, int]:
+        from world.classes.models import Path, PathStage
+        from world.magic.models import EffectType, TechniqueStyle
+        from world.magic.models.cantrips import Cantrip
+
+        return {
+            "cantrips": Cantrip.objects.count(),
+            "styles": TechniqueStyle.objects.count(),
+            "effect_types": EffectType.objects.count(),
+            "prospect_paths": Path.objects.filter(stage=PathStage.PROSPECT).count(),
+        }
+
+    def test_row_counts_unchanged(self) -> None:
+        counts = self._counts()
+        self.assertEqual(counts["cantrips"], 25)
+        self.assertEqual(counts["styles"], 5)
+        self.assertEqual(counts["effect_types"], 6)
+        self.assertEqual(counts["prospect_paths"], 5)
+
+    def test_same_pks_returned(self) -> None:
+        style_names = {"Manifestation", "Subtle", "Performance", "Prayer", "Incantation"}
+        for name in style_names:
+            self.assertEqual(
+                self.first.styles[name].pk,
+                self.second.styles[name].pk,
+                f"TechniqueStyle '{name}' pk changed on second call",
+            )
+        for name, cantrip in self.first.cantrips.items():
+            self.assertEqual(
+                cantrip.pk,
+                self.second.cantrips[name].pk,
+                f"Cantrip '{name}' pk changed on second call",
+            )
+        for name, et in self.first.effect_types.items():
+            self.assertEqual(
+                et.pk,
+                self.second.effect_types[name].pk,
+                f"EffectType '{name}' pk changed on second call",
+            )
+        path_names = {
+            "Path of Steel",
+            "Path of Whispers",
+            "Path of Voice",
+            "Path of the Chosen",
+            "Path of Tomes",
+        }
+        for name in path_names:
+            self.assertEqual(
+                self.first.paths[name].pk,
+                self.second.paths[name].pk,
+                f"Path '{name}' pk changed on second call",
+            )
+
+
+class TestSeedCantripStarterCatalogPreservesEdits(TestCase):
+    """Staff edits to Cantrip rows survive a re-run (get_or_create semantics)."""
+
+    def test_edit_preserved_on_rerun(self) -> None:
+        from world.magic.models.cantrips import Cantrip
+
+        first = seed_cantrip_starter_catalog()
+        # Pick the first cantrip alphabetically for determinism
+        cantrip_name = next(iter(sorted(first.cantrips.keys())))
+        cantrip_pk = first.cantrips[cantrip_name].pk
+
+        # Simulate a staff edit via bulk update (bypasses identity map)
+        Cantrip.objects.filter(pk=cantrip_pk).update(description="staff-edited description")
+
+        # Re-run the seed — must not overwrite the staff edit
+        seed_cantrip_starter_catalog()
+
+        # Use .values() to bypass SharedMemoryModel identity-map cache
+        db_value = Cantrip.objects.filter(pk=cantrip_pk).values("description").get()
+        self.assertEqual(
+            db_value["description"],
+            "staff-edited description",
+            "seed_cantrip_starter_catalog() must not overwrite existing rows",
         )

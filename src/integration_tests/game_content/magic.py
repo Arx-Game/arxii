@@ -11,11 +11,13 @@ if TYPE_CHECKING:
 
     from actions.models import ActionEnhancement
     from actions.models.consequence_pools import ConsequencePool
+    from world.classes.models import Path
     from world.conditions.models import CapabilityType, ConditionStage
     from world.magic.audere import AudereThreshold
     from world.magic.models import (
         Affinity,
         AnimaConfig,
+        EffectType,
         IntensityTier,
         MagicalAlterationTemplate,
         MishapPoolTier,
@@ -24,7 +26,9 @@ if TYPE_CHECKING:
         SoulfrayConfig,
         Technique,
         TechniqueCapabilityGrant,
+        TechniqueStyle,
     )
+    from world.magic.models.cantrips import Cantrip
     from world.magic.models.corruption_config import CorruptionConfig
     from world.magic.models.gain_config import ResonanceGainConfig
     from world.magic.models.threads import ThreadPullCost, ThreadPullEffect
@@ -737,4 +741,386 @@ def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
         pull_costs=pull_costs,
         canonical_resonance=resonance,
         pull_effects=pull_effects,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Task 1.8 — seed_cantrip_starter_catalog()
+# ---------------------------------------------------------------------------
+#
+# 5×5 grid: 5 CantripArchetype values × 5 TechniqueStyle names = 25 cantrips.
+#
+# Style → PROSPECT Path mapping (per CLAUDE.md / magic CLAUDE.md):
+#   Manifestation → Path of Steel
+#   Subtle        → Path of Whispers
+#   Performance   → Path of Voice
+#   Prayer        → Path of the Chosen
+#   Incantation   → Path of Tomes
+#
+# Archetype → EffectType mapping:
+#   ATTACK  → Ranged Attack  (for Manifestation/Performance/Incantation)
+#             Weapon Enhancement (for Subtle/Prayer)
+#   DEFENSE → Defense
+#   BUFF    → Buff
+#   DEBUFF  → Debuff
+#   UTILITY → Utility
+#
+# Each (archetype, style) pair maps to exactly one cantrip with an evocative name.
+#
+
+#: 5 canonical PROSPECT paths, each with minimal required fields.
+#: (name, description)
+_PROSPECT_PATHS: list[tuple[str, str]] = [
+    ("Path of Steel", "Warriors who temper themselves through hardship and direct action."),
+    ("Path of Whispers", "Those who move unseen, trading in secrets and subtle influence."),
+    ("Path of Voice", "Performers whose magic resonates through song, story, and presence."),
+    ("Path of the Chosen", "Devotees bound to a higher power whose prayers shape reality."),
+    ("Path of Tomes", "Scholars who unlock magic through careful study and written lore."),
+]
+
+#: 5 canonical TechniqueStyle definitions (name, description) and their linked path name.
+_TECHNIQUE_STYLES: list[tuple[str, str, str]] = [
+    (
+        "Manifestation",
+        "Magic made tangible — raw elemental force given shape and weight.",
+        "Path of Steel",
+    ),
+    (
+        "Subtle",
+        "Magic woven into the fabric of things — invisible until it strikes.",
+        "Path of Whispers",
+    ),
+    (
+        "Performance",
+        "Magic amplified through art — voice, gesture, and presence as conduit.",
+        "Path of Voice",
+    ),
+    (
+        "Prayer",
+        "Magic granted by devotion — the higher power answers through the faithful.",
+        "Path of the Chosen",
+    ),
+    (
+        "Incantation",
+        "Magic encoded in language — formulae, glyphs, and spoken true names.",
+        "Path of Tomes",
+    ),
+]
+
+#: 6 canonical EffectType definitions (name, description, base_power, base_anima_cost).
+_EFFECT_TYPES: list[tuple[str, str, int | None, int]] = [
+    ("Weapon Enhancement", "Imbues a held weapon with magical force.", 10, 3),
+    ("Ranged Attack", "Projects destructive energy at a distant target.", 10, 3),
+    ("Buff", "Enhances the caster or an ally with a temporary magical boon.", None, 2),
+    ("Debuff", "Weakens or hampers a target with a magical affliction.", None, 2),
+    ("Defense", "Interposes magical protection between the caster and harm.", 8, 3),
+    ("Utility", "Produces a practical magical effect with no direct combat role.", None, 2),
+]
+
+# Mapping: (archetype_value, style_name) → (cantrip_name, description, effect_type_name)
+# 25 entries covering all 5×5 combinations.
+_CANTRIP_GRID: list[tuple[str, str, str, str, str]] = [
+    # (archetype, style, cantrip_name, description, effect_type)
+    # --- ATTACK ---
+    (
+        "attack",
+        "Manifestation",
+        "Burning Strike",
+        "A lance of raw fire conjured from personal will and hurled at the enemy.",
+        "Ranged Attack",
+    ),
+    (
+        "attack",
+        "Subtle",
+        "Shadow Blade",
+        "A blade wreathed in shadow strikes from an unexpected angle.",
+        "Weapon Enhancement",
+    ),
+    (
+        "attack",
+        "Performance",
+        "Shattering Chorus",
+        "A keening note tears through armor and resolve alike.",
+        "Ranged Attack",
+    ),
+    (
+        "attack",
+        "Prayer",
+        "Smiting Light",
+        "Holy radiance descends on the unworthy, burning like judgment.",
+        "Weapon Enhancement",
+    ),
+    (
+        "attack",
+        "Incantation",
+        "Force Sigil",
+        "A rune of impact is inscribed mid-air, detonating on contact.",
+        "Ranged Attack",
+    ),
+    # --- DEFENSE ---
+    (
+        "defense",
+        "Manifestation",
+        "Iron Skin",
+        "The caster's flesh hardens momentarily into something like cooled metal.",
+        "Defense",
+    ),
+    (
+        "defense",
+        "Subtle",
+        "Blur Step",
+        "Subtle distortions make the caster hard to track — blows glance aside.",
+        "Defense",
+    ),
+    (
+        "defense",
+        "Performance",
+        "Resonant Ward",
+        "A harmonious tone creates a shimmering barrier that absorbs incoming force.",
+        "Defense",
+    ),
+    (
+        "defense",
+        "Prayer",
+        "Sacred Ward",
+        "The devout invoke their patron's shelter; harm slides off like rain.",
+        "Defense",
+    ),
+    (
+        "defense",
+        "Incantation",
+        "Arcane Barrier",
+        "An inscribed ward springs up and deflects the next magical blow.",
+        "Defense",
+    ),
+    # --- BUFF ---
+    (
+        "buff",
+        "Manifestation",
+        "Surge",
+        "Raw vitality floods the target's limbs, sharpening reflexes for a moment.",
+        "Buff",
+    ),
+    (
+        "buff",
+        "Subtle",
+        "Unseen Edge",
+        "Whispered magic gifts the target preternatural awareness of threats.",
+        "Buff",
+    ),
+    (
+        "buff",
+        "Performance",
+        "Inspiring Refrain",
+        "A rousing melody lifts allies' spirits and sharpens their focus.",
+        "Buff",
+    ),
+    (
+        "buff",
+        "Prayer",
+        "Blessing of Strength",
+        "A murmured prayer calls down divine favor onto a willing recipient.",
+        "Buff",
+    ),
+    (
+        "buff",
+        "Incantation",
+        "Empowering Glyph",
+        "A brief formula inscribed on the target's skin grants temporary potency.",
+        "Buff",
+    ),
+    # --- DEBUFF ---
+    (
+        "debuff",
+        "Manifestation",
+        "Leaden Aura",
+        "Palpable magical weight presses down on the target, slowing movement.",
+        "Debuff",
+    ),
+    (
+        "debuff",
+        "Subtle",
+        "Doubt's Touch",
+        "A whisper in the mind erodes the target's certainty at a critical moment.",
+        "Debuff",
+    ),
+    (
+        "debuff",
+        "Performance",
+        "Discordant Note",
+        "A jarring sound disrupts the target's concentration and coordination.",
+        "Debuff",
+    ),
+    (
+        "debuff",
+        "Prayer",
+        "Mark of Penitence",
+        "The caster's deity marks the target, making all blows against them more telling.",
+        "Debuff",
+    ),
+    (
+        "debuff",
+        "Incantation",
+        "Unraveling Hex",
+        "A compact curse formula frays the target's magical and physical defenses.",
+        "Debuff",
+    ),
+    # --- UTILITY ---
+    (
+        "utility",
+        "Manifestation",
+        "Mending Touch",
+        "Elemental force knits broken objects or calms a raging fire with a touch.",
+        "Utility",
+    ),
+    (
+        "utility",
+        "Subtle",
+        "Silent Passage",
+        "The caster's presence dampens sound and scent — ideal for moving unseen.",
+        "Utility",
+    ),
+    (
+        "utility",
+        "Performance",
+        "Lullaby",
+        "A soft melody coaxes fatigue into the listener, easing them toward sleep.",
+        "Utility",
+    ),
+    (
+        "utility",
+        "Prayer",
+        "Gentle Mending",
+        "A prayer of restoration closes minor wounds and soothes pain.",
+        "Utility",
+    ),
+    (
+        "utility",
+        "Incantation",
+        "Light Script",
+        "A luminous glyph provides clean magical light until dismissed.",
+        "Utility",
+    ),
+]
+
+
+@dataclass
+class CantripStarterCatalogResult:
+    """Returned by seed_cantrip_starter_catalog().
+
+    Covers the 5×5 grid of archetypes × styles.  All rows are lazy-created via
+    get_or_create so re-running on a populated DB is a no-op; staff edits survive.
+    """
+
+    styles: dict[str, TechniqueStyle]  # style_name → TechniqueStyle
+    effect_types: dict[str, EffectType]  # effect_type_name → EffectType
+    cantrips: dict[str, Cantrip]  # cantrip_name → Cantrip
+    paths: dict[str, Path]  # path_name → Path (the 5 PROSPECT paths)
+
+
+def seed_cantrip_starter_catalog() -> CantripStarterCatalogResult:
+    """Lazy-create the cantrip starter catalog: 5 styles × 5 archetypes = 25 cantrips.
+
+    All writes use get_or_create so re-running on a populated DB is a no-op.
+    Existing rows are never modified; staff edits survive repeated calls.
+
+    5×5 archetype × style grid
+    ─────────────────────────────────────────────────────────────────────────
+    Style         Path              Archetype coverage
+    ─────────────────────────────────────────────────────────────────────────
+    Manifestation Path of Steel     attack, defense, buff, debuff, utility
+    Subtle        Path of Whispers  attack, defense, buff, debuff, utility
+    Performance   Path of Voice     attack, defense, buff, debuff, utility
+    Prayer        Path of Chosen    attack, defense, buff, debuff, utility
+    Incantation   Path of Tomes     attack, defense, buff, debuff, utility
+    ─────────────────────────────────────────────────────────────────────────
+
+    Creates:
+    - 5 Path rows (PROSPECT stage) — one per style, idempotent on name
+    - 5 TechniqueStyle rows — wired to their corresponding Path via allowed_paths M2M
+    - 6 EffectType rows — Weapon Enhancement, Ranged Attack, Buff, Debuff, Defense, Utility
+    - 25 Cantrip rows — one per (archetype, style) pair, idempotent on name
+
+    Returns:
+        CantripStarterCatalogResult with all created/fetched instances.
+    """
+    from world.classes.models import Path, PathStage  # noqa: PLC0415
+    from world.magic.constants import CantripArchetype  # noqa: PLC0415
+    from world.magic.models import EffectType, TechniqueStyle  # noqa: PLC0415
+    from world.magic.models.cantrips import Cantrip  # noqa: PLC0415
+
+    # --- PROSPECT Paths (idempotent on name) ---
+    paths: dict[str, Path] = {}
+    for path_name, path_description in _PROSPECT_PATHS:
+        path, _ = Path.objects.get_or_create(
+            name=path_name,
+            defaults={
+                "description": path_description,
+                "stage": PathStage.PROSPECT,
+                "minimum_level": 1,
+                "is_active": True,
+                "sort_order": 0,
+            },
+        )
+        paths[path_name] = path
+
+    # --- TechniqueStyle rows + M2M wiring (idempotent on name) ---
+    styles: dict[str, TechniqueStyle] = {}
+    for style_name, style_description, linked_path_name in _TECHNIQUE_STYLES:
+        style, _ = TechniqueStyle.objects.get_or_create(
+            name=style_name,
+            defaults={"description": style_description},
+        )
+        # Wire the path into allowed_paths if not already linked (M2M add is idempotent)
+        linked_path = paths[linked_path_name]
+        style.allowed_paths.add(linked_path)
+        styles[style_name] = style
+
+    # --- EffectType rows (idempotent on name) ---
+    effect_types: dict[str, EffectType] = {}
+    for et_name, et_description, base_power, base_anima_cost in _EFFECT_TYPES:
+        has_scaling = base_power is not None
+        et, _ = EffectType.objects.get_or_create(
+            name=et_name,
+            defaults={
+                "description": et_description,
+                "base_power": base_power,
+                "base_anima_cost": base_anima_cost,
+                "has_power_scaling": has_scaling,
+            },
+        )
+        effect_types[et_name] = et
+
+    # --- Cantrip rows (idempotent on name) ---
+    # Validate all archetype values exist in CantripArchetype
+    valid_archetypes = {choice.value for choice in CantripArchetype}
+    cantrips: dict[str, Cantrip] = {}
+    for sort_idx, (archetype_value, style_name, cantrip_name, description, et_name) in enumerate(
+        _CANTRIP_GRID
+    ):
+        if archetype_value not in valid_archetypes:
+            msg = f"Invalid archetype '{archetype_value}' in _CANTRIP_GRID"
+            raise ValueError(msg)
+        cantrip, _ = Cantrip.objects.get_or_create(
+            name=cantrip_name,
+            defaults={
+                "description": description,
+                "archetype": archetype_value,
+                "effect_type": effect_types[et_name],
+                "style": styles[style_name],
+                "base_intensity": 1,
+                "base_control": 1,
+                "base_anima_cost": 5,
+                "requires_facet": False,
+                "is_active": True,
+                "sort_order": sort_idx,
+            },
+        )
+        cantrips[cantrip_name] = cantrip
+
+    return CantripStarterCatalogResult(
+        styles=styles,
+        effect_types=effect_types,
+        cantrips=cantrips,
+        paths=paths,
     )
