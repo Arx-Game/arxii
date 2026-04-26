@@ -165,6 +165,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/aggregate-beat-contributions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for AggregateBeatContribution.
+     *
+     *     Writes go through record_aggregate_contribution service (Wave 11 action endpoints).
+     *     Read access: the contributing character's account, story Lead GM (owner), or staff.
+     */
+    get: operations['aggregate_beat_contributions_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/aggregate-beat-contributions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for AggregateBeatContribution.
+     *
+     *     Writes go through record_aggregate_contribution service (Wave 11 action endpoints).
+     *     Read access: the contributing character's account, story Lead GM (owner), or staff.
+     */
+    get: operations['aggregate_beat_contributions_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/areas/': {
     parameters: {
       query?: never;
@@ -233,6 +277,181 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/assistant-gm-claims/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for AssistantGMClaim.
+     *
+     *     Read: ReadOnlyModelViewSet (list + retrieve).
+     *     State transitions: custom @action endpoints (Wave 11):
+     *       POST /api/assistant-gm-claims/request/ — request_claim
+     *       POST /api/assistant-gm-claims/{id}/approve/ — approve_claim
+     *       POST /api/assistant-gm-claims/{id}/reject/  — reject_claim
+     *       POST /api/assistant-gm-claims/{id}/cancel/  — cancel_claim
+     *       POST /api/assistant-gm-claims/{id}/complete/ — complete_claim
+     *
+     *     Read access: the claiming AGM (assistant_gm.account), Lead GM (story owner), or staff.
+     */
+    get: operations['assistant_gm_claims_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/assistant-gm-claims/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for AssistantGMClaim.
+     *
+     *     Read: ReadOnlyModelViewSet (list + retrieve).
+     *     State transitions: custom @action endpoints (Wave 11):
+     *       POST /api/assistant-gm-claims/request/ — request_claim
+     *       POST /api/assistant-gm-claims/{id}/approve/ — approve_claim
+     *       POST /api/assistant-gm-claims/{id}/reject/  — reject_claim
+     *       POST /api/assistant-gm-claims/{id}/cancel/  — cancel_claim
+     *       POST /api/assistant-gm-claims/{id}/complete/ — complete_claim
+     *
+     *     Read access: the claiming AGM (assistant_gm.account), Lead GM (story owner), or staff.
+     */
+    get: operations['assistant_gm_claims_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/assistant-gm-claims/{id}/approve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/assistant-gm-claims/{id}/approve/ — Lead GM approves the claim.
+     *
+     *     IsGMProfile ensures request.user.gm_profile is always accessible.
+     *     IsLeadGMOnClaimStoryOrStaff confirms Lead GM role on the claim's story.
+     *     Status validation handled by ApproveClaimInputSerializer.
+     *     Returns 200 with the updated claim.
+     */
+    post: operations['assistant_gm_claims_approve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/assistant-gm-claims/{id}/cancel/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/assistant-gm-claims/{id}/cancel/ — the AGM cancels their own claim.
+     *
+     *     Status validation (must be REQUESTED) handled by CancelClaimInputSerializer.
+     *     Returns 200 with the updated claim.
+     */
+    post: operations['assistant_gm_claims_cancel_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/assistant-gm-claims/{id}/complete/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/assistant-gm-claims/{id}/complete/ — Lead GM marks an approved claim done.
+     *
+     *     IsGMProfile ensures request.user.gm_profile is always accessible.
+     *     IsLeadGMOnClaimStoryOrStaff confirms Lead GM role on the claim's story.
+     *     Status validation (must be APPROVED) handled by CompleteClaimInputSerializer.
+     *     Returns 200 with the updated claim.
+     */
+    post: operations['assistant_gm_claims_complete_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/assistant-gm-claims/{id}/reject/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/assistant-gm-claims/{id}/reject/ — Lead GM rejects the claim.
+     *
+     *     IsGMProfile ensures request.user.gm_profile is always accessible.
+     *     IsLeadGMOnClaimStoryOrStaff confirms Lead GM role on the claim's story.
+     *     Status validation handled by RejectClaimInputSerializer.
+     *     Returns 200 with the updated claim.
+     */
+    post: operations['assistant_gm_claims_reject_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/assistant-gm-claims/request/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/assistant-gm-claims/request/ — an AGM requests to run a beat.
+     *
+     *     Requires a GMProfile (enforced by IsGMProfile). Beat existence and
+     *     agm_eligible validation handled by RequestClaimInputSerializer.
+     *     Returns 201 with the claim on success.
+     */
+    post: operations['assistant_gm_claims_request_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/auth/browser/v1/auth/email/request': {
     parameters: {
       query?: never;
@@ -278,6 +497,113 @@ export interface paths {
     put?: never;
     /** @description Log out the current user. */
     post: operations['auth_browser_v1_auth_logout_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/beats/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for Beat — includes all Phase 2 predicate config fields.
+     *
+     *     Access delegated to episode story ownership (same as EpisodeViewSet).
+     */
+    get: operations['beats_list'];
+    put?: never;
+    /**
+     * @description ViewSet for Beat — includes all Phase 2 predicate config fields.
+     *
+     *     Access delegated to episode story ownership (same as EpisodeViewSet).
+     */
+    post: operations['beats_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/beats/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for Beat — includes all Phase 2 predicate config fields.
+     *
+     *     Access delegated to episode story ownership (same as EpisodeViewSet).
+     */
+    get: operations['beats_retrieve'];
+    /**
+     * @description ViewSet for Beat — includes all Phase 2 predicate config fields.
+     *
+     *     Access delegated to episode story ownership (same as EpisodeViewSet).
+     */
+    put: operations['beats_update'];
+    post?: never;
+    /**
+     * @description ViewSet for Beat — includes all Phase 2 predicate config fields.
+     *
+     *     Access delegated to episode story ownership (same as EpisodeViewSet).
+     */
+    delete: operations['beats_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for Beat — includes all Phase 2 predicate config fields.
+     *
+     *     Access delegated to episode story ownership (same as EpisodeViewSet).
+     */
+    patch: operations['beats_partial_update'];
+    trace?: never;
+  };
+  '/api/beats/{id}/contribute/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/beats/{id}/contribute/ — record a character contribution to an AGGREGATE beat.
+     *
+     *     The requesting user must own the character_sheet (or be staff), validated
+     *     by ContributeBeatInputSerializer. Wraps record_aggregate_contribution.
+     *     Returns 201 with contribution on success.
+     */
+    post: operations['beats_contribute_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/beats/{id}/mark/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/beats/{id}/mark/ — GM marks the outcome of a GM_MARKED beat.
+     *
+     *     Lead GM, staff, or an AGM with an approved claim on this beat may call this.
+     *     Wraps record_gm_marked_outcome. Returns 201 with BeatCompletion on success.
+     */
+    post: operations['beats_mark_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2545,6 +2871,34 @@ export interface paths {
     patch: operations['episodes_partial_update'];
     trace?: never;
   };
+  '/api/episodes/{id}/resolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/episodes/{id}/resolve/ — resolve the current progress for an episode.
+     *
+     *     Lead GM or staff posts {progress_id?, chosen_transition?, gm_notes?} to
+     *     advance the story's progress record past the current episode. Returns 201 on success.
+     *
+     *     Note: NoEligibleTransitionError and AmbiguousTransitionError can fire from
+     *     resolve_episode() for cases the serializer cannot pre-validate without
+     *     duplicating get_eligible_transitions() logic. These are caught here and
+     *     surfaced as 400 responses. They are genuine runtime errors, not
+     *     user-input-validation errors.
+     */
+    post: operations['episodes_resolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/episodes/{id}/scenes/': {
     parameters: {
       query?: never;
@@ -2922,6 +3276,74 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/global-story-progress/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for GlobalStoryProgress — singleton metaplot progress pointer.
+     *
+     *     Read access: any authenticated user (metaplot is public).
+     *     Write access: staff only.
+     */
+    get: operations['global_story_progress_list'];
+    put?: never;
+    /**
+     * @description ViewSet for GlobalStoryProgress — singleton metaplot progress pointer.
+     *
+     *     Read access: any authenticated user (metaplot is public).
+     *     Write access: staff only.
+     */
+    post: operations['global_story_progress_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/global-story-progress/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for GlobalStoryProgress — singleton metaplot progress pointer.
+     *
+     *     Read access: any authenticated user (metaplot is public).
+     *     Write access: staff only.
+     */
+    get: operations['global_story_progress_retrieve'];
+    /**
+     * @description ViewSet for GlobalStoryProgress — singleton metaplot progress pointer.
+     *
+     *     Read access: any authenticated user (metaplot is public).
+     *     Write access: staff only.
+     */
+    put: operations['global_story_progress_update'];
+    post?: never;
+    /**
+     * @description ViewSet for GlobalStoryProgress — singleton metaplot progress pointer.
+     *
+     *     Read access: any authenticated user (metaplot is public).
+     *     Write access: staff only.
+     */
+    delete: operations['global_story_progress_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for GlobalStoryProgress — singleton metaplot progress pointer.
+     *
+     *     Read access: any authenticated user (metaplot is public).
+     *     Write access: staff only.
+     */
+    patch: operations['global_story_progress_partial_update'];
     trace?: never;
   };
   '/api/gm/applications/': {
@@ -3433,6 +3855,74 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/group-story-progress/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for GroupStoryProgress — per-GMTable progress pointer.
+     *
+     *     Read access: active members of the GMTable.
+     *     Write access: Lead GM (GMTable.gm) and staff.
+     */
+    get: operations['group_story_progress_list'];
+    put?: never;
+    /**
+     * @description ViewSet for GroupStoryProgress — per-GMTable progress pointer.
+     *
+     *     Read access: active members of the GMTable.
+     *     Write access: Lead GM (GMTable.gm) and staff.
+     */
+    post: operations['group_story_progress_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/group-story-progress/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for GroupStoryProgress — per-GMTable progress pointer.
+     *
+     *     Read access: active members of the GMTable.
+     *     Write access: Lead GM (GMTable.gm) and staff.
+     */
+    get: operations['group_story_progress_retrieve'];
+    /**
+     * @description ViewSet for GroupStoryProgress — per-GMTable progress pointer.
+     *
+     *     Read access: active members of the GMTable.
+     *     Write access: Lead GM (GMTable.gm) and staff.
+     */
+    put: operations['group_story_progress_update'];
+    post?: never;
+    /**
+     * @description ViewSet for GroupStoryProgress — per-GMTable progress pointer.
+     *
+     *     Read access: active members of the GMTable.
+     *     Write access: Lead GM (GMTable.gm) and staff.
+     */
+    delete: operations['group_story_progress_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for GroupStoryProgress — per-GMTable progress pointer.
+     *
+     *     Read access: active members of the GMTable.
+     *     Write access: Lead GM (GMTable.gm) and staff.
+     */
+    patch: operations['group_story_progress_partial_update'];
     trace?: never;
   };
   '/api/homepage/': {
@@ -4388,6 +4878,107 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/pose-endorsements/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Create + delete-if-unsettled pose endorsements (Spec C Task 23).
+     *
+     *     Listing is not supported here — use ResonanceGrantViewSet (Task 25) for
+     *     audit queries.
+     *
+     *     POST /api/magic/pose-endorsements/ — create an endorsement.
+     *     DELETE /api/magic/pose-endorsements/<pk>/ — retract an unsettled endorsement.
+     */
+    post: operations['magic_pose_endorsements_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/pose-endorsements/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /**
+     * @description Delete an unsettled endorsement.
+     *
+     *     Settled endorsements are hidden behind 404 — they are immutable once
+     *     the weekly tick has run. Only the endorsing account can delete.
+     */
+    delete: operations['magic_pose_endorsements_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/resonance-grants/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only audit ledger of all grants. User-scoped; staff see all.
+     *
+     *     GET  /api/magic/resonance-grants/       — list (user-scoped or staff-all)
+     *     GET  /api/magic/resonance-grants/<pk>/  — retrieve one row
+     *
+     *     Ordering: newest-first (descending granted_at). This is a timeline surface
+     *     and ordering is justified per CLAUDE.md policy.
+     *
+     *     Filter params: source, resonance (PK), granted_after, granted_before.
+     */
+    get: operations['magic_resonance_grants_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/resonance-grants/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only audit ledger of all grants. User-scoped; staff see all.
+     *
+     *     GET  /api/magic/resonance-grants/       — list (user-scoped or staff-all)
+     *     GET  /api/magic/resonance-grants/<pk>/  — retrieve one row
+     *
+     *     Ordering: newest-first (descending granted_at). This is a timeline surface
+     *     and ordering is justified per CLAUDE.md policy.
+     *
+     *     Filter params: source, resonance (PK), granted_after, granted_before.
+     */
+    get: operations['magic_resonance_grants_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/restrictions/': {
     parameters: {
       query?: never;
@@ -4441,6 +5032,60 @@ export interface paths {
     put?: never;
     /** @description Validate, resolve, and dispatch the ritual; return a result payload. */
     post: operations['magic_rituals_perform_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/scene-entry-endorsements/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Create + retrieve — scene-entry endorsements are immutable (Spec C Task 24).
+     *
+     *     DELETE is deferred until ResonanceGrantReversal ships. Grant fires
+     *     immediately at creation time — no weekly settlement step. Retrieve is
+     *     exposed so the detail URL is registered, which means DELETE returns 405
+     *     (Method Not Allowed) rather than 404 (not found).
+     *
+     *     POST /api/magic/scene-entry-endorsements/ — create an endorsement.
+     *     GET  /api/magic/scene-entry-endorsements/<pk>/ — retrieve an endorsement.
+     */
+    post: operations['magic_scene_entry_endorsements_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/scene-entry-endorsements/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Create + retrieve — scene-entry endorsements are immutable (Spec C Task 24).
+     *
+     *     DELETE is deferred until ResonanceGrantReversal ships. Grant fires
+     *     immediately at creation time — no weekly settlement step. Retrieve is
+     *     exposed so the detail URL is registered, which means DELETE returns 405
+     *     (Method Not Allowed) rather than 404 (not found).
+     *
+     *     POST /api/magic/scene-entry-endorsements/ — create an endorsement.
+     *     GET  /api/magic/scene-entry-endorsements/<pk>/ — retrieve an endorsement.
+     */
+    get: operations['magic_scene_entry_endorsements_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -4947,6 +5592,40 @@ export interface paths {
     };
     /** @description List and retrieve situation templates. */
     get: operations['mechanics_situation_templates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/narrative/deliveries/{id}/acknowledge/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description POST endpoint that marks a delivery acknowledged (idempotent). */
+    post: operations['narrative_deliveries_acknowledge_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/narrative/my-messages/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List narrative message deliveries for the requesting account's character(s). */
+    get: operations['narrative_my_messages_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -6130,6 +6809,129 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/session-requests/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for SessionRequest.
+     *
+     *     Read: ReadOnlyModelViewSet (list + retrieve).
+     *     State transitions: custom @action endpoints (Wave 11):
+     *       POST /api/session-requests/{id}/create-event/ — create_event_from_session_request
+     *       POST /api/session-requests/{id}/cancel/       — cancel_session_request
+     *       POST /api/session-requests/{id}/resolve/      — resolve_session_request
+     *
+     *     Wave 7 auto-creates requests; manual creation is admin-only.
+     *     Read access: players with StoryParticipation, assigned/story-owning GMs, staff.
+     */
+    get: operations['session_requests_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/session-requests/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for SessionRequest.
+     *
+     *     Read: ReadOnlyModelViewSet (list + retrieve).
+     *     State transitions: custom @action endpoints (Wave 11):
+     *       POST /api/session-requests/{id}/create-event/ — create_event_from_session_request
+     *       POST /api/session-requests/{id}/cancel/       — cancel_session_request
+     *       POST /api/session-requests/{id}/resolve/      — resolve_session_request
+     *
+     *     Wave 7 auto-creates requests; manual creation is admin-only.
+     *     Read access: players with StoryParticipation, assigned/story-owning GMs, staff.
+     */
+    get: operations['session_requests_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/session-requests/{id}/cancel/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/session-requests/{id}/cancel/ — cancel an OPEN session request.
+     *
+     *     Status validation (must be OPEN) handled by CancelSessionRequestInputSerializer.
+     *     Returns 200 with the updated SessionRequest.
+     */
+    post: operations['session_requests_cancel_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/session-requests/{id}/create-event/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/session-requests/{id}/create-event/ — schedule a session by creating an Event.
+     *
+     *     Bridges an OPEN SessionRequest to the events system. Status and host_persona
+     *     FK validated by CreateEventFromSessionRequestInputSerializer.
+     *     Returns 201 with the SessionRequest on success.
+     */
+    post: operations['session_requests_create_event_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/session-requests/{id}/resolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/session-requests/{id}/resolve/ — mark a scheduled session as resolved.
+     *
+     *     Status validation (must be SCHEDULED) handled by ResolveSessionRequestInputSerializer.
+     *     Returns 200 with the updated SessionRequest.
+     */
+    post: operations['session_requests_resolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/skills/path-skill-suggestions/': {
     parameters: {
       query?: never;
@@ -6492,6 +7294,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/stories/expire-overdue-beats/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Expire all overdue beats and return the count. */
+    post: operations['stories_expire_overdue_beats_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/stories/gm-queue/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the GM's current work queue. */
+    get: operations['stories_gm_queue_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/stories/my-active/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return active stories for the authenticated account. */
+    get: operations['stories_my_active_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/stories/staff-workload/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return cross-story workload metrics for staff. */
+    get: operations['stories_staff_workload_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/story-feedback/': {
     parameters: {
       query?: never;
@@ -6806,6 +7676,22 @@ export interface components {
      * @enum {string}
      */
     ActionEnum: 'submit' | 'edit' | 'agree';
+    /** @description Read-only serializer for AggregateBeatContribution ledger rows. */
+    AggregateBeatContribution: {
+      readonly id: number;
+      readonly beat: number;
+      /** @description The character this sheet belongs to */
+      readonly character_sheet: number;
+      /** @description Which roster tenure was active when this contribution was made. For audit only. */
+      readonly roster_entry: number | null;
+      /** @description Contribution points toward the beat's required_points threshold. */
+      readonly points: number;
+      readonly era: number | null;
+      /** @description Brief description of what produced this contribution (siege battle, mission, etc.). */
+      readonly source_note: string;
+      /** Format: date-time */
+      readonly recorded_at: string;
+    };
     /**
      * @description * `major` - Major Arcana
      *     * `minor` - Minor Arcana
@@ -6855,6 +7741,32 @@ export interface components {
       /** @description Description of what this aspect represents */
       description?: string;
     };
+    /** @description Read-only serializer for AssistantGMClaim records. */
+    AssistantGMClaim: {
+      readonly id: number;
+      readonly beat: number;
+      readonly assistant_gm: number;
+      readonly status: components['schemas']['AssistantGMClaimStatusEnum'];
+      /** @description The Lead GM or Staff member who approved/rejected. */
+      readonly approved_by: number | null;
+      /** @description Reason for rejection (shown to AGM). */
+      readonly rejection_note: string;
+      /** @description Lead GM's one-paragraph framing for the AGM session. Sets the scene without exposing the rest of the story. */
+      readonly framing_note: string;
+      /** Format: date-time */
+      readonly requested_at: string;
+      /** Format: date-time */
+      readonly updated_at: string;
+    };
+    /**
+     * @description * `requested` - Requested
+     *     * `approved` - Approved
+     *     * `rejected` - Rejected
+     *     * `cancelled` - Cancelled
+     *     * `completed` - Completed
+     * @enum {string}
+     */
+    AssistantGMClaimStatusEnum: 'requested' | 'approved' | 'rejected' | 'cancelled' | 'completed';
     AvailableAction: {
       application_id: number;
       application_name: string;
@@ -6871,6 +7783,130 @@ export interface components {
       prerequisite_met?: boolean;
       prerequisite_reasons?: string[];
     };
+    /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
+    Beat: {
+      readonly id: number;
+      episode: number;
+      predicate_type?: components['schemas']['PredicateTypeEnum'];
+      /**
+       * @description The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
+       *
+       *     * `unsatisfied` - Unsatisfied
+       *     * `success` - Success
+       *     * `failure` - Failure
+       *     * `expired` - Expired
+       *     * `pending_gm_review` - Pending GM review
+       */
+      outcome?: components['schemas']['OutcomeEnum'];
+      visibility?: components['schemas']['BeatVisibilityEnum'];
+      /** @description Author/Lead GM/staff view: real predicate + meaning. */
+      internal_description: string;
+      /** @description Shown while active (if visibility=HINTED or VISIBLE). */
+      player_hint?: string;
+      /** @description Shown in story log after beat completes. */
+      player_resolution_text?: string;
+      order?: number;
+      /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
+      required_level?: number | null;
+      /** @description For ACHIEVEMENT_HELD predicates. */
+      required_achievement?: number | null;
+      /** @description For CONDITION_HELD predicates. */
+      required_condition_template?: number | null;
+      /** @description For CODEX_ENTRY_UNLOCKED predicates. */
+      required_codex_entry?: number | null;
+      /** @description For STORY_AT_MILESTONE predicates. */
+      referenced_story?: number | null;
+      /**
+       * @description Which kind of milestone to check on referenced_story.
+       *
+       *     * `story_resolved` - Story resolved
+       *     * `chapter_reached` - Chapter reached or passed
+       *     * `episode_reached` - Episode reached or passed
+       */
+      referenced_milestone_type?:
+        | components['schemas']['ReferencedMilestoneTypeEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description For referenced_milestone_type=CHAPTER_REACHED. */
+      referenced_chapter?: number | null;
+      /** @description For referenced_milestone_type=EPISODE_REACHED. */
+      referenced_episode?: number | null;
+      /** @description For AGGREGATE_THRESHOLD predicates — total contribution points required. */
+      required_points?: number | null;
+      /** @description Lead GM may flag this beat to be claimable by Assistant GMs. */
+      agm_eligible?: boolean;
+      /**
+       * Format: date-time
+       * @description Optional wall-clock deadline. Expiry handling deferred to Phase 3+.
+       */
+      deadline?: string | null;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly updated_at: string;
+    };
+    /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
+    BeatRequest: {
+      episode: number;
+      predicate_type?: components['schemas']['PredicateTypeEnum'];
+      /**
+       * @description The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
+       *
+       *     * `unsatisfied` - Unsatisfied
+       *     * `success` - Success
+       *     * `failure` - Failure
+       *     * `expired` - Expired
+       *     * `pending_gm_review` - Pending GM review
+       */
+      outcome?: components['schemas']['OutcomeEnum'];
+      visibility?: components['schemas']['BeatVisibilityEnum'];
+      /** @description Author/Lead GM/staff view: real predicate + meaning. */
+      internal_description: string;
+      /** @description Shown while active (if visibility=HINTED or VISIBLE). */
+      player_hint?: string;
+      /** @description Shown in story log after beat completes. */
+      player_resolution_text?: string;
+      order?: number;
+      /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
+      required_level?: number | null;
+      /** @description For ACHIEVEMENT_HELD predicates. */
+      required_achievement?: number | null;
+      /** @description For CONDITION_HELD predicates. */
+      required_condition_template?: number | null;
+      /** @description For CODEX_ENTRY_UNLOCKED predicates. */
+      required_codex_entry?: number | null;
+      /** @description For STORY_AT_MILESTONE predicates. */
+      referenced_story?: number | null;
+      /**
+       * @description Which kind of milestone to check on referenced_story.
+       *
+       *     * `story_resolved` - Story resolved
+       *     * `chapter_reached` - Chapter reached or passed
+       *     * `episode_reached` - Episode reached or passed
+       */
+      referenced_milestone_type?:
+        | components['schemas']['ReferencedMilestoneTypeEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description For referenced_milestone_type=CHAPTER_REACHED. */
+      referenced_chapter?: number | null;
+      /** @description For referenced_milestone_type=EPISODE_REACHED. */
+      referenced_episode?: number | null;
+      /** @description For AGGREGATE_THRESHOLD predicates — total contribution points required. */
+      required_points?: number | null;
+      /** @description Lead GM may flag this beat to be claimable by Assistant GMs. */
+      agm_eligible?: boolean;
+      /**
+       * Format: date-time
+       * @description Optional wall-clock deadline. Expiry handling deferred to Phase 3+.
+       */
+      deadline?: string | null;
+    };
+    /**
+     * @description * `hinted` - Hinted
+     *     * `secret` - Secret
+     *     * `visible` - Visible
+     * @enum {string}
+     */
+    BeatVisibilityEnum: 'hinted' | 'secret' | 'visible';
     /** @description Serializer for Beginnings options. */
     Beginnings: {
       readonly id: number;
@@ -7070,30 +8106,6 @@ export interface components {
       readonly name: string;
       readonly description: string;
     };
-    /**
-     * @description * `physical` - Physical
-     *     * `social` - Social
-     *     * `mental` - Mental
-     *     * `meta` - Meta
-     *     * `magic` - Magic
-     *     * `combat` - Combat
-     *     * `general` - General
-     *     * `crafting` - Crafting
-     *     * `war` - War
-     *     * `other` - Other
-     * @enum {string}
-     */
-    CategoryEnum:
-      | 'physical'
-      | 'social'
-      | 'mental'
-      | 'meta'
-      | 'magic'
-      | 'combat'
-      | 'general'
-      | 'crafting'
-      | 'war'
-      | 'other';
     /** @description Nested serializer for challenge approaches. */
     ChallengeApproach: {
       readonly id: number;
@@ -7848,12 +8860,6 @@ export interface components {
       readonly stages: components['schemas']['ConditionStage'][];
     };
     /**
-     * @description * `therefore` - Therefore
-     *     * `but` - But
-     * @enum {string}
-     */
-    ConnectionToNextEnum: 'therefore' | 'but';
-    /**
      * @description * `1` - Origin
      *     * `2` - Heritage
      *     * `3` - Lineage
@@ -8171,17 +9177,6 @@ export interface components {
       title: string;
       description?: string;
       order: number;
-      /**
-       * @description How this episode connects to the next
-       *
-       *     * `therefore` - Therefore
-       *     * `but` - But
-       */
-      connection_to_next?:
-        | components['schemas']['ConnectionToNextEnum']
-        | components['schemas']['BlankEnum'];
-      /** @description Explanation of how episodes connect */
-      connection_summary?: string;
     };
     /** @description Serializer for creating episodes */
     EpisodeCreateRequest: {
@@ -8189,17 +9184,6 @@ export interface components {
       title: string;
       description?: string;
       order: number;
-      /**
-       * @description How this episode connects to the next
-       *
-       *     * `therefore` - Therefore
-       *     * `but` - But
-       */
-      connection_to_next?:
-        | components['schemas']['ConnectionToNextEnum']
-        | components['schemas']['BlankEnum'];
-      /** @description Explanation of how episodes connect */
-      connection_summary?: string;
     };
     /** @description Full serializer for episode details */
     EpisodeDetail: {
@@ -8213,17 +9197,6 @@ export interface components {
       summary?: string;
       /** @description What consequences lead to the next episode */
       consequences?: string;
-      /**
-       * @description How this episode connects to the next
-       *
-       *     * `therefore` - Therefore
-       *     * `but` - But
-       */
-      connection_to_next?:
-        | components['schemas']['ConnectionToNextEnum']
-        | components['schemas']['BlankEnum'];
-      /** @description Explanation of how episodes connect */
-      connection_summary?: string;
       /** Format: date-time */
       completed_at?: string | null;
       /** Format: date-time */
@@ -8241,17 +9214,6 @@ export interface components {
       summary?: string;
       /** @description What consequences lead to the next episode */
       consequences?: string;
-      /**
-       * @description How this episode connects to the next
-       *
-       *     * `therefore` - Therefore
-       *     * `but` - But
-       */
-      connection_to_next?:
-        | components['schemas']['ConnectionToNextEnum']
-        | components['schemas']['BlankEnum'];
-      /** @description Explanation of how episodes connect */
-      connection_summary?: string;
       /** Format: date-time */
       completed_at?: string | null;
     };
@@ -8262,15 +9224,6 @@ export interface components {
       title: string;
       order: number;
       is_active?: boolean;
-      /**
-       * @description How this episode connects to the next
-       *
-       *     * `therefore` - Therefore
-       *     * `but` - But
-       */
-      connection_to_next?:
-        | components['schemas']['ConnectionToNextEnum']
-        | components['schemas']['BlankEnum'];
       readonly scenes_count: number;
       /** Format: date-time */
       completed_at?: string | null;
@@ -8281,32 +9234,10 @@ export interface components {
       readonly episode: string;
       readonly scene: string;
       order: number;
-      /**
-       * @description How this scene connects to the next in the episode
-       *
-       *     * `therefore` - Therefore
-       *     * `but` - But
-       */
-      connection_to_next?:
-        | components['schemas']['ConnectionToNextEnum']
-        | components['schemas']['BlankEnum'];
-      /** @description Brief explanation of the scene connection */
-      connection_summary?: string;
     };
     /** @description Serializer for episode-scene connections */
     EpisodeSceneRequest: {
       order: number;
-      /**
-       * @description How this scene connects to the next in the episode
-       *
-       *     * `therefore` - Therefore
-       *     * `but` - But
-       */
-      connection_to_next?:
-        | components['schemas']['ConnectionToNextEnum']
-        | components['schemas']['BlankEnum'];
-      /** @description Brief explanation of the scene connection */
-      connection_summary?: string;
     };
     /**
      * @description * `skin` - Skin
@@ -8913,6 +9844,25 @@ export interface components {
       readonly description: string;
       readonly technique_count: number;
     };
+    /** @description Serializer for GlobalStoryProgress — singleton metaplot progress pointer. */
+    GlobalStoryProgress: {
+      readonly id: number;
+      story: number;
+      /** @description Null while the story is at the frontier or before start. */
+      current_episode?: number | null;
+      /** Format: date-time */
+      readonly started_at: string;
+      /** Format: date-time */
+      readonly last_advanced_at: string;
+      is_active?: boolean;
+    };
+    /** @description Serializer for GlobalStoryProgress — singleton metaplot progress pointer. */
+    GlobalStoryProgressRequest: {
+      story: number;
+      /** @description Null while the story is at the frontier or before start. */
+      current_episode?: number | null;
+      is_active?: boolean;
+    };
     /**
      * @description * `0` - Untrusted
      *     * `1` - Basic
@@ -8933,6 +9883,27 @@ export interface components {
       readonly display_order: number;
       /** @description Check if this domain is optional (doesn't require point allocation). */
       readonly is_optional: boolean;
+    };
+    /** @description Serializer for GroupStoryProgress — per-GMTable progress pointer. */
+    GroupStoryProgress: {
+      readonly id: number;
+      story: number;
+      gm_table: number;
+      /** @description Null while the story is at the frontier (unauthored) or before start. */
+      current_episode?: number | null;
+      /** Format: date-time */
+      readonly started_at: string;
+      /** Format: date-time */
+      readonly last_advanced_at: string;
+      is_active?: boolean;
+    };
+    /** @description Serializer for GroupStoryProgress — per-GMTable progress pointer. */
+    GroupStoryProgressRequest: {
+      story: number;
+      gm_table: number;
+      /** @description Null while the story is at the frontier (unauthored) or before start. */
+      current_episode?: number | null;
+      is_active?: boolean;
     };
     HeightBand: {
       readonly id: number;
@@ -9009,7 +9980,7 @@ export interface components {
        *     * `default` - Default
        *     * `very_private` - Very Private
        */
-      visibility?: components['schemas']['VisibilityEnum'];
+      visibility?: components['schemas']['VisibilityF91Enum'];
       /** Format: date-time */
       readonly timestamp: string;
       readonly is_favorited: boolean;
@@ -9066,7 +10037,7 @@ export interface components {
        *     * `default` - Default
        *     * `very_private` - Very Private
        */
-      visibility?: components['schemas']['VisibilityEnum'];
+      visibility?: components['schemas']['VisibilityF91Enum'];
       /** Format: date-time */
       readonly timestamp: string;
       readonly is_favorited: boolean;
@@ -9104,7 +10075,7 @@ export interface components {
        *     * `default` - Default
        *     * `very_private` - Very Private
        */
-      visibility?: components['schemas']['VisibilityEnum'];
+      visibility?: components['schemas']['VisibilityF91Enum'];
     };
     InteractionReaction: {
       readonly id: number;
@@ -9276,6 +10247,43 @@ export interface components {
        */
       readonly primary_persona_id: number | null;
     };
+    /** @description Player-facing message representation. Excludes ooc_note. */
+    NarrativeMessage: {
+      readonly id: number;
+      /** @description IC content shown to recipients. */
+      readonly body: string;
+      readonly category: components['schemas']['NarrativeMessageCategoryEnum'];
+      /** @description Null = automated/system-sourced. */
+      readonly sender_account: number | null;
+      readonly related_story: number | null;
+      readonly related_beat_completion: number | null;
+      readonly related_episode_resolution: number | null;
+      /** Format: date-time */
+      readonly sent_at: string;
+    };
+    /**
+     * @description * `story` - Story update
+     *     * `atmosphere` - Atmosphere
+     *     * `visions` - Visions
+     *     * `happenstance` - Happenstance
+     *     * `system` - System
+     * @enum {string}
+     */
+    NarrativeMessageCategoryEnum: 'story' | 'atmosphere' | 'visions' | 'happenstance' | 'system';
+    NarrativeMessageDelivery: {
+      readonly id: number;
+      readonly message: components['schemas']['NarrativeMessage'];
+      /**
+       * Format: date-time
+       * @description Timestamp when the message was pushed to the character's puppeted session. Null until online delivery or login catch-up delivers it.
+       */
+      readonly delivered_at: string | null;
+      /**
+       * Format: date-time
+       * @description Timestamp when the player acknowledged having seen the message. Null until the player marks it read. Used to distinguish 'unread' in future UI work.
+       */
+      readonly acknowledged_at: string | null;
+    };
     /**
      * @description * `personal` - Personal
      *     * `room` - Room
@@ -9343,12 +10351,36 @@ export interface components {
       name: string;
     };
     /**
+     * @description * `unsatisfied` - Unsatisfied
+     *     * `success` - Success
+     *     * `failure` - Failure
+     *     * `expired` - Expired
+     *     * `pending_gm_review` - Pending GM review
+     * @enum {string}
+     */
+    OutcomeEnum: 'unsatisfied' | 'success' | 'failure' | 'expired' | 'pending_gm_review';
+    /**
      * @description * `timed` - Timed
      *     * `ready` - Ready
      *     * `manual` - Manual
      * @enum {string}
      */
     PaceModeEnum: 'timed' | 'ready' | 'manual';
+    PaginatedAggregateBeatContributionList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['AggregateBeatContribution'][];
+    };
     PaginatedAreaListList: {
       /** @example 123 */
       count?: number;
@@ -9378,6 +10410,36 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['AreaRoom'][];
+    };
+    PaginatedAssistantGMClaimList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['AssistantGMClaim'][];
+    };
+    PaginatedBeatList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['Beat'][];
     };
     PaginatedBugReportDetailList: {
       /** @example 123 */
@@ -9649,6 +10711,36 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['GiftList'][];
     };
+    PaginatedGlobalStoryProgressList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['GlobalStoryProgress'][];
+    };
+    PaginatedGroupStoryProgressList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['GroupStoryProgress'][];
+    };
     PaginatedInteractionFavoriteList: {
       /** @example 123 */
       count?: number;
@@ -9683,6 +10775,21 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['ItemTemplateList'][];
+    };
+    PaginatedNarrativeMessageDeliveryList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['NarrativeMessageDelivery'][];
     };
     PaginatedOrganizationSearchList: {
       /** @example 123 */
@@ -9879,6 +10986,21 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['SceneSummaryRevision'][];
     };
+    PaginatedSessionRequestList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['SessionRequest'][];
+    };
     PaginatedSituationInstanceList: {
       /** @example 123 */
       count?: number;
@@ -10056,6 +11178,62 @@ export interface components {
      * @enum {string}
      */
     ParticipationLevelEnum: 'critical' | 'important' | 'optional';
+    /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
+    PatchedBeatRequest: {
+      episode?: number;
+      predicate_type?: components['schemas']['PredicateTypeEnum'];
+      /**
+       * @description The story's current outcome on this beat — a single shared value across the story's progression (the owning character for CHARACTER scope, the group for GROUP scope, the world for GLOBAL scope). A story has exactly one progression trail, so this field represents the whole story's state, not per-character state. Historical per-character contributions live in BeatCompletion.
+       *
+       *     * `unsatisfied` - Unsatisfied
+       *     * `success` - Success
+       *     * `failure` - Failure
+       *     * `expired` - Expired
+       *     * `pending_gm_review` - Pending GM review
+       */
+      outcome?: components['schemas']['OutcomeEnum'];
+      visibility?: components['schemas']['BeatVisibilityEnum'];
+      /** @description Author/Lead GM/staff view: real predicate + meaning. */
+      internal_description?: string;
+      /** @description Shown while active (if visibility=HINTED or VISIBLE). */
+      player_hint?: string;
+      /** @description Shown in story log after beat completes. */
+      player_resolution_text?: string;
+      order?: number;
+      /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
+      required_level?: number | null;
+      /** @description For ACHIEVEMENT_HELD predicates. */
+      required_achievement?: number | null;
+      /** @description For CONDITION_HELD predicates. */
+      required_condition_template?: number | null;
+      /** @description For CODEX_ENTRY_UNLOCKED predicates. */
+      required_codex_entry?: number | null;
+      /** @description For STORY_AT_MILESTONE predicates. */
+      referenced_story?: number | null;
+      /**
+       * @description Which kind of milestone to check on referenced_story.
+       *
+       *     * `story_resolved` - Story resolved
+       *     * `chapter_reached` - Chapter reached or passed
+       *     * `episode_reached` - Episode reached or passed
+       */
+      referenced_milestone_type?:
+        | components['schemas']['ReferencedMilestoneTypeEnum']
+        | components['schemas']['BlankEnum'];
+      /** @description For referenced_milestone_type=CHAPTER_REACHED. */
+      referenced_chapter?: number | null;
+      /** @description For referenced_milestone_type=EPISODE_REACHED. */
+      referenced_episode?: number | null;
+      /** @description For AGGREGATE_THRESHOLD predicates — total contribution points required. */
+      required_points?: number | null;
+      /** @description Lead GM may flag this beat to be claimable by Assistant GMs. */
+      agm_eligible?: boolean;
+      /**
+       * Format: date-time
+       * @description Optional wall-clock deadline. Expiry handling deferred to Phase 3+.
+       */
+      deadline?: string | null;
+    };
     PatchedBugReportDetailRequest: {
       reporter_persona?: number;
       /** @description What the player observed. */
@@ -10212,34 +11390,12 @@ export interface components {
       summary?: string;
       /** @description What consequences lead to the next episode */
       consequences?: string;
-      /**
-       * @description How this episode connects to the next
-       *
-       *     * `therefore` - Therefore
-       *     * `but` - But
-       */
-      connection_to_next?:
-        | components['schemas']['ConnectionToNextEnum']
-        | components['schemas']['BlankEnum'];
-      /** @description Explanation of how episodes connect */
-      connection_summary?: string;
       /** Format: date-time */
       completed_at?: string | null;
     };
     /** @description Serializer for episode-scene connections */
     PatchedEpisodeSceneRequest: {
       order?: number;
-      /**
-       * @description How this scene connects to the next in the episode
-       *
-       *     * `therefore` - Therefore
-       *     * `but` - But
-       */
-      connection_to_next?:
-        | components['schemas']['ConnectionToNextEnum']
-        | components['schemas']['BlankEnum'];
-      /** @description Brief explanation of the scene connection */
-      connection_summary?: string;
     };
     /** @description Serializer for updating events. Only mutable fields are writable. */
     PatchedEventUpdateRequest: {
@@ -10315,6 +11471,21 @@ export interface components {
       resonance_ids?: number[];
       /** @description Player-facing description of this gift. */
       description?: string;
+    };
+    /** @description Serializer for GlobalStoryProgress — singleton metaplot progress pointer. */
+    PatchedGlobalStoryProgressRequest: {
+      story?: number;
+      /** @description Null while the story is at the frontier or before start. */
+      current_episode?: number | null;
+      is_active?: boolean;
+    };
+    /** @description Serializer for GroupStoryProgress — per-GMTable progress pointer. */
+    PatchedGroupStoryProgressRequest: {
+      story?: number;
+      gm_table?: number;
+      /** @description Null while the story is at the frontier (unauthored) or before start. */
+      current_episode?: number | null;
+      is_active?: boolean;
     };
     PatchedPersonaRequest: {
       /** @description The character sheet this persona belongs to. */
@@ -10402,8 +11573,14 @@ export interface components {
       description?: string;
       status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
-      /** @description True if this is a character's personal story arc */
-      is_personal_story?: boolean;
+      /**
+       * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
+       *
+       *     * `character` - Character
+       *     * `group` - Group
+       *     * `global` - Global
+       */
+      scope?: components['schemas']['ScopeEnum'];
       /** Format: date-time */
       completed_at?: string | null;
     };
@@ -10955,6 +12132,69 @@ export interface components {
       gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
     };
     /**
+     * @description Serializer for PoseEndorsement create + read (Spec C Task 23).
+     *
+     *     Write: accepts ``interaction`` + ``resonance`` PKs from the request body.
+     *     The ``endorser_sheet`` is resolved from the requesting account in the
+     *     view (``PoseEndorsementViewSet.perform_create``) and injected via
+     *     ``serializer.save(endorser_sheet=sheet)``.
+     *
+     *     Read: all fields are present; read-only fields cannot be supplied by the
+     *     client.
+     */
+    PoseEndorsement: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      readonly endorser_sheet: number;
+      /** @description The character this sheet belongs to */
+      readonly endorsee_sheet: number;
+      /** @description The interaction being endorsed. */
+      interaction: number;
+      resonance: number;
+      /** @description Endorsee's persona at endorsement time — captures masquerade for audit. */
+      readonly persona_snapshot: number | null;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly settled_at: string | null;
+      /** @description Set at weekly settlement. */
+      readonly granted_amount: number | null;
+    };
+    /**
+     * @description Serializer for PoseEndorsement create + read (Spec C Task 23).
+     *
+     *     Write: accepts ``interaction`` + ``resonance`` PKs from the request body.
+     *     The ``endorser_sheet`` is resolved from the requesting account in the
+     *     view (``PoseEndorsementViewSet.perform_create``) and injected via
+     *     ``serializer.save(endorser_sheet=sheet)``.
+     *
+     *     Read: all fields are present; read-only fields cannot be supplied by the
+     *     client.
+     */
+    PoseEndorsementRequest: {
+      /** @description The interaction being endorsed. */
+      interaction: number;
+      resonance: number;
+    };
+    /**
+     * @description * `gm_marked` - GM-marked
+     *     * `character_level_at_least` - Character level at least
+     *     * `achievement_held` - Achievement held
+     *     * `condition_held` - Condition held
+     *     * `codex_entry_unlocked` - Codex entry unlocked
+     *     * `story_at_milestone` - Referenced story at milestone
+     *     * `aggregate_threshold` - Aggregate threshold reached
+     * @enum {string}
+     */
+    PredicateTypeEnum:
+      | 'gm_marked'
+      | 'character_level_at_least'
+      | 'achievement_held'
+      | 'condition_held'
+      | 'codex_entry_unlocked'
+      | 'story_at_milestone'
+      | 'aggregate_threshold';
+    /**
      * @description * `public` - Public
      *     * `private` - Private
      *     * `invite_only` - Invite Only
@@ -11035,6 +12275,13 @@ export interface components {
      * @enum {integer}
      */
     RatingEnum: -2 | -1 | 0 | 1 | 2;
+    /**
+     * @description * `story_resolved` - Story resolved
+     *     * `chapter_reached` - Chapter reached or passed
+     *     * `episode_reached` - Episode reached or passed
+     * @enum {string}
+     */
+    ReferencedMilestoneTypeEnum: 'story_resolved' | 'chapter_reached' | 'episode_reached';
     /** @description Serializer for RelationshipCondition lookup table. */
     RelationshipCondition: {
       readonly id: number;
@@ -11109,6 +12356,30 @@ export interface components {
       readonly description: string;
       /** @description Return the Codex entry ID if this resonance's modifier_target has one. */
       readonly codex_entry_id: number | null;
+    };
+    /** @description Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25). */
+    ResonanceGrant: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      readonly character_sheet: number;
+      readonly resonance: number;
+      readonly amount: number;
+      /**
+       * @description Discriminator. Identifies which source_* FK is populated.
+       *
+       *     * `POSE_ENDORSEMENT` - Pose endorsement
+       *     * `SCENE_ENTRY` - Scene entry endorsement
+       *     * `ROOM_RESIDENCE` - Room residence trickle
+       *     * `OUTFIT_ITEM` - Outfit item trickle (reserved — stubbed)
+       *     * `STAFF_GRANT` - Staff grant
+       */
+      readonly source: components['schemas']['SourceEnum'];
+      /** Format: date-time */
+      readonly granted_at: string;
+      readonly source_room_aura_profile: number | null;
+      readonly source_staff_account: number | null;
+      readonly source_pose_endorsement: number | null;
+      readonly source_scene_entry_endorsement: number | null;
     };
     /** @description Serializer for Restriction lookup records. */
     Restriction: {
@@ -11305,6 +12576,50 @@ export interface components {
        */
       privacy_mode?: components['schemas']['PrivacyModeEnum'];
     };
+    /**
+     * @description Serializer for SceneEntryEndorsement create + read (Spec C Task 24).
+     *
+     *     Write: accepts ``endorsee_sheet`` + ``scene`` + ``resonance`` PKs from the
+     *     request body. The ``endorser_sheet`` is resolved from the requesting account
+     *     in the view (``SceneEntryEndorsementViewSet.perform_create``) and injected
+     *     via ``serializer.save(endorser_sheet=sheet)``.
+     *
+     *     No DELETE — scene-entry endorsements are immutable at creation (grant fires
+     *     immediately). Reversal is deferred to the ResonanceGrantReversal PR.
+     */
+    SceneEntryEndorsement: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      readonly endorser_sheet: number;
+      /** @description The character this sheet belongs to */
+      endorsee_sheet: number;
+      scene: number;
+      /** @description The ENTRY pose being endorsed; nullable for resilience to interaction cleanup. */
+      readonly entry_interaction: number | null;
+      resonance: number;
+      readonly persona_snapshot: number | null;
+      /** @description Captured from config at creation. */
+      readonly granted_amount: number;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description Serializer for SceneEntryEndorsement create + read (Spec C Task 24).
+     *
+     *     Write: accepts ``endorsee_sheet`` + ``scene`` + ``resonance`` PKs from the
+     *     request body. The ``endorser_sheet`` is resolved from the requesting account
+     *     in the view (``SceneEntryEndorsementViewSet.perform_create``) and injected
+     *     via ``serializer.save(endorser_sheet=sheet)``.
+     *
+     *     No DELETE — scene-entry endorsements are immutable at creation (grant fires
+     *     immediately). Reversal is deferred to the ResonanceGrantReversal PR.
+     */
+    SceneEntryEndorsementRequest: {
+      /** @description The character this sheet belongs to */
+      endorsee_sheet: number;
+      scene: number;
+      resonance: number;
+    };
     /** @description Simplified scene representation for lists */
     SceneList: {
       readonly id: number;
@@ -11353,6 +12668,47 @@ export interface components {
        *     * `agree` - Agree
        */
       action: components['schemas']['ActionEnum'];
+    };
+    /**
+     * @description * `character` - Character
+     *     * `group` - Group
+     *     * `global` - Global
+     * @enum {string}
+     */
+    ScopeEnum: 'character' | 'group' | 'global';
+    /** @description Read-only serializer for SessionRequest records. */
+    SessionRequest: {
+      readonly id: number;
+      episode: number;
+      readonly story_id: number;
+      status?: components['schemas']['StatusBa4Enum'];
+      /** @description Populated when the Lead GM schedules this via create_event_from_session_request. */
+      event?: number | null;
+      /** @description Player opted for first-available GM (CHARACTER scope only), or staff opened a metaplot event to any GM. */
+      open_to_any_gm?: boolean;
+      /** @description The GM currently expected to run this session. */
+      assigned_gm?: number | null;
+      initiated_by_account?: number | null;
+      /** @description Player or staff notes (scheduling preferences, etc.). */
+      notes?: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly updated_at: string;
+    };
+    /** @description Read-only serializer for SessionRequest records. */
+    SessionRequestRequest: {
+      episode: number;
+      status?: components['schemas']['StatusBa4Enum'];
+      /** @description Populated when the Lead GM schedules this via create_event_from_session_request. */
+      event?: number | null;
+      /** @description Player opted for first-available GM (CHARACTER scope only), or staff opened a metaplot event to any GM. */
+      open_to_any_gm?: boolean;
+      /** @description The GM currently expected to run this session. */
+      assigned_gm?: number | null;
+      initiated_by_account?: number | null;
+      /** @description Player or staff notes (scheduling preferences, etc.). */
+      notes?: string;
     };
     /**
      * @description * `positive` - Positive
@@ -11451,6 +12807,20 @@ export interface components {
       id: number;
       name: string;
     };
+    /**
+     * @description * `POSE_ENDORSEMENT` - Pose endorsement
+     *     * `SCENE_ENTRY` - Scene entry endorsement
+     *     * `ROOM_RESIDENCE` - Room residence trickle
+     *     * `OUTFIT_ITEM` - Outfit item trickle (reserved — stubbed)
+     *     * `STAFF_GRANT` - Staff grant
+     * @enum {string}
+     */
+    SourceEnum:
+      | 'POSE_ENDORSEMENT'
+      | 'SCENE_ENTRY'
+      | 'ROOM_RESIDENCE'
+      | 'OUTFIT_ITEM'
+      | 'STAFF_GRANT';
     /**
      * @description * `technique` - TECHNIQUE
      *     * `trait` - TRAIT
@@ -11572,6 +12942,14 @@ export interface components {
      */
     Status4e6Enum: 'declaring' | 'resolving' | 'between_rounds' | 'completed';
     /**
+     * @description * `open` - Open — awaiting scheduling
+     *     * `scheduled` - Scheduled (Event created)
+     *     * `resolved` - Resolved (session complete)
+     *     * `cancelled` - Cancelled
+     * @enum {string}
+     */
+    StatusBa4Enum: 'open' | 'scheduled' | 'resolved' | 'cancelled';
+    /**
      * @description * `pending` - Pending Review
      *     * `approved` - Approved
      *     * `denied` - Denied
@@ -11608,20 +12986,28 @@ export interface components {
       title: string;
       description: string;
       privacy?: components['schemas']['PrivacyEnum'];
-      /** @description True if this is a character's personal story arc */
-      is_personal_story?: boolean;
-      /** @description Character this personal story belongs to */
-      personal_story_character?: number | null;
+      /**
+       * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
+       *
+       *     * `character` - Character
+       *     * `group` - Group
+       *     * `global` - Global
+       */
+      scope?: components['schemas']['ScopeEnum'];
     };
     /** @description Serializer for creating stories */
     StoryCreateRequest: {
       title: string;
       description: string;
       privacy?: components['schemas']['PrivacyEnum'];
-      /** @description True if this is a character's personal story arc */
-      is_personal_story?: boolean;
-      /** @description Character this personal story belongs to */
-      personal_story_character?: number | null;
+      /**
+       * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
+       *
+       *     * `character` - Character
+       *     * `group` - Group
+       *     * `global` - Global
+       */
+      scope?: components['schemas']['ScopeEnum'];
     };
     /** @description Full serializer for story detail views */
     StoryDetail: {
@@ -11630,12 +13016,19 @@ export interface components {
       description: string;
       status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
+      /**
+       * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
+       *
+       *     * `character` - Character
+       *     * `group` - Group
+       *     * `global` - Global
+       */
+      scope?: components['schemas']['ScopeEnum'];
       readonly owners: string[];
       readonly active_gms: components['schemas']['GMProfile'][];
       readonly trust_requirements: string;
-      /** @description True if this is a character's personal story arc */
-      is_personal_story?: boolean;
-      readonly personal_story_character: string;
+      /** @description The character this sheet belongs to */
+      readonly character_sheet: number;
       readonly chapters_count: number;
       /** Format: date-time */
       readonly created_at: string;
@@ -11650,8 +13043,14 @@ export interface components {
       description: string;
       status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
-      /** @description True if this is a character's personal story arc */
-      is_personal_story?: boolean;
+      /**
+       * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
+       *
+       *     * `character` - Character
+       *     * `group` - Group
+       *     * `global` - Global
+       */
+      scope?: components['schemas']['ScopeEnum'];
       /** Format: date-time */
       completed_at?: string | null;
     };
@@ -11700,8 +13099,14 @@ export interface components {
       title: string;
       status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
-      /** @description True if this is a character's personal story arc */
-      is_personal_story?: boolean;
+      /**
+       * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
+       *
+       *     * `character` - Character
+       *     * `group` - Group
+       *     * `global` - Global
+       */
+      scope?: components['schemas']['ScopeEnum'];
       readonly owners_count: number;
       readonly active_gms_count: number;
       readonly participants_count: number;
@@ -12048,10 +13453,34 @@ export interface components {
        *     * `war` - War
        *     * `other` - Other
        */
-      readonly category: components['schemas']['CategoryEnum'];
+      readonly category: components['schemas']['TraitCategoryEnum'];
       /** @description Optional description of what this trait represents */
       readonly description: string;
     };
+    /**
+     * @description * `physical` - Physical
+     *     * `social` - Social
+     *     * `mental` - Mental
+     *     * `meta` - Meta
+     *     * `magic` - Magic
+     *     * `combat` - Combat
+     *     * `general` - General
+     *     * `crafting` - Crafting
+     *     * `war` - War
+     *     * `other` - Other
+     * @enum {string}
+     */
+    TraitCategoryEnum:
+      | 'physical'
+      | 'social'
+      | 'mental'
+      | 'meta'
+      | 'magic'
+      | 'combat'
+      | 'general'
+      | 'crafting'
+      | 'war'
+      | 'other';
     /**
      * @description * `stat` - Stat
      *     * `skill` - Skill
@@ -12154,7 +13583,7 @@ export interface components {
      *     * `very_private` - Very Private
      * @enum {string}
      */
-    VisibilityEnum: 'default' | 'very_private';
+    VisibilityF91Enum: 'default' | 'very_private';
     /** @description Read serializer for WeeklyVote instances. */
     WeeklyVote: {
       readonly id: number;
@@ -12390,6 +13819,60 @@ export interface operations {
       };
     };
   };
+  aggregate_beat_contributions_list: {
+    parameters: {
+      query?: {
+        beat?: number;
+        character_sheet?: number;
+        episode?: number;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        recorded_after?: string;
+        recorded_before?: string;
+        story?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAggregateBeatContributionList'];
+        };
+      };
+    };
+  };
+  aggregate_beat_contributions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this aggregate beat contribution. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AggregateBeatContribution'];
+        };
+      };
+    };
+  };
   areas_list: {
     parameters: {
       query?: {
@@ -12484,6 +13967,167 @@ export interface operations {
       };
     };
   };
+  assistant_gm_claims_list: {
+    parameters: {
+      query?: {
+        assistant_gm?: number;
+        beat?: number;
+        episode?: number;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        requested_after?: string;
+        status?: string;
+        story?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAssistantGMClaimList'];
+        };
+      };
+    };
+  };
+  assistant_gm_claims_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this assistant gm claim. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AssistantGMClaim'];
+        };
+      };
+    };
+  };
+  assistant_gm_claims_approve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this assistant gm claim. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AssistantGMClaim'];
+        };
+      };
+    };
+  };
+  assistant_gm_claims_cancel_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this assistant gm claim. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AssistantGMClaim'];
+        };
+      };
+    };
+  };
+  assistant_gm_claims_complete_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this assistant gm claim. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AssistantGMClaim'];
+        };
+      };
+    };
+  };
+  assistant_gm_claims_reject_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this assistant gm claim. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AssistantGMClaim'];
+        };
+      };
+    };
+  };
+  assistant_gm_claims_request_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AssistantGMClaim'];
+        };
+      };
+    };
+  };
   auth_browser_v1_auth_email_request_create: {
     parameters: {
       query?: never;
@@ -12535,6 +14179,202 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  beats_list: {
+    parameters: {
+      query?: {
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedBeatList'];
+        };
+      };
+    };
+  };
+  beats_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BeatRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Beat'];
+        };
+      };
+    };
+  };
+  beats_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this beat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Beat'];
+        };
+      };
+    };
+  };
+  beats_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this beat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BeatRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Beat'];
+        };
+      };
+    };
+  };
+  beats_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this beat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  beats_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this beat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedBeatRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Beat'];
+        };
+      };
+    };
+  };
+  beats_contribute_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this beat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BeatRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Beat'];
+        };
+      };
+    };
+  };
+  beats_mark_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this beat. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BeatRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Beat'];
+        };
       };
     };
   };
@@ -13706,8 +15546,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this Starting Area. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -15200,7 +17039,6 @@ export interface operations {
   episode_scenes_list: {
     parameters: {
       query?: {
-        connection_to_next?: string;
         episode?: number;
         order?: number;
         /** @description Which field to use when ordering the results. */
@@ -15349,7 +17187,6 @@ export interface operations {
     parameters: {
       query?: {
         chapter?: number;
-        connection_to_next?: string;
         is_active?: boolean;
         order_max?: number;
         order_min?: number;
@@ -15484,6 +17321,32 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedEpisodeDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EpisodeDetail'];
+        };
+      };
+    };
+  };
+  episodes_resolve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this episode. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EpisodeDetailRequest'];
       };
     };
     responses: {
@@ -16090,6 +17953,152 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['FormTrait'];
+        };
+      };
+    };
+  };
+  global_story_progress_list: {
+    parameters: {
+      query?: {
+        is_active?: boolean;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        story?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGlobalStoryProgressList'];
+        };
+      };
+    };
+  };
+  global_story_progress_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GlobalStoryProgressRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GlobalStoryProgress'];
+        };
+      };
+    };
+  };
+  global_story_progress_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this global story progress. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GlobalStoryProgress'];
+        };
+      };
+    };
+  };
+  global_story_progress_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this global story progress. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GlobalStoryProgressRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GlobalStoryProgress'];
+        };
+      };
+    };
+  };
+  global_story_progress_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this global story progress. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  global_story_progress_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this global story progress. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedGlobalStoryProgressRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GlobalStoryProgress'];
         };
       };
     };
@@ -16847,6 +18856,153 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  group_story_progress_list: {
+    parameters: {
+      query?: {
+        gm_table?: number;
+        is_active?: boolean;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        story?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGroupStoryProgressList'];
+        };
+      };
+    };
+  };
+  group_story_progress_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GroupStoryProgressRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GroupStoryProgress'];
+        };
+      };
+    };
+  };
+  group_story_progress_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this group story progress. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GroupStoryProgress'];
+        };
+      };
+    };
+  };
+  group_story_progress_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this group story progress. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GroupStoryProgressRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GroupStoryProgress'];
+        };
+      };
+    };
+  };
+  group_story_progress_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this group story progress. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  group_story_progress_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this group story progress. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedGroupStoryProgressRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GroupStoryProgress'];
+        };
       };
     };
   };
@@ -18484,6 +20640,110 @@ export interface operations {
       };
     };
   };
+  magic_pose_endorsements_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PoseEndorsementRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PoseEndorsement'];
+        };
+      };
+    };
+  };
+  magic_pose_endorsements_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this pose endorsement. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_resonance_grants_list: {
+    parameters: {
+      query?: {
+        granted_after?: string;
+        granted_before?: string;
+        resonance?: number;
+        /**
+         * @description Discriminator. Identifies which source_* FK is populated.
+         *
+         *     * `POSE_ENDORSEMENT` - Pose endorsement
+         *     * `SCENE_ENTRY` - Scene entry endorsement
+         *     * `ROOM_RESIDENCE` - Room residence trickle
+         *     * `OUTFIT_ITEM` - Outfit item trickle (reserved — stubbed)
+         *     * `STAFF_GRANT` - Staff grant
+         */
+        source?:
+          | 'OUTFIT_ITEM'
+          | 'POSE_ENDORSEMENT'
+          | 'ROOM_RESIDENCE'
+          | 'SCENE_ENTRY'
+          | 'STAFF_GRANT';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ResonanceGrant'][];
+        };
+      };
+    };
+  };
+  magic_resonance_grants_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this resonance grant. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ResonanceGrant'];
+        };
+      };
+    };
+  };
   magic_restrictions_list: {
     parameters: {
       query?: {
@@ -18542,6 +20802,51 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  magic_scene_entry_endorsements_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SceneEntryEndorsementRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneEntryEndorsement'];
+        };
+      };
+    };
+  };
+  magic_scene_entry_endorsements_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this scene entry endorsement. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SceneEntryEndorsement'];
+        };
       };
     };
   };
@@ -19292,6 +21597,50 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SituationTemplateDetail'];
+        };
+      };
+    };
+  };
+  narrative_deliveries_acknowledge_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  narrative_my_messages_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedNarrativeMessageDeliveryList'];
         };
       };
     };
@@ -21447,6 +23796,139 @@ export interface operations {
       };
     };
   };
+  session_requests_list: {
+    parameters: {
+      query?: {
+        assigned_gm?: number;
+        created_after?: string;
+        created_before?: string;
+        episode?: number;
+        open_to_any_gm?: boolean;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        status?: string;
+        story?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSessionRequestList'];
+        };
+      };
+    };
+  };
+  session_requests_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this session request. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SessionRequest'];
+        };
+      };
+    };
+  };
+  session_requests_cancel_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this session request. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SessionRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SessionRequest'];
+        };
+      };
+    };
+  };
+  session_requests_create_event_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this session request. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SessionRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SessionRequest'];
+        };
+      };
+    };
+  };
+  session_requests_resolve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this session request. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SessionRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SessionRequest'];
+        };
+      };
+    };
+  };
   skills_path_skill_suggestions_list: {
     parameters: {
       query?: {
@@ -21716,7 +24198,6 @@ export interface operations {
       query?: {
         created_after?: string;
         created_before?: string;
-        is_personal_story?: boolean;
         /** @description Which field to use when ordering the results. */
         ordering?: string;
         /** @description Owner Username */
@@ -21728,6 +24209,14 @@ export interface operations {
         privacy?: string;
         /** @description Requires Trust Category */
         requires_trust_category?: string;
+        /**
+         * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
+         *
+         *     * `character` - Character
+         *     * `group` - Group
+         *     * `global` - Global
+         */
+        scope?: 'character' | 'global' | 'group';
         /** @description A search term. */
         search?: string;
         status?: string;
@@ -21933,6 +24422,78 @@ export interface operations {
         content: {
           'application/json': components['schemas']['StoryDetail'];
         };
+      };
+    };
+  };
+  stories_expire_overdue_beats_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  stories_gm_queue_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  stories_my_active_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  stories_staff_workload_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
