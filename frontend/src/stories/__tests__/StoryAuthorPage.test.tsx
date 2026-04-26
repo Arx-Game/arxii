@@ -334,4 +334,35 @@ describe('StoryAuthorPage', () => {
       expect(toast.success).toHaveBeenCalledWith('Story deleted');
     });
   });
+
+  it('shows Tree tab by default and DAG tab when toggled', async () => {
+    const user = userEvent.setup();
+    mockStoryListSuccess(storyList);
+    vi.mocked(api.getStory).mockResolvedValue(storyDetail);
+
+    render(<StoryAuthorPage />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('story-sidebar-item')[0]).toBeInTheDocument();
+    });
+    await user.click(screen.getAllByTestId('story-sidebar-item')[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('author-view-tabs')).toBeInTheDocument();
+    });
+
+    // Tree tab is selected by default — tree is visible
+    expect(screen.getByTestId('tab-tree')).toBeInTheDocument();
+    expect(screen.getByTestId('tab-dag')).toBeInTheDocument();
+    expect(screen.getByTestId('story-author-tree')).toBeInTheDocument();
+
+    // Switch to DAG tab
+    await user.click(screen.getByTestId('tab-dag'));
+
+    // DAG canvas or empty/loading state should be present
+    await waitFor(() => {
+      const dagCanvas = document.querySelector('[data-testid^="dag-"]');
+      expect(dagCanvas).toBeInTheDocument();
+    });
+  });
 });

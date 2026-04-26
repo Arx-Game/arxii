@@ -3,7 +3,7 @@
  *
  * Two-pane layout:
  *   Left:  sidebar listing user's stories (or all if staff)
- *   Right: selected story header + chapter/episode/beat tree
+ *   Right: selected story header + chapter/episode/beat tree OR DAG view
  *
  * Permission gating: the endpoint 403s for non-Lead-GM. Same throwOnError:false
  * pattern as GMQueuePage and StaffWorkloadPage.
@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +33,9 @@ import type { Story, StoryList } from '../types';
 import { ScopeBadge } from '../components/ScopeBadge';
 import { StoryFormDialog } from '../components/StoryFormDialog';
 import { StoryAuthorTree } from '../components/StoryAuthorTree';
+import { EpisodeDAG } from '../components/EpisodeDAG';
+import { EpisodeFormDialog } from '../components/EpisodeFormDialog';
+import type { EpisodeLike } from '../components/EpisodeFormDialog';
 
 // ---------------------------------------------------------------------------
 // Access denied fallback
@@ -109,6 +113,8 @@ interface StoryMainPaneProps {
 
 function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
   const [editOpen, setEditOpen] = useState(false);
+  const [dagEpisodeOpen, setDagEpisodeOpen] = useState(false);
+  const [dagEpisode, setDagEpisode] = useState<EpisodeLike | null>(null);
   const deleteMutation = useDeleteStory();
 
   function handleDelete() {
@@ -120,6 +126,16 @@ function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
       onError: () => toast.error('Failed to delete story'),
     });
   }
+
+  function handleDagEpisodeClick(episode: EpisodeLike) {
+    setDagEpisode(episode);
+    setDagEpisodeOpen(true);
+  }
+
+  // EpisodeFormDialog requires chapterId for the create path, but when
+  // opening from the DAG (edit mode), the episode object is pre-populated.
+  // Pass chapterId=0 — it is unused in edit mode (isEdit = episode !== undefined).
+  const dagEpisodeChapterId = 0;
 
   return (
     <div className="min-w-0 flex-1" data-testid="story-main-pane">
@@ -180,8 +196,25 @@ function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
         </div>
       </div>
 
-      {/* Chapter/episode/beat tree */}
-      <StoryAuthorTree story={story} />
+      {/* Tree / DAG tabs */}
+      <Tabs defaultValue="tree" data-testid="author-view-tabs">
+        <TabsList className="mb-4">
+          <TabsTrigger value="tree" data-testid="tab-tree">
+            Tree
+          </TabsTrigger>
+          <TabsTrigger value="dag" data-testid="tab-dag">
+            DAG
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="tree">
+          <StoryAuthorTree story={story} />
+        </TabsContent>
+
+        <TabsContent value="dag">
+          <EpisodeDAG storyId={story.id} onEpisodeClick={handleDagEpisodeClick} />
+        </TabsContent>
+      </Tabs>
 
       <StoryFormDialog
         open={editOpen}
@@ -189,6 +222,19 @@ function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
         story={story}
         onSuccess={onEdited}
       />
+
+      {/* Episode form opened by clicking a node in the DAG */}
+      {dagEpisode !== null && (
+        <EpisodeFormDialog
+          open={dagEpisodeOpen}
+          onOpenChange={(open) => {
+            setDagEpisodeOpen(open);
+            if (!open) setDagEpisode(null);
+          }}
+          chapterId={dagEpisodeChapterId}
+          episode={dagEpisode}
+        />
+      )}
     </div>
   );
 }
