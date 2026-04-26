@@ -18,6 +18,7 @@ import { ScopeBadge } from '../components/ScopeBadge';
 import { StatusBadge } from '../components/StatusBadge';
 import { CurrentEpisodePanel } from '../components/CurrentEpisodePanel';
 import { StoryLog } from '../components/StoryLog';
+import { SessionRequestStatusCard } from '../components/SessionRequestStatusCard';
 
 // ---------------------------------------------------------------------------
 // Loading skeleton for the header area
@@ -108,21 +109,24 @@ function StoryDetailInner({ storyId }: StoryDetailInnerProps) {
 
       {/* Current episode panel */}
       {activeEntry?.current_episode_id != null ? (
-        <CurrentEpisodePanel episodeId={activeEntry.current_episode_id} />
+        <CurrentEpisodePanel
+          episodeId={activeEntry.current_episode_id}
+          characterSheetId={story.character_sheet}
+        />
       ) : (
         <section className="rounded-lg border bg-card p-4">
           <p className="text-sm text-muted-foreground">No active episode at this time.</p>
         </section>
       )}
 
+      {/* Session request status (Wave 4 — read-only display) */}
+      {activeEntry && <SessionRequestStatusCard activeEntry={activeEntry} />}
+
       {/* Story log */}
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Story Log</h2>
         <StoryLog storyId={storyId} />
       </section>
-
-      {/* Schedule CTA — placeholder for Wave 4 */}
-      {/* TODO Wave 4: mount <ScheduleSessionButton storyId={storyId} /> here */}
     </div>
   );
 }

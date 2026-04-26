@@ -396,6 +396,7 @@ export function useSessionRequest(id: number) {
   return useQuery({
     queryKey: storiesKeys.sessionRequest(id),
     queryFn: () => api.getSessionRequest(id),
+    enabled: id > 0,
     throwOnError: true,
   });
 }
