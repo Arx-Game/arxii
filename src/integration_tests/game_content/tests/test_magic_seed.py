@@ -1,4 +1,5 @@
-"""Tests for seed_magic_config() — Task 1.1 and seed_canonical_rituals() — Task 1.2.
+"""Tests for seed_magic_config() — Task 1.1, seed_canonical_rituals() — Task 1.2,
+and seed_thread_pull_catalog() — Task 1.3.
 
 Verifies:
 1. All 5 singletons + IntensityTier rows + MishapPoolTier are created with
@@ -7,6 +8,9 @@ Verifies:
 3. Staff edits to existing rows survive a re-run (get_or_create, not update_or_create) (Task 1.1).
 4. Canonical rituals are created with correct names (Task 1.2).
 5. Ritual seeding is idempotent and preserves edits (Task 1.2).
+6. ThreadPullCost + ThreadPullEffect catalog rows are created correctly (Task 1.3).
+7. Thread pull catalog seeding is idempotent (Task 1.3).
+8. Staff edits to ThreadPullEffect survive a re-run (Task 1.3).
 """
 
 from django.test import TestCase
@@ -14,8 +18,10 @@ from django.test import TestCase
 from integration_tests.game_content.magic import (
     MagicConfigResult,
     RitualSeedResult,
+    ThreadPullCatalogResult,
     seed_canonical_rituals,
     seed_magic_config,
+    seed_thread_pull_catalog,
 )
 
 
@@ -243,4 +249,178 @@ class TestSeedCanonicalRituals(TestCase):
             db_value["description"],
             "custom description",
             "seed_canonical_rituals() must not overwrite existing rows (get_or_create semantics)",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Task 1.3 — seed_thread_pull_catalog()
+# ---------------------------------------------------------------------------
+
+
+class TestSeedThreadPullCatalogCreation(TestCase):
+    """First-call assertions: correct rows exist with expected values."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.result: ThreadPullCatalogResult = seed_thread_pull_catalog()
+
+    def test_pull_costs_created(self) -> None:
+        from world.magic.models.threads import ThreadPullCost
+
+        self.assertEqual(ThreadPullCost.objects.count(), 3)
+        tier1 = ThreadPullCost.objects.get(tier=1)
+        tier2 = ThreadPullCost.objects.get(tier=2)
+        tier3 = ThreadPullCost.objects.get(tier=3)
+
+        self.assertEqual(tier1.resonance_cost, 1)
+        self.assertEqual(tier1.anima_per_thread, 1)
+        self.assertEqual(tier1.label, "soft")
+
+        self.assertEqual(tier2.resonance_cost, 3)
+        self.assertEqual(tier2.anima_per_thread, 2)
+        self.assertEqual(tier2.label, "medium")
+
+        self.assertEqual(tier3.resonance_cost, 6)
+        self.assertEqual(tier3.anima_per_thread, 3)
+        self.assertEqual(tier3.label, "hard")
+
+        self.assertIn(1, self.result.pull_costs)
+        self.assertIn(2, self.result.pull_costs)
+        self.assertIn(3, self.result.pull_costs)
+
+    def test_pull_effects_created(self) -> None:
+        from world.magic.constants import EffectKind
+        from world.magic.models.threads import ThreadPullEffect
+
+        self.assertEqual(ThreadPullEffect.objects.count(), 4)
+
+        self.assertIn(EffectKind.FLAT_BONUS, self.result.pull_effects)
+        self.assertIn(EffectKind.INTENSITY_BUMP, self.result.pull_effects)
+        self.assertIn(EffectKind.VITAL_BONUS, self.result.pull_effects)
+        self.assertIn(EffectKind.CAPABILITY_GRANT, self.result.pull_effects)
+
+        flat = self.result.pull_effects[EffectKind.FLAT_BONUS]
+        self.assertEqual(flat.tier, 1)
+        self.assertEqual(flat.flat_bonus_amount, 2)
+
+        bump = self.result.pull_effects[EffectKind.INTENSITY_BUMP]
+        self.assertEqual(bump.tier, 2)
+        self.assertEqual(bump.intensity_bump_amount, 1)
+
+        vital = self.result.pull_effects[EffectKind.VITAL_BONUS]
+        self.assertEqual(vital.tier, 0)
+        self.assertEqual(vital.vital_bonus_amount, 5)
+        from world.magic.constants import VitalBonusTarget
+
+        self.assertEqual(vital.vital_target, VitalBonusTarget.MAX_HEALTH)
+
+        cap_grant = self.result.pull_effects[EffectKind.CAPABILITY_GRANT]
+        self.assertEqual(cap_grant.tier, 3)
+        self.assertEqual(cap_grant.min_thread_level, 5)
+        self.assertIsNotNone(cap_grant.capability_grant)
+        self.assertEqual(cap_grant.capability_grant.name, "endurance")
+
+    def test_canonical_resonance_authored(self) -> None:
+        from world.magic.models import Affinity, Resonance
+
+        self.assertEqual(Resonance.objects.filter(name="Tideborne").count(), 1)
+        self.assertEqual(Affinity.objects.filter(name="Primal (Tideborne)").count(), 1)
+        self.assertEqual(self.result.canonical_resonance.name, "Tideborne")
+        self.assertEqual(self.result.canonical_resonance.affinity.name, "Primal (Tideborne)")
+
+
+class TestSeedThreadPullCatalogIdempotency(TestCase):
+    """Second-call assertions: row counts unchanged, same PKs returned."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.first: ThreadPullCatalogResult = seed_thread_pull_catalog()
+        cls.second: ThreadPullCatalogResult = seed_thread_pull_catalog()
+
+    def _counts(self) -> dict[str, int]:
+        from world.conditions.models import CapabilityType
+        from world.magic.models import Affinity, Resonance
+        from world.magic.models.threads import ThreadPullCost, ThreadPullEffect
+
+        return {
+            "pull_costs": ThreadPullCost.objects.count(),
+            "pull_effects": ThreadPullEffect.objects.count(),
+            "resonances": Resonance.objects.count(),
+            "affinities": Affinity.objects.count(),
+            "capability_types": CapabilityType.objects.count(),
+        }
+
+    def test_row_counts_unchanged(self) -> None:
+        counts = self._counts()
+        self.assertEqual(counts["pull_costs"], 3)
+        self.assertEqual(
+            counts["pull_effects"],
+            4,
+            "seed_thread_pull_catalog() must not create extra ThreadPullEffect rows on second call",
+        )
+        self.assertEqual(
+            counts["resonances"],
+            1,
+            "seed_thread_pull_catalog() must not create extra Resonance rows on second call",
+        )
+        self.assertEqual(
+            counts["affinities"],
+            1,
+            "seed_thread_pull_catalog() must not create extra Affinity rows on second call",
+        )
+        self.assertEqual(
+            counts["capability_types"],
+            1,
+            "seed_thread_pull_catalog() must not create extra CapabilityType rows on second call",
+        )
+
+    def test_same_pks_returned(self) -> None:
+        from world.magic.constants import EffectKind
+
+        self.assertEqual(
+            self.first.canonical_resonance.pk,
+            self.second.canonical_resonance.pk,
+        )
+        for tier in (1, 2, 3):
+            self.assertEqual(
+                self.first.pull_costs[tier].pk,
+                self.second.pull_costs[tier].pk,
+                f"ThreadPullCost tier {tier} pk changed on second call",
+            )
+        for effect_kind in (
+            EffectKind.FLAT_BONUS,
+            EffectKind.INTENSITY_BUMP,
+            EffectKind.VITAL_BONUS,
+            EffectKind.CAPABILITY_GRANT,
+        ):
+            self.assertEqual(
+                self.first.pull_effects[effect_kind].pk,
+                self.second.pull_effects[effect_kind].pk,
+                f"ThreadPullEffect {effect_kind} pk changed on second call",
+            )
+
+
+class TestSeedThreadPullCatalogPreservesEdits(TestCase):
+    """Staff edits to ThreadPullEffect survive a re-run (get_or_create semantics)."""
+
+    def test_edit_preserved_on_rerun(self) -> None:
+        from world.magic.constants import EffectKind
+        from world.magic.models.threads import ThreadPullEffect
+
+        first = seed_thread_pull_catalog()
+        flat_pk = first.pull_effects[EffectKind.FLAT_BONUS].pk
+
+        # Simulate a staff edit via bulk update (bypasses identity map)
+        ThreadPullEffect.objects.filter(pk=flat_pk).update(flat_bonus_amount=99)
+
+        # Re-run the seed — must not overwrite the staff edit
+        seed_thread_pull_catalog()
+
+        # Use .values() to bypass SharedMemoryModel identity-map cache and
+        # read directly from the DB.
+        db_value = ThreadPullEffect.objects.filter(pk=flat_pk).values("flat_bonus_amount").get()
+        self.assertEqual(
+            db_value["flat_bonus_amount"],
+            99,
+            "seed_thread_pull_catalog() must not overwrite existing rows (get_or_create semantics)",
         )

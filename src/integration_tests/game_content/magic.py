@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     )
     from world.magic.models.corruption_config import CorruptionConfig
     from world.magic.models.gain_config import ResonanceGainConfig
+    from world.magic.models.threads import ThreadPullCost, ThreadPullEffect
     from world.mechanics.models import Property
 
 # Maps action_key → technique name (narrative, not mechanical)
@@ -593,3 +594,147 @@ def seed_canonical_rituals() -> RitualSeedResult:
     imbuing = ImbuingRitualFactory()
     atonement = AtonementRitualFactory()
     return RitualSeedResult(rite_of_imbuing=imbuing, rite_of_atonement=atonement)
+
+
+# ---------------------------------------------------------------------------
+# Task 1.3 — seed_thread_pull_catalog()
+# ---------------------------------------------------------------------------
+
+#: Canonical resonance name for the thread pull catalog.
+#: Must not collide with names used by other seed helpers
+#: ("Wild Hunt", "Web of Spiders" are claimed by corruption content).
+_CATALOG_RESONANCE_NAME: str = "Tideborne"
+_CATALOG_AFFINITY_NAME: str = "Primal (Tideborne)"
+
+#: Per-tier pull cost definitions: (tier, resonance_cost, anima_per_thread, label)
+_PULL_COST_TIERS: list[tuple[int, int, int, str]] = [
+    (1, 1, 1, "soft"),
+    (2, 3, 2, "medium"),
+    (3, 6, 3, "hard"),
+]
+
+#: Canonical capability name for CAPABILITY_GRANT effect.
+_CATALOG_CAPABILITY_NAME: str = "endurance"
+
+
+@dataclass
+class ThreadPullCatalogResult:
+    """Returned by seed_thread_pull_catalog().
+
+    All rows are lazy-created via get_or_create. Re-running preserves any edits
+    to existing rows (idempotent).
+    """
+
+    pull_costs: dict[int, ThreadPullCost]  # tier → cost row
+    canonical_resonance: Resonance
+    pull_effects: dict[str, ThreadPullEffect]  # EffectKind value → effect row
+
+
+def seed_thread_pull_catalog() -> ThreadPullCatalogResult:
+    """Lazy-create ThreadPullCost rows (tiers 1/2/3) and a 4-row ThreadPullEffect catalog.
+
+    All writes use get_or_create so re-running on a populated DB is a no-op.
+    Existing rows are never modified; staff edits survive repeated calls.
+
+    Creates:
+    - ThreadPullCost rows: tier 1 (soft), tier 2 (medium), tier 3 (hard)
+    - Affinity "Primal (Tideborne)" — shared affinity for the catalog resonance
+    - Resonance "Tideborne" — canonical reference resonance for the catalog
+    - CapabilityType "endurance" — used by the CAPABILITY_GRANT effect
+    - ThreadPullEffect rows:
+        - FLAT_BONUS (tier=1, min_thread_level=0, flat_bonus_amount=2)
+        - INTENSITY_BUMP (tier=2, min_thread_level=0, intensity_bump_amount=1)
+        - VITAL_BONUS (tier=0, min_thread_level=0, vital_bonus_amount=5, MAX_HEALTH)
+        - CAPABILITY_GRANT (tier=3, min_thread_level=5, capability=endurance)
+
+    Returns:
+        ThreadPullCatalogResult dataclass with all created/fetched instances.
+    """
+    from world.conditions.models import CapabilityType  # noqa: PLC0415
+    from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget  # noqa: PLC0415
+    from world.magic.factories import (  # noqa: PLC0415
+        AffinityFactory,
+        ResonanceFactory,
+        ThreadPullCostFactory,
+    )
+    from world.magic.models.threads import ThreadPullEffect  # noqa: PLC0415
+
+    # --- ThreadPullCost rows (tier is the natural key via django_get_or_create) ---
+    pull_costs: dict[int, ThreadPullCost] = {}
+    for tier, resonance_cost, anima_per_thread, label in _PULL_COST_TIERS:
+        cost = ThreadPullCostFactory(
+            tier=tier,
+            resonance_cost=resonance_cost,
+            anima_per_thread=anima_per_thread,
+            label=label,
+        )
+        pull_costs[tier] = cost
+
+    # --- Canonical resonance (both factory calls use django_get_or_create on name) ---
+    affinity = AffinityFactory(name=_CATALOG_AFFINITY_NAME)
+    resonance = ResonanceFactory(name=_CATALOG_RESONANCE_NAME, affinity=affinity)
+
+    # --- CapabilityType for CAPABILITY_GRANT (get_or_create on name) ---
+    capability, _ = CapabilityType.objects.get_or_create(
+        name=_CATALOG_CAPABILITY_NAME,
+        defaults={"description": "Endurance capability — used by thread pull catalog."},
+    )
+
+    # --- ThreadPullEffect rows (natural key: target_kind, resonance, tier, min_thread_level) ---
+    # Using direct ORM get_or_create per task spec to avoid non-idempotent factory calls.
+    pull_effects: dict[str, ThreadPullEffect] = {}
+
+    flat_bonus_effect, _ = ThreadPullEffect.objects.get_or_create(
+        target_kind=TargetKind.TRAIT,
+        resonance=resonance,
+        tier=1,
+        min_thread_level=0,
+        defaults={
+            "effect_kind": EffectKind.FLAT_BONUS,
+            "flat_bonus_amount": 2,
+        },
+    )
+    pull_effects[EffectKind.FLAT_BONUS] = flat_bonus_effect
+
+    intensity_bump_effect, _ = ThreadPullEffect.objects.get_or_create(
+        target_kind=TargetKind.TRAIT,
+        resonance=resonance,
+        tier=2,
+        min_thread_level=0,
+        defaults={
+            "effect_kind": EffectKind.INTENSITY_BUMP,
+            "intensity_bump_amount": 1,
+        },
+    )
+    pull_effects[EffectKind.INTENSITY_BUMP] = intensity_bump_effect
+
+    vital_bonus_effect, _ = ThreadPullEffect.objects.get_or_create(
+        target_kind=TargetKind.TRAIT,
+        resonance=resonance,
+        tier=0,
+        min_thread_level=0,
+        defaults={
+            "effect_kind": EffectKind.VITAL_BONUS,
+            "vital_bonus_amount": 5,
+            "vital_target": VitalBonusTarget.MAX_HEALTH,
+        },
+    )
+    pull_effects[EffectKind.VITAL_BONUS] = vital_bonus_effect
+
+    capability_grant_effect, _ = ThreadPullEffect.objects.get_or_create(
+        target_kind=TargetKind.TRAIT,
+        resonance=resonance,
+        tier=3,
+        min_thread_level=5,
+        defaults={
+            "effect_kind": EffectKind.CAPABILITY_GRANT,
+            "capability_grant": capability,
+        },
+    )
+    pull_effects[EffectKind.CAPABILITY_GRANT] = capability_grant_effect
+
+    return ThreadPullCatalogResult(
+        pull_costs=pull_costs,
+        canonical_resonance=resonance,
+        pull_effects=pull_effects,
+    )
