@@ -1,6 +1,6 @@
 # Seed Mechanism + Integration Test Coverage
 
-**Status:** in-progress (audit complete; execution starting)
+**Status:** Phase 1 complete; Phase 2 in-progress
 **Audit:** [`docs/audits/2026-04-26-seed-and-integration-coverage-audit.md`](../audits/2026-04-26-seed-and-integration-coverage-audit.md)
 
 ## Why this exists
@@ -44,15 +44,15 @@ These can overlap at the boundaries — for example, the magic-cluster seed help
 
 | Task | Unlocks |
 |------|---------|
-| **1.1** — `seed_magic_config()` orchestrator: lazy-create the 5 singletons (AnimaConfig, SoulfrayConfig, ResonanceGainConfig, CorruptionConfig, AudereThreshold) with sensible defaults. Includes IntensityTier reference rows (AudereThreshold's FK target) and MishapPoolTier rows. | `use_technique` no longer errors on cast. Anima daily regen actually fires. Soulfray accumulation works. Audere eligibility check has data to work with. |
-| **1.2** — Seed canonical Rituals: "Rite of Imbuing" and "Rite of Atonement". Factories already exist (`ImbuingRitualFactory`, `AtonementRitualFactory`); just need an idempotent seed call. | Atonement flow can fire. Imbuing ritual dispatches. Both today silently fail because the service code looks them up by hardcoded name. |
-| **1.3** — Seed `ThreadPullCost` rows for tiers 1, 2, 3. | `spend_resonance_for_pull` no longer errors. Thread pulls become a real mechanic. |
-| **1.4** — Pipeline test: `test_thread_pull_pipeline.py`. Resonance spend → CombatPull written → ThreadPullEffect resolved → effect applied (FLAT_BONUS, INTENSITY_BUMP, VITAL_BONUS, CAPABILITY_GRANT). | Proves the entire Spec A thread system works in combat context. Today this is exercised only by unit tests against individual stages. |
-| **1.5** — Pipeline test: `test_anima_regen_pipeline.py`. Full daily regen tick: AnimaConfig + character with depleted anima + Soulfray-gated property → tick fires → anima restored unless gated. | Confirms the AnimaConfig + ConditionStage `blocks_anima_regen` property + tick scheduler all integrate correctly. |
-| **1.6** — Pipeline test: `test_situation_pipeline.py`. SituationTemplate → SituationInstance → ChallengeInstance chain → resolution. | Currently zero pipeline coverage for the Situation system despite full factory coverage. |
-| **1.7** — Pipeline test: `test_corruption_per_cast_pipeline.py` (or extend `test_corruption_flow`) covering the full per-cast hook landed in PR #403 — Audere caster takes corruption from non-Celestial cast, multiple resonances accrue per their involvement. | Validates the per-cast corruption hook end-to-end. The unit tests cover the formula; this covers the pipeline. |
-| **1.8** — Cantrip starter catalog: at minimum 1 cantrip per archetype × style combination (5 styles × ~5 archetypes = ~25 entries). Allows CG magic stage to function with seed data, not just test fixtures. | CG magic stage works on a fresh dev install. New characters can pick a starter cantrip. |
-| **1.9** — `seed_magic_dev()` master function that calls 1.1, 1.2, 1.3, 1.8 plus the existing `author_reference_corruption_content()` and `MagicContent.create_all()`. Idempotent. | One call seeds the entire magic cluster. Becomes the magic-cluster contribution to Phase 3's `seed_dev_database()`. |
+| ✅ **1.1** — `seed_magic_config()` orchestrator: lazy-create the 5 singletons (AnimaConfig, SoulfrayConfig, ResonanceGainConfig, CorruptionConfig, AudereThreshold) with sensible defaults. Includes IntensityTier reference rows (AudereThreshold's FK target) and MishapPoolTier rows. | `use_technique` no longer errors on cast. Anima daily regen actually fires. Soulfray accumulation works. Audere eligibility check has data to work with. |
+| ✅ **1.2** — Seed canonical Rituals: "Rite of Imbuing" and "Rite of Atonement". Factories already exist (`ImbuingRitualFactory`, `AtonementRitualFactory`); just need an idempotent seed call. | Atonement flow can fire. Imbuing ritual dispatches. Both today silently fail because the service code looks them up by hardcoded name. |
+| ✅ **1.3** — Seed `ThreadPullCost` rows for tiers 1, 2, 3. Also seeds `ThreadPullEffect` catalog (FLAT_BONUS, INTENSITY_BUMP, VITAL_BONUS, CAPABILITY_GRANT) via `seed_thread_pull_catalog()`. | `spend_resonance_for_pull` no longer errors. Thread pulls become a real mechanic. |
+| ✅ **1.4** — Pipeline test: `test_thread_pull_pipeline.py`. Resonance spend → CombatPull written → ThreadPullEffect resolved → effect applied (FLAT_BONUS, INTENSITY_BUMP, VITAL_BONUS, CAPABILITY_GRANT). | Proves the entire Spec A thread system works in combat context. |
+| ✅ **1.5** — Pipeline test: `test_anima_regen_pipeline.py`. Full daily regen tick: AnimaConfig + character with depleted anima + Soulfray-gated property → tick fires → anima restored unless gated. | Confirms the AnimaConfig + ConditionStage `blocks_anima_regen` property + tick scheduler all integrate correctly. |
+| ✅ **1.6** — Pipeline test: `test_situation_pipeline.py`. SituationTemplate → SituationInstance → ChallengeInstance chain → resolution. | Situation system covered end-to-end. |
+| ✅ **1.7** — Pipeline test: `test_corruption_per_cast_pipeline.py` covering the full per-cast hook landed in PR #403 — Audere caster takes corruption from non-Celestial cast, multiple resonances accrue per their involvement. | Per-cast corruption hook validated end-to-end. |
+| ✅ **1.8** — Cantrip starter catalog via `seed_cantrip_starter_catalog()`: 5 TechniqueStyle rows, 6 EffectType rows, 25 Cantrip rows (5 styles × 5 archetypes), 5 PROSPECT Path rows. | CG magic stage works on a fresh dev install. New characters can pick a starter cantrip. |
+| ✅ **1.9** — `seed_magic_dev()` master function in `integration_tests/game_content/magic.py` that calls 1.1, 1.2, 1.3, 1.8 plus `author_reference_corruption_content()` and `MagicContent.create_all()`. Two idempotency fixes: `_make_magical_endurance_check_type()` switched from factory to direct ORM (converges with seed_magic_config's row); `MagicContent.create_all()` switched to get_or_create (no duplicate Technique/ActionEnhancement rows on re-run). 7 new tests covering idempotency and convergence. | One call seeds the entire magic cluster. Ready to become the magic-cluster contribution to Phase 3's `seed_dev_database()`. |
 
 ### Phase 1 not in scope
 
