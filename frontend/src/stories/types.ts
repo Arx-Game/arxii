@@ -33,14 +33,18 @@ export type Episode = EpisodeDetail;
 // Beat — single shape with all Phase 2 predicate config fields.
 // The generated type does not yet include the Wave 7 context fields added to
 // BeatSerializer (episode_title, chapter_title, story_id, story_title).
-// We extend it with those fields here until the schema is regenerated.
+// We use Omit + intersection to override the readonly string fields with
+// nullable variants until the schema is regenerated.
 export type GeneratedBeat = components['schemas']['Beat'];
-export interface Beat extends GeneratedBeat {
+export type Beat = Omit<
+  GeneratedBeat,
+  'episode_title' | 'chapter_title' | 'story_id' | 'story_title'
+> & {
   episode_title?: string | null;
   chapter_title?: string | null;
   story_id?: number | null;
   story_title?: string | null;
-}
+};
 
 // Progress — CHARACTER scope has no generated type (no ViewSet); only GROUP and GLOBAL do.
 export type GroupStoryProgress = components['schemas']['GroupStoryProgress'];
@@ -269,6 +273,18 @@ export interface CreateEventBody {
   description?: string;
   is_public?: boolean;
 }
+
+// Transition, EpisodeProgressionRequirement, TransitionRequiredOutcome — Wave 9 author editor
+export type Transition = components['schemas']['Transition'];
+export type EpisodeProgressionRequirement = components['schemas']['EpisodeProgressionRequirement'];
+export type TransitionRequiredOutcome = components['schemas']['TransitionRequiredOutcome'];
+
+// Enum aliases for Wave 9
+export type TransitionMode = NonNullable<Transition['mode']>;
+export type StoryConnectionType = NonNullable<components['schemas']['ConnectionTypeEnum']>;
+export type ReferencedMilestoneType = NonNullable<
+  components['schemas']['ReferencedMilestoneTypeEnum']
+>;
 
 export interface StoryCreateBody {
   title: string;

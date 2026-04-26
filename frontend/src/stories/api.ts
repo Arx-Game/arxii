@@ -29,6 +29,7 @@ import type {
   Episode,
   EpisodeCreateBody,
   EpisodeList,
+  EpisodeProgressionRequirement,
   EpisodeResolution,
   GlobalStoryProgress,
   GMQueueResponse,
@@ -45,6 +46,8 @@ import type {
   StoryCreateBody,
   StoryList,
   StoryLogResponse,
+  Transition,
+  TransitionRequiredOutcome,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -617,6 +620,137 @@ export async function getStoryLog(storyId: number): Promise<StoryLogResponse> {
   const res = await apiFetch(`/api/stories/${storyId}/log/`);
   if (!res.ok) throw new Error('Failed to load story log');
   return res.json() as Promise<StoryLogResponse>;
+}
+
+// ---------------------------------------------------------------------------
+// Transitions CRUD (Wave 9 author editor)
+// ---------------------------------------------------------------------------
+
+export interface ListTransitionsParams {
+  source_episode?: number;
+  story?: number;
+  page?: number;
+  page_size?: number;
+}
+
+export async function listTransitions(
+  params?: ListTransitionsParams
+): Promise<PaginatedResponse<Transition>> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/transitions/${qs}`);
+  if (!res.ok) throw new Error('Failed to load transitions');
+  return res.json() as Promise<PaginatedResponse<Transition>>;
+}
+
+export async function getTransition(id: number): Promise<Transition> {
+  const res = await apiFetch(`/api/transitions/${id}/`);
+  if (!res.ok) throw new Error(`Failed to load transition ${id}`);
+  return res.json() as Promise<Transition>;
+}
+
+export async function createTransition(data: Partial<Transition>): Promise<Transition> {
+  const res = await apiFetch('/api/transitions/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create transition');
+  return res.json() as Promise<Transition>;
+}
+
+export async function updateTransition(id: number, data: Partial<Transition>): Promise<Transition> {
+  const res = await apiFetch(`/api/transitions/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Failed to update transition ${id}`);
+  return res.json() as Promise<Transition>;
+}
+
+export async function deleteTransition(id: number): Promise<void> {
+  const res = await apiFetch(`/api/transitions/${id}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Failed to delete transition ${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// EpisodeProgressionRequirement CRUD (Wave 9 author editor)
+// ---------------------------------------------------------------------------
+
+export interface ListProgressionRequirementsParams {
+  episode?: number;
+  page?: number;
+  page_size?: number;
+}
+
+export async function listProgressionRequirements(
+  params?: ListProgressionRequirementsParams
+): Promise<PaginatedResponse<EpisodeProgressionRequirement>> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/episode-progression-requirements/${qs}`);
+  if (!res.ok) throw new Error('Failed to load progression requirements');
+  return res.json() as Promise<PaginatedResponse<EpisodeProgressionRequirement>>;
+}
+
+export async function createProgressionRequirement(
+  data: Omit<EpisodeProgressionRequirement, 'id'>
+): Promise<EpisodeProgressionRequirement> {
+  const res = await apiFetch('/api/episode-progression-requirements/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create progression requirement');
+  return res.json() as Promise<EpisodeProgressionRequirement>;
+}
+
+export async function deleteProgressionRequirement(id: number): Promise<void> {
+  const res = await apiFetch(`/api/episode-progression-requirements/${id}/`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error(`Failed to delete progression requirement ${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// TransitionRequiredOutcome CRUD (Wave 9 author editor)
+// ---------------------------------------------------------------------------
+
+export interface ListTransitionRequiredOutcomesParams {
+  transition?: number;
+  page?: number;
+  page_size?: number;
+}
+
+export async function listTransitionRequiredOutcomes(
+  params?: ListTransitionRequiredOutcomesParams
+): Promise<PaginatedResponse<TransitionRequiredOutcome>> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/transition-required-outcomes/${qs}`);
+  if (!res.ok) throw new Error('Failed to load transition required outcomes');
+  return res.json() as Promise<PaginatedResponse<TransitionRequiredOutcome>>;
+}
+
+export async function createTransitionRequiredOutcome(
+  data: Omit<TransitionRequiredOutcome, 'id'>
+): Promise<TransitionRequiredOutcome> {
+  const res = await apiFetch('/api/transition-required-outcomes/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create transition required outcome');
+  return res.json() as Promise<TransitionRequiredOutcome>;
+}
+
+export async function deleteTransitionRequiredOutcome(id: number): Promise<void> {
+  const res = await apiFetch(`/api/transition-required-outcomes/${id}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Failed to delete transition required outcome ${id}`);
 }
 
 /**

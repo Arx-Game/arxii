@@ -14,21 +14,28 @@ import type {
   ListContributionsParams,
   ListEpisodesParams,
   ListGroupProgressParams,
+  ListProgressionRequirementsParams,
   ListSessionRequestsParams,
   ListStoriesParams,
+  ListTransitionRequiredOutcomesParams,
+  ListTransitionsParams,
 } from './api';
 import type {
   ApproveClaimBody,
+  Beat,
   BeatOutcome,
   ChapterCreateBody,
   ContributeBeatBody,
   CreateEventBody,
   EpisodeCreateBody,
+  EpisodeProgressionRequirement,
   MarkBeatBody,
   RejectClaimBody,
   RequestClaimBody,
   ResolveEpisodeBody,
   StoryCreateBody,
+  Transition,
+  TransitionRequiredOutcome,
 } from './types';
 
 export type { BeatOutcome };
@@ -82,6 +89,19 @@ export const storiesKeys = {
 
   // Story log
   storyLog: (id: number) => [...storiesKeys.all, 'story', id, 'log'] as const,
+
+  // Transitions (Wave 9)
+  transitionList: (params?: ListTransitionsParams) =>
+    [...storiesKeys.all, 'transitions', params] as const,
+  transition: (id: number) => [...storiesKeys.all, 'transition', id] as const,
+
+  // EpisodeProgressionRequirements (Wave 9)
+  progressionRequirements: (params?: ListProgressionRequirementsParams) =>
+    [...storiesKeys.all, 'progression-requirements', params] as const,
+
+  // TransitionRequiredOutcomes (Wave 9)
+  transitionRequiredOutcomes: (params?: ListTransitionRequiredOutcomesParams) =>
+    [...storiesKeys.all, 'transition-required-outcomes', params] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -565,3 +585,128 @@ export function useExpireOverdueBeats() {
     },
   });
 }
+
+// ---------------------------------------------------------------------------
+// Transition hooks (Wave 9 author editor)
+// ---------------------------------------------------------------------------
+
+export function useTransitionList(params?: ListTransitionsParams) {
+  return useQuery({
+    queryKey: storiesKeys.transitionList(params),
+    queryFn: () => api.listTransitions(params),
+    throwOnError: true,
+  });
+}
+
+export function useCreateTransition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof api.createTransition>[0]) => api.createTransition(data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.transitionList() });
+    },
+  });
+}
+
+export function useUpdateTransition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Partial<Transition> }) =>
+      api.updateTransition(id, data),
+    onSuccess: (_, { id }) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.transition(id) });
+      void qc.invalidateQueries({ queryKey: storiesKeys.transitionList() });
+    },
+  });
+}
+
+export function useDeleteTransition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.deleteTransition(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.transitionList() });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// EpisodeProgressionRequirement hooks (Wave 9 author editor)
+// ---------------------------------------------------------------------------
+
+export function useProgressionRequirements(params?: ListProgressionRequirementsParams) {
+  return useQuery({
+    queryKey: storiesKeys.progressionRequirements(params),
+    queryFn: () => api.listProgressionRequirements(params),
+    enabled: params?.episode !== undefined,
+    throwOnError: true,
+  });
+}
+
+export function useCreateProgressionRequirement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Omit<EpisodeProgressionRequirement, 'id'>) =>
+      api.createProgressionRequirement(data),
+    onSuccess: (_, { episode }) => {
+      void qc.invalidateQueries({
+        queryKey: storiesKeys.progressionRequirements({ episode }),
+      });
+    },
+  });
+}
+
+export function useDeleteProgressionRequirement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, episodeId: _episodeId }: { id: number; episodeId: number }) =>
+      api.deleteProgressionRequirement(id),
+    onSuccess: (_, { episodeId }) => {
+      void qc.invalidateQueries({
+        queryKey: storiesKeys.progressionRequirements({ episode: episodeId }),
+      });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// TransitionRequiredOutcome hooks (Wave 9 author editor)
+// ---------------------------------------------------------------------------
+
+export function useTransitionRequiredOutcomes(params?: ListTransitionRequiredOutcomesParams) {
+  return useQuery({
+    queryKey: storiesKeys.transitionRequiredOutcomes(params),
+    queryFn: () => api.listTransitionRequiredOutcomes(params),
+    enabled: params?.transition !== undefined,
+    throwOnError: true,
+  });
+}
+
+export function useCreateTransitionRequiredOutcome() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Omit<TransitionRequiredOutcome, 'id'>) =>
+      api.createTransitionRequiredOutcome(data),
+    onSuccess: (_, { transition }) => {
+      void qc.invalidateQueries({
+        queryKey: storiesKeys.transitionRequiredOutcomes({ transition }),
+      });
+    },
+  });
+}
+
+export function useDeleteTransitionRequiredOutcome() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, transitionId: _transitionId }: { id: number; transitionId: number }) =>
+      api.deleteTransitionRequiredOutcome(id),
+    onSuccess: (_, { transitionId }) => {
+      void qc.invalidateQueries({
+        queryKey: storiesKeys.transitionRequiredOutcomes({ transition: transitionId }),
+      });
+    },
+  });
+}
+
+// Suppress unused-import lint — Beat is re-exported for consumers
+export type { Beat };
