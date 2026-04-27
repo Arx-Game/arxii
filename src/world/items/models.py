@@ -13,7 +13,7 @@ from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
+from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype, OwnershipEventType
 
 
 class QualityTier(SharedMemoryModel):
@@ -178,6 +178,22 @@ class ItemTemplate(SharedMemoryModel):
         blank=True,
         related_name="item_templates",
         help_text="Default reference image for items of this type. Instances can override.",
+    )
+    facet_capacity = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Number of Facet slots this template can carry. "
+            "Plain items = 0 or 1; fine items = 2-3; ceremonial = 4-5."
+        ),
+    )
+    gear_archetype = models.CharField(
+        max_length=20,
+        choices=GearArchetype.choices,
+        default=GearArchetype.OTHER,
+        help_text=(
+            "Gear category. Drives covenant role × gear compatibility. "
+            "Immutable across instances of this template."
+        ),
     )
 
     class Meta:

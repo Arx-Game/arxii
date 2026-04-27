@@ -3,7 +3,7 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
+from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype, OwnershipEventType
 from world.items.factories import (
     InteractionTypeFactory,
     ItemInstanceFactory,
@@ -334,6 +334,27 @@ class OwnershipEventTests(TestCase):
         events = list(OwnershipEvent.objects.filter(item_instance=instance).order_by("-created_at"))
         self.assertEqual(events[0].event_type, OwnershipEventType.GIVEN)
         self.assertEqual(events[1].event_type, OwnershipEventType.CREATED)
+
+
+class ItemTemplateGearFieldsTests(TestCase):
+    def test_facet_capacity_defaults_to_zero(self) -> None:
+        from world.items.factories import ItemTemplateFactory
+
+        tpl = ItemTemplateFactory()
+        self.assertEqual(tpl.facet_capacity, 0)
+
+    def test_gear_archetype_defaults_to_other(self) -> None:
+        from world.items.factories import ItemTemplateFactory
+
+        tpl = ItemTemplateFactory()
+        self.assertEqual(tpl.gear_archetype, GearArchetype.OTHER)
+
+    def test_facet_capacity_and_archetype_settable(self) -> None:
+        from world.items.factories import ItemTemplateFactory
+
+        tpl = ItemTemplateFactory(facet_capacity=3, gear_archetype=GearArchetype.HEAVY_ARMOR)
+        self.assertEqual(tpl.facet_capacity, 3)
+        self.assertEqual(tpl.gear_archetype, GearArchetype.HEAVY_ARMOR)
 
 
 class CurrencyBalanceTests(TestCase):
