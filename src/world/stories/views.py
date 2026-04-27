@@ -21,6 +21,7 @@ from world.stories.constants import (
     SessionRequestStatus,
     StoryScope,
 )
+from world.stories.exceptions import EraAdvanceError
 from world.stories.filters import (
     AggregateBeatContributionFilter,
     AssistantGMClaimFilter,
@@ -29,6 +30,7 @@ from world.stories.filters import (
     EpisodeFilter,
     EpisodeProgressionRequirementFilter,
     EpisodeSceneFilter,
+    EraFilter,
     GlobalStoryProgressFilter,
     GroupStoryProgressFilter,
     PlayerTrustFilter,
@@ -48,6 +50,7 @@ from world.stories.models import (
     Episode,
     EpisodeProgressionRequirement,
     EpisodeScene,
+    Era,
     GlobalStoryProgress,
     GroupStoryProgress,
     PlayerTrust,
@@ -119,6 +122,7 @@ from world.stories.serializers import (
     EpisodeProgressionRequirementSerializer,
     EpisodeResolutionSerializer,
     EpisodeSceneSerializer,
+    EraSerializer,
     GlobalStoryProgressSerializer,
     GroupStoryProgressSerializer,
     MarkBeatInputSerializer,
@@ -142,10 +146,68 @@ from world.stories.serializers import (
     WithdrawOfferInputSerializer,
 )
 from world.stories.services.dashboards import STALE_STORY_DAYS, compute_story_status
+from world.stories.services.era import advance_era, archive_era
 from world.stories.services.participation import create_story_participation
 from world.stories.services.progress import get_active_progress_for_story
 from world.stories.services.story_log import serialize_story_log
 from world.stories.types import AnyStoryProgress
+
+
+class EraViewSet(viewsets.ModelViewSet):
+    """ViewSet for Era — metaplot era (season) management.
+
+    Read access: any authenticated user (eras are public metaplot info).
+    Write access: staff only.
+    Advance/archive actions: staff only (IsAdminUser).
+
+    Wave 11 will register this route; for now urls.py registers it.
+    """
+
+    queryset = Era.objects.all()
+    serializer_class = EraSerializer
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = EraFilter
+    pagination_class = SmallResultsSetPagination
+    ordering_fields = ["season_number", "created_at", "status"]
+    ordering = ["season_number"]
+
+    def get_permissions(self) -> list[Any]:
+        """Read: IsAuthenticated. Write/delete: IsAdminUser."""
+        if self.action in {"advance", "archive"} or self.request.method not in (
+            "GET",
+            "HEAD",
+            "OPTIONS",
+        ):
+            return [permissions.IsAuthenticated(), permissions.IsAdminUser()]
+        return [permissions.IsAuthenticated()]
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def advance(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/eras/{id}/advance/
+
+        Staff-only. Closes the current ACTIVE era; activates this UPCOMING era.
+        Returns 200 with updated EraSerializer data, or 400 with detail on error.
+        """
+        era = self.get_object()
+        try:
+            updated = advance_era(next_era=era)
+        except EraAdvanceError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(EraSerializer(updated, context={"request": request}).data)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def archive(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/eras/{id}/archive/
+
+        Staff-only. Marks this era CONCLUDED without advancing to a new one.
+        Idempotent for CONCLUDED eras. Returns 200, or 400 with detail on error.
+        """
+        era = self.get_object()
+        try:
+            updated = archive_era(era=era)
+        except EraAdvanceError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(EraSerializer(updated, context={"request": request}).data)
 
 
 class StoryViewSet(viewsets.ModelViewSet):

@@ -9,6 +9,7 @@ from world.stories.views import (
     EpisodeProgressionRequirementViewSet,
     EpisodeSceneViewSet,
     EpisodeViewSet,
+    EraViewSet,
     ExpireOverdueBeatsView,
     GlobalStoryProgressViewSet,
     GMQueueView,
@@ -26,6 +27,8 @@ from world.stories.views import (
 )
 
 router = DefaultRouter()
+# Wave 6: Era lifecycle
+router.register(r"eras", EraViewSet)
 router.register(r"stories", StoryViewSet)
 router.register(r"chapters", ChapterViewSet)
 router.register(r"episodes", EpisodeViewSet)

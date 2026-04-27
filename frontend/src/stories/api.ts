@@ -26,6 +26,8 @@ import type {
   ChapterList,
   ContributeBeatBody,
   CreateEventBody,
+  Era,
+  EraCreateBody,
   Episode,
   EpisodeCreateBody,
   EpisodeList,
@@ -906,4 +908,92 @@ export async function expireOverdueBeats(): Promise<{ expired_count: number }> {
   });
   if (!res.ok) throw new Error('Failed to expire overdue beats');
   return res.json() as Promise<{ expired_count: number }>;
+}
+
+// ---------------------------------------------------------------------------
+// Era CRUD and lifecycle actions (Wave 6)
+// ---------------------------------------------------------------------------
+
+export interface ListErasParams {
+  status?: string;
+  season_number?: number;
+  ordering?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export async function listEras(params?: ListErasParams): Promise<PaginatedResponse<Era>> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/eras/${qs}`);
+  if (!res.ok) throw new Error('Failed to load eras');
+  return res.json() as Promise<PaginatedResponse<Era>>;
+}
+
+export async function getEra(id: number): Promise<Era> {
+  const res = await apiFetch(`/api/eras/${id}/`);
+  if (!res.ok) throw new Error(`Failed to load era ${id}`);
+  return res.json() as Promise<Era>;
+}
+
+export async function createEra(data: EraCreateBody): Promise<Era> {
+  const res = await apiFetch('/api/eras/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create era');
+  return res.json() as Promise<Era>;
+}
+
+export async function updateEra(id: number, data: Partial<EraCreateBody>): Promise<Era> {
+  const res = await apiFetch(`/api/eras/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Failed to update era ${id}`);
+  return res.json() as Promise<Era>;
+}
+
+export async function deleteEra(id: number): Promise<void> {
+  const res = await apiFetch(`/api/eras/${id}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Failed to delete era ${id}`);
+}
+
+/**
+ * POST /api/eras/{id}/advance/
+ * Staff-only. Closes current ACTIVE era, activates this UPCOMING era.
+ * Returns 200 with updated Era on success, 400 on invalid state.
+ */
+export async function advanceEra(id: number): Promise<Era> {
+  const res = await apiFetch(`/api/eras/${id}/advance/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(body.detail ?? `Failed to advance era ${id}`);
+  }
+  return res.json() as Promise<Era>;
+}
+
+/**
+ * POST /api/eras/{id}/archive/
+ * Staff-only. Marks era CONCLUDED without advancing to a new one.
+ * Returns 200 with updated Era on success, 400 on invalid state.
+ */
+export async function archiveEra(id: number): Promise<Era> {
+  const res = await apiFetch(`/api/eras/${id}/archive/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(body.detail ?? `Failed to archive era ${id}`);
+  }
+  return res.json() as Promise<Era>;
 }

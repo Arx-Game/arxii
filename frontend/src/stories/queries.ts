@@ -12,6 +12,7 @@ import type {
   ListChaptersParams,
   ListClaimsParams,
   ListContributionsParams,
+  ListErasParams,
   ListEpisodesParams,
   ListGMProfilesParams,
   ListGroupProgressParams,
@@ -29,6 +30,8 @@ import type {
   ChapterCreateBody,
   ContributeBeatBody,
   CreateEventBody,
+  Era,
+  EraCreateBody,
   EpisodeCreateBody,
   EpisodeProgressionRequirement,
   MarkBeatBody,
@@ -115,6 +118,10 @@ export const storiesKeys = {
   // GMProfiles (Wave 5)
   gmProfiles: (params?: ListGMProfilesParams) =>
     [...storiesKeys.all, 'gm-profiles', params] as const,
+
+  // Eras (Wave 6)
+  eraList: (params?: ListErasParams) => [...storiesKeys.all, 'eras', params] as const,
+  era: (id: number) => [...storiesKeys.all, 'era', id] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -820,5 +827,80 @@ export function useGMProfiles(params?: ListGMProfilesParams) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Era hooks (Wave 6)
+// ---------------------------------------------------------------------------
+
+export function useEras(params?: ListErasParams) {
+  return useQuery({
+    queryKey: storiesKeys.eraList(params),
+    queryFn: () => api.listEras(params),
+    throwOnError: true,
+  });
+}
+
+export function useEra(id: number) {
+  return useQuery({
+    queryKey: storiesKeys.era(id),
+    queryFn: () => api.getEra(id),
+    enabled: id > 0,
+    throwOnError: true,
+  });
+}
+
+export function useCreateEra() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: EraCreateBody) => api.createEra(data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
+    },
+  });
+}
+
+export function useUpdateEra() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.updateEra>[1] }) =>
+      api.updateEra(id, data),
+    onSuccess: (_, { id }) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.era(id) });
+      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
+    },
+  });
+}
+
+export function useDeleteEra() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.deleteEra(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
+    },
+  });
+}
+
+export function useAdvanceEra() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.advanceEra(id),
+    onSuccess: (updated) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.era(updated.id) });
+    },
+  });
+}
+
+export function useArchiveEra() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.archiveEra(id),
+    onSuccess: (updated) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.era(updated.id) });
+    },
+  });
+}
+
 // Suppress unused-import lint — Beat is re-exported for consumers
-export type { Beat };
+export type { Beat, Era };

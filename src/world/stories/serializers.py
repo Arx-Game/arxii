@@ -26,6 +26,7 @@ from world.stories.models import (
     EpisodeProgressionRequirement,
     EpisodeResolution,
     EpisodeScene,
+    Era,
     GlobalStoryProgress,
     GroupStoryProgress,
     PlayerTrust,
@@ -43,6 +44,36 @@ from world.stories.models import (
     TrustCategoryFeedbackRating,
 )
 from world.stories.types import AnyStoryProgress, StoryLogBeatEntry, StoryLogEpisodeEntry
+
+# ---------------------------------------------------------------------------
+# Wave 6: Era lifecycle serializer
+# ---------------------------------------------------------------------------
+
+
+class EraSerializer(serializers.ModelSerializer):
+    """Full serializer for Era — includes read-only story_count context field."""
+
+    story_count = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = Era
+        fields = [
+            "id",
+            "name",
+            "display_name",
+            "season_number",
+            "description",
+            "status",
+            "activated_at",
+            "concluded_at",
+            "created_at",
+            "story_count",
+        ]
+        read_only_fields = ["id", "activated_at", "concluded_at", "created_at", "story_count"]
+
+    def get_story_count(self, obj: Era) -> int:
+        """Return the number of Story records whose created_in_era matches this era."""
+        return Story.objects.filter(created_in_era=obj).count()
 
 
 class StoryListSerializer(serializers.ModelSerializer):

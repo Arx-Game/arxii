@@ -10,6 +10,7 @@ from world.stories.models import (
     Episode,
     EpisodeProgressionRequirement,
     EpisodeScene,
+    Era,
     GlobalStoryProgress,
     GroupStoryProgress,
     PlayerTrust,
@@ -23,6 +24,25 @@ from world.stories.models import (
     TransitionRequiredOutcome,
     TrustCategory,
 )
+
+
+class EraFilter(django_filters.FilterSet):
+    """Filter for Era model — by status and season_number."""
+
+    status = django_filters.CharFilter(field_name="status")
+    season_number = django_filters.NumberFilter(field_name="season_number")
+    season_number_min = django_filters.NumberFilter(
+        field_name="season_number",
+        lookup_expr="gte",
+    )
+    season_number_max = django_filters.NumberFilter(
+        field_name="season_number",
+        lookup_expr="lte",
+    )
+
+    class Meta:
+        model = Era
+        fields = ["status", "season_number"]
 
 
 class StoryFilter(django_filters.FilterSet):

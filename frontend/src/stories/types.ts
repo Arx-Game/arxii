@@ -400,3 +400,34 @@ export interface OfferStoryToGMBody {
 export interface RespondToOfferBody {
   response_note?: string;
 }
+
+// ---------------------------------------------------------------------------
+// Era — Wave 6 era lifecycle types.
+// The generated api.d.ts does not yet include Era (no ViewSet in the
+// pre-Wave-6 schema dump). Hand-defined to match EraSerializer in
+// world/stories/serializers.py.
+// ---------------------------------------------------------------------------
+
+export type EraStatus = 'upcoming' | 'active' | 'concluded';
+
+export interface Era {
+  id: number;
+  name: string;
+  display_name: string;
+  season_number: number;
+  description: string;
+  status: EraStatus;
+  activated_at: string | null;
+  concluded_at: string | null;
+  created_at: string;
+  story_count: number;
+}
+
+export interface EraCreateBody {
+  name: string;
+  display_name: string;
+  season_number: number;
+  description?: string;
+  /** Only UPCOMING is allowed on creation. */
+  status?: EraStatus;
+}
