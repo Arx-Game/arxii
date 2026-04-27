@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 
 from world.gm.models import GMProfile, GMTable
 from world.stories.constants import AssistantClaimStatus, StoryScope
-from world.stories.models import AssistantGMClaim, Story
+from world.stories.models import AssistantGMClaim, Story, StoryParticipation, TableBulletinPost
 from world.stories.types import AnyStoryProgress, StoryPrivacy
 
 
@@ -1024,3 +1024,116 @@ def _story_log_user_has_access(
         )
         .exists()
     )
+
+
+# ---------------------------------------------------------------------------
+# Wave 10: TableBulletin permission classes
+# ---------------------------------------------------------------------------
+
+
+def _user_can_read_bulletin_post(
+    user: AbstractBaseUser | AnonymousUser,
+    post: TableBulletinPost,
+) -> bool:
+    """Return True if ``user`` has read access to ``post``.
+
+    Read rules:
+    - Staff: always
+    - Lead GM of post.table: always
+    - story=None (table-wide): any active table member
+    - story=set (story-scoped): any active StoryParticipation on post.story
+    """
+    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL — AnonymousUser
+        return False
+    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL — AnonymousUser
+        return True
+
+    # Lead GM of the table (post.table.gm is the Lead GMProfile).
+    try:
+        gm_profile = user.gm_profile
+        if post.table.gm_id == gm_profile.pk:
+            return True
+    except GMProfile.DoesNotExist:
+        pass
+
+    # Active member of the table.
+    is_active_member = post.table.memberships.filter(
+        persona__character_sheet__character__db_account=user,
+        left_at__isnull=True,
+    ).exists()
+
+    if post.story_id is None:
+        # Table-wide: any active member.
+        return is_active_member
+
+    # Story-scoped: must be an active story participant.
+    return (
+        cast(Any, StoryParticipation)
+        .objects.filter(
+            story_id=post.story_id,
+            character__db_account=user,
+            is_active=True,
+        )
+        .exists()
+    )
+
+
+class CanReadBulletinPost(permissions.BasePermission):
+    """Read access to a bulletin post.
+
+    - Staff: always
+    - Lead GM of post.table: always
+    - story=None (table-wide): any active table member
+    - story=set (story-scoped): any active StoryParticipation on post.story
+    """
+
+    message = "You do not have permission to view this bulletin post."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check; object-level enforces full scope."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Delegate to shared helper."""
+        return _user_can_read_bulletin_post(request.user, cast(TableBulletinPost, obj))
+
+
+class CanAuthorBulletinPost(permissions.BasePermission):
+    """Top-level post authorship: Lead GM of the target table, or staff.
+
+    View-level guard only — the exact table comes from request.data.
+    Serializer's validate_table enforces the table ownership rule.
+    """
+
+    message = "Only the Lead GM of the table or staff may create bulletin posts."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Authenticated check; serializer enforces table ownership."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """For update/delete: author or staff may act on the post."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        post = cast(TableBulletinPost, obj)
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return False
+        return post.table.gm_id == gm_profile.pk
+
+
+class CanReplyToBulletinPost(permissions.BasePermission):
+    """Reply permission: qualifying reader + post.allow_replies=True (or staff).
+
+    View-level guard only. Serializer's validate_post checks allow_replies
+    and read access before the reply is created.
+    """
+
+    message = "You do not have permission to reply to this bulletin post."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Authenticated check; serializer enforces read access + allow_replies."""
+        return bool(request.user and request.user.is_authenticated)

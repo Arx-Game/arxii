@@ -22,6 +22,8 @@ from world.stories.views import (
     StoryGMOfferViewSet,
     StoryParticipationViewSet,
     StoryViewSet,
+    TableBulletinPostViewSet,
+    TableBulletinReplyViewSet,
     TransitionRequiredOutcomeViewSet,
     TransitionViewSet,
 )
@@ -49,6 +51,9 @@ router.register(r"story-gm-offers", StoryGMOfferViewSet, basename="storygmoffer"
 router.register(r"transitions", TransitionViewSet)
 router.register(r"episode-progression-requirements", EpisodeProgressionRequirementViewSet)
 router.register(r"transition-required-outcomes", TransitionRequiredOutcomeViewSet)
+# Wave 10: Bulletin board
+router.register(r"table-bulletin-posts", TableBulletinPostViewSet, basename="tablebulletinpost")
+router.register(r"table-bulletin-replies", TableBulletinReplyViewSet, basename="tablebulletinreply")
 
 urlpatterns = [
     # Wave 10: Dashboard endpoints (APIView — aggregate, not paginated).

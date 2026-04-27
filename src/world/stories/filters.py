@@ -20,6 +20,8 @@ from world.stories.models import (
     StoryFeedback,
     StoryGMOffer,
     StoryParticipation,
+    TableBulletinPost,
+    TableBulletinReply,
     Transition,
     TransitionRequiredOutcome,
     TrustCategory,
@@ -473,3 +475,36 @@ class SessionRequestFilter(django_filters.FilterSet):
     class Meta:
         model = SessionRequest
         fields = ["episode", "status", "open_to_any_gm"]
+
+
+# ---------------------------------------------------------------------------
+# Wave 10: TableBulletin filters
+# ---------------------------------------------------------------------------
+
+
+class TableBulletinPostFilter(django_filters.FilterSet):
+    """Filter for TableBulletinPost — by table, story, and author_persona."""
+
+    table = django_filters.NumberFilter(field_name="table_id")
+    story = django_filters.NumberFilter(field_name="story_id")
+    story_isnull = django_filters.BooleanFilter(
+        field_name="story",
+        lookup_expr="isnull",
+        label="Table-wide posts only",
+    )
+    author_persona = django_filters.NumberFilter(field_name="author_persona_id")
+
+    class Meta:
+        model = TableBulletinPost
+        fields = ["table", "story", "author_persona"]
+
+
+class TableBulletinReplyFilter(django_filters.FilterSet):
+    """Filter for TableBulletinReply — by parent post."""
+
+    post = django_filters.NumberFilter(field_name="post_id")
+    author_persona = django_filters.NumberFilter(field_name="author_persona_id")
+
+    class Meta:
+        model = TableBulletinReply
+        fields = ["post", "author_persona"]

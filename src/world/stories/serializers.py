@@ -5,7 +5,7 @@ from rest_framework import serializers
 
 from world.character_sheets.models import CharacterSheet
 from world.gm.constants import GMTableStatus
-from world.gm.models import GMTable
+from world.gm.models import GMProfile, GMTable
 from world.gm.serializers import GMProfileSerializer
 from world.scenes.models import Persona
 from world.stories.constants import (
@@ -38,6 +38,8 @@ from world.stories.models import (
     StoryParticipation,
     StoryProgress,
     StoryTrustRequirement,
+    TableBulletinPost,
+    TableBulletinReply,
     Transition,
     TransitionRequiredOutcome,
     TrustCategory,
@@ -1521,3 +1523,170 @@ class WithdrawOfferInputSerializer(serializers.Serializer):
             msg = "Only PENDING offers can be withdrawn."
             raise serializers.ValidationError({"non_field_errors": msg})
         return attrs
+
+
+# ---------------------------------------------------------------------------
+# Wave 10: TableBulletin serializers
+# ---------------------------------------------------------------------------
+
+
+class TableBulletinReplySerializer(serializers.ModelSerializer):
+    """Read serializer for TableBulletinReply."""
+
+    class Meta:
+        model = TableBulletinReply
+        fields = [
+            "id",
+            "post",
+            "author_persona",
+            "body",
+            "created_at",
+        ]
+        read_only_fields = ["id", "post", "author_persona", "created_at"]
+
+
+class TableBulletinPostSerializer(serializers.ModelSerializer):
+    """Read serializer for TableBulletinPost — includes nested reply list.
+
+    Replies are read from ``replies_cached`` (set by the ViewSet's
+    Prefetch to_attr) when available, falling back to the reverse manager.
+    """
+
+    replies = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TableBulletinPost
+        fields = [
+            "id",
+            "table",
+            "story",
+            "author_persona",
+            "title",
+            "body",
+            "allow_replies",
+            "created_at",
+            "updated_at",
+            "replies",
+        ]
+        read_only_fields = [
+            "id",
+            "table",
+            "story",
+            "author_persona",
+            "created_at",
+            "updated_at",
+            "replies",
+        ]
+
+    def get_replies(self, obj: Any) -> list[Any]:
+        """Return cached replies (from Prefetch to_attr) or query the DB."""
+        reply_list = getattr(obj, "replies_cached", None)  # noqa: GETATTR_LITERAL — Prefetch to_attr
+        if reply_list is None:
+            reply_list = list(obj.replies.select_related("author_persona").all())
+        return TableBulletinReplySerializer(reply_list, many=True).data
+
+
+class CreateBulletinPostInputSerializer(serializers.Serializer):
+    """Input for POST /api/table-bulletin-posts/.
+
+    Validates:
+    - ``table`` exists and user is its Lead GM (or staff)
+    - ``story`` (if set) belongs to ``table`` (story.primary_table == table)
+    - ``author_persona`` belongs to the requesting user's account
+
+    Stores validated model instances in validated_data.
+    """
+
+    table = serializers.PrimaryKeyRelatedField(queryset=GMTable.objects.all())
+    story = serializers.PrimaryKeyRelatedField(
+        queryset=Story.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+    author_persona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
+    title = serializers.CharField(max_length=200)
+    body = serializers.CharField()
+    allow_replies = serializers.BooleanField(required=False, default=True)
+
+    def validate_table(self, table: GMTable) -> GMTable:
+        """User must be the Lead GM of the table (or staff)."""
+        request = self.context.get("request")
+        if request is None:
+            msg = "Request context is required."
+            raise serializers.ValidationError(msg)
+        if getattr(request.user, "is_staff", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
+            return table
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            msg = "You must be a GM to post bulletins."
+            raise serializers.ValidationError(msg) from None
+        if table.gm_id != gm_profile.pk:
+            msg = "You can only post bulletins to your own table."
+            raise serializers.ValidationError(msg)
+        return table
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        """Validate that story (if set) belongs to the specified table."""
+        table: GMTable = attrs["table"]
+        story: Story | None = attrs.get("story")
+        if story is not None and story.primary_table_id != table.pk:
+            msg = "The selected story is not assigned to this table."
+            raise serializers.ValidationError({"story": msg})
+        return attrs
+
+
+class UpdateBulletinPostInputSerializer(serializers.Serializer):
+    """Input for PATCH /api/table-bulletin-posts/{id}/.
+
+    Only the post author (Lead GM of the table) or staff may edit.
+    No field is required; all are optional.
+    """
+
+    title = serializers.CharField(max_length=200, required=False)
+    body = serializers.CharField(required=False)
+    allow_replies = serializers.BooleanField(required=False)
+
+
+class CreateBulletinReplyInputSerializer(serializers.Serializer):
+    """Input for POST /api/table-bulletin-replies/.
+
+    Validates:
+    - ``post`` exists
+    - post.allow_replies=True (or user is staff)
+    - requesting user has read access to the post
+    - ``author_persona`` belongs to the requesting user's account
+
+    Stores validated model instances in validated_data.
+    """
+
+    post = serializers.PrimaryKeyRelatedField(queryset=TableBulletinPost.objects.all())
+    author_persona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
+    body = serializers.CharField()
+
+    def validate_post(self, post: TableBulletinPost) -> TableBulletinPost:
+        """Verify replies are enabled on this post (staff bypass)."""
+        request = self.context.get("request")
+        if request is None:
+            msg = "Request context is required."
+            raise serializers.ValidationError(msg)
+        if not post.allow_replies and not request.user.is_staff:
+            msg = "Replies are disabled on this post."
+            raise serializers.ValidationError(msg)
+        # Also check that the user can read the post.
+        from world.stories.permissions import _user_can_read_bulletin_post  # noqa: PLC0415
+
+        if not _user_can_read_bulletin_post(request.user, post):
+            msg = "You do not have access to this bulletin post."
+            raise serializers.ValidationError(msg)
+        return post
+
+
+class UpdateBulletinReplyInputSerializer(serializers.Serializer):
+    """Input for PATCH /api/table-bulletin-replies/{id}/.
+
+    Only the reply author or staff may edit.
+    """
+
+    body = serializers.CharField()

@@ -39,6 +39,8 @@ from world.stories.filters import (
     StoryFilter,
     StoryGMOfferFilter,
     StoryParticipationFilter,
+    TableBulletinPostFilter,
+    TableBulletinReplyFilter,
     TransitionFilter,
     TransitionRequiredOutcomeFilter,
 )
@@ -60,6 +62,8 @@ from world.stories.models import (
     StoryGMOffer,
     StoryParticipation,
     StoryProgress,
+    TableBulletinPost,
+    TableBulletinReply,
     Transition,
     TransitionRequiredOutcome,
 )
@@ -70,9 +74,11 @@ from world.stories.pagination import (
 )
 from world.stories.permissions import (
     VIEWER_ROLE_NO_ACCESS,
+    CanAuthorBulletinPost,
     CanDetachStoryFromTable,
     CanMarkBeat,
     CanParticipateInStory,
+    CanReplyToBulletinPost,
     IsAccountOfCharacterSheet,
     IsBeatStoryOwnerOrStaff,
     IsChapterStoryOwnerOrStaff,
@@ -97,6 +103,7 @@ from world.stories.permissions import (
     IsSessionRequestParticipantOrStaff,
     IsStoryGMOfferParticipantOrStaff,
     IsStoryOwnerOrStaff,
+    _user_can_read_bulletin_post,
     classify_story_log_viewer_role,
 )
 from world.stories.serializers import (
@@ -114,6 +121,8 @@ from world.stories.serializers import (
     ChapterListSerializer,
     CompleteClaimInputSerializer,
     ContributeBeatInputSerializer,
+    CreateBulletinPostInputSerializer,
+    CreateBulletinReplyInputSerializer,
     CreateEventFromSessionRequestInputSerializer,
     DeclineOfferInputSerializer,
     EpisodeCreateSerializer,
@@ -141,8 +150,12 @@ from world.stories.serializers import (
     StoryListSerializer,
     StoryLogSerializer,
     StoryParticipationSerializer,
+    TableBulletinPostSerializer,
+    TableBulletinReplySerializer,
     TransitionRequiredOutcomeSerializer,
     TransitionSerializer,
+    UpdateBulletinPostInputSerializer,
+    UpdateBulletinReplyInputSerializer,
     WithdrawOfferInputSerializer,
 )
 from world.stories.services.dashboards import STALE_STORY_DAYS, compute_story_status
@@ -1865,3 +1878,241 @@ class StaffWorkloadView(APIView):
                 "counts_by_scope": counts_by_scope,
             }
         )
+
+
+# ---------------------------------------------------------------------------
+# Wave 10: TableBulletin ViewSets
+# ---------------------------------------------------------------------------
+
+
+class TableBulletinPostViewSet(viewsets.ModelViewSet):
+    """ViewSet for TableBulletinPost — bulletin posts on GMTables.
+
+    Read access: Lead GM / staff (always) + active table members (table-wide
+    posts) or story participants (story-scoped posts).
+    Create: Lead GM of the target table or staff.
+    Update/Delete: Lead GM of the post's table or staff.
+    """
+
+    queryset = TableBulletinPost.objects.select_related(
+        "table__gm",
+        "story",
+        "author_persona",
+    ).prefetch_related(
+        models.Prefetch(
+            "replies",
+            queryset=TableBulletinReply.objects.select_related("author_persona"),
+            to_attr="replies_cached",
+        ),
+    )
+    serializer_class = TableBulletinPostSerializer
+    permission_classes = [CanAuthorBulletinPost]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = TableBulletinPostFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["created_at", "updated_at"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self) -> QuerySet[TableBulletinPost]:
+        """Scope the queryset to posts the requesting user may read."""
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return qs
+
+        # Lead GM of any table — sees all posts on their tables.
+        lead_gm_q = models.Q()
+        try:
+            gm_profile = user.gm_profile
+            lead_gm_q = models.Q(table__gm=gm_profile)
+        except GMProfile.DoesNotExist:
+            pass
+
+        # Active table member — sees table-wide posts (story=None).
+        active_member_table_wide_q = models.Q(
+            table__memberships__persona__character_sheet__character__db_account=user,
+            table__memberships__left_at__isnull=True,
+            story__isnull=True,
+        )
+
+        # Active story participant — sees story-scoped posts for their stories.
+        active_participant_q = models.Q(
+            story__participants__character__db_account=user,
+            story__participants__is_active=True,
+        )
+
+        return qs.filter(lead_gm_q | active_member_table_wide_q | active_participant_q).distinct()
+
+    def get_serializer_class(self) -> type[BaseSerializer]:
+        """Use input serializers for write operations."""
+        if self.action == "create":
+            return CreateBulletinPostInputSerializer
+        if self.action in {"update", "partial_update"}:
+            return UpdateBulletinPostInputSerializer
+        return TableBulletinPostSerializer
+
+    def get_object(self) -> TableBulletinPost:
+        """Standard get_object with read permission check."""
+        obj = super().get_object()
+        # For retrieve, ensure the user can actually read this post.
+        if self.action == "retrieve":
+            if not _user_can_read_bulletin_post(self.request.user, obj):
+                msg = "You do not have permission to view this bulletin post."
+                raise PermissionDenied(msg)
+        return obj
+
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Create a bulletin post using the three-layer pattern."""
+        from world.stories.services.bulletin import create_bulletin_post  # noqa: PLC0415
+
+        ser = CreateBulletinPostInputSerializer(data=request.data, context={"request": request})
+        ser.is_valid(raise_exception=True)
+        vd = ser.validated_data
+        post = create_bulletin_post(
+            table=vd["table"],
+            author_persona=vd["author_persona"],
+            title=vd["title"],
+            body=vd["body"],
+            story=vd.get("story"),
+            allow_replies=vd.get("allow_replies", True),
+        )
+        return Response(TableBulletinPostSerializer(post).data, status=status.HTTP_201_CREATED)
+
+    def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Edit a post (author / staff)."""
+        from world.stories.services.bulletin import edit_bulletin_post  # noqa: PLC0415
+
+        post = self.get_object()
+        self.check_object_permissions(request, post)
+        ser = UpdateBulletinPostInputSerializer(data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        vd = ser.validated_data
+        edit_bulletin_post(
+            post=post,
+            title=vd.get("title"),
+            body=vd.get("body"),
+            allow_replies=vd.get("allow_replies"),
+        )
+        return Response(TableBulletinPostSerializer(post).data)
+
+    def partial_update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Delegate to update (always partial for this viewset)."""
+        return self.update(request, *args, **kwargs)
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Delete a post (author / staff)."""
+        from world.stories.services.bulletin import delete_bulletin_post  # noqa: PLC0415
+
+        post = self.get_object()
+        self.check_object_permissions(request, post)
+        delete_bulletin_post(post=post)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TableBulletinReplyViewSet(viewsets.ModelViewSet):
+    """ViewSet for TableBulletinReply — replies to bulletin posts.
+
+    Read access: same as the parent post (reader must have read access to post).
+    Create: any qualifying reader when post.allow_replies=True (staff bypass).
+    Update/Delete: reply author or staff.
+    """
+
+    queryset = TableBulletinReply.objects.select_related(
+        "post__table__gm",
+        "post__story",
+        "author_persona",
+    )
+    serializer_class = TableBulletinReplySerializer
+    permission_classes = [CanReplyToBulletinPost]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = TableBulletinReplyFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["created_at"]
+    ordering = ["created_at"]
+
+    def get_queryset(self) -> QuerySet[TableBulletinReply]:
+        """Scope to replies whose parent post the user may read."""
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return qs
+
+        lead_gm_q = models.Q()
+        try:
+            gm_profile = user.gm_profile
+            lead_gm_q = models.Q(post__table__gm=gm_profile)
+        except GMProfile.DoesNotExist:
+            pass
+
+        active_member_table_wide_q = models.Q(
+            post__table__memberships__persona__character_sheet__character__db_account=user,
+            post__table__memberships__left_at__isnull=True,
+            post__story__isnull=True,
+        )
+        active_participant_q = models.Q(
+            post__story__participants__character__db_account=user,
+            post__story__participants__is_active=True,
+        )
+
+        return qs.filter(lead_gm_q | active_member_table_wide_q | active_participant_q).distinct()
+
+    def get_serializer_class(self) -> type[BaseSerializer]:
+        if self.action == "create":
+            return CreateBulletinReplyInputSerializer
+        if self.action in {"update", "partial_update"}:
+            return UpdateBulletinReplyInputSerializer
+        return TableBulletinReplySerializer
+
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Create a reply using the three-layer pattern."""
+        from world.stories.services.bulletin import reply_to_post  # noqa: PLC0415
+
+        ser = CreateBulletinReplyInputSerializer(data=request.data, context={"request": request})
+        ser.is_valid(raise_exception=True)
+        vd = ser.validated_data
+        reply = reply_to_post(
+            post=vd["post"],
+            author_persona=vd["author_persona"],
+            body=vd["body"],
+        )
+        return Response(TableBulletinReplySerializer(reply).data, status=status.HTTP_201_CREATED)
+
+    def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Edit a reply (author or staff only)."""
+        reply = self.get_object()
+        # Author or staff check.
+        user = request.user
+        is_author = (
+            reply.author_persona_id is not None
+            and reply.author_persona.character_sheet.character.db_account_id == user.pk
+        )
+        if not user.is_staff and not is_author:
+            msg = "Only the reply author or staff may edit this reply."
+            raise PermissionDenied(msg)
+        ser = UpdateBulletinReplyInputSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        reply.body = ser.validated_data["body"]
+        reply.save(update_fields=["body"])
+        return Response(TableBulletinReplySerializer(reply).data)
+
+    def partial_update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Delegate to update."""
+        return self.update(request, *args, **kwargs)
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Delete a reply (author or staff only)."""
+        reply = self.get_object()
+        user = request.user
+        is_author = (
+            reply.author_persona_id is not None
+            and reply.author_persona.character_sheet.character.db_account_id == user.pk
+        )
+        if not user.is_staff and not is_author:
+            msg = "Only the reply author or staff may delete this reply."
+            raise PermissionDenied(msg)
+        reply.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
