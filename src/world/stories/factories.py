@@ -10,6 +10,7 @@ from world.stories.constants import (
     BeatVisibility,
     EraStatus,
     SessionRequestStatus,
+    StoryGMOfferStatus,
     StoryScope,
     TransitionMode,
 )
@@ -31,6 +32,7 @@ from world.stories.models import (
     SessionRequest,
     Story,
     StoryFeedback,
+    StoryGMOffer,
     StoryParticipation,
     StoryProgress,
     Transition,
@@ -477,6 +479,25 @@ class AssistantGMClaimFactory(factory_django.DjangoModelFactory):
     approved_by = None
     rejection_note = ""
     framing_note = factory.Faker("paragraph")
+
+
+class StoryGMOfferFactory(factory_django.DjangoModelFactory):
+    """Factory for creating StoryGMOffer instances.
+
+    Defaults to PENDING status. For accepted/declined/withdrawn offers, pass
+    status=StoryGMOfferStatus.ACCEPTED etc. and set responded_at manually.
+    """
+
+    class Meta:
+        model = StoryGMOffer
+
+    story = factory.SubFactory(StoryFactory, scope=StoryScope.CHARACTER, primary_table=None)
+    offered_to = factory.SubFactory("world.gm.factories.GMProfileFactory")
+    offered_by_account = factory.SubFactory("evennia_extensions.factories.AccountFactory")
+    status = StoryGMOfferStatus.PENDING
+    message = ""
+    response_note = ""
+    responded_at = None
 
 
 class SessionRequestFactory(factory_django.DjangoModelFactory):

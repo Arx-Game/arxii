@@ -18,6 +18,7 @@ from world.stories.models import (
     SessionRequest,
     Story,
     StoryFeedback,
+    StoryGMOffer,
     StoryParticipation,
     StoryProgress,
     StoryTrustRequirement,
@@ -483,6 +484,19 @@ class SessionRequestAdmin(admin.ModelAdmin):
     search_fields = ("episode__title", "notes")
     readonly_fields = ("created_at", "updated_at")
     raw_id_fields = ("episode", "event", "assigned_gm", "initiated_by_account")
+
+
+@admin.register(StoryGMOffer)
+class StoryGMOfferAdmin(admin.ModelAdmin):
+    list_display = ("story", "offered_to", "offered_by_account", "status", "created_at")
+    list_filter = ("status",)
+    search_fields = (
+        "story__title",
+        "offered_to__account__username",
+        "offered_by_account__username",
+    )
+    readonly_fields = ("created_at", "updated_at", "responded_at")
+    raw_id_fields = ("story", "offered_to", "offered_by_account")
 
 
 @admin.register(AssistantGMClaim)

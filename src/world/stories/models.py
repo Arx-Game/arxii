@@ -12,6 +12,7 @@ from world.stories.constants import (
     BeatVisibility,
     EraStatus,
     SessionRequestStatus,
+    StoryGMOfferStatus,
     StoryMilestoneType,
     StoryScope,
     TransitionMode,
@@ -1509,3 +1510,60 @@ class SessionRequest(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"SessionRequest({self.episode.title} status={self.status})"
+
+
+class StoryGMOffer(SharedMemoryModel):
+    """A player's offer to assign their personal story to a specific GM.
+
+    Lifecycle:
+        PENDING -> ACCEPTED  (GM takes the story; primary_table set)
+                -> DECLINED  (GM rejects; story stays seeking)
+                -> WITHDRAWN (player rescinds; story stays seeking)
+
+    Only one PENDING offer per (story, offered_to) at a time
+    (partial unique constraint).
+    """
+
+    story = models.ForeignKey(
+        Story,
+        on_delete=models.CASCADE,
+        related_name="gm_offers",
+    )
+    offered_to = models.ForeignKey(
+        "gm.GMProfile",
+        on_delete=models.CASCADE,
+        related_name="story_offers_received",
+    )
+    offered_by_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        related_name="story_offers_made",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=StoryGMOfferStatus.choices,
+        default=StoryGMOfferStatus.PENDING,
+    )
+    message = models.TextField(blank=True, help_text="Optional note from offerer.")
+    response_note = models.TextField(blank=True, help_text="Optional GM response.")
+    created_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["story", "offered_to"],
+                condition=models.Q(status=StoryGMOfferStatus.PENDING),
+                name="unique_pending_offer_per_story_per_gm",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["offered_to", "status"]),
+            models.Index(fields=["story", "status"]),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"StoryGMOffer(story=#{self.story_id}, gm=#{self.offered_to_id}, status={self.status})"
+        )

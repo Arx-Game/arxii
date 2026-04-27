@@ -65,6 +65,13 @@ class TransitionMode(models.TextChoices):
     GM_CHOICE = "gm_choice", "GM Choice"
 
 
+class StoryGMOfferStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    ACCEPTED = "accepted", "Accepted"
+    DECLINED = "declined", "Declined"
+    WITHDRAWN = "withdrawn", "Withdrawn"
+
+
 class StoryEpisodeStatus(models.TextChoices):
     """Coarse status of a story's current episode, exposed via dashboards.
 

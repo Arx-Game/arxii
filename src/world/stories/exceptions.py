@@ -46,3 +46,7 @@ class ClaimStateTransitionError(AssistantClaimError):
 
 class SessionRequestNotOpenError(StoryError):
     _SAFE_MESSAGE = "This session request cannot be scheduled in its current state."
+
+
+class StoryGMOfferError(StoryError):
+    _SAFE_MESSAGE = "This story-GM offer cannot be processed in its current state."
