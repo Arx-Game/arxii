@@ -4,8 +4,8 @@
  * Shows title/hint, outcome pill, aggregate progress bar, deadline, and
  * resolution text for completed beats.  For AGGREGATE_THRESHOLD beats
  * with a known characterSheetId, also renders the "Contribute" action.
- * For GM_MARKED beats renders the "Mark" action (optimistic — API 403 if
- * user lacks permission).
+ * For GM_MARKED beats renders the "Mark" action only when beat.can_mark
+ * is true (server signals the requesting user has permission).
  */
 
 import { formatRelativeTime } from '@/lib/relativeTime';
@@ -54,7 +54,7 @@ export function BeatRow({ beat, aggregateTotal = 0, characterSheetId }: BeatRowP
               currentTotal={aggregateTotal}
             />
           )}
-          {isGmMarked && !isResolved && <MarkBeatDialog beat={beat} />}
+          {isGmMarked && !isResolved && beat.can_mark && <MarkBeatDialog beat={beat} />}
           <BeatOutcomeBadge outcome={outcome} />
         </div>
       </div>

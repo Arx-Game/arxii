@@ -774,6 +774,11 @@ class BeatSerializer(serializers.ModelSerializer):
     story_id = serializers.IntegerField(source="episode.chapter.story_id", read_only=True)
     story_title = serializers.CharField(source="episode.chapter.story.title", read_only=True)
 
+    # Client-side gating: true when the requesting user may call POST /beats/{id}/mark/.
+    # Delegates to CanMarkBeat.has_object_permission so the frontend can hide the Mark
+    # button instead of rendering it optimistically and hitting a 403.
+    can_mark = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Beat
         fields = [
@@ -806,6 +811,8 @@ class BeatSerializer(serializers.ModelSerializer):
             # Timestamps
             "created_at",
             "updated_at",
+            # Client-side permission gating
+            "can_mark",
         ]
         read_only_fields = [
             "id",
@@ -815,7 +822,21 @@ class BeatSerializer(serializers.ModelSerializer):
             "story_title",
             "created_at",
             "updated_at",
+            "can_mark",
         ]
+
+    def get_can_mark(self, obj: Beat) -> bool:
+        """Return True if the requesting user may mark this beat.
+
+        Delegates to CanMarkBeat.has_object_permission.  The view arg is
+        passed as None — CanMarkBeat does not use it.
+        """
+        from world.stories.permissions import CanMarkBeat  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is None:
+            return False
+        return CanMarkBeat().has_object_permission(request, None, obj)  # type: ignore[arg-type]
 
     def validate(self, attrs: Any) -> Any:
         """Mirror Beat.clean() so predicate-type invariants surface as 400 responses."""

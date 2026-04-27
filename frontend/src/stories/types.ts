@@ -41,7 +41,15 @@ export type Episode = EpisodeDetail;
 // Wave 7 read-context breadcrumb fields (episode_title, chapter_title,
 // story_id, story_title). The generated type now correctly includes these
 // as readonly non-nullable fields (verified in api.d.ts Beat schema).
-export type Beat = components['schemas']['Beat'];
+//
+// Wave 12: can_mark is a server-computed boolean telling the client whether
+// the requesting user may POST /beats/{id}/mark/. Added to BeatSerializer
+// in Phase 5 Wave 12; not yet in the schema dump — extended here until
+// the next schema regeneration.
+export type Beat = components['schemas']['Beat'] & {
+  /** True when the requesting user may call POST /beats/{id}/mark/. */
+  readonly can_mark: boolean;
+};
 
 // Progress — CHARACTER scope has no generated type (no ViewSet); only GROUP and GLOBAL do.
 export type GroupStoryProgress = components['schemas']['GroupStoryProgress'];
