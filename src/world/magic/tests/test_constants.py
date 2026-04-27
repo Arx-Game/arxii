@@ -59,7 +59,7 @@ class GainSourceTests(SimpleTestCase):
         self.assertEqual(GainSource.POSE_ENDORSEMENT, "POSE_ENDORSEMENT")
         self.assertEqual(GainSource.SCENE_ENTRY, "SCENE_ENTRY")
         self.assertEqual(GainSource.ROOM_RESIDENCE, "ROOM_RESIDENCE")
-        self.assertEqual(GainSource.OUTFIT_ITEM, "OUTFIT_ITEM")
+        self.assertEqual(GainSource.OUTFIT_TRICKLE, "OUTFIT_TRICKLE")
         self.assertEqual(GainSource.STAFF_GRANT, "STAFF_GRANT")
 
     def test_gain_source_label_present(self) -> None:

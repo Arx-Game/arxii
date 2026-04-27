@@ -503,7 +503,7 @@ def outfit_trickle_tick() -> int:
     Returns: count of grants issued (always 0 at launch).
     """
     # When Items lands, iterate sheets × worn items × resonance tags, grant
-    # per-item. Guarded so nothing is granted with OUTFIT_ITEM source value
+    # per-item. Guarded so nothing is granted with OUTFIT_TRICKLE source value
     # before the source_item_instance FK exists in the schema.
     return 0
 

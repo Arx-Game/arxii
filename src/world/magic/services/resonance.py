@@ -69,7 +69,7 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
 
     Validates that the typed source kwarg matches the discriminator. Raises
-    ValueError for OUTFIT_ITEM source — that typed FK ships with the Items system.
+    ValueError for OUTFIT_TRICKLE source — that typed FK ships with the Items system.
 
     Args:
         character_sheet: The character receiving resonance.
@@ -139,8 +139,8 @@ def _validate_grant_source_shape(
             msg = "SCENE_ENTRY source requires scene_entry_endorsement= kwarg."
             raise ValueError(msg)
         return
-    if source == GainSource.OUTFIT_ITEM:
-        msg = "OUTFIT_ITEM source is reserved; item_instance FK ships with Items system."
+    if source == GainSource.OUTFIT_TRICKLE:
+        msg = "OUTFIT_TRICKLE source is reserved; item_instance FK ships with Items system."
         raise ValueError(msg)
     if source == GainSource.ROOM_RESIDENCE:
         if room_aura_profile is None:

@@ -82,6 +82,7 @@ class PropertyHolder(models.TextChoices):
 EQUIPMENT_RELEVANT_CATEGORIES: frozenset[str] = frozenset(
     {
         "stat",
+        "magic",
         "affinity",
         "resonance",
         # Add more as PR3 lands combat stats and ItemCapabilityGrants.
