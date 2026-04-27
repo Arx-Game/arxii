@@ -75,3 +75,15 @@ class PropertyHolder(models.TextChoices):
     SELF = "self", "Character (self)"
     TARGET = "target", "Target object"
     LOCATION = "location", "Location (room)"
+
+
+# Identifies which ModifierCategory values can receive equipment-driven contributions.
+# get_modifier_total walks equipment only when target.category is in this set.
+EQUIPMENT_RELEVANT_CATEGORIES: frozenset[str] = frozenset(
+    {
+        "stat",
+        "affinity",
+        "resonance",
+        # Add more as PR3 lands combat stats and ItemCapabilityGrants.
+    }
+)
