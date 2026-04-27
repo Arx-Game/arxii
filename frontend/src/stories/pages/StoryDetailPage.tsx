@@ -21,6 +21,7 @@ import { CurrentEpisodePanel } from '../components/CurrentEpisodePanel';
 import { StoryLog } from '../components/StoryLog';
 import { SessionRequestStatusCard } from '../components/SessionRequestStatusCard';
 import { ChangeMyGMDialog } from '../components/ChangeMyGMDialog';
+import { SendStoryOOCDialog } from '../components/SendStoryOOCDialog';
 
 // ---------------------------------------------------------------------------
 // Loading skeleton for the header area
@@ -66,6 +67,13 @@ function StoryDetailInner({ storyId }: StoryDetailInnerProps) {
     story != null &&
     story.scope === 'character' &&
     (myActive?.character_stories ?? []).some((e) => e.story_id === storyId);
+
+  // The "Send OOC notice" CTA is rendered optimistically when the story has an
+  // attached GM table (primary_table != null). The API 403s if the caller is
+  // not the Lead GM or staff — that case surfaces as a toast from the dialog.
+  // This keeps the button accessible to staff browsing any story detail page
+  // without requiring a separate /api/user/is-staff check.
+  const canSendOOC = story != null && story.primary_table != null;
 
   if (storyLoading) {
     return (
@@ -119,6 +127,9 @@ function StoryDetailInner({ storyId }: StoryDetailInnerProps) {
 
         {/* "Change my GM" / "Offer to a GM" CTA */}
         {isOwnedCharacterStory && <ChangeMyGMDialog story={story} />}
+
+        {/* "Send OOC notice" CTA — optimistic render; API 403s for non-Lead-GMs */}
+        {canSendOOC && <SendStoryOOCDialog story={story} />}
       </header>
 
       {/* Current episode panel */}

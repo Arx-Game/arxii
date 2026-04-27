@@ -896,6 +896,52 @@ export async function listGMProfiles(
   return res.json() as Promise<PaginatedResponse<GMProfile>>;
 }
 
+// ---------------------------------------------------------------------------
+// Story OOC sender (Wave 8)
+// ---------------------------------------------------------------------------
+
+export interface SendStoryOOCBody {
+  body: string;
+  ooc_note?: string;
+}
+
+/**
+ * POST /api/stories/{id}/send-ooc/
+ * Lead GM / staff sends a story-scoped OOC notice.
+ * Returns 201 with the created NarrativeMessage.
+ */
+export async function sendStoryOOC(
+  storyId: number,
+  data: SendStoryOOCBody
+): Promise<NarrativeMessageResponse> {
+  const res = await apiFetch(`/api/stories/${storyId}/send-ooc/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = new Error('Failed to send OOC notice') as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return res.json() as Promise<NarrativeMessageResponse>;
+}
+
+/**
+ * Minimal NarrativeMessage shape returned by send-ooc.
+ * The backend returns the full NarrativeMessage serializer output.
+ */
+export interface NarrativeMessageResponse {
+  id: number;
+  body: string;
+  category: string;
+  sender_account: number | null;
+  related_story: number | null;
+  related_beat_completion: number | null;
+  related_episode_resolution: number | null;
+  sent_at: string;
+}
+
 /**
  * POST /api/stories/expire-overdue-beats/
  * Staff-only trigger. Returns { expired_count: number }.

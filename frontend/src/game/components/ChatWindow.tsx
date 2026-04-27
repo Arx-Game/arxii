@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { GameMessage } from '@/hooks/types';
 import { EvenniaMessage } from './EvenniaMessage';
 import { GAME_MESSAGE_TYPE } from '@/hooks/types';
-import { narrativeKeys } from '@/narrative/queries';
+import { gemitKeys, narrativeKeys } from '@/narrative/queries';
 
 interface ChatWindowProps {
   messages: Array<GameMessage & { id: string }>;
@@ -20,6 +20,15 @@ export function ChatWindow({ messages }: ChatWindowProps) {
     const hasNarrative = messages.some((m) => m.type === GAME_MESSAGE_TYPE.NARRATIVE);
     if (hasNarrative) {
       void queryClient.invalidateQueries({ queryKey: narrativeKeys.all });
+    }
+  }, [messages, queryClient]);
+
+  // Invalidate the gemit list cache when a real-time gemit arrives so any
+  // persistent gemit browser refreshes automatically.
+  useEffect(() => {
+    const hasGemit = messages.some((m) => m.type === GAME_MESSAGE_TYPE.GEMIT);
+    if (hasGemit) {
+      void queryClient.invalidateQueries({ queryKey: gemitKeys.all });
     }
   }, [messages, queryClient]);
 
@@ -54,7 +63,9 @@ export function ChatWindow({ messages }: ChatWindowProps) {
             className={
               message.type === GAME_MESSAGE_TYPE.NARRATIVE
                 ? 'mb-2 border-l-2 border-red-500 bg-red-950/20 px-2'
-                : 'mb-2'
+                : message.type === GAME_MESSAGE_TYPE.GEMIT
+                  ? 'mb-2 border-l-2 border-green-500 bg-green-950/20 px-2'
+                  : 'mb-2'
             }
           >
             <span className="text-xs text-muted-foreground">
@@ -65,15 +76,17 @@ export function ChatWindow({ messages }: ChatWindowProps) {
               className={
                 message.type === GAME_MESSAGE_TYPE.NARRATIVE
                   ? 'text-red-300'
-                  : message.type === GAME_MESSAGE_TYPE.SYSTEM
-                    ? 'text-blue-400'
-                    : message.type === GAME_MESSAGE_TYPE.ACTION
-                      ? 'text-green-400'
-                      : message.type === GAME_MESSAGE_TYPE.CHANNEL
-                        ? 'text-purple-400'
-                        : message.type === GAME_MESSAGE_TYPE.ERROR
-                          ? 'text-red-400'
-                          : 'text-white'
+                  : message.type === GAME_MESSAGE_TYPE.GEMIT
+                    ? 'text-green-300'
+                    : message.type === GAME_MESSAGE_TYPE.SYSTEM
+                      ? 'text-blue-400'
+                      : message.type === GAME_MESSAGE_TYPE.ACTION
+                        ? 'text-green-400'
+                        : message.type === GAME_MESSAGE_TYPE.CHANNEL
+                          ? 'text-purple-400'
+                          : message.type === GAME_MESSAGE_TYPE.ERROR
+                            ? 'text-red-400'
+                            : 'text-white'
               }
             />
           </div>

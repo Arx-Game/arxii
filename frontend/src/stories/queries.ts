@@ -22,6 +22,7 @@ import type {
   ListStoriesParams,
   ListTransitionRequiredOutcomesParams,
   ListTransitionsParams,
+  SendStoryOOCBody,
 } from './api';
 import type {
   ApproveClaimBody,
@@ -604,6 +605,24 @@ export function useStoryLog(storyId: number) {
     queryFn: () => api.getStoryLog(storyId),
     enabled: storyId > 0,
     throwOnError: true,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Story OOC sender hook (Wave 8)
+// ---------------------------------------------------------------------------
+
+export function useSendStoryOOC() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ storyId, ...data }: { storyId: number } & SendStoryOOCBody) =>
+      api.sendStoryOOC(storyId, data),
+    onSuccess: (_, { storyId }) => {
+      // Invalidate narrative messages so the recipient inbox refreshes.
+      void qc.invalidateQueries({ queryKey: ['narrative'] });
+      // Invalidate the story log so the sent notice appears there.
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyLog(storyId) });
+    },
   });
 }
 
