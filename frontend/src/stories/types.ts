@@ -15,7 +15,14 @@ import type { components } from '@/generated/api';
 // Stories have two serializer shapes: StoryList (lightweight) and StoryDetail (full).
 // We export both and alias the detail shape as Story for most usage.
 export type StoryList = components['schemas']['StoryList'];
-export type StoryDetail = components['schemas']['StoryDetail'];
+export type StoryDetailBase = components['schemas']['StoryDetail'];
+
+// StoryDetail extended with primary_table — field added in Phase 5 Wave 2 but
+// not yet reflected in the generated schema. The serializer returns this field
+// as a nullable integer (the GMTable PK).
+export interface StoryDetail extends StoryDetailBase {
+  readonly primary_table: number | null;
+}
 export type Story = StoryDetail;
 
 // Chapters have three shapes: ChapterList, ChapterDetail, ChapterCreate.
@@ -336,4 +343,60 @@ export type StoryLogEntry = StoryLogBeatEntry | StoryLogEpisodeEntry;
 
 export interface StoryLogResponse {
   entries: StoryLogEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// StoryGMOffer — hand-defined from StoryGMOfferSerializer in serializers.py.
+// Not yet reflected in the generated api.d.ts schema because the
+// spectacular-generated schema for story-gm-offers was not captured in the
+// last schema dump.
+// ---------------------------------------------------------------------------
+
+export type StoryGMOfferStatus = 'pending' | 'accepted' | 'declined' | 'withdrawn';
+
+export interface StoryGMOffer {
+  id: number;
+  story: number;
+  offered_to: number;
+  offered_by_account: number;
+  status: StoryGMOfferStatus;
+  message: string;
+  response_note: string;
+  created_at: string;
+  responded_at: string | null;
+  updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// GMProfile — hand-defined from GMProfileSerializer in gm/serializers.py.
+// The generated type exists in api.d.ts but duplicated here for cleaner
+// import paths within the stories module.
+// ---------------------------------------------------------------------------
+
+export interface GMProfileData {
+  id: number;
+  account: number;
+  account_username: string;
+  level: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
+  approved_at: string;
+}
+
+/** Alias for the full GM profile shape returned by the API. */
+export type GMProfile = GMProfileData;
+
+// ---------------------------------------------------------------------------
+// OfferStoryToGM request body
+// ---------------------------------------------------------------------------
+
+export interface OfferStoryToGMBody {
+  gm_profile_id: number;
+  message?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Accept/Decline offer request bodies
+// ---------------------------------------------------------------------------
+
+export interface RespondToOfferBody {
+  response_note?: string;
 }

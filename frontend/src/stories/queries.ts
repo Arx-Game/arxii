@@ -13,9 +13,11 @@ import type {
   ListClaimsParams,
   ListContributionsParams,
   ListEpisodesParams,
+  ListGMProfilesParams,
   ListGroupProgressParams,
   ListProgressionRequirementsParams,
   ListSessionRequestsParams,
+  ListStoryGMOffersParams,
   ListStoriesParams,
   ListTransitionRequiredOutcomesParams,
   ListTransitionsParams,
@@ -30,8 +32,10 @@ import type {
   EpisodeCreateBody,
   EpisodeProgressionRequirement,
   MarkBeatBody,
+  OfferStoryToGMBody,
   RejectClaimBody,
   RequestClaimBody,
+  RespondToOfferBody,
   ResolveEpisodeBody,
   StoryCreateBody,
   Transition,
@@ -102,6 +106,15 @@ export const storiesKeys = {
   // TransitionRequiredOutcomes (Wave 9)
   transitionRequiredOutcomes: (params?: ListTransitionRequiredOutcomesParams) =>
     [...storiesKeys.all, 'transition-required-outcomes', params] as const,
+
+  // StoryGMOffers (Wave 5)
+  storyGMOffers: (params?: ListStoryGMOffersParams) =>
+    [...storiesKeys.all, 'story-gm-offers', params] as const,
+  storyGMOffer: (id: number) => [...storiesKeys.all, 'story-gm-offer', id] as const,
+
+  // GMProfiles (Wave 5)
+  gmProfiles: (params?: ListGMProfilesParams) =>
+    [...storiesKeys.all, 'gm-profiles', params] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -722,6 +735,88 @@ export function useDeleteTransitionRequiredOutcome() {
         queryKey: storiesKeys.transitionRequiredOutcomes({ transition: transitionId }),
       });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// StoryGMOffer hooks (Wave 5)
+// ---------------------------------------------------------------------------
+
+export function useStoryGMOffers(params?: ListStoryGMOffersParams) {
+  return useQuery({
+    queryKey: storiesKeys.storyGMOffers(params),
+    queryFn: () => api.listStoryGMOffers(params),
+    throwOnError: true,
+  });
+}
+
+export function useDetachStoryFromTable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (storyId: number) => api.detachStoryFromTable(storyId),
+    onSuccess: (_, storyId) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.story(storyId) });
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyList() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
+    },
+  });
+}
+
+export function useOfferStoryToGM() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ storyId, ...body }: { storyId: number } & OfferStoryToGMBody) =>
+      api.offerStoryToGM(storyId, body),
+    onSuccess: (_, { storyId }) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.story(storyId) });
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyList() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() });
+    },
+  });
+}
+
+export function useAcceptOffer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ offerId, ...body }: { offerId: number } & RespondToOfferBody) =>
+      api.acceptOffer(offerId, body),
+    onSuccess: (updated) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.story(updated.story) });
+      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
+    },
+  });
+}
+
+export function useDeclineOffer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ offerId, ...body }: { offerId: number } & RespondToOfferBody) =>
+      api.declineOffer(offerId, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() });
+    },
+  });
+}
+
+export function useWithdrawOffer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (offerId: number) => api.withdrawOffer(offerId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// GMProfile hooks (Wave 5 — for offer-to-GM picker)
+// ---------------------------------------------------------------------------
+
+export function useGMProfiles(params?: ListGMProfilesParams) {
+  return useQuery({
+    queryKey: storiesKeys.gmProfiles(params),
+    queryFn: () => api.listGMProfiles(params),
   });
 }
 

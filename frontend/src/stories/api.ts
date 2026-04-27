@@ -32,18 +32,22 @@ import type {
   EpisodeProgressionRequirement,
   EpisodeResolution,
   GlobalStoryProgress,
+  GMProfile,
   GMQueueResponse,
   GroupStoryProgress,
   MarkBeatBody,
   MyActiveStoriesResponse,
+  OfferStoryToGMBody,
   PaginatedResponse,
   RejectClaimBody,
   RequestClaimBody,
+  RespondToOfferBody,
   ResolveEpisodeBody,
   SessionRequest,
   StaffWorkloadResponse,
   Story,
   StoryCreateBody,
+  StoryGMOffer,
   StoryList,
   StoryLogResponse,
   Transition,
@@ -752,6 +756,142 @@ export async function createTransitionRequiredOutcome(
 export async function deleteTransitionRequiredOutcome(id: number): Promise<void> {
   const res = await apiFetch(`/api/transition-required-outcomes/${id}/`, { method: 'DELETE' });
   if (!res.ok) throw new Error(`Failed to delete transition required outcome ${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Story GM offer endpoints (Wave 5)
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/stories/{id}/detach-from-table/
+ * Clears story.primary_table. Returns 200 with updated Story.
+ */
+export async function detachStoryFromTable(storyId: number): Promise<Story> {
+  const res = await apiFetch(`/api/stories/${storyId}/detach-from-table/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error('Failed to detach story from table');
+  return res.json() as Promise<Story>;
+}
+
+/**
+ * POST /api/stories/{id}/offer-to-gm/
+ * Body: { gm_profile_id: number, message?: string }
+ * Returns 201 with the created StoryGMOffer.
+ */
+export async function offerStoryToGM(
+  storyId: number,
+  body: OfferStoryToGMBody
+): Promise<StoryGMOffer> {
+  const res = await apiFetch(`/api/stories/${storyId}/offer-to-gm/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to offer story to GM');
+  return res.json() as Promise<StoryGMOffer>;
+}
+
+export interface ListStoryGMOffersParams {
+  status?: string;
+  story?: number;
+  offered_to?: number;
+  offered_by_account?: number;
+  page?: number;
+  page_size?: number;
+}
+
+/**
+ * GET /api/story-gm-offers/
+ * Queryset is auto-scoped by the backend (GM sees received; player sees made; staff sees all).
+ */
+export async function listStoryGMOffers(
+  params?: ListStoryGMOffersParams
+): Promise<PaginatedResponse<StoryGMOffer>> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/story-gm-offers/${qs}`);
+  if (!res.ok) throw new Error('Failed to load story GM offers');
+  return res.json() as Promise<PaginatedResponse<StoryGMOffer>>;
+}
+
+/**
+ * POST /api/story-gm-offers/{id}/accept/
+ * Body: { response_note?: string }
+ * Returns 200 with updated StoryGMOffer.
+ */
+export async function acceptOffer(
+  offerId: number,
+  body?: RespondToOfferBody
+): Promise<StoryGMOffer> {
+  const res = await apiFetch(`/api/story-gm-offers/${offerId}/accept/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) throw new Error('Failed to accept offer');
+  return res.json() as Promise<StoryGMOffer>;
+}
+
+/**
+ * POST /api/story-gm-offers/{id}/decline/
+ * Body: { response_note?: string }
+ * Returns 200 with updated StoryGMOffer.
+ */
+export async function declineOffer(
+  offerId: number,
+  body?: RespondToOfferBody
+): Promise<StoryGMOffer> {
+  const res = await apiFetch(`/api/story-gm-offers/${offerId}/decline/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) throw new Error('Failed to decline offer');
+  return res.json() as Promise<StoryGMOffer>;
+}
+
+/**
+ * POST /api/story-gm-offers/{id}/withdraw/
+ * No body required. Returns 200 with updated StoryGMOffer.
+ */
+export async function withdrawOffer(offerId: number): Promise<StoryGMOffer> {
+  const res = await apiFetch(`/api/story-gm-offers/${offerId}/withdraw/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error('Failed to withdraw offer');
+  return res.json() as Promise<StoryGMOffer>;
+}
+
+// ---------------------------------------------------------------------------
+// GM Profile search endpoint (Wave 5 — for offer-to-GM picker)
+// ---------------------------------------------------------------------------
+
+export interface ListGMProfilesParams {
+  search?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/**
+ * GET /api/gm/profiles/
+ * Read-only list of approved GM profiles, searchable by username.
+ * Available to any authenticated user for the offer-to-GM picker.
+ */
+export async function listGMProfiles(
+  params?: ListGMProfilesParams
+): Promise<PaginatedResponse<GMProfile>> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/gm/profiles/${qs}`);
+  if (!res.ok) throw new Error('Failed to load GM profiles');
+  return res.json() as Promise<PaginatedResponse<GMProfile>>;
 }
 
 /**

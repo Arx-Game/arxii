@@ -3,9 +3,10 @@
  *
  * Shows:
  *  1. Story header (title, scope badge, status, breadcrumb)
- *  2. Current Episode Panel (beats)
- *  3. Story Log timeline
- *  4. Schedule CTA placeholder (Wave 4)
+ *  2. "Change my GM" / "Offer to a GM" CTA (CHARACTER-scope, owned stories only)
+ *  3. Current Episode Panel (beats)
+ *  4. Story Log timeline
+ *  5. Session request status
  */
 
 import { useParams, useNavigate } from 'react-router-dom';
@@ -19,6 +20,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { CurrentEpisodePanel } from '../components/CurrentEpisodePanel';
 import { StoryLog } from '../components/StoryLog';
 import { SessionRequestStatusCard } from '../components/SessionRequestStatusCard';
+import { ChangeMyGMDialog } from '../components/ChangeMyGMDialog';
 
 // ---------------------------------------------------------------------------
 // Loading skeleton for the header area
@@ -55,6 +57,15 @@ function StoryDetailInner({ storyId }: StoryDetailInnerProps) {
     ...(myActive?.global_stories ?? []),
   ];
   const activeEntry = allEntries.find((e) => e.story_id === storyId);
+
+  // The "Change my GM" CTA is visible only when:
+  //   1. The story is CHARACTER-scope.
+  //   2. This story appears in myActive.character_stories — this means the
+  //      current user's character is the owner of this story.
+  const isOwnedCharacterStory =
+    story != null &&
+    story.scope === 'character' &&
+    (myActive?.character_stories ?? []).some((e) => e.story_id === storyId);
 
   if (storyLoading) {
     return (
@@ -105,6 +116,9 @@ function StoryDetailInner({ storyId }: StoryDetailInnerProps) {
         {activeEntry && (
           <StatusBadge status={activeEntry.status} label={activeEntry.status_label} />
         )}
+
+        {/* "Change my GM" / "Offer to a GM" CTA */}
+        {isOwnedCharacterStory && <ChangeMyGMDialog story={story} />}
       </header>
 
       {/* Current episode panel */}

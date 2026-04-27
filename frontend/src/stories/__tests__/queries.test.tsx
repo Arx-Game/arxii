@@ -143,6 +143,7 @@ const mockStory = {
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-04-19T00:00:00Z',
   completed_at: null,
+  primary_table: null,
 };
 
 const mockBeatCompletion = {
