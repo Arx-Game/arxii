@@ -77,11 +77,36 @@ def join_table(table: GMTable, persona: Persona) -> GMTableMembership:
 
 @transaction.atomic
 def leave_table(membership: GMTableMembership) -> None:
-    """Soft-leave a membership. No-op if already left."""
+    """Soft-leave a membership. No-op if already left.
+
+    Side effects:
+    - GMTableMembership.left_at set to now (deactivates the membership).
+    - Any CHARACTER-scope Story owned by this persona's character_sheet whose
+      primary_table matches the leaving table is detached (primary_table=None).
+      Story history and participations are preserved; the story enters
+      'seeking GM' state.
+    - GROUP-scope stories at the table are not affected — those stories belong
+      to the table, not to the individual member.
+    """
     if membership.left_at is not None:
         return
     membership.left_at = timezone.now()
     membership.save(update_fields=["left_at"])
+
+    # Auto-detach CHARACTER-scope stories owned by this persona's character.
+    # Imported inside the function to avoid circular imports between gm and stories.
+    from world.stories.constants import StoryScope  # noqa: PLC0415
+    from world.stories.models import Story  # noqa: PLC0415
+    from world.stories.services.tables import detach_story_from_table  # noqa: PLC0415
+
+    sheet = membership.persona.character_sheet
+    stories_to_detach = Story.objects.filter(
+        scope=StoryScope.CHARACTER,
+        character_sheet=sheet,
+        primary_table=membership.table,
+    )
+    for story in stories_to_detach:
+        detach_story_from_table(story=story)
 
 
 @transaction.atomic
