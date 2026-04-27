@@ -13,14 +13,22 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import type {
+  BulletinPostCreateBody,
+  BulletinPostUpdateBody,
+  BulletinReplyCreateBody,
+  BulletinReplyUpdateBody,
   GMTable,
   GMTableCreateBody,
   GMTableMembership,
   GMTableMembershipCreateBody,
   GMTableTransferBody,
   GMTableUpdateBody,
+  PaginatedBulletinPosts,
+  PaginatedBulletinReplies,
   PaginatedMemberships,
   PaginatedTables,
+  TableBulletinPost,
+  TableBulletinReply,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -48,6 +56,8 @@ function buildQueryString(params: Record<string, string | number | boolean | und
 
 const TABLES_URL = '/api/gm/tables';
 const MEMBERSHIPS_URL = '/api/gm/table-memberships';
+const BULLETIN_POSTS_URL = '/api/table-bulletin-posts';
+const BULLETIN_REPLIES_URL = '/api/table-bulletin-replies';
 
 // ---------------------------------------------------------------------------
 // Tables CRUD
@@ -181,4 +191,136 @@ export async function removeMembership(id: number): Promise<void> {
  */
 export async function leaveTable(membershipId: number): Promise<void> {
   return removeMembership(membershipId);
+}
+
+// ---------------------------------------------------------------------------
+// Bulletin Posts
+// ---------------------------------------------------------------------------
+
+export interface ListBulletinPostsParams {
+  table?: number;
+  story?: number | null;
+  page?: number;
+  page_size?: number;
+}
+
+/**
+ * GET /api/table-bulletin-posts/?table=<id>&story=<id>
+ * The queryset is already permission-filtered by the backend.
+ */
+export async function getBulletinPosts(
+  params?: ListBulletinPostsParams
+): Promise<PaginatedBulletinPosts> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`${BULLETIN_POSTS_URL}/${qs}`);
+  if (!res.ok) throw new Error('Failed to load bulletin posts');
+  return res.json() as Promise<PaginatedBulletinPosts>;
+}
+
+/**
+ * POST /api/table-bulletin-posts/
+ * GM/staff only. Creates a new bulletin post (table-wide or story-scoped).
+ */
+export async function createBulletinPost(data: BulletinPostCreateBody): Promise<TableBulletinPost> {
+  const res = await apiFetch(`${BULLETIN_POSTS_URL}/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create bulletin post');
+  return res.json() as Promise<TableBulletinPost>;
+}
+
+/**
+ * PATCH /api/table-bulletin-posts/{id}/
+ * Author edits (title, body, allow_replies).
+ */
+export async function updateBulletinPost(
+  id: number,
+  data: BulletinPostUpdateBody
+): Promise<TableBulletinPost> {
+  const res = await apiFetch(`${BULLETIN_POSTS_URL}/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Failed to update bulletin post ${id}`);
+  return res.json() as Promise<TableBulletinPost>;
+}
+
+/**
+ * DELETE /api/table-bulletin-posts/{id}/
+ * Author deletes.
+ */
+export async function deleteBulletinPost(id: number): Promise<void> {
+  const res = await apiFetch(`${BULLETIN_POSTS_URL}/${id}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Failed to delete bulletin post ${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Bulletin Replies
+// ---------------------------------------------------------------------------
+
+export interface ListBulletinRepliesParams {
+  post?: number;
+  page?: number;
+  page_size?: number;
+}
+
+/**
+ * GET /api/table-bulletin-replies/?post=<id>
+ */
+export async function getBulletinReplies(
+  params?: ListBulletinRepliesParams
+): Promise<PaginatedBulletinReplies> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`${BULLETIN_REPLIES_URL}/${qs}`);
+  if (!res.ok) throw new Error('Failed to load bulletin replies');
+  return res.json() as Promise<PaginatedBulletinReplies>;
+}
+
+/**
+ * POST /api/table-bulletin-replies/
+ * Qualifying readers can reply if allow_replies is true.
+ */
+export async function createBulletinReply(
+  data: BulletinReplyCreateBody
+): Promise<TableBulletinReply> {
+  const res = await apiFetch(`${BULLETIN_REPLIES_URL}/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create bulletin reply');
+  return res.json() as Promise<TableBulletinReply>;
+}
+
+/**
+ * PATCH /api/table-bulletin-replies/{id}/
+ * Author edits.
+ */
+export async function updateBulletinReply(
+  id: number,
+  data: BulletinReplyUpdateBody
+): Promise<TableBulletinReply> {
+  const res = await apiFetch(`${BULLETIN_REPLIES_URL}/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Failed to update bulletin reply ${id}`);
+  return res.json() as Promise<TableBulletinReply>;
+}
+
+/**
+ * DELETE /api/table-bulletin-replies/{id}/
+ * Author deletes.
+ */
+export async function deleteBulletinReply(id: number): Promise<void> {
+  const res = await apiFetch(`${BULLETIN_REPLIES_URL}/${id}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Failed to delete bulletin reply ${id}`);
 }

@@ -7,8 +7,17 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
-import type { ListMembershipsParams, ListTablesParams } from './api';
 import type {
+  ListBulletinPostsParams,
+  ListBulletinRepliesParams,
+  ListMembershipsParams,
+  ListTablesParams,
+} from './api';
+import type {
+  BulletinPostCreateBody,
+  BulletinPostUpdateBody,
+  BulletinReplyCreateBody,
+  BulletinReplyUpdateBody,
   GMTableCreateBody,
   GMTableMembershipCreateBody,
   GMTableTransferBody,
@@ -25,6 +34,10 @@ export const tablesKeys = {
   detail: (id: number) => [...tablesKeys.all, 'detail', id] as const,
   members: (tableId: number, filters?: ListMembershipsParams) =>
     [...tablesKeys.all, 'members', tableId, filters] as const,
+  bulletinPosts: (params?: ListBulletinPostsParams) =>
+    [...tablesKeys.all, 'bulletin-posts', params] as const,
+  bulletinReplies: (params?: ListBulletinRepliesParams) =>
+    [...tablesKeys.all, 'bulletin-replies', params] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -147,6 +160,125 @@ export function useLeaveTable() {
       void qc.invalidateQueries({ queryKey: tablesKeys.members(tableId) });
       void qc.invalidateQueries({ queryKey: tablesKeys.detail(tableId) });
       void qc.invalidateQueries({ queryKey: tablesKeys.list() });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Bulletin Post read hooks
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch bulletin posts for a given table (and optionally story).
+ * The queryset is already permission-filtered by the backend.
+ */
+export function useBulletinPosts(params: ListBulletinPostsParams) {
+  return useQuery({
+    queryKey: tablesKeys.bulletinPosts(params),
+    queryFn: () => api.getBulletinPosts(params),
+    enabled: (params.table ?? 0) > 0,
+    throwOnError: true,
+  });
+}
+
+/**
+ * Fetch replies for a single bulletin post.
+ * Replies are also embedded in the post's `replies` field but this
+ * hook is provided for manual refresh scenarios.
+ */
+export function useBulletinReplies(postId: number) {
+  const params: ListBulletinRepliesParams = { post: postId };
+  return useQuery({
+    queryKey: tablesKeys.bulletinReplies(params),
+    queryFn: () => api.getBulletinReplies(params),
+    enabled: postId > 0,
+    throwOnError: true,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Bulletin Post mutation hooks
+// ---------------------------------------------------------------------------
+
+export function useCreateBulletinPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: BulletinPostCreateBody) => api.createBulletinPost(data),
+    onSuccess: (post) => {
+      void qc.invalidateQueries({
+        queryKey: tablesKeys.bulletinPosts({ table: post.table }),
+      });
+    },
+  });
+}
+
+export function useUpdateBulletinPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: BulletinPostUpdateBody; tableId: number }) =>
+      api.updateBulletinPost(id, data),
+    onSuccess: (post) => {
+      void qc.invalidateQueries({
+        queryKey: tablesKeys.bulletinPosts({ table: post.table }),
+      });
+    },
+  });
+}
+
+export function useDeleteBulletinPost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, tableId: _tableId }: { id: number; tableId: number }) =>
+      api.deleteBulletinPost(id),
+    onSuccess: (_, { tableId }) => {
+      void qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts({ table: tableId }) });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Bulletin Reply mutation hooks
+// ---------------------------------------------------------------------------
+
+export function useCreateBulletinReply() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: BulletinReplyCreateBody) => api.createBulletinReply(data),
+    onSuccess: (reply) => {
+      // Invalidate the post list so the embedded replies_cached refreshes.
+      void qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts() });
+      void qc.invalidateQueries({
+        queryKey: tablesKeys.bulletinReplies({ post: reply.post }),
+      });
+    },
+  });
+}
+
+export function useUpdateBulletinReply() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      data,
+      postId: _postId,
+    }: {
+      id: number;
+      data: BulletinReplyUpdateBody;
+      postId: number;
+    }) => api.updateBulletinReply(id, data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts() });
+    },
+  });
+}
+
+export function useDeleteBulletinReply() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, postId: _postId }: { id: number; postId: number }) =>
+      api.deleteBulletinReply(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: tablesKeys.bulletinPosts() });
     },
   });
 }

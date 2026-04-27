@@ -23,15 +23,21 @@ import type { GMTable } from '../types';
 vi.mock('../queries', () => ({
   useTable: vi.fn(),
   useTableMembers: vi.fn(),
+  useBulletinPosts: vi.fn(() => ({
+    data: { count: 0, next: null, previous: null, results: [] },
+    isLoading: false,
+  })),
   useCreateTable: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useUpdateTable: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useRemoveMembership: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useLeaveTable: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useArchiveTable: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useInviteToTable: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useCreateBulletinPost: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useDeleteBulletinPost: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 
-// Mock stories queries used by TableStoryRoster
+// Mock stories queries used by TableStoryRoster and TableBulletin
 vi.mock('@/stories/queries', () => ({
   useStoryList: vi.fn(() => ({
     data: { count: 0, next: null, previous: null, results: [] },
@@ -220,7 +226,55 @@ describe('TableDetailPage', () => {
     });
   });
 
-  it('switches to Bulletin tab and shows placeholder', async () => {
+  it('switches to Bulletin tab and shows section selector and empty state', async () => {
+    const user = userEvent.setup();
+    const table = makeTable({ viewer_role: 'member' });
+    vi.mocked(queries.useTable).mockReturnValue({
+      data: table,
+      isLoading: false,
+    } as unknown as ReturnType<typeof queries.useTable>);
+    vi.mocked(queries.useTableMembers).mockReturnValue({
+      data: { count: 0, next: null, previous: null, results: [] },
+      isLoading: false,
+    } as unknown as ReturnType<typeof queries.useTableMembers>);
+
+    render(<TableDetailPage />, { wrapper: createWrapper() });
+
+    const bulletinTab = screen.getByRole('tab', { name: /bulletin/i });
+    await user.click(bulletinTab);
+
+    // Section selector shows Table-Wide button
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /table-wide/i })).toBeInTheDocument();
+    });
+
+    // Empty state is shown (member sees GM-authored message)
+    expect(screen.getByText(/no posts in this section yet/i)).toBeInTheDocument();
+  });
+
+  it('shows New Post button for GM role on Bulletin tab', async () => {
+    const user = userEvent.setup();
+    const table = makeTable({ viewer_role: 'gm' });
+    vi.mocked(queries.useTable).mockReturnValue({
+      data: table,
+      isLoading: false,
+    } as unknown as ReturnType<typeof queries.useTable>);
+    vi.mocked(queries.useTableMembers).mockReturnValue({
+      data: { count: 0, next: null, previous: null, results: [] },
+      isLoading: false,
+    } as unknown as ReturnType<typeof queries.useTableMembers>);
+
+    render(<TableDetailPage />, { wrapper: createWrapper() });
+
+    const bulletinTab = screen.getByRole('tab', { name: /bulletin/i });
+    await user.click(bulletinTab);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /\+ new post/i })).toBeInTheDocument();
+    });
+  });
+
+  it('does not show New Post button for member role', async () => {
     const user = userEvent.setup();
     const table = makeTable({ viewer_role: 'member' });
     vi.mocked(queries.useTable).mockReturnValue({
@@ -238,7 +292,9 @@ describe('TableDetailPage', () => {
     await user.click(bulletinTab);
 
     await waitFor(() => {
-      expect(screen.getByText(/bulletin board coming soon/i)).toBeInTheDocument();
+      expect(screen.getByText(/no posts in this section yet/i)).toBeInTheDocument();
     });
+
+    expect(screen.queryByRole('button', { name: /\+ new post/i })).not.toBeInTheDocument();
   });
 });

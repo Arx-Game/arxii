@@ -29,19 +29,7 @@ import { InviteToTableDialog } from '../components/InviteToTableDialog';
 import { RemoveFromTableDialog } from '../components/RemoveFromTableDialog';
 import { LeaveTableDialog } from '../components/LeaveTableDialog';
 import { ArchiveTableDialog } from '../components/ArchiveTableDialog';
-
-// ---------------------------------------------------------------------------
-// Empty state for Bulletin tab (Wave 11 placeholder)
-// ---------------------------------------------------------------------------
-
-function BulletinPlaceholder() {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-      <p className="text-lg font-medium">Bulletin board coming soon</p>
-      <p className="mt-1 text-sm">Table-wide announcements and pinned notes will appear here.</p>
-    </div>
-  );
-}
+import { TableBulletin } from '../components/TableBulletin';
 
 // ---------------------------------------------------------------------------
 // Inner detail (inside error boundary)
@@ -206,7 +194,7 @@ function TableDetailInner({ tableId }: { tableId: number }) {
         </TabsContent>
 
         <TabsContent value="bulletin" className="mt-4">
-          <BulletinPlaceholder />
+          <TableBulletin table={table} />
         </TabsContent>
       </Tabs>
 
