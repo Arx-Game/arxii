@@ -852,6 +852,94 @@ class CanDetachStoryFromTable(permissions.BasePermission):
 
 
 # ---------------------------------------------------------------------------
+# Wave 3: StoryGMOffer permission classes
+# ---------------------------------------------------------------------------
+
+
+class IsOfferRecipientGMOrStaff(permissions.BasePermission):
+    """Accept / decline actions: only the GM the offer was directed to, or staff.
+
+    Object-level permission; obj is a StoryGMOffer.
+    """
+
+    message = "Only the GM this offer was sent to, or staff, may accept or decline it."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        offer = cast(Any, obj)
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return False
+        return offer.offered_to_id == gm_profile.pk
+
+
+class IsOfferOffererOrStaff(permissions.BasePermission):
+    """Withdraw action: only the account that created the offer, or staff.
+
+    Object-level permission; obj is a StoryGMOffer.
+    """
+
+    message = "Only the player who made this offer, or staff, may withdraw it."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        offer = cast(Any, obj)
+        return offer.offered_by_account_id == request.user.pk
+
+
+class IsStoryGMOfferParticipantOrStaff(permissions.BasePermission):
+    """Read access for StoryGMOfferViewSet list / retrieve.
+
+    Allowed:
+    - The GM who received the offer (offered_to.account == user)
+    - The player who made the offer (offered_by_account == user)
+    - Staff
+    """
+
+    message = "You do not have permission to view this GM offer."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Read only; no generic write access via this permission class."""
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        # Writes (create/update/delete) are not permitted — actions only.
+        return request.user.is_staff
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        offer = cast(Any, obj)
+        # Player who made the offer
+        if offer.offered_by_account_id == request.user.pk:
+            return True
+        # GM who received the offer
+        try:
+            gm_profile = request.user.gm_profile
+            return offer.offered_to_id == gm_profile.pk
+        except GMProfile.DoesNotExist:
+            return False
+
+
+# ---------------------------------------------------------------------------
 # Story log viewer role classifier
 # ---------------------------------------------------------------------------
 

@@ -18,6 +18,7 @@ from world.stories.views import (
     SessionRequestViewSet,
     StaffWorkloadView,
     StoryFeedbackViewSet,
+    StoryGMOfferViewSet,
     StoryParticipationViewSet,
     StoryViewSet,
     TransitionRequiredOutcomeViewSet,
@@ -39,6 +40,8 @@ router.register(r"aggregate-beat-contributions", AggregateBeatContributionViewSe
 router.register(r"assistant-gm-claims", AssistantGMClaimViewSet)
 router.register(r"session-requests", SessionRequestViewSet)
 router.register(r"beats", BeatViewSet)
+# Wave 3: GM offer lifecycle
+router.register(r"story-gm-offers", StoryGMOfferViewSet, basename="storygmoffer")
 # Phase 4 Wave 9: Author editor ViewSets
 router.register(r"transitions", TransitionViewSet)
 router.register(r"episode-progression-requirements", EpisodeProgressionRequirementViewSet)

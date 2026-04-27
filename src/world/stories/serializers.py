@@ -13,6 +13,7 @@ from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
     SessionRequestStatus,
+    StoryGMOfferStatus,
     StoryScope,
 )
 from world.stories.models import (
@@ -32,6 +33,7 @@ from world.stories.models import (
     SessionRequest,
     Story,
     StoryFeedback,
+    StoryGMOffer,
     StoryParticipation,
     StoryProgress,
     StoryTrustRequirement,
@@ -1353,3 +1355,138 @@ class AssignStoryToTableInputSerializer(serializers.Serializer):
             msg = "You can only assign stories to your own table."
             raise serializers.ValidationError(msg)
         return table
+
+
+# ---------------------------------------------------------------------------
+# Wave 3: StoryGMOffer serializers
+# ---------------------------------------------------------------------------
+
+
+class StoryGMOfferSerializer(serializers.ModelSerializer):
+    """Read serializer for StoryGMOffer records."""
+
+    class Meta:
+        model = StoryGMOffer
+        fields = [
+            "id",
+            "story",
+            "offered_to",
+            "offered_by_account",
+            "status",
+            "message",
+            "response_note",
+            "created_at",
+            "responded_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class OfferStoryToGMInputSerializer(serializers.Serializer):
+    """Input for POST /api/stories/{id}/offer-to-gm/.
+
+    Context required:
+        story (Story): the story being offered (resolved by get_object()).
+        request: DRF request (for user identity + staff check).
+
+    Validates:
+        - story.scope == CHARACTER (service will catch this, but serializer validates first)
+        - story.primary_table is None
+        - gm_profile_id points to an existing GMProfile
+
+    Stores ``offered_to`` (GMProfile) in validated_data.
+    """
+
+    gm_profile_id = serializers.IntegerField()
+    message = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_gm_profile_id(self, value: int) -> int:
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        if not GMProfile.objects.filter(pk=value).exists():
+            msg = "No GM with that profile ID exists."
+            raise serializers.ValidationError(msg)
+        return value
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        story: Story = self.context["story"]
+        request = self.context["request"]
+
+        # Permission: only the character-scope owner (or staff) can offer this story.
+        if not request.user.is_staff:
+            if story.scope != StoryScope.CHARACTER or story.character_sheet_id is None:
+                msg = "Only CHARACTER-scope stories with an owner can be offered to a GM."
+                raise serializers.ValidationError({"non_field_errors": msg})
+            if story.character_sheet.character.db_account_id != request.user.pk:
+                msg = "You can only offer your own story."
+                raise serializers.ValidationError({"non_field_errors": msg})
+
+        if story.scope != StoryScope.CHARACTER:
+            msg = "Only CHARACTER-scope stories support GM offers."
+            raise serializers.ValidationError({"non_field_errors": msg})
+        if story.primary_table_id is not None:
+            msg = "Withdraw from the current GM's table before offering this story to another GM."
+            raise serializers.ValidationError({"non_field_errors": msg})
+
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        attrs["offered_to"] = GMProfile.objects.get(pk=attrs["gm_profile_id"])
+        return attrs
+
+
+class AcceptOfferInputSerializer(serializers.Serializer):
+    """Input for POST /api/story-gm-offers/{id}/accept/.
+
+    Context required:
+        offer (StoryGMOffer): the offer being accepted.
+
+    Validates:
+        - offer.status == PENDING
+    """
+
+    response_note = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        offer: StoryGMOffer = self.context["offer"]
+        if offer.status != StoryGMOfferStatus.PENDING:
+            msg = "Only PENDING offers can be accepted."
+            raise serializers.ValidationError({"non_field_errors": msg})
+        return attrs
+
+
+class DeclineOfferInputSerializer(serializers.Serializer):
+    """Input for POST /api/story-gm-offers/{id}/decline/.
+
+    Context required:
+        offer (StoryGMOffer): the offer being declined.
+
+    Validates:
+        - offer.status == PENDING
+    """
+
+    response_note = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        offer: StoryGMOffer = self.context["offer"]
+        if offer.status != StoryGMOfferStatus.PENDING:
+            msg = "Only PENDING offers can be declined."
+            raise serializers.ValidationError({"non_field_errors": msg})
+        return attrs
+
+
+class WithdrawOfferInputSerializer(serializers.Serializer):
+    """Input for POST /api/story-gm-offers/{id}/withdraw/.
+
+    Context required:
+        offer (StoryGMOffer): the offer being withdrawn.
+
+    Validates:
+        - offer.status == PENDING
+    """
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        offer: StoryGMOffer = self.context["offer"]
+        if offer.status != StoryGMOfferStatus.PENDING:
+            msg = "Only PENDING offers can be withdrawn."
+            raise serializers.ValidationError({"non_field_errors": msg})
+        return attrs

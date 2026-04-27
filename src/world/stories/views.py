@@ -1,5 +1,5 @@
 from http import HTTPMethod
-from typing import Any
+from typing import Any, cast
 
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import AnonymousUser
@@ -7,6 +7,7 @@ from django.db import models
 from django.db.models import Count, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from evennia.accounts.models import AccountDB
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -15,7 +16,11 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
 
-from world.stories.constants import AssistantClaimStatus, SessionRequestStatus, StoryScope
+from world.stories.constants import (
+    AssistantClaimStatus,
+    SessionRequestStatus,
+    StoryScope,
+)
 from world.stories.filters import (
     AggregateBeatContributionFilter,
     AssistantGMClaimFilter,
@@ -30,6 +35,7 @@ from world.stories.filters import (
     SessionRequestFilter,
     StoryFeedbackFilter,
     StoryFilter,
+    StoryGMOfferFilter,
     StoryParticipationFilter,
     TransitionFilter,
     TransitionRequiredOutcomeFilter,
@@ -48,6 +54,7 @@ from world.stories.models import (
     SessionRequest,
     Story,
     StoryFeedback,
+    StoryGMOffer,
     StoryParticipation,
     StoryProgress,
     Transition,
@@ -78,15 +85,19 @@ from world.stories.permissions import (
     IsLeadGMOnEpisodeStoryOrStaff,
     IsLeadGMOnStoryOrStaff,
     IsLeadGMOnTransitionStoryOrStaff,
+    IsOfferOffererOrStaff,
+    IsOfferRecipientGMOrStaff,
     IsParticipationOwnerOrStoryOwnerOrStaff,
     IsPlayerTrustOwnerOrStaff,
     IsReviewerOrStoryOwnerOrStaff,
     IsSessionRequestGMOrStaff,
     IsSessionRequestParticipantOrStaff,
+    IsStoryGMOfferParticipantOrStaff,
     IsStoryOwnerOrStaff,
     classify_story_log_viewer_role,
 )
 from world.stories.serializers import (
+    AcceptOfferInputSerializer,
     AggregateBeatContributionSerializer,
     ApproveClaimInputSerializer,
     AssignStoryToTableInputSerializer,
@@ -101,6 +112,7 @@ from world.stories.serializers import (
     CompleteClaimInputSerializer,
     ContributeBeatInputSerializer,
     CreateEventFromSessionRequestInputSerializer,
+    DeclineOfferInputSerializer,
     EpisodeCreateSerializer,
     EpisodeDetailSerializer,
     EpisodeListSerializer,
@@ -110,6 +122,7 @@ from world.stories.serializers import (
     GlobalStoryProgressSerializer,
     GroupStoryProgressSerializer,
     MarkBeatInputSerializer,
+    OfferStoryToGMInputSerializer,
     PlayerTrustSerializer,
     RejectClaimInputSerializer,
     RequestClaimInputSerializer,
@@ -120,11 +133,13 @@ from world.stories.serializers import (
     StoryDetailSerializer,
     StoryFeedbackCreateSerializer,
     StoryFeedbackSerializer,
+    StoryGMOfferSerializer,
     StoryListSerializer,
     StoryLogSerializer,
     StoryParticipationSerializer,
     TransitionRequiredOutcomeSerializer,
     TransitionSerializer,
+    WithdrawOfferInputSerializer,
 )
 from world.stories.services.dashboards import STALE_STORY_DAYS, compute_story_status
 from world.stories.services.participation import create_story_participation
@@ -361,6 +376,41 @@ class StoryViewSet(viewsets.ModelViewSet):
         story = self.get_object()
         updated = detach_story_from_table(story=story)
         return Response(StoryDetailSerializer(updated, context={"request": request}).data)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="offer-to-gm",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def offer_to_gm(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/stories/{id}/offer-to-gm/ — player offers their CHARACTER-scope story to a GM.
+
+        Body: { gm_profile_id: number, message?: string }
+
+        The serializer enforces:
+        - story.scope == CHARACTER
+        - story.primary_table is None
+        - story.character_sheet.character.db_account == request.user (or staff)
+
+        Returns 201 with the StoryGMOffer on success.
+        """
+        from world.stories.services.tables import offer_story_to_gm  # noqa: PLC0415
+
+        story = self.get_object()
+        ser = OfferStoryToGMInputSerializer(
+            data=request.data, context={"story": story, "request": request}
+        )
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+
+        offer = offer_story_to_gm(
+            story=story,
+            offered_to=data["offered_to"],
+            offered_by_account=cast(AccountDB, request.user),
+            message=data["message"],
+        )
+        return Response(StoryGMOfferSerializer(offer).data, status=status.HTTP_201_CREATED)
 
 
 class StoryParticipationViewSet(viewsets.ModelViewSet):
@@ -1092,6 +1142,114 @@ class BeatViewSet(viewsets.ModelViewSet):
             AggregateBeatContributionSerializer(contribution).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+# ---------------------------------------------------------------------------
+# Wave 3: StoryGMOffer ViewSet
+# ---------------------------------------------------------------------------
+
+
+class StoryGMOfferViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for StoryGMOffer.
+
+    Read: ReadOnlyModelViewSet (list + retrieve).
+    State transitions: custom @action endpoints:
+      POST /api/story-gm-offers/{id}/accept/   — accept_offer (GM)
+      POST /api/story-gm-offers/{id}/decline/  — decline_offer (GM)
+      POST /api/story-gm-offers/{id}/withdraw/ — withdraw_offer (player)
+
+    Queryset scoping:
+      - Staff: all offers.
+      - GM: offers where offered_to.account == user.
+      - Player: offers where offered_by_account == user.
+    """
+
+    serializer_class = StoryGMOfferSerializer
+    permission_classes = [IsStoryGMOfferParticipantOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = StoryGMOfferFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["created_at", "updated_at", "status"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self) -> models.QuerySet[StoryGMOffer]:
+        user = self.request.user
+        if not user.is_authenticated:
+            return StoryGMOffer.objects.none()
+        if user.is_staff:
+            return StoryGMOffer.objects.all()
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        try:
+            gm_profile = user.gm_profile
+            gm_q = models.Q(offered_to=gm_profile)
+        except GMProfile.DoesNotExist:
+            gm_q = models.Q()
+        return StoryGMOffer.objects.filter(models.Q(offered_by_account=user) | gm_q).distinct()
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="accept",
+        permission_classes=[IsOfferRecipientGMOrStaff],
+    )
+    def accept(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/story-gm-offers/{id}/accept/ — GM accepts the offer.
+
+        Body: { response_note?: string }
+
+        Assigns story to the GM's first ACTIVE table. Returns 200 with the
+        updated StoryGMOffer.
+        """
+        from world.stories.services.tables import accept_story_offer  # noqa: PLC0415
+
+        offer = self.get_object()
+        ser = AcceptOfferInputSerializer(data=request.data, context={"offer": offer})
+        ser.is_valid(raise_exception=True)
+        updated = accept_story_offer(offer=offer, response_note=ser.validated_data["response_note"])
+        return Response(StoryGMOfferSerializer(updated).data, status=status.HTTP_200_OK)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="decline",
+        permission_classes=[IsOfferRecipientGMOrStaff],
+    )
+    def decline(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/story-gm-offers/{id}/decline/ — GM declines the offer.
+
+        Body: { response_note?: string }
+
+        Story remains detached. Returns 200 with the updated StoryGMOffer.
+        """
+        from world.stories.services.tables import decline_story_offer  # noqa: PLC0415
+
+        offer = self.get_object()
+        ser = DeclineOfferInputSerializer(data=request.data, context={"offer": offer})
+        ser.is_valid(raise_exception=True)
+        updated = decline_story_offer(
+            offer=offer, response_note=ser.validated_data["response_note"]
+        )
+        return Response(StoryGMOfferSerializer(updated).data, status=status.HTTP_200_OK)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="withdraw",
+        permission_classes=[IsOfferOffererOrStaff],
+    )
+    def withdraw(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/story-gm-offers/{id}/withdraw/ — player rescinds the offer.
+
+        No body required. Returns 200 with the updated StoryGMOffer.
+        """
+        from world.stories.services.tables import withdraw_story_offer  # noqa: PLC0415
+
+        offer = self.get_object()
+        ser = WithdrawOfferInputSerializer(data=request.data, context={"offer": offer})
+        ser.is_valid(raise_exception=True)
+        updated = withdraw_story_offer(offer=offer)
+        return Response(StoryGMOfferSerializer(updated).data, status=status.HTTP_200_OK)
 
 
 # ---------------------------------------------------------------------------

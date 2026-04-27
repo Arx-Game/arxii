@@ -17,6 +17,7 @@ from world.stories.models import (
     SessionRequest,
     Story,
     StoryFeedback,
+    StoryGMOffer,
     StoryParticipation,
     Transition,
     TransitionRequiredOutcome,
@@ -408,6 +409,24 @@ class TransitionRequiredOutcomeFilter(django_filters.FilterSet):
     class Meta:
         model = TransitionRequiredOutcome
         fields = ["transition", "beat"]
+
+
+class StoryGMOfferFilter(django_filters.FilterSet):
+    """Filter for StoryGMOffer model."""
+
+    story = django_filters.NumberFilter(field_name="story_id")
+    offered_to = django_filters.NumberFilter(field_name="offered_to_id")
+    offered_by_account = django_filters.NumberFilter(field_name="offered_by_account_id")
+    status = django_filters.CharFilter(field_name="status")
+
+    created_after = django_filters.DateTimeFilter(
+        field_name="created_at",
+        lookup_expr="gte",
+    )
+
+    class Meta:
+        model = StoryGMOffer
+        fields = ["story", "offered_to", "offered_by_account", "status"]
 
 
 class SessionRequestFilter(django_filters.FilterSet):
