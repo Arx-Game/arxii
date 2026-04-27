@@ -43,6 +43,9 @@ class StoryFilter(django_filters.FilterSet):
         label="Requires Trust Category",
     )
 
+    # Primary table filtering — used by the Tables frontend to show stories at a table
+    primary_table = django_filters.NumberFilter(field_name="primary_table_id")
+
     # Date range filtering
     created_after = django_filters.DateTimeFilter(
         field_name="created_at",

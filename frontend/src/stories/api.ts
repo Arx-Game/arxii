@@ -105,6 +105,7 @@ export interface ListStoriesParams {
   privacy?: string;
   search?: string;
   ordering?: string;
+  primary_table?: number;
   page?: number;
   page_size?: number;
 }
