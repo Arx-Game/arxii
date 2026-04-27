@@ -314,6 +314,41 @@ export interface EpisodeCreateBody {
 }
 
 // ---------------------------------------------------------------------------
+// Beat write-side body types — omit read-only server-derived fields.
+//
+// Phase 4 used Partial<Beat> for createBeat/updateBeat payloads; Beat
+// includes read-only fields (id, episode_title, chapter_title, story_id,
+// story_title, created_at, updated_at, can_mark) that must not be sent on
+// write requests. These explicit types surface intent and prevent callers
+// from accidentally including server-derived data.
+// ---------------------------------------------------------------------------
+
+export interface BeatCreateBody {
+  episode: number;
+  predicate_type?: BeatPredicateType;
+  visibility?: BeatVisibility;
+  internal_description: string;
+  player_hint?: string;
+  player_resolution_text?: string;
+  order?: number;
+  agm_eligible?: boolean;
+  deadline?: string | null;
+
+  // Predicate-type-specific config (exactly one set applies per predicate_type):
+  required_level?: number | null; // CHARACTER_LEVEL_AT_LEAST
+  required_achievement?: number | null; // ACHIEVEMENT_HELD
+  required_condition_template?: number | null; // CONDITION_HELD
+  required_codex_entry?: number | null; // CODEX_ENTRY_UNLOCKED
+  referenced_story?: number | null; // STORY_AT_MILESTONE
+  referenced_milestone_type?: ReferencedMilestoneType; // STORY_AT_MILESTONE
+  referenced_chapter?: number | null; // STORY_AT_MILESTONE/chapter_reached
+  referenced_episode?: number | null; // STORY_AT_MILESTONE/episode_reached
+  required_points?: number | null; // AGGREGATE_THRESHOLD
+}
+
+export type BeatUpdateBody = Partial<BeatCreateBody>;
+
+// ---------------------------------------------------------------------------
 // Story log types — hand-defined from StoryLogSerializer in serializers.py.
 // The generated type for stories_log_retrieve incorrectly returns StoryDetail;
 // the actual response is { entries: StoryLogEntry[] }.

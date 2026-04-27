@@ -21,6 +21,8 @@ import type {
   AssistantGMClaim,
   Beat,
   BeatCompletion,
+  BeatCreateBody,
+  BeatUpdateBody,
   Chapter,
   ChapterCreateBody,
   ChapterList,
@@ -300,7 +302,7 @@ export async function getBeat(id: number): Promise<Beat> {
   return res.json() as Promise<Beat>;
 }
 
-export async function createBeat(data: Partial<Beat>): Promise<Beat> {
+export async function createBeat(data: BeatCreateBody): Promise<Beat> {
   const res = await apiFetch('/api/beats/', {
     method: 'POST',
     headers: jsonHeaders(),
@@ -310,7 +312,7 @@ export async function createBeat(data: Partial<Beat>): Promise<Beat> {
   return res.json() as Promise<Beat>;
 }
 
-export async function updateBeat(id: number, data: Partial<Beat>): Promise<Beat> {
+export async function updateBeat(id: number, data: BeatUpdateBody): Promise<Beat> {
   const res = await apiFetch(`/api/beats/${id}/`, {
     method: 'PATCH',
     headers: jsonHeaders(),
