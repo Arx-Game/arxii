@@ -134,6 +134,16 @@ class StoryViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Story model.
     Provides CRUD operations with proper permissions and filtering.
+
+    Queryset scoping (Phase 5 Task 1.3):
+    - Staff: all stories.
+    - GM (table owner): all stories at their tables PLUS all owned stories.
+    - Authenticated user: stories they own, stories they actively participate in,
+      and all GLOBAL-scope stories (publicly browsable).
+    - Unauthenticated: none (permission class rejects).
+
+    GROUP-scope stories are visible if the user is an active GMTableMember at the
+    story's primary_table AND has an active StoryParticipation.
     """
 
     queryset = Story.objects.all()
@@ -148,6 +158,67 @@ class StoryViewSet(viewsets.ModelViewSet):
     search_fields = ["title", "description"]
     ordering_fields = ["created_at", "updated_at", "title", "status"]
     ordering = ["-updated_at"]
+
+    def get_queryset(self) -> QuerySet[Story]:
+        """Return the scoped story queryset for the requesting user.
+
+        Visibility rules (Phase 5 Task 1.3):
+        - Staff: all stories.
+        - GM (table owner): all stories at tables they own.
+        - CHARACTER-scope: story.character_sheet.character.db_account == user.
+        - Participant: active StoryParticipation where character.db_account == user.
+        - Story owner (M2M): user in story.owners.
+        - GLOBAL scope: visible to all authenticated users (public metaplot).
+
+        The character_sheet path covers personal stories that have no StoryParticipation
+        (the story "belongs to" the player by virtue of their character sheet FK).
+        """
+        qs = super().get_queryset()
+        user = self.request.user
+
+        if not user.is_authenticated:
+            return qs.none()
+
+        if user.is_staff:
+            return qs
+
+        # GM: all stories at tables they own.
+        # gm_profile is a reverse OneToOne — not present for non-GM accounts.
+        gm_q = models.Q()
+        if hasattr(user, "gm_profile"):
+            gm_profile = user.gm_profile
+            gm_q = models.Q(primary_table__gm=gm_profile)
+
+        # Stories the user owns (by account M2M).
+        owned_q = models.Q(owners=user)
+
+        # CHARACTER-scope: story belongs to the user's character sheet.
+        # Chain: Story.character_sheet → CharacterSheet.character → ObjectDB.db_account
+        character_sheet_q = models.Q(
+            scope=StoryScope.CHARACTER,
+            character_sheet__character__db_account=user,
+        )
+
+        # Stories the user actively participates in (via ObjectDB → db_account).
+        participant_q = models.Q(
+            participants__character__db_account=user,
+            participants__is_active=True,
+        )
+
+        # GLOBAL-scope stories are publicly browsable by any authenticated user.
+        global_q = models.Q(scope=StoryScope.GLOBAL)
+
+        # PUBLIC-privacy stories are discoverable by any authenticated user — this
+        # is required to allow players to find and apply to participate in stories.
+        # The existing IsStoryOwnerOrStaff._can_read_story grants PUBLIC stories to
+        # all authenticated users; the queryset must match that intent.
+        from world.stories.types import StoryPrivacy  # noqa: PLC0415
+
+        public_privacy_q = models.Q(privacy=StoryPrivacy.PUBLIC)
+
+        return qs.filter(
+            gm_q | owned_q | character_sheet_q | participant_q | global_q | public_privacy_q
+        ).distinct()
 
     def get_serializer_class(self) -> type[BaseSerializer]:
         """Return appropriate serializer based on action"""

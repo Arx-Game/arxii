@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from world.gm.constants import GMApplicationStatus
+from world.gm.constants import GMApplicationStatus, GMTableViewerRole
 from world.gm.models import (
     GMApplication,
     GMProfile,
@@ -89,9 +89,19 @@ class GMProfileSerializer(serializers.ModelSerializer):
 
 
 class GMTableSerializer(serializers.ModelSerializer):
-    """Serializer for GM tables."""
+    """Serializer for GM tables.
+
+    Computed read-only fields:
+    - member_count: active memberships (left_at__isnull=True)
+    - story_count: stories with primary_table=this table
+    - viewer_role: "gm" / "staff" / "member" / "guest" / "none" derived from
+      request.user vs. table.gm.account and membership/participation lookups
+    """
 
     gm_username = serializers.CharField(source="gm.account.username", read_only=True)
+    member_count = serializers.SerializerMethodField()
+    story_count = serializers.SerializerMethodField()
+    viewer_role = serializers.SerializerMethodField()
 
     class Meta:
         model = GMTable
@@ -104,8 +114,62 @@ class GMTableSerializer(serializers.ModelSerializer):
             "status",
             "created_at",
             "archived_at",
+            "member_count",
+            "story_count",
+            "viewer_role",
         ]
-        read_only_fields = ["id", "gm_username", "created_at", "archived_at", "status"]
+        read_only_fields = [
+            "id",
+            "gm_username",
+            "created_at",
+            "archived_at",
+            "status",
+            "member_count",
+            "story_count",
+            "viewer_role",
+        ]
+
+    def get_member_count(self, table: GMTable) -> int:
+        return table.memberships.filter(left_at__isnull=True).count()
+
+    def get_story_count(self, table: GMTable) -> int:
+        return table.primary_stories.count()
+
+    def get_viewer_role(self, table: GMTable) -> str:
+        """Return the requesting user's role relative to this table.
+
+        Priority: gm > staff > member > guest > none.
+        "guest" means the user participates in a story at this table via
+        StoryParticipation but has no active GMTableMembership.
+        """
+        from world.stories.models import StoryParticipation  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return GMTableViewerRole.NONE
+        user = request.user
+        # GM owner of this table.
+        if table.gm.account_id == user.pk:
+            return GMTableViewerRole.GM
+        # Staff (but not the table's GM, already handled above).
+        if user.is_staff:
+            return GMTableViewerRole.STAFF
+        # Active table member via any persona.
+        # Chain: GMTableMembership.persona → Persona.character_sheet
+        #        → CharacterSheet.character (ObjectDB) → ObjectDB.db_account
+        if table.memberships.filter(
+            persona__character_sheet__character__db_account=user,
+            left_at__isnull=True,
+        ).exists():
+            return GMTableViewerRole.MEMBER
+        # Guest: participates in a story at this table but is not a member.
+        if StoryParticipation.objects.filter(
+            story__primary_table=table,
+            character__db_account=user,
+            is_active=True,
+        ).exists():
+            return GMTableViewerRole.GUEST
+        return GMTableViewerRole.NONE
 
 
 class GMTableMembershipSerializer(serializers.ModelSerializer):
