@@ -125,7 +125,7 @@ class GainSource(models.TextChoices):
     POSE_ENDORSEMENT = "POSE_ENDORSEMENT", "Pose endorsement"
     SCENE_ENTRY = "SCENE_ENTRY", "Scene entry endorsement"
     ROOM_RESIDENCE = "ROOM_RESIDENCE", "Room residence trickle"
-    OUTFIT_ITEM = "OUTFIT_ITEM", "Outfit item trickle (reserved — stubbed)"
+    OUTFIT_TRICKLE = "OUTFIT_TRICKLE", "Outfit trickle"
     STAFF_GRANT = "STAFF_GRANT", "Staff grant"
 
 
