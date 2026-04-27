@@ -10,6 +10,7 @@ import { Badge } from './ui/badge';
 import { navigationMenuTriggerStyle } from '@/components/ui/navigation-menu-trigger-style';
 import { useAppSelector } from '@/store/hooks';
 import { useOpenSubmissionCount } from '@/staff/queries';
+import { UnreadNarrativeBadge } from '@/narrative/components/UnreadNarrativeBadge';
 
 const links = [
   { to: '/game', label: 'Play' },
@@ -20,6 +21,9 @@ const links = [
   { to: '/news', label: 'News' },
   { to: '/community', label: 'Community' },
 ];
+
+/** Nav links visible only to authenticated users (account != null). */
+const authLinks = [{ to: '/stories/my-active', label: 'My Stories' }];
 
 export function Header() {
   const account = useAppSelector((state) => state.auth.account);
@@ -39,6 +43,14 @@ export function Header() {
                 </Link>
               </NavigationMenuItem>
             ))}
+            {account &&
+              authLinks.map((link) => (
+                <NavigationMenuItem key={link.to}>
+                  <Link to={link.to} className={navigationMenuTriggerStyle()}>
+                    {link.label}
+                  </Link>
+                </NavigationMenuItem>
+              ))}
             {isStaff && (
               <NavigationMenuItem>
                 <Link to="/staff" className={navigationMenuTriggerStyle()}>
@@ -51,8 +63,18 @@ export function Header() {
                 </Link>
               </NavigationMenuItem>
             )}
+            {isStaff && (
+              <NavigationMenuItem>
+                <Link to="/stories/staff-workload" className={navigationMenuTriggerStyle()}>
+                  Story Workload
+                </Link>
+              </NavigationMenuItem>
+            )}
             <NavigationMenuItem>
               <ModeToggle />
+            </NavigationMenuItem>
+            <NavigationMenuItem>
+              <UnreadNarrativeBadge />
             </NavigationMenuItem>
             <NavigationMenuItem>
               <UserNav />
@@ -74,12 +96,24 @@ export function Header() {
                     {link.label}
                   </Link>
                 ))}
+                {account &&
+                  authLinks.map((link) => (
+                    <Link key={link.to} to={link.to} className="text-lg">
+                      {link.label}
+                    </Link>
+                  ))}
                 {isStaff && (
                   <Link to="/staff" className="text-lg">
                     Staff {pendingCount && pendingCount > 0 ? `(${pendingCount})` : ''}
                   </Link>
                 )}
+                {isStaff && (
+                  <Link to="/stories/staff-workload" className="text-lg">
+                    Story Workload
+                  </Link>
+                )}
                 <ModeToggle />
+                <UnreadNarrativeBadge />
                 <UserNav />
               </nav>
             </SheetContent>

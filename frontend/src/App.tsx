@@ -1,8 +1,10 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { GuestOnlyRoute } from './components/GuestOnlyRoute';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { StaffRoute } from './components/StaffRoute';
+import { Skeleton } from './components/ui/skeleton';
 import { HomePage } from './evennia_replacements/HomePage';
 import { GamePage } from './game/GamePage';
 import { LoginPage } from './evennia_replacements/LoginPage';
@@ -43,6 +45,49 @@ import { StaffAccountHistoryPage } from './staff/pages/StaffAccountHistoryPage';
 import { StaffGMApplicationsPage } from './staff/pages/StaffGMApplicationsPage';
 import { StaffGMApplicationDetailPage } from './staff/pages/StaffGMApplicationDetailPage';
 import { RouletteModal } from './components/roulette/RouletteModal';
+
+// ---------------------------------------------------------------------------
+// Lazy-loaded stories pages (React.lazy for route-level code splitting)
+// ---------------------------------------------------------------------------
+
+const MyActiveStoriesPage = lazy(() =>
+  import('@/stories/pages/MyActiveStoriesPage').then((m) => ({ default: m.MyActiveStoriesPage }))
+);
+const StoryDetailPage = lazy(() =>
+  import('@/stories/pages/StoryDetailPage').then((m) => ({ default: m.StoryDetailPage }))
+);
+const GMQueuePage = lazy(() =>
+  import('@/stories/pages/GMQueuePage').then((m) => ({ default: m.GMQueuePage }))
+);
+const AGMOpportunitiesPage = lazy(() =>
+  import('@/stories/pages/AGMOpportunitiesPage').then((m) => ({
+    default: m.AGMOpportunitiesPage,
+  }))
+);
+const MyAGMClaimsPage = lazy(() =>
+  import('@/stories/pages/MyAGMClaimsPage').then((m) => ({ default: m.MyAGMClaimsPage }))
+);
+const StaffWorkloadPage = lazy(() =>
+  import('@/stories/pages/StaffWorkloadPage').then((m) => ({ default: m.StaffWorkloadPage }))
+);
+const StoryAuthorPage = lazy(() =>
+  import('@/stories/pages/StoryAuthorPage').then((m) => ({ default: m.StoryAuthorPage }))
+);
+
+// ---------------------------------------------------------------------------
+// Suspense fallback — shown while lazy stories chunks load
+// ---------------------------------------------------------------------------
+
+function PageLoadingFallback() {
+  return (
+    <div className="container mx-auto space-y-4 px-4 py-8">
+      <Skeleton className="h-8 w-48" />
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-3/4" />
+      <Skeleton className="h-4 w-1/2" />
+    </div>
+  );
+}
 
 function App() {
   return (
@@ -229,6 +274,100 @@ function App() {
           }
         />
         <Route path="/characters/create/application" element={<CharacterCreationPage />} />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Stories (Phase 4) — lazy-loaded, route-level code splitting         */}
+        {/* ------------------------------------------------------------------ */}
+        <Route
+          path="/stories"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <Navigate to="my-active" replace />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/stories/my-active"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <MyActiveStoriesPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/stories/gm-queue"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <GMQueuePage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/stories/agm-opportunities"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <AGMOpportunitiesPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/stories/my-claims"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <MyAGMClaimsPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/stories/staff-workload"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <StaffRoute>
+                <StaffWorkloadPage />
+              </StaffRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/stories/author"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <StoryAuthorPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/stories/author/:storyId"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <StoryAuthorPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        {/* /stories/:id must come after the named /stories/* paths */}
+        <Route
+          path="/stories/:id"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <StoryDetailPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
       <RouletteModal />

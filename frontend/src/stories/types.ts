@@ -1,0 +1,339 @@
+/**
+ * Stories TypeScript types
+ *
+ * Re-exports from frontend/src/generated/api.d.ts with local aliases,
+ * plus hand-defined response shapes for the three dashboard APIView
+ * endpoints (which spectacular cannot introspect).
+ */
+
+import type { components } from '@/generated/api';
+
+// ---------------------------------------------------------------------------
+// ViewSet model schemas — from generated types
+// ---------------------------------------------------------------------------
+
+// Stories have two serializer shapes: StoryList (lightweight) and StoryDetail (full).
+// We export both and alias the detail shape as Story for most usage.
+export type StoryList = components['schemas']['StoryList'];
+export type StoryDetail = components['schemas']['StoryDetail'];
+export type Story = StoryDetail;
+
+// Chapters have three shapes: ChapterList, ChapterDetail, ChapterCreate.
+export type ChapterList = components['schemas']['ChapterList'];
+export type ChapterDetail = components['schemas']['ChapterDetail'];
+export type ChapterCreate = components['schemas']['ChapterCreate'];
+export type Chapter = ChapterDetail;
+
+// Episodes have three shapes: EpisodeList, EpisodeDetail, EpisodeCreate.
+export type EpisodeList = components['schemas']['EpisodeList'];
+export type EpisodeDetail = components['schemas']['EpisodeDetail'];
+export type EpisodeCreate = components['schemas']['EpisodeCreate'];
+export type Episode = EpisodeDetail;
+
+// Beat — single shape with all Phase 2 predicate config fields plus the
+// Wave 7 read-context breadcrumb fields (episode_title, chapter_title,
+// story_id, story_title). The generated type now correctly includes these
+// as readonly non-nullable fields (verified in api.d.ts Beat schema).
+export type Beat = components['schemas']['Beat'];
+
+// Progress — CHARACTER scope has no generated type (no ViewSet); only GROUP and GLOBAL do.
+export type GroupStoryProgress = components['schemas']['GroupStoryProgress'];
+export type GlobalStoryProgress = components['schemas']['GlobalStoryProgress'];
+
+// Aggregate beat contributions, claims, session requests.
+export type AggregateBeatContribution = components['schemas']['AggregateBeatContribution'];
+export type AssistantGMClaim = components['schemas']['AssistantGMClaim'];
+export type SessionRequest = components['schemas']['SessionRequest'];
+
+// EpisodeResolution and BeatCompletion exist as backend models with serializers
+// but spectacular doesn't generate them as named schemas — the generated types
+// incorrectly show EpisodeDetail / Beat as the response types for the resolve /
+// mark actions. We hand-define them to match the actual serializer fields
+// (EpisodeResolutionSerializer and BeatCompletionSerializer in serializers.py).
+export interface EpisodeResolution {
+  id: number;
+  episode: number;
+  character_sheet: number | null;
+  gm_table: number | null;
+  chosen_transition: number | null;
+  resolved_by: number | null;
+  era: number | null;
+  gm_notes: string;
+  resolved_at: string;
+}
+
+export interface BeatCompletion {
+  id: number;
+  beat: number;
+  character_sheet: number | null;
+  gm_table: number | null;
+  roster_entry: number | null;
+  outcome: BeatOutcome;
+  era: number | null;
+  gm_notes: string;
+  recorded_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Enum aliases — NonNullable because these are server-side required enums
+// ---------------------------------------------------------------------------
+
+export type BeatPredicateType = NonNullable<Beat['predicate_type']>;
+export type BeatOutcome = NonNullable<Beat['outcome']>;
+export type BeatVisibility = NonNullable<Beat['visibility']>;
+export type StoryScope = NonNullable<Story['scope']>;
+export type StoryStatus = NonNullable<Story['status']>;
+export type StoryPrivacy = NonNullable<Story['privacy']>;
+export type AssistantClaimStatus = NonNullable<AssistantGMClaim['status']>;
+export type SessionRequestStatus = NonNullable<SessionRequest['status']>;
+
+// ---------------------------------------------------------------------------
+// Union for scope-polymorphic helpers
+// (CHARACTER scope has no ViewSet; GROUP and GLOBAL do.)
+// ---------------------------------------------------------------------------
+export type AnyStoryProgress = GroupStoryProgress | GlobalStoryProgress;
+
+// ---------------------------------------------------------------------------
+// Paginated response wrappers
+// ---------------------------------------------------------------------------
+
+export interface PaginatedResponse<T> {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: T[];
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard response types — hand-defined from views.py
+//
+// MyActiveStoriesView (_serialize_progress_entry)
+// Returns three lists, each entry built from compute_story_status().
+// ---------------------------------------------------------------------------
+
+/**
+ * One active story entry from GET /api/stories/my-active/.
+ * Built by _serialize_progress_entry() in views.py.
+ */
+export interface MyActiveStoryEntry {
+  story_id: number;
+  story_title: string;
+  scope: StoryScope;
+  current_episode_id: number | null;
+  current_episode_title: string | null;
+  chapter_title: string | null;
+  /** StoryEpisodeStatus value e.g. "waiting_on_beats", "ready_to_resolve" */
+  status: string;
+  /** Human-readable label from StoryEpisodeStatus.label */
+  status_label: string;
+  chapter_order: number | null;
+  episode_order: number | null;
+  open_session_request_id: number | null;
+  scheduled_event_id: number | null;
+  scheduled_real_time: string | null;
+}
+
+export interface MyActiveStoriesResponse {
+  character_stories: MyActiveStoryEntry[];
+  group_stories: MyActiveStoryEntry[];
+  global_stories: MyActiveStoryEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// GMQueueView
+// Returns episodes_ready_to_run, pending_agm_claims, assigned_session_requests.
+// Built by _build_gm_queue_for_story() in views.py.
+// ---------------------------------------------------------------------------
+
+/** One episode ready to run, from GET /api/stories/gm-queue/. */
+export interface GMQueueEpisodeEntry {
+  story_id: number;
+  story_title: string;
+  scope: StoryScope;
+  episode_id: number;
+  episode_title: string;
+  progress_type: StoryScope;
+  progress_id: number;
+  eligible_transitions: Array<{ transition_id: number; mode: TransitionMode }>;
+  open_session_request_id: number | null;
+}
+
+/** One pending AGM claim summary, from GET /api/stories/gm-queue/. */
+export interface GMQueuePendingClaim {
+  claim_id: number;
+  beat_id: number;
+  beat_internal_description: string;
+  story_title: string;
+  assistant_gm_id: number;
+  requested_at: string;
+}
+
+/** One assigned session request summary, from GET /api/stories/gm-queue/. */
+export interface GMQueueAssignedRequest {
+  session_request_id: number;
+  episode_id: number;
+  episode_title: string;
+  story_title: string;
+  status: string;
+  event_id: number | null;
+}
+
+export interface GMQueueResponse {
+  episodes_ready_to_run: GMQueueEpisodeEntry[];
+  pending_agm_claims: GMQueuePendingClaim[];
+  assigned_session_requests: GMQueueAssignedRequest[];
+}
+
+// ---------------------------------------------------------------------------
+// StaffWorkloadView
+// Returns per_gm_queue_depth, stale_stories, stories_at_frontier, counts.
+// Built in StaffWorkloadView.get() in views.py.
+// ---------------------------------------------------------------------------
+
+export interface PerGMQueueEntry {
+  gm_profile_id: number;
+  gm_name: string;
+  episodes_ready: number;
+  pending_claims: number;
+}
+
+export interface StaleStoryEntry {
+  story_id: number;
+  story_title: string;
+  last_advanced_at: string;
+  days_stale: number;
+}
+
+export interface FrontierStoryEntry {
+  story_id: number;
+  story_title: string;
+  scope: StoryScope;
+}
+
+export interface StaffWorkloadResponse {
+  per_gm_queue_depth: PerGMQueueEntry[];
+  stale_stories: StaleStoryEntry[];
+  stories_at_frontier: FrontierStoryEntry[];
+  pending_agm_claims_count: number;
+  open_session_requests_count: number;
+  /** Map of scope → story count */
+  counts_by_scope: Record<string, number>;
+}
+
+// ---------------------------------------------------------------------------
+// Action endpoint request shapes (for API functions)
+// ---------------------------------------------------------------------------
+
+export interface ResolveEpisodeBody {
+  progress_id?: number | null;
+  chosen_transition?: number | null;
+  gm_notes?: string;
+}
+
+export interface MarkBeatBody {
+  outcome: BeatOutcome;
+  gm_notes?: string;
+  progress_id?: number | null;
+}
+
+export interface ContributeBeatBody {
+  character_sheet: number;
+  points: number;
+  source_note?: string;
+}
+
+export interface RequestClaimBody {
+  beat: number;
+  framing_note?: string;
+}
+
+export interface ApproveClaimBody {
+  framing_note?: string;
+}
+
+export interface RejectClaimBody {
+  note?: string;
+}
+
+export interface CreateEventBody {
+  name: string;
+  scheduled_real_time: string;
+  host_persona: number;
+  location_id: number;
+  description?: string;
+  is_public?: boolean;
+}
+
+// Transition, EpisodeProgressionRequirement, TransitionRequiredOutcome — Wave 9 author editor
+export type Transition = components['schemas']['Transition'];
+export type EpisodeProgressionRequirement = components['schemas']['EpisodeProgressionRequirement'];
+export type TransitionRequiredOutcome = components['schemas']['TransitionRequiredOutcome'];
+
+// Enum aliases for Wave 9
+export type TransitionMode = NonNullable<Transition['mode']>;
+export type StoryConnectionType = NonNullable<components['schemas']['ConnectionTypeEnum']>;
+export type ReferencedMilestoneType = NonNullable<
+  components['schemas']['ReferencedMilestoneTypeEnum']
+>;
+
+export interface StoryCreateBody {
+  title: string;
+  description: string;
+  privacy?: StoryPrivacy;
+  scope?: StoryScope;
+}
+
+export interface ChapterCreateBody {
+  story: number;
+  title: string;
+  description?: string;
+  order?: number;
+  is_active?: boolean;
+}
+
+export interface EpisodeCreateBody {
+  chapter: number;
+  title: string;
+  description?: string;
+  order?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Story log types — hand-defined from StoryLogSerializer in serializers.py.
+// The generated type for stories_log_retrieve incorrectly returns StoryDetail;
+// the actual response is { entries: StoryLogEntry[] }.
+// ---------------------------------------------------------------------------
+
+export interface StoryLogBeatEntry {
+  entry_type: 'beat_completion';
+  beat_id: number;
+  episode_id: number;
+  recorded_at: string;
+  outcome: BeatOutcome;
+  visibility: BeatVisibility;
+  player_hint: string | null;
+  player_resolution_text: string | null;
+  /** Non-null only for lead GM / staff viewers. */
+  internal_description: string | null;
+  gm_notes: string | null;
+}
+
+export interface StoryLogEpisodeEntry {
+  entry_type: 'episode_resolution';
+  episode_id: number;
+  episode_title: string;
+  resolved_at: string;
+  transition_id: number | null;
+  target_episode_id: number | null;
+  target_episode_title: string | null;
+  connection_type: string;
+  connection_summary: string;
+  /** Non-null only for lead GM / staff viewers. */
+  internal_notes: string | null;
+}
+
+export type StoryLogEntry = StoryLogBeatEntry | StoryLogEpisodeEntry;
+
+export interface StoryLogResponse {
+  entries: StoryLogEntry[];
+}
