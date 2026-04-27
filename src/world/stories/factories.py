@@ -35,6 +35,8 @@ from world.stories.models import (
     StoryGMOffer,
     StoryParticipation,
     StoryProgress,
+    TableBulletinPost,
+    TableBulletinReply,
     Transition,
     TransitionRequiredOutcome,
     TrustCategory,
@@ -513,6 +515,36 @@ class SessionRequestFactory(factory_django.DjangoModelFactory):
     assigned_gm = None
     initiated_by_account = None
     notes = ""
+
+
+# ---------------------------------------------------------------------------
+# Wave 10: Bulletin factories
+# ---------------------------------------------------------------------------
+
+
+class TableBulletinPostFactory(factory_django.DjangoModelFactory):
+    """Factory for TableBulletinPost — defaults to a table-wide post (story=None)."""
+
+    class Meta:
+        model = TableBulletinPost
+
+    table = factory.SubFactory("world.gm.factories.GMTableFactory")
+    story = None
+    author_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    title = factory.Faker("sentence", nb_words=5)
+    body = factory.Faker("paragraph", nb_sentences=3)
+    allow_replies = True
+
+
+class TableBulletinReplyFactory(factory_django.DjangoModelFactory):
+    """Factory for TableBulletinReply."""
+
+    class Meta:
+        model = TableBulletinReply
+
+    post = factory.SubFactory(TableBulletinPostFactory)
+    author_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    body = factory.Faker("paragraph", nb_sentences=2)
 
 
 # Convenience functions for common test scenarios

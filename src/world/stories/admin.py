@@ -22,6 +22,8 @@ from world.stories.models import (
     StoryParticipation,
     StoryProgress,
     StoryTrustRequirement,
+    TableBulletinPost,
+    TableBulletinReply,
     Transition,
     TransitionRequiredOutcome,
     TrustCategory,
@@ -510,3 +512,26 @@ class AssistantGMClaimAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("requested_at", "updated_at")
     raw_id_fields = ("beat", "assistant_gm", "approved_by")
+
+
+# ---------------------------------------------------------------------------
+# Wave 10: Bulletin admin
+# ---------------------------------------------------------------------------
+
+
+@admin.register(TableBulletinPost)
+class TableBulletinPostAdmin(admin.ModelAdmin):
+    list_display = ("title", "table", "story", "author_persona", "allow_replies", "created_at")
+    list_filter = ("allow_replies", "created_at")
+    search_fields = ("title", "body", "table__name")
+    readonly_fields = ("created_at", "updated_at")
+    raw_id_fields = ("table", "story", "author_persona")
+
+
+@admin.register(TableBulletinReply)
+class TableBulletinReplyAdmin(admin.ModelAdmin):
+    list_display = ("post", "author_persona", "created_at")
+    list_filter = ("created_at",)
+    search_fields = ("body", "post__title")
+    readonly_fields = ("created_at",)
+    raw_id_fields = ("post", "author_persona")
