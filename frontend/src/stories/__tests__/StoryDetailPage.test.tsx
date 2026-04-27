@@ -10,6 +10,24 @@ import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { StoryDetailPage } from '../pages/StoryDetailPage';
 
+// Mock narrative queries used by MuteStoryToggle
+vi.mock('../../narrative/queries', () => ({
+  useStoryMutes: vi.fn(() => ({
+    data: { count: 0, next: null, previous: null, results: [] },
+    isLoading: false,
+    isSuccess: true,
+    error: null,
+  })),
+  useMuteStory: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
+  useUnmuteStory: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
+}));
+
 const makeMutationIdle = () => ({
   mutate: vi.fn(),
   mutateAsync: vi.fn(),

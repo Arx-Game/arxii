@@ -165,6 +165,19 @@ export function useStoryList(params?: ListStoriesParams) {
   });
 }
 
+/**
+ * Browse all stories the current user can see (backend-scoped).
+ * Optionally filtered by scope. Used by BrowseStoriesPage.
+ */
+export function useBrowseStories(scope?: string) {
+  const params: ListStoriesParams = scope ? { scope } : {};
+  return useQuery({
+    queryKey: storiesKeys.storyList(params),
+    queryFn: () => api.listStories(params),
+    throwOnError: true,
+  });
+}
+
 export function useStory(id: number) {
   return useQuery({
     queryKey: storiesKeys.story(id),

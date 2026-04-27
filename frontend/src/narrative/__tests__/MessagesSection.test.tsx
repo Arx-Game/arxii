@@ -7,6 +7,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { MessagesSection } from '../components/MessagesSection';
@@ -23,7 +24,11 @@ function createWrapper() {
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   });
   return function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </QueryClientProvider>
+    );
   };
 }
 
@@ -165,5 +170,14 @@ describe('MessagesSection', () => {
     render(<MessagesSection />, { wrapper: createWrapper() });
 
     expect(screen.queryByRole('button', { name: /acknowledge/i })).not.toBeInTheDocument();
+  });
+
+  it('renders Manage muted stories link', () => {
+    setupMocks([]);
+    render(<MessagesSection />, { wrapper: createWrapper() });
+
+    const link = screen.getByTestId('manage-mutes-link');
+    expect(link).toBeInTheDocument();
+    expect(link).toHaveAttribute('href', '/profile/mute-settings');
   });
 });

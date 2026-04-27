@@ -3,14 +3,28 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { acknowledgeDelivery, broadcastGemit, getGemits, getMyMessages } from './api';
-import type { BroadcastGemitBody, GemitListParams, MyMessagesQueryParams } from './types';
+import {
+  acknowledgeDelivery,
+  broadcastGemit,
+  getGemits,
+  getMyMessages,
+  getStoryMutes,
+  muteStory,
+  unmuteStory,
+} from './api';
+import type {
+  BroadcastGemitBody,
+  GemitListParams,
+  MyMessagesQueryParams,
+  UserStoryMuteCreateBody,
+} from './types';
 
 export const narrativeKeys = {
   all: ['narrative'] as const,
   myMessages: (filters?: MyMessagesQueryParams) =>
     [...narrativeKeys.all, 'my-messages', filters] as const,
   gemits: (params?: GemitListParams) => [...narrativeKeys.all, 'gemits', params] as const,
+  storyMutes: () => [...narrativeKeys.all, 'story-mutes'] as const,
 };
 
 // Alias for the gemit list root — used by ChatWindow to invalidate on gemit push.
@@ -59,6 +73,38 @@ export function useBroadcastGemit() {
     mutationFn: (data: BroadcastGemitBody) => broadcastGemit(data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: gemitKeys.all });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// UserStoryMute hooks (Wave 9)
+// ---------------------------------------------------------------------------
+
+export function useStoryMutes() {
+  return useQuery({
+    queryKey: narrativeKeys.storyMutes(),
+    queryFn: getStoryMutes,
+    throwOnError: true,
+  });
+}
+
+export function useMuteStory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: UserStoryMuteCreateBody) => muteStory(data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: narrativeKeys.storyMutes() });
+    },
+  });
+}
+
+export function useUnmuteStory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (muteId: number) => unmuteStory(muteId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: narrativeKeys.storyMutes() });
     },
   });
 }

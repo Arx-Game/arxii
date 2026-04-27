@@ -22,6 +22,7 @@ import { StoryLog } from '../components/StoryLog';
 import { SessionRequestStatusCard } from '../components/SessionRequestStatusCard';
 import { ChangeMyGMDialog } from '../components/ChangeMyGMDialog';
 import { SendStoryOOCDialog } from '../components/SendStoryOOCDialog';
+import { MuteStoryToggle } from '../../narrative/components/MuteStoryToggle';
 
 // ---------------------------------------------------------------------------
 // Loading skeleton for the header area
@@ -117,6 +118,7 @@ function StoryDetailInner({ storyId }: StoryDetailInnerProps) {
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold">{story.title}</h1>
           <ScopeBadge scope={story.scope ?? 'character'} />
+          <MuteStoryToggle storyId={storyId} />
         </div>
 
         {breadcrumb && <p className="text-sm text-muted-foreground">{breadcrumb}</p>}

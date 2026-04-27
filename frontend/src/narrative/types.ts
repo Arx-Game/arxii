@@ -56,3 +56,27 @@ export interface PaginatedGemits {
   previous: string | null;
   results: Gemit[];
 }
+
+// ---------------------------------------------------------------------------
+// UserStoryMute — hand-defined from UserStoryMuteSerializer in
+// world/narrative/serializers.py. Fields: id, story, muted_at.
+// Not yet in the generated api.d.ts schema.
+// ---------------------------------------------------------------------------
+
+export interface UserStoryMute {
+  id: number;
+  /** PK of the related Story. */
+  story: number;
+  muted_at: string;
+}
+
+export interface UserStoryMuteCreateBody {
+  story: number;
+}
+
+export interface PaginatedMutes {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: UserStoryMute[];
+}

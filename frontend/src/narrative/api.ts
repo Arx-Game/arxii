@@ -16,6 +16,9 @@ import type {
   NarrativeMessageDelivery,
   PaginatedDeliveries,
   PaginatedGemits,
+  PaginatedMutes,
+  UserStoryMute,
+  UserStoryMuteCreateBody,
 } from './types';
 
 const BASE_URL = '/api/narrative';
@@ -66,6 +69,52 @@ export async function getGemits(params?: GemitListParams): Promise<PaginatedGemi
     throw new Error('Failed to load gemits');
   }
   return res.json() as Promise<PaginatedGemits>;
+}
+
+// ---------------------------------------------------------------------------
+// UserStoryMute endpoints (Wave 9)
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/narrative/story-mutes/
+ * Returns the current account's list of muted stories.
+ */
+export async function getStoryMutes(): Promise<PaginatedMutes> {
+  const res = await apiFetch(`${BASE_URL}/story-mutes/`);
+  if (!res.ok) {
+    throw new Error('Failed to load story mutes');
+  }
+  return res.json() as Promise<PaginatedMutes>;
+}
+
+/**
+ * POST /api/narrative/story-mutes/
+ * Body: { story: <id> }
+ * Returns 201 with the created UserStoryMute.
+ */
+export async function muteStory(data: UserStoryMuteCreateBody): Promise<UserStoryMute> {
+  const res = await apiFetch(`${BASE_URL}/story-mutes/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = new Error('Failed to mute story') as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return res.json() as Promise<UserStoryMute>;
+}
+
+/**
+ * DELETE /api/narrative/story-mutes/{id}/
+ * Removes the mute. Returns 204 No Content on success.
+ */
+export async function unmuteStory(muteId: number): Promise<void> {
+  const res = await apiFetch(`${BASE_URL}/story-mutes/${muteId}/`, { method: 'DELETE' });
+  if (!res.ok) {
+    throw new Error(`Failed to unmute story (mute id ${muteId})`);
+  }
 }
 
 /**
