@@ -2,7 +2,7 @@
 
 import factory
 
-from world.items.models import InteractionType, ItemInstance, ItemTemplate, QualityTier
+from world.items.models import InteractionType, ItemFacet, ItemInstance, ItemTemplate, QualityTier
 
 
 class QualityTierFactory(factory.django.DjangoModelFactory):
@@ -57,3 +57,15 @@ class ItemInstanceFactory(factory.django.DjangoModelFactory):
     custom_name = ""
     custom_description = ""
     quantity = 1
+
+
+class ItemFacetFactory(factory.django.DjangoModelFactory):
+    """Factory for ItemFacet."""
+
+    class Meta:
+        model = ItemFacet
+        django_get_or_create = ("item_instance", "facet")
+
+    item_instance = factory.SubFactory(ItemInstanceFactory)
+    facet = factory.SubFactory("world.magic.factories.FacetFactory")
+    attachment_quality_tier = factory.SubFactory(QualityTierFactory)

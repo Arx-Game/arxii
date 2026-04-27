@@ -376,3 +376,45 @@ class CurrencyBalanceTests(TestCase):
         CurrencyBalance.objects.create(character=self.character)
         with self.assertRaises(IntegrityError):
             CurrencyBalance.objects.create(character=self.character)
+
+
+class ItemFacetTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from world.items.factories import (
+            ItemInstanceFactory,
+            ItemTemplateFactory,
+            QualityTierFactory,
+        )
+        from world.magic.factories import FacetFactory
+
+        cls.template = ItemTemplateFactory(facet_capacity=2)
+        cls.instance = ItemInstanceFactory(template=cls.template)
+        cls.facet = FacetFactory(name="Spider")
+        cls.attach_q = QualityTierFactory(name="Fine attach")
+
+    def test_create_item_facet(self):
+        from world.items.models import ItemFacet
+
+        row = ItemFacet.objects.create(
+            item_instance=self.instance,
+            facet=self.facet,
+            attachment_quality_tier=self.attach_q,
+        )
+        self.assertEqual(row.item_instance, self.instance)
+        self.assertEqual(row.facet, self.facet)
+
+    def test_unique_per_instance(self):
+        from world.items.models import ItemFacet
+
+        ItemFacet.objects.create(
+            item_instance=self.instance,
+            facet=self.facet,
+            attachment_quality_tier=self.attach_q,
+        )
+        with self.assertRaises(IntegrityError):
+            ItemFacet.objects.create(
+                item_instance=self.instance,
+                facet=self.facet,
+                attachment_quality_tier=self.attach_q,
+            )

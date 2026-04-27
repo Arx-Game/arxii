@@ -542,3 +542,50 @@ class CurrencyBalance(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.character}: {self.gold} gold"
+
+
+class ItemFacet(SharedMemoryModel):
+    """A single facet attached to an item instance.
+
+    Spec D §4.2. Items carry facets either at craft time or via post-craft
+    decoration. Each row carries its own attachment quality, independent of
+    the item's overall quality tier. Threads anchor on the global Facet
+    (not on ItemFacet); when computing wearer bonuses, the pipeline walks
+    worn items → ItemFacet rows → matches against the wearer's Threads on
+    those Facets.
+    """
+
+    item_instance = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.CASCADE,
+        related_name="item_facets",
+    )
+    facet = models.ForeignKey(
+        "magic.Facet",
+        on_delete=models.PROTECT,
+        related_name="item_attachments",
+    )
+    applied_by_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="facet_applications",
+    )
+    attachment_quality_tier = models.ForeignKey(
+        "items.QualityTier",
+        on_delete=models.PROTECT,
+        related_name="facet_attachments",
+    )
+    applied_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_instance", "facet"],
+                name="items_unique_itemfacet_per_instance",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.item_instance} ← {self.facet}"
