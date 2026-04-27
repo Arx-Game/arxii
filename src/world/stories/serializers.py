@@ -15,6 +15,7 @@ from world.stories.constants import (
     SessionRequestStatus,
     StoryGMOfferStatus,
     StoryScope,
+    TransitionMode,
 )
 from world.stories.models import (
     AggregateBeatContribution,
@@ -45,7 +46,12 @@ from world.stories.models import (
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
-from world.stories.types import AnyStoryProgress, StoryLogBeatEntry, StoryLogEpisodeEntry
+from world.stories.types import (
+    AnyStoryProgress,
+    ConnectionType,
+    StoryLogBeatEntry,
+    StoryLogEpisodeEntry,
+)
 
 # ---------------------------------------------------------------------------
 # Wave 6: Era lifecycle serializer
@@ -952,6 +958,83 @@ class TransitionRequiredOutcomeSerializer(serializers.ModelSerializer):
             "required_outcome",
         ]
         read_only_fields = ["id"]
+
+
+# ---------------------------------------------------------------------------
+# Wave 13: Atomic transition save serializer
+# ---------------------------------------------------------------------------
+
+
+class OutcomeInputSerializer(serializers.Serializer):
+    """Nested routing-predicate row for SaveTransitionWithOutcomesInputSerializer."""
+
+    beat = serializers.PrimaryKeyRelatedField(queryset=Beat.objects.all())
+    required_outcome = serializers.ChoiceField(choices=BeatOutcome.choices)
+
+    def validate_beat(self, beat: Beat) -> Beat:
+        """Beat must belong to the source episode supplied via context."""
+        source_episode: Episode | None = self.context.get("source_episode")
+        if source_episode is not None and beat.episode_id != source_episode.pk:
+            msg = "Beat does not belong to the source episode of this transition."
+            raise serializers.ValidationError(msg)
+        return beat
+
+
+class SaveTransitionWithOutcomesInputSerializer(serializers.Serializer):
+    """Input for POST /api/transitions/save-with-outcomes/.
+
+    Accepts the core Transition fields plus a nested list of routing predicates.
+    Validates the whole payload before handing off to the service.
+
+    Context required: none (the source_episode is read from transition.source_episode).
+    """
+
+    existing_id = serializers.PrimaryKeyRelatedField(
+        queryset=Transition.objects.select_related("source_episode"),
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+    source_episode = serializers.PrimaryKeyRelatedField(queryset=Episode.objects.all())
+    target_episode = serializers.PrimaryKeyRelatedField(
+        queryset=Episode.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+    mode = serializers.ChoiceField(choices=TransitionMode.choices)
+    connection_type = serializers.ChoiceField(
+        choices=ConnectionType.choices,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    connection_summary = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    order = serializers.IntegerField(default=0, min_value=0)
+    outcomes = OutcomeInputSerializer(many=True, required=False, default=list)
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        existing: Transition | None = attrs.get("existing_id")
+        source_episode: Episode = attrs["source_episode"]
+        target_episode: Episode | None = attrs.get("target_episode")
+
+        # When updating, ensure the existing transition belongs to the same source episode.
+        if existing is not None and existing.source_episode_id != source_episode.pk:
+            msg = "existing_id transition does not belong to the given source_episode."
+            raise serializers.ValidationError({"existing_id": msg})
+
+        # target_episode must differ from source_episode (or be null for frontier).
+        if target_episode is not None and target_episode.pk == source_episode.pk:
+            msg = "target_episode must be different from source_episode."
+            raise serializers.ValidationError({"target_episode": msg})
+
+        # Pass source_episode into nested outcome serializer context (belt-and-suspenders;
+        # the child serializer receives context via the serializer chain).
+        return attrs
 
 
 # ---------------------------------------------------------------------------

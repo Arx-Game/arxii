@@ -685,6 +685,46 @@ export async function deleteTransition(id: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Wave 13: Atomic save-with-outcomes (replaces multi-roundtrip create)
+// ---------------------------------------------------------------------------
+
+export interface OutcomeInputBody {
+  beat: number;
+  required_outcome: string;
+}
+
+export interface SaveTransitionWithOutcomesBody {
+  source_episode: number;
+  target_episode: number | null;
+  mode: string;
+  connection_type: string;
+  connection_summary: string;
+  order: number;
+  outcomes: OutcomeInputBody[];
+  /** Omit or pass null for create; pass the existing Transition PK for update. */
+  existing_id?: number | null;
+}
+
+export async function saveTransitionWithOutcomes(
+  body: SaveTransitionWithOutcomesBody
+): Promise<Transition> {
+  const res = await apiFetch('/api/transitions/save-with-outcomes/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    // Preserve the response for the caller to inspect field errors.
+    const err = new Error('Failed to save transition with outcomes') as Error & {
+      response?: Response;
+    };
+    err.response = res;
+    throw err;
+  }
+  return res.json() as Promise<Transition>;
+}
+
+// ---------------------------------------------------------------------------
 // EpisodeProgressionRequirement CRUD (Wave 9 author editor)
 // ---------------------------------------------------------------------------
 

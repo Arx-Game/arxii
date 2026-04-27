@@ -22,6 +22,7 @@ import type {
   ListStoriesParams,
   ListTransitionRequiredOutcomesParams,
   ListTransitionsParams,
+  SaveTransitionWithOutcomesBody,
   SendStoryOOCBody,
 } from './api';
 import type {
@@ -695,6 +696,18 @@ export function useDeleteTransition() {
     mutationFn: (id: number) => api.deleteTransition(id),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: storiesKeys.transitionList() });
+    },
+  });
+}
+
+// Wave 13: atomic save-with-outcomes mutation
+export function useSaveTransitionWithOutcomes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SaveTransitionWithOutcomesBody) => api.saveTransitionWithOutcomes(body),
+    onSuccess: (transition) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.transitionList() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.transition(transition.id) });
     },
   });
 }

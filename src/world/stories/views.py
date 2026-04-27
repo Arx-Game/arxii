@@ -141,6 +141,7 @@ from world.stories.serializers import (
     RequestClaimInputSerializer,
     ResolveEpisodeInputSerializer,
     ResolveSessionRequestInputSerializer,
+    SaveTransitionWithOutcomesInputSerializer,
     SessionRequestSerializer,
     StoryCreateSerializer,
     StoryDetailSerializer,
@@ -162,6 +163,7 @@ from world.stories.services.dashboards import STALE_STORY_DAYS, compute_story_st
 from world.stories.services.era import advance_era, archive_era
 from world.stories.services.participation import create_story_participation
 from world.stories.services.progress import get_active_progress_for_story
+from world.stories.services.save_transition import OutcomeInput, save_transition_with_outcomes
 from world.stories.services.story_log import serialize_story_log
 from world.stories.types import AnyStoryProgress
 
@@ -1395,6 +1397,92 @@ class TransitionViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     ordering_fields = ["order", "created_at"]
     ordering = ["source_episode", "order"]
+
+    @action(
+        detail=False,
+        methods=[HTTPMethod.POST],
+        url_path="save-with-outcomes",
+        permission_classes=[IsLeadGMOnTransitionStoryOrStaff],
+    )
+    def save_with_outcomes(self, request: Request) -> Response:
+        """POST /api/transitions/save-with-outcomes/
+
+        Atomically create or update a Transition and replace its routing
+        predicate (TransitionRequiredOutcome) rows in a single transaction.
+
+        Replaces the Phase 4 multi-roundtrip flow:
+            POST /api/transitions/  → then N × POST /api/transition-required-outcomes/
+
+        Body::
+
+            {
+                "source_episode": <int>,
+                "target_episode": <int | null>,
+                "mode": "auto" | "gm_choice",
+                "connection_type": "" | "therefore" | "but",
+                "connection_summary": "<str>",
+                "order": <int>,
+                "outcomes": [{"beat": <int>, "required_outcome": "success" | "failure" | "expired"},
+                             ...],
+                "existing_id": <int | null>   # omit or null for create
+            }
+
+        Returns the saved Transition (same shape as TransitionSerializer).
+
+        Permissions: Lead GM of source_episode's story, or staff.
+        The permission class cannot inspect the object before the serializer runs
+        (source_episode comes from the body, not the URL), so this is a view-level
+        guard only — any user with a GMProfile who is a Lead GM of *some* story can
+        reach this action; the serializer validates that the source_episode's story
+        matches the caller.  Stricter object-level gating is applied in
+        IsLeadGMOnTransitionStoryOrStaff.has_object_permission after the service
+        creates the object — which effectively means the permission class's
+        has_permission gate alone guards creation.  This matches the pattern used
+        by all other "create with body data" action endpoints in this ViewSet.
+        """
+        ser = SaveTransitionWithOutcomesInputSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        vd = ser.validated_data
+        existing: Transition | None = vd.get("existing_id")
+        source_episode: Episode = vd["source_episode"]
+
+        # Verify Lead GM permission for the source episode's story.
+        # (has_permission above only checks authentication + GMProfile existence.)
+        # We do an explicit object-permission check using the existing permission class.
+        if not request.user.is_staff:
+            story = source_episode.chapter.story
+            from world.gm.models import GMProfile  # noqa: PLC0415
+
+            _denied_msg = "Only the Lead GM of this story or staff may perform this action."
+            try:
+                gm_profile = request.user.gm_profile
+            except GMProfile.DoesNotExist:
+                raise PermissionDenied(_denied_msg) from None
+            if not story.primary_table_id or story.primary_table.gm_id != gm_profile.pk:
+                raise PermissionDenied(_denied_msg)
+
+        transition_data: dict[str, Any] = {
+            "source_episode": source_episode,
+            "target_episode": vd.get("target_episode"),
+            "mode": vd["mode"],
+            "connection_type": vd.get("connection_type", ""),
+            "connection_summary": vd.get("connection_summary", ""),
+            "order": vd.get("order", 0),
+        }
+        outcome_inputs = [
+            OutcomeInput(beat_id=row["beat"].pk, required_outcome=row["required_outcome"])
+            for row in vd.get("outcomes", [])
+        ]
+
+        transition = save_transition_with_outcomes(
+            transition_data=transition_data,
+            outcomes=outcome_inputs,
+            existing_transition=existing,
+        )
+        out_ser = TransitionSerializer(transition)
+        http_status = status.HTTP_200_OK if existing is not None else status.HTTP_201_CREATED
+        return Response(out_ser.data, status=http_status)
 
 
 class EpisodeProgressionRequirementViewSet(viewsets.ModelViewSet):

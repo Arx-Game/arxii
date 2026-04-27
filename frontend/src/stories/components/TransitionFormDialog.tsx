@@ -1,17 +1,19 @@
 /**
  * TransitionFormDialog — create or edit a Transition from a source episode.
  *
- * Fields: target_episode (optional), mode, connection_type, connection_summary, order.
- * Also manages TransitionRequiredOutcome rows (routing predicate).
+ * Wave 13: Replaced the Phase 4 multi-roundtrip submit (POST transition →
+ * N × POST outcomes) with a single atomic call to
+ * POST /api/transitions/save-with-outcomes/.
  *
- * Multi-roundtrip approach (Approach A):
- *  1. Save the transition via POST/PATCH.
- *  2. For each new routing row: POST /api/transition-required-outcomes/.
- *  3. For each removed routing row: DELETE /api/transition-required-outcomes/{id}/.
- * No backend transaction endpoint exists; partial saves are visible briefly.
+ * Routing predicates are now collected locally in state; on submit they are
+ * sent together with the transition fields in one request.  If the server
+ * rolls back (e.g. DB integrity error), no partial state is left behind.
+ *
+ * Fields: target_episode (optional), mode, connection_type, connection_summary,
+ * order, and a routing predicate list (beat + required_outcome pairs).
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Trash2, Plus } from 'lucide-react';
 import {
@@ -28,15 +30,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Combobox } from '@/components/ui/combobox';
 import {
-  useCreateTransition,
-  useUpdateTransition,
+  useSaveTransitionWithOutcomes,
   useTransitionRequiredOutcomes,
-  useCreateTransitionRequiredOutcome,
-  useDeleteTransitionRequiredOutcome,
   useEpisodeList,
   useBeatList,
 } from '../queries';
-import type { Transition, TransitionRequiredOutcome } from '../types';
+import type { Transition } from '../types';
 
 // ---------------------------------------------------------------------------
 // DRF error shapes
@@ -49,8 +48,27 @@ interface DRFFieldErrors {
   connection_type?: string[];
   connection_summary?: string[];
   order?: string[];
+  outcomes?: string[];
   non_field_errors?: string[];
   detail?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Local routing predicate row (not yet persisted)
+// ---------------------------------------------------------------------------
+
+interface RoutingRow {
+  /** Unique client-side key for React list rendering. */
+  key: string;
+  beatId: number;
+  outcome: string;
+  beatLabel: string;
+}
+
+let rowCounter = 0;
+function nextKey(): string {
+  rowCounter += 1;
+  return `r${rowCounter}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,12 +93,12 @@ const OUTCOME_OPTIONS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Routing predicate row editor
+// Add-routing-row sub-form
 // ---------------------------------------------------------------------------
 
 interface AddRoutingRowProps {
   episodeId: number;
-  onAdd: (beatId: number, outcome: string) => void;
+  onAdd: (row: Omit<RoutingRow, 'key'>) => void;
   disabled: boolean;
 }
 
@@ -144,7 +162,9 @@ function AddRoutingRow({ episodeId, onAdd, disabled }: AddRoutingRowProps) {
           size="sm"
           onClick={() => {
             if (!beatId) return;
-            onAdd(Number(beatId), outcome);
+            const beatLabel =
+              beatOptions.find((o) => o.value === beatId)?.label ?? `Beat #${beatId}`;
+            onAdd({ beatId: Number(beatId), outcome, beatLabel });
             setBeatId('');
             setOutcome('success');
             setAdding(false);
@@ -158,88 +178,6 @@ function AddRoutingRow({ episodeId, onAdd, disabled }: AddRoutingRowProps) {
           Cancel
         </Button>
       </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Routing predicate manager (for existing transitions)
-// ---------------------------------------------------------------------------
-
-interface RoutingPredicateManagerProps {
-  transition: Transition;
-  episodeId: number;
-}
-
-function RoutingPredicateManager({ transition, episodeId }: RoutingPredicateManagerProps) {
-  const { data, refetch } = useTransitionRequiredOutcomes({ transition: transition.id });
-  const createMutation = useCreateTransitionRequiredOutcome();
-  const deleteMutation = useDeleteTransitionRequiredOutcome();
-
-  const rows = data?.results ?? [];
-
-  function handleAdd(beatId: number, outcome: string) {
-    const rowData: Omit<TransitionRequiredOutcome, 'id'> = {
-      transition: transition.id,
-      beat: beatId,
-      required_outcome: outcome as TransitionRequiredOutcome['required_outcome'],
-    };
-    createMutation.mutate(rowData, {
-      onSuccess: () => {
-        void refetch();
-        toast.success('Routing condition added');
-      },
-      onError: () => toast.error('Failed to add routing condition'),
-    });
-  }
-
-  function handleDelete(row: TransitionRequiredOutcome) {
-    deleteMutation.mutate(
-      { id: row.id, transitionId: transition.id },
-      {
-        onSuccess: () => {
-          void refetch();
-          toast.success('Routing condition removed');
-        },
-        onError: () => toast.error('Failed to remove routing condition'),
-      }
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {rows.length === 0 ? (
-        <p className="text-sm italic text-muted-foreground" data-testid="routing-predicate-empty">
-          No conditions — this transition is always eligible.
-        </p>
-      ) : (
-        <ul className="space-y-1" data-testid="routing-predicate-list">
-          {rows.map((row) => (
-            <li
-              key={row.id}
-              className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
-              data-testid="routing-predicate-row"
-            >
-              <span>
-                Beat #{row.beat} — {row.required_outcome}
-              </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
-                onClick={() => handleDelete(row)}
-                disabled={deleteMutation.isPending}
-                aria-label="Remove routing condition"
-                data-testid="remove-routing-row-btn"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <AddRoutingRow episodeId={episodeId} onAdd={handleAdd} disabled={createMutation.isPending} />
     </div>
   );
 }
@@ -290,21 +228,40 @@ export function TransitionFormDialog({
   const [order, setOrder] = useState<string>(
     transition?.order !== undefined ? String(transition.order) : '0'
   );
+  const [routingRows, setRoutingRows] = useState<RoutingRow[]>([]);
   const [fieldErrors, setFieldErrors] = useState<DRFFieldErrors>({});
-  const [savedTransition, setSavedTransition] = useState<Transition | undefined>(
-    isEdit ? transition : undefined
+
+  // For edit mode: load existing routing predicates once so the user can see and
+  // remove them before submitting.  We do this once on open so the local state
+  // starts with the server's current predicates.
+  const existingOutcomesQuery = useTransitionRequiredOutcomes(
+    isEdit && transition ? { transition: transition.id, page_size: 100 } : undefined
   );
 
-  const createMutation = useCreateTransition();
-  const updateMutation = useUpdateTransition();
-  const isPending = createMutation.isPending || updateMutation.isPending;
-
-  // Load episodes in the same story for target selector
+  // Load episodes in the same story for target selector.
   const { data: episodesData } = useEpisodeList({ story: storyId, page_size: 100 });
   const episodeOptions =
     episodesData?.results
       .filter((ep) => ep.id !== sourceEpisodeId)
       .map((ep) => ({ value: String(ep.id), label: ep.title })) ?? [];
+
+  // Populate routingRows from server data on first load in edit mode.
+  const [initialised, setInitialised] = useState(false);
+  useEffect(() => {
+    if (!initialised && isEdit && existingOutcomesQuery.data) {
+      const rows: RoutingRow[] = existingOutcomesQuery.data.results.map((row) => ({
+        key: nextKey(),
+        beatId: row.beat,
+        outcome: row.required_outcome,
+        beatLabel: `Beat #${row.beat}`,
+      }));
+      setRoutingRows(rows);
+      setInitialised(true);
+    }
+  }, [initialised, isEdit, existingOutcomesQuery.data]);
+
+  const saveMutation = useSaveTransitionWithOutcomes();
+  const isPending = saveMutation.isPending;
 
   function resetForm() {
     setTargetEpisode(
@@ -318,8 +275,9 @@ export function TransitionFormDialog({
     setConnectionType(transition?.connection_type ?? '');
     setConnectionSummary(transition?.connection_summary ?? '');
     setOrder(transition?.order !== undefined ? String(transition.order) : '0');
+    setRoutingRows([]);
     setFieldErrors({});
-    setSavedTransition(isEdit ? transition : undefined);
+    setInitialised(false);
   }
 
   function handleOpenChange(next: boolean) {
@@ -343,41 +301,41 @@ export function TransitionFormDialog({
     toast.error(err instanceof Error ? err.message : 'An error occurred. Please try again.');
   }
 
+  function handleAddRow(row: Omit<RoutingRow, 'key'>) {
+    setRoutingRows((prev) => [...prev, { ...row, key: nextKey() }]);
+  }
+
+  function handleRemoveRow(key: string) {
+    setRoutingRows((prev) => prev.filter((r) => r.key !== key));
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFieldErrors({});
 
-    const data: Partial<Transition> = {
-      source_episode: sourceEpisodeId,
-      target_episode: targetEpisode ? Number(targetEpisode) : null,
-      mode: mode as Transition['mode'],
-      connection_type: (connectionType || undefined) as Transition['connection_type'],
-      connection_summary: connectionSummary.trim(),
-      order: Number(order),
-    };
-
-    if (isEdit && transition) {
-      updateMutation.mutate(
-        { id: transition.id, data },
-        {
-          onSuccess: (updated) => {
-            toast.success('Transition updated');
-            setSavedTransition(updated);
-            onSuccess?.(updated);
-          },
-          onError: handleError,
-        }
-      );
-    } else {
-      createMutation.mutate(data, {
-        onSuccess: (created) => {
-          toast.success('Transition created');
-          setSavedTransition(created);
-          onSuccess?.(created);
+    saveMutation.mutate(
+      {
+        source_episode: sourceEpisodeId,
+        target_episode: targetEpisode ? Number(targetEpisode) : null,
+        mode,
+        connection_type: connectionType,
+        connection_summary: connectionSummary.trim(),
+        order: Number(order),
+        outcomes: routingRows.map((r) => ({
+          beat: r.beatId,
+          required_outcome: r.outcome,
+        })),
+        existing_id: isEdit && transition ? transition.id : null,
+      },
+      {
+        onSuccess: (saved) => {
+          toast.success(isEdit ? 'Transition updated' : 'Transition created');
+          onSuccess?.(saved);
+          handleOpenChange(false);
         },
         onError: handleError,
-      });
-    }
+      }
+    );
   }
 
   const nonFieldErrors = fieldErrors.non_field_errors ?? [];
@@ -493,6 +451,60 @@ export function TransitionFormDialog({
                 <p className="text-xs text-destructive">{fieldErrors.order.join(' ')}</p>
               )}
             </div>
+
+            {/* Routing Predicate — collected locally, sent on submit */}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Routing Predicate</p>
+              <p className="text-xs text-muted-foreground">
+                Beat-outcome conditions — ALL must be true for this transition to fire. Submitted
+                atomically with the transition fields; no partial saves.
+              </p>
+              {routingRows.length === 0 ? (
+                <p
+                  className="text-sm italic text-muted-foreground"
+                  data-testid="routing-predicate-empty"
+                >
+                  No conditions — this transition is always eligible.
+                </p>
+              ) : (
+                <ul className="space-y-1" data-testid="routing-predicate-list">
+                  {routingRows.map((row) => (
+                    <li
+                      key={row.key}
+                      className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
+                      data-testid="routing-predicate-row"
+                    >
+                      <span>
+                        {row.beatLabel} — {row.outcome}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => handleRemoveRow(row.key)}
+                        aria-label="Remove routing condition"
+                        data-testid="remove-routing-row-btn"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <AddRoutingRow
+                episodeId={sourceEpisodeId}
+                onAdd={handleAddRow}
+                disabled={isPending}
+              />
+              {fieldErrors.outcomes && (
+                <p className="text-xs text-destructive">
+                  {Array.isArray(fieldErrors.outcomes)
+                    ? fieldErrors.outcomes.join(' ')
+                    : String(fieldErrors.outcomes)}
+                </p>
+              )}
+            </div>
           </div>
 
           <DialogFooter className="mt-6">
@@ -515,21 +527,6 @@ export function TransitionFormDialog({
             </Button>
           </DialogFooter>
         </form>
-
-        {/* Routing Predicate — available once transition is saved */}
-        {savedTransition ? (
-          <div className="mt-6 border-t pt-4">
-            <p className="mb-1 text-sm font-medium">Routing Predicate</p>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Add beat-outcome conditions that must all be true for this transition to fire.
-            </p>
-            <RoutingPredicateManager transition={savedTransition} episodeId={sourceEpisodeId} />
-          </div>
-        ) : (
-          <p className="mt-4 text-xs text-muted-foreground">
-            Save the transition first to add routing conditions.
-          </p>
-        )}
       </DialogContent>
     </Dialog>
   );
