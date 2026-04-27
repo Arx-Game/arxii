@@ -254,6 +254,11 @@ interface TransitionFormDialogProps {
   sourceEpisodeId: number;
   storyId: number;
   transition?: Transition;
+  /**
+   * Pre-fill the target episode selector (used when opening from the DAG
+   * drag-to-connect gesture so the user only needs to confirm, not re-select).
+   */
+  defaultTargetEpisodeId?: number;
   onSuccess?: (transition: Transition) => void;
 }
 
@@ -267,12 +272,17 @@ export function TransitionFormDialog({
   sourceEpisodeId,
   storyId,
   transition,
+  defaultTargetEpisodeId,
   onSuccess,
 }: TransitionFormDialogProps) {
   const isEdit = transition !== undefined;
 
   const [targetEpisode, setTargetEpisode] = useState<string>(
-    transition?.target_episode != null ? String(transition.target_episode) : ''
+    transition?.target_episode != null
+      ? String(transition.target_episode)
+      : defaultTargetEpisodeId != null
+        ? String(defaultTargetEpisodeId)
+        : ''
   );
   const [mode, setMode] = useState<string>(transition?.mode ?? 'auto');
   const [connectionType, setConnectionType] = useState<string>(transition?.connection_type ?? '');
@@ -297,7 +307,13 @@ export function TransitionFormDialog({
       .map((ep) => ({ value: String(ep.id), label: ep.title })) ?? [];
 
   function resetForm() {
-    setTargetEpisode(transition?.target_episode != null ? String(transition.target_episode) : '');
+    setTargetEpisode(
+      transition?.target_episode != null
+        ? String(transition.target_episode)
+        : defaultTargetEpisodeId != null
+          ? String(defaultTargetEpisodeId)
+          : ''
+    );
     setMode(transition?.mode ?? 'auto');
     setConnectionType(transition?.connection_type ?? '');
     setConnectionSummary(transition?.connection_summary ?? '');

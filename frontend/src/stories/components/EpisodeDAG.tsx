@@ -18,7 +18,7 @@
 
 import { useMemo } from 'react';
 import { ReactFlow, Controls, Background, BackgroundVariant, MarkerType } from '@xyflow/react';
-import type { Node, Edge } from '@xyflow/react';
+import type { Node, Edge, Connection } from '@xyflow/react';
 import dagre from 'dagre';
 import '@xyflow/react/dist/style.css';
 
@@ -173,9 +173,23 @@ export interface EpisodeDAGProps {
   storyId: number;
   /** Called when the user clicks an episode node; receives EpisodeLike for dialog. */
   onEpisodeClick: (episode: EpisodeLike) => void;
+  /**
+   * When true, nodes become connectable and draggable (local positioning only,
+   * not persisted). Dragging from one node handle to another fires
+   * onConnectEpisodes(sourceId, targetId) so the parent can open
+   * TransitionFormDialog pre-filled with the connection.
+   */
+  editMode?: boolean;
+  /** Called in edit mode when the user drags a connection between two episode nodes. */
+  onConnectEpisodes?: (sourceId: number, targetId: number) => void;
 }
 
-export function EpisodeDAG({ storyId, onEpisodeClick }: EpisodeDAGProps) {
+export function EpisodeDAG({
+  storyId,
+  onEpisodeClick,
+  editMode = false,
+  onConnectEpisodes,
+}: EpisodeDAGProps) {
   // Fetch all episodes and transitions for the story in single requests.
   const { data: episodesData, isLoading: episodesLoading } = useEpisodeList({
     story: storyId,
@@ -211,6 +225,15 @@ export function EpisodeDAG({ storyId, onEpisodeClick }: EpisodeDAGProps) {
     return computeLayout(episodes, transitions, chapterTitles, onEpisodeClick);
   }, [episodes, transitions, chapterTitles, onEpisodeClick]);
 
+  function handleConnect(connection: Connection) {
+    if (!editMode || !onConnectEpisodes) return;
+    const sourceId = connection.source ? parseInt(connection.source, 10) : NaN;
+    const targetId = connection.target ? parseInt(connection.target, 10) : NaN;
+    if (!isNaN(sourceId) && !isNaN(targetId) && sourceId !== targetId) {
+      onConnectEpisodes(sourceId, targetId);
+    }
+  }
+
   const isLoading = episodesLoading || transitionsLoading;
 
   if (isLoading) {
@@ -244,9 +267,10 @@ export function EpisodeDAG({ storyId, onEpisodeClick }: EpisodeDAGProps) {
         nodes={rfNodes}
         edges={rfEdges}
         nodeTypes={nodeTypes}
-        nodesDraggable={false}
-        nodesConnectable={false}
+        nodesDraggable={editMode}
+        nodesConnectable={editMode}
         elementsSelectable={true}
+        onConnect={handleConnect}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.25}
