@@ -789,6 +789,68 @@ class IsAccountOfCharacterSheet(permissions.BasePermission):
         return bool(request.user and request.user.is_authenticated)
 
 
+class IsLeadGMOfDestinationTableOrStaff(permissions.BasePermission):
+    """For assign-to-table: the requesting user must be the Lead GM of the
+    destination table, or staff.
+
+    This is a view-level guard only — the destination table is not known at
+    has_object_permission time (it comes from request.data). Ownership
+    enforcement is delegated to AssignStoryToTableInputSerializer.validate_table().
+    """
+
+    message = "Only the Lead GM of the destination table or staff may assign stories to it."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Authenticated users only; serializer handles table ownership."""
+        return bool(request.user and request.user.is_authenticated)
+
+
+class CanDetachStoryFromTable(permissions.BasePermission):
+    """For detach-from-table: who may clear a story's primary_table.
+
+    Allowed:
+    - Staff — always.
+    - Lead GM of the story's current primary_table
+      (story.primary_table.gm == request.user.gm_profile).
+    - The story owner (CHARACTER scope): the story's character_sheet's
+      character's db_account matches request.user.
+    """
+
+    message = (
+        "Only the current Lead GM of this story, the story owner (for personal stories), "
+        "or staff may detach this story from its table."
+    )
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Check Lead GM of current table, story character owner, or staff."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+
+        story = cast(Any, obj)
+
+        # Lead GM of the story's current primary_table.
+        if story.primary_table_id is not None:
+            try:
+                gm_profile = request.user.gm_profile
+            except GMProfile.DoesNotExist:
+                gm_profile = None
+            if gm_profile is not None and story.primary_table.gm_id == gm_profile.pk:
+                return True
+
+        # CHARACTER-scope story owner: character_sheet -> character -> db_account.
+        if story.character_sheet_id is not None:
+            if story.character_sheet.character.db_account_id == request.user.pk:
+                return True
+
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Story log viewer role classifier
 # ---------------------------------------------------------------------------

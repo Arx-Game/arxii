@@ -60,6 +60,7 @@ from world.stories.pagination import (
 )
 from world.stories.permissions import (
     VIEWER_ROLE_NO_ACCESS,
+    CanDetachStoryFromTable,
     CanMarkBeat,
     CanParticipateInStory,
     IsAccountOfCharacterSheet,
@@ -72,6 +73,7 @@ from world.stories.permissions import (
     IsGlobalProgressReadableOrStaff,
     IsGMProfile,
     IsGroupProgressMemberOrStaff,
+    IsLeadGMOfDestinationTableOrStaff,
     IsLeadGMOnClaimStoryOrStaff,
     IsLeadGMOnEpisodeStoryOrStaff,
     IsLeadGMOnStoryOrStaff,
@@ -87,6 +89,7 @@ from world.stories.permissions import (
 from world.stories.serializers import (
     AggregateBeatContributionSerializer,
     ApproveClaimInputSerializer,
+    AssignStoryToTableInputSerializer,
     AssistantGMClaimSerializer,
     BeatCompletionSerializer,
     BeatSerializer,
@@ -317,6 +320,47 @@ class StoryViewSet(viewsets.ModelViewSet):
         log_entries = serialize_story_log(story=story, progress=progress, viewer_role=viewer_role)
         serializer = StoryLogSerializer(log_entries)
         return Response(serializer.data)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="assign-to-table",
+        permission_classes=[IsLeadGMOfDestinationTableOrStaff],
+    )
+    def assign_to_table(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/stories/{id}/assign-to-table/ — assign a story to a GM's table.
+
+        Lead GM of the destination table (or staff) calls this to take ownership
+        of a story. The serializer validates that the caller owns the destination
+        table. Returns 200 with the updated Story on success.
+        """
+        from world.stories.services.tables import assign_story_to_table  # noqa: PLC0415
+
+        story = self.get_object()
+        ser = AssignStoryToTableInputSerializer(data=request.data, context={"request": request})
+        ser.is_valid(raise_exception=True)
+        updated = assign_story_to_table(story=story, table=ser.validated_data["table"])
+        return Response(StoryDetailSerializer(updated, context={"request": request}).data)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="detach-from-table",
+        permission_classes=[CanDetachStoryFromTable],
+    )
+    def detach_from_table(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/stories/{id}/detach-from-table/ — clear a story's primary_table.
+
+        Allowed by: current Lead GM (story.primary_table.gm), the story's
+        character-scope owner (character_sheet.character.db_account == user),
+        or staff. Story history and participations are preserved; the story
+        enters 'seeking GM' state. Returns 200 with the updated Story.
+        """
+        from world.stories.services.tables import detach_story_from_table  # noqa: PLC0415
+
+        story = self.get_object()
+        updated = detach_story_from_table(story=story)
+        return Response(StoryDetailSerializer(updated, context={"request": request}).data)
 
 
 class StoryParticipationViewSet(viewsets.ModelViewSet):

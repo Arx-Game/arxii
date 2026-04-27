@@ -4,6 +4,8 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from world.character_sheets.models import CharacterSheet
+from world.gm.constants import GMTableStatus
+from world.gm.models import GMTable
 from world.gm.serializers import GMProfileSerializer
 from world.scenes.models import Persona
 from world.stories.constants import (
@@ -76,6 +78,7 @@ class StoryDetailSerializer(serializers.ModelSerializer):
     owners = serializers.StringRelatedField(many=True, read_only=True)
     active_gms = GMProfileSerializer(many=True, read_only=True)
     character_sheet = serializers.PrimaryKeyRelatedField(read_only=True)
+    primary_table = serializers.PrimaryKeyRelatedField(read_only=True)
     chapters_count = serializers.IntegerField(source="chapters.count", read_only=True)
     trust_requirements = serializers.SerializerMethodField()
 
@@ -92,6 +95,7 @@ class StoryDetailSerializer(serializers.ModelSerializer):
             "active_gms",
             "trust_requirements",
             "character_sheet",
+            "primary_table",
             "chapters_count",
             "created_at",
             "updated_at",
@@ -1310,3 +1314,42 @@ class StoryLogSerializer(serializers.Serializer):
     def to_representation(self, instance: list) -> dict[str, Any]:
         """Accept the log entries list as the instance."""
         return {"entries": self.get_entries(instance)}
+
+
+# ---------------------------------------------------------------------------
+# Wave 2: Table assignment input serializers
+# ---------------------------------------------------------------------------
+
+
+class AssignStoryToTableInputSerializer(serializers.Serializer):
+    """Input for POST /api/stories/{id}/assign-to-table/.
+
+    Validates that the requesting user is the Lead GM of the destination table
+    (or staff). The story-side permission (can this story be assigned?) is
+    handled by the view's get_object() / queryset scoping.
+    """
+
+    table = serializers.PrimaryKeyRelatedField(
+        queryset=GMTable.objects.filter(status=GMTableStatus.ACTIVE),
+    )
+
+    def validate_table(self, table: GMTable) -> GMTable:
+        """Verify the requesting user can assign stories to this table."""
+        request = self.context.get("request")
+        if request is None:
+            msg = "Request context is required."
+            raise serializers.ValidationError(msg)
+        user = request.user
+        if user.is_staff:
+            return table
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        try:
+            gm_profile = user.gm_profile
+        except GMProfile.DoesNotExist:
+            msg = "You must be a GM to assign stories to a table."
+            raise serializers.ValidationError(msg) from None
+        if table.gm_id != gm_profile.pk:
+            msg = "You can only assign stories to your own table."
+            raise serializers.ValidationError(msg)
+        return table
