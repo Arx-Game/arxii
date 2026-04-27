@@ -711,7 +711,18 @@ share the protagonism-lock aggregator but design independently.
 - **Budget-based technique builder** — replaces restriction-based power for post-CG technique creation
 - Thread system UI integration (models exist, needs frontend)
 - Aura farming mechanics — how perception at scenes feeds into resonance strength
-- Fashion-to-resonance integration (requires Items & Crafting systems)
+- Fashion-to-resonance integration (requires Items & Crafting systems —
+  designed in `docs/superpowers/specs/2026-04-26-items-fashion-mantles-spec-d-design.md`,
+  implementation phased across 4 PRs)
+- **Style / motif / aura magical-significance axis (post-Spec D, dedicated future spec).**
+  Resonance + facets cover *what* a character's magic is about; they don't cover
+  *vibe* — "seductive," "beguiling," "menacing," "regal," "feral." Existing
+  `Motif`/`MotifResonance`/`MotifResonanceAssociation` models in
+  `world/magic/models/motifs.py` are scaffolding without a coherent system.
+  Spec D's Section 13.3 has the design sub-questions that the future spec needs
+  to answer. **Important design intent:** flamboyant fashion (battle lingerie
+  on a Sword warrior, paladin getup, evil-sorceress robes) should be a *strong*
+  mechanical axis — this is intentional, not flavor garnish.
 - Magical discovery through gameplay — unpredictable moments during RP where magic manifests
 - Thread strengthening through relationship development
 - Tradition gameplay (beyond CG templates — what traditions do during play)
