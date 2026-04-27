@@ -442,6 +442,48 @@ class StoryViewSet(viewsets.ModelViewSet):
     @action(
         detail=True,
         methods=[HTTPMethod.POST],
+        url_path="send-ooc",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def send_ooc(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/stories/{id}/send-ooc/ — Lead GM or staff sends an OOC notice.
+
+        Body: { body: string, ooc_note?: string }
+
+        Permission: Lead GM of story.primary_table or staff.
+        Input serializer validates body length (>= 1 char).
+        Service resolves scope-appropriate recipients and fans out
+        NarrativeMessageDelivery rows with category=STORY.
+
+        Returns 201 with the created NarrativeMessage.
+        """
+        from world.narrative.permissions import IsStoryLeadGMOrStaff  # noqa: PLC0415
+        from world.narrative.serializers import (  # noqa: PLC0415
+            NarrativeMessageSerializer,
+            SendStoryOOCInputSerializer,
+        )
+        from world.narrative.services import send_story_ooc_message  # noqa: PLC0415
+
+        story = self.get_object()
+
+        # Object-level permission check for Lead GM or staff.
+        perm = IsStoryLeadGMOrStaff()
+        if not perm.has_object_permission(request, self, story):
+            raise PermissionDenied(perm.message)
+
+        ser = SendStoryOOCInputSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        msg = send_story_ooc_message(
+            story=story,
+            sender_account=cast(AccountDB, request.user),
+            body=ser.validated_data["body"],
+            ooc_note=ser.validated_data.get("ooc_note", ""),
+        )
+        return Response(NarrativeMessageSerializer(msg).data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
         url_path="offer-to-gm",
         permission_classes=[permissions.IsAuthenticated],
     )

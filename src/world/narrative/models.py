@@ -6,6 +6,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from world.narrative.constants import NarrativeCategory
 
 _STR_PREVIEW_LEN = 40
+_GEMIT_PREVIEW_LEN = 60
 
 
 class NarrativeMessage(SharedMemoryModel):
@@ -132,3 +133,87 @@ class NarrativeMessageDelivery(SharedMemoryModel):
             f"NarrativeMessageDelivery(msg=#{self.message_id}, "
             f"sheet=#{self.recipient_character_sheet_id}, {state})"
         )
+
+
+class Gemit(SharedMemoryModel):
+    """A staff-sent real-time broadcast to all online players.
+
+    Persistent record so any account can browse retroactively. Does NOT
+    fan out into NarrativeMessageDelivery rows — gemit is server-wide,
+    not per-recipient.
+    """
+
+    body = models.TextField(
+        help_text="Broadcast text shown to all connected players.",
+    )
+    sender_account = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="gemits_sent",
+        help_text="Null = system-generated.",
+    )
+    related_era = models.ForeignKey(
+        "stories.Era",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="gemits",
+        help_text="Optional: link to the era this gemit relates to.",
+    )
+    related_story = models.ForeignKey(
+        "stories.Story",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="gemits",
+        help_text="Optional: link to a specific story this gemit relates to.",
+    )
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["-sent_at"]),
+            models.Index(fields=["sender_account", "-sent_at"]),
+        ]
+
+    def __str__(self) -> str:
+        truncated = len(self.body) > _GEMIT_PREVIEW_LEN
+        preview = self.body[:_GEMIT_PREVIEW_LEN] + ("..." if truncated else "")
+        return f"Gemit #{self.pk}: {preview}"
+
+
+class UserStoryMute(SharedMemoryModel):
+    """A user's preference to suppress real-time narrative pushes for a specific story.
+
+    Does NOT gate read access — muted users still see the story in their
+    dashboard and can browse the log. Only suppresses the live
+    character.msg() push when narrative messages fire on that story.
+    """
+
+    account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.CASCADE,
+        related_name="story_mutes",
+    )
+    story = models.ForeignKey(
+        "stories.Story",
+        on_delete=models.CASCADE,
+        related_name="muted_by",
+    )
+    muted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["account", "story"],
+                name="unique_user_story_mute",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["account", "story"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"UserStoryMute(account=#{self.account_id}, story=#{self.story_id})"
