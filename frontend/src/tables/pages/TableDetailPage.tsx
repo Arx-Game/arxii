@@ -139,7 +139,7 @@ function TableDetailInner({ tableId }: { tableId: number }) {
       </div>
 
       {/* Stats strip */}
-      <div className="flex gap-4">
+      <div className="flex flex-wrap gap-4">
         <div className="rounded-lg border bg-card px-4 py-3 text-center">
           <p className="text-2xl font-bold">{table.member_count}</p>
           <p className="text-xs text-muted-foreground">
@@ -154,13 +154,15 @@ function TableDetailInner({ tableId }: { tableId: number }) {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — overflow-x-auto so tab bar scrolls horizontally on very narrow screens */}
       <Tabs defaultValue="stories">
-        <TabsList>
-          <TabsTrigger value="stories">Stories</TabsTrigger>
-          <TabsTrigger value="members">Members</TabsTrigger>
-          <TabsTrigger value="bulletin">Bulletin</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto">
+          <TabsList>
+            <TabsTrigger value="stories">Stories</TabsTrigger>
+            <TabsTrigger value="members">Members</TabsTrigger>
+            <TabsTrigger value="bulletin">Bulletin</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="stories" className="mt-4">
           <TableStoryRoster
@@ -241,14 +243,14 @@ export function TableDetailPage() {
 
   if (!tableId || isNaN(tableId)) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <p className="text-muted-foreground">Invalid table ID.</p>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <ErrorBoundary>
         <TableDetailInner tableId={tableId} />
       </ErrorBoundary>

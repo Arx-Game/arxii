@@ -63,8 +63,8 @@ function AccessDeniedPage() {
 
 function LoadingSkeleton() {
   return (
-    <div className="flex gap-6" data-testid="author-loading">
-      <div className="w-56 space-y-2">
+    <div className="flex flex-col gap-4 md:flex-row md:gap-6" data-testid="author-loading">
+      <div className="w-full space-y-2 md:w-56">
         <Skeleton className="h-8 w-full" />
         {[0, 1, 2].map((i) => (
           <Skeleton key={i} className="h-10 w-full" />
@@ -323,9 +323,9 @@ export function StoryAuthorPage() {
     const stories = data.results;
 
     content = (
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-4 md:flex-row md:gap-6">
         {/* Sidebar */}
-        <aside className="w-56 shrink-0" data-testid="stories-sidebar">
+        <aside className="w-full shrink-0 md:w-56" data-testid="stories-sidebar">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-medium text-muted-foreground">My Stories</p>
             <Button
@@ -386,7 +386,7 @@ export function StoryAuthorPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <h1 className="mb-8 text-2xl font-bold">Story Author</h1>
       <ErrorBoundary>{content}</ErrorBoundary>
 

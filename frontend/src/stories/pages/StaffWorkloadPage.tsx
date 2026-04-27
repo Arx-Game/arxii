@@ -271,8 +271,8 @@ export function StaffWorkloadPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Staff Workload</h1>
         <SendGemitDialog />
       </div>

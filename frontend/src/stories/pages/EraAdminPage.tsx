@@ -142,7 +142,7 @@ export function EraAdminPage() {
 
   if (erasQuery.isPending) {
     return (
-      <div className="container mx-auto max-w-4xl px-4 py-8">
+      <div className="container mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <PageSkeleton />
       </div>
     );
@@ -150,7 +150,7 @@ export function EraAdminPage() {
 
   if (erasQuery.isError) {
     return (
-      <div className="container mx-auto max-w-4xl px-4 py-8">
+      <div className="container mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <p className="text-sm text-destructive">
           Failed to load eras. You may not have permission to view this page.
         </p>
@@ -162,9 +162,9 @@ export function EraAdminPage() {
   const sorted = [...eras].sort((a, b) => a.season_number - b.season_number);
 
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-8">
+    <div className="container mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">Eras (Seasons)</h1>
           <p className="text-sm text-muted-foreground">

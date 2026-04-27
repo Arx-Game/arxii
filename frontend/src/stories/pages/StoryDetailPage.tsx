@@ -169,7 +169,7 @@ export function StoryDetailPage() {
 
   if (storyId === 0) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <div className="py-16 text-center">
           <p className="text-muted-foreground">Story not found.</p>
         </div>
@@ -178,7 +178,7 @@ export function StoryDetailPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <ErrorBoundary>
         <StoryDetailInner storyId={storyId} />
       </ErrorBoundary>

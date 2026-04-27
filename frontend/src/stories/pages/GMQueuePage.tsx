@@ -225,7 +225,7 @@ function GMQueueInner() {
 
 export function GMQueuePage() {
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <h1 className="mb-8 text-2xl font-bold">GM Queue</h1>
       <ErrorBoundary>
         <GMQueueInner />
