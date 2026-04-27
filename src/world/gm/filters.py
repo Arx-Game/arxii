@@ -6,7 +6,21 @@ from django.db.models import QuerySet
 import django_filters
 
 from world.gm.constants import GMApplicationStatus, GMTableStatus
-from world.gm.models import GMApplication, GMTable, GMTableMembership
+from world.gm.models import GMApplication, GMProfile, GMTable, GMTableMembership
+
+
+class GMProfileFilter(django_filters.FilterSet):
+    """Filter for GMProfile list — search by account username."""
+
+    search = django_filters.CharFilter(
+        field_name="account__username",
+        lookup_expr="icontains",
+        label="Search by username",
+    )
+
+    class Meta:
+        model = GMProfile
+        fields = ["search"]
 
 
 class GMApplicationFilter(django_filters.FilterSet):

@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 from world.gm.constants import GMApplicationStatus, GMTableStatus
 from world.gm.filters import (
     GMApplicationFilter,
+    GMProfileFilter,
     GMTableFilter,
     GMTableMembershipFilter,
 )
@@ -36,6 +37,7 @@ from world.gm.serializers import (
     GMApplicationQueueSerializer,
     GMInviteClaimSerializer,
     GMInviteRevokeSerializer,
+    GMProfileSerializer,
     GMRosterInviteSerializer,
     GMTableMembershipSerializer,
     GMTableSerializer,
@@ -99,6 +101,25 @@ class GMApplicationViewSet(
                     "approved_by": self.request.user,
                 },
             )
+
+
+class GMProfileViewSet(
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Read-only list of approved GM profiles.
+
+    Accessible by any authenticated user so players can pick a GM when
+    offering their story. Supports ``?search=<username>`` for autocomplete.
+    """
+
+    queryset = GMProfile.objects.select_related("account").order_by("account__username")
+    serializer_class = GMProfileSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = GMProfileFilter
+    pagination_class = StandardResultsSetPagination
 
 
 class GMTableViewSet(viewsets.ModelViewSet):
