@@ -42,23 +42,37 @@ TypeScript types for the tables feature.
 
 ### `components/`
 
-| File                        | Purpose                                     |
-| --------------------------- | ------------------------------------------- |
-| `TableCard.tsx`             | Clickable table card for the list page      |
-| `TableMemberRoster.tsx`     | Member list in the table detail Members tab |
-| `TableStoryRoster.tsx`      | Story list in the table detail Stories tab  |
-| `TableFormDialog.tsx`       | Create + edit table dialog                  |
-| `InviteToTableDialog.tsx`   | GM invites a persona to the table           |
-| `RemoveFromTableDialog.tsx` | GM confirms removing a member               |
-| `LeaveTableDialog.tsx`      | Player confirms leaving the table           |
-| `ArchiveTableDialog.tsx`    | GM archives the whole table                 |
+**Table management (Wave 4):**
+
+| File                        | Purpose                                                      |
+| --------------------------- | ------------------------------------------------------------ |
+| `TableCard.tsx`             | Clickable table card for the list page                       |
+| `TableMemberRoster.tsx`     | Member list in the table detail Members tab                  |
+| `TableStoryRoster.tsx`      | Story list in the table detail Stories tab                   |
+| `TableFormDialog.tsx`       | Create + edit table dialog                                   |
+| `InviteToTableDialog.tsx`   | GM invites a persona to the table (debounced persona search) |
+| `RemoveFromTableDialog.tsx` | GM confirms removing a member                                |
+| `LeaveTableDialog.tsx`      | Player confirms leaving the table                            |
+| `ArchiveTableDialog.tsx`    | GM archives the whole table                                  |
+
+**Table bulletin board (Wave 11):**
+
+| File                           | Purpose                                                                                                  |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `TableBulletin.tsx`            | Full bulletin board section in `TableDetailPage` — section selector (Table-Wide / per-story) + post list |
+| `BulletinPostCard.tsx`         | Single post card — title + author + body + inline reply list                                             |
+| `BulletinReplyRow.tsx`         | Single reply row within a `BulletinPostCard`                                                             |
+| `CreateBulletinPostDialog.tsx` | GM/staff: compose title + body + section selector + allow_replies                                        |
+| `EditBulletinPostDialog.tsx`   | Inline edit form inside `BulletinPostCard` (GM/staff only)                                               |
 
 ### `pages/`
 
-| File                  | Route (Wave 11 will register) | Auth           |
-| --------------------- | ----------------------------- | -------------- |
-| `TablesListPage.tsx`  | `/tables`                     | ProtectedRoute |
-| `TableDetailPage.tsx` | `/tables/:id`                 | ProtectedRoute |
+| File                  | Route         | Auth           |
+| --------------------- | ------------- | -------------- |
+| `TablesListPage.tsx`  | `/tables`     | ProtectedRoute |
+| `TableDetailPage.tsx` | `/tables/:id` | ProtectedRoute |
+
+Routes registered in `App.tsx` during Wave 14.
 
 ## Data Flow
 
@@ -72,7 +86,7 @@ TypeScript types for the tables feature.
 - **Backend:** `world.gm` models (GMTable, GMTableMembership, GMProfile)
 - **Stories:** Stories with `primary_table` set appear in the table detail
 - **Persona search:** Reuses `searchPersonas` from `@/events/queries`
-- **Navigation:** Wave 11 will add `/tables` route to App.tsx routing
+- **Navigation:** `/tables` and `/tables/:id` routes registered in `App.tsx` (Wave 14)
 
 ## Common Gotchas
 
