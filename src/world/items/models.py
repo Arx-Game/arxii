@@ -395,6 +395,18 @@ class ItemInstance(SharedMemoryModel):
         """Return custom image if set, otherwise template image."""
         return self.image or self.template.image
 
+    @cached_property
+    def cached_item_facets(self) -> list[ItemFacet]:
+        """Facets attached to this item instance.
+
+        Targeted by Prefetch(..., to_attr=). When prefetched, Django populates
+        this directly. When accessed without prefetch, falls back to a fresh
+        query.
+
+        To invalidate: del instance.cached_item_facets
+        """
+        return list(self.item_facets.select_related("facet", "attachment_quality_tier"))
+
 
 class TemplateInteraction(SharedMemoryModel):
     """

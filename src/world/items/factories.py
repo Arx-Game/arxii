@@ -2,7 +2,15 @@
 
 import factory
 
-from world.items.models import InteractionType, ItemFacet, ItemInstance, ItemTemplate, QualityTier
+from world.items.constants import BodyRegion, EquipmentLayer
+from world.items.models import (
+    EquippedItem,
+    InteractionType,
+    ItemFacet,
+    ItemInstance,
+    ItemTemplate,
+    QualityTier,
+)
 
 
 class QualityTierFactory(factory.django.DjangoModelFactory):
@@ -69,3 +77,21 @@ class ItemFacetFactory(factory.django.DjangoModelFactory):
     item_instance = factory.SubFactory(ItemInstanceFactory)
     facet = factory.SubFactory("world.magic.factories.FacetFactory")
     attachment_quality_tier = factory.SubFactory(QualityTierFactory)
+
+
+class EquippedItemFactory(factory.django.DjangoModelFactory):
+    """Factory for EquippedItem.
+
+    Caller must pass ``character`` (an ObjectDB / Character instance) explicitly;
+    there is no safe default since EquippedItem.character is a FK to ObjectDB and
+    the available character-creation helpers are outside this app.
+    """
+
+    class Meta:
+        model = EquippedItem
+        django_get_or_create = ("character", "body_region", "equipment_layer")
+
+    item_instance = factory.SubFactory(ItemInstanceFactory)
+    body_region = BodyRegion.TORSO
+    equipment_layer = EquipmentLayer.BASE
+    # character — caller must provide; no default
