@@ -10,6 +10,7 @@ from world.magic.constants import EffectKind, GainSource, TargetKind
 from world.magic.exceptions import (
     AnchorCapExceeded,
     InvalidImbueAmount,
+    NoMatchingWornFacetItemsError,
     ResonanceInsufficient,
 )
 from world.magic.models import (
@@ -256,8 +257,17 @@ def spend_resonance_for_imbuing(  # noqa: C901 — sequential guards + greedy lo
 
 # Always-in-action target kinds: relationship anchors are the player's assertion
 # of involvement; the system never validates them per Spec §5.4 line 1450.
+# FACET threads are gated by the worn-items check (NoMatchingWornFacetItemsError),
+# not by anchor-involvement — so they bypass the generic in-action check here.
+# COVENANT_ROLE threads similarly have their own gate (role held at action time);
+# they bypass anchor-involvement in the same way.
 _ALWAYS_IN_ACTION_KINDS = frozenset(
-    {TargetKind.RELATIONSHIP_TRACK, TargetKind.RELATIONSHIP_CAPSTONE}
+    {
+        TargetKind.RELATIONSHIP_TRACK,
+        TargetKind.RELATIONSHIP_CAPSTONE,
+        TargetKind.FACET,
+        TargetKind.COVENANT_ROLE,
+    }
 )
 
 
@@ -469,7 +479,7 @@ def _persist_combat_pull(  # noqa: PLR0913
 
 
 @transaction.atomic
-def spend_resonance_for_pull(  # noqa: C901 — sequential guards + combat/ephemeral branches, complexity is inherent
+def spend_resonance_for_pull(  # noqa: C901, PLR0912 — sequential guards + combat/ephemeral branches, complexity is inherent
     character_sheet: CharacterSheet,
     resonance: ResonanceModel,
     tier: int,
@@ -522,6 +532,9 @@ def spend_resonance_for_pull(  # noqa: C901 — sequential guards + combat/ephem
         if not _anchor_in_action(t, action_context):
             msg = "Thread anchor is not involved in this action."
             raise InvalidImbueAmount(msg)
+        if t.target_kind == TargetKind.FACET:
+            if not character_sheet.character.equipped_items.item_facets_for(t.target_facet):
+                raise NoMatchingWornFacetItemsError
 
     # select_for_update on cr + anima so concurrent ephemeral pulls cannot
     # both pass the balance check against an unlocked read and double-spend.

@@ -14,17 +14,19 @@ from world.combat.models import CombatPull
 from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget
 from world.magic.exceptions import (
     InvalidImbueAmount,
+    NoMatchingWornFacetItemsError,
     ResonanceInsufficient,
 )
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterResonanceFactory,
+    FacetFactory,
     ResonanceFactory,
     ThreadFactory,
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
 )
-from world.magic.models import CharacterAnima, CharacterResonance
+from world.magic.models import CharacterAnima, CharacterResonance, Thread
 from world.magic.services import _anchor_in_action, spend_resonance_for_pull
 from world.magic.types import PullActionContext
 
@@ -446,3 +448,80 @@ class AnchorInActionTests(TestCase):
         ctx_out = PullActionContext(involved_techniques=())
         self.assertTrue(_anchor_in_action(thread, ctx_in))
         self.assertFalse(_anchor_in_action(thread, ctx_out))
+
+    def test_facet_always_in_action(self) -> None:
+        """FACET threads bypass the anchor-involvement check (gated by worn-items instead)."""
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+        )
+        ctx = PullActionContext(combat_encounter=None, participant=None)
+        self.assertTrue(_anchor_in_action(thread, ctx))
+
+    def test_covenant_role_always_in_action(self) -> None:
+        """COVENANT_ROLE threads bypass the anchor-involvement check."""
+        from world.covenants.factories import CovenantRoleFactory
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+        )
+        ctx = PullActionContext(combat_encounter=None, participant=None)
+        self.assertTrue(_anchor_in_action(thread, ctx))
+
+
+class FacetWornItemsGateTests(TestCase):
+    """Tests for the FACET worn-items gate in spend_resonance_for_pull."""
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        CharacterAnimaFactory(character=self.sheet.character, current=10, maximum=10)
+        self.resonance = ResonanceFactory()
+        CharacterResonanceFactory(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+            balance=10,
+            lifetime_earned=10,
+        )
+        ThreadPullCostFactory(tier=1, resonance_cost=2, anima_per_thread=1)
+        self.facet = FacetFactory()
+
+    def _make_facet_thread(self) -> Thread:
+        return Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.FACET,
+            target_facet=self.facet,
+            level=0,
+            developed_points=0,
+        )
+
+    def test_facet_pull_without_matching_worn_item_raises(self) -> None:
+        """FACET pull with no items wearing the facet raises NoMatchingWornFacetItemsError
+        and leaves the resonance balance untouched."""
+        thread = self._make_facet_thread()
+        ctx = PullActionContext(combat_encounter=None, participant=None)
+
+        pre_balance = 10
+        with self.assertRaises(NoMatchingWornFacetItemsError):
+            spend_resonance_for_pull(
+                self.sheet,
+                self.resonance,
+                tier=1,
+                threads=[thread],
+                action_context=ctx,
+            )
+
+        cr = CharacterResonance.objects.get(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+        )
+        self.assertEqual(cr.balance, pre_balance)
