@@ -272,7 +272,7 @@ def weave_thread(  # noqa: PLR0913 — kw-only args; target+resonance+kind are d
         character_sheet: Character creating the thread.
         target_kind: TargetKind discriminator string.
         target: The anchor object (Trait, Technique, ObjectDB, RelationshipTrackProgress,
-                RelationshipCapstone).
+                RelationshipCapstone, Facet, CovenantRole).
         resonance: Resonance this thread channels.
         name: Optional narrative name.
         description: Optional narrative description.
@@ -282,6 +282,8 @@ def weave_thread(  # noqa: PLR0913 — kw-only args; target+resonance+kind are d
 
     Raises:
         WeavingUnlockMissing: If the character lacks the required weaving unlock.
+        CovenantRoleNeverHeldError: If target_kind is COVENANT_ROLE and the
+                character has never held the role.
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
 
