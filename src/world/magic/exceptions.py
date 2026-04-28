@@ -36,6 +36,10 @@ class WeavingUnlockMissing(MagicError):
     user_message = "You have not learned to weave threads of this kind."
 
 
+class NoMatchingWornFacetItemsError(MagicError):
+    user_message = "You aren't wearing anything bearing this facet."
+
+
 class RitualComponentError(MagicError):
     user_message = "You do not have the required components for this ritual."
 
