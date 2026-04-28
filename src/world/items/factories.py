@@ -10,6 +10,7 @@ from world.items.models import (
     ItemInstance,
     ItemTemplate,
     QualityTier,
+    TemplateSlot,
 )
 
 
@@ -65,6 +66,23 @@ class ItemInstanceFactory(factory.django.DjangoModelFactory):
     custom_name = ""
     custom_description = ""
     quantity = 1
+
+
+class TemplateSlotFactory(factory.django.DjangoModelFactory):
+    """Factory for TemplateSlot.
+
+    Caller should pass ``template`` explicitly; body_region and equipment_layer
+    default to TORSO/BASE for convenience.
+    """
+
+    class Meta:
+        model = TemplateSlot
+        django_get_or_create = ("template", "body_region", "equipment_layer")
+
+    template = factory.SubFactory(ItemTemplateFactory)
+    body_region = BodyRegion.TORSO
+    equipment_layer = EquipmentLayer.BASE
+    covers_lower_layers = False
 
 
 class ItemFacetFactory(factory.django.DjangoModelFactory):
