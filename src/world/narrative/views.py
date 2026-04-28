@@ -4,7 +4,6 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.generics import ListAPIView
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
@@ -160,10 +159,7 @@ class UserStoryMuteViewSet(
         return Response(UserStoryMuteSerializer(mute).data, status=status.HTTP_201_CREATED)
 
     def destroy(self, request: "Request", *args: Any, **kwargs: Any) -> Response:
-        """Delete the mute if the requesting user owns it."""
+        """Delete the mute. IsOwnStoryMuteOrStaff enforces ownership via get_object()."""
         mute = self.get_object()
-        if not request.user.is_staff and mute.account_id != request.user.pk:
-            msg = "You may only delete your own story mutes."
-            raise PermissionDenied(msg)
         mute.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

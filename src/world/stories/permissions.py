@@ -1125,6 +1125,35 @@ class CanAuthorBulletinPost(permissions.BasePermission):
         return post.table.gm_id == gm_profile.pk
 
 
+class IsBulletinReplyAuthorOrStaff(permissions.BasePermission):
+    """Update/delete access for bulletin replies: reply author or staff.
+
+    Object-level check only; obj is a TableBulletinReply.
+    Resolves authorship via reply.author_persona -> character_sheet -> character -> db_account.
+
+    Requires author_persona__character_sheet__character to be select_related on the
+    queryset to avoid N+1 on list endpoints.
+    """
+
+    message = "Only the reply author or staff may edit or delete this reply."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Authenticated users only; object-level enforces authorship."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Author or staff may update/delete; read access is unrestricted here."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        reply = cast(Any, obj)
+        return (
+            reply.author_persona_id is not None
+            and reply.author_persona.character_sheet.character.db_account_id == request.user.pk
+        )
+
+
 class CanReplyToBulletinPost(permissions.BasePermission):
     """Reply permission: qualifying reader + post.allow_replies=True (or staff).
 

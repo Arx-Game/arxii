@@ -19,11 +19,38 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
     from evennia.accounts.models import AccountDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.roster.models import RosterEntry
     from world.roster.models.applications import RosterApplication
     from world.stories.models import Story
 
 DEFAULT_INVITE_DURATION_DAYS = 30
+
+
+def get_notification_target_for_gm(gm_profile: GMProfile) -> CharacterSheet | None:
+    """Resolve the CharacterSheet to use as the notification recipient for a GM.
+
+    Walks GMProfile -> account -> primary ObjectDB character -> CharacterSheet
+    (via the sheet_data OneToOne reverse relation) -> primary_persona's character_sheet.
+
+    Returns None if the GM's account has no character with a CharacterSheet, so
+    callers can skip the notification gracefully.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.scenes.constants import PersonaType as _PersonaType  # noqa: PLC0415
+
+    account = gm_profile.account
+    # Find a character owned by this account that has a sheet with a PRIMARY persona.
+    # We take the first match — GMs are expected to have at least one played character.
+    return (
+        CharacterSheet.objects.filter(
+            character__db_account=account,
+            personas__persona_type=_PersonaType.PRIMARY,
+        )
+        .select_related("character")
+        .first()
+    )
+
 
 TEMPORARY_PERSONA_REJECTION = (
     "A temporary persona cannot join a GM table — use a primary or established persona."

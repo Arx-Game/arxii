@@ -16,12 +16,13 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
 
+from world.narrative.permissions import IsStoryLeadGMOrStaff
 from world.stories.constants import (
     AssistantClaimStatus,
     SessionRequestStatus,
     StoryScope,
 )
-from world.stories.exceptions import EraAdvanceError
+from world.stories.exceptions import EraAdvanceError, StoryGMOfferError
 from world.stories.filters import (
     AggregateBeatContributionFilter,
     AssistantGMClaimFilter,
@@ -81,6 +82,7 @@ from world.stories.permissions import (
     CanReplyToBulletinPost,
     IsAccountOfCharacterSheet,
     IsBeatStoryOwnerOrStaff,
+    IsBulletinReplyAuthorOrStaff,
     IsChapterStoryOwnerOrStaff,
     IsClaimantOrLeadGMOrStaff,
     IsClaimOwnerOrStaff,
@@ -178,7 +180,7 @@ class EraViewSet(viewsets.ModelViewSet):
     Wave 11 will register this route; for now urls.py registers it.
     """
 
-    queryset = Era.objects.all()
+    queryset = Era.objects.annotate(story_count=Count("stories_created_in_era"))
     serializer_class = EraSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_class = EraFilter
@@ -458,21 +460,22 @@ class StoryViewSet(viewsets.ModelViewSet):
         detail=True,
         methods=[HTTPMethod.POST],
         url_path="send-ooc",
-        permission_classes=[permissions.IsAuthenticated],
+        permission_classes=[permissions.IsAuthenticated, IsStoryLeadGMOrStaff],
     )
     def send_ooc(self, request: Request, pk: int | None = None) -> Response:
         """POST /api/stories/{id}/send-ooc/ — Lead GM or staff sends an OOC notice.
 
         Body: { body: string, ooc_note?: string }
 
-        Permission: Lead GM of story.primary_table or staff.
+        Permission: Lead GM of story.primary_table or staff (enforced by
+        IsStoryLeadGMOrStaff in permission_classes; has_object_permission fires
+        automatically when get_object() is called).
         Input serializer validates body length (>= 1 char).
         Service resolves scope-appropriate recipients and fans out
         NarrativeMessageDelivery rows with category=STORY.
 
         Returns 201 with the created NarrativeMessage.
         """
-        from world.narrative.permissions import IsStoryLeadGMOrStaff  # noqa: PLC0415
         from world.narrative.serializers import (  # noqa: PLC0415
             NarrativeMessageSerializer,
             SendStoryOOCInputSerializer,
@@ -480,12 +483,6 @@ class StoryViewSet(viewsets.ModelViewSet):
         from world.narrative.services import send_story_ooc_message  # noqa: PLC0415
 
         story = self.get_object()
-
-        # Object-level permission check for Lead GM or staff.
-        perm = IsStoryLeadGMOrStaff()
-        if not perm.has_object_permission(request, self, story):
-            raise PermissionDenied(perm.message)
-
         ser = SendStoryOOCInputSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         msg = send_story_ooc_message(
@@ -1186,7 +1183,7 @@ class BeatViewSet(viewsets.ModelViewSet):
     """
 
     queryset = Beat.objects.select_related(
-        "episode__chapter__story",
+        "episode__chapter__story__primary_table",  # needed by BeatSerializer.get_can_mark
         "required_achievement",
         "required_condition_template",
         "required_codex_entry",
@@ -1325,7 +1322,17 @@ class StoryGMOfferViewSet(viewsets.ReadOnlyModelViewSet):
         offer = self.get_object()
         ser = AcceptOfferInputSerializer(data=request.data, context={"offer": offer})
         ser.is_valid(raise_exception=True)
-        updated = accept_story_offer(offer=offer, response_note=ser.validated_data["response_note"])
+        # Race-condition guard: the GM may have lost their active table between
+        # serializer validation and service execution. Re-raises as 400 to avoid
+        # a 500. Matches the EpisodeViewSet.resolve exemption pattern.
+        try:
+            updated = accept_story_offer(
+                offer=offer, response_note=ser.validated_data["response_note"]
+            )
+        except StoryGMOfferError as exc:
+            from rest_framework import serializers as drf_serializers  # noqa: PLC0415
+
+            raise drf_serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
         return Response(StoryGMOfferSerializer(updated).data, status=status.HTTP_200_OK)
 
     @action(
@@ -1440,27 +1447,14 @@ class TransitionViewSet(viewsets.ModelViewSet):
         has_permission gate alone guards creation.  This matches the pattern used
         by all other "create with body data" action endpoints in this ViewSet.
         """
-        ser = SaveTransitionWithOutcomesInputSerializer(data=request.data)
+        ser = SaveTransitionWithOutcomesInputSerializer(
+            data=request.data, context={"request": request}
+        )
         ser.is_valid(raise_exception=True)
 
         vd = ser.validated_data
         existing: Transition | None = vd.get("existing_id")
         source_episode: Episode = vd["source_episode"]
-
-        # Verify Lead GM permission for the source episode's story.
-        # (has_permission above only checks authentication + GMProfile existence.)
-        # We do an explicit object-permission check using the existing permission class.
-        if not request.user.is_staff:
-            story = source_episode.chapter.story
-            from world.gm.models import GMProfile  # noqa: PLC0415
-
-            _denied_msg = "Only the Lead GM of this story or staff may perform this action."
-            try:
-                gm_profile = request.user.gm_profile
-            except GMProfile.DoesNotExist:
-                raise PermissionDenied(_denied_msg) from None
-            if not story.primary_table_id or story.primary_table.gm_id != gm_profile.pk:
-                raise PermissionDenied(_denied_msg)
 
         transition_data: dict[str, Any] = {
             "source_episode": source_episode,
@@ -2110,7 +2104,7 @@ class TableBulletinReplyViewSet(viewsets.ModelViewSet):
     queryset = TableBulletinReply.objects.select_related(
         "post__table__gm",
         "post__story",
-        "author_persona",
+        "author_persona__character_sheet__character",  # needed by IsBulletinReplyAuthorOrStaff
     )
     serializer_class = TableBulletinReplySerializer
     permission_classes = [CanReplyToBulletinPost]
@@ -2148,6 +2142,15 @@ class TableBulletinReplyViewSet(viewsets.ModelViewSet):
 
         return qs.filter(lead_gm_q | active_member_table_wide_q | active_participant_q).distinct()
 
+    def get_permissions(self) -> list[Any]:
+        """Create: CanReplyToBulletinPost (read + allow_replies check in serializer).
+        Update/partial_update/destroy: IsBulletinReplyAuthorOrStaff (author or staff).
+        All others: base CanReplyToBulletinPost.
+        """
+        if self.action in {"update", "partial_update", "destroy"}:
+            return [IsBulletinReplyAuthorOrStaff()]
+        return [CanReplyToBulletinPost()]
+
     def get_serializer_class(self) -> type[BaseSerializer]:
         if self.action == "create":
             return CreateBulletinReplyInputSerializer
@@ -2170,17 +2173,8 @@ class TableBulletinReplyViewSet(viewsets.ModelViewSet):
         return Response(TableBulletinReplySerializer(reply).data, status=status.HTTP_201_CREATED)
 
     def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        """Edit a reply (author or staff only)."""
+        """Edit a reply — IsBulletinReplyAuthorOrStaff enforces author ownership."""
         reply = self.get_object()
-        # Author or staff check.
-        user = request.user
-        is_author = (
-            reply.author_persona_id is not None
-            and reply.author_persona.character_sheet.character.db_account_id == user.pk
-        )
-        if not user.is_staff and not is_author:
-            msg = "Only the reply author or staff may edit this reply."
-            raise PermissionDenied(msg)
         ser = UpdateBulletinReplyInputSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         reply.body = ser.validated_data["body"]
@@ -2192,15 +2186,7 @@ class TableBulletinReplyViewSet(viewsets.ModelViewSet):
         return self.update(request, *args, **kwargs)
 
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        """Delete a reply (author or staff only)."""
+        """Delete a reply — IsBulletinReplyAuthorOrStaff enforces author ownership."""
         reply = self.get_object()
-        user = request.user
-        is_author = (
-            reply.author_persona_id is not None
-            and reply.author_persona.character_sheet.character.db_account_id == user.pk
-        )
-        if not user.is_staff and not is_author:
-            msg = "Only the reply author or staff may delete this reply."
-            raise PermissionDenied(msg)
         reply.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)

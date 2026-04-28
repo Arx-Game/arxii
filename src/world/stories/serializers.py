@@ -80,7 +80,15 @@ class EraSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "activated_at", "concluded_at", "created_at", "story_count"]
 
     def get_story_count(self, obj: Era) -> int:
-        """Return the number of Story records whose created_in_era matches this era."""
+        """Return the number of Story records whose created_in_era matches this era.
+
+        Reads from the ``story_count`` annotation added by EraViewSet.queryset
+        (``Count("stories_created_in_era")``). Falls back to a direct query only
+        when the annotation is absent (e.g. in non-viewset serializer calls).
+        """
+        annotated = getattr(obj, "story_count", None)  # noqa: GETATTR_LITERAL — optional annotation, not a fixed model field
+        if annotated is not None:
+            return int(annotated)
         return Story.objects.filter(created_in_era=obj).count()
 
 
@@ -836,6 +844,10 @@ class BeatSerializer(serializers.ModelSerializer):
 
         Delegates to CanMarkBeat.has_object_permission.  The view arg is
         passed as None — CanMarkBeat does not use it.
+
+        Requires the Beat queryset to select_related
+        'episode__chapter__story__primary_table' to avoid N+1 on list endpoints.
+        BeatViewSet.queryset already includes this chain.
         """
         from world.stories.permissions import CanMarkBeat  # noqa: PLC0415
 
@@ -1031,6 +1043,25 @@ class SaveTransitionWithOutcomesInputSerializer(serializers.Serializer):
         if target_episode is not None and target_episode.pk == source_episode.pk:
             msg = "target_episode must be different from source_episode."
             raise serializers.ValidationError({"target_episode": msg})
+
+        # Lead GM permission check: only the Lead GM of the source episode's story
+        # (or staff) may save transitions. This runs here because save-with-outcomes
+        # is a detail=False action — no URL object exists for has_object_permission
+        # to inspect. The view-level IsLeadGMOnTransitionStoryOrStaff.has_permission
+        # only confirms a GMProfile exists; the authoritative check is here.
+        request = self.context.get("request")
+        if request is not None and not request.user.is_staff:
+            from world.gm.models import GMProfile  # noqa: PLC0415
+
+            story = source_episode.chapter.story
+            try:
+                gm_profile = request.user.gm_profile
+            except GMProfile.DoesNotExist:
+                msg = "Only GMs can save transitions."
+                raise serializers.ValidationError({"non_field_errors": [msg]}) from None
+            if not story.primary_table_id or story.primary_table.gm_id != gm_profile.pk:
+                msg = "You can only save transitions on stories at your tables."
+                raise serializers.ValidationError({"non_field_errors": [msg]})
 
         # Pass source_episode into nested outcome serializer context (belt-and-suspenders;
         # the child serializer receives context via the serializer chain).

@@ -140,30 +140,31 @@ def _send_offer_notification(offer: StoryGMOffer, *, kind: str) -> None:
     """Send a NarrativeMessage about a StoryGMOffer state change.
 
     kind:
-        "created"  — sent to the GM (new offer waiting for their response)
-        "accepted" — sent to the player who made the offer
-        "declined" — sent to the player who made the offer
+        "created"  — sent to the GM who received the offer (offer.offered_to)
+        "accepted" — sent to the player who made the offer (story.character_sheet)
+        "declined" — sent to the player who made the offer (story.character_sheet)
 
     Recipient CharacterSheet resolution:
-        GM notifications go to the character_sheet of the story's character_sheet
-        (the story owner's character). Player notifications go the same route since
-        both sides are reached through the story FK.
+        KIND_CREATED: walk GMProfile -> account -> primary character -> CharacterSheet via
+        get_notification_target_for_gm(). If the GM has no resolvable CharacterSheet,
+        the notification is skipped — the GM offer inbox query surfaces offers without push.
+        KIND_ACCEPTED/DECLINED: use story.character_sheet (the player's character).
 
-    If no character_sheet is resolvable the notification is skipped with a TODO
-    comment — the GM offer inbox query (Wave 5 frontend) surfaces offers without
-    needing real-time push.
+    If no character_sheet is resolvable the notification is skipped gracefully.
     """
     # Lazy import to avoid circular dependency at module load time.
+    from world.gm.services import get_notification_target_for_gm  # noqa: PLC0415
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
     story = offer.story
 
     if kind == _KIND_CREATED:
-        # Notify GM: story owner is offer.story.character_sheet
-        character_sheet = story.character_sheet
+        # Notify the GM being approached, not the player who offered.
+        character_sheet = get_notification_target_for_gm(offer.offered_to)
         if character_sheet is None:
-            # TODO(wave-7): fallback notification path when story.character_sheet is None
+            # GM has no resolvable character sheet — skip notification gracefully.
+            # The GM offer inbox query (Wave 5 frontend) surfaces the offer regardless.
             return
         body = (
             f"A player has offered you their story '{story.title}'. "
@@ -171,7 +172,7 @@ def _send_offer_notification(offer: StoryGMOffer, *, kind: str) -> None:
         )
         sender = offer.offered_by_account
     elif kind in (_KIND_ACCEPTED, _KIND_DECLINED):
-        # Notify player (offerer): their character's sheet
+        # Notify the player who made the offer (the story's character's account).
         character_sheet = story.character_sheet
         if character_sheet is None:
             # TODO(wave-7): fallback notification path when story.character_sheet is None

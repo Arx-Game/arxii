@@ -84,13 +84,25 @@ if not beat.agm_eligible:
 | `assert condition, "..."` in service | `if not condition: raise ValueError(msg)` |
 | String literal directly in `raise ValidationError(...)` | Assign `msg = ...` first |
 
-### Exception: race-condition errors in `EpisodeViewSet.resolve`
+### Exceptions: permitted race-condition `try/except` blocks in view bodies
 
-`NoEligibleTransitionError` and `AmbiguousTransitionError` from `resolve_episode()` cannot be
-pre-validated by the serializer without duplicating `get_eligible_transitions()`. The
-`EpisodeViewSet.resolve` view retains a narrow `try/except StoryError` **only** for these two
-service-level race conditions. This is the only permitted `try/except` in a view body; all other
-validation belongs in the serializer.
+The following view bodies retain narrow `try/except` blocks for race-condition errors that cannot
+be pre-validated by serializers without duplicating service-level atomic state checks. These are
+the **only** permitted `try/except` blocks in views; all other validation belongs in serializers.
+
+**`EpisodeViewSet.resolve`** — catches `NoEligibleTransitionError` and `AmbiguousTransitionError`
+from `resolve_episode()`. These cannot be pre-validated without duplicating
+`get_eligible_transitions()`.
+
+**`StoryGMOfferViewSet.accept`** — catches `StoryGMOfferError("The receiving GM has no active
+table…")`. Between serializer validation and service execution, the GM may have lost their active
+table (e.g., table archived concurrently). Pre-validating this in the serializer would duplicate
+the service's atomic table-existence check without preventing the race condition.
+
+**`EraViewSet.advance`** and **`EraViewSet.archive`** — catch `EraAdvanceError`. The era status
+can change between serializer validation and the atomic `advance_era()`/`archive_era()` call.
+Pre-validating in the serializer would duplicate the service's idempotency checks without
+eliminating the window.
 
 ## Key Files
 
