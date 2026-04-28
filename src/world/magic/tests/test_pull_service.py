@@ -11,6 +11,8 @@ from world.combat.factories import (
     CombatParticipantFactory,
 )
 from world.combat.models import CombatPull
+from world.covenants.factories import CovenantRoleFactory
+from world.items.factories import EquippedItemFactory, ItemFacetFactory, ItemInstanceFactory
 from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget
 from world.magic.exceptions import (
     InvalidImbueAmount,
@@ -464,8 +466,6 @@ class AnchorInActionTests(TestCase):
 
     def test_covenant_role_always_in_action(self) -> None:
         """COVENANT_ROLE threads bypass the anchor-involvement check."""
-        from world.covenants.factories import CovenantRoleFactory
-
         sheet = CharacterSheetFactory()
         role = CovenantRoleFactory()
         thread = Thread.objects.create(
@@ -525,3 +525,37 @@ class FacetWornItemsGateTests(TestCase):
             resonance=self.resonance,
         )
         self.assertEqual(cr.balance, pre_balance)
+
+    def test_facet_pull_with_matching_worn_item_succeeds(self) -> None:
+        """FACET pull with a worn item bearing the facet debits resonance and returns a result."""
+        thread = self._make_facet_thread()
+        # Equip an item with an ItemFacet for self.facet on self.sheet.character.
+        instance = ItemInstanceFactory()
+        ItemFacetFactory(item_instance=instance, facet=self.facet)
+        EquippedItemFactory(character=self.sheet.character, item_instance=instance)
+        # Invalidate so the handler re-loads from DB (setUp may have touched the cache).
+        self.sheet.character.equipped_items.invalidate()
+
+        # Add a NARRATIVE_ONLY tier-1 effect so resolve_pull_effects doesn't fail.
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.FACET,
+            resonance=self.resonance,
+            tier=1,
+            as_narrative_only=True,
+        )
+
+        ctx = PullActionContext(combat_encounter=None, participant=None)
+        result = spend_resonance_for_pull(
+            self.sheet,
+            self.resonance,
+            tier=1,
+            threads=[thread],
+            action_context=ctx,
+        )
+
+        self.assertEqual(result.resonance_spent, 2)
+        cr = CharacterResonance.objects.get(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+        )
+        self.assertEqual(cr.balance, 8)  # 10 − 2
