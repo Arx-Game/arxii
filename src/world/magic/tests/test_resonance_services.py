@@ -563,6 +563,100 @@ class ThreadsBlockedByCapTests(TestCase):
 
 
 # =============================================================================
+# compute_anchor_cap — FACET + COVENANT_ROLE arms (Spec D Task 25)
+# =============================================================================
+
+
+class ComputeAnchorCapFacetCovenantTests(TestCase):
+    """Tests for FACET and COVENANT_ROLE arms of compute_anchor_cap."""
+
+    def test_facet_cap_uses_lifetime_divided(self) -> None:
+        """lifetime_earned=100, divisor=50 → cap = 2. Path stage defaults to 1, hard_max=20."""
+        from world.magic.models import CharacterResonance, Thread
+        from world.magic.services.threads import compute_anchor_cap
+
+        sheet = CharacterSheetFactory(_path_stage=1)
+        res = ResonanceFactory()
+        facet = FacetFactory()
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=res,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            name="Test Facet Thread",
+        )
+        CharacterResonance.objects.create(
+            character_sheet=sheet, resonance=res, balance=0, lifetime_earned=100
+        )
+        # 100 // 50 = 2, hard_max = 1 * 20 = 20, so result = min(2, 20) = 2
+        self.assertEqual(compute_anchor_cap(thread), 2)
+
+    def test_facet_cap_capped_by_path_stage_x_20(self) -> None:
+        """lifetime_earned=10000 would give 200 from division; path_stage=1 hard_max=20 wins."""
+        from world.magic.models import CharacterResonance, Thread
+        from world.magic.services.threads import compute_anchor_cap
+
+        sheet = CharacterSheetFactory(_path_stage=1)
+        res = ResonanceFactory()
+        facet = FacetFactory()
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=res,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            name="Test Facet Thread High",
+        )
+        CharacterResonance.objects.create(
+            character_sheet=sheet, resonance=res, balance=0, lifetime_earned=10000
+        )
+        # 10000 // 50 = 200, hard_max = 1 * 20 = 20, so result = min(200, 20) = 20
+        self.assertEqual(compute_anchor_cap(thread), 20)
+
+    def test_covenant_role_cap_equals_level_x_10(self) -> None:
+        """current_level=3 → cap = 30."""
+        from world.classes.factories import CharacterClassLevelFactory
+        from world.covenants.factories import CovenantRoleFactory
+        from world.magic.models import Thread
+        from world.magic.services.threads import compute_anchor_cap
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        role = CovenantRoleFactory()
+        # Set current_level=3 via a class assignment
+        CharacterClassLevelFactory(character=sheet.character, level=3)
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=res,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            name="Test Covenant Role Thread",
+        )
+        self.assertEqual(compute_anchor_cap(thread), 30)
+
+    def test_item_kind_dropped_from_target_kind(self) -> None:
+        """ITEM is gone from TargetKind; ROOM still raises AnchorCapNotImplemented."""
+        from world.magic.exceptions import AnchorCapNotImplemented
+        from world.magic.models import Thread
+        from world.magic.services.threads import compute_anchor_cap
+
+        self.assertNotIn("ITEM", TargetKind.values)
+
+        # ROOM still raises AnchorCapNotImplemented
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        obj = sheet.character  # any ObjectDB
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=res,
+            target_kind=TargetKind.ROOM,
+            target_object=obj,
+            name="Test Room Thread",
+        )
+        with self.assertRaises(AnchorCapNotImplemented):
+            compute_anchor_cap(thread)
+
+
+# =============================================================================
 # Gate 10.6 — ProtagonismLockedError for resonance currency spends
 # =============================================================================
 

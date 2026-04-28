@@ -16,7 +16,12 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.constants import TargetKind, VitalBonusTarget
+from world.magic.constants import (
+    ANCHOR_CAP_FACET_DIVISOR,
+    ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE,
+    TargetKind,
+    VitalBonusTarget,
+)
 from world.magic.exceptions import (
     AnchorCapExceeded,
     AnchorCapNotImplemented,
@@ -89,7 +94,7 @@ def _current_path_stage(character_sheet: CharacterSheet) -> int:
     return int(history.path.stage)
 
 
-def compute_anchor_cap(thread: Thread) -> int:
+def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911 — one arm per TargetKind, hard to collapse further
     """Return the anchor-side cap for this thread (Spec A §2.4).
 
     Rules per target_kind:
@@ -103,6 +108,8 @@ def compute_anchor_cap(thread: Thread) -> int:
       defaults to 0 if no tier reached.
     - RELATIONSHIP_CAPSTONE: character's current path stage × 10 (same
       formula as path cap; capstone threads are gated by the mage's growth).
+    - FACET: min(lifetime_earned // ANCHOR_CAP_FACET_DIVISOR, path_stage × 20).
+    - COVENANT_ROLE: current_level × 10.
     - ROOM: not yet implemented — raises AnchorCapNotImplemented.
     """
     match thread.target_kind:
@@ -125,6 +132,12 @@ def compute_anchor_cap(thread: Thread) -> int:
         case TargetKind.RELATIONSHIP_CAPSTONE:
             stage = _current_path_stage(thread.owner)
             return int(stage * 10)
+        case TargetKind.FACET:
+            lifetime = thread.owner.character.resonances.lifetime(thread.resonance)
+            hard_max = _current_path_stage(thread.owner) * ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE
+            return min(lifetime // ANCHOR_CAP_FACET_DIVISOR, hard_max)
+        case TargetKind.COVENANT_ROLE:
+            return thread.owner.current_level * 10
         case TargetKind.ROOM:
             msg = thread.target_kind + " anchor cap awaits Spec D."
             raise AnchorCapNotImplemented(msg)
