@@ -9,8 +9,10 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantRoleFactory,
+    GearArchetypeCompatibilityFactory,
 )
-from world.covenants.services import assign_covenant_role, end_covenant_role
+from world.covenants.services import assign_covenant_role, end_covenant_role, is_gear_compatible
+from world.items.constants import GearArchetype
 
 
 class AssignCovenantRoleTests(TestCase):
@@ -78,3 +80,18 @@ class EndCovenantRoleTests(TestCase):
 
         # After ending, currently_held should return None.
         self.assertIsNone(self.sheet.character.covenant_roles.currently_held())
+
+
+class IsGearCompatibleTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.role = CovenantRoleFactory(slug="crown-gear")
+
+    def test_is_gear_compatible_returns_true_when_row_exists(self) -> None:
+        GearArchetypeCompatibilityFactory(
+            covenant_role=self.role, gear_archetype=GearArchetype.HEAVY_ARMOR
+        )
+        self.assertTrue(is_gear_compatible(self.role, GearArchetype.HEAVY_ARMOR))
+
+    def test_is_gear_compatible_returns_false_when_row_missing(self) -> None:
+        self.assertFalse(is_gear_compatible(self.role, GearArchetype.LIGHT_ARMOR))

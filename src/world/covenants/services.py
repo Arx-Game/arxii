@@ -6,7 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
-from world.covenants.models import CharacterCovenantRole, CovenantRole
+from world.covenants.models import CharacterCovenantRole, CovenantRole, GearArchetypeCompatibility
 
 
 @transaction.atomic
@@ -42,3 +42,17 @@ def end_covenant_role(*, assignment: CharacterCovenantRole) -> None:
     assignment.left_at = timezone.now()
     assignment.save(update_fields=["left_at"])
     assignment.character_sheet.character.covenant_roles.invalidate()
+
+
+def is_gear_compatible(role: CovenantRole, archetype: str) -> bool:
+    """Return True if a row exists in GearArchetypeCompatibility for this pair.
+
+    Existence-only join lookup. Row present = role bonuses add to mundane gear
+    stats on that archetype. Row absent = incompatible (max(role, gear) per
+    slot). GearArchetypeCompatibility is authored content (SharedMemoryModel
+    lookup table); identity-map cache makes repeated calls cheap.
+    """
+    return GearArchetypeCompatibility.objects.filter(
+        covenant_role=role,
+        gear_archetype=archetype,
+    ).exists()
