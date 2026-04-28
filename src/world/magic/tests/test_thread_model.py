@@ -223,7 +223,8 @@ class ThreadFacetKindTests(TestCase):
                 resonance=ResonanceFactory(),
             )
 
-    def test_facet_thread_unique_per_owner_resonance_facet(self) -> None:
+    def test_two_active_facet_threads_same_owner_facet_same_resonance_collide(self) -> None:
+        """Two active threads with identical (owner, facet, resonance) must collide."""
         sheet = CharacterSheetFactory()
         facet = FacetFactory()
         res = ResonanceFactory()
@@ -240,3 +241,55 @@ class ThreadFacetKindTests(TestCase):
                 target_facet=facet,
                 resonance=res,
             )
+
+    def test_two_active_facet_threads_same_owner_facet_different_resonance_collide(
+        self,
+    ) -> None:
+        """Two active threads on the same (owner, facet) with different resonances must
+        still collide — resonance is a property of the single identity thread, not a
+        second dimension that allows duplicates."""
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        res_a = ResonanceFactory()
+        res_b = ResonanceFactory()
+        Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            resonance=res_a,
+        )
+        with self.assertRaises(IntegrityError):
+            Thread.objects.create(
+                owner=sheet,
+                target_kind=TargetKind.FACET,
+                target_facet=facet,
+                resonance=res_b,
+            )
+
+    def test_retired_facet_thread_allows_new_active_thread_on_same_facet(self) -> None:
+        """Retiring a facet thread (setting retired_at) must allow a new active thread
+        on the same (owner, facet), even with a different resonance (e.g. Spider/Praedari
+        → Spider/Brimscar)."""
+
+        from django.utils import timezone
+
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        res_a = ResonanceFactory()
+        res_b = ResonanceFactory()
+        retired = Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            resonance=res_a,
+        )
+        retired.retired_at = timezone.now()
+        retired.save()
+        # New active thread on the same facet with a different resonance should succeed.
+        new_thread = Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            resonance=res_b,
+        )
+        self.assertIsNone(new_thread.retired_at)

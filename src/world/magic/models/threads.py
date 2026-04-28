@@ -473,10 +473,15 @@ class Thread(SharedMemoryModel):
                 ),
             ),
             # ---- FACET -------------------------------------------------------
+            # One active thread per (owner, facet) — the chosen resonance is a
+            # property of that single thread, not a second dimension of identity.
+            # Retired threads (retired_at IS NOT NULL) are excluded so a character
+            # can retire a Spider/Praedari thread and later weave a Spider/Brimscar
+            # thread on the same facet.
             models.UniqueConstraint(
-                fields=["owner", "resonance", "target_facet"],
-                condition=models.Q(target_kind=TargetKind.FACET),
-                name="uniq_thread_facet",
+                fields=["owner", "target_facet"],
+                condition=models.Q(target_kind=TargetKind.FACET, retired_at__isnull=True),
+                name="uniq_thread_facet_active",
             ),
             models.CheckConstraint(
                 name="thread_facet_payload",
@@ -510,7 +515,7 @@ class Thread(SharedMemoryModel):
             TargetKind.FACET: "target_facet",
         }
         attr = _kind_to_attr.get(self.target_kind)
-        return getattr(self, attr) if attr is not None else None  # noqa: GETATTR_LITERAL
+        return getattr(self, attr) if attr is not None else None
 
     def clean(self) -> None:
         """Validate exactly-one-target rule + ITEM typeclass registry membership.
