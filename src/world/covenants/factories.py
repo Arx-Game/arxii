@@ -4,7 +4,8 @@ import factory
 from factory import django as factory_django
 
 from world.covenants.constants import CovenantType, RoleArchetype
-from world.covenants.models import CovenantRole
+from world.covenants.models import CovenantRole, GearArchetypeCompatibility
+from world.items.constants import GearArchetype
 
 
 class CovenantRoleFactory(factory_django.DjangoModelFactory):
@@ -20,3 +21,14 @@ class CovenantRoleFactory(factory_django.DjangoModelFactory):
     archetype = RoleArchetype.SWORD
     speed_rank = 5
     description = ""
+
+
+class GearArchetypeCompatibilityFactory(factory_django.DjangoModelFactory):
+    """Factory for GearArchetypeCompatibility."""
+
+    class Meta:
+        model = GearArchetypeCompatibility
+        django_get_or_create = ("covenant_role", "gear_archetype")
+
+    covenant_role = factory.SubFactory(CovenantRoleFactory)
+    gear_archetype = GearArchetype.HEAVY_ARMOR

@@ -5,7 +5,8 @@ from django.test import TestCase
 
 from world.covenants.constants import CovenantType, RoleArchetype
 from world.covenants.factories import CovenantRoleFactory
-from world.covenants.models import CovenantRole
+from world.covenants.models import CovenantRole, GearArchetypeCompatibility
+from world.items.constants import GearArchetype
 
 
 class CovenantRoleTests(TestCase):
@@ -67,3 +68,25 @@ class CovenantRoleTests(TestCase):
         role = CovenantRoleFactory()
         self.assertIsNotNone(role.pk)
         self.assertEqual(role.covenant_type, CovenantType.DURANCE)
+
+
+class GearArchetypeCompatibilityTests(TestCase):
+    def test_create(self) -> None:
+        role = CovenantRoleFactory()
+        row = GearArchetypeCompatibility.objects.create(
+            covenant_role=role,
+            gear_archetype=GearArchetype.HEAVY_ARMOR,
+        )
+        self.assertEqual(row.covenant_role, role)
+
+    def test_unique_role_archetype(self) -> None:
+        role = CovenantRoleFactory()
+        GearArchetypeCompatibility.objects.create(
+            covenant_role=role,
+            gear_archetype=GearArchetype.HEAVY_ARMOR,
+        )
+        with self.assertRaises(IntegrityError):
+            GearArchetypeCompatibility.objects.create(
+                covenant_role=role,
+                gear_archetype=GearArchetype.HEAVY_ARMOR,
+            )
