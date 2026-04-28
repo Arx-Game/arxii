@@ -54,3 +54,15 @@ def equip_item(
     )
     char_obj.equipped_items.invalidate()
     return equipped
+
+
+@transaction.atomic
+def unequip_item(*, equipped_item: EquippedItem) -> None:
+    """Remove an EquippedItem and invalidate the character's handler cache.
+
+    Args:
+        equipped_item: The row to delete.
+    """
+    char_obj = equipped_item.character
+    equipped_item.delete()
+    char_obj.equipped_items.invalidate()

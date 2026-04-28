@@ -5,7 +5,7 @@ from django.test import TestCase
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.exceptions import SlotConflict, SlotIncompatible
 from world.items.models import EquippedItem
-from world.items.services.equip import equip_item
+from world.items.services.equip import equip_item, unequip_item
 
 
 class EquipItemTests(TestCase):
@@ -106,3 +106,60 @@ class EquipItemTests(TestCase):
                 body_region=BodyRegion.HEAD,
                 equipment_layer=EquipmentLayer.BASE,
             )
+
+
+class UnequipItemTests(TestCase):
+    """Tests for unequip_item."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemInstanceFactory,
+            ItemTemplateFactory,
+            TemplateSlotFactory,
+        )
+
+        cls.character = CharacterFactory(db_key="UnequipTestChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        template = ItemTemplateFactory(name="Test Boot")
+        TemplateSlotFactory(
+            template=template,
+            body_region=BodyRegion.FEET,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        cls.item = ItemInstanceFactory(template=template)
+        cls.equipped = EquippedItemFactory(
+            character=cls.character,
+            item_instance=cls.item,
+            body_region=BodyRegion.FEET,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+    def test_happy_path_removes_row(self) -> None:
+        equipped_pk = self.equipped.pk
+        unequip_item(equipped_item=self.equipped)
+        self.assertFalse(EquippedItem.objects.filter(pk=equipped_pk).exists())
+
+    def test_handler_cache_invalidated_after_unequip(self) -> None:
+        # Recreate a fresh equipped item so this test is independent.
+        from world.items.factories import EquippedItemFactory, ItemInstanceFactory
+
+        fresh_item = ItemInstanceFactory(template=self.item.template)
+        equipped = EquippedItemFactory(
+            character=self.character,
+            item_instance=fresh_item,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        # Warm the cache.
+        handler = self.character.equipped_items
+        handler.invalidate()
+        _ = list(handler)
+        self.assertIsNotNone(handler._cached)
+
+        unequip_item(equipped_item=equipped)
+
+        self.assertIsNone(handler._cached)
