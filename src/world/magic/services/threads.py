@@ -108,7 +108,8 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911 — one arm per 
       defaults to 0 if no tier reached.
     - RELATIONSHIP_CAPSTONE: character's current path stage × 10 (same
       formula as path cap; capstone threads are gated by the mage's growth).
-    - FACET: min(lifetime_earned // ANCHOR_CAP_FACET_DIVISOR, path_stage × 20).
+    - FACET: min(lifetime_earned // ANCHOR_CAP_FACET_DIVISOR,
+      path_stage × ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE).
     - COVENANT_ROLE: current_level × 10.
     - ROOM: not yet implemented — raises AnchorCapNotImplemented.
     """

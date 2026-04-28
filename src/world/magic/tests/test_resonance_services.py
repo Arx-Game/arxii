@@ -624,6 +624,7 @@ class ComputeAnchorCapFacetCovenantTests(TestCase):
         role = CovenantRoleFactory()
         # Set current_level=3 via a class assignment
         CharacterClassLevelFactory(character=sheet.character, level=3)
+        sheet.invalidate_class_level_cache()
         thread = Thread.objects.create(
             owner=sheet,
             resonance=res,
@@ -641,10 +642,11 @@ class ComputeAnchorCapFacetCovenantTests(TestCase):
 
         self.assertNotIn("ITEM", TargetKind.values)
 
-        # ROOM still raises AnchorCapNotImplemented
+        # Any ObjectDB works as target_object; AnchorCapNotImplemented fires
+        # before the target is inspected.
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
-        obj = sheet.character  # any ObjectDB
+        obj = sheet.character
         thread = Thread.objects.create(
             owner=sheet,
             resonance=res,
