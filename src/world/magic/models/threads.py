@@ -345,6 +345,14 @@ class Thread(SharedMemoryModel):
         related_name="anchored_threads",
         help_text="Set when target_kind=RELATIONSHIP_CAPSTONE; null otherwise.",
     )
+    target_facet = models.ForeignKey(
+        "magic.Facet",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=FACET; null otherwise.",
+    )
 
     class Meta:
         constraints = [
@@ -390,6 +398,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
                     )
                 ),
             ),
@@ -403,6 +412,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
                     )
                 ),
             ),
@@ -416,6 +426,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_object__isnull=False)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
                     )
                 ),
             ),
@@ -429,6 +440,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_object__isnull=False)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
                     )
                 ),
             ),
@@ -442,6 +454,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=False)
                         & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
                     )
                 ),
             ),
@@ -455,6 +468,27 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=False)
+                        & models.Q(target_facet__isnull=True)
+                    )
+                ),
+            ),
+            # ---- FACET -------------------------------------------------------
+            models.UniqueConstraint(
+                fields=["owner", "resonance", "target_facet"],
+                condition=models.Q(target_kind=TargetKind.FACET),
+                name="uniq_thread_facet",
+            ),
+            models.CheckConstraint(
+                name="thread_facet_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.FACET)
+                    | (
+                        models.Q(target_facet__isnull=False)
+                        & models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=True)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
                     )
                 ),
             ),
@@ -466,18 +500,17 @@ class Thread(SharedMemoryModel):
     @property
     def target(self) -> models.Model | None:
         """Return the populated FK object, picked by target_kind."""
-        match self.target_kind:
-            case TargetKind.TRAIT:
-                return self.target_trait
-            case TargetKind.TECHNIQUE:
-                return self.target_technique
-            case TargetKind.ITEM | TargetKind.ROOM:
-                return self.target_object
-            case TargetKind.RELATIONSHIP_TRACK:
-                return self.target_relationship_track
-            case TargetKind.RELATIONSHIP_CAPSTONE:
-                return self.target_capstone
-        return None
+        _kind_to_attr: dict[str, str] = {
+            TargetKind.TRAIT: "target_trait",
+            TargetKind.TECHNIQUE: "target_technique",
+            TargetKind.ITEM: "target_object",
+            TargetKind.ROOM: "target_object",
+            TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
+            TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
+            TargetKind.FACET: "target_facet",
+        }
+        attr = _kind_to_attr.get(self.target_kind)
+        return getattr(self, attr) if attr is not None else None  # noqa: GETATTR_LITERAL
 
     def clean(self) -> None:
         """Validate exactly-one-target rule + ITEM typeclass registry membership.
@@ -490,6 +523,7 @@ class Thread(SharedMemoryModel):
         kind_to_field: dict[str, str] = {
             TargetKind.TRAIT: "target_trait",
             TargetKind.TECHNIQUE: "target_technique",
+            TargetKind.FACET: "target_facet",
             TargetKind.ITEM: "target_object",
             TargetKind.ROOM: "target_object",
             TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
@@ -498,6 +532,7 @@ class Thread(SharedMemoryModel):
         all_target_fields = (
             "target_trait",
             "target_technique",
+            "target_facet",
             "target_object",
             "target_relationship_track",
             "target_capstone",

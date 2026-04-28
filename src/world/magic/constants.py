@@ -77,6 +77,7 @@ MIN_ALTERATION_DESCRIPTION_LENGTH = 40
 class TargetKind(models.TextChoices):
     TRAIT = "TRAIT", "Trait"
     TECHNIQUE = "TECHNIQUE", "Technique"
+    FACET = "FACET", "Facet"
     ITEM = "ITEM", "Item"
     ROOM = "ROOM", "Room"
     RELATIONSHIP_TRACK = "RELATIONSHIP_TRACK", "Relationship Track"

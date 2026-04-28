@@ -20,6 +20,7 @@ from evennia.utils import create
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import TargetKind
 from world.magic.factories import (
+    FacetFactory,
     ResonanceFactory,
     ThreadFactory,
     ThreadLevelUnlockFactory,
@@ -155,3 +156,87 @@ class ThreadLevelUnlockTests(TestCase):
         ThreadLevelUnlockFactory(thread=thread, unlocked_level=20)
         ThreadLevelUnlockFactory(thread=thread, unlocked_level=30)
         self.assertEqual(thread.level_unlocks.count(), 2)
+
+
+class ThreadFacetKindTests(TestCase):
+    """Tests for the FACET TargetKind and target_facet typed FK (Spec D Task 9)."""
+
+    def test_create_facet_thread(self) -> None:
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        res = ResonanceFactory()
+        thread = Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            resonance=res,
+            level=0,
+        )
+        self.assertEqual(thread.target_kind, TargetKind.FACET)
+        self.assertEqual(thread.target_facet, facet)
+
+    def test_target_property_returns_facet(self) -> None:
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        res = ResonanceFactory()
+        thread = Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            resonance=res,
+        )
+        self.assertEqual(thread.target, facet)
+
+    def test_clean_accepts_facet_kind_with_target_facet(self) -> None:
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        res = ResonanceFactory()
+        thread = Thread(
+            owner=sheet,
+            resonance=res,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+        )
+        thread.clean()  # no exception
+
+    def test_clean_rejects_facet_kind_without_target_facet(self) -> None:
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        thread = Thread(
+            owner=sheet,
+            resonance=res,
+            target_kind=TargetKind.FACET,
+        )
+        with self.assertRaises(ValidationError):
+            thread.clean()
+
+    def test_facet_kind_requires_only_target_facet(self) -> None:
+        """Setting any other typed FK alongside target_facet with kind=FACET must fail."""
+        sheet = CharacterSheetFactory()
+        trait = TraitFactory()
+        with self.assertRaises(IntegrityError):
+            Thread.objects.create(
+                owner=sheet,
+                target_kind=TargetKind.FACET,
+                target_facet=FacetFactory(),
+                target_trait=trait,
+                resonance=ResonanceFactory(),
+            )
+
+    def test_facet_thread_unique_per_owner_resonance_facet(self) -> None:
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        res = ResonanceFactory()
+        Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            resonance=res,
+        )
+        with self.assertRaises(IntegrityError):
+            Thread.objects.create(
+                owner=sheet,
+                target_kind=TargetKind.FACET,
+                target_facet=facet,
+                resonance=res,
+            )
