@@ -11,7 +11,7 @@ from world.magic.constants import (
 
 
 class TargetKindTests(SimpleTestCase):
-    def test_seven_target_kinds(self):
+    def test_eight_target_kinds(self):
         self.assertEqual(
             set(TargetKind.values),
             {
@@ -22,6 +22,7 @@ class TargetKindTests(SimpleTestCase):
                 "ROOM",
                 "RELATIONSHIP_TRACK",
                 "RELATIONSHIP_CAPSTONE",
+                "COVENANT_ROLE",
             },
         )
 

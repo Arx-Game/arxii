@@ -293,3 +293,99 @@ class ThreadFacetKindTests(TestCase):
             resonance=res_b,
         )
         self.assertIsNone(new_thread.retired_at)
+
+
+class ThreadCovenantRoleKindTests(TestCase):
+    """Tests for the COVENANT_ROLE TargetKind and target_covenant_role typed FK (Spec D Task 10)."""
+
+    def test_create_covenant_role_thread(self) -> None:
+        from world.covenants.factories import CovenantRoleFactory
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        res = ResonanceFactory()
+        thread = Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            resonance=res,
+        )
+        self.assertEqual(thread.target_covenant_role, role)
+        self.assertEqual(thread.target, role)
+
+    def test_clean_rejects_covenant_role_kind_without_target(self) -> None:
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        thread = Thread(
+            owner=sheet,
+            resonance=res,
+            target_kind=TargetKind.COVENANT_ROLE,
+        )
+        with self.assertRaises(ValidationError):
+            thread.clean()
+
+    def test_check_constraint_rejects_covenant_role_with_extra_fk(self) -> None:
+        """Setting both target_covenant_role and target_trait under COVENANT_ROLE kind
+        must fail at the DB layer."""
+        from world.covenants.factories import CovenantRoleFactory
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        trait = TraitFactory()
+        with self.assertRaises(IntegrityError):
+            Thread.objects.create(
+                owner=sheet,
+                target_kind=TargetKind.COVENANT_ROLE,
+                target_covenant_role=role,
+                target_trait=trait,
+                resonance=ResonanceFactory(),
+            )
+
+    def test_two_active_covenant_role_threads_same_owner_role_collide(self) -> None:
+        """Two active threads on (owner, role) must raise IntegrityError."""
+        from world.covenants.factories import CovenantRoleFactory
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        res_a = ResonanceFactory()
+        res_b = ResonanceFactory()
+        Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            resonance=res_a,
+        )
+        with self.assertRaises(IntegrityError):
+            Thread.objects.create(
+                owner=sheet,
+                target_kind=TargetKind.COVENANT_ROLE,
+                target_covenant_role=role,
+                resonance=res_b,
+            )
+
+    def test_retired_covenant_role_thread_allows_new_active_thread(self) -> None:
+        """Retiring a covenant role thread allows a new active thread on the same
+        (owner, role)."""
+        from django.utils import timezone
+
+        from world.covenants.factories import CovenantRoleFactory
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        res_a = ResonanceFactory()
+        res_b = ResonanceFactory()
+        retired = Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            resonance=res_a,
+        )
+        retired.retired_at = timezone.now()
+        retired.save()
+        new_thread = Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            resonance=res_b,
+        )
+        self.assertIsNone(new_thread.retired_at)

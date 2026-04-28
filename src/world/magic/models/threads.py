@@ -353,6 +353,14 @@ class Thread(SharedMemoryModel):
         related_name="anchored_threads",
         help_text="Set when target_kind=FACET; null otherwise.",
     )
+    target_covenant_role = models.ForeignKey(
+        "covenants.CovenantRole",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=COVENANT_ROLE; null otherwise.",
+    )
 
     class Meta:
         constraints = [
@@ -399,6 +407,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
                     )
                 ),
             ),
@@ -413,6 +422,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
                     )
                 ),
             ),
@@ -427,6 +437,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
                     )
                 ),
             ),
@@ -441,6 +452,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
                     )
                 ),
             ),
@@ -455,6 +467,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_relationship_track__isnull=False)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
                     )
                 ),
             ),
@@ -469,6 +482,7 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=False)
                         & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
                     )
                 ),
             ),
@@ -494,6 +508,31 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
+                    )
+                ),
+            ),
+            # ---- COVENANT_ROLE -----------------------------------------------
+            # One active thread per (owner, covenant_role). Retired threads
+            # (retired_at IS NOT NULL) are excluded so a character can retire a
+            # role thread and later weave a new one on the same role.
+            models.UniqueConstraint(
+                fields=["owner", "target_covenant_role"],
+                condition=models.Q(target_kind=TargetKind.COVENANT_ROLE, retired_at__isnull=True),
+                name="uniq_thread_covenant_role_active",
+            ),
+            models.CheckConstraint(
+                name="thread_covenant_role_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.COVENANT_ROLE)
+                    | (
+                        models.Q(target_covenant_role__isnull=False)
+                        & models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=True)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
                     )
                 ),
             ),
@@ -513,6 +552,7 @@ class Thread(SharedMemoryModel):
             TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
             TargetKind.FACET: "target_facet",
+            TargetKind.COVENANT_ROLE: "target_covenant_role",
         }
         attr = _kind_to_attr.get(self.target_kind)
         return getattr(self, attr) if attr is not None else None
@@ -533,6 +573,7 @@ class Thread(SharedMemoryModel):
             TargetKind.ROOM: "target_object",
             TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
+            TargetKind.COVENANT_ROLE: "target_covenant_role",
         }
         all_target_fields = (
             "target_trait",
@@ -541,6 +582,7 @@ class Thread(SharedMemoryModel):
             "target_object",
             "target_relationship_track",
             "target_capstone",
+            "target_covenant_role",
         )
 
         expected_field = kind_to_field.get(self.target_kind)
