@@ -5,7 +5,7 @@ from django.test import TestCase
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.exceptions import FacetAlreadyAttached, FacetCapacityExceeded
 from world.items.models import ItemFacet
-from world.items.services.facets import attach_facet_to_item
+from world.items.services.facets import attach_facet_to_item, remove_facet_from_item
 
 
 class AttachFacetToItemTests(TestCase):
@@ -125,3 +125,89 @@ class AttachFacetToItemTests(TestCase):
         fresh_handler = CharacterEquipmentHandler(self.character)
         fresh_facets = list(fresh_handler.iter_item_facets())
         self.assertIn(row, fresh_facets)
+
+
+class RemoveFacetFromItemTests(TestCase):
+    """Tests for remove_facet_from_item."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import AccountFactory, CharacterFactory
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemFacetFactory,
+            ItemInstanceFactory,
+            ItemTemplateFactory,
+            QualityTierFactory,
+            TemplateSlotFactory,
+        )
+        from world.magic.factories import FacetFactory
+
+        cls.crafter = AccountFactory(username="RemoveFacetCrafter")
+        cls.quality = QualityTierFactory()
+        cls.template = ItemTemplateFactory(name="Removable Facet Item", facet_capacity=2)
+        cls.item = ItemInstanceFactory(template=cls.template)
+        cls.facet = FacetFactory(name="RemovableFacet")
+        cls.item_facet = ItemFacetFactory(
+            item_instance=cls.item,
+            facet=cls.facet,
+            attachment_quality_tier=cls.quality,
+        )
+
+        # Character wearing the item for cache-invalidation tests.
+        cls.character = CharacterFactory(db_key="RemoveFacetChar")
+        TemplateSlotFactory(
+            template=cls.template,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        cls.equipped = EquippedItemFactory(
+            character=cls.character,
+            item_instance=cls.item,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+    def test_happy_path_deletes_row(self) -> None:
+        from world.items.factories import ItemFacetFactory
+        from world.magic.factories import FacetFactory
+
+        # Create a disposable facet for this test so we don't break setUpTestData state.
+        extra_facet = FacetFactory(name="DisposableFacet")
+        row = ItemFacetFactory(
+            item_instance=self.item,
+            facet=extra_facet,
+            attachment_quality_tier=self.quality,
+        )
+        row_pk = row.pk
+        remove_facet_from_item(item_facet=row)
+        self.assertFalse(ItemFacet.objects.filter(pk=row_pk).exists())
+
+    def test_handler_cache_invalidated_for_wearer(self) -> None:
+        """After remove, the DB row is gone and a fresh handler sees the updated state.
+
+        Same rationale as AttachFacetToItemTests.test_handler_cache_invalidated_for_wearer.
+        """
+        from world.items.factories import ItemFacetFactory
+        from world.items.handlers import CharacterEquipmentHandler
+        from world.magic.factories import FacetFactory
+
+        extra_facet = FacetFactory(name="CacheInvalidateFacet")
+        row = ItemFacetFactory(
+            item_instance=self.item,
+            facet=extra_facet,
+            attachment_quality_tier=self.quality,
+        )
+        row_pk = row.pk
+        self.assertTrue(ItemFacet.objects.filter(pk=row_pk).exists())
+
+        remove_facet_from_item(item_facet=row)
+
+        # Row must be deleted from DB.
+        self.assertFalse(ItemFacet.objects.filter(pk=row_pk).exists())
+
+        # A fresh handler must not see the removed facet.
+        fresh_handler = CharacterEquipmentHandler(self.character)
+        fresh_facets = list(fresh_handler.iter_item_facets())
+        pk_set = {f.pk for f in fresh_facets}
+        self.assertNotIn(row_pk, pk_set)
