@@ -247,6 +247,9 @@ def _has_weaving_unlock(
             # Both RelationshipTrackProgress and RelationshipCapstone expose .track
             track = target.track  # type: ignore[union-attr]  # noqa: GETATTR_LITERAL — both relationship anchor types expose .track
             return base.filter(unlock__unlock_track=track).exists()
+        case TargetKind.FACET:
+            # Single global FACET unlock — no per-facet variant; any FACET-kind unlock suffices.
+            return base.filter(unlock__target_kind=TargetKind.FACET).exists()
     return False
 
 
@@ -282,7 +285,12 @@ def weave_thread(  # noqa: PLR0913 — kw-only args; target+resonance+kind are d
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
 
-    if not _has_weaving_unlock(character_sheet, target_kind, target):
+    if target_kind == TargetKind.COVENANT_ROLE:
+        from world.covenants.exceptions import CovenantRoleNeverHeldError  # noqa: PLC0415
+
+        if not character_sheet.character.covenant_roles.has_ever_held(target):
+            raise CovenantRoleNeverHeldError
+    elif not _has_weaving_unlock(character_sheet, target_kind, target):
         msg = "Character lacks the required ThreadWeavingUnlock for this anchor."
         raise WeavingUnlockMissing(msg)
 
@@ -292,6 +300,8 @@ def weave_thread(  # noqa: PLR0913 — kw-only args; target+resonance+kind are d
         TargetKind.ROOM: "target_object",
         TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
         TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
+        TargetKind.FACET: "target_facet",
+        TargetKind.COVENANT_ROLE: "target_covenant_role",
     }
     kwargs: dict[str, object] = {
         "owner": character_sheet,

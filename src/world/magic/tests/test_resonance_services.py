@@ -18,6 +18,7 @@ from world.magic.factories import (
     CharacterResonanceFactory,
     CharacterSheetFactory,
     CharacterThreadWeavingUnlockFactory,
+    FacetFactory,
     ResonanceFactory,
     ThreadFactory,
     ThreadLevelUnlockFactory,
@@ -392,6 +393,61 @@ class WeaveThreadTests(TestCase):
         res = ResonanceFactory()
         with self.assertRaises(WeavingUnlockMissing):
             weave_thread(sheet, TargetKind.TRAIT, trait, res)
+
+    def test_weave_thread_facet(self) -> None:
+        """Character with global FACET weaving unlock can create a FACET thread."""
+        from world.magic.models import ThreadWeavingUnlock
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        facet = FacetFactory()
+        # Single global unlock for FACET kind — all FK args NULL, bypasses full_clean()
+        unlock = ThreadWeavingUnlock.objects.create(target_kind=TargetKind.FACET, xp_cost=100)
+        CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock, xp_spent=100)
+
+        thread = weave_thread(sheet, TargetKind.FACET, facet, res, name="Silk Thread")
+        self.assertEqual(thread.owner, sheet)
+        self.assertEqual(thread.resonance, res)
+        self.assertEqual(thread.target_kind, TargetKind.FACET)
+        self.assertEqual(thread.target_facet, facet)
+        self.assertEqual(thread.name, "Silk Thread")
+        self.assertEqual(thread.level, 0)
+
+    def test_weave_thread_facet_no_unlock_raises(self) -> None:
+        """Character without FACET weaving unlock → raises WeavingUnlockMissing."""
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        facet = FacetFactory()
+        with self.assertRaises(WeavingUnlockMissing):
+            weave_thread(sheet, TargetKind.FACET, facet, res)
+
+    def test_weave_thread_covenant_role_never_held_raises(self) -> None:
+        """Character who has never held the role → raises CovenantRoleNeverHeldError."""
+        from world.covenants.exceptions import CovenantRoleNeverHeldError
+        from world.covenants.factories import CovenantRoleFactory
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        role = CovenantRoleFactory()
+        with self.assertRaises(CovenantRoleNeverHeldError):
+            weave_thread(sheet, TargetKind.COVENANT_ROLE, role, res)
+
+    def test_weave_thread_covenant_role_with_historical_role_succeeds(self) -> None:
+        """Character who has held the role (active or ended) can weave a COVENANT_ROLE thread."""
+        from world.covenants.factories import CharacterCovenantRoleFactory, CovenantRoleFactory
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        role = CovenantRoleFactory()
+        CharacterCovenantRoleFactory(character_sheet=sheet, covenant_role=role)
+
+        thread = weave_thread(sheet, TargetKind.COVENANT_ROLE, role, res, name="Vanguard Thread")
+        self.assertEqual(thread.owner, sheet)
+        self.assertEqual(thread.resonance, res)
+        self.assertEqual(thread.target_kind, TargetKind.COVENANT_ROLE)
+        self.assertEqual(thread.target_covenant_role, role)
+        self.assertEqual(thread.name, "Vanguard Thread")
+        self.assertEqual(thread.level, 0)
 
 
 class UpdateThreadNarrativeTests(TestCase):
