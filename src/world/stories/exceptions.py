@@ -46,3 +46,19 @@ class ClaimStateTransitionError(AssistantClaimError):
 
 class SessionRequestNotOpenError(StoryError):
     _SAFE_MESSAGE = "This session request cannot be scheduled in its current state."
+
+
+class StoryGMOfferError(StoryError):
+    _SAFE_MESSAGE = "This story-GM offer cannot be processed in its current state."
+
+
+class EraAdvanceError(StoryError):
+    """Raised when an era lifecycle transition is not permitted."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self._message = message
+
+    @property
+    def user_message(self) -> str:
+        return self._message

@@ -27,3 +27,17 @@ class GMTableStatus(models.TextChoices):
 
     ACTIVE = "active", "Active"
     ARCHIVED = "archived", "Archived"
+
+
+class GMTableViewerRole(models.TextChoices):
+    """Requesting user's role relative to a GMTable.
+
+    Returned by GMTableSerializer.get_viewer_role(). Priority: gm > staff >
+    member > guest > none.
+    """
+
+    GM = "gm", "GM (owner)"
+    STAFF = "staff", "Staff"
+    MEMBER = "member", "Member"
+    GUEST = "guest", "Guest (story participant, not a member)"
+    NONE = "none", "None"

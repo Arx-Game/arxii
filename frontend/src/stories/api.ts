@@ -21,29 +21,37 @@ import type {
   AssistantGMClaim,
   Beat,
   BeatCompletion,
+  BeatCreateBody,
+  BeatUpdateBody,
   Chapter,
   ChapterCreateBody,
   ChapterList,
   ContributeBeatBody,
   CreateEventBody,
+  Era,
+  EraCreateBody,
   Episode,
   EpisodeCreateBody,
   EpisodeList,
   EpisodeProgressionRequirement,
   EpisodeResolution,
   GlobalStoryProgress,
+  GMProfile,
   GMQueueResponse,
   GroupStoryProgress,
   MarkBeatBody,
   MyActiveStoriesResponse,
+  OfferStoryToGMBody,
   PaginatedResponse,
   RejectClaimBody,
   RequestClaimBody,
+  RespondToOfferBody,
   ResolveEpisodeBody,
   SessionRequest,
   StaffWorkloadResponse,
   Story,
   StoryCreateBody,
+  StoryGMOffer,
   StoryList,
   StoryLogResponse,
   Transition,
@@ -105,6 +113,7 @@ export interface ListStoriesParams {
   privacy?: string;
   search?: string;
   ordering?: string;
+  primary_table?: number;
   page?: number;
   page_size?: number;
 }
@@ -293,7 +302,7 @@ export async function getBeat(id: number): Promise<Beat> {
   return res.json() as Promise<Beat>;
 }
 
-export async function createBeat(data: Partial<Beat>): Promise<Beat> {
+export async function createBeat(data: BeatCreateBody): Promise<Beat> {
   const res = await apiFetch('/api/beats/', {
     method: 'POST',
     headers: jsonHeaders(),
@@ -303,7 +312,7 @@ export async function createBeat(data: Partial<Beat>): Promise<Beat> {
   return res.json() as Promise<Beat>;
 }
 
-export async function updateBeat(id: number, data: Partial<Beat>): Promise<Beat> {
+export async function updateBeat(id: number, data: BeatUpdateBody): Promise<Beat> {
   const res = await apiFetch(`/api/beats/${id}/`, {
     method: 'PATCH',
     headers: jsonHeaders(),
@@ -676,6 +685,46 @@ export async function deleteTransition(id: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Wave 13: Atomic save-with-outcomes (replaces multi-roundtrip create)
+// ---------------------------------------------------------------------------
+
+export interface OutcomeInputBody {
+  beat: number;
+  required_outcome: string;
+}
+
+export interface SaveTransitionWithOutcomesBody {
+  source_episode: number;
+  target_episode: number | null;
+  mode: string;
+  connection_type: string;
+  connection_summary: string;
+  order: number;
+  outcomes: OutcomeInputBody[];
+  /** Omit or pass null for create; pass the existing Transition PK for update. */
+  existing_id?: number | null;
+}
+
+export async function saveTransitionWithOutcomes(
+  body: SaveTransitionWithOutcomesBody
+): Promise<Transition> {
+  const res = await apiFetch('/api/transitions/save-with-outcomes/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    // Preserve the response for the caller to inspect field errors.
+    const err = new Error('Failed to save transition with outcomes') as Error & {
+      response?: Response;
+    };
+    err.response = res;
+    throw err;
+  }
+  return res.json() as Promise<Transition>;
+}
+
+// ---------------------------------------------------------------------------
 // EpisodeProgressionRequirement CRUD (Wave 9 author editor)
 // ---------------------------------------------------------------------------
 
@@ -753,6 +802,188 @@ export async function deleteTransitionRequiredOutcome(id: number): Promise<void>
   if (!res.ok) throw new Error(`Failed to delete transition required outcome ${id}`);
 }
 
+// ---------------------------------------------------------------------------
+// Story GM offer endpoints (Wave 5)
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/stories/{id}/detach-from-table/
+ * Clears story.primary_table. Returns 200 with updated Story.
+ */
+export async function detachStoryFromTable(storyId: number): Promise<Story> {
+  const res = await apiFetch(`/api/stories/${storyId}/detach-from-table/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error('Failed to detach story from table');
+  return res.json() as Promise<Story>;
+}
+
+/**
+ * POST /api/stories/{id}/offer-to-gm/
+ * Body: { gm_profile_id: number, message?: string }
+ * Returns 201 with the created StoryGMOffer.
+ */
+export async function offerStoryToGM(
+  storyId: number,
+  body: OfferStoryToGMBody
+): Promise<StoryGMOffer> {
+  const res = await apiFetch(`/api/stories/${storyId}/offer-to-gm/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to offer story to GM');
+  return res.json() as Promise<StoryGMOffer>;
+}
+
+export interface ListStoryGMOffersParams {
+  status?: string;
+  story?: number;
+  offered_to?: number;
+  offered_by_account?: number;
+  page?: number;
+  page_size?: number;
+}
+
+/**
+ * GET /api/story-gm-offers/
+ * Queryset is auto-scoped by the backend (GM sees received; player sees made; staff sees all).
+ */
+export async function listStoryGMOffers(
+  params?: ListStoryGMOffersParams
+): Promise<PaginatedResponse<StoryGMOffer>> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/story-gm-offers/${qs}`);
+  if (!res.ok) throw new Error('Failed to load story GM offers');
+  return res.json() as Promise<PaginatedResponse<StoryGMOffer>>;
+}
+
+/**
+ * POST /api/story-gm-offers/{id}/accept/
+ * Body: { response_note?: string }
+ * Returns 200 with updated StoryGMOffer.
+ */
+export async function acceptOffer(
+  offerId: number,
+  body?: RespondToOfferBody
+): Promise<StoryGMOffer> {
+  const res = await apiFetch(`/api/story-gm-offers/${offerId}/accept/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) throw new Error('Failed to accept offer');
+  return res.json() as Promise<StoryGMOffer>;
+}
+
+/**
+ * POST /api/story-gm-offers/{id}/decline/
+ * Body: { response_note?: string }
+ * Returns 200 with updated StoryGMOffer.
+ */
+export async function declineOffer(
+  offerId: number,
+  body?: RespondToOfferBody
+): Promise<StoryGMOffer> {
+  const res = await apiFetch(`/api/story-gm-offers/${offerId}/decline/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body ?? {}),
+  });
+  if (!res.ok) throw new Error('Failed to decline offer');
+  return res.json() as Promise<StoryGMOffer>;
+}
+
+/**
+ * POST /api/story-gm-offers/{id}/withdraw/
+ * No body required. Returns 200 with updated StoryGMOffer.
+ */
+export async function withdrawOffer(offerId: number): Promise<StoryGMOffer> {
+  const res = await apiFetch(`/api/story-gm-offers/${offerId}/withdraw/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) throw new Error('Failed to withdraw offer');
+  return res.json() as Promise<StoryGMOffer>;
+}
+
+// ---------------------------------------------------------------------------
+// GM Profile search endpoint (Wave 5 — for offer-to-GM picker)
+// ---------------------------------------------------------------------------
+
+export interface ListGMProfilesParams {
+  search?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/**
+ * GET /api/gm/profiles/
+ * Read-only list of approved GM profiles, searchable by username.
+ * Available to any authenticated user for the offer-to-GM picker.
+ */
+export async function listGMProfiles(
+  params?: ListGMProfilesParams
+): Promise<PaginatedResponse<GMProfile>> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/gm/profiles/${qs}`);
+  if (!res.ok) throw new Error('Failed to load GM profiles');
+  return res.json() as Promise<PaginatedResponse<GMProfile>>;
+}
+
+// ---------------------------------------------------------------------------
+// Story OOC sender (Wave 8)
+// ---------------------------------------------------------------------------
+
+export interface SendStoryOOCBody {
+  body: string;
+  ooc_note?: string;
+}
+
+/**
+ * POST /api/stories/{id}/send-ooc/
+ * Lead GM / staff sends a story-scoped OOC notice.
+ * Returns 201 with the created NarrativeMessage.
+ */
+export async function sendStoryOOC(
+  storyId: number,
+  data: SendStoryOOCBody
+): Promise<NarrativeMessageResponse> {
+  const res = await apiFetch(`/api/stories/${storyId}/send-ooc/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = new Error('Failed to send OOC notice') as Error & { status?: number };
+    err.status = res.status;
+    throw err;
+  }
+  return res.json() as Promise<NarrativeMessageResponse>;
+}
+
+/**
+ * Minimal NarrativeMessage shape returned by send-ooc.
+ * The backend returns the full NarrativeMessage serializer output.
+ */
+export interface NarrativeMessageResponse {
+  id: number;
+  body: string;
+  category: string;
+  sender_account: number | null;
+  related_story: number | null;
+  related_beat_completion: number | null;
+  related_episode_resolution: number | null;
+  sent_at: string;
+}
+
 /**
  * POST /api/stories/expire-overdue-beats/
  * Staff-only trigger. Returns { expired_count: number }.
@@ -765,4 +996,92 @@ export async function expireOverdueBeats(): Promise<{ expired_count: number }> {
   });
   if (!res.ok) throw new Error('Failed to expire overdue beats');
   return res.json() as Promise<{ expired_count: number }>;
+}
+
+// ---------------------------------------------------------------------------
+// Era CRUD and lifecycle actions (Wave 6)
+// ---------------------------------------------------------------------------
+
+export interface ListErasParams {
+  status?: string;
+  season_number?: number;
+  ordering?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export async function listEras(params?: ListErasParams): Promise<PaginatedResponse<Era>> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/eras/${qs}`);
+  if (!res.ok) throw new Error('Failed to load eras');
+  return res.json() as Promise<PaginatedResponse<Era>>;
+}
+
+export async function getEra(id: number): Promise<Era> {
+  const res = await apiFetch(`/api/eras/${id}/`);
+  if (!res.ok) throw new Error(`Failed to load era ${id}`);
+  return res.json() as Promise<Era>;
+}
+
+export async function createEra(data: EraCreateBody): Promise<Era> {
+  const res = await apiFetch('/api/eras/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error('Failed to create era');
+  return res.json() as Promise<Era>;
+}
+
+export async function updateEra(id: number, data: Partial<EraCreateBody>): Promise<Era> {
+  const res = await apiFetch(`/api/eras/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(`Failed to update era ${id}`);
+  return res.json() as Promise<Era>;
+}
+
+export async function deleteEra(id: number): Promise<void> {
+  const res = await apiFetch(`/api/eras/${id}/`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`Failed to delete era ${id}`);
+}
+
+/**
+ * POST /api/eras/{id}/advance/
+ * Staff-only. Closes current ACTIVE era, activates this UPCOMING era.
+ * Returns 200 with updated Era on success, 400 on invalid state.
+ */
+export async function advanceEra(id: number): Promise<Era> {
+  const res = await apiFetch(`/api/eras/${id}/advance/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(body.detail ?? `Failed to advance era ${id}`);
+  }
+  return res.json() as Promise<Era>;
+}
+
+/**
+ * POST /api/eras/{id}/archive/
+ * Staff-only. Marks era CONCLUDED without advancing to a new one.
+ * Returns 200 with updated Era on success, 400 on invalid state.
+ */
+export async function archiveEra(id: number): Promise<Era> {
+  const res = await apiFetch(`/api/eras/${id}/archive/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({}),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { detail?: string };
+    throw new Error(body.detail ?? `Failed to archive era ${id}`);
+  }
+  return res.json() as Promise<Era>;
 }

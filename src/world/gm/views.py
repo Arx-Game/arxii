@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from django.db.models import QuerySet
+from django.db.models import Q, QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -18,6 +18,7 @@ from rest_framework.views import APIView
 from world.gm.constants import GMApplicationStatus, GMTableStatus
 from world.gm.filters import (
     GMApplicationFilter,
+    GMProfileFilter,
     GMTableFilter,
     GMTableMembershipFilter,
 )
@@ -36,6 +37,7 @@ from world.gm.serializers import (
     GMApplicationQueueSerializer,
     GMInviteClaimSerializer,
     GMInviteRevokeSerializer,
+    GMProfileSerializer,
     GMRosterInviteSerializer,
     GMTableMembershipSerializer,
     GMTableSerializer,
@@ -101,11 +103,35 @@ class GMApplicationViewSet(
             )
 
 
+class GMProfileViewSet(
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Read-only list of approved GM profiles.
+
+    Accessible by any authenticated user so players can pick a GM when
+    offering their story. Supports ``?search=<username>`` for autocomplete.
+    """
+
+    queryset = GMProfile.objects.select_related("account").order_by("account__username")
+    serializer_class = GMProfileSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = GMProfileFilter
+    pagination_class = StandardResultsSetPagination
+
+
 class GMTableViewSet(viewsets.ModelViewSet):
     """GM table management.
 
-    Staff sees all tables. GMs see only their own. Archive and transfer
-    ownership are staff-only lifecycle actions.
+    Staff sees all tables. GMs see their own tables. Players see tables where any
+    of their personas has an active GMTableMembership (left_at__isnull=True).
+
+    Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+    → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+
+    Archive and transfer ownership are staff-only lifecycle actions.
     """
 
     queryset = GMTable.objects.select_related("gm__account").order_by("-created_at")
@@ -120,7 +146,14 @@ class GMTableViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_staff:
             return qs
-        return qs.filter(gm__account=user)
+        # GM owner of the table OR has an active membership via any persona.
+        return qs.filter(
+            Q(gm__account=user)
+            | Q(
+                memberships__persona__character_sheet__character__db_account=user,
+                memberships__left_at__isnull=True,
+            )
+        ).distinct()
 
     @action(detail=True, methods=["post"], permission_classes=[IsAdminUser])
     def archive(self, request: Request, pk: str | None = None) -> Response:
@@ -145,7 +178,14 @@ class GMTableViewSet(viewsets.ModelViewSet):
 class GMTableMembershipViewSet(viewsets.ModelViewSet):
     """GM table membership management.
 
-    Staff sees all memberships. GMs see only memberships for tables they own.
+    Staff sees all memberships. GMs (table owners) see all memberships at their
+    tables. Authenticated players see all memberships at tables where any of
+    their personas has an active membership — this gives them the member roster
+    for tables they belong to.
+
+    Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+    → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+
     Creation uses the join_table service to apply temporary-persona validation.
     Destroy is a soft-leave — the record remains with left_at set.
     """
@@ -162,7 +202,16 @@ class GMTableMembershipViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_staff:
             return qs
-        return qs.filter(table__gm__account=user)
+        # GM owns the table OR the user has an active membership at the table.
+        # The second branch gives members access to the full membership roster
+        # for any table they actively belong to (needed for Wave 4 Members tab).
+        return qs.filter(
+            Q(table__gm__account=user)
+            | Q(
+                table__memberships__persona__character_sheet__character__db_account=user,
+                table__memberships__left_at__isnull=True,
+            )
+        ).distinct()
 
     def perform_create(self, serializer: serializers.Serializer) -> None:
         """Create membership via service to enforce TEMPORARY rejection.

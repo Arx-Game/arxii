@@ -10,6 +10,7 @@ from world.stories.constants import (
     BeatVisibility,
     EraStatus,
     SessionRequestStatus,
+    StoryGMOfferStatus,
     StoryScope,
     TransitionMode,
 )
@@ -31,8 +32,11 @@ from world.stories.models import (
     SessionRequest,
     Story,
     StoryFeedback,
+    StoryGMOffer,
     StoryParticipation,
     StoryProgress,
+    TableBulletinPost,
+    TableBulletinReply,
     Transition,
     TransitionRequiredOutcome,
     TrustCategory,
@@ -479,6 +483,25 @@ class AssistantGMClaimFactory(factory_django.DjangoModelFactory):
     framing_note = factory.Faker("paragraph")
 
 
+class StoryGMOfferFactory(factory_django.DjangoModelFactory):
+    """Factory for creating StoryGMOffer instances.
+
+    Defaults to PENDING status. For accepted/declined/withdrawn offers, pass
+    status=StoryGMOfferStatus.ACCEPTED etc. and set responded_at manually.
+    """
+
+    class Meta:
+        model = StoryGMOffer
+
+    story = factory.SubFactory(StoryFactory, scope=StoryScope.CHARACTER, primary_table=None)
+    offered_to = factory.SubFactory("world.gm.factories.GMProfileFactory")
+    offered_by_account = factory.SubFactory("evennia_extensions.factories.AccountFactory")
+    status = StoryGMOfferStatus.PENDING
+    message = ""
+    response_note = ""
+    responded_at = None
+
+
 class SessionRequestFactory(factory_django.DjangoModelFactory):
     """Factory for creating SessionRequest instances."""
 
@@ -492,6 +515,36 @@ class SessionRequestFactory(factory_django.DjangoModelFactory):
     assigned_gm = None
     initiated_by_account = None
     notes = ""
+
+
+# ---------------------------------------------------------------------------
+# Wave 10: Bulletin factories
+# ---------------------------------------------------------------------------
+
+
+class TableBulletinPostFactory(factory_django.DjangoModelFactory):
+    """Factory for TableBulletinPost — defaults to a table-wide post (story=None)."""
+
+    class Meta:
+        model = TableBulletinPost
+
+    table = factory.SubFactory("world.gm.factories.GMTableFactory")
+    story = None
+    author_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    title = factory.Faker("sentence", nb_words=5)
+    body = factory.Faker("paragraph", nb_sentences=3)
+    allow_replies = True
+
+
+class TableBulletinReplyFactory(factory_django.DjangoModelFactory):
+    """Factory for TableBulletinReply."""
+
+    class Meta:
+        model = TableBulletinReply
+
+    post = factory.SubFactory(TableBulletinPostFactory)
+    author_persona = factory.SubFactory("world.scenes.factories.PersonaFactory")
+    body = factory.Faker("paragraph", nb_sentences=2)
 
 
 # Convenience functions for common test scenarios

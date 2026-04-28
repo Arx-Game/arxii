@@ -8,12 +8,20 @@ from rest_framework.test import APITestCase
 
 from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
+from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.stories.constants import (
+    AssistantClaimStatus,
     BeatOutcome,
     BeatPredicateType,
     BeatVisibility,
 )
-from world.stories.factories import BeatFactory, ChapterFactory, EpisodeFactory, StoryFactory
+from world.stories.factories import (
+    AssistantGMClaimFactory,
+    BeatFactory,
+    ChapterFactory,
+    EpisodeFactory,
+    StoryFactory,
+)
 
 
 class BeatSerializerFieldsTest(APITestCase):
@@ -299,3 +307,80 @@ class BeatViewSetPermissionsTest(APITestCase):
             content_type="application/json",
         )
         assert response.status_code == status.HTTP_201_CREATED
+
+
+class BeatSerializerCanMarkTest(APITestCase):
+    """BeatSerializer.can_mark field gates the Mark button correctly."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        # Lead GM: a GMProfile whose account owns the story's primary_table.
+        cls.lead_gm_profile = GMProfileFactory()
+        cls.lead_gm_account = cls.lead_gm_profile.account
+        cls.gm_table = GMTableFactory(gm=cls.lead_gm_profile)
+
+        cls.story = StoryFactory(primary_table=cls.gm_table)
+        cls.chapter = ChapterFactory(story=cls.story)
+        cls.episode = EpisodeFactory(chapter=cls.chapter)
+        cls.beat = BeatFactory(
+            episode=cls.episode,
+            predicate_type=BeatPredicateType.GM_MARKED,
+            agm_eligible=True,
+        )
+
+        # AGM with APPROVED claim on this beat.
+        cls.agm_profile = GMProfileFactory()
+        cls.agm_account = cls.agm_profile.account
+        cls.approved_claim = AssistantGMClaimFactory(
+            beat=cls.beat,
+            assistant_gm=cls.agm_profile,
+            status=AssistantClaimStatus.APPROVED,
+        )
+
+        # Regular authenticated user (no GM profile).
+        cls.regular_account = AccountFactory()
+
+        # Staff account.
+        cls.staff_account = AccountFactory(is_staff=True)
+
+    def _get_beat(self, account: object) -> object:
+        """Retrieve beat via API as the given account."""
+        self.client.force_authenticate(user=account)
+        url = reverse("beat-detail", kwargs={"pk": self.beat.pk})
+        return self.client.get(url)
+
+    def test_lead_gm_gets_can_mark_true(self) -> None:
+        """Lead GM (story's primary_table owner) gets can_mark=true."""
+        response = self._get_beat(self.lead_gm_account)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["can_mark"] is True
+
+    def test_staff_gets_can_mark_true(self) -> None:
+        """Staff always gets can_mark=true."""
+        response = self._get_beat(self.staff_account)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["can_mark"] is True
+
+    def test_agm_with_approved_claim_gets_can_mark_true(self) -> None:
+        """AGM with APPROVED claim on this beat gets can_mark=true."""
+        response = self._get_beat(self.agm_account)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["can_mark"] is True
+
+    def test_regular_user_gets_can_mark_false(self) -> None:
+        """Regular authenticated user (no GM profile) gets can_mark=false."""
+        response = self._get_beat(self.regular_account)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["can_mark"] is False
+
+    def test_unapproved_agm_gets_can_mark_false(self) -> None:
+        """AGM with only REQUESTED (not APPROVED) claim gets can_mark=false."""
+        other_agm_profile = GMProfileFactory()
+        AssistantGMClaimFactory(
+            beat=self.beat,
+            assistant_gm=other_agm_profile,
+            status=AssistantClaimStatus.REQUESTED,
+        )
+        response = self._get_beat(other_agm_profile.account)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["can_mark"] is False

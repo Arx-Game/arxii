@@ -5,7 +5,7 @@ import factory.django as factory_django
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.narrative.constants import NarrativeCategory
-from world.narrative.models import NarrativeMessage, NarrativeMessageDelivery
+from world.narrative.models import Gemit, NarrativeMessage, NarrativeMessageDelivery, UserStoryMute
 
 
 class NarrativeMessageFactory(factory_django.DjangoModelFactory):
@@ -29,3 +29,21 @@ class NarrativeMessageDeliveryFactory(factory_django.DjangoModelFactory):
     recipient_character_sheet = factory.SubFactory(CharacterSheetFactory)
     delivered_at = None
     acknowledged_at = None
+
+
+class GemitFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = Gemit
+
+    body = factory.Faker("paragraph")
+    sender_account = None
+    related_era = None
+    related_story = None
+
+
+class UserStoryMuteFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = UserStoryMute
+
+    account = factory.SubFactory("evennia_extensions.factories.AccountFactory")
+    story = factory.SubFactory("world.stories.factories.StoryFactory")

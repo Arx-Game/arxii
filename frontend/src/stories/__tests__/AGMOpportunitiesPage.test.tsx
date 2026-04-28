@@ -74,6 +74,7 @@ function makeBeat(overrides: Partial<Beat> = {}): Beat {
     deadline: undefined,
     created_at: '2026-04-01T00:00:00Z',
     updated_at: '2026-04-01T00:00:00Z',
+    can_mark: false,
     ...overrides,
   };
 }

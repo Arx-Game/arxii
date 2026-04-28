@@ -19,11 +19,38 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
     from evennia.accounts.models import AccountDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.roster.models import RosterEntry
     from world.roster.models.applications import RosterApplication
     from world.stories.models import Story
 
 DEFAULT_INVITE_DURATION_DAYS = 30
+
+
+def get_notification_target_for_gm(gm_profile: GMProfile) -> CharacterSheet | None:
+    """Resolve the CharacterSheet to use as the notification recipient for a GM.
+
+    Walks GMProfile -> account -> primary ObjectDB character -> CharacterSheet
+    (via the sheet_data OneToOne reverse relation) -> primary_persona's character_sheet.
+
+    Returns None if the GM's account has no character with a CharacterSheet, so
+    callers can skip the notification gracefully.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.scenes.constants import PersonaType as _PersonaType  # noqa: PLC0415
+
+    account = gm_profile.account
+    # Find a character owned by this account that has a sheet with a PRIMARY persona.
+    # We take the first match — GMs are expected to have at least one played character.
+    return (
+        CharacterSheet.objects.filter(
+            character__db_account=account,
+            personas__persona_type=_PersonaType.PRIMARY,
+        )
+        .select_related("character")
+        .first()
+    )
+
 
 TEMPORARY_PERSONA_REJECTION = (
     "A temporary persona cannot join a GM table — use a primary or established persona."
@@ -77,11 +104,36 @@ def join_table(table: GMTable, persona: Persona) -> GMTableMembership:
 
 @transaction.atomic
 def leave_table(membership: GMTableMembership) -> None:
-    """Soft-leave a membership. No-op if already left."""
+    """Soft-leave a membership. No-op if already left.
+
+    Side effects:
+    - GMTableMembership.left_at set to now (deactivates the membership).
+    - Any CHARACTER-scope Story owned by this persona's character_sheet whose
+      primary_table matches the leaving table is detached (primary_table=None).
+      Story history and participations are preserved; the story enters
+      'seeking GM' state.
+    - GROUP-scope stories at the table are not affected — those stories belong
+      to the table, not to the individual member.
+    """
     if membership.left_at is not None:
         return
     membership.left_at = timezone.now()
     membership.save(update_fields=["left_at"])
+
+    # Auto-detach CHARACTER-scope stories owned by this persona's character.
+    # Imported inside the function to avoid circular imports between gm and stories.
+    from world.stories.constants import StoryScope  # noqa: PLC0415
+    from world.stories.models import Story  # noqa: PLC0415
+    from world.stories.services.tables import detach_story_from_table  # noqa: PLC0415
+
+    sheet = membership.persona.character_sheet
+    stories_to_detach = Story.objects.filter(
+        scope=StoryScope.CHARACTER,
+        character_sheet=sheet,
+        primary_table=membership.table,
+    )
+    for story in stories_to_detach:
+        detach_story_from_table(story=story)
 
 
 @transaction.atomic

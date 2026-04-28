@@ -108,6 +108,7 @@ const storyDetail: Story = {
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
   completed_at: null,
+  primary_table: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -363,6 +364,40 @@ describe('StoryAuthorPage', () => {
     await waitFor(() => {
       const dagCanvas = document.querySelector('[data-testid^="dag-"]');
       expect(dagCanvas).toBeInTheDocument();
+    });
+  });
+
+  it('DAG edit mode toggle renders in the DAG tab', async () => {
+    const user = userEvent.setup();
+    mockStoryListSuccess(storyList);
+    vi.mocked(api.getStory).mockResolvedValue(storyDetail);
+
+    render(<StoryAuthorPage />, { wrapper: createWrapper() });
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('story-sidebar-item')[0]).toBeInTheDocument();
+    });
+    await user.click(screen.getAllByTestId('story-sidebar-item')[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tab-dag')).toBeInTheDocument();
+    });
+
+    // Switch to DAG tab to reveal the toggle
+    await user.click(screen.getByTestId('tab-dag'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dag-edit-mode-toggle')).toBeInTheDocument();
+    });
+
+    // Toggle starts in read-only state
+    const toggle = screen.getByTestId('dag-edit-mode-toggle');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+
+    // Clicking the toggle flips it to edit mode
+    await user.click(toggle);
+    await waitFor(() => {
+      expect(toggle).toHaveAttribute('aria-checked', 'true');
     });
   });
 });

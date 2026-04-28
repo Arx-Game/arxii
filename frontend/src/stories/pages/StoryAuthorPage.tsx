@@ -28,6 +28,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { listStories, getStory } from '../api';
 import { storiesKeys, useDeleteStory } from '../queries';
 import type { Story, StoryList } from '../types';
@@ -37,6 +39,7 @@ import { StoryAuthorTree } from '../components/StoryAuthorTree';
 import { EpisodeDAG } from '../components/EpisodeDAG';
 import { EpisodeFormDialog } from '../components/EpisodeFormDialog';
 import type { EpisodeLike } from '../components/EpisodeFormDialog';
+import { TransitionFormDialog } from '../components/TransitionFormDialog';
 
 // ---------------------------------------------------------------------------
 // Access denied fallback
@@ -60,8 +63,8 @@ function AccessDeniedPage() {
 
 function LoadingSkeleton() {
   return (
-    <div className="flex gap-6" data-testid="author-loading">
-      <div className="w-56 space-y-2">
+    <div className="flex flex-col gap-4 md:flex-row md:gap-6" data-testid="author-loading">
+      <div className="w-full space-y-2 md:w-56">
         <Skeleton className="h-8 w-full" />
         {[0, 1, 2].map((i) => (
           <Skeleton key={i} className="h-10 w-full" />
@@ -116,6 +119,11 @@ function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [dagEpisodeOpen, setDagEpisodeOpen] = useState(false);
   const [dagEpisode, setDagEpisode] = useState<EpisodeLike | null>(null);
+  const [dagEditMode, setDagEditMode] = useState(false);
+  const [pendingConnect, setPendingConnect] = useState<{
+    sourceId: number;
+    targetId: number;
+  } | null>(null);
   const deleteMutation = useDeleteStory();
 
   function handleDelete() {
@@ -131,6 +139,10 @@ function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
   function handleDagEpisodeClick(episode: EpisodeLike) {
     setDagEpisode(episode);
     setDagEpisodeOpen(true);
+  }
+
+  function handleConnectEpisodes(sourceId: number, targetId: number) {
+    setPendingConnect({ sourceId, targetId });
   }
 
   // EpisodeFormDialog requires chapterId for the create path, but when
@@ -213,7 +225,23 @@ function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
         </TabsContent>
 
         <TabsContent value="dag">
-          <EpisodeDAG storyId={story.id} onEpisodeClick={handleDagEpisodeClick} />
+          <div className="mb-3 flex items-center gap-3">
+            <Switch
+              id="dag-edit-mode"
+              checked={dagEditMode}
+              onCheckedChange={setDagEditMode}
+              data-testid="dag-edit-mode-toggle"
+            />
+            <Label htmlFor="dag-edit-mode" className="text-sm text-muted-foreground">
+              {dagEditMode ? 'Edit mode — drag nodes to connect' : 'Read-only'}
+            </Label>
+          </div>
+          <EpisodeDAG
+            storyId={story.id}
+            onEpisodeClick={handleDagEpisodeClick}
+            editMode={dagEditMode}
+            onConnectEpisodes={handleConnectEpisodes}
+          />
         </TabsContent>
       </Tabs>
 
@@ -234,6 +262,20 @@ function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
           }}
           chapterId={dagEpisodeChapterId}
           episode={dagEpisode}
+        />
+      )}
+
+      {/* Transition form opened by drag-to-connect in the DAG edit mode */}
+      {pendingConnect !== null && (
+        <TransitionFormDialog
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setPendingConnect(null);
+          }}
+          sourceEpisodeId={pendingConnect.sourceId}
+          defaultTargetEpisodeId={pendingConnect.targetId}
+          storyId={story.id}
+          onSuccess={() => setPendingConnect(null)}
         />
       )}
     </div>
@@ -281,9 +323,9 @@ export function StoryAuthorPage() {
     const stories = data.results;
 
     content = (
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-4 md:flex-row md:gap-6">
         {/* Sidebar */}
-        <aside className="w-56 shrink-0" data-testid="stories-sidebar">
+        <aside className="w-full shrink-0 md:w-56" data-testid="stories-sidebar">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-medium text-muted-foreground">My Stories</p>
             <Button
@@ -344,7 +386,7 @@ export function StoryAuthorPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <h1 className="mb-8 text-2xl font-bold">Story Author</h1>
       <ErrorBoundary>{content}</ErrorBoundary>
 

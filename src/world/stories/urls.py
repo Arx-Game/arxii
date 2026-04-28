@@ -9,6 +9,7 @@ from world.stories.views import (
     EpisodeProgressionRequirementViewSet,
     EpisodeSceneViewSet,
     EpisodeViewSet,
+    EraViewSet,
     ExpireOverdueBeatsView,
     GlobalStoryProgressViewSet,
     GMQueueView,
@@ -18,13 +19,18 @@ from world.stories.views import (
     SessionRequestViewSet,
     StaffWorkloadView,
     StoryFeedbackViewSet,
+    StoryGMOfferViewSet,
     StoryParticipationViewSet,
     StoryViewSet,
+    TableBulletinPostViewSet,
+    TableBulletinReplyViewSet,
     TransitionRequiredOutcomeViewSet,
     TransitionViewSet,
 )
 
 router = DefaultRouter()
+# Wave 6: Era lifecycle
+router.register(r"eras", EraViewSet)
 router.register(r"stories", StoryViewSet)
 router.register(r"chapters", ChapterViewSet)
 router.register(r"episodes", EpisodeViewSet)
@@ -39,10 +45,15 @@ router.register(r"aggregate-beat-contributions", AggregateBeatContributionViewSe
 router.register(r"assistant-gm-claims", AssistantGMClaimViewSet)
 router.register(r"session-requests", SessionRequestViewSet)
 router.register(r"beats", BeatViewSet)
+# Wave 3: GM offer lifecycle
+router.register(r"story-gm-offers", StoryGMOfferViewSet, basename="storygmoffer")
 # Phase 4 Wave 9: Author editor ViewSets
 router.register(r"transitions", TransitionViewSet)
 router.register(r"episode-progression-requirements", EpisodeProgressionRequirementViewSet)
 router.register(r"transition-required-outcomes", TransitionRequiredOutcomeViewSet)
+# Wave 10: Bulletin board
+router.register(r"table-bulletin-posts", TableBulletinPostViewSet, basename="tablebulletinpost")
+router.register(r"table-bulletin-replies", TableBulletinReplyViewSet, basename="tablebulletinreply")
 
 urlpatterns = [
     # Wave 10: Dashboard endpoints (APIView — aggregate, not paginated).

@@ -1,8 +1,9 @@
 /**
  * ChatWindow Tests
  *
- * Verifies that narrative messages render with distinct light-red styling
- * while normal and system messages render with standard styling.
+ * Verifies that narrative messages render with distinct light-red styling,
+ * gemit messages render with green styling, and normal messages render with
+ * standard styling.
  */
 
 import { render, screen } from '@testing-library/react';
@@ -71,6 +72,45 @@ describe('ChatWindow', () => {
 
     const systemEl = screen.getByText('System: Connected.').closest('.mb-2');
     expect(systemEl).not.toHaveClass('border-red-500');
+  });
+
+  it('renders gemit message with distinct green styling', () => {
+    const messages = [makeMsg('[GEMIT] The realm shakes!', GAME_MESSAGE_TYPE.GEMIT)];
+    render(<ChatWindow messages={messages} />, { wrapper: createWrapper() });
+
+    const messageContainer = screen.getByText('[GEMIT] The realm shakes!').closest('.border-l-2');
+    expect(messageContainer).toBeInTheDocument();
+    expect(messageContainer).toHaveClass('border-green-500');
+    expect(messageContainer).toHaveClass('bg-green-950/20');
+  });
+
+  it('renders gemit text in green-300 color class', () => {
+    const messages = [makeMsg('[GEMIT] A new era begins.', GAME_MESSAGE_TYPE.GEMIT)];
+    render(<ChatWindow messages={messages} />, { wrapper: createWrapper() });
+
+    // The EvenniaMessage span should carry text-green-300
+    const textEl = screen.getByText('[GEMIT] A new era begins.');
+    expect(textEl).toHaveClass('text-green-300');
+  });
+
+  it('renders mixed message types with correct styling for each', () => {
+    const messages = [
+      makeMsg('[NARRATIVE] The realm trembles.', GAME_MESSAGE_TYPE.NARRATIVE, 'msg-1'),
+      makeMsg('[GEMIT] A new era.', GAME_MESSAGE_TYPE.GEMIT, 'msg-2'),
+      makeMsg('You enter the hall.', GAME_MESSAGE_TYPE.TEXT, 'msg-3'),
+    ];
+    render(<ChatWindow messages={messages} />, { wrapper: createWrapper() });
+
+    const narrativeEl = screen.getByText('[NARRATIVE] The realm trembles.').closest('.border-l-2');
+    expect(narrativeEl).toHaveClass('border-red-500');
+    expect(narrativeEl).not.toHaveClass('border-green-500');
+
+    const gemitEl = screen.getByText('[GEMIT] A new era.').closest('.border-l-2');
+    expect(gemitEl).toHaveClass('border-green-500');
+    expect(gemitEl).not.toHaveClass('border-red-500');
+
+    const normalEl = screen.getByText('You enter the hall.').closest('.mb-2');
+    expect(normalEl).not.toHaveClass('border-l-2');
   });
 
   it('shows empty state when no messages', () => {

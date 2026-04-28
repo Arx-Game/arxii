@@ -15,7 +15,14 @@ import type { components } from '@/generated/api';
 // Stories have two serializer shapes: StoryList (lightweight) and StoryDetail (full).
 // We export both and alias the detail shape as Story for most usage.
 export type StoryList = components['schemas']['StoryList'];
-export type StoryDetail = components['schemas']['StoryDetail'];
+export type StoryDetailBase = components['schemas']['StoryDetail'];
+
+// StoryDetail extended with primary_table — field added in Phase 5 Wave 2 but
+// not yet reflected in the generated schema. The serializer returns this field
+// as a nullable integer (the GMTable PK).
+export interface StoryDetail extends StoryDetailBase {
+  readonly primary_table: number | null;
+}
 export type Story = StoryDetail;
 
 // Chapters have three shapes: ChapterList, ChapterDetail, ChapterCreate.
@@ -34,7 +41,15 @@ export type Episode = EpisodeDetail;
 // Wave 7 read-context breadcrumb fields (episode_title, chapter_title,
 // story_id, story_title). The generated type now correctly includes these
 // as readonly non-nullable fields (verified in api.d.ts Beat schema).
-export type Beat = components['schemas']['Beat'];
+//
+// Wave 12: can_mark is a server-computed boolean telling the client whether
+// the requesting user may POST /beats/{id}/mark/. Added to BeatSerializer
+// in Phase 5 Wave 12; not yet in the schema dump — extended here until
+// the next schema regeneration.
+export type Beat = components['schemas']['Beat'] & {
+  /** True when the requesting user may call POST /beats/{id}/mark/. */
+  readonly can_mark: boolean;
+};
 
 // Progress — CHARACTER scope has no generated type (no ViewSet); only GROUP and GLOBAL do.
 export type GroupStoryProgress = components['schemas']['GroupStoryProgress'];
@@ -299,6 +314,41 @@ export interface EpisodeCreateBody {
 }
 
 // ---------------------------------------------------------------------------
+// Beat write-side body types — omit read-only server-derived fields.
+//
+// Phase 4 used Partial<Beat> for createBeat/updateBeat payloads; Beat
+// includes read-only fields (id, episode_title, chapter_title, story_id,
+// story_title, created_at, updated_at, can_mark) that must not be sent on
+// write requests. These explicit types surface intent and prevent callers
+// from accidentally including server-derived data.
+// ---------------------------------------------------------------------------
+
+export interface BeatCreateBody {
+  episode: number;
+  predicate_type?: BeatPredicateType;
+  visibility?: BeatVisibility;
+  internal_description: string;
+  player_hint?: string;
+  player_resolution_text?: string;
+  order?: number;
+  agm_eligible?: boolean;
+  deadline?: string | null;
+
+  // Predicate-type-specific config (exactly one set applies per predicate_type):
+  required_level?: number | null; // CHARACTER_LEVEL_AT_LEAST
+  required_achievement?: number | null; // ACHIEVEMENT_HELD
+  required_condition_template?: number | null; // CONDITION_HELD
+  required_codex_entry?: number | null; // CODEX_ENTRY_UNLOCKED
+  referenced_story?: number | null; // STORY_AT_MILESTONE
+  referenced_milestone_type?: ReferencedMilestoneType; // STORY_AT_MILESTONE
+  referenced_chapter?: number | null; // STORY_AT_MILESTONE/chapter_reached
+  referenced_episode?: number | null; // STORY_AT_MILESTONE/episode_reached
+  required_points?: number | null; // AGGREGATE_THRESHOLD
+}
+
+export type BeatUpdateBody = Partial<BeatCreateBody>;
+
+// ---------------------------------------------------------------------------
 // Story log types — hand-defined from StoryLogSerializer in serializers.py.
 // The generated type for stories_log_retrieve incorrectly returns StoryDetail;
 // the actual response is { entries: StoryLogEntry[] }.
@@ -336,4 +386,91 @@ export type StoryLogEntry = StoryLogBeatEntry | StoryLogEpisodeEntry;
 
 export interface StoryLogResponse {
   entries: StoryLogEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// StoryGMOffer — hand-defined from StoryGMOfferSerializer in serializers.py.
+// Not yet reflected in the generated api.d.ts schema because the
+// spectacular-generated schema for story-gm-offers was not captured in the
+// last schema dump.
+// ---------------------------------------------------------------------------
+
+export type StoryGMOfferStatus = 'pending' | 'accepted' | 'declined' | 'withdrawn';
+
+export interface StoryGMOffer {
+  id: number;
+  story: number;
+  offered_to: number;
+  offered_by_account: number;
+  status: StoryGMOfferStatus;
+  message: string;
+  response_note: string;
+  created_at: string;
+  responded_at: string | null;
+  updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// GMProfile — hand-defined from GMProfileSerializer in gm/serializers.py.
+// The generated type exists in api.d.ts but duplicated here for cleaner
+// import paths within the stories module.
+// ---------------------------------------------------------------------------
+
+export interface GMProfileData {
+  id: number;
+  account: number;
+  account_username: string;
+  level: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
+  approved_at: string;
+}
+
+/** Alias for the full GM profile shape returned by the API. */
+export type GMProfile = GMProfileData;
+
+// ---------------------------------------------------------------------------
+// OfferStoryToGM request body
+// ---------------------------------------------------------------------------
+
+export interface OfferStoryToGMBody {
+  gm_profile_id: number;
+  message?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Accept/Decline offer request bodies
+// ---------------------------------------------------------------------------
+
+export interface RespondToOfferBody {
+  response_note?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Era — Wave 6 era lifecycle types.
+// The generated api.d.ts does not yet include Era (no ViewSet in the
+// pre-Wave-6 schema dump). Hand-defined to match EraSerializer in
+// world/stories/serializers.py.
+// ---------------------------------------------------------------------------
+
+export type EraStatus = 'upcoming' | 'active' | 'concluded';
+
+export interface Era {
+  id: number;
+  name: string;
+  display_name: string;
+  season_number: number;
+  description: string;
+  status: EraStatus;
+  activated_at: string | null;
+  concluded_at: string | null;
+  created_at: string;
+  story_count: number;
+}
+
+export interface EraCreateBody {
+  name: string;
+  display_name: string;
+  season_number: number;
+  description?: string;
+  /** Only UPCOMING is allowed on creation. */
+  status?: EraStatus;
 }

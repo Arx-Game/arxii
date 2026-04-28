@@ -29,6 +29,7 @@ import { PerGMQueueTable } from '../components/PerGMQueueTable';
 import { StaleStoriesTable } from '../components/StaleStoriesTable';
 import { FrontierStoriesTable } from '../components/FrontierStoriesTable';
 import { ExpireBeatsButton } from '../components/ExpireBeatsButton';
+import { SendGemitDialog } from '@/narrative/components/SendGemitDialog';
 import type { StaffWorkloadResponse } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -270,8 +271,11 @@ export function StaffWorkloadPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="mb-8 text-2xl font-bold">Staff Workload</h1>
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">Staff Workload</h1>
+        <SendGemitDialog />
+      </div>
       <ErrorBoundary>{content}</ErrorBoundary>
     </div>
   );

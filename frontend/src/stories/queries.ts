@@ -12,13 +12,18 @@ import type {
   ListChaptersParams,
   ListClaimsParams,
   ListContributionsParams,
+  ListErasParams,
   ListEpisodesParams,
+  ListGMProfilesParams,
   ListGroupProgressParams,
   ListProgressionRequirementsParams,
   ListSessionRequestsParams,
+  ListStoryGMOffersParams,
   ListStoriesParams,
   ListTransitionRequiredOutcomesParams,
   ListTransitionsParams,
+  SaveTransitionWithOutcomesBody,
+  SendStoryOOCBody,
 } from './api';
 import type {
   ApproveClaimBody,
@@ -27,11 +32,15 @@ import type {
   ChapterCreateBody,
   ContributeBeatBody,
   CreateEventBody,
+  Era,
+  EraCreateBody,
   EpisodeCreateBody,
   EpisodeProgressionRequirement,
   MarkBeatBody,
+  OfferStoryToGMBody,
   RejectClaimBody,
   RequestClaimBody,
+  RespondToOfferBody,
   ResolveEpisodeBody,
   StoryCreateBody,
   Transition,
@@ -102,6 +111,19 @@ export const storiesKeys = {
   // TransitionRequiredOutcomes (Wave 9)
   transitionRequiredOutcomes: (params?: ListTransitionRequiredOutcomesParams) =>
     [...storiesKeys.all, 'transition-required-outcomes', params] as const,
+
+  // StoryGMOffers (Wave 5)
+  storyGMOffers: (params?: ListStoryGMOffersParams) =>
+    [...storiesKeys.all, 'story-gm-offers', params] as const,
+  storyGMOffer: (id: number) => [...storiesKeys.all, 'story-gm-offer', id] as const,
+
+  // GMProfiles (Wave 5)
+  gmProfiles: (params?: ListGMProfilesParams) =>
+    [...storiesKeys.all, 'gm-profiles', params] as const,
+
+  // Eras (Wave 6)
+  eraList: (params?: ListErasParams) => [...storiesKeys.all, 'eras', params] as const,
+  era: (id: number) => [...storiesKeys.all, 'era', id] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -137,6 +159,19 @@ export function useStaffWorkload() {
 // ---------------------------------------------------------------------------
 
 export function useStoryList(params?: ListStoriesParams) {
+  return useQuery({
+    queryKey: storiesKeys.storyList(params),
+    queryFn: () => api.listStories(params),
+    throwOnError: true,
+  });
+}
+
+/**
+ * Browse all stories the current user can see (backend-scoped).
+ * Optionally filtered by scope. Used by BrowseStoriesPage.
+ */
+export function useBrowseStories(scope?: string) {
+  const params: ListStoriesParams = scope ? { scope } : {};
   return useQuery({
     queryKey: storiesKeys.storyList(params),
     queryFn: () => api.listStories(params),
@@ -587,6 +622,24 @@ export function useStoryLog(storyId: number) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Story OOC sender hook (Wave 8)
+// ---------------------------------------------------------------------------
+
+export function useSendStoryOOC() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ storyId, ...data }: { storyId: number } & SendStoryOOCBody) =>
+      api.sendStoryOOC(storyId, data),
+    onSuccess: (_, { storyId }) => {
+      // Invalidate narrative messages so the recipient inbox refreshes.
+      void qc.invalidateQueries({ queryKey: ['narrative'] });
+      // Invalidate the story log so the sent notice appears there.
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyLog(storyId) });
+    },
+  });
+}
+
 export function useExpireOverdueBeats() {
   const qc = useQueryClient();
   return useMutation({
@@ -643,6 +696,18 @@ export function useDeleteTransition() {
     mutationFn: (id: number) => api.deleteTransition(id),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: storiesKeys.transitionList() });
+    },
+  });
+}
+
+// Wave 13: atomic save-with-outcomes mutation
+export function useSaveTransitionWithOutcomes() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SaveTransitionWithOutcomesBody) => api.saveTransitionWithOutcomes(body),
+    onSuccess: (transition) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.transitionList() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.transition(transition.id) });
     },
   });
 }
@@ -725,5 +790,162 @@ export function useDeleteTransitionRequiredOutcome() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// StoryGMOffer hooks (Wave 5)
+// ---------------------------------------------------------------------------
+
+export function useStoryGMOffers(params?: ListStoryGMOffersParams) {
+  return useQuery({
+    queryKey: storiesKeys.storyGMOffers(params),
+    queryFn: () => api.listStoryGMOffers(params),
+    throwOnError: true,
+  });
+}
+
+export function useDetachStoryFromTable() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (storyId: number) => api.detachStoryFromTable(storyId),
+    onSuccess: (_, storyId) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.story(storyId) });
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyList() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.myActive() });
+    },
+  });
+}
+
+export function useOfferStoryToGM() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ storyId, ...body }: { storyId: number } & OfferStoryToGMBody) =>
+      api.offerStoryToGM(storyId, body),
+    onSuccess: (_, { storyId }) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.story(storyId) });
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyList() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() });
+    },
+  });
+}
+
+export function useAcceptOffer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ offerId, ...body }: { offerId: number } & RespondToOfferBody) =>
+      api.acceptOffer(offerId, body),
+    onSuccess: (updated) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.story(updated.story) });
+      void qc.invalidateQueries({ queryKey: storiesKeys.gmQueue() });
+    },
+  });
+}
+
+export function useDeclineOffer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ offerId, ...body }: { offerId: number } & RespondToOfferBody) =>
+      api.declineOffer(offerId, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() });
+    },
+  });
+}
+
+export function useWithdrawOffer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (offerId: number) => api.withdrawOffer(offerId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.storyGMOffers() });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// GMProfile hooks (Wave 5 — for offer-to-GM picker)
+// ---------------------------------------------------------------------------
+
+export function useGMProfiles(params?: ListGMProfilesParams) {
+  return useQuery({
+    queryKey: storiesKeys.gmProfiles(params),
+    queryFn: () => api.listGMProfiles(params),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Era hooks (Wave 6)
+// ---------------------------------------------------------------------------
+
+export function useEras(params?: ListErasParams) {
+  return useQuery({
+    queryKey: storiesKeys.eraList(params),
+    queryFn: () => api.listEras(params),
+    throwOnError: true,
+  });
+}
+
+export function useEra(id: number) {
+  return useQuery({
+    queryKey: storiesKeys.era(id),
+    queryFn: () => api.getEra(id),
+    enabled: id > 0,
+    throwOnError: true,
+  });
+}
+
+export function useCreateEra() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: EraCreateBody) => api.createEra(data),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
+    },
+  });
+}
+
+export function useUpdateEra() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Parameters<typeof api.updateEra>[1] }) =>
+      api.updateEra(id, data),
+    onSuccess: (_, { id }) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.era(id) });
+      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
+    },
+  });
+}
+
+export function useDeleteEra() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.deleteEra(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
+    },
+  });
+}
+
+export function useAdvanceEra() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.advanceEra(id),
+    onSuccess: (updated) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.era(updated.id) });
+    },
+  });
+}
+
+export function useArchiveEra() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => api.archiveEra(id),
+    onSuccess: (updated) => {
+      void qc.invalidateQueries({ queryKey: storiesKeys.eraList() });
+      void qc.invalidateQueries({ queryKey: storiesKeys.era(updated.id) });
+    },
+  });
+}
+
 // Suppress unused-import lint — Beat is re-exported for consumers
-export type { Beat };
+export type { Beat, Era };

@@ -236,3 +236,35 @@ describe('EpisodeDAG', () => {
     expect(queries.useTransitionList).toHaveBeenCalledWith(expect.objectContaining({ story: 42 }));
   });
 });
+
+describe('EpisodeDAG — edit mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders DAG canvas in read-only mode by default (no editMode prop)', () => {
+    mockEpisodes([ep1, ep2]);
+    mockTransitions([transitionNormal]);
+    render(<EpisodeDAG storyId={1} onEpisodeClick={vi.fn()} />, {
+      wrapper: createWrapper(),
+    });
+    // Canvas renders regardless of mode
+    expect(screen.getByTestId('dag-canvas')).toBeInTheDocument();
+  });
+
+  it('renders DAG canvas in edit mode when editMode=true', () => {
+    mockEpisodes([ep1, ep2]);
+    mockTransitions([transitionNormal]);
+    const onConnectEpisodes = vi.fn();
+    render(
+      <EpisodeDAG
+        storyId={1}
+        onEpisodeClick={vi.fn()}
+        editMode={true}
+        onConnectEpisodes={onConnectEpisodes}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByTestId('dag-canvas')).toBeInTheDocument();
+  });
+});

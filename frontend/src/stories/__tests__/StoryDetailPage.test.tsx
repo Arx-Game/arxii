@@ -10,6 +10,43 @@ import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { StoryDetailPage } from '../pages/StoryDetailPage';
 
+// Mock narrative queries used by MuteStoryToggle
+vi.mock('../../narrative/queries', () => ({
+  useStoryMutes: vi.fn(() => ({
+    data: { count: 0, next: null, previous: null, results: [] },
+    isLoading: false,
+    isSuccess: true,
+    error: null,
+  })),
+  useMuteStory: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
+  useUnmuteStory: vi.fn(() => ({
+    mutate: vi.fn(),
+    isPending: false,
+  })),
+}));
+
+const makeMutationIdle = () => ({
+  mutate: vi.fn(),
+  mutateAsync: vi.fn(),
+  isPending: false,
+  isSuccess: false,
+  isError: false,
+  isIdle: true,
+  error: null,
+  data: undefined,
+  variables: undefined,
+  status: 'idle' as const,
+  reset: vi.fn(),
+  context: undefined,
+  failureCount: 0,
+  failureReason: null,
+  isPaused: false,
+  submittedAt: 0,
+});
+
 vi.mock('../queries', () => ({
   useStory: vi.fn(),
   useMyActiveStories: vi.fn(),
@@ -21,6 +58,10 @@ vi.mock('../queries', () => ({
   useContributeToBeat: vi.fn(),
   // Required by BeatRow → MarkBeatDialog for gm_marked beats (Wave 6)
   useMarkBeat: vi.fn(),
+  // Wave 5: ChangeMyGMDialog hooks
+  useDetachStoryFromTable: vi.fn(),
+  useOfferStoryToGM: vi.fn(),
+  useGMProfiles: vi.fn(),
 }));
 
 import * as queries from '../queries';
@@ -44,6 +85,7 @@ const mockStory = {
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-04-19T00:00:00Z',
   completed_at: null,
+  primary_table: null,
 };
 
 const mockActiveEntry = {
@@ -195,6 +237,20 @@ function setupMocks(
     isPaused: false,
     submittedAt: 0,
   } as unknown as ReturnType<typeof queries.useMarkBeat>);
+
+  // Wave 5: ChangeMyGMDialog hooks
+  vi.mocked(queries.useDetachStoryFromTable).mockReturnValue(
+    makeMutationIdle() as unknown as ReturnType<typeof queries.useDetachStoryFromTable>
+  );
+  vi.mocked(queries.useOfferStoryToGM).mockReturnValue(
+    makeMutationIdle() as unknown as ReturnType<typeof queries.useOfferStoryToGM>
+  );
+  vi.mocked(queries.useGMProfiles).mockReturnValue({
+    data: { count: 0, next: null, previous: null, results: [] },
+    isLoading: false,
+    isSuccess: true,
+    error: null,
+  } as unknown as ReturnType<typeof queries.useGMProfiles>);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +322,50 @@ describe('StoryDetailPage', () => {
     );
 
     expect(screen.getByText('Story Log')).toBeInTheDocument();
+  });
+
+  it('shows "Offer to a GM" CTA for CHARACTER-scope owned story seeking a GM', () => {
+    setupMocks();
+    renderWithProviders(
+      <Routes>
+        <Route path="/stories/:id" element={<StoryDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/stories/1'] }
+    );
+
+    // mockStory has scope='character', primary_table=null, and is in character_stories
+    expect(screen.getByTestId('change-gm-button')).toBeInTheDocument();
+    expect(screen.getByTestId('change-gm-button')).toHaveTextContent('Offer to a GM');
+  });
+
+  it('does not show CTA for GROUP-scope story', () => {
+    // Override useStory to return a group-scope story
+    vi.mocked(queries.useStory).mockReturnValue({
+      data: { ...mockStory, scope: 'group' },
+      isLoading: false,
+      isSuccess: true,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useStory>);
+
+    vi.mocked(queries.useMyActiveStories).mockReturnValue({
+      data: {
+        character_stories: [], // not in character_stories
+        group_stories: [{ ...mockActiveEntry, story_id: 1 }],
+        global_stories: [],
+      },
+      isLoading: false,
+      isSuccess: true,
+      error: null,
+    } as unknown as ReturnType<typeof queries.useMyActiveStories>);
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/stories/:id" element={<StoryDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/stories/1'] }
+    );
+
+    expect(screen.queryByTestId('change-gm-button')).not.toBeInTheDocument();
   });
 
   it('shows loading skeleton when story is loading', () => {

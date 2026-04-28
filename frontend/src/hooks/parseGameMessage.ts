@@ -13,6 +13,8 @@ export function parseGameMessage(parsed: IncomingMessage): GameMessage {
         messageType = GAME_MESSAGE_TYPE.CHANNEL;
       } else if (kw.type === 'narrative') {
         messageType = GAME_MESSAGE_TYPE.NARRATIVE;
+      } else if (kw.type === 'gemit') {
+        messageType = GAME_MESSAGE_TYPE.GEMIT;
       } else {
         messageType = GAME_MESSAGE_TYPE.TEXT;
       }

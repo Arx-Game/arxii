@@ -36,7 +36,13 @@ import {
   useChapterList,
   useEpisodeList,
 } from '../queries';
-import type { Beat, BeatPredicateType, BeatVisibility, ReferencedMilestoneType } from '../types';
+import type {
+  Beat,
+  BeatCreateBody,
+  BeatPredicateType,
+  BeatVisibility,
+  ReferencedMilestoneType,
+} from '../types';
 
 // ---------------------------------------------------------------------------
 // DRF error shapes
@@ -457,8 +463,8 @@ export function BeatFormDialog({
     toast.error(err instanceof Error ? err.message : 'An error occurred. Please try again.');
   }
 
-  function buildPayload(): Partial<Beat> {
-    const base: Partial<Beat> = {
+  function buildPayload(): BeatCreateBody {
+    const base: BeatCreateBody = {
       episode: episodeId,
       predicate_type: predicateType,
       internal_description: internalDescription.trim(),

@@ -18,9 +18,12 @@ from world.stories.models import (
     SessionRequest,
     Story,
     StoryFeedback,
+    StoryGMOffer,
     StoryParticipation,
     StoryProgress,
     StoryTrustRequirement,
+    TableBulletinPost,
+    TableBulletinReply,
     Transition,
     TransitionRequiredOutcome,
     TrustCategory,
@@ -485,6 +488,19 @@ class SessionRequestAdmin(admin.ModelAdmin):
     raw_id_fields = ("episode", "event", "assigned_gm", "initiated_by_account")
 
 
+@admin.register(StoryGMOffer)
+class StoryGMOfferAdmin(admin.ModelAdmin):
+    list_display = ("story", "offered_to", "offered_by_account", "status", "created_at")
+    list_filter = ("status",)
+    search_fields = (
+        "story__title",
+        "offered_to__account__username",
+        "offered_by_account__username",
+    )
+    readonly_fields = ("created_at", "updated_at", "responded_at")
+    raw_id_fields = ("story", "offered_to", "offered_by_account")
+
+
 @admin.register(AssistantGMClaim)
 class AssistantGMClaimAdmin(admin.ModelAdmin):
     list_display = ("beat", "assistant_gm", "status", "approved_by", "requested_at")
@@ -496,3 +512,26 @@ class AssistantGMClaimAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("requested_at", "updated_at")
     raw_id_fields = ("beat", "assistant_gm", "approved_by")
+
+
+# ---------------------------------------------------------------------------
+# Wave 10: Bulletin admin
+# ---------------------------------------------------------------------------
+
+
+@admin.register(TableBulletinPost)
+class TableBulletinPostAdmin(admin.ModelAdmin):
+    list_display = ("title", "table", "story", "author_persona", "allow_replies", "created_at")
+    list_filter = ("allow_replies", "created_at")
+    search_fields = ("title", "body", "table__name")
+    readonly_fields = ("created_at", "updated_at")
+    raw_id_fields = ("table", "story", "author_persona")
+
+
+@admin.register(TableBulletinReply)
+class TableBulletinReplyAdmin(admin.ModelAdmin):
+    list_display = ("post", "author_persona", "created_at")
+    list_filter = ("created_at",)
+    search_fields = ("body", "post__title")
+    readonly_fields = ("created_at",)
+    raw_id_fields = ("post", "author_persona")

@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 
 from world.gm.models import GMProfile, GMTable
 from world.stories.constants import AssistantClaimStatus, StoryScope
-from world.stories.models import AssistantGMClaim, Story
+from world.stories.models import AssistantGMClaim, Story, StoryParticipation, TableBulletinPost
 from world.stories.types import AnyStoryProgress, StoryPrivacy
 
 
@@ -789,6 +789,156 @@ class IsAccountOfCharacterSheet(permissions.BasePermission):
         return bool(request.user and request.user.is_authenticated)
 
 
+class IsLeadGMOfDestinationTableOrStaff(permissions.BasePermission):
+    """For assign-to-table: the requesting user must be the Lead GM of the
+    destination table, or staff.
+
+    This is a view-level guard only — the destination table is not known at
+    has_object_permission time (it comes from request.data). Ownership
+    enforcement is delegated to AssignStoryToTableInputSerializer.validate_table().
+    """
+
+    message = "Only the Lead GM of the destination table or staff may assign stories to it."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Authenticated users only; serializer handles table ownership."""
+        return bool(request.user and request.user.is_authenticated)
+
+
+class CanDetachStoryFromTable(permissions.BasePermission):
+    """For detach-from-table: who may clear a story's primary_table.
+
+    Allowed:
+    - Staff — always.
+    - Lead GM of the story's current primary_table
+      (story.primary_table.gm == request.user.gm_profile).
+    - The story owner (CHARACTER scope): the story's character_sheet's
+      character's db_account matches request.user.
+    """
+
+    message = (
+        "Only the current Lead GM of this story, the story owner (for personal stories), "
+        "or staff may detach this story from its table."
+    )
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Check Lead GM of current table, story character owner, or staff."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+
+        story = cast(Any, obj)
+
+        # Lead GM of the story's current primary_table.
+        if story.primary_table_id is not None:
+            try:
+                gm_profile = request.user.gm_profile
+            except GMProfile.DoesNotExist:
+                gm_profile = None
+            if gm_profile is not None and story.primary_table.gm_id == gm_profile.pk:
+                return True
+
+        # CHARACTER-scope story owner: character_sheet -> character -> db_account.
+        if story.character_sheet_id is not None:
+            if story.character_sheet.character.db_account_id == request.user.pk:
+                return True
+
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Wave 3: StoryGMOffer permission classes
+# ---------------------------------------------------------------------------
+
+
+class IsOfferRecipientGMOrStaff(permissions.BasePermission):
+    """Accept / decline actions: only the GM the offer was directed to, or staff.
+
+    Object-level permission; obj is a StoryGMOffer.
+    """
+
+    message = "Only the GM this offer was sent to, or staff, may accept or decline it."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        offer = cast(Any, obj)
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return False
+        return offer.offered_to_id == gm_profile.pk
+
+
+class IsOfferOffererOrStaff(permissions.BasePermission):
+    """Withdraw action: only the account that created the offer, or staff.
+
+    Object-level permission; obj is a StoryGMOffer.
+    """
+
+    message = "Only the player who made this offer, or staff, may withdraw it."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        offer = cast(Any, obj)
+        return offer.offered_by_account_id == request.user.pk
+
+
+class IsStoryGMOfferParticipantOrStaff(permissions.BasePermission):
+    """Read access for StoryGMOfferViewSet list / retrieve.
+
+    Allowed:
+    - The GM who received the offer (offered_to.account == user)
+    - The player who made the offer (offered_by_account == user)
+    - Staff
+    """
+
+    message = "You do not have permission to view this GM offer."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Read only; no generic write access via this permission class."""
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        # Writes (create/update/delete) are not permitted — actions only.
+        return request.user.is_staff
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        offer = cast(Any, obj)
+        # Player who made the offer
+        if offer.offered_by_account_id == request.user.pk:
+            return True
+        # GM who received the offer
+        try:
+            gm_profile = request.user.gm_profile
+            return offer.offered_to_id == gm_profile.pk
+        except GMProfile.DoesNotExist:
+            return False
+
+
 # ---------------------------------------------------------------------------
 # Story log viewer role classifier
 # ---------------------------------------------------------------------------
@@ -874,3 +1024,145 @@ def _story_log_user_has_access(
         )
         .exists()
     )
+
+
+# ---------------------------------------------------------------------------
+# Wave 10: TableBulletin permission classes
+# ---------------------------------------------------------------------------
+
+
+def _user_can_read_bulletin_post(
+    user: AbstractBaseUser | AnonymousUser,
+    post: TableBulletinPost,
+) -> bool:
+    """Return True if ``user`` has read access to ``post``.
+
+    Read rules:
+    - Staff: always
+    - Lead GM of post.table: always
+    - story=None (table-wide): any active table member
+    - story=set (story-scoped): any active StoryParticipation on post.story
+    """
+    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL — AnonymousUser
+        return False
+    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL — AnonymousUser
+        return True
+
+    # Lead GM of the table (post.table.gm is the Lead GMProfile).
+    try:
+        gm_profile = user.gm_profile
+        if post.table.gm_id == gm_profile.pk:
+            return True
+    except GMProfile.DoesNotExist:
+        pass
+
+    # Active member of the table.
+    is_active_member = post.table.memberships.filter(
+        persona__character_sheet__character__db_account=user,
+        left_at__isnull=True,
+    ).exists()
+
+    if post.story_id is None:
+        # Table-wide: any active member.
+        return is_active_member
+
+    # Story-scoped: must be an active story participant.
+    return (
+        cast(Any, StoryParticipation)
+        .objects.filter(
+            story_id=post.story_id,
+            character__db_account=user,
+            is_active=True,
+        )
+        .exists()
+    )
+
+
+class CanReadBulletinPost(permissions.BasePermission):
+    """Read access to a bulletin post.
+
+    - Staff: always
+    - Lead GM of post.table: always
+    - story=None (table-wide): any active table member
+    - story=set (story-scoped): any active StoryParticipation on post.story
+    """
+
+    message = "You do not have permission to view this bulletin post."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Basic authentication check; object-level enforces full scope."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Delegate to shared helper."""
+        return _user_can_read_bulletin_post(request.user, cast(TableBulletinPost, obj))
+
+
+class CanAuthorBulletinPost(permissions.BasePermission):
+    """Top-level post authorship: Lead GM of the target table, or staff.
+
+    View-level guard only — the exact table comes from request.data.
+    Serializer's validate_table enforces the table ownership rule.
+    """
+
+    message = "Only the Lead GM of the table or staff may create bulletin posts."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Authenticated check; serializer enforces table ownership."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """For update/delete: author or staff may act on the post."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        post = cast(TableBulletinPost, obj)
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            return False
+        return post.table.gm_id == gm_profile.pk
+
+
+class IsBulletinReplyAuthorOrStaff(permissions.BasePermission):
+    """Update/delete access for bulletin replies: reply author or staff.
+
+    Object-level check only; obj is a TableBulletinReply.
+    Resolves authorship via reply.author_persona -> character_sheet -> character -> db_account.
+
+    Requires author_persona__character_sheet__character to be select_related on the
+    queryset to avoid N+1 on list endpoints.
+    """
+
+    message = "Only the reply author or staff may edit or delete this reply."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Authenticated users only; object-level enforces authorship."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Author or staff may update/delete; read access is unrestricted here."""
+        if not request.user.is_authenticated:
+            return False
+        if request.user.is_staff:
+            return True
+        reply = cast(Any, obj)
+        return (
+            reply.author_persona_id is not None
+            and reply.author_persona.character_sheet.character.db_account_id == request.user.pk
+        )
+
+
+class CanReplyToBulletinPost(permissions.BasePermission):
+    """Reply permission: qualifying reader + post.allow_replies=True (or staff).
+
+    View-level guard only. Serializer's validate_post checks allow_replies
+    and read access before the reply is created.
+    """
+
+    message = "You do not have permission to reply to this bulletin post."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Authenticated check; serializer enforces read access + allow_replies."""
+        return bool(request.user and request.user.is_authenticated)

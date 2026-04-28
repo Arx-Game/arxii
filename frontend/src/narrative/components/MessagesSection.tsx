@@ -4,6 +4,7 @@
  */
 
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useMyMessages } from '../queries';
@@ -49,9 +50,18 @@ export function MessagesSection() {
 
   return (
     <section aria-labelledby="messages-section-heading">
-      <h3 id="messages-section-heading" className="mb-4 text-xl font-semibold">
-        Messages
-      </h3>
+      <div className="mb-4 flex items-center justify-between">
+        <h3 id="messages-section-heading" className="text-xl font-semibold">
+          Messages
+        </h3>
+        <Link
+          to="/profile/mute-settings"
+          className="text-sm text-muted-foreground hover:text-foreground"
+          data-testid="manage-mutes-link"
+        >
+          Manage muted stories
+        </Link>
+      </div>
 
       <Tabs value={activeFilter} onValueChange={handleFilterChange} className="w-full">
         <TabsList className="mb-4 flex h-auto flex-wrap gap-1">

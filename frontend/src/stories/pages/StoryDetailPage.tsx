@@ -3,9 +3,10 @@
  *
  * Shows:
  *  1. Story header (title, scope badge, status, breadcrumb)
- *  2. Current Episode Panel (beats)
- *  3. Story Log timeline
- *  4. Schedule CTA placeholder (Wave 4)
+ *  2. "Change my GM" / "Offer to a GM" CTA (CHARACTER-scope, owned stories only)
+ *  3. Current Episode Panel (beats)
+ *  4. Story Log timeline
+ *  5. Session request status
  */
 
 import { useParams, useNavigate } from 'react-router-dom';
@@ -19,6 +20,9 @@ import { StatusBadge } from '../components/StatusBadge';
 import { CurrentEpisodePanel } from '../components/CurrentEpisodePanel';
 import { StoryLog } from '../components/StoryLog';
 import { SessionRequestStatusCard } from '../components/SessionRequestStatusCard';
+import { ChangeMyGMDialog } from '../components/ChangeMyGMDialog';
+import { SendStoryOOCDialog } from '../components/SendStoryOOCDialog';
+import { MuteStoryToggle } from '../../narrative/components/MuteStoryToggle';
 
 // ---------------------------------------------------------------------------
 // Loading skeleton for the header area
@@ -55,6 +59,22 @@ function StoryDetailInner({ storyId }: StoryDetailInnerProps) {
     ...(myActive?.global_stories ?? []),
   ];
   const activeEntry = allEntries.find((e) => e.story_id === storyId);
+
+  // The "Change my GM" CTA is visible only when:
+  //   1. The story is CHARACTER-scope.
+  //   2. This story appears in myActive.character_stories — this means the
+  //      current user's character is the owner of this story.
+  const isOwnedCharacterStory =
+    story != null &&
+    story.scope === 'character' &&
+    (myActive?.character_stories ?? []).some((e) => e.story_id === storyId);
+
+  // The "Send OOC notice" CTA is rendered optimistically when the story has an
+  // attached GM table (primary_table != null). The API 403s if the caller is
+  // not the Lead GM or staff — that case surfaces as a toast from the dialog.
+  // This keeps the button accessible to staff browsing any story detail page
+  // without requiring a separate /api/user/is-staff check.
+  const canSendOOC = story != null && story.primary_table != null;
 
   if (storyLoading) {
     return (
@@ -98,6 +118,7 @@ function StoryDetailInner({ storyId }: StoryDetailInnerProps) {
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold">{story.title}</h1>
           <ScopeBadge scope={story.scope ?? 'character'} />
+          <MuteStoryToggle storyId={storyId} />
         </div>
 
         {breadcrumb && <p className="text-sm text-muted-foreground">{breadcrumb}</p>}
@@ -105,6 +126,12 @@ function StoryDetailInner({ storyId }: StoryDetailInnerProps) {
         {activeEntry && (
           <StatusBadge status={activeEntry.status} label={activeEntry.status_label} />
         )}
+
+        {/* "Change my GM" / "Offer to a GM" CTA */}
+        {isOwnedCharacterStory && <ChangeMyGMDialog story={story} />}
+
+        {/* "Send OOC notice" CTA — optimistic render; API 403s for non-Lead-GMs */}
+        {canSendOOC && <SendStoryOOCDialog story={story} />}
       </header>
 
       {/* Current episode panel */}
@@ -142,7 +169,7 @@ export function StoryDetailPage() {
 
   if (storyId === 0) {
     return (
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <div className="py-16 text-center">
           <p className="text-muted-foreground">Story not found.</p>
         </div>
@@ -151,7 +178,7 @@ export function StoryDetailPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <ErrorBoundary>
         <StoryDetailInner storyId={storyId} />
       </ErrorBoundary>

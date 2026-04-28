@@ -10,6 +10,7 @@ from world.stories.models import (
     Episode,
     EpisodeProgressionRequirement,
     EpisodeScene,
+    Era,
     GlobalStoryProgress,
     GroupStoryProgress,
     PlayerTrust,
@@ -17,11 +18,33 @@ from world.stories.models import (
     SessionRequest,
     Story,
     StoryFeedback,
+    StoryGMOffer,
     StoryParticipation,
+    TableBulletinPost,
+    TableBulletinReply,
     Transition,
     TransitionRequiredOutcome,
     TrustCategory,
 )
+
+
+class EraFilter(django_filters.FilterSet):
+    """Filter for Era model — by status and season_number."""
+
+    status = django_filters.CharFilter(field_name="status")
+    season_number = django_filters.NumberFilter(field_name="season_number")
+    season_number_min = django_filters.NumberFilter(
+        field_name="season_number",
+        lookup_expr="gte",
+    )
+    season_number_max = django_filters.NumberFilter(
+        field_name="season_number",
+        lookup_expr="lte",
+    )
+
+    class Meta:
+        model = Era
+        fields = ["status", "season_number"]
 
 
 class StoryFilter(django_filters.FilterSet):
@@ -41,6 +64,9 @@ class StoryFilter(django_filters.FilterSet):
         method="filter_requires_trust_category",
         label="Requires Trust Category",
     )
+
+    # Primary table filtering — used by the Tables frontend to show stories at a table
+    primary_table = django_filters.NumberFilter(field_name="primary_table_id")
 
     # Date range filtering
     created_after = django_filters.DateTimeFilter(
@@ -410,6 +436,24 @@ class TransitionRequiredOutcomeFilter(django_filters.FilterSet):
         fields = ["transition", "beat"]
 
 
+class StoryGMOfferFilter(django_filters.FilterSet):
+    """Filter for StoryGMOffer model."""
+
+    story = django_filters.NumberFilter(field_name="story_id")
+    offered_to = django_filters.NumberFilter(field_name="offered_to_id")
+    offered_by_account = django_filters.NumberFilter(field_name="offered_by_account_id")
+    status = django_filters.CharFilter(field_name="status")
+
+    created_after = django_filters.DateTimeFilter(
+        field_name="created_at",
+        lookup_expr="gte",
+    )
+
+    class Meta:
+        model = StoryGMOffer
+        fields = ["story", "offered_to", "offered_by_account", "status"]
+
+
 class SessionRequestFilter(django_filters.FilterSet):
     """Filter for SessionRequest model"""
 
@@ -431,3 +475,36 @@ class SessionRequestFilter(django_filters.FilterSet):
     class Meta:
         model = SessionRequest
         fields = ["episode", "status", "open_to_any_gm"]
+
+
+# ---------------------------------------------------------------------------
+# Wave 10: TableBulletin filters
+# ---------------------------------------------------------------------------
+
+
+class TableBulletinPostFilter(django_filters.FilterSet):
+    """Filter for TableBulletinPost — by table, story, and author_persona."""
+
+    table = django_filters.NumberFilter(field_name="table_id")
+    story = django_filters.NumberFilter(field_name="story_id")
+    story_isnull = django_filters.BooleanFilter(
+        field_name="story",
+        lookup_expr="isnull",
+        label="Table-wide posts only",
+    )
+    author_persona = django_filters.NumberFilter(field_name="author_persona_id")
+
+    class Meta:
+        model = TableBulletinPost
+        fields = ["table", "story", "author_persona"]
+
+
+class TableBulletinReplyFilter(django_filters.FilterSet):
+    """Filter for TableBulletinReply — by parent post."""
+
+    post = django_filters.NumberFilter(field_name="post_id")
+    author_persona = django_filters.NumberFilter(field_name="author_persona_id")
+
+    class Meta:
+        model = TableBulletinReply
+        fields = ["post", "author_persona"]

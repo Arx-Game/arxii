@@ -8,6 +8,7 @@ from world.gm.views import (
     GMApplicationQueueView,
     GMApplicationViewSet,
     GMInviteClaimView,
+    GMProfileViewSet,
     GMRosterInviteViewSet,
     GMTableMembershipViewSet,
     GMTableViewSet,
@@ -17,6 +18,7 @@ app_name = "gm"
 
 router = DefaultRouter()
 router.register("applications", GMApplicationViewSet, basename="gm-application")
+router.register("profiles", GMProfileViewSet, basename="gm-profile")
 router.register("tables", GMTableViewSet, basename="gm-table")
 router.register("table-memberships", GMTableMembershipViewSet, basename="gm-table-membership")
 router.register("invites", GMRosterInviteViewSet, basename="gm-invite")

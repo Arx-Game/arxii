@@ -1,5 +1,5 @@
 from http import HTTPMethod
-from typing import Any
+from typing import Any, cast
 
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import AnonymousUser
@@ -7,6 +7,7 @@ from django.db import models
 from django.db.models import Count, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from evennia.accounts.models import AccountDB
 from rest_framework import filters, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -15,7 +16,13 @@ from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
 
-from world.stories.constants import AssistantClaimStatus, SessionRequestStatus, StoryScope
+from world.narrative.permissions import IsStoryLeadGMOrStaff
+from world.stories.constants import (
+    AssistantClaimStatus,
+    SessionRequestStatus,
+    StoryScope,
+)
+from world.stories.exceptions import EraAdvanceError, StoryGMOfferError
 from world.stories.filters import (
     AggregateBeatContributionFilter,
     AssistantGMClaimFilter,
@@ -24,13 +31,17 @@ from world.stories.filters import (
     EpisodeFilter,
     EpisodeProgressionRequirementFilter,
     EpisodeSceneFilter,
+    EraFilter,
     GlobalStoryProgressFilter,
     GroupStoryProgressFilter,
     PlayerTrustFilter,
     SessionRequestFilter,
     StoryFeedbackFilter,
     StoryFilter,
+    StoryGMOfferFilter,
     StoryParticipationFilter,
+    TableBulletinPostFilter,
+    TableBulletinReplyFilter,
     TransitionFilter,
     TransitionRequiredOutcomeFilter,
 )
@@ -42,14 +53,18 @@ from world.stories.models import (
     Episode,
     EpisodeProgressionRequirement,
     EpisodeScene,
+    Era,
     GlobalStoryProgress,
     GroupStoryProgress,
     PlayerTrust,
     SessionRequest,
     Story,
     StoryFeedback,
+    StoryGMOffer,
     StoryParticipation,
     StoryProgress,
+    TableBulletinPost,
+    TableBulletinReply,
     Transition,
     TransitionRequiredOutcome,
 )
@@ -60,10 +75,14 @@ from world.stories.pagination import (
 )
 from world.stories.permissions import (
     VIEWER_ROLE_NO_ACCESS,
+    CanAuthorBulletinPost,
+    CanDetachStoryFromTable,
     CanMarkBeat,
     CanParticipateInStory,
+    CanReplyToBulletinPost,
     IsAccountOfCharacterSheet,
     IsBeatStoryOwnerOrStaff,
+    IsBulletinReplyAuthorOrStaff,
     IsChapterStoryOwnerOrStaff,
     IsClaimantOrLeadGMOrStaff,
     IsClaimOwnerOrStaff,
@@ -72,21 +91,28 @@ from world.stories.permissions import (
     IsGlobalProgressReadableOrStaff,
     IsGMProfile,
     IsGroupProgressMemberOrStaff,
+    IsLeadGMOfDestinationTableOrStaff,
     IsLeadGMOnClaimStoryOrStaff,
     IsLeadGMOnEpisodeStoryOrStaff,
     IsLeadGMOnStoryOrStaff,
     IsLeadGMOnTransitionStoryOrStaff,
+    IsOfferOffererOrStaff,
+    IsOfferRecipientGMOrStaff,
     IsParticipationOwnerOrStoryOwnerOrStaff,
     IsPlayerTrustOwnerOrStaff,
     IsReviewerOrStoryOwnerOrStaff,
     IsSessionRequestGMOrStaff,
     IsSessionRequestParticipantOrStaff,
+    IsStoryGMOfferParticipantOrStaff,
     IsStoryOwnerOrStaff,
+    _user_can_read_bulletin_post,
     classify_story_log_viewer_role,
 )
 from world.stories.serializers import (
+    AcceptOfferInputSerializer,
     AggregateBeatContributionSerializer,
     ApproveClaimInputSerializer,
+    AssignStoryToTableInputSerializer,
     AssistantGMClaimSerializer,
     BeatCompletionSerializer,
     BeatSerializer,
@@ -97,43 +123,124 @@ from world.stories.serializers import (
     ChapterListSerializer,
     CompleteClaimInputSerializer,
     ContributeBeatInputSerializer,
+    CreateBulletinPostInputSerializer,
+    CreateBulletinReplyInputSerializer,
     CreateEventFromSessionRequestInputSerializer,
+    DeclineOfferInputSerializer,
     EpisodeCreateSerializer,
     EpisodeDetailSerializer,
     EpisodeListSerializer,
     EpisodeProgressionRequirementSerializer,
     EpisodeResolutionSerializer,
     EpisodeSceneSerializer,
+    EraSerializer,
     GlobalStoryProgressSerializer,
     GroupStoryProgressSerializer,
     MarkBeatInputSerializer,
+    OfferStoryToGMInputSerializer,
     PlayerTrustSerializer,
     RejectClaimInputSerializer,
     RequestClaimInputSerializer,
     ResolveEpisodeInputSerializer,
     ResolveSessionRequestInputSerializer,
+    SaveTransitionWithOutcomesInputSerializer,
     SessionRequestSerializer,
     StoryCreateSerializer,
     StoryDetailSerializer,
     StoryFeedbackCreateSerializer,
     StoryFeedbackSerializer,
+    StoryGMOfferSerializer,
     StoryListSerializer,
     StoryLogSerializer,
     StoryParticipationSerializer,
+    TableBulletinPostSerializer,
+    TableBulletinReplySerializer,
     TransitionRequiredOutcomeSerializer,
     TransitionSerializer,
+    UpdateBulletinPostInputSerializer,
+    UpdateBulletinReplyInputSerializer,
+    WithdrawOfferInputSerializer,
 )
 from world.stories.services.dashboards import STALE_STORY_DAYS, compute_story_status
+from world.stories.services.era import advance_era, archive_era
 from world.stories.services.participation import create_story_participation
 from world.stories.services.progress import get_active_progress_for_story
+from world.stories.services.save_transition import OutcomeInput, save_transition_with_outcomes
 from world.stories.services.story_log import serialize_story_log
 from world.stories.types import AnyStoryProgress
+
+
+class EraViewSet(viewsets.ModelViewSet):
+    """ViewSet for Era — metaplot era (season) management.
+
+    Read access: any authenticated user (eras are public metaplot info).
+    Write access: staff only.
+    Advance/archive actions: staff only (IsAdminUser).
+
+    Wave 11 will register this route; for now urls.py registers it.
+    """
+
+    queryset = Era.objects.annotate(story_count=Count("stories_created_in_era"))
+    serializer_class = EraSerializer
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = EraFilter
+    pagination_class = SmallResultsSetPagination
+    ordering_fields = ["season_number", "created_at", "status"]
+    ordering = ["season_number"]
+
+    def get_permissions(self) -> list[Any]:
+        """Read: IsAuthenticated. Write/delete: IsAdminUser."""
+        if self.action in {"advance", "archive"} or self.request.method not in (
+            "GET",
+            "HEAD",
+            "OPTIONS",
+        ):
+            return [permissions.IsAuthenticated(), permissions.IsAdminUser()]
+        return [permissions.IsAuthenticated()]
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def advance(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/eras/{id}/advance/
+
+        Staff-only. Closes the current ACTIVE era; activates this UPCOMING era.
+        Returns 200 with updated EraSerializer data, or 400 with detail on error.
+        """
+        era = self.get_object()
+        try:
+            updated = advance_era(next_era=era)
+        except EraAdvanceError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(EraSerializer(updated, context={"request": request}).data)
+
+    @action(detail=True, methods=[HTTPMethod.POST])
+    def archive(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/eras/{id}/archive/
+
+        Staff-only. Marks this era CONCLUDED without advancing to a new one.
+        Idempotent for CONCLUDED eras. Returns 200, or 400 with detail on error.
+        """
+        era = self.get_object()
+        try:
+            updated = archive_era(era=era)
+        except EraAdvanceError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(EraSerializer(updated, context={"request": request}).data)
 
 
 class StoryViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Story model.
     Provides CRUD operations with proper permissions and filtering.
+
+    Queryset scoping (Phase 5 Task 1.3):
+    - Staff: all stories.
+    - GM (table owner): all stories at their tables PLUS all owned stories.
+    - Authenticated user: stories they own, stories they actively participate in,
+      and all GLOBAL-scope stories (publicly browsable).
+    - Unauthenticated: none (permission class rejects).
+
+    GROUP-scope stories are visible if the user is an active GMTableMember at the
+    story's primary_table AND has an active StoryParticipation.
     """
 
     queryset = Story.objects.all()
@@ -148,6 +255,67 @@ class StoryViewSet(viewsets.ModelViewSet):
     search_fields = ["title", "description"]
     ordering_fields = ["created_at", "updated_at", "title", "status"]
     ordering = ["-updated_at"]
+
+    def get_queryset(self) -> QuerySet[Story]:
+        """Return the scoped story queryset for the requesting user.
+
+        Visibility rules (Phase 5 Task 1.3):
+        - Staff: all stories.
+        - GM (table owner): all stories at tables they own.
+        - CHARACTER-scope: story.character_sheet.character.db_account == user.
+        - Participant: active StoryParticipation where character.db_account == user.
+        - Story owner (M2M): user in story.owners.
+        - GLOBAL scope: visible to all authenticated users (public metaplot).
+
+        The character_sheet path covers personal stories that have no StoryParticipation
+        (the story "belongs to" the player by virtue of their character sheet FK).
+        """
+        qs = super().get_queryset()
+        user = self.request.user
+
+        if not user.is_authenticated:
+            return qs.none()
+
+        if user.is_staff:
+            return qs
+
+        # GM: all stories at tables they own.
+        # gm_profile is a reverse OneToOne — not present for non-GM accounts.
+        gm_q = models.Q()
+        if hasattr(user, "gm_profile"):
+            gm_profile = user.gm_profile
+            gm_q = models.Q(primary_table__gm=gm_profile)
+
+        # Stories the user owns (by account M2M).
+        owned_q = models.Q(owners=user)
+
+        # CHARACTER-scope: story belongs to the user's character sheet.
+        # Chain: Story.character_sheet → CharacterSheet.character → ObjectDB.db_account
+        character_sheet_q = models.Q(
+            scope=StoryScope.CHARACTER,
+            character_sheet__character__db_account=user,
+        )
+
+        # Stories the user actively participates in (via ObjectDB → db_account).
+        participant_q = models.Q(
+            participants__character__db_account=user,
+            participants__is_active=True,
+        )
+
+        # GLOBAL-scope stories are publicly browsable by any authenticated user.
+        global_q = models.Q(scope=StoryScope.GLOBAL)
+
+        # PUBLIC-privacy stories are discoverable by any authenticated user — this
+        # is required to allow players to find and apply to participate in stories.
+        # The existing IsStoryOwnerOrStaff._can_read_story grants PUBLIC stories to
+        # all authenticated users; the queryset must match that intent.
+        from world.stories.types import StoryPrivacy  # noqa: PLC0415
+
+        public_privacy_q = models.Q(privacy=StoryPrivacy.PUBLIC)
+
+        return qs.filter(
+            gm_q | owned_q | character_sheet_q | participant_q | global_q | public_privacy_q
+        ).distinct()
 
     def get_serializer_class(self) -> type[BaseSerializer]:
         """Return appropriate serializer based on action"""
@@ -246,6 +414,119 @@ class StoryViewSet(viewsets.ModelViewSet):
         log_entries = serialize_story_log(story=story, progress=progress, viewer_role=viewer_role)
         serializer = StoryLogSerializer(log_entries)
         return Response(serializer.data)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="assign-to-table",
+        permission_classes=[IsLeadGMOfDestinationTableOrStaff],
+    )
+    def assign_to_table(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/stories/{id}/assign-to-table/ — assign a story to a GM's table.
+
+        Lead GM of the destination table (or staff) calls this to take ownership
+        of a story. The serializer validates that the caller owns the destination
+        table. Returns 200 with the updated Story on success.
+        """
+        from world.stories.services.tables import assign_story_to_table  # noqa: PLC0415
+
+        story = self.get_object()
+        ser = AssignStoryToTableInputSerializer(data=request.data, context={"request": request})
+        ser.is_valid(raise_exception=True)
+        updated = assign_story_to_table(story=story, table=ser.validated_data["table"])
+        return Response(StoryDetailSerializer(updated, context={"request": request}).data)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="detach-from-table",
+        permission_classes=[CanDetachStoryFromTable],
+    )
+    def detach_from_table(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/stories/{id}/detach-from-table/ — clear a story's primary_table.
+
+        Allowed by: current Lead GM (story.primary_table.gm), the story's
+        character-scope owner (character_sheet.character.db_account == user),
+        or staff. Story history and participations are preserved; the story
+        enters 'seeking GM' state. Returns 200 with the updated Story.
+        """
+        from world.stories.services.tables import detach_story_from_table  # noqa: PLC0415
+
+        story = self.get_object()
+        updated = detach_story_from_table(story=story)
+        return Response(StoryDetailSerializer(updated, context={"request": request}).data)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="send-ooc",
+        permission_classes=[permissions.IsAuthenticated, IsStoryLeadGMOrStaff],
+    )
+    def send_ooc(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/stories/{id}/send-ooc/ — Lead GM or staff sends an OOC notice.
+
+        Body: { body: string, ooc_note?: string }
+
+        Permission: Lead GM of story.primary_table or staff (enforced by
+        IsStoryLeadGMOrStaff in permission_classes; has_object_permission fires
+        automatically when get_object() is called).
+        Input serializer validates body length (>= 1 char).
+        Service resolves scope-appropriate recipients and fans out
+        NarrativeMessageDelivery rows with category=STORY.
+
+        Returns 201 with the created NarrativeMessage.
+        """
+        from world.narrative.serializers import (  # noqa: PLC0415
+            NarrativeMessageSerializer,
+            SendStoryOOCInputSerializer,
+        )
+        from world.narrative.services import send_story_ooc_message  # noqa: PLC0415
+
+        story = self.get_object()
+        ser = SendStoryOOCInputSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        msg = send_story_ooc_message(
+            story=story,
+            sender_account=cast(AccountDB, request.user),
+            body=ser.validated_data["body"],
+            ooc_note=ser.validated_data.get("ooc_note", ""),
+        )
+        return Response(NarrativeMessageSerializer(msg).data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="offer-to-gm",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def offer_to_gm(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/stories/{id}/offer-to-gm/ — player offers their CHARACTER-scope story to a GM.
+
+        Body: { gm_profile_id: number, message?: string }
+
+        The serializer enforces:
+        - story.scope == CHARACTER
+        - story.primary_table is None
+        - story.character_sheet.character.db_account == request.user (or staff)
+
+        Returns 201 with the StoryGMOffer on success.
+        """
+        from world.stories.services.tables import offer_story_to_gm  # noqa: PLC0415
+
+        story = self.get_object()
+        ser = OfferStoryToGMInputSerializer(
+            data=request.data, context={"story": story, "request": request}
+        )
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+
+        offer = offer_story_to_gm(
+            story=story,
+            offered_to=data["offered_to"],
+            offered_by_account=cast(AccountDB, request.user),
+            message=data["message"],
+        )
+        return Response(StoryGMOfferSerializer(offer).data, status=status.HTTP_201_CREATED)
 
 
 class StoryParticipationViewSet(viewsets.ModelViewSet):
@@ -902,7 +1183,7 @@ class BeatViewSet(viewsets.ModelViewSet):
     """
 
     queryset = Beat.objects.select_related(
-        "episode__chapter__story",
+        "episode__chapter__story__primary_table",  # needed by BeatSerializer.get_can_mark
         "required_achievement",
         "required_condition_template",
         "required_codex_entry",
@@ -980,6 +1261,124 @@ class BeatViewSet(viewsets.ModelViewSet):
 
 
 # ---------------------------------------------------------------------------
+# Wave 3: StoryGMOffer ViewSet
+# ---------------------------------------------------------------------------
+
+
+class StoryGMOfferViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for StoryGMOffer.
+
+    Read: ReadOnlyModelViewSet (list + retrieve).
+    State transitions: custom @action endpoints:
+      POST /api/story-gm-offers/{id}/accept/   — accept_offer (GM)
+      POST /api/story-gm-offers/{id}/decline/  — decline_offer (GM)
+      POST /api/story-gm-offers/{id}/withdraw/ — withdraw_offer (player)
+
+    Queryset scoping:
+      - Staff: all offers.
+      - GM: offers where offered_to.account == user.
+      - Player: offers where offered_by_account == user.
+    """
+
+    serializer_class = StoryGMOfferSerializer
+    permission_classes = [IsStoryGMOfferParticipantOrStaff]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = StoryGMOfferFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["created_at", "updated_at", "status"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self) -> models.QuerySet[StoryGMOffer]:
+        user = self.request.user
+        if not user.is_authenticated:
+            return StoryGMOffer.objects.none()
+        if user.is_staff:
+            return StoryGMOffer.objects.all()
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        try:
+            gm_profile = user.gm_profile
+            gm_q = models.Q(offered_to=gm_profile)
+        except GMProfile.DoesNotExist:
+            gm_q = models.Q()
+        return StoryGMOffer.objects.filter(models.Q(offered_by_account=user) | gm_q).distinct()
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="accept",
+        permission_classes=[IsOfferRecipientGMOrStaff],
+    )
+    def accept(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/story-gm-offers/{id}/accept/ — GM accepts the offer.
+
+        Body: { response_note?: string }
+
+        Assigns story to the GM's first ACTIVE table. Returns 200 with the
+        updated StoryGMOffer.
+        """
+        from world.stories.services.tables import accept_story_offer  # noqa: PLC0415
+
+        offer = self.get_object()
+        ser = AcceptOfferInputSerializer(data=request.data, context={"offer": offer})
+        ser.is_valid(raise_exception=True)
+        # Race-condition guard: the GM may have lost their active table between
+        # serializer validation and service execution. Re-raises as 400 to avoid
+        # a 500. Matches the EpisodeViewSet.resolve exemption pattern.
+        try:
+            updated = accept_story_offer(
+                offer=offer, response_note=ser.validated_data["response_note"]
+            )
+        except StoryGMOfferError as exc:
+            from rest_framework import serializers as drf_serializers  # noqa: PLC0415
+
+            raise drf_serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        return Response(StoryGMOfferSerializer(updated).data, status=status.HTTP_200_OK)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="decline",
+        permission_classes=[IsOfferRecipientGMOrStaff],
+    )
+    def decline(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/story-gm-offers/{id}/decline/ — GM declines the offer.
+
+        Body: { response_note?: string }
+
+        Story remains detached. Returns 200 with the updated StoryGMOffer.
+        """
+        from world.stories.services.tables import decline_story_offer  # noqa: PLC0415
+
+        offer = self.get_object()
+        ser = DeclineOfferInputSerializer(data=request.data, context={"offer": offer})
+        ser.is_valid(raise_exception=True)
+        updated = decline_story_offer(
+            offer=offer, response_note=ser.validated_data["response_note"]
+        )
+        return Response(StoryGMOfferSerializer(updated).data, status=status.HTTP_200_OK)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="withdraw",
+        permission_classes=[IsOfferOffererOrStaff],
+    )
+    def withdraw(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/story-gm-offers/{id}/withdraw/ — player rescinds the offer.
+
+        No body required. Returns 200 with the updated StoryGMOffer.
+        """
+        from world.stories.services.tables import withdraw_story_offer  # noqa: PLC0415
+
+        offer = self.get_object()
+        ser = WithdrawOfferInputSerializer(data=request.data, context={"offer": offer})
+        ser.is_valid(raise_exception=True)
+        updated = withdraw_story_offer(offer=offer)
+        return Response(StoryGMOfferSerializer(updated).data, status=status.HTTP_200_OK)
+
+
+# ---------------------------------------------------------------------------
 # Phase 4 Wave 9: Author editor ViewSets
 # ---------------------------------------------------------------------------
 
@@ -1005,6 +1404,79 @@ class TransitionViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     ordering_fields = ["order", "created_at"]
     ordering = ["source_episode", "order"]
+
+    @action(
+        detail=False,
+        methods=[HTTPMethod.POST],
+        url_path="save-with-outcomes",
+        permission_classes=[IsLeadGMOnTransitionStoryOrStaff],
+    )
+    def save_with_outcomes(self, request: Request) -> Response:
+        """POST /api/transitions/save-with-outcomes/
+
+        Atomically create or update a Transition and replace its routing
+        predicate (TransitionRequiredOutcome) rows in a single transaction.
+
+        Replaces the Phase 4 multi-roundtrip flow:
+            POST /api/transitions/  → then N × POST /api/transition-required-outcomes/
+
+        Body::
+
+            {
+                "source_episode": <int>,
+                "target_episode": <int | null>,
+                "mode": "auto" | "gm_choice",
+                "connection_type": "" | "therefore" | "but",
+                "connection_summary": "<str>",
+                "order": <int>,
+                "outcomes": [{"beat": <int>, "required_outcome": "success" | "failure" | "expired"},
+                             ...],
+                "existing_id": <int | null>   # omit or null for create
+            }
+
+        Returns the saved Transition (same shape as TransitionSerializer).
+
+        Permissions: Lead GM of source_episode's story, or staff.
+        The permission class cannot inspect the object before the serializer runs
+        (source_episode comes from the body, not the URL), so this is a view-level
+        guard only — any user with a GMProfile who is a Lead GM of *some* story can
+        reach this action; the serializer validates that the source_episode's story
+        matches the caller.  Stricter object-level gating is applied in
+        IsLeadGMOnTransitionStoryOrStaff.has_object_permission after the service
+        creates the object — which effectively means the permission class's
+        has_permission gate alone guards creation.  This matches the pattern used
+        by all other "create with body data" action endpoints in this ViewSet.
+        """
+        ser = SaveTransitionWithOutcomesInputSerializer(
+            data=request.data, context={"request": request}
+        )
+        ser.is_valid(raise_exception=True)
+
+        vd = ser.validated_data
+        existing: Transition | None = vd.get("existing_id")
+        source_episode: Episode = vd["source_episode"]
+
+        transition_data: dict[str, Any] = {
+            "source_episode": source_episode,
+            "target_episode": vd.get("target_episode"),
+            "mode": vd["mode"],
+            "connection_type": vd.get("connection_type", ""),
+            "connection_summary": vd.get("connection_summary", ""),
+            "order": vd.get("order", 0),
+        }
+        outcome_inputs = [
+            OutcomeInput(beat_id=row["beat"].pk, required_outcome=row["required_outcome"])
+            for row in vd.get("outcomes", [])
+        ]
+
+        transition = save_transition_with_outcomes(
+            transition_data=transition_data,
+            outcomes=outcome_inputs,
+            existing_transition=existing,
+        )
+        out_ser = TransitionSerializer(transition)
+        http_status = status.HTTP_200_OK if existing is not None else status.HTTP_201_CREATED
+        return Response(out_ser.data, status=http_status)
 
 
 class EpisodeProgressionRequirementViewSet(viewsets.ModelViewSet):
@@ -1488,3 +1960,233 @@ class StaffWorkloadView(APIView):
                 "counts_by_scope": counts_by_scope,
             }
         )
+
+
+# ---------------------------------------------------------------------------
+# Wave 10: TableBulletin ViewSets
+# ---------------------------------------------------------------------------
+
+
+class TableBulletinPostViewSet(viewsets.ModelViewSet):
+    """ViewSet for TableBulletinPost — bulletin posts on GMTables.
+
+    Read access: Lead GM / staff (always) + active table members (table-wide
+    posts) or story participants (story-scoped posts).
+    Create: Lead GM of the target table or staff.
+    Update/Delete: Lead GM of the post's table or staff.
+    """
+
+    queryset = TableBulletinPost.objects.select_related(
+        "table__gm",
+        "story",
+        "author_persona",
+    ).prefetch_related(
+        models.Prefetch(
+            "replies",
+            queryset=TableBulletinReply.objects.select_related("author_persona"),
+            to_attr="replies_cached",
+        ),
+    )
+    serializer_class = TableBulletinPostSerializer
+    permission_classes = [CanAuthorBulletinPost]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = TableBulletinPostFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["created_at", "updated_at"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self) -> QuerySet[TableBulletinPost]:
+        """Scope the queryset to posts the requesting user may read."""
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return qs
+
+        # Lead GM of any table — sees all posts on their tables.
+        lead_gm_q = models.Q()
+        try:
+            gm_profile = user.gm_profile
+            lead_gm_q = models.Q(table__gm=gm_profile)
+        except GMProfile.DoesNotExist:
+            pass
+
+        # Active table member — sees table-wide posts (story=None).
+        active_member_table_wide_q = models.Q(
+            table__memberships__persona__character_sheet__character__db_account=user,
+            table__memberships__left_at__isnull=True,
+            story__isnull=True,
+        )
+
+        # Active story participant — sees story-scoped posts for their stories.
+        active_participant_q = models.Q(
+            story__participants__character__db_account=user,
+            story__participants__is_active=True,
+        )
+
+        return qs.filter(lead_gm_q | active_member_table_wide_q | active_participant_q).distinct()
+
+    def get_serializer_class(self) -> type[BaseSerializer]:
+        """Use input serializers for write operations."""
+        if self.action == "create":
+            return CreateBulletinPostInputSerializer
+        if self.action in {"update", "partial_update"}:
+            return UpdateBulletinPostInputSerializer
+        return TableBulletinPostSerializer
+
+    def get_object(self) -> TableBulletinPost:
+        """Standard get_object with read permission check."""
+        obj = super().get_object()
+        # For retrieve, ensure the user can actually read this post.
+        if self.action == "retrieve":
+            if not _user_can_read_bulletin_post(self.request.user, obj):
+                msg = "You do not have permission to view this bulletin post."
+                raise PermissionDenied(msg)
+        return obj
+
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Create a bulletin post using the three-layer pattern."""
+        from world.stories.services.bulletin import create_bulletin_post  # noqa: PLC0415
+
+        ser = CreateBulletinPostInputSerializer(data=request.data, context={"request": request})
+        ser.is_valid(raise_exception=True)
+        vd = ser.validated_data
+        post = create_bulletin_post(
+            table=vd["table"],
+            author_persona=vd["author_persona"],
+            title=vd["title"],
+            body=vd["body"],
+            story=vd.get("story"),
+            allow_replies=vd.get("allow_replies", True),
+        )
+        return Response(TableBulletinPostSerializer(post).data, status=status.HTTP_201_CREATED)
+
+    def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Edit a post (author / staff)."""
+        from world.stories.services.bulletin import edit_bulletin_post  # noqa: PLC0415
+
+        post = self.get_object()
+        self.check_object_permissions(request, post)
+        ser = UpdateBulletinPostInputSerializer(data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        vd = ser.validated_data
+        edit_bulletin_post(
+            post=post,
+            title=vd.get("title"),
+            body=vd.get("body"),
+            allow_replies=vd.get("allow_replies"),
+        )
+        return Response(TableBulletinPostSerializer(post).data)
+
+    def partial_update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Delegate to update (always partial for this viewset)."""
+        return self.update(request, *args, **kwargs)
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Delete a post (author / staff)."""
+        from world.stories.services.bulletin import delete_bulletin_post  # noqa: PLC0415
+
+        post = self.get_object()
+        self.check_object_permissions(request, post)
+        delete_bulletin_post(post=post)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TableBulletinReplyViewSet(viewsets.ModelViewSet):
+    """ViewSet for TableBulletinReply — replies to bulletin posts.
+
+    Read access: same as the parent post (reader must have read access to post).
+    Create: any qualifying reader when post.allow_replies=True (staff bypass).
+    Update/Delete: reply author or staff.
+    """
+
+    queryset = TableBulletinReply.objects.select_related(
+        "post__table__gm",
+        "post__story",
+        "author_persona__character_sheet__character",  # needed by IsBulletinReplyAuthorOrStaff
+    )
+    serializer_class = TableBulletinReplySerializer
+    permission_classes = [CanReplyToBulletinPost]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = TableBulletinReplyFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["created_at"]
+    ordering = ["created_at"]
+
+    def get_queryset(self) -> QuerySet[TableBulletinReply]:
+        """Scope to replies whose parent post the user may read."""
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return qs
+
+        lead_gm_q = models.Q()
+        try:
+            gm_profile = user.gm_profile
+            lead_gm_q = models.Q(post__table__gm=gm_profile)
+        except GMProfile.DoesNotExist:
+            pass
+
+        active_member_table_wide_q = models.Q(
+            post__table__memberships__persona__character_sheet__character__db_account=user,
+            post__table__memberships__left_at__isnull=True,
+            post__story__isnull=True,
+        )
+        active_participant_q = models.Q(
+            post__story__participants__character__db_account=user,
+            post__story__participants__is_active=True,
+        )
+
+        return qs.filter(lead_gm_q | active_member_table_wide_q | active_participant_q).distinct()
+
+    def get_permissions(self) -> list[Any]:
+        """Create: CanReplyToBulletinPost (read + allow_replies check in serializer).
+        Update/partial_update/destroy: IsBulletinReplyAuthorOrStaff (author or staff).
+        All others: base CanReplyToBulletinPost.
+        """
+        if self.action in {"update", "partial_update", "destroy"}:
+            return [IsBulletinReplyAuthorOrStaff()]
+        return [CanReplyToBulletinPost()]
+
+    def get_serializer_class(self) -> type[BaseSerializer]:
+        if self.action == "create":
+            return CreateBulletinReplyInputSerializer
+        if self.action in {"update", "partial_update"}:
+            return UpdateBulletinReplyInputSerializer
+        return TableBulletinReplySerializer
+
+    def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Create a reply using the three-layer pattern."""
+        from world.stories.services.bulletin import reply_to_post  # noqa: PLC0415
+
+        ser = CreateBulletinReplyInputSerializer(data=request.data, context={"request": request})
+        ser.is_valid(raise_exception=True)
+        vd = ser.validated_data
+        reply = reply_to_post(
+            post=vd["post"],
+            author_persona=vd["author_persona"],
+            body=vd["body"],
+        )
+        return Response(TableBulletinReplySerializer(reply).data, status=status.HTTP_201_CREATED)
+
+    def update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Edit a reply — IsBulletinReplyAuthorOrStaff enforces author ownership."""
+        reply = self.get_object()
+        ser = UpdateBulletinReplyInputSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        reply.body = ser.validated_data["body"]
+        reply.save(update_fields=["body"])
+        return Response(TableBulletinReplySerializer(reply).data)
+
+    def partial_update(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Delegate to update."""
+        return self.update(request, *args, **kwargs)
+
+    def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Delete a reply — IsBulletinReplyAuthorOrStaff enforces author ownership."""
+        reply = self.get_object()
+        reply.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

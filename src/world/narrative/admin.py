@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from world.narrative.models import NarrativeMessage, NarrativeMessageDelivery
+from world.narrative.models import Gemit, NarrativeMessage, NarrativeMessageDelivery, UserStoryMute
 
 
 class NarrativeMessageDeliveryInline(admin.TabularInline):
@@ -37,3 +37,18 @@ class NarrativeMessageDeliveryAdmin(admin.ModelAdmin):
     list_filter = ("delivered_at", "acknowledged_at")
     raw_id_fields = ("message", "recipient_character_sheet")
     readonly_fields = ("delivered_at", "acknowledged_at")
+
+
+@admin.register(Gemit)
+class GemitAdmin(admin.ModelAdmin):
+    list_display = ("id", "sender_account", "related_era", "related_story", "sent_at")
+    search_fields = ("body",)
+    readonly_fields = ("sent_at",)
+    raw_id_fields = ("sender_account", "related_era", "related_story")
+
+
+@admin.register(UserStoryMute)
+class UserStoryMuteAdmin(admin.ModelAdmin):
+    list_display = ("id", "account", "story", "muted_at")
+    raw_id_fields = ("account", "story")
+    readonly_fields = ("muted_at",)

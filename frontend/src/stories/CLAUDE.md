@@ -12,6 +12,8 @@ dashboard, and story author editor. Implemented in Phase 4 (Waves 1-12).
 REST API client — one thin `apiFetch` wrapper per endpoint. Grouped by
 endpoint family:
 
+**Phase 4 — stories core:**
+
 - **Dashboard reads:** `getMyActiveStories()`, `getGMQueue()`, `getStaffWorkload()`
 - **Story / chapter / episode / beat / transition CRUD:** `getStory()`,
   `listChapters()`, `listEpisodes()`, `listBeats()`, `listTransitions()`,
@@ -24,6 +26,14 @@ endpoint family:
   `requestClaim()`, `createEventFromSessionRequest()`, `cancelSessionRequest()`,
   `resolveSessionRequest()`, `expireOverdueBeats()`
 - **AGM / session request reads:** `listAssistantGMClaims()`, `listSessionRequests()`
+
+**Phase 5 — era + story mobility + browse:**
+
+- **Era CRUD + actions:** `listEras()`, `getEra()`, `createEra()`, `updateEra()`, `deleteEra()`, `advanceEra()`, `archiveEra()`
+- **Story table assignment:** `assignToTable(storyId, tableId)`, `detachFromTable(storyId)`
+- **GM offers:** `listStoryGMOffers()`, `createGMOffer(storyId, body)`, `acceptGMOffer(offerId)`, `declineGMOffer(offerId)`, `withdrawGMOffer(offerId)`
+- **Browse:** `listStoriesPublic(params?)` — visibility-filtered list for `BrowseStoriesPage`
+- **Atomic transition save:** `saveTransitionWithOutcomes(transitionId?, body)` — `POST /api/stories/transitions/save-with-outcomes/`
 
 ### `queries.ts`
 
@@ -80,7 +90,19 @@ introspect `APIView`-based dashboard endpoints.
 | `TransitionFormDialog.tsx`          | Transition CRUD dialog                                     |
 | `WorkloadStatCard.tsx`              | Stat card on the staff workload dashboard                  |
 
+**Phase 5 additions:**
+
+| File                   | Purpose                                                               |
+| ---------------------- | --------------------------------------------------------------------- |
+| `ChangeMyGMDialog.tsx` | Player dialog: withdraw story from current GM + offer to a new one    |
+| `OfferCard.tsx`        | GM offer card for `MyStoryOffersPage` (pending offer display)         |
+| `OfferRow.tsx`         | Single offer row in the responded-offers history section              |
+| `EraCard.tsx`          | Single era card for `EraAdminPage` (status badge + advance/archive)   |
+| `StoryBrowseCard.tsx`  | Compact story card for `BrowseStoriesPage` with scope + status badges |
+
 ### `pages/`
+
+**Phase 4:**
 
 | File                       | Route                                            | Auth                             |
 | -------------------------- | ------------------------------------------------ | -------------------------------- |
@@ -91,6 +113,24 @@ introspect `APIView`-based dashboard endpoints.
 | `MyAGMClaimsPage.tsx`      | `/stories/my-claims`                             | ProtectedRoute                   |
 | `StaffWorkloadPage.tsx`    | `/stories/staff-workload`                        | StaffRoute                       |
 | `StoryAuthorPage.tsx`      | `/stories/author` and `/stories/author/:storyId` | ProtectedRoute                   |
+
+**Phase 5:**
+
+| File                    | Route                | Auth           |
+| ----------------------- | -------------------- | -------------- |
+| `EraAdminPage.tsx`      | `/stories/eras`      | StaffRoute     |
+| `BrowseStoriesPage.tsx` | `/stories/browse`    | Public (any)   |
+| `MyStoryOffersPage.tsx` | `/stories/my-offers` | ProtectedRoute |
+
+`EraAdminPage` — staff admin for era (season) lifecycle: list + advance + archive actions + era
+detail showing tagged stories.
+
+`BrowseStoriesPage` — public directory listing all stories the requester can access, grouped by
+scope (Personal / Group / Global) with filter chips. Backend restricts visibility per the existing
+queryset rules.
+
+`MyStoryOffersPage` — GM offer inbox; pending story offers in a card grid with Accept / Decline
+actions, responded offers in a history section. `OfferRow` and `OfferCard` are sub-components.
 
 ## Data Flow
 
@@ -140,5 +180,25 @@ do not assert stories-specific UI because that requires authentication.
 
 **Episode DAG uses React Flow.** The `EpisodeDAG` component imports
 `@xyflow/react`. React Flow requires a CSS import (`@xyflow/react/dist/style.css`)
-already in `index.css`. The DAG is read-only in Phase 4; edit-mode
-transition wiring is deferred to Phase 6+.
+already in `index.css`. Phase 5 Wave 12 added drag-to-add-transitions edit mode
+via `onConnect`. Multi-select, copy/paste, and layout templates are deferred to Phase 6+.
+
+**Phase 5: `BeatSerializer.can_mark` field is now wired.** `MarkBeatDialog` reads
+`beat.can_mark` to gate the "Mark" button. The button is hidden for unauthorized
+users rather than relying on the 403 response. `can_mark` is `true` when the
+requesting user is the Lead GM, staff, or has an APPROVED AGM claim on this beat.
+
+**Phase 5: `TransitionFormDialog` uses atomic save.** Creating or editing a
+transition with required-outcome rows now fires a single `POST /api/stories/transitions/save-with-outcomes/`
+request. The prior two-step create-then-patch approach is removed; rollback
+on partial failure is handled server-side.
+
+**Phase 5: Story GM offer flow.** `ChangeMyGMDialog` on `StoryDetailPage` fires
+`detach-from-table` then `create-gm-offer` (two requests). If the detach succeeds
+but the offer creation fails, the story is left in "seeking GM" state (primary_table=None).
+The player can retry from `MyStoryOffersPage`.
+
+**`BrowseStoriesPage` is public (no ProtectedRoute).** It is wrapped directly
+in a `<Suspense>` in `App.tsx` without `<ProtectedRoute>`. The backend queryset
+restricts results by visibility — private stories are excluded for anonymous or
+non-participant viewers.

@@ -4,6 +4,8 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from world.character_sheets.models import CharacterSheet
+from world.gm.constants import GMTableStatus
+from world.gm.models import GMProfile, GMTable
 from world.gm.serializers import GMProfileSerializer
 from world.scenes.models import Persona
 from world.stories.constants import (
@@ -11,7 +13,9 @@ from world.stories.constants import (
     BeatOutcome,
     BeatPredicateType,
     SessionRequestStatus,
+    StoryGMOfferStatus,
     StoryScope,
+    TransitionMode,
 )
 from world.stories.models import (
     AggregateBeatContribution,
@@ -23,6 +27,7 @@ from world.stories.models import (
     EpisodeProgressionRequirement,
     EpisodeResolution,
     EpisodeScene,
+    Era,
     GlobalStoryProgress,
     GroupStoryProgress,
     PlayerTrust,
@@ -30,15 +35,61 @@ from world.stories.models import (
     SessionRequest,
     Story,
     StoryFeedback,
+    StoryGMOffer,
     StoryParticipation,
     StoryProgress,
     StoryTrustRequirement,
+    TableBulletinPost,
+    TableBulletinReply,
     Transition,
     TransitionRequiredOutcome,
     TrustCategory,
     TrustCategoryFeedbackRating,
 )
-from world.stories.types import AnyStoryProgress, StoryLogBeatEntry, StoryLogEpisodeEntry
+from world.stories.types import (
+    AnyStoryProgress,
+    ConnectionType,
+    StoryLogBeatEntry,
+    StoryLogEpisodeEntry,
+)
+
+# ---------------------------------------------------------------------------
+# Wave 6: Era lifecycle serializer
+# ---------------------------------------------------------------------------
+
+
+class EraSerializer(serializers.ModelSerializer):
+    """Full serializer for Era — includes read-only story_count context field."""
+
+    story_count = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = Era
+        fields = [
+            "id",
+            "name",
+            "display_name",
+            "season_number",
+            "description",
+            "status",
+            "activated_at",
+            "concluded_at",
+            "created_at",
+            "story_count",
+        ]
+        read_only_fields = ["id", "activated_at", "concluded_at", "created_at", "story_count"]
+
+    def get_story_count(self, obj: Era) -> int:
+        """Return the number of Story records whose created_in_era matches this era.
+
+        Reads from the ``story_count`` annotation added by EraViewSet.queryset
+        (``Count("stories_created_in_era")``). Falls back to a direct query only
+        when the annotation is absent (e.g. in non-viewset serializer calls).
+        """
+        annotated = getattr(obj, "story_count", None)  # noqa: GETATTR_LITERAL — optional annotation, not a fixed model field
+        if annotated is not None:
+            return int(annotated)
+        return Story.objects.filter(created_in_era=obj).count()
 
 
 class StoryListSerializer(serializers.ModelSerializer):
@@ -76,6 +127,7 @@ class StoryDetailSerializer(serializers.ModelSerializer):
     owners = serializers.StringRelatedField(many=True, read_only=True)
     active_gms = GMProfileSerializer(many=True, read_only=True)
     character_sheet = serializers.PrimaryKeyRelatedField(read_only=True)
+    primary_table = serializers.PrimaryKeyRelatedField(read_only=True)
     chapters_count = serializers.IntegerField(source="chapters.count", read_only=True)
     trust_requirements = serializers.SerializerMethodField()
 
@@ -92,6 +144,7 @@ class StoryDetailSerializer(serializers.ModelSerializer):
             "active_gms",
             "trust_requirements",
             "character_sheet",
+            "primary_table",
             "chapters_count",
             "created_at",
             "updated_at",
@@ -735,6 +788,11 @@ class BeatSerializer(serializers.ModelSerializer):
     story_id = serializers.IntegerField(source="episode.chapter.story_id", read_only=True)
     story_title = serializers.CharField(source="episode.chapter.story.title", read_only=True)
 
+    # Client-side gating: true when the requesting user may call POST /beats/{id}/mark/.
+    # Delegates to CanMarkBeat.has_object_permission so the frontend can hide the Mark
+    # button instead of rendering it optimistically and hitting a 403.
+    can_mark = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Beat
         fields = [
@@ -767,6 +825,8 @@ class BeatSerializer(serializers.ModelSerializer):
             # Timestamps
             "created_at",
             "updated_at",
+            # Client-side permission gating
+            "can_mark",
         ]
         read_only_fields = [
             "id",
@@ -776,7 +836,25 @@ class BeatSerializer(serializers.ModelSerializer):
             "story_title",
             "created_at",
             "updated_at",
+            "can_mark",
         ]
+
+    def get_can_mark(self, obj: Beat) -> bool:
+        """Return True if the requesting user may mark this beat.
+
+        Delegates to CanMarkBeat.has_object_permission.  The view arg is
+        passed as None — CanMarkBeat does not use it.
+
+        Requires the Beat queryset to select_related
+        'episode__chapter__story__primary_table' to avoid N+1 on list endpoints.
+        BeatViewSet.queryset already includes this chain.
+        """
+        from world.stories.permissions import CanMarkBeat  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is None:
+            return False
+        return CanMarkBeat().has_object_permission(request, None, obj)  # type: ignore[arg-type]
 
     def validate(self, attrs: Any) -> Any:
         """Mirror Beat.clean() so predicate-type invariants surface as 400 responses."""
@@ -892,6 +970,102 @@ class TransitionRequiredOutcomeSerializer(serializers.ModelSerializer):
             "required_outcome",
         ]
         read_only_fields = ["id"]
+
+
+# ---------------------------------------------------------------------------
+# Wave 13: Atomic transition save serializer
+# ---------------------------------------------------------------------------
+
+
+class OutcomeInputSerializer(serializers.Serializer):
+    """Nested routing-predicate row for SaveTransitionWithOutcomesInputSerializer."""
+
+    beat = serializers.PrimaryKeyRelatedField(queryset=Beat.objects.all())
+    required_outcome = serializers.ChoiceField(choices=BeatOutcome.choices)
+
+    def validate_beat(self, beat: Beat) -> Beat:
+        """Beat must belong to the source episode supplied via context."""
+        source_episode: Episode | None = self.context.get("source_episode")
+        if source_episode is not None and beat.episode_id != source_episode.pk:
+            msg = "Beat does not belong to the source episode of this transition."
+            raise serializers.ValidationError(msg)
+        return beat
+
+
+class SaveTransitionWithOutcomesInputSerializer(serializers.Serializer):
+    """Input for POST /api/transitions/save-with-outcomes/.
+
+    Accepts the core Transition fields plus a nested list of routing predicates.
+    Validates the whole payload before handing off to the service.
+
+    Context required: none (the source_episode is read from transition.source_episode).
+    """
+
+    existing_id = serializers.PrimaryKeyRelatedField(
+        queryset=Transition.objects.select_related("source_episode"),
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+    source_episode = serializers.PrimaryKeyRelatedField(queryset=Episode.objects.all())
+    target_episode = serializers.PrimaryKeyRelatedField(
+        queryset=Episode.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+    mode = serializers.ChoiceField(choices=TransitionMode.choices)
+    connection_type = serializers.ChoiceField(
+        choices=ConnectionType.choices,
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    connection_summary = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        default="",
+    )
+    order = serializers.IntegerField(default=0, min_value=0)
+    outcomes = OutcomeInputSerializer(many=True, required=False, default=list)
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        existing: Transition | None = attrs.get("existing_id")
+        source_episode: Episode = attrs["source_episode"]
+        target_episode: Episode | None = attrs.get("target_episode")
+
+        # When updating, ensure the existing transition belongs to the same source episode.
+        if existing is not None and existing.source_episode_id != source_episode.pk:
+            msg = "existing_id transition does not belong to the given source_episode."
+            raise serializers.ValidationError({"existing_id": msg})
+
+        # target_episode must differ from source_episode (or be null for frontier).
+        if target_episode is not None and target_episode.pk == source_episode.pk:
+            msg = "target_episode must be different from source_episode."
+            raise serializers.ValidationError({"target_episode": msg})
+
+        # Lead GM permission check: only the Lead GM of the source episode's story
+        # (or staff) may save transitions. This runs here because save-with-outcomes
+        # is a detail=False action — no URL object exists for has_object_permission
+        # to inspect. The view-level IsLeadGMOnTransitionStoryOrStaff.has_permission
+        # only confirms a GMProfile exists; the authoritative check is here.
+        request = self.context.get("request")
+        if request is not None and not request.user.is_staff:
+            from world.gm.models import GMProfile  # noqa: PLC0415
+
+            story = source_episode.chapter.story
+            try:
+                gm_profile = request.user.gm_profile
+            except GMProfile.DoesNotExist:
+                msg = "Only GMs can save transitions."
+                raise serializers.ValidationError({"non_field_errors": [msg]}) from None
+            if not story.primary_table_id or story.primary_table.gm_id != gm_profile.pk:
+                msg = "You can only save transitions on stories at your tables."
+                raise serializers.ValidationError({"non_field_errors": [msg]})
+
+        # Pass source_episode into nested outcome serializer context (belt-and-suspenders;
+        # the child serializer receives context via the serializer chain).
+        return attrs
 
 
 # ---------------------------------------------------------------------------
@@ -1310,3 +1484,344 @@ class StoryLogSerializer(serializers.Serializer):
     def to_representation(self, instance: list) -> dict[str, Any]:
         """Accept the log entries list as the instance."""
         return {"entries": self.get_entries(instance)}
+
+
+# ---------------------------------------------------------------------------
+# Wave 2: Table assignment input serializers
+# ---------------------------------------------------------------------------
+
+
+class AssignStoryToTableInputSerializer(serializers.Serializer):
+    """Input for POST /api/stories/{id}/assign-to-table/.
+
+    Validates that the requesting user is the Lead GM of the destination table
+    (or staff). The story-side permission (can this story be assigned?) is
+    handled by the view's get_object() / queryset scoping.
+    """
+
+    table = serializers.PrimaryKeyRelatedField(
+        queryset=GMTable.objects.filter(status=GMTableStatus.ACTIVE),
+    )
+
+    def validate_table(self, table: GMTable) -> GMTable:
+        """Verify the requesting user can assign stories to this table."""
+        request = self.context.get("request")
+        if request is None:
+            msg = "Request context is required."
+            raise serializers.ValidationError(msg)
+        user = request.user
+        if user.is_staff:
+            return table
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        try:
+            gm_profile = user.gm_profile
+        except GMProfile.DoesNotExist:
+            msg = "You must be a GM to assign stories to a table."
+            raise serializers.ValidationError(msg) from None
+        if table.gm_id != gm_profile.pk:
+            msg = "You can only assign stories to your own table."
+            raise serializers.ValidationError(msg)
+        return table
+
+
+# ---------------------------------------------------------------------------
+# Wave 3: StoryGMOffer serializers
+# ---------------------------------------------------------------------------
+
+
+class StoryGMOfferSerializer(serializers.ModelSerializer):
+    """Read serializer for StoryGMOffer records."""
+
+    class Meta:
+        model = StoryGMOffer
+        fields = [
+            "id",
+            "story",
+            "offered_to",
+            "offered_by_account",
+            "status",
+            "message",
+            "response_note",
+            "created_at",
+            "responded_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class OfferStoryToGMInputSerializer(serializers.Serializer):
+    """Input for POST /api/stories/{id}/offer-to-gm/.
+
+    Context required:
+        story (Story): the story being offered (resolved by get_object()).
+        request: DRF request (for user identity + staff check).
+
+    Validates:
+        - story.scope == CHARACTER (service will catch this, but serializer validates first)
+        - story.primary_table is None
+        - gm_profile_id points to an existing GMProfile
+
+    Stores ``offered_to`` (GMProfile) in validated_data.
+    """
+
+    gm_profile_id = serializers.IntegerField()
+    message = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_gm_profile_id(self, value: int) -> int:
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        if not GMProfile.objects.filter(pk=value).exists():
+            msg = "No GM with that profile ID exists."
+            raise serializers.ValidationError(msg)
+        return value
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        story: Story = self.context["story"]
+        request = self.context["request"]
+
+        # Permission: only the character-scope owner (or staff) can offer this story.
+        if not request.user.is_staff:
+            if story.scope != StoryScope.CHARACTER or story.character_sheet_id is None:
+                msg = "Only CHARACTER-scope stories with an owner can be offered to a GM."
+                raise serializers.ValidationError({"non_field_errors": msg})
+            if story.character_sheet.character.db_account_id != request.user.pk:
+                msg = "You can only offer your own story."
+                raise serializers.ValidationError({"non_field_errors": msg})
+
+        if story.scope != StoryScope.CHARACTER:
+            msg = "Only CHARACTER-scope stories support GM offers."
+            raise serializers.ValidationError({"non_field_errors": msg})
+        if story.primary_table_id is not None:
+            msg = "Withdraw from the current GM's table before offering this story to another GM."
+            raise serializers.ValidationError({"non_field_errors": msg})
+
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        attrs["offered_to"] = GMProfile.objects.get(pk=attrs["gm_profile_id"])
+        return attrs
+
+
+class AcceptOfferInputSerializer(serializers.Serializer):
+    """Input for POST /api/story-gm-offers/{id}/accept/.
+
+    Context required:
+        offer (StoryGMOffer): the offer being accepted.
+
+    Validates:
+        - offer.status == PENDING
+    """
+
+    response_note = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        offer: StoryGMOffer = self.context["offer"]
+        if offer.status != StoryGMOfferStatus.PENDING:
+            msg = "Only PENDING offers can be accepted."
+            raise serializers.ValidationError({"non_field_errors": msg})
+        return attrs
+
+
+class DeclineOfferInputSerializer(serializers.Serializer):
+    """Input for POST /api/story-gm-offers/{id}/decline/.
+
+    Context required:
+        offer (StoryGMOffer): the offer being declined.
+
+    Validates:
+        - offer.status == PENDING
+    """
+
+    response_note = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        offer: StoryGMOffer = self.context["offer"]
+        if offer.status != StoryGMOfferStatus.PENDING:
+            msg = "Only PENDING offers can be declined."
+            raise serializers.ValidationError({"non_field_errors": msg})
+        return attrs
+
+
+class WithdrawOfferInputSerializer(serializers.Serializer):
+    """Input for POST /api/story-gm-offers/{id}/withdraw/.
+
+    Context required:
+        offer (StoryGMOffer): the offer being withdrawn.
+
+    Validates:
+        - offer.status == PENDING
+    """
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        offer: StoryGMOffer = self.context["offer"]
+        if offer.status != StoryGMOfferStatus.PENDING:
+            msg = "Only PENDING offers can be withdrawn."
+            raise serializers.ValidationError({"non_field_errors": msg})
+        return attrs
+
+
+# ---------------------------------------------------------------------------
+# Wave 10: TableBulletin serializers
+# ---------------------------------------------------------------------------
+
+
+class TableBulletinReplySerializer(serializers.ModelSerializer):
+    """Read serializer for TableBulletinReply."""
+
+    class Meta:
+        model = TableBulletinReply
+        fields = [
+            "id",
+            "post",
+            "author_persona",
+            "body",
+            "created_at",
+        ]
+        read_only_fields = ["id", "post", "author_persona", "created_at"]
+
+
+class TableBulletinPostSerializer(serializers.ModelSerializer):
+    """Read serializer for TableBulletinPost — includes nested reply list.
+
+    Replies are read from ``replies_cached`` (set by the ViewSet's
+    Prefetch to_attr) when available, falling back to the reverse manager.
+    """
+
+    replies = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TableBulletinPost
+        fields = [
+            "id",
+            "table",
+            "story",
+            "author_persona",
+            "title",
+            "body",
+            "allow_replies",
+            "created_at",
+            "updated_at",
+            "replies",
+        ]
+        read_only_fields = [
+            "id",
+            "table",
+            "story",
+            "author_persona",
+            "created_at",
+            "updated_at",
+            "replies",
+        ]
+
+    def get_replies(self, obj: Any) -> list[Any]:
+        """Return cached replies (from Prefetch to_attr) or query the DB."""
+        reply_list = getattr(obj, "replies_cached", None)  # noqa: GETATTR_LITERAL — Prefetch to_attr
+        if reply_list is None:
+            reply_list = list(obj.replies.select_related("author_persona").all())
+        return TableBulletinReplySerializer(reply_list, many=True).data
+
+
+class CreateBulletinPostInputSerializer(serializers.Serializer):
+    """Input for POST /api/table-bulletin-posts/.
+
+    Validates:
+    - ``table`` exists and user is its Lead GM (or staff)
+    - ``story`` (if set) belongs to ``table`` (story.primary_table == table)
+    - ``author_persona`` belongs to the requesting user's account
+
+    Stores validated model instances in validated_data.
+    """
+
+    table = serializers.PrimaryKeyRelatedField(queryset=GMTable.objects.all())
+    story = serializers.PrimaryKeyRelatedField(
+        queryset=Story.objects.all(),
+        required=False,
+        allow_null=True,
+        default=None,
+    )
+    author_persona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
+    title = serializers.CharField(max_length=200)
+    body = serializers.CharField()
+    allow_replies = serializers.BooleanField(required=False, default=True)
+
+    def validate_table(self, table: GMTable) -> GMTable:
+        """User must be the Lead GM of the table (or staff)."""
+        request = self.context.get("request")
+        if request is None:
+            msg = "Request context is required."
+            raise serializers.ValidationError(msg)
+        if getattr(request.user, "is_staff", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
+            return table
+        try:
+            gm_profile = request.user.gm_profile
+        except GMProfile.DoesNotExist:
+            msg = "You must be a GM to post bulletins."
+            raise serializers.ValidationError(msg) from None
+        if table.gm_id != gm_profile.pk:
+            msg = "You can only post bulletins to your own table."
+            raise serializers.ValidationError(msg)
+        return table
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        """Validate that story (if set) belongs to the specified table."""
+        table: GMTable = attrs["table"]
+        story: Story | None = attrs.get("story")
+        if story is not None and story.primary_table_id != table.pk:
+            msg = "The selected story is not assigned to this table."
+            raise serializers.ValidationError({"story": msg})
+        return attrs
+
+
+class UpdateBulletinPostInputSerializer(serializers.Serializer):
+    """Input for PATCH /api/table-bulletin-posts/{id}/.
+
+    Only the post author (Lead GM of the table) or staff may edit.
+    No field is required; all are optional.
+    """
+
+    title = serializers.CharField(max_length=200, required=False)
+    body = serializers.CharField(required=False)
+    allow_replies = serializers.BooleanField(required=False)
+
+
+class CreateBulletinReplyInputSerializer(serializers.Serializer):
+    """Input for POST /api/table-bulletin-replies/.
+
+    Validates:
+    - ``post`` exists
+    - post.allow_replies=True (or user is staff)
+    - requesting user has read access to the post
+    - ``author_persona`` belongs to the requesting user's account
+
+    Stores validated model instances in validated_data.
+    """
+
+    post = serializers.PrimaryKeyRelatedField(queryset=TableBulletinPost.objects.all())
+    author_persona = serializers.PrimaryKeyRelatedField(queryset=Persona.objects.all())
+    body = serializers.CharField()
+
+    def validate_post(self, post: TableBulletinPost) -> TableBulletinPost:
+        """Verify replies are enabled on this post (staff bypass)."""
+        request = self.context.get("request")
+        if request is None:
+            msg = "Request context is required."
+            raise serializers.ValidationError(msg)
+        if not post.allow_replies and not request.user.is_staff:
+            msg = "Replies are disabled on this post."
+            raise serializers.ValidationError(msg)
+        # Also check that the user can read the post.
+        from world.stories.permissions import _user_can_read_bulletin_post  # noqa: PLC0415
+
+        if not _user_can_read_bulletin_post(request.user, post):
+            msg = "You do not have access to this bulletin post."
+            raise serializers.ValidationError(msg)
+        return post
+
+
+class UpdateBulletinReplyInputSerializer(serializers.Serializer):
+    """Input for PATCH /api/table-bulletin-replies/{id}/.
+
+    Only the reply author or staff may edit.
+    """
+
+    body = serializers.CharField()

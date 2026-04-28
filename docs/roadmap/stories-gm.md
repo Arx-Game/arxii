@@ -1,6 +1,6 @@
 # Stories & GM Tables
 
-**Status:** phase-4-complete
+**Status:** phase-5-complete
 **Depends on:** Scenes, Missions, Codex, Relationships, Progression
 
 ## Overview
@@ -234,63 +234,78 @@ The full React UI for the stories + narrative backend is implemented in
   Unauthenticated access redirects to `/login` — e2e smoke tests account for
   this by verifying crash-free rendering rather than requiring live auth.
 
+### Phase 5: GM/Staff Workflow (complete — Waves 0–14)
+
+Phase 5 made GMs and staff capable of running the game from the web UI.
+All 14 waves shipped across two sessions.
+
+**Group A — Table management (Waves 0–3):**
+- `GMTableViewSet` and `GMTableMembershipViewSet` — full CRUD with role-aware
+  permission classes (`IsGMTableOwnerOrStaff`, member-filtered queryset)
+- `Story.primary_table` mutation: `assign-to-table` and `detach-from-table`
+  custom actions on `StoryViewSet`; `detach_story_from_table` service
+- `leave_table` auto-detaches CHARACTER-scope stories non-destructively when a
+  player leaves a table (stories enter "seeking GM" state)
+- Guest story-membership without table-membership: Lead GM can add an outsider
+  as a story participant
+
+**Group B — Story withdrawal + GM re-offer (Wave 3):**
+- `StoryGMOffer(story, offered_to, offered_by_account, message, status, response_note, responded_at)` model with partial unique constraint on PENDING pairs
+- Services: `offer_story_to_gm`, `accept_story_offer`, `decline_story_offer`, `withdraw_story_offer`
+- `StoryGMOfferViewSet` with offer / accept / decline / withdraw actions
+- Frontend: `ChangeMyGMDialog` on player story detail; `MyStoryOffersPage` GM offer inbox; `OfferRow` component
+
+**Group C — GM ad-hoc messaging (Wave 7 backend, Wave 8 frontend):**
+- `Gemit(body, sender_account, related_era, related_story, sent_at)` — staff-broadcast record; persistent for retroactive viewing; pushed to all sessions via `SESSION_HANDLER`
+- `UserStoryMute(account, story, muted_at)` — per-user notification suppression (muted delivery rows still created; only real-time push is skipped)
+- `broadcast_gemit(body, sender_account, related_era, related_story)` service — creates Gemit + pushes to all online sessions in `|G[GEMIT]|n` green
+- `send_story_ooc_message(story, sender_account, body)` service — fans out `NarrativeMessage(category=STORY)` to all scope-appropriate participants; respects UserStoryMute for real-time push
+- Frontend: `SendGemitDialog` (staff), `SendStoryOOCDialog` (Lead GM/staff), `GemitRenderer` (inline green display), `MuteStoryToggle` (bell icon on StoryDetailPage), `MuteSettingsPage` (`/narrative/mute-settings`)
+
+**Group C-ext — Browse Stories public directory (Wave 9):**
+- `BrowseStoriesPage` (`/stories/browse`) — public directory listing all stories the requester can see, grouped by scope with filter chips; backend visibility enforced by existing queryset
+
+**Group D — Era lifecycle (Wave 6):**
+- `advance_era(next_era)` — atomically concludes the current ACTIVE era and activates the UPCOMING era; `EraAdvanceError` for bad state transitions
+- `archive_era(era)` — marks an ACTIVE era CONCLUDED without advancing to a new one; idempotent on already-CONCLUDED eras
+- `EraViewSet` with `advance` and `archive` custom actions (staff-only); `EraSerializer` with status read-write
+- Frontend: `EraAdminPage` (`/stories/eras`, staff) — era list with advance/archive actions and era detail showing tagged stories
+
+**Group E — Table bulletin board (Waves 10–11):**
+- `TableBulletinPost(table, story|null, author_persona, title, body, allow_replies, created_at, updated_at)` — top-level posts authored by GM/staff only; story-scoped posts visible to story members; table-wide posts visible to all table members
+- `TableBulletinReply(post, author_persona, body, created_at, updated_at)` — any qualifying viewer can reply if `allow_replies=True`
+- Services: `create_bulletin_post`, `reply_to_post`, `edit_bulletin_post`, `delete_bulletin_post`
+- `TableBulletinPostViewSet` and `TableBulletinReplyViewSet` with story-scoped permission enforcement
+- Frontend: `TableBulletin` component on `TableDetailPage` — section selector (Table-Wide / per-story); `BulletinPostCard` with inline replies; `CreateBulletinPostDialog` (GM/staff); inline edit/delete for GM/staff
+
+**Group F — Phase 4 polish deferrals (Waves 12–13):**
+- `BeatSerializer.can_mark` computed field — client-side button gating; replaces optimistic-rendering hack
+- `BeatCreateBody` / `BeatUpdateBody` explicit types — replaces `Partial<Beat>` in API client and form
+- DAG drag-to-add-transitions — `onConnect` handler + transition-create-on-drop in React Flow edit mode
+- `POST /api/stories/transitions/{id}/save-with-outcomes/` — atomic create-or-update Transition + TransitionRequiredOutcome rows in one request
+- `TransitionFormDialog` two-phase save with rollback — create transition; if outcome creation fails, delete the transition
+- Mobile-responsive layout polish across stories / tables / narrative pages
+
+**Wave 14 — End-to-end integration test + docs:**
+- `test_integration_phase5.py` — 18-step scenario walking era lifecycle, table creation + membership, story assignment + withdrawal + GM offer, beat authoring + session resolution, narrative messages (story OOC + gemit + mute), table bulletin posts + replies, member self-leave with auto-detach
+- Playwright e2e smoke tests: `e2e/tables.spec.ts`, `e2e/era-admin.spec.ts`, `e2e/bulletin.spec.ts` — crash-free rendering for all Phase 5 routes
+- App.tsx: Phase 5 routes registered (`/tables`, `/tables/:id`, `/stories/eras`, `/stories/browse`, `/stories/my-offers`, `/narrative/mute-settings`)
+- MODEL_MAP regenerated; CLAUDE.md files updated for tables, narrative, stories
+- 761+ backend tests; 938+ frontend Vitest tests; Playwright smoke tests across all new routes
+
 ## What's Needed for MVP
 
-### Phase 5: Remaining UI Polish + Missing Lifecycle Tools
+### Phase 6+
 
-- **Covenant leadership model** — required for GROUP-scope stories to have
-  meaningful player-driven agency. PC leader / group vote / assigned GM model
-  is TBD. Not blocking GROUP-scope backend (GMTable is the current owner),
-  but required for full player autonomy.
-- **Era lifecycle tooling** — advancing to a new era, handling stories that
-  span eras, staff UI for era-advancement flow and Season-N closing ceremonies
-- **Dispute / withdrawal state transitions** — personal-story GM change, story
-  transfer, player withdrawal from GROUP stories
-- **GM ad-hoc narrative message composer** — backend sender endpoint not yet
-  built; defer until that endpoint lands alongside the composer UI
-- **Mobile-responsive layout polish** — Phase 4 is desktop-first; mobile
-  tweaks deferred
+All MVP-blocking items from Phase 5's "What's Needed for MVP" section have landed. Remaining items are either blocked on other systems or represent quality-of-life improvements:
 
-#### Phase 5 Hooks (identified in Phase 4 code review)
-
-Items that are small but deferred because they need backend changes or
-design decisions before the frontend can consume them:
-
-- **Hook B — `BeatSerializer.can_mark` field** — add a `can_mark: bool`
-  computed field to `BeatSerializer` indicating whether the requesting user
-  has permission to mark this beat (Lead GM, staff, or AGM with APPROVED
-  claim). `MarkBeatDialog` currently renders the "Mark" button for all GMs
-  and relies on the 403 for enforcement; hiding the button for unauthorised
-  users requires this backend field.
-
-- **Hook C — `EpisodeFormDialog` chapter-ID threading** — `StoryAuthorPage`
-  passes `chapterId=0` when opening the episode form from a DAG node click
-  (edit mode only, so chapter is unused). Once the DAG gains create-mode
-  support, the actual chapter ID must be threaded through from the DAG node
-  data. Current sentinel is intentional and documented in `StoryAuthorPage`.
-
-- **Hook D — `BeatCreateBody`/`BeatWriteBody` explicit types** — `BeatFormDialog`
-  and related code use `Partial<Beat>` as the write shape, which is over-broad
-  (all Beat read fields become optional write fields). Define dedicated
-  `BeatCreateBody` and `BeatWriteBody` types in `types.ts` (analogous to
-  `StoryCreateBody`) and update the API client and form to use them.
-
-- **Minor #11 — `TransitionFormDialog` two-phase save** — creating a transition
-  and then adding `TransitionRequiredOutcome` rows is two separate API calls
-  with no atomicity guarantee. Either add a backend "save-with-children"
-  endpoint that creates the transition and outcomes in one request, or implement
-  a two-phase save with rollback on the frontend (delete the transition if the
-  outcome creation fails). Current behaviour is last-write-wins with a
-  potential orphaned transition on failure.
-
-### Phase 6+ (blocked on other systems)
-
-- **MISSION_COMPLETE predicate UI** — blocked by the Missions system; the
-  `Beat.required_mission` FK scaffold exists in backend, but the Missions
-  system itself does not yet exist. Will land alongside missions.
-- **Authoring UX richer features** — drag-to-add-transitions in the episode
-  DAG, beat-template library, multi-story arc visualizer. Phase 4 delivered
-  read-only DAG with frontier highlighting; edit-mode transitions are deferred.
+- **Covenant / organization chat channels** — broader feature beyond stories scope; will land alongside the organizations system
+- **MISSION_COMPLETE predicate UI** — blocked by the Missions system; the `Beat.required_mission` FK scaffold exists in backend but Missions does not yet exist. Will land alongside missions.
+- **DAG advanced editing** — multi-select, copy/paste, layout templates, drag-position persistence; Phase 5 delivered drag-to-add; richer graph editing is Phase 6+
+- **Cross-table GM availability marketplace** — searchable directory of GMs accepting story offers; Phase 6+ feature
+- **Notification settings UI beyond story mute** — per-category toggles for atmosphere / visions / happenstance / system; Phase 6+
+- **Persona ID in account payload** — for GM/staff persona selection (surfaces in `TableBulletin` `gmPersonaId` stub); requires account payload expansion
+- **Profile-driven role-aware navigation** — eliminate 403 fallbacks for GM-only routes; requires GMProfile presence in the account payload
 
 ### Pending Wiring (backend)
 
