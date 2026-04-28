@@ -75,6 +75,29 @@ const StoryAuthorPage = lazy(() =>
 );
 
 // ---------------------------------------------------------------------------
+// Lazy-loaded Phase 5 pages — tables, era admin, browse, mute, GM offers
+// ---------------------------------------------------------------------------
+
+const TablesListPage = lazy(() =>
+  import('@/tables/pages/TablesListPage').then((m) => ({ default: m.TablesListPage }))
+);
+const TableDetailPage = lazy(() =>
+  import('@/tables/pages/TableDetailPage').then((m) => ({ default: m.TableDetailPage }))
+);
+const EraAdminPage = lazy(() =>
+  import('@/stories/pages/EraAdminPage').then((m) => ({ default: m.EraAdminPage }))
+);
+const BrowseStoriesPage = lazy(() =>
+  import('@/stories/pages/BrowseStoriesPage').then((m) => ({ default: m.BrowseStoriesPage }))
+);
+const MyStoryOffersPage = lazy(() =>
+  import('@/stories/pages/MyStoryOffersPage').then((m) => ({ default: m.MyStoryOffersPage }))
+);
+const MuteSettingsPage = lazy(() =>
+  import('@/narrative/pages/MuteSettingsPage').then((m) => ({ default: m.MuteSettingsPage }))
+);
+
+// ---------------------------------------------------------------------------
 // Suspense fallback — shown while lazy stories chunks load
 // ---------------------------------------------------------------------------
 
@@ -363,6 +386,68 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <StoryDetailPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Phase 5 — tables, era admin, browse stories, mute settings, offers  */}
+        {/* ------------------------------------------------------------------ */}
+        <Route
+          path="/tables"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <TablesListPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/tables/:id"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <TableDetailPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/stories/eras"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <StaffRoute>
+                <EraAdminPage />
+              </StaffRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/stories/browse"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <BrowseStoriesPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/stories/my-offers"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <MyStoryOffersPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/narrative/mute-settings"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <MuteSettingsPage />
               </ProtectedRoute>
             </Suspense>
           }
