@@ -1,7 +1,6 @@
 from django.test import SimpleTestCase
 
 from world.magic.constants import (
-    THREADWEAVING_ITEM_TYPECLASSES,
     EffectKind,
     RitualExecutionKind,
     SoulTetherRole,
@@ -11,14 +10,13 @@ from world.magic.constants import (
 
 
 class TargetKindTests(SimpleTestCase):
-    def test_eight_target_kinds(self):
+    def test_seven_target_kinds(self):
         self.assertEqual(
             set(TargetKind.values),
             {
                 "TRAIT",
                 "TECHNIQUE",
                 "FACET",
-                "ITEM",
                 "ROOM",
                 "RELATIONSHIP_TRACK",
                 "RELATIONSHIP_CAPSTONE",
@@ -51,14 +49,6 @@ class RitualExecutionKindTests(SimpleTestCase):
 class SoulTetherRoleTests(SimpleTestCase):
     def test_two_roles(self):
         self.assertEqual(set(SoulTetherRole.values), {"ABYSSAL", "SINEATER"})
-
-
-class ItemTypeclassRegistryTests(SimpleTestCase):
-    def test_registry_is_a_tuple_of_strings(self):
-        self.assertIsInstance(THREADWEAVING_ITEM_TYPECLASSES, tuple)
-        for path in THREADWEAVING_ITEM_TYPECLASSES:
-            self.assertIsInstance(path, str)
-            self.assertIn(".", path)  # at least namespaced
 
 
 class GainSourceTests(SimpleTestCase):

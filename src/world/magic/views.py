@@ -50,7 +50,6 @@ from world.magic.models import (
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
-    CharacterFacet,
     CharacterGift,
     CharacterResonance,
     EffectType,
@@ -75,7 +74,6 @@ from world.magic.serializers import (
     CharacterAnimaRitualSerializer,
     CharacterAnimaSerializer,
     CharacterAuraSerializer,
-    CharacterFacetSerializer,
     CharacterGiftSerializer,
     CharacterResonanceSerializer,
     EffectTypeSerializer,
@@ -224,31 +222,6 @@ class FacetViewSet(viewsets.ReadOnlyModelViewSet):
         top_level = Facet.objects.filter(parent__isnull=True).prefetch_related(_children_prefetch)
         serializer = FacetTreeSerializer(top_level, many=True)
         return Response(serializer.data)
-
-
-class CharacterFacetViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for CharacterFacet records.
-
-    Manages facet assignments for characters.
-    """
-
-    serializer_class = CharacterFacetSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        """Filter to characters owned by the current user."""
-        user = self.request.user
-        queryset = CharacterFacet.objects.select_related(
-            "facet",
-            "facet__parent",
-            "resonance",
-            "resonance__affinity",
-            "resonance__modifier_target__codex_entry",
-        )
-        if user.is_staff:
-            return queryset
-        return queryset.filter(character__character__db_account=user)
 
 
 class GiftViewSet(viewsets.ModelViewSet):

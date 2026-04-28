@@ -274,7 +274,7 @@ def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:
         return thread.target_trait_id in ctx.involved_traits
     if thread.target_kind == TargetKind.TECHNIQUE:
         return thread.target_technique_id in ctx.involved_techniques
-    if thread.target_kind in (TargetKind.ITEM, TargetKind.ROOM):
+    if thread.target_kind == TargetKind.ROOM:
         return thread.target_object_id in ctx.involved_objects
     return False
 

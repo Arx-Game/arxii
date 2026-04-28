@@ -576,18 +576,20 @@ class ThreadWeavingTeachingOfferViewSetTests(APITestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        from world.mechanics.factories import PropertyFactory
+
         cls.account = AccountFactory(username="offer_viewer")
         cls.trait_unlock = ThreadWeavingUnlockFactory(
             target_kind=TargetKind.TRAIT,
         )
-        # Switch one to ITEM so target_kind filter meaningfully discriminates.
-        cls.item_unlock = ThreadWeavingUnlockFactory(
-            target_kind=TargetKind.ITEM,
+        # Use ROOM so target_kind filter meaningfully discriminates.
+        cls.room_unlock = ThreadWeavingUnlockFactory(
+            target_kind=TargetKind.ROOM,
             unlock_trait=None,
-            unlock_item_typeclass_path="typeclasses.objects.Object",
+            unlock_room_property=PropertyFactory(name="SanctifiedSpace"),
         )
         cls.trait_offer = ThreadWeavingTeachingOfferFactory(unlock=cls.trait_unlock)
-        cls.item_offer = ThreadWeavingTeachingOfferFactory(unlock=cls.item_unlock)
+        cls.room_offer = ThreadWeavingTeachingOfferFactory(unlock=cls.room_unlock)
 
     def test_requires_auth(self) -> None:
         response = self.client.get(reverse("magic:thread-weaving-teaching-offer-list"))
@@ -606,11 +608,11 @@ class ThreadWeavingTeachingOfferViewSetTests(APITestCase):
         self.client.force_authenticate(user=self.account)
         response = self.client.get(
             reverse("magic:thread-weaving-teaching-offer-list"),
-            {"target_kind": TargetKind.ITEM},
+            {"target_kind": TargetKind.ROOM},
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         returned_ids = {o["id"] for o in response.data["results"]}
-        self.assertIn(self.item_offer.pk, returned_ids)
+        self.assertIn(self.room_offer.pk, returned_ids)
         self.assertNotIn(self.trait_offer.pk, returned_ids)
 
     def test_list_is_read_only(self) -> None:

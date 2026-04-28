@@ -78,7 +78,6 @@ class TargetKind(models.TextChoices):
     TRAIT = "TRAIT", "Trait"
     TECHNIQUE = "TECHNIQUE", "Technique"
     FACET = "FACET", "Facet"
-    ITEM = "ITEM", "Item"
     ROOM = "ROOM", "Room"
     RELATIONSHIP_TRACK = "RELATIONSHIP_TRACK", "Relationship Track"
     RELATIONSHIP_CAPSTONE = "RELATIONSHIP_CAPSTONE", "Relationship Capstone"
@@ -106,18 +105,6 @@ class RitualExecutionKind(models.TextChoices):
 class SoulTetherRole(models.TextChoices):
     ABYSSAL = "ABYSSAL", "Abyssal Side"
     SINEATER = "SINEATER", "Sineater Side"
-
-
-# Item-typeclass paths registered for ThreadWeavingUnlock(target_kind=ITEM).
-# Spec §2.1 line 332 — validated at save(); subclasses inherit eligibility
-# via typeclass-inheritance walk in eligibility checks.
-THREADWEAVING_ITEM_TYPECLASSES: tuple[str, ...] = (
-    # Populate during Phase 5 / authoring pass — start with whatever item
-    # typeclasses already exist in src/typeclasses/items.py and weapons.py.
-    # For Phase 1, the registry exists with at minimum the base paths Spec §6.4
-    # references: swords, daggers, polearms, holy symbols, tomes, etc.
-    # The exact list is content; the registry shape is the contract.
-)
 
 
 class GainSource(models.TextChoices):

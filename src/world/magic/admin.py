@@ -10,7 +10,6 @@ from world.magic.models import (
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
-    CharacterFacet,
     CharacterGift,
     CharacterResonance,
     CharacterTechnique,
@@ -319,26 +318,6 @@ class FacetAdmin(admin.ModelAdmin):
         return obj.full_path
 
 
-@admin.register(CharacterFacet)
-class CharacterFacetAdmin(admin.ModelAdmin):
-    """Admin for CharacterFacet assignments."""
-
-    list_display = ["character", "facet", "resonance", "get_facet_path"]
-    list_filter = ["resonance", "facet__parent"]
-    search_fields = [
-        "character__character__db_key",
-        "facet__name",
-        "resonance__name",
-        "flavor_text",
-    ]
-    autocomplete_fields = ["facet", "resonance"]
-    list_select_related = ["character", "facet", "facet__parent", "resonance"]
-
-    @admin.display(description="Facet Path")
-    def get_facet_path(self, obj):
-        return obj.facet.full_path
-
-
 @admin.register(Reincarnation)
 class ReincarnationAdmin(admin.ModelAdmin):
     list_display = ["character", "gift", "past_life_name"]
@@ -529,7 +508,6 @@ class ThreadWeavingUnlockAdmin(admin.ModelAdmin):
     search_fields = [
         "unlock_trait__name",
         "unlock_gift__name",
-        "unlock_item_typeclass_path",
         "unlock_room_property__name",
         "unlock_track__name",
     ]

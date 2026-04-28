@@ -1,21 +1,20 @@
 """Tests for the Phase 4 Thread model (discriminator + typed-FK pattern).
 
 Spec A §2.1 lines 83-151 — Thread is per-character, anchored to a trait,
-technique, item, room, relationship-track, or relationship-capstone via
-exactly one populated target_* FK matching the target_kind discriminator.
+technique, room, relationship-track, relationship-capstone, facet, or
+covenant-role via exactly one populated target_* FK matching the target_kind
+discriminator.
 
 Coverage:
 - Field shape and defaults via factory.
 - clean() rejects missing target_* and wrong-target-for-kind, accepts correct combos.
-- Per-kind partial UniqueConstraints fire only within the same target_kind, so two
-  threads for the same ObjectDB but different kinds (ITEM vs ROOM) can coexist.
+- Per-kind partial UniqueConstraints fire only within the same target_kind.
 - ThreadLevelUnlock unique-together (thread, unlocked_level) and multi-level coexistence.
 """
 
 from django.core.exceptions import ValidationError
 from django.db.utils import IntegrityError
 from django.test import TestCase
-from evennia.utils import create
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import TargetKind
@@ -76,26 +75,6 @@ class ThreadCleanTests(TestCase):
         )
         thread.clean()  # no exception
 
-    def test_clean_rejects_item_not_in_registry(self) -> None:
-        """ITEM-kind threads validate target_object.db_typeclass_path against the
-        THREADWEAVING_ITEM_TYPECLASSES registry. Phase 1 left it empty, so any
-        item must be rejected at this layer."""
-        sheet = CharacterSheetFactory()
-        res = ResonanceFactory()
-        obj = create.create_object(
-            typeclass="typeclasses.objects.Object",
-            key="unregistered-item",
-            nohome=True,
-        )
-        thread = Thread(
-            owner=sheet,
-            resonance=res,
-            target_kind=TargetKind.ITEM,
-            target_object=obj,
-        )
-        with self.assertRaises(ValidationError):
-            thread.clean()
-
 
 class ThreadPartialUniqueTests(TestCase):
     def test_two_trait_threads_same_owner_same_trait_same_resonance_collide(self) -> None:
@@ -115,33 +94,6 @@ class ThreadPartialUniqueTests(TestCase):
                 target_kind=TargetKind.TRAIT,
                 target_trait=trait,
             )
-
-    def test_two_threads_different_target_kind_same_object_coexist(self) -> None:
-        """Same target_object FK (ObjectDB) but different discriminator —
-        partial uniques don't collide."""
-        sheet = CharacterSheetFactory()
-        res = ResonanceFactory()
-        obj = create.create_object(
-            typeclass="typeclasses.objects.Object",
-            key="test-anchor",
-            nohome=True,
-        )
-        ThreadFactory(
-            owner=sheet,
-            resonance=res,
-            target_kind=TargetKind.ITEM,
-            target_object=obj,
-            target_trait=None,  # explicitly null factory's default TRAIT FK
-        )
-        # ROOM thread on the same object — same target_object, different
-        # target_kind — should NOT collide.
-        ThreadFactory(
-            owner=sheet,
-            resonance=res,
-            target_kind=TargetKind.ROOM,
-            target_object=obj,
-            target_trait=None,
-        )
 
 
 class ThreadLevelUnlockTests(TestCase):

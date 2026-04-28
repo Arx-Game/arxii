@@ -1,6 +1,6 @@
 """Threads and thread-pull infrastructure.
 
-Per-character Thread rows anchored to a trait/technique/item/room/relationship.
+Per-character Thread rows anchored to a trait/technique/room/relationship/facet/covenant-role.
 ThreadLevelUnlock is the per-thread XP-locked-boundary receipt.
 ThreadPullCost is the per-tier pull-cost tuning table.
 ThreadXPLockedLevel is the XP-locked boundary price list.
@@ -15,7 +15,6 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.constants import (
-    THREADWEAVING_ITEM_TYPECLASSES,
     EffectKind,
     TargetKind,
     VitalBonusTarget,
@@ -247,21 +246,18 @@ class ThreadPullEffect(SharedMemoryModel):
 
 
 class Thread(SharedMemoryModel):
-    """Per-character thread anchored to a trait/technique/item/room/relationship.
+    """Per-character thread anchored to a trait/technique/room/relationship/facet/covenant-role.
 
     Discriminator + typed-FK pattern (Spec A §2.1 lines 83-151). Exactly one
     target_* column is populated, matching ``target_kind``. Three layers of
     enforcement:
 
-    - ``clean()`` raises ValidationError on missing / mismatched targets and on
-      ITEM-kind targets whose typeclass isn't in THREADWEAVING_ITEM_TYPECLASSES.
+    - ``clean()`` raises ValidationError on missing / mismatched targets.
     - Per-kind CheckConstraints mirror the "exactly one target_* set, matching
       target_kind" rule at the DB layer (so misuse via .objects.create() also
       fails).
     - Per-kind partial UniqueConstraints prevent duplicate threads within the
-      same (owner, resonance, target_kind, target_*) combination, while still
-      allowing — for example — an ITEM thread and a ROOM thread on the same
-      ObjectDB.
+      same (owner, resonance, target_kind, target_*) combination.
     """
 
     owner = models.ForeignKey(
@@ -377,11 +373,6 @@ class Thread(SharedMemoryModel):
             ),
             models.UniqueConstraint(
                 fields=["owner", "resonance", "target_object"],
-                condition=models.Q(target_kind=TargetKind.ITEM),
-                name="uniq_thread_item",
-            ),
-            models.UniqueConstraint(
-                fields=["owner", "resonance", "target_object"],
                 condition=models.Q(target_kind=TargetKind.ROOM),
                 name="uniq_thread_room",
             ),
@@ -419,21 +410,6 @@ class Thread(SharedMemoryModel):
                         models.Q(target_trait__isnull=True)
                         & models.Q(target_technique__isnull=False)
                         & models.Q(target_object__isnull=True)
-                        & models.Q(target_relationship_track__isnull=True)
-                        & models.Q(target_capstone__isnull=True)
-                        & models.Q(target_facet__isnull=True)
-                        & models.Q(target_covenant_role__isnull=True)
-                    )
-                ),
-            ),
-            models.CheckConstraint(
-                name="thread_item_payload",
-                check=(
-                    ~models.Q(target_kind=TargetKind.ITEM)
-                    | (
-                        models.Q(target_trait__isnull=True)
-                        & models.Q(target_technique__isnull=True)
-                        & models.Q(target_object__isnull=False)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
                         & models.Q(target_facet__isnull=True)
@@ -547,7 +523,6 @@ class Thread(SharedMemoryModel):
         _kind_to_attr: dict[str, str] = {
             TargetKind.TRAIT: "target_trait",
             TargetKind.TECHNIQUE: "target_technique",
-            TargetKind.ITEM: "target_object",
             TargetKind.ROOM: "target_object",
             TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
@@ -558,18 +533,17 @@ class Thread(SharedMemoryModel):
         return getattr(self, attr) if attr is not None else None
 
     def clean(self) -> None:
-        """Validate exactly-one-target rule + ITEM typeclass registry membership.
+        """Validate exactly-one-target rule.
 
         DB constraints catch the same shape errors at write time; ``clean()``
         is the user-facing error path (forms / serializers / tests calling
         ``full_clean()``).
         """
-        # Map target_kind -> (expected_field_name, list_of_other_field_names)
+        # Map target_kind -> expected_field_name
         kind_to_field: dict[str, str] = {
             TargetKind.TRAIT: "target_trait",
             TargetKind.TECHNIQUE: "target_technique",
             TargetKind.FACET: "target_facet",
-            TargetKind.ITEM: "target_object",
             TargetKind.ROOM: "target_object",
             TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
@@ -604,22 +578,6 @@ class Thread(SharedMemoryModel):
                     {
                         field_name: (
                             f"target_kind={self.target_kind} requires {field_name} to be null."
-                        ),
-                    },
-                )
-
-        # ITEM-kind: validate the target_object's typeclass is in the
-        # THREADWEAVING_ITEM_TYPECLASSES registry (subclass-aware).
-        if self.target_kind == TargetKind.ITEM:
-            from world.magic.services import _typeclass_path_in_registry  # noqa: PLC0415
-
-            tc_path = self.target_object.db_typeclass_path
-            if not _typeclass_path_in_registry(tc_path, THREADWEAVING_ITEM_TYPECLASSES):
-                raise ValidationError(
-                    {
-                        "target_object": (
-                            f"Typeclass {tc_path!r} is not in "
-                            "THREADWEAVING_ITEM_TYPECLASSES registry."
                         ),
                     },
                 )

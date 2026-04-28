@@ -18,7 +18,6 @@ from world.magic.models import (
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
-    CharacterFacet,
     CharacterGift,
     CharacterResonance,
     EffectType,
@@ -485,29 +484,6 @@ class FacetTreeSerializer(serializers.ModelSerializer):
         return FacetTreeSerializer(children, many=True).data
 
 
-class CharacterFacetSerializer(serializers.ModelSerializer):
-    """Serializer for CharacterFacet model."""
-
-    facet_name = serializers.CharField(source="facet.name", read_only=True)
-    facet_path = serializers.CharField(source="facet.full_path", read_only=True)
-    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
-
-    class Meta:
-        model = CharacterFacet
-        fields = [
-            "id",
-            "character",
-            "facet",
-            "facet_name",
-            "facet_path",
-            "resonance",
-            "resonance_name",
-            "flavor_text",
-            "created_at",
-        ]
-        read_only_fields = ["id", "created_at"]
-
-
 # =============================================================================
 # Motif Serializers
 # =============================================================================
@@ -794,7 +770,6 @@ class ThreadSerializer(serializers.ModelSerializer):
         model_map: dict[str, type] = {
             TargetKind.TRAIT: Trait,
             TargetKind.TECHNIQUE: TechniqueModel,
-            TargetKind.ITEM: ObjectDB,
             TargetKind.ROOM: ObjectDB,
             TargetKind.RELATIONSHIP_TRACK: RelationshipTrackProgress,
             TargetKind.RELATIONSHIP_CAPSTONE: RelationshipCapstone,
