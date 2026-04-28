@@ -378,3 +378,67 @@ class ResonanceGrantSceneEntryShapeTests(TestCase):
                 source_pose_endorsement=pose_ep,
                 source_scene_entry_endorsement=entry_ep,  # forbidden
             )
+
+
+class ResonanceGrantOutfitTrickleTests(TestCase):
+    def test_outfit_trickle_grant(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.factories import ItemFacetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        item_facet = ItemFacetFactory()
+
+        grant = ResonanceGrant.objects.create(
+            character_sheet=sheet,
+            resonance=resonance,
+            amount=1,
+            source=GainSource.OUTFIT_TRICKLE,
+            outfit_item_facet=item_facet,
+        )
+        self.assertEqual(grant.outfit_item_facet, item_facet)
+        self.assertEqual(grant.source, GainSource.OUTFIT_TRICKLE)
+
+    def test_outfit_trickle_requires_item_facet(self) -> None:
+        # source=OUTFIT_TRICKLE without outfit_item_facet must fail check constraint
+        from django.db import IntegrityError
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        with self.assertRaises(IntegrityError):
+            ResonanceGrant.objects.create(
+                character_sheet=sheet,
+                resonance=resonance,
+                amount=1,
+                source=GainSource.OUTFIT_TRICKLE,
+            )
+
+    def test_outfit_item_facet_only_with_outfit_trickle(self) -> None:
+        # Setting outfit_item_facet on a non-OUTFIT_TRICKLE grant must fail.
+        from django.db import IntegrityError
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.factories import ItemFacetFactory
+        from world.magic.constants import GainSource
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import ResonanceGrant
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        item_facet = ItemFacetFactory()
+        with self.assertRaises(IntegrityError):
+            ResonanceGrant.objects.create(
+                character_sheet=sheet,
+                resonance=resonance,
+                amount=1,
+                source=GainSource.STAFF_GRANT,
+                outfit_item_facet=item_facet,
+            )
