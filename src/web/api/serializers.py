@@ -4,6 +4,22 @@ from allauth.account.models import EmailAddress
 from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
+from world.scenes.models import Persona
+
+
+class PersonaPayloadSerializer(serializers.ModelSerializer):
+    """Persona entry inside the account payload's available_characters."""
+
+    display_name = serializers.SerializerMethodField()
+
+    def get_display_name(self, obj: Persona) -> str:
+        # Currently identical to name; reserved for future formatting (color codes, titles, etc.)
+        return obj.name
+
+    class Meta:
+        model = Persona
+        fields = ["id", "name", "persona_type", "display_name"]
+
 
 class AccountPlayerSerializer(serializers.ModelSerializer):
     """Serialize account and player display information."""
