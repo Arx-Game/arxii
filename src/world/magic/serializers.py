@@ -760,7 +760,11 @@ class ThreadSerializer(serializers.ModelSerializer):
         # In-function imports avoid app-boot circular deps (magic ↔ traits ↔ relationships).
         from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
-        from world.magic.models import Technique as TechniqueModel  # noqa: PLC0415
+        from world.covenants.models import CovenantRole  # noqa: PLC0415
+        from world.magic.models import (  # noqa: PLC0415
+            Facet,
+            Technique as TechniqueModel,
+        )
         from world.relationships.models import (  # noqa: PLC0415
             RelationshipCapstone,
             RelationshipTrackProgress,
@@ -773,6 +777,8 @@ class ThreadSerializer(serializers.ModelSerializer):
             TargetKind.ROOM: ObjectDB,
             TargetKind.RELATIONSHIP_TRACK: RelationshipTrackProgress,
             TargetKind.RELATIONSHIP_CAPSTONE: RelationshipCapstone,
+            TargetKind.FACET: Facet,
+            TargetKind.COVENANT_ROLE: CovenantRole,
         }
         model = model_map.get(target_kind)
         if model is None:
@@ -795,6 +801,8 @@ class ThreadSerializer(serializers.ModelSerializer):
         target = validated_data.pop("_target")
         validated_data.pop("target_id", None)
 
+        from world.covenants.exceptions import CovenantRoleNeverHeldError  # noqa: PLC0415
+
         try:
             return weave_thread(
                 character_sheet=character_sheet,
@@ -804,7 +812,7 @@ class ThreadSerializer(serializers.ModelSerializer):
                 name=validated_data.get("name", ""),
                 description=validated_data.get("description", ""),
             )
-        except WeavingUnlockMissing as exc:
+        except (WeavingUnlockMissing, CovenantRoleNeverHeldError) as exc:
             raise serializers.ValidationError({"detail": exc.user_message}) from exc
 
 

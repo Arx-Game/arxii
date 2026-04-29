@@ -195,6 +195,139 @@ class ThreadViewSetTests(APITestCase):
         # Row still exists — historical references preserved.
         self.assertTrue(Thread.objects.filter(pk=self.thread.pk).exists())
 
+    # ------------------------------------------------------------------
+    # FACET thread creation tests
+    # ------------------------------------------------------------------
+
+    def test_create_facet_thread_succeeds_with_global_unlock(self) -> None:
+        """A character with a global FACET weaving unlock can create a FACET thread."""
+        from world.magic.factories import FacetFactory
+        from world.magic.models import ThreadWeavingUnlock
+
+        facet = FacetFactory()
+        # Global FACET unlock — no typed FK required; bypass full_clean() via .objects.create()
+        unlock = ThreadWeavingUnlock.objects.create(target_kind=TargetKind.FACET, xp_cost=100)
+        CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=unlock)
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.FACET,
+                "target_id": facet.pk,
+                "character_sheet_id": self.sheet.pk,
+                "name": "Silk Thread",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertTrue(
+            Thread.objects.filter(
+                owner=self.sheet,
+                resonance=self.resonance,
+                target_facet=facet,
+                target_kind=TargetKind.FACET,
+            ).exists()
+        )
+
+    def test_create_facet_thread_unknown_facet_id_returns_400(self) -> None:
+        """POSTing a non-existent facet pk returns 400 with a descriptive message."""
+        from world.magic.models import ThreadWeavingUnlock
+
+        unlock = ThreadWeavingUnlock.objects.create(target_kind=TargetKind.FACET, xp_cost=100)
+        CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=unlock)
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.FACET,
+                "target_id": 999999,
+                "character_sheet_id": self.sheet.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("FACET", str(response.data))
+
+    # ------------------------------------------------------------------
+    # COVENANT_ROLE thread creation tests
+    # ------------------------------------------------------------------
+
+    def test_create_covenant_role_thread_succeeds_when_held(self) -> None:
+        """A character who has held a covenant role can create a COVENANT_ROLE thread."""
+        from world.covenants.factories import CharacterCovenantRoleFactory, CovenantRoleFactory
+
+        # Use a fresh account+character+sheet to avoid cached_property state from setUpTestData.
+        account = AccountFactory(username="cr_thread_held")
+        character = CharacterFactory(db_key="CRThreadHeld")
+        sheet = CharacterSheetFactory(character=character)
+        _link_account_to_sheet(account, character, sheet)
+
+        role = CovenantRoleFactory()
+        CharacterCovenantRoleFactory(character_sheet=sheet, covenant_role=role)
+
+        self.client.force_authenticate(user=account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.COVENANT_ROLE,
+                "target_id": role.pk,
+                "character_sheet_id": sheet.pk,
+                "name": "Vanguard Thread",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertTrue(
+            Thread.objects.filter(
+                owner=sheet,
+                resonance=self.resonance,
+                target_covenant_role=role,
+                target_kind=TargetKind.COVENANT_ROLE,
+            ).exists()
+        )
+
+    def test_create_covenant_role_thread_never_held_returns_400(self) -> None:
+        """A character who has never held the role gets a 400 with user_message."""
+        from world.covenants.exceptions import CovenantRoleNeverHeldError
+        from world.covenants.factories import CovenantRoleFactory
+
+        role = CovenantRoleFactory()
+
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.COVENANT_ROLE,
+                "target_id": role.pk,
+                "character_sheet_id": self.sheet.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(CovenantRoleNeverHeldError.user_message, str(response.data))
+
+    def test_create_covenant_role_thread_unknown_id_returns_400(self) -> None:
+        """POSTing a non-existent CovenantRole pk returns 400 with a descriptive message."""
+        self.client.force_authenticate(user=self.account)
+        response = self.client.post(
+            reverse("magic:thread-list"),
+            {
+                "resonance": self.resonance.pk,
+                "target_kind": TargetKind.COVENANT_ROLE,
+                "target_id": 999999,
+                "character_sheet_id": self.sheet.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("COVENANT_ROLE", str(response.data))
+
 
 class ThreadPullPreviewTests(APITestCase):
     """Tests for POST /api/magic/thread-pull-preview/ (Spec A §5.6)."""
