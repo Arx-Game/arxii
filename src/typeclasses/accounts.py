@@ -142,6 +142,20 @@ class Account(DefaultAccount):
 
         return True, ""
 
+    def _broadcast_puppet_changed(self, session, character) -> None:
+        """Notify all of this account's sessions that a puppet swap occurred.
+
+        Other tabs/sessions use this to update their portrait-grid indicators
+        (e.g., "currently puppeted in another session" badge).
+        """
+        payload = {
+            "session_id": session.sessid,
+            "character_id": character.id if character else None,
+            "character_name": character.key if character else None,
+        }
+        for sess in self.sessions.all():
+            sess.msg(type="puppet_changed", args=[payload])
+
     def puppet_character_in_session(self, character, session):
         """Puppet a character in a specific session."""
         can_puppet, reason = self.can_puppet_character(character)
@@ -155,6 +169,7 @@ class Account(DefaultAccount):
 
         # Puppet the new character
         self.puppet_object(session, character)
+        self._broadcast_puppet_changed(session, character)
         return True, f"Now controlling {character.name}."
 
     def at_account_creation(self):
