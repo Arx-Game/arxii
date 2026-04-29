@@ -48,9 +48,6 @@ class ItemsDevSeedResult:
 #         OUTER = outermost (cloaks, coats, full plate surcoat).
 # ---------------------------------------------------------------------------
 
-_TEMPLATE_SPECS: list[tuple[str, str, list[tuple[str, str]], int]] = []
-# populated lazily below so we can reference the constants at call time
-
 
 def _build_template_specs() -> list[tuple[str, str, list[tuple[str, str]], int]]:
     """Return the canonical template-spec list using actual constant values."""

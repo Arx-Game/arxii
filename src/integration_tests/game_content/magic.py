@@ -1204,8 +1204,9 @@ def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
     """Lazy-create the single global ThreadWeavingUnlock for FACET kind.
 
     No specific facet is pinned — the unlock applies to weaving any Facet
-    thread. Idempotent via get_or_create keyed on target_kind=FACET (no FK
-    qualifies it; the FACET partial UniqueConstraint covers exactly this shape).
+    thread. Idempotency is guaranteed by ``get_or_create`` semantics keyed on
+    ``target_kind=FACET``. The model has no DB-level uniqueness for FACET
+    unlocks, but only one global unlock is ever needed (no per-facet variant).
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
     from world.magic.models.weaving import ThreadWeavingUnlock  # noqa: PLC0415
