@@ -48,7 +48,7 @@ from world.magic.types import PullActionContext
 
 
 class FacetThreadPullCombatTests(TestCase):
-    """Happy-path: FACET thread + equipped matching item → CombatPull + frozen ResolvedEffect rows.
+    """Happy path: FACET thread + equipped matching item → CombatPull + ResolvedEffect rows.
 
     Uses setUpTestData for fixture creation; each test method re-fetches
     CharacterResonance from DB to confirm balance changes.
