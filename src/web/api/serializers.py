@@ -5,13 +5,7 @@ from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
 from web.api.character_type import derive_character_type
-from world.roster.models import (
-    ApplicationStatus,
-    RosterApplication,
-    RosterEntry,
-    RosterType,
-)
-from world.scenes.constants import PersonaType
+from world.roster.models import RosterApplication, RosterEntry
 from world.scenes.models import Persona
 
 
@@ -60,14 +54,7 @@ class AvailableCharacterSerializer(serializers.Serializer):
         return derive_character_type(obj.character_sheet.character)
 
     def get_personas(self, obj: RosterEntry) -> list[dict]:
-        primary = obj.character_sheet.personas.filter(
-            persona_type=PersonaType.PRIMARY,
-        )
-        established = obj.character_sheet.personas.filter(
-            persona_type=PersonaType.ESTABLISHED,
-        ).order_by("created_at")
-        ordered = list(primary) + list(established)
-        return PersonaPayloadSerializer(ordered, many=True).data
+        return PersonaPayloadSerializer(obj.character_sheet.cached_payload_personas, many=True).data
 
     def get_last_location(self, obj: RosterEntry) -> dict | None:
         location = obj.character_sheet.character.location
@@ -120,30 +107,24 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
         """Get player's avatar URL if available."""
         return obj.player_data.avatar_url
 
-    def get_available_characters(self, obj) -> list[dict]:
-        """List of ACTIVE-roster characters playable by this account."""
-        puppeted_ids = {char.id for char in obj.get_puppeted_characters()}
-        entries = (
-            RosterEntry.objects.filter(
-                tenures__player_data=obj.player_data,
-                tenures__end_date__isnull=True,
-                roster__name=RosterType.ACTIVE,
-            )
-            .distinct()
-            .select_related("roster", "character_sheet", "profile_picture")
-        )
+    def get_available_characters(self, _obj) -> list[dict]:
+        """List of ACTIVE-roster characters playable by this account.
+
+        Reads prefetched `active_entries` from serializer context. Build the
+        context via `web.api.payload_helpers.build_account_payload_context`.
+        """
+        entries = self.context.get("active_entries", [])
         return AvailableCharacterSerializer(
             entries,
             many=True,
-            context={"puppeted_character_ids": puppeted_ids},
+            context={
+                "puppeted_character_ids": self.context.get("puppeted_character_ids", set()),
+            },
         ).data
 
-    def get_pending_applications(self, obj) -> list[dict]:
-        """Account's pending RosterApplications."""
-        apps = RosterApplication.objects.filter(
-            player_data=obj.player_data,
-            status=ApplicationStatus.PENDING,
-        ).select_related("character")
+    def get_pending_applications(self, _obj) -> list[dict]:
+        """Account's pending RosterApplications (from prefetched context)."""
+        apps = self.context.get("pending_applications", [])
         return PendingApplicationSerializer(apps, many=True).data
 
     class Meta:
