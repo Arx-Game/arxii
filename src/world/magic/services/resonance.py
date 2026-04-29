@@ -329,7 +329,11 @@ def resolve_pull_effects(
                         # No worn items bearing this facet — skip this effect row.
                         # Other threads in the outer loop still resolve normally.
                         continue
-                    worn_aggregate = sum(
+                    # Decimal(str(...)) coerces in case a multiplier surfaces as
+                    # float (e.g. via factory or .values() in test fixtures);
+                    # DecimalField normally returns Decimal but this is
+                    # belt-and-suspenders.
+                    items_aggregate = [
                         (
                             Decimal(str(item_facet.item_instance.quality_tier.stat_multiplier))
                             if item_facet.item_instance.quality_tier is not None
@@ -337,7 +341,8 @@ def resolve_pull_effects(
                         )
                         * Decimal(str(item_facet.attachment_quality_tier.stat_multiplier))
                         for item_facet in matching
-                    )
+                    ]
+                    worn_aggregate = sum(items_aggregate, Decimal(0))
                     base_scaled = (
                         int((authored or 0) * multiplier * worn_aggregate)
                         if has_numeric_payload

@@ -617,6 +617,8 @@ class ResolvePullEffectsFacetScalingTests(TestCase):
         """
         self._equip_item_with_quality("1.00", "2.00", body_region=BodyRegion.TORSO)
         self._equip_item_with_quality("1.00", "3.00", body_region=BodyRegion.HEAD)
+        # Force fresh handler load — character factory may have primed
+        # equipped_items before items were attached.
         self.sheet.character.equipped_items.invalidate()
 
         thread = Thread.objects.create(
