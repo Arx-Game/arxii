@@ -159,12 +159,6 @@ class ItemFacetViewTests(ItemViewTestCase):
         # Authenticate as the item owner by default.
         self.client.force_authenticate(user=self.owner)
 
-    def tearDown(self) -> None:
-        # Clean up any ItemFacets created during individual tests.
-        ItemFacet.objects.filter(
-            item_instance__in=[self.item_owner, self.item_other, self.item_cap1]
-        ).delete()
-
     def test_list_returns_facets(self) -> None:
         """GET list includes an attached ItemFacet."""
         row = attach_facet_to_item(
@@ -279,7 +273,7 @@ class ItemFacetViewTests(ItemViewTestCase):
         self.assertFalse(ItemFacet.objects.filter(pk=row.pk).exists())
 
     def test_delete_rejects_non_owner(self) -> None:
-        """Non-owner DELETE is rejected with 403/404."""
+        """Non-owner DELETE is rejected with 403."""
         row = attach_facet_to_item(
             crafter=self.non_owner,
             item_instance=self.item_other,
@@ -288,7 +282,7 @@ class ItemFacetViewTests(ItemViewTestCase):
         )
         # owner does not own item_other
         response = self.client.delete(f"/api/items/item-facets/{row.pk}/")
-        self.assertIn(response.status_code, [status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND])
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_unauthenticated_denied(self) -> None:
         """Unauthenticated requests are rejected with 403."""
@@ -297,7 +291,7 @@ class ItemFacetViewTests(ItemViewTestCase):
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_put_method_not_allowed(self) -> None:
-        """PUT is disabled — model has no editable fields after create."""
+        """PUT and PATCH are disabled — model has no editable fields after create."""
         row = ItemFacetFactory(
             item_instance=self.item_owner,
             facet=self.facet_c,
@@ -311,4 +305,6 @@ class ItemFacetViewTests(ItemViewTestCase):
                 "attachment_quality_tier": self.quality.pk,
             },
         )
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        response = self.client.patch(f"/api/items/item-facets/{row.pk}/", {})
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)

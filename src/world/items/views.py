@@ -47,7 +47,9 @@ class ItemFacetWritePermission(IsAuthenticated):
         if request.method == "POST":
             instance_pk = request.data.get("item_instance")
             if instance_pk is None:
-                return True  # let serializer reject as required-field
+                # If item_instance is absent or unparseable, fall through to True;
+                # the serializer's required-field validation will reject.
+                return True
             return ItemInstance.objects.filter(pk=instance_pk, owner=request.user).exists()
         return True  # DELETE checked at object level
 

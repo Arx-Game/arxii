@@ -94,7 +94,7 @@ class ItemFacetWriteSerializer(serializers.ModelSerializer):
         model = ItemFacet
         fields = ["item_instance", "facet", "attachment_quality_tier"]
 
-    def create(self, validated_data: dict) -> ItemFacet:  # type: ignore[override]
+    def create(self, validated_data: dict) -> ItemFacet:  # type: ignore[override]  # DRF base returns Model; we narrow to ItemFacet
         """Delegate creation to the facet service."""
         crafter = self.context["request"].user
         try:
