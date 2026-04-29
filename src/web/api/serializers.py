@@ -4,6 +4,9 @@ from allauth.account.models import EmailAddress
 from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
+from web.api.character_type import derive_character_type
+from world.roster.models import RosterEntry
+from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 
 
@@ -19,6 +22,57 @@ class PersonaPayloadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Persona
         fields = ["id", "name", "persona_type", "display_name"]
+
+
+class AvailableCharacterSerializer(serializers.Serializer):
+    """An entry in the account payload's available_characters list.
+
+    Input: a RosterEntry. Context must provide `puppeted_character_ids: set[int]`.
+    """
+
+    id = serializers.SerializerMethodField()
+    name = serializers.SerializerMethodField()
+    portrait_url = serializers.SerializerMethodField()
+    character_type = serializers.SerializerMethodField()
+    roster_status = serializers.CharField(source="roster.name", read_only=True)
+    personas = serializers.SerializerMethodField()
+    last_location = serializers.SerializerMethodField()
+    currently_puppeted_in_session = serializers.SerializerMethodField()
+
+    def get_id(self, obj: RosterEntry) -> int:
+        return obj.character_sheet.character.id
+
+    def get_name(self, obj: RosterEntry) -> str:
+        return obj.character_sheet.character.key
+
+    def get_portrait_url(self, obj: RosterEntry) -> str | None:
+        if obj.profile_picture is None:
+            return None
+        # profile_picture is a TenureMedia; the underlying PlayerMedia carries the URL.
+        return obj.profile_picture.media.cloudinary_url
+
+    def get_character_type(self, obj: RosterEntry) -> str:
+        return derive_character_type(obj.character_sheet.character)
+
+    def get_personas(self, obj: RosterEntry) -> list[dict]:
+        primary = obj.character_sheet.personas.filter(
+            persona_type=PersonaType.PRIMARY,
+        )
+        established = obj.character_sheet.personas.filter(
+            persona_type=PersonaType.ESTABLISHED,
+        ).order_by("created_at")
+        ordered = list(primary) + list(established)
+        return PersonaPayloadSerializer(ordered, many=True).data
+
+    def get_last_location(self, obj: RosterEntry) -> dict | None:
+        location = obj.character_sheet.character.location
+        if location is None:
+            return None
+        return {"id": location.id, "name": location.key}
+
+    def get_currently_puppeted_in_session(self, obj: RosterEntry) -> bool:
+        puppeted_ids = self.context.get("puppeted_character_ids", set())
+        return obj.character_sheet.character.id in puppeted_ids
 
 
 class AccountPlayerSerializer(serializers.ModelSerializer):
