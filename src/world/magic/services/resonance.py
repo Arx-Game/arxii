@@ -43,6 +43,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
+    from world.items.models import ItemFacet
     from world.magic.models import (
         PoseEndorsement,
         Resonance as ResonanceModel,
@@ -67,11 +68,11 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
     scene_entry_endorsement: SceneEntryEndorsement | None = None,
     room_aura_profile: RoomAuraProfile | None = None,
     staff_account: AccountDB | None = None,
+    outfit_item_facet: ItemFacet | None = None,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
 
-    Validates that the typed source kwarg matches the discriminator. Raises
-    ValueError for OUTFIT_TRICKLE source — that typed FK ships with the Items system.
+    Validates that the typed source kwarg matches the discriminator.
 
     Args:
         character_sheet: The character receiving resonance.
@@ -82,13 +83,14 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
         scene_entry_endorsement: Required for SCENE_ENTRY source.
         room_aura_profile: Required for ROOM_RESIDENCE source.
         staff_account: Optional for STAFF_GRANT source (nullable by design).
+        outfit_item_facet: Required for OUTFIT_TRICKLE source.
 
     Returns:
         The updated CharacterResonance instance.
 
     Raises:
         InvalidImbueAmount: If amount <= 0.
-        ValueError: If source/kwarg shape is invalid or source is not yet supported.
+        ValueError: If source/kwarg shape is invalid.
     """
     if amount <= 0:
         msg = "Resonance grant amount must be positive."
@@ -99,6 +101,7 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
         room_aura_profile=room_aura_profile,
         pose_endorsement=pose_endorsement,
         scene_entry_endorsement=scene_entry_endorsement,
+        outfit_item_facet=outfit_item_facet,
     )
 
     cr, _ = CharacterResonance.objects.get_or_create(
@@ -119,6 +122,7 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
         source_staff_account=staff_account,
         source_pose_endorsement=pose_endorsement,
         source_scene_entry_endorsement=scene_entry_endorsement,
+        outfit_item_facet=outfit_item_facet,
     )
     return cr
 
@@ -129,6 +133,7 @@ def _validate_grant_source_shape(
     room_aura_profile: RoomAuraProfile | None,
     pose_endorsement: PoseEndorsement | None = None,
     scene_entry_endorsement: SceneEntryEndorsement | None = None,
+    outfit_item_facet: ItemFacet | None = None,
 ) -> None:
     """Raise ValueError if the source discriminator doesn't match the supplied kwargs."""
     if source == GainSource.POSE_ENDORSEMENT:
@@ -142,8 +147,10 @@ def _validate_grant_source_shape(
             raise ValueError(msg)
         return
     if source == GainSource.OUTFIT_TRICKLE:
-        msg = "OUTFIT_TRICKLE source is reserved; item_instance FK ships with Items system."
-        raise ValueError(msg)
+        if outfit_item_facet is None:
+            msg = "OUTFIT_TRICKLE source requires outfit_item_facet= kwarg."
+            raise ValueError(msg)
+        return
     if source == GainSource.ROOM_RESIDENCE:
         if room_aura_profile is None:
             msg = "ROOM_RESIDENCE source requires room_aura_profile= kwarg."

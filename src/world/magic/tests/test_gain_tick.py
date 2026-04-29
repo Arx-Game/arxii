@@ -100,18 +100,17 @@ class ResidenceTrickleTickTests(TestCase):
         self.assertEqual(summary.residence_grants_issued, 2)
 
 
-class OutfitStubTests(TestCase):
-    def test_stub_returns_empty(self) -> None:
-        from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.services.gain import get_outfit_resonance_contributions
-
-        sheet = CharacterSheetFactory()
-        result = list(get_outfit_resonance_contributions(sheet))
-        self.assertEqual(result, [])
-
-    def test_outfit_tick_returns_zero(self) -> None:
+class OutfitTrickleTickNoItemsTests(TestCase):
+    def test_outfit_tick_returns_zero_with_no_sheets(self) -> None:
         from world.magic.services.gain import outfit_trickle_tick
 
+        self.assertEqual(outfit_trickle_tick(), 0)
+
+    def test_outfit_tick_returns_zero_when_no_items_equipped(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.services.gain import outfit_trickle_tick
+
+        CharacterSheetFactory()
         self.assertEqual(outfit_trickle_tick(), 0)
 
 
@@ -194,3 +193,138 @@ class ResonanceWeeklySettlementTickTests(TestCase):
         self.assertEqual(summary.endorsers_settled, 3)
         self.assertEqual(summary.total_endorsements_settled, 6)
         self.assertEqual(PoseEndorsement.objects.filter(settled_at__isnull=True).count(), 0)
+
+
+class OutfitDailyTrickleTests(TestCase):
+    """Tests for outfit_daily_trickle_for_character (Spec D §5.1)."""
+
+    def _build_sheet_with_equipped_facet_item(
+        self,
+        *,
+        item_quality_multiplier: str = "2.00",
+        attachment_quality_multiplier: str = "3.00",
+        thread_level: int = 2,
+    ):
+        """Build a CharacterSheet with an equipped item bearing a facet and a matching Thread.
+
+        Returns: (sheet, resonance, facet, item_facet, thread)
+        """
+        from decimal import Decimal
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemFacetFactory,
+            ItemInstanceFactory,
+            QualityTierFactory,
+        )
+        from world.magic.constants import TargetKind
+        from world.magic.factories import FacetFactory, ResonanceFactory
+        from world.magic.models import Thread
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        facet = FacetFactory()
+
+        item_quality = QualityTierFactory(stat_multiplier=Decimal(item_quality_multiplier))
+        attach_quality = QualityTierFactory(stat_multiplier=Decimal(attachment_quality_multiplier))
+        instance = ItemInstanceFactory(quality_tier=item_quality)
+        item_facet = ItemFacetFactory(
+            item_instance=instance,
+            facet=facet,
+            attachment_quality_tier=attach_quality,
+        )
+        EquippedItemFactory(character=sheet.character, item_instance=instance)
+        # Invalidate handler cache so it sees the newly equipped item.
+        sheet.character.equipped_items.invalidate()
+
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=resonance,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            level=thread_level,
+            developed_points=0,
+        )
+        return sheet, resonance, facet, item_facet, thread
+
+    def test_grants_resonance_when_thread_matches(self) -> None:
+        """Equipped item bearing a facet + Thread on that facet → grant issued.
+
+        Config default base=1, item_quality=2.0, attach_quality=3.0, thread_level=2
+        → amount = 1 × 2 × 3 × 2 = 12.
+        """
+        from world.magic.constants import GainSource
+        from world.magic.models import CharacterResonance, ResonanceGrant
+        from world.magic.services.gain import outfit_daily_trickle_for_character
+
+        sheet, resonance, _facet, item_facet, _thread = self._build_sheet_with_equipped_facet_item()
+
+        grants_issued = outfit_daily_trickle_for_character(sheet)
+
+        self.assertEqual(grants_issued, 1)
+        grant = ResonanceGrant.objects.get(character_sheet=sheet, source=GainSource.OUTFIT_TRICKLE)
+        self.assertEqual(grant.outfit_item_facet, item_facet)
+        self.assertEqual(grant.amount, 12)  # 1 × 2.0 × 3.0 × 2 = 12
+
+        cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
+        self.assertEqual(cr.balance, 12)
+
+    def test_no_thread_means_no_grant(self) -> None:
+        """Equipped item with facet but no Thread on that facet → no grants."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemFacetFactory,
+            ItemInstanceFactory,
+        )
+        from world.magic.factories import FacetFactory
+        from world.magic.models import ResonanceGrant
+        from world.magic.services.gain import outfit_daily_trickle_for_character
+
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        instance = ItemInstanceFactory()
+        ItemFacetFactory(item_instance=instance, facet=facet)
+        EquippedItemFactory(character=sheet.character, item_instance=instance)
+        sheet.character.equipped_items.invalidate()
+
+        grants_issued = outfit_daily_trickle_for_character(sheet)
+
+        self.assertEqual(grants_issued, 0)
+        self.assertFalse(ResonanceGrant.objects.exists())
+
+    def test_no_items_worn_means_no_grant(self) -> None:
+        """Sheet has Thread on facet but no items equipped → no grants."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import TargetKind
+        from world.magic.factories import FacetFactory, ResonanceFactory
+        from world.magic.models import ResonanceGrant, Thread
+        from world.magic.services.gain import outfit_daily_trickle_for_character
+
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        facet = FacetFactory()
+        Thread.objects.create(
+            owner=sheet,
+            resonance=resonance,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            level=1,
+            developed_points=0,
+        )
+
+        grants_issued = outfit_daily_trickle_for_character(sheet)
+
+        self.assertEqual(grants_issued, 0)
+        self.assertFalse(ResonanceGrant.objects.exists())
+
+    def test_resonance_daily_tick_counts_outfit_grants(self) -> None:
+        """resonance_daily_tick() surfaces outfit grants in summary.outfit_grants_issued."""
+        from world.magic.services.gain import resonance_daily_tick
+
+        self._build_sheet_with_equipped_facet_item()
+
+        summary = resonance_daily_tick()
+
+        self.assertEqual(summary.outfit_grants_issued, 1)
