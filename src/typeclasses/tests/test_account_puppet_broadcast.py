@@ -65,3 +65,41 @@ class PuppetCharacterBroadcastTests(TestCase):
             call for call in sess1.msg.call_args_list if call.kwargs.get("type") == "puppet_changed"
         ]
         assert puppet_calls == []
+
+
+class UnpuppetBroadcastTests(TestCase):
+    """unpuppet_object should broadcast puppet_changed to all sessions."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.account = AccountFactory()
+        self.character = CharacterFactory(db_key="Bob")
+        sheet = CharacterSheetFactory(character=self.character)
+        entry = RosterEntryFactory(
+            character_sheet=sheet,
+            roster=RosterFactory(name=RosterType.ACTIVE),
+        )
+        RosterTenureFactory(
+            player_data=self.account.player_data,
+            roster_entry=entry,
+        )
+
+    def test_unpuppet_broadcasts_with_null_character(self) -> None:
+        sess1 = MagicMock(sessid=10)
+        sess1.puppet = self.character
+        sess2 = MagicMock(sessid=11, puppet=None)
+        self.account.sessions.all = lambda: [sess1, sess2]
+
+        self.account.unpuppet_object(sess1)
+
+        for sess in (sess1, sess2):
+            puppet_calls = [
+                call
+                for call in sess.msg.call_args_list
+                if call.kwargs.get("type") == "puppet_changed"
+            ]
+            assert len(puppet_calls) >= 1, f"sess {sess.sessid} got no puppet_changed"
+            payload = puppet_calls[-1].kwargs["args"][0]
+            assert payload["session_id"] == 10
+            assert payload["character_id"] is None
+            assert payload["character_name"] is None

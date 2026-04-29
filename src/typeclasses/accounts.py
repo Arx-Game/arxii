@@ -172,6 +172,17 @@ class Account(DefaultAccount):
         self._broadcast_puppet_changed(session, character)
         return True, f"Now controlling {character.name}."
 
+    def unpuppet_object(self, session) -> None:
+        """Unpuppet a character from a session and broadcast the change.
+
+        Triggered both by explicit @ic swaps (which call this internally before
+        re-puppeting) and by session disconnects (browser tab close, telnet quit).
+        Broadcasting on every unpuppet keeps other tabs' portrait-grid state
+        consistent without requiring a refresh.
+        """
+        super().unpuppet_object(session)
+        self._broadcast_puppet_changed(session, character=None)
+
     def at_account_creation(self):
         """Called when account is first created."""
         super().at_account_creation()
