@@ -2,7 +2,7 @@
 
 import django_filters
 
-from world.items.models import InteractionType, ItemTemplate, QualityTier
+from world.items.models import InteractionType, ItemFacet, ItemTemplate, QualityTier
 
 
 class QualityTierFilter(django_filters.FilterSet):
@@ -19,6 +19,14 @@ class InteractionTypeFilter(django_filters.FilterSet):
     class Meta:
         model = InteractionType
         fields = ["name"]
+
+
+class ItemFacetFilter(django_filters.FilterSet):
+    """Filters for ItemFacet."""
+
+    class Meta:
+        model = ItemFacet
+        fields = ["item_instance", "facet"]
 
 
 class ItemTemplateFilter(django_filters.FilterSet):

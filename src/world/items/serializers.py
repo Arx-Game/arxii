@@ -2,13 +2,16 @@
 
 from rest_framework import serializers
 
+from world.items.exceptions import FacetAlreadyAttached, FacetCapacityExceeded
 from world.items.models import (
     InteractionType,
+    ItemFacet,
     ItemTemplate,
     QualityTier,
     TemplateInteraction,
     TemplateSlot,
 )
+from world.items.services.facets import attach_facet_to_item
 
 
 class QualityTierSerializer(serializers.ModelSerializer):
@@ -66,6 +69,45 @@ class TemplateInteractionSerializer(serializers.ModelSerializer):
         model = TemplateInteraction
         fields = ["interaction_type", "flavor_text"]
         read_only_fields = fields
+
+
+class ItemFacetReadSerializer(serializers.ModelSerializer):
+    """Read serializer for ItemFacet (GET list/detail)."""
+
+    class Meta:
+        model = ItemFacet
+        fields = [
+            "id",
+            "item_instance",
+            "facet",
+            "applied_by_account",
+            "attachment_quality_tier",
+            "applied_at",
+        ]
+        read_only_fields = fields
+
+
+class ItemFacetWriteSerializer(serializers.ModelSerializer):
+    """Write serializer for ItemFacet (POST create)."""
+
+    class Meta:
+        model = ItemFacet
+        fields = ["item_instance", "facet", "attachment_quality_tier"]
+
+    def create(self, validated_data: dict) -> ItemFacet:  # type: ignore[override]
+        """Delegate creation to the facet service."""
+        crafter = self.context["request"].user
+        try:
+            return attach_facet_to_item(
+                crafter=crafter,
+                item_instance=validated_data["item_instance"],
+                facet=validated_data["facet"],
+                attachment_quality_tier=validated_data["attachment_quality_tier"],
+            )
+        except FacetAlreadyAttached as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        except FacetCapacityExceeded as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
 
 
 class ItemTemplateListSerializer(serializers.ModelSerializer):

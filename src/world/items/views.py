@@ -4,15 +4,19 @@ from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import serializers, viewsets
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import SAFE_METHODS, IsAuthenticated
+from rest_framework.request import Request
 
 from world.items.filters import (
     InteractionTypeFilter,
+    ItemFacetFilter,
     ItemTemplateFilter,
     QualityTierFilter,
 )
 from world.items.models import (
     InteractionType,
+    ItemFacet,
+    ItemInstance,
     ItemTemplate,
     QualityTier,
     TemplateInteraction,
@@ -20,10 +24,39 @@ from world.items.models import (
 )
 from world.items.serializers import (
     InteractionTypeSerializer,
+    ItemFacetReadSerializer,
+    ItemFacetWriteSerializer,
     ItemTemplateDetailSerializer,
     ItemTemplateListSerializer,
     QualityTierSerializer,
 )
+from world.items.services.facets import remove_facet_from_item
+
+
+class ItemFacetWritePermission(IsAuthenticated):
+    """Allow attach/remove only if the user owns the item_instance, or is staff."""
+
+    def has_permission(self, request: Request, view: viewsets.ViewSet) -> bool:
+        if not super().has_permission(request, view):
+            return False
+        if request.method in SAFE_METHODS:
+            return True
+        if request.user.is_staff:
+            return True
+        # POST: check the item_instance the request is targeting.
+        if request.method == "POST":
+            instance_pk = request.data.get("item_instance")
+            if instance_pk is None:
+                return True  # let serializer reject as required-field
+            return ItemInstance.objects.filter(pk=instance_pk, owner=request.user).exists()
+        return True  # DELETE checked at object level
+
+    def has_object_permission(
+        self, request: Request, view: viewsets.ViewSet, obj: ItemFacet
+    ) -> bool:
+        if request.user.is_staff:
+            return True
+        return obj.item_instance.owner_id == request.user.pk
 
 
 class ItemTemplatePagination(PageNumberPagination):
@@ -87,3 +120,29 @@ class ItemTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         if self.action == "retrieve":
             return ItemTemplateDetailSerializer
         return ItemTemplateListSerializer
+
+
+class ItemFacetViewSet(viewsets.ModelViewSet):
+    """ViewSet for ItemFacet attach/list/delete."""
+
+    http_method_names = ["get", "post", "delete", "head", "options"]
+    permission_classes = [ItemFacetWritePermission]
+    pagination_class = ItemTemplatePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ItemFacetFilter
+    queryset = ItemFacet.objects.select_related(
+        "item_instance",
+        "facet",
+        "applied_by_account",
+        "attachment_quality_tier",
+    ).order_by("-applied_at")
+
+    def get_serializer_class(self) -> type[serializers.ModelSerializer]:
+        """Use write serializer for create, read serializer otherwise."""
+        if self.action == "create":
+            return ItemFacetWriteSerializer
+        return ItemFacetReadSerializer
+
+    def perform_destroy(self, instance: ItemFacet) -> None:
+        """Remove facet via service so cache invalidation fires."""
+        remove_facet_from_item(item_facet=instance)

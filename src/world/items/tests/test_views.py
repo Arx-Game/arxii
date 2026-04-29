@@ -7,10 +7,13 @@ from rest_framework.test import APIClient
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import (
     InteractionTypeFactory,
+    ItemFacetFactory,
+    ItemInstanceFactory,
     ItemTemplateFactory,
     QualityTierFactory,
 )
-from world.items.models import TemplateInteraction, TemplateSlot
+from world.items.models import ItemFacet, TemplateInteraction, TemplateSlot
+from world.items.services.facets import attach_facet_to_item
 
 
 class ItemViewTestCase(TestCase):
@@ -123,3 +126,189 @@ class ItemTemplateViewTests(ItemViewTestCase):
         self.assertIn("interactions", response.data)
         self.assertEqual(len(response.data["slots"]), 1)
         self.assertEqual(len(response.data["interactions"]), 1)
+
+
+class ItemFacetViewTests(ItemViewTestCase):
+    """Tests for /api/items/item-facets/ endpoint."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import AccountFactory
+        from world.magic.factories import FacetFactory
+
+        super().setUpTestData()
+        cls.quality = QualityTierFactory(name="ItemFacetViewQuality")
+        cls.facet_a = FacetFactory(name="ViewFacetA")
+        cls.facet_b = FacetFactory(name="ViewFacetB")
+        cls.facet_c = FacetFactory(name="ViewFacetC")
+
+        # An account that owns items (used as the authenticated user in most tests).
+        cls.owner = AccountFactory(username="facet_view_owner")
+        # A second account that does NOT own the items.
+        cls.non_owner = AccountFactory(username="facet_view_nonowner")
+
+        cls.template_cap2 = ItemTemplateFactory(name="FacetView Cap2 Template", facet_capacity=2)
+        cls.template_cap1 = ItemTemplateFactory(name="FacetView Cap1 Template", facet_capacity=1)
+
+        cls.item_owner = ItemInstanceFactory(template=cls.template_cap2, owner=cls.owner)
+        cls.item_other = ItemInstanceFactory(template=cls.template_cap2, owner=cls.non_owner)
+        cls.item_cap1 = ItemInstanceFactory(template=cls.template_cap1, owner=cls.owner)
+
+    def setUp(self) -> None:
+        super().setUp()
+        # Authenticate as the item owner by default.
+        self.client.force_authenticate(user=self.owner)
+
+    def tearDown(self) -> None:
+        # Clean up any ItemFacets created during individual tests.
+        ItemFacet.objects.filter(
+            item_instance__in=[self.item_owner, self.item_other, self.item_cap1]
+        ).delete()
+
+    def test_list_returns_facets(self) -> None:
+        """GET list includes an attached ItemFacet."""
+        row = attach_facet_to_item(
+            crafter=self.owner,
+            item_instance=self.item_owner,
+            facet=self.facet_a,
+            attachment_quality_tier=self.quality,
+        )
+        response = self.client.get("/api/items/item-facets/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result_ids = [r["id"] for r in response.data["results"]]
+        self.assertIn(row.pk, result_ids)
+
+    def test_filter_by_item_instance(self) -> None:
+        """GET ?item_instance=<pk> returns only that item's facets."""
+        attach_facet_to_item(
+            crafter=self.owner,
+            item_instance=self.item_owner,
+            facet=self.facet_a,
+            attachment_quality_tier=self.quality,
+        )
+        attach_facet_to_item(
+            crafter=self.non_owner,
+            item_instance=self.item_other,
+            facet=self.facet_b,
+            attachment_quality_tier=self.quality,
+        )
+        response = self.client.get(f"/api/items/item-facets/?item_instance={self.item_owner.pk}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for item in response.data["results"]:
+            self.assertEqual(item["item_instance"], self.item_owner.pk)
+
+    def test_post_create_calls_service(self) -> None:
+        """POST creates an ItemFacet via the service; applied_by_account is set."""
+        response = self.client.post(
+            "/api/items/item-facets/",
+            {
+                "item_instance": self.item_owner.pk,
+                "facet": self.facet_a.pk,
+                "attachment_quality_tier": self.quality.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        row = ItemFacet.objects.get(item_instance=self.item_owner, facet=self.facet_a)
+        self.assertEqual(row.applied_by_account_id, self.owner.pk)
+
+    def test_post_rejects_non_owner(self) -> None:
+        """Non-owner POST to attach a facet to someone else's item is rejected with 403."""
+        self.client.force_authenticate(user=self.non_owner)
+        response = self.client.post(
+            "/api/items/item-facets/",
+            {
+                "item_instance": self.item_owner.pk,
+                "facet": self.facet_a.pk,
+                "attachment_quality_tier": self.quality.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_post_facet_already_attached_returns_400(self) -> None:
+        """POST same facet on same item a second time returns 400 with user_message."""
+        attach_facet_to_item(
+            crafter=self.owner,
+            item_instance=self.item_owner,
+            facet=self.facet_a,
+            attachment_quality_tier=self.quality,
+        )
+        response = self.client.post(
+            "/api/items/item-facets/",
+            {
+                "item_instance": self.item_owner.pk,
+                "facet": self.facet_a.pk,
+                "attachment_quality_tier": self.quality.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("That facet is already attached to this item.", str(response.data))
+
+    def test_post_capacity_exceeded_returns_400(self) -> None:
+        """POST a second facet on a cap-1 item returns 400."""
+        attach_facet_to_item(
+            crafter=self.owner,
+            item_instance=self.item_cap1,
+            facet=self.facet_a,
+            attachment_quality_tier=self.quality,
+        )
+        response = self.client.post(
+            "/api/items/item-facets/",
+            {
+                "item_instance": self.item_cap1.pk,
+                "facet": self.facet_b.pk,
+                "attachment_quality_tier": self.quality.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("This item has no remaining facet slots.", str(response.data))
+
+    def test_delete_calls_remove_service(self) -> None:
+        """DELETE removes the ItemFacet row via the service."""
+        row = attach_facet_to_item(
+            crafter=self.owner,
+            item_instance=self.item_owner,
+            facet=self.facet_a,
+            attachment_quality_tier=self.quality,
+        )
+        response = self.client.delete(f"/api/items/item-facets/{row.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(ItemFacet.objects.filter(pk=row.pk).exists())
+
+    def test_delete_rejects_non_owner(self) -> None:
+        """Non-owner DELETE is rejected with 403/404."""
+        row = attach_facet_to_item(
+            crafter=self.non_owner,
+            item_instance=self.item_other,
+            facet=self.facet_a,
+            attachment_quality_tier=self.quality,
+        )
+        # owner does not own item_other
+        response = self.client.delete(f"/api/items/item-facets/{row.pk}/")
+        self.assertIn(response.status_code, [status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND])
+
+    def test_unauthenticated_denied(self) -> None:
+        """Unauthenticated requests are rejected with 403."""
+        self.client.force_authenticate(user=None)
+        response = self.client.get("/api/items/item-facets/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_put_method_not_allowed(self) -> None:
+        """PUT is disabled — model has no editable fields after create."""
+        row = ItemFacetFactory(
+            item_instance=self.item_owner,
+            facet=self.facet_c,
+            attachment_quality_tier=self.quality,
+        )
+        response = self.client.put(
+            f"/api/items/item-facets/{row.pk}/",
+            {
+                "item_instance": self.item_owner.pk,
+                "facet": self.facet_c.pk,
+                "attachment_quality_tier": self.quality.pk,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
