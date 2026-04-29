@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -321,9 +322,30 @@ def resolve_pull_effects(
                     EffectKind.CAPABILITY_GRANT,
                     EffectKind.NARRATIVE_ONLY,
                 )
-                base_scaled: int | None = (
-                    (authored or 0) * multiplier if has_numeric_payload else None
-                )
+
+                if t.target_kind == TargetKind.FACET:
+                    matching = t.owner.character.equipped_items.item_facets_for(t.target_facet)
+                    if not matching:
+                        # No worn items bearing this facet — skip this effect row.
+                        # Other threads in the outer loop still resolve normally.
+                        continue
+                    worn_aggregate = sum(
+                        (
+                            Decimal(str(item_facet.item_instance.quality_tier.stat_multiplier))
+                            if item_facet.item_instance.quality_tier is not None
+                            else Decimal(1)
+                        )
+                        * Decimal(str(item_facet.attachment_quality_tier.stat_multiplier))
+                        for item_facet in matching
+                    )
+                    base_scaled = (
+                        int((authored or 0) * multiplier * worn_aggregate)
+                        if has_numeric_payload
+                        else None
+                    )
+                else:
+                    base_scaled = (authored or 0) * multiplier if has_numeric_payload else None
+
                 inactive = row.effect_kind == EffectKind.VITAL_BONUS and not in_combat
                 resolved.append(
                     ResolvedPullEffect(
