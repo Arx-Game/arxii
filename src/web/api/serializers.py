@@ -5,7 +5,7 @@ from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
 from web.api.character_type import derive_character_type
-from world.roster.models import RosterEntry
+from world.roster.models import RosterApplication, RosterEntry
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 
@@ -73,6 +73,16 @@ class AvailableCharacterSerializer(serializers.Serializer):
     def get_currently_puppeted_in_session(self, obj: RosterEntry) -> bool:
         puppeted_ids = self.context.get("puppeted_character_ids", set())
         return obj.character_sheet.character.id in puppeted_ids
+
+
+class PendingApplicationSerializer(serializers.ModelSerializer):
+    """Pending RosterApplication entry for the account payload."""
+
+    character_name = serializers.CharField(source="character.key", read_only=True)
+
+    class Meta:
+        model = RosterApplication
+        fields = ["id", "character_name", "status", "applied_date"]
 
 
 class AccountPlayerSerializer(serializers.ModelSerializer):
