@@ -7,8 +7,7 @@ for allowing Characters to traverse the exit to its destination.
 
 """
 
-from functools import cached_property
-
+from django.utils.functional import cached_property
 from evennia.objects.objects import DefaultExit
 
 from commands.evennia_overrides.exit_command import CmdExit

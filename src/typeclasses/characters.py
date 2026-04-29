@@ -8,10 +8,9 @@ creation commands.
 
 """
 
-from functools import cached_property
-
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
+from django.utils.functional import cached_property
 from evennia.objects.objects import DefaultCharacter
 
 from commands.utils import serialize_cmdset

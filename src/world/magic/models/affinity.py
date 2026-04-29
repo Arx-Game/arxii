@@ -5,9 +5,8 @@ Resonances are style tags that contribute to affinities and have opposing pairs.
 Both are proper domain models replacing the old ModifierTarget-based pattern.
 """
 
-from functools import cached_property
-
 from django.db import models
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin

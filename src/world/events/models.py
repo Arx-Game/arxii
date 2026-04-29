@@ -1,6 +1,5 @@
-from functools import cached_property
-
 from django.db import models
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin

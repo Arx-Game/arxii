@@ -9,10 +9,10 @@ Design doc: docs/plans/2026-01-25-conditions-models-design.md
 """
 
 from decimal import Decimal
-from functools import cached_property
 
 from django.db import models
 from django.db.models import Q
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin

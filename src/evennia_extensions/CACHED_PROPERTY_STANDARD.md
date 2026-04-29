@@ -1,42 +1,29 @@
 # Cached Property Usage Standard
 
-## Current State
-The codebase currently has inconsistent usage of `cached_property`:
+## Rule
 
-- **8 files** use Django's `cached_property` (`django.utils.functional`)
-- **3 files** use functools `cached_property`
+**Always use `from django.utils.functional import cached_property`** in `src/`. Never use `from functools import cached_property`.
 
-## Recommendation: Standardize on `functools.cached_property`
+A custom pre-commit linter (`tools/lint_cached_property_import.py`, token `CACHED_PROPERTY_IMPORT`) enforces this.
 
-### Rationale:
-1. **Standard Library**: `functools.cached_property` is part of Python's standard library (3.8+)
-2. **Performance**: Slightly better performance as it's implemented in C
-3. **Future-proof**: Less dependency on Django internals
-4. **ArxII Target**: We're using Python 3.13+, so standard library version is available
+## Why
 
-### Migration Strategy:
-1. **New Code**: Always use `from functools import cached_property`
-2. **Existing Code**: Can remain with Django version for now - both are supported
-3. **Gradual Migration**: Update Django imports to functools when touching files
+`functools.cached_property` and `django.utils.functional.cached_property` expose the same Python-level interface (lazy-computed attribute, `__set_name__`, set-on-instance-dict semantics). They are interface-equivalent.
 
-### Mixin Compatibility:
-The `CachedPropertiesMixin` and `RelatedCacheClearingMixin` support both implementations automatically, so migration can be gradual without breaking cache clearing functionality.
+But Django's `prefetch_related(Prefetch(..., to_attr="cached_X"))` machinery only recognizes its own class via `isinstance`. With `functools.cached_property`, Django's `is_to_attr_fetched()` decides "this isn't my cached_property, assume the attr is already populated" and **silently skips the batched prefetch**. Subsequent attribute access fires the cached_property's fallback query — once per row. Classic N+1, no warning, no exception, correct data, slow performance.
 
-### Standard Import:
+Because the project's documented prefetch pattern (CLAUDE.md: "to_attr should point to a cached_property on the model for cache-safe access") relies on Django recognizing the descriptor, we must use Django's version everywhere. Even on classes that aren't currently a `Prefetch(to_attr=...)` target — making the choice once project-wide eliminates the footgun.
+
+## Suppression
+
+If a non-Django context genuinely needs `functools.cached_property` (e.g., a defensive `isinstance` target, a script outside `src/`, or a pure utility class that will never be a Prefetch target and where stdlib alignment matters), suppress with:
+
 ```python
-# Preferred (new code)
-from functools import cached_property
-
-# Legacy (existing code, still supported)
-from django.utils.functional import cached_property
+from functools import cached_property  # noqa: CACHED_PROPERTY_IMPORT — <reason>
 ```
 
-### Files to Eventually Migrate:
-- `behaviors/models.py`
-- `typeclasses/tests/test_trigger_registry.py`
-- `typeclasses/rooms.py`
-- `flows/managers.py`
-- `flows/models/triggers.py`
-- `typeclasses/characters.py`
-- `typeclasses/accounts.py`
-- `flows/object_states/base_state.py`
+The canonical example is `src/evennia_extensions/mixins.py`, which `isinstance`-checks against both classes to clear caches defensively. Suppressions in `src/` should be rare and accompanied by a clear reason. The default answer is "use Django's."
+
+## History
+
+The original standard (commit history) recommended `functools.cached_property` for stdlib alignment. That advice predated discovery of the silent Prefetch+to_attr breakage; commit `dd6a5ca1` documents the bug, and the project-wide sweep that followed inverted the recommendation.

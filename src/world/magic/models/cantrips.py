@@ -6,9 +6,8 @@ anima cost) are hidden from the player; they only see name, description,
 archetype grouping, and optional facet selection.
 """
 
-from functools import cached_property
-
 from django.db import models
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.constants import CantripArchetype

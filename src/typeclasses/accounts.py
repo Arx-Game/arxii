@@ -22,8 +22,7 @@ several more options for customizing the Guest account system.
 
 """
 
-from functools import cached_property
-
+from django.utils.functional import cached_property
 from evennia.accounts.accounts import DefaultAccount, DefaultGuest
 
 from commands.utils import serialize_cmdset
