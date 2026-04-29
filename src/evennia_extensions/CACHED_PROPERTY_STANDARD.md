@@ -8,7 +8,12 @@ A custom pre-commit linter (`tools/lint_cached_property_import.py`, token `CACHE
 
 ## Why
 
-`functools.cached_property` and `django.utils.functional.cached_property` expose the same Python-level interface (lazy-computed attribute, `__set_name__`, set-on-instance-dict semantics). They are interface-equivalent.
+`functools.cached_property` and `django.utils.functional.cached_property`
+expose the same Python-level descriptor protocol (`__get__`, `__set_name__`,
+set-on-instance-dict semantics). Behavior differs in threaded first-access
+— stdlib `functools.cached_property` uses a global lock, Django's does not
+— but in single-threaded request handling (Django's normal mode) they're
+observationally equivalent.
 
 But Django's `prefetch_related(Prefetch(..., to_attr="cached_X"))` machinery only recognizes its own class via `isinstance`. With `functools.cached_property`, Django's `is_to_attr_fetched()` decides "this isn't my cached_property, assume the attr is already populated" and **silently skips the batched prefetch**. Subsequent attribute access fires the cached_property's fallback query — once per row. Classic N+1, no warning, no exception, correct data, slow performance.
 
@@ -26,4 +31,8 @@ The canonical example is `src/evennia_extensions/mixins.py`, which `isinstance`-
 
 ## History
 
-The original standard (commit history) recommended `functools.cached_property` for stdlib alignment. That advice predated discovery of the silent Prefetch+to_attr breakage; commit `dd6a5ca1` documents the bug, and the project-wide sweep that followed inverted the recommendation.
+The original standard recommended `functools.cached_property` for stdlib
+alignment. That advice predated discovery of the silent Prefetch+to_attr
+breakage; the senior-dev review pass for Stories Phase 6a documented
+the bug, and the project-wide sweep that followed inverted the
+recommendation.

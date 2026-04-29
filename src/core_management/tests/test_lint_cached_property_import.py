@@ -114,3 +114,50 @@ class TestCachedPropertyImportLint(SimpleTestCase):
         )
         errors = self._check(code)
         self.assertEqual(errors, [])
+
+    def test_attribute_access_violation(self) -> None:
+        """Catch `functools.cached_property` used via `import functools`."""
+        code = textwrap.dedent(
+            """\
+            import functools
+
+
+            class Foo:
+                @functools.cached_property
+                def x(self):
+                    return 1
+            """
+        )
+        errors = self._check(code)
+        self.assertEqual(len(errors), 1)
+
+    def test_attribute_access_suppression(self) -> None:
+        """Suppression token on the attribute-access line is honored."""
+        code = textwrap.dedent(
+            """\
+            import functools
+
+
+            class Foo:
+                @functools.cached_property  # noqa: CACHED_PROPERTY_IMPORT
+                def x(self):
+                    return 1
+            """
+        )
+        errors = self._check(code)
+        self.assertEqual(errors, [])
+
+    def test_unrelated_functools_attribute_access(self) -> None:
+        """Other functools attributes (e.g., lru_cache) are not flagged."""
+        code = textwrap.dedent(
+            """\
+            import functools
+
+
+            @functools.lru_cache
+            def x():
+                return 1
+            """
+        )
+        errors = self._check(code)
+        self.assertEqual(errors, [])

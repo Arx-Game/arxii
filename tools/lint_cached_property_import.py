@@ -33,6 +33,11 @@ def has_suppression(line: str) -> bool:
 def find_violations(tree: ast.AST, source_lines: list[str]) -> list[tuple[int, str]]:
     """Return (lineno, message) tuples for each violation in the tree.
 
+    Detects two forbidden patterns:
+        1. ``from functools import cached_property`` (any aliasing).
+        2. ``functools.cached_property`` attribute access — the form
+           that follows ``import functools``.
+
     Args:
         tree: The parsed AST.
         source_lines: The file's source split into lines.
@@ -42,26 +47,46 @@ def find_violations(tree: ast.AST, source_lines: list[str]) -> list[tuple[int, s
     """
     violations: list[tuple[int, str]] = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.ImportFrom):
-            continue
-        if node.module != "functools":
-            continue
-        for alias in node.names:
-            if alias.name != "cached_property":
+        # Pattern 1: from functools import cached_property
+        if isinstance(node, ast.ImportFrom):
+            if node.module != "functools":
                 continue
-            # A multi-line `from functools import (...)` may carry the suppression
-            # comment on the alias line rather than on node.lineno. Check every
-            # line the import spans.
-            start = node.lineno
-            end = node.end_lineno or node.lineno
-            spanned_lines = source_lines[start - 1 : end]
-            if any(has_suppression(line) for line in spanned_lines):
+            for alias in node.names:
+                if alias.name != "cached_property":
+                    continue
+                # A multi-line `from functools import (...)` may carry the
+                # suppression comment on the alias line rather than on
+                # node.lineno. Check every line the import spans.
+                start = node.lineno
+                end = node.end_lineno or node.lineno
+                spanned_lines = source_lines[start - 1 : end]
+                if any(has_suppression(line) for line in spanned_lines):
+                    continue
+                violations.append(
+                    (
+                        node.lineno,
+                        "forbidden import — use 'from django.utils.functional "
+                        "import cached_property' (see "
+                        "src/evennia_extensions/CACHED_PROPERTY_STANDARD.md)",
+                    )
+                )
+        # Pattern 2: functools.cached_property attribute access
+        elif (
+            isinstance(node, ast.Attribute)
+            and node.attr == "cached_property"
+            and isinstance(node.value, ast.Name)
+            and node.value.id == "functools"
+        ):
+            line_index = node.lineno - 1
+            if 0 <= line_index < len(source_lines) and has_suppression(source_lines[line_index]):
                 continue
             violations.append(
                 (
                     node.lineno,
-                    "forbidden import — use 'from django.utils.functional import "
-                    "cached_property' (see src/evennia_extensions/CACHED_PROPERTY_STANDARD.md)",
+                    "forbidden attribute access — 'functools.cached_property' "
+                    "silently breaks Prefetch(to_attr=...). Use Django's "
+                    "cached_property instead (see "
+                    "src/evennia_extensions/CACHED_PROPERTY_STANDARD.md)",
                 )
             )
     return violations
