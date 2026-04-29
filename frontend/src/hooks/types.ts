@@ -22,6 +22,7 @@ export const WS_MESSAGE_TYPE = {
   COMMAND_ERROR: 'command_error',
   ROULETTE_RESULT: 'roulette_result',
   INTERACTION: 'interaction',
+  PUPPET_CHANGED: 'puppet_changed',
 } as const;
 
 export type SocketMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];
