@@ -9,7 +9,9 @@ export interface AvailableCharacter {
   id: number;
   name: string;
   portrait_url: string | null;
-  character_type: 'PC' | 'GM' | 'STAFF';
+  // Open union — backend may add new typeclasses (NPC, etc.) without
+  // requiring a frontend release. Use a switch with a default branch.
+  character_type: 'PC' | 'GM' | 'STAFF' | (string & {});
   roster_status: string;
   personas: PersonaPayload[];
   last_location: { id: number; name: string } | null;

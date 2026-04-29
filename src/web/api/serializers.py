@@ -78,7 +78,22 @@ class PendingApplicationSerializer(serializers.ModelSerializer):
 
 
 class AccountPlayerSerializer(serializers.ModelSerializer):
-    """Serialize account and player display information."""
+    """Serialize an authenticated account for the /api/user/ endpoint.
+
+    REQUIRED CONTEXT (built by `web.api.payload_helpers.build_account_payload_context`):
+        - active_entries: list[RosterEntry] — prefetched ACTIVE roster entries
+        - pending_applications: list[RosterApplication] — prefetched pending apps
+        - puppeted_character_ids: set[int] — currently puppeted character ObjectDB ids
+
+    If context is missing, `available_characters` and `pending_applications`
+    silently return empty lists. Always construct via the helper, including
+    in tests::
+
+        from web.api.payload_helpers import build_account_payload_context
+        data = AccountPlayerSerializer(
+            account, context=build_account_payload_context(account)
+        ).data
+    """
 
     display_name = serializers.CharField(
         source="player_data.display_name",

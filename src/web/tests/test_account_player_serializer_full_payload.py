@@ -109,6 +109,7 @@ class AccountPayloadQueryCountTests(TestCase):
 
     def setUp(self) -> None:
         self.active_roster = RosterFactory(name=RosterType.ACTIVE)
+        self._test_room = None
 
     def _add_character(self, *, account, key: str) -> None:
         character = CharacterFactory(db_key=key)
@@ -121,6 +122,19 @@ class AccountPayloadQueryCountTests(TestCase):
         )
         entry = RosterEntryFactory(character_sheet=sheet, roster=self.active_roster)
         RosterTenureFactory(player_data=account.player_data, roster_entry=entry)
+        # Place the character in a real Room so last_location actually fires
+        # the FK access path (and the query-count test catches a stale
+        # select_related chain).
+        if self._test_room is None:
+            from evennia.utils.create import create_object
+
+            self._test_room = create_object(
+                "typeclasses.rooms.Room",
+                key=f"{self.__class__.__name__}-room",
+                nohome=True,
+            )
+        character.location = self._test_room
+        character.save()
 
     def test_query_count_does_not_scale_with_character_count(self) -> None:
         # Each measurement uses a separate account to keep state isolated.
@@ -145,10 +159,9 @@ class AccountPayloadQueryCountTests(TestCase):
             list(data_five["available_characters"])
         five_count = len(ctx_five.captured_queries)
 
-        # Query count must not scale linearly with character count.
-        # Allow a small constant overhead (DRF ModelSerializer can re-fetch
-        # account-level fields a few times) but not 5× the work.
-        assert five_count <= one_count + 3, (
+        # Query count must not scale at all with character count — the
+        # prefetch chain is fully bounded.
+        assert five_count == one_count, (
             f"Payload query count grew from {one_count} (1 char) to "
-            f"{five_count} (5 chars) — likely an N+1 in serializer methods"
+            f"{five_count} (5 chars) — N+1 in serializer methods"
         )

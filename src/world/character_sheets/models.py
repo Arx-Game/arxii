@@ -310,23 +310,26 @@ class CharacterSheet(SharedMemoryModel):
                 "character_sheet__personas",
                 queryset=Persona.objects.filter(
                     persona_type__in=[PersonaType.PRIMARY, PersonaType.ESTABLISHED]
-                ).order_by("-persona_type", "created_at"),
+                ).order_by("-persona_type", "created_at", "id"),
                 to_attr="cached_payload_personas",
             )
 
         PRIMARY first (descending alphabetical: 'p' > 'e'), then ESTABLISHED
-        by ``created_at``. TEMPORARY personas are excluded — they are scene-bound
-        and not selectable from a portrait grid.
+        by ``created_at`` with ``id`` as a deterministic tiebreaker.
+        TEMPORARY personas are excluded — they are scene-bound and not
+        selectable from a portrait grid.
 
         When prefetched, Django populates this directly. When accessed without
-        prefetch, falls back to a fresh query.
+        prefetch, falls back to a fresh query. The fallback ordering MUST
+        match the Prefetch ordering exactly, or prefetched vs. non-prefetched
+        rows will diverge.
         """
         from world.scenes.constants import PersonaType  # noqa: PLC0415
 
         return list(
             self.personas.filter(
                 persona_type__in=[PersonaType.PRIMARY, PersonaType.ESTABLISHED]
-            ).order_by("-persona_type", "created_at")
+            ).order_by("-persona_type", "created_at", "id")
         )
 
     @cached_property

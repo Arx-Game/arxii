@@ -43,15 +43,12 @@ def build_account_payload_context(account: AccountDB) -> AccountPayloadContext:
     Single round of queries; serializer methods walk attributes only.
     """
     active_entries = list(
-        RosterEntry.objects.filter(
-            tenures__player_data=account.player_data,
-            tenures__end_date__isnull=True,
-            roster__name=RosterType.ACTIVE,
-        )
+        RosterEntry.objects.for_account(account)
+        .filter(roster__name=RosterType.ACTIVE)
         .distinct()
         .select_related(
             "roster",
-            "character_sheet__character",
+            "character_sheet__character__db_location",
             "profile_picture__media",
         )
         .prefetch_related(
@@ -59,7 +56,7 @@ def build_account_payload_context(account: AccountDB) -> AccountPayloadContext:
                 "character_sheet__personas",
                 queryset=Persona.objects.filter(
                     persona_type__in=[PersonaType.PRIMARY, PersonaType.ESTABLISHED]
-                ).order_by("-persona_type", "created_at"),
+                ).order_by("-persona_type", "created_at", "id"),
                 to_attr="cached_payload_personas",
             )
         )

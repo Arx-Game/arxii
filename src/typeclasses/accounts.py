@@ -26,6 +26,7 @@ from django.utils.functional import cached_property
 from evennia.accounts.accounts import DefaultAccount, DefaultGuest
 
 from commands.utils import serialize_cmdset
+from web.webclient.message_types import WebsocketMessageType
 
 
 class CharacterList:
@@ -153,7 +154,23 @@ class Account(DefaultAccount):
             "character_name": character.key if character else None,
         }
         for sess in self.sessions.all():
-            sess.msg(type="puppet_changed", args=[payload])
+            sess.msg(type=WebsocketMessageType.PUPPET_CHANGED.value, args=[payload])
+
+    def puppet_object(self, session, obj):
+        """Puppet a character on a session, then broadcast puppet_changed.
+
+        Overrides Evennia's puppet_object so the broadcast covers all paths
+        that lead to a puppet change — not just `puppet_character_in_session`.
+        Multisession takeover, session reuse, and any direct callers all
+        flow through here.
+
+        Evennia's puppet_object can early-return without puppeting (permission
+        denied, already-puppeted-by-other-account, max-puppets). We check
+        session.puppet to confirm success before broadcasting.
+        """
+        super().puppet_object(session, obj)
+        if session.puppet is obj:
+            self._broadcast_puppet_changed(session, obj)
 
     def puppet_character_in_session(self, character, session):
         """Puppet a character in a specific session."""
@@ -166,9 +183,8 @@ class Account(DefaultAccount):
             session.msg(f"Switching from {session.puppet.name} to {character.name}.")
             self.unpuppet_object(session)
 
-        # Puppet the new character
+        # Puppet the new character — broadcast handled by puppet_object override
         self.puppet_object(session, character)
-        self._broadcast_puppet_changed(session, character)
         return True, f"Now controlling {character.name}."
 
     def unpuppet_object(self, session) -> None:
