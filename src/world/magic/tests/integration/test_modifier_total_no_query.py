@@ -42,7 +42,7 @@ Query budget analysis (as of Spec D PR1):
 
   Character-side handler walks (equipped_items.iter_item_facets,
   threads.threads_of_kind, covenant_roles.currently_held) fire ZERO queries
-  after warming — these are properly handler-cached. The 3 above are genuine
+  after warming — these are properly handler-cached. The 4 above are genuine
   "always-query" sites at the service function level.
 
   Future work (PR3): caching ThreadPullEffect and GearArchetypeCompatibility
@@ -66,7 +66,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
     - covenant_role_bonus (§5.6): CharacterCovenantRole + GearArchetypeCompatibility row
 
     After calling iter_item_facets / threads_of_kind / currently_held to warm the
-    character-side handlers, exactly 3 queries remain (see module docstring).
+    character-side handlers, exactly 4 queries remain (see module docstring).
     """
 
     @classmethod
@@ -230,10 +230,10 @@ class ModifierTotalQueryBudgetTests(TestCase):
         self.assertEqual(result, 5)
 
     def test_no_handler_warm_query_count_is_higher(self) -> None:
-        """Without warming, handler queries fire on top of the baseline 3.
+        """Without warming, handler queries fire on top of the baseline 4.
 
         This is the control test: demonstrate that warmup matters. After
-        invalidating the handler caches, we expect MORE than 3 queries because
+        invalidating the handler caches, we expect MORE than 4 queries because
         the handler walks (equipped_items, threads, covenant_roles) must fetch
         from the DB on first access.
 
@@ -250,7 +250,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
         self.character_obj.threads.invalidate()
         self.character_obj.covenant_roles.invalidate()
 
-        baseline_queries = 3
+        baseline_queries = 4
 
         # Capture actual count by running without constraint
         from django.db import connection
