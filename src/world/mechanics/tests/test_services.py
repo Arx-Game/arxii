@@ -15,6 +15,7 @@ from world.mechanics.services import (
     delete_distinction_modifiers,
     get_modifier_breakdown,
     get_modifier_total,
+    passive_facet_bonuses,
     update_distinction_rank,
 )
 
@@ -351,3 +352,181 @@ class TestUpdateDistinctionRank(TestCase):
 
         # New value
         assert get_modifier_total(self.character, self.allure) == 15
+
+
+class PassiveFacetBonusesTests(TestCase):
+    """Tests for passive_facet_bonuses (Spec D §5.2)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemFacetFactory,
+            ItemInstanceFactory,
+            ItemTemplateFactory,
+            QualityTierFactory,
+        )
+        from world.magic.constants import EffectKind, TargetKind
+        from world.magic.factories import (
+            FacetFactory,
+            ResonanceFactory,
+            ThreadFactory,
+            ThreadPullEffectFactory,
+        )
+
+        # Character with both a Character typeclass and a CharacterSheet
+        cls.character_obj = CharacterFactory(db_key="FacetBonusChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character_obj, primary_persona=False)
+
+        # Resonance with a linked ModifierTarget (OneToOne target_resonance)
+        cls.resonance = ResonanceFactory()
+        cls.target = ModifierTargetFactory(name="FacetTarget", target_resonance=cls.resonance)
+
+        # Facet used as thread anchor and item facet
+        cls.facet = FacetFactory(name="TestFacet")
+
+        # Quality tiers: item quality stat_multiplier=2.0, attach quality stat_multiplier=3.0
+        cls.item_quality = QualityTierFactory(name="ItemQuality", stat_multiplier=2.0)
+        cls.attach_quality = QualityTierFactory(name="AttachQuality", stat_multiplier=3.0)
+
+        # One ItemInstance equipped on the character, with the facet attached
+        cls.item_template = ItemTemplateFactory(facet_capacity=1)
+        cls.item_instance = ItemInstanceFactory(
+            template=cls.item_template,
+            quality_tier=cls.item_quality,
+        )
+        cls.item_facet = ItemFacetFactory(
+            item_instance=cls.item_instance,
+            facet=cls.facet,
+            attachment_quality_tier=cls.attach_quality,
+        )
+        EquippedItemFactory(character=cls.character_obj, item_instance=cls.item_instance)
+
+        # FACET thread anchored to cls.facet, resonance=cls.resonance, level=2
+        cls.thread = ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            target_kind=TargetKind.FACET,
+            target_facet=cls.facet,
+            target_trait=None,
+            level=2,
+        )
+
+        # Tier-0 FLAT_BONUS ThreadPullEffect for this resonance
+        cls.effect = ThreadPullEffectFactory(
+            target_kind=TargetKind.FACET,
+            resonance=cls.resonance,
+            tier=0,
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=5,
+        )
+
+    def test_no_items_worn_returns_zero(self) -> None:
+        """Sheet with FACET thread but no matching worn items → 0."""
+        from evennia_extensions.factories import CharacterFactory
+        from world.magic.constants import TargetKind
+        from world.magic.factories import FacetFactory, ResonanceFactory, ThreadFactory
+
+        # Separate character with no equipped items
+        bare_char = CharacterFactory(db_key="BareChar")
+        bare_sheet = CharacterSheetFactory(character=bare_char, primary_persona=False)
+        bare_res = ResonanceFactory()
+        bare_facet = FacetFactory(name="BareTestFacet")
+        # ModifierTarget linked to bare_res so gating passes; items check will fail
+        bare_target = ModifierTargetFactory(name="BareTarget", target_resonance=bare_res)
+        ThreadFactory(
+            owner=bare_sheet,
+            resonance=bare_res,
+            target_kind=TargetKind.FACET,
+            target_facet=bare_facet,
+            target_trait=None,
+            level=2,
+        )
+        result = passive_facet_bonuses(bare_sheet, bare_target)
+        assert result == 0
+
+    def test_tier_0_flat_bonus_sums_contributions(self) -> None:
+        """Contribution = flat_bonus × item_quality × attach_quality × max(1, level).
+
+        Setup: flat=5, item_quality.stat_multiplier=2, attach_quality.stat_multiplier=3, level=2.
+        Expected: 5 × 2 × 3 × 2 = 60.
+        """
+        result = passive_facet_bonuses(self.sheet, self.target)
+        assert result == 60
+
+    def test_target_without_resonance_link_returns_zero(self) -> None:
+        """ModifierTarget with no target_resonance → gating blocks all effects → 0."""
+        unlinked_target = ModifierTargetFactory(name="UnlinkedTarget", target_resonance=None)
+        result = passive_facet_bonuses(self.sheet, unlinked_target)
+        assert result == 0
+
+    def test_two_items_aggregate_correctly(self) -> None:
+        """Two equipped items each contribute independently; no division.
+
+        Each item: 5 × 2 × 3 × 2 = 60. Two items → 120.
+        """
+        from evennia_extensions.factories import CharacterFactory
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemFacetFactory,
+            ItemInstanceFactory,
+            QualityTierFactory,
+        )
+        from world.magic.constants import TargetKind
+        from world.magic.factories import FacetFactory, ResonanceFactory, ThreadFactory
+
+        # Fresh character so equipped_items cache is isolated
+        two_item_char = CharacterFactory(db_key="TwoItemChar")
+        two_item_sheet = CharacterSheetFactory(character=two_item_char, primary_persona=False)
+        two_res = ResonanceFactory()
+        two_facet = FacetFactory(name="TwoItemFacet")
+        two_target = ModifierTargetFactory(name="TwoItemTarget", target_resonance=two_res)
+
+        q_item = QualityTierFactory(name="TwoItemQuality", stat_multiplier=2.0)
+        q_attach = QualityTierFactory(name="TwoAttachQuality", stat_multiplier=3.0)
+
+        # Two instances, same facet, both equipped
+        template = self.item_template
+        inst_a = ItemInstanceFactory(template=template, quality_tier=q_item)
+        inst_b = ItemInstanceFactory(template=template, quality_tier=q_item)
+        ItemFacetFactory(item_instance=inst_a, facet=two_facet, attachment_quality_tier=q_attach)
+        ItemFacetFactory(item_instance=inst_b, facet=two_facet, attachment_quality_tier=q_attach)
+        from world.items.constants import BodyRegion, EquipmentLayer
+
+        EquippedItemFactory(
+            character=two_item_char,
+            item_instance=inst_a,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        EquippedItemFactory(
+            character=two_item_char,
+            item_instance=inst_b,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.OUTER,
+        )
+
+        ThreadFactory(
+            owner=two_item_sheet,
+            resonance=two_res,
+            target_kind=TargetKind.FACET,
+            target_facet=two_facet,
+            target_trait=None,
+            level=2,
+        )
+
+        # Reuse the tier-0 FLAT_BONUS effect already in the DB for two_res
+        from world.magic.constants import EffectKind
+        from world.magic.factories import ThreadPullEffectFactory
+
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.FACET,
+            resonance=two_res,
+            tier=0,
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=5,
+        )
+
+        result = passive_facet_bonuses(two_item_sheet, two_target)
+        assert result == 120  # (5 × 2 × 3 × 2) × 2 items
