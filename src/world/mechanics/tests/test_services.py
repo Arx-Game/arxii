@@ -466,6 +466,8 @@ class PassiveFacetBonusesTests(TestCase):
 
         Each item: 5 × 2 × 3 × 2 = 60. Two items → 120.
         """
+        # Fresh character — equipped_items cached_property is unpopulated,
+        # no invalidate needed.
         from evennia_extensions.factories import CharacterFactory
         from world.items.factories import (
             EquippedItemFactory,

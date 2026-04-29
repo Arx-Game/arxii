@@ -211,6 +211,8 @@ def _facet_pull_effects_for(
     Returns:
         List of ThreadPullEffect rows (may be empty).
     """
+    # ModifierTarget owns the FK; .target_resonance_id is the FK column, so
+    # this is a direct PK compare with no extra query.
     if target.target_resonance_id is None or target.target_resonance_id != resonance.pk:
         return []
     return list(
@@ -253,6 +255,7 @@ def _facet_effect_contribution(
         if item.quality_tier is not None
         else Decimal(1)
     )
+    # Non-nullable FK — always present
     attach_mult = Decimal(str(item_facet.attachment_quality_tier.stat_multiplier))
     level_mult = max(1, thread.level)
     return int(base * item_mult * attach_mult * level_mult)
