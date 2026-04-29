@@ -45,6 +45,8 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import CheckType
+    from world.covenants.models import CovenantRole
+    from world.items.models import ItemInstance
 
 
 def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> ModifierBreakdown:
@@ -259,6 +261,63 @@ def _facet_effect_contribution(
     attach_mult = Decimal(str(item_facet.attachment_quality_tier.stat_multiplier))
     level_mult = max(1, thread.level)
     return int(base * item_mult * attach_mult * level_mult)
+
+
+# =============================================================================
+# Covenant Role Bonus (Spec D §5.6)
+# =============================================================================
+
+
+def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
+    """Sum covenant-role contributions across equipped items for a ModifierTarget (Spec D §5.6).
+
+    Per slot:
+    - Compatible gear (GearArchetypeCompatibility row exists): role_bonus + gear_stat (additive)
+    - Incompatible gear (no row): max(role_bonus, gear_stat) (highest wins)
+
+    At low character levels gear_stat dominates; incompatible gear costs nothing.
+    At high levels role_bonus dominates; incompatible gear's mundane stat is wasted.
+
+    Args:
+        sheet: CharacterSheet instance.
+        target: The ModifierTarget to aggregate bonuses for.
+
+    Returns:
+        Integer total of all covenant-role contributions across equipped items.
+    """
+    from world.covenants.services import is_gear_compatible  # noqa: PLC0415
+
+    role = sheet.character.covenant_roles.currently_held()
+    if role is None:
+        return 0
+    role_bonus = role_base_bonus_for_target(role, target, sheet.current_level)
+    total = 0
+    for equipped in sheet.character.equipped_items:
+        item = equipped.item_instance
+        gear_stat = item_mundane_stat_for_target(item, target)
+        archetype = item.template.gear_archetype
+        if is_gear_compatible(role, archetype):
+            total += role_bonus + gear_stat
+        else:
+            total += max(role_bonus, gear_stat)
+    return total
+
+
+def role_base_bonus_for_target(
+    role: CovenantRole,  # noqa: ARG001
+    target: ModifierTarget,  # noqa: ARG001
+    character_level: int,  # noqa: ARG001
+) -> int:
+    """PLACEHOLDER — returns 0 in PR1. PR3 wires authored values."""
+    return 0
+
+
+def item_mundane_stat_for_target(
+    item: ItemInstance,  # noqa: ARG001
+    target: ModifierTarget,  # noqa: ARG001
+) -> int:
+    """PLACEHOLDER — returns 0 in PR1. PR3 reads ItemCombatStat."""
+    return 0
 
 
 def create_distinction_modifiers(

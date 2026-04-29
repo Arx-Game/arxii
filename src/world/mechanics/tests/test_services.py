@@ -11,6 +11,7 @@ from world.distinctions.factories import (
 from world.mechanics.factories import ModifierTargetFactory
 from world.mechanics.models import CharacterModifier
 from world.mechanics.services import (
+    covenant_role_bonus,
     create_distinction_modifiers,
     delete_distinction_modifiers,
     get_modifier_breakdown,
@@ -532,3 +533,211 @@ class PassiveFacetBonusesTests(TestCase):
 
         result = passive_facet_bonuses(two_item_sheet, two_target)
         assert result == 120  # (5 × 2 × 3 × 2) × 2 items
+
+
+class CovenantRoleBonusTests(TestCase):
+    """Tests for covenant_role_bonus (Spec D §5.6)."""
+
+    def test_no_role_returns_zero(self) -> None:
+        """Sheet with no active CharacterCovenantRole → returns 0."""
+        from evennia_extensions.factories import CharacterFactory
+
+        char = CharacterFactory(db_key="NoRoleChar")
+        sheet = CharacterSheetFactory(character=char, primary_persona=False)
+        target = ModifierTargetFactory(name="NoRoleTarget")
+
+        result = covenant_role_bonus(sheet, target)
+        assert result == 0
+
+    def test_placeholders_return_zero_by_default(self) -> None:
+        """Without patching, sheet with active role + equipped item → 0 (PR1 behavior)."""
+        from evennia_extensions.factories import CharacterFactory
+        from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.items.constants import GearArchetype
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemInstanceFactory,
+            ItemTemplateFactory,
+        )
+
+        char = CharacterFactory(db_key="PlaceholderChar")
+        sheet = CharacterSheetFactory(character=char, primary_persona=False)
+        target = ModifierTargetFactory(name="PlaceholderTarget")
+
+        CharacterCovenantRoleFactory(character_sheet=sheet)
+        sheet.character.covenant_roles.invalidate()
+
+        template = ItemTemplateFactory(gear_archetype=GearArchetype.HEAVY_ARMOR)
+        item = ItemInstanceFactory(template=template)
+        EquippedItemFactory(character=char, item_instance=item)
+        char.equipped_items.invalidate()
+
+        result = covenant_role_bonus(sheet, target)
+        assert result == 0
+
+    def test_compatible_gear_additive(self) -> None:
+        """Patched helpers (role=10, gear=3). One compatible item → 10+3 = 13."""
+        from unittest.mock import patch
+
+        from evennia_extensions.factories import CharacterFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            GearArchetypeCompatibilityFactory,
+        )
+        from world.items.constants import GearArchetype
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemInstanceFactory,
+            ItemTemplateFactory,
+        )
+
+        char = CharacterFactory(db_key="CompatChar")
+        sheet = CharacterSheetFactory(character=char, primary_persona=False)
+        target = ModifierTargetFactory(name="CompatTarget")
+
+        assignment = CharacterCovenantRoleFactory(character_sheet=sheet)
+        sheet.character.covenant_roles.invalidate()
+
+        template = ItemTemplateFactory(gear_archetype=GearArchetype.HEAVY_ARMOR)
+        item = ItemInstanceFactory(template=template)
+        EquippedItemFactory(character=char, item_instance=item)
+        char.equipped_items.invalidate()
+
+        # Create compatibility row so is_gear_compatible returns True
+        GearArchetypeCompatibilityFactory(
+            covenant_role=assignment.covenant_role,
+            gear_archetype=GearArchetype.HEAVY_ARMOR,
+        )
+
+        with (
+            patch("world.mechanics.services.role_base_bonus_for_target", return_value=10),
+            patch("world.mechanics.services.item_mundane_stat_for_target", return_value=3),
+        ):
+            result = covenant_role_bonus(sheet, target)
+
+        assert result == 13  # 10 + 3 (additive)
+
+    def test_incompatible_gear_max(self) -> None:
+        """Patched helpers (role=10, gear=3). No compat row → max(10, 3) = 10."""
+        from unittest.mock import patch
+
+        from evennia_extensions.factories import CharacterFactory
+        from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.items.constants import GearArchetype
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemInstanceFactory,
+            ItemTemplateFactory,
+        )
+
+        char = CharacterFactory(db_key="IncompatChar")
+        sheet = CharacterSheetFactory(character=char, primary_persona=False)
+        target = ModifierTargetFactory(name="IncompatTarget")
+
+        CharacterCovenantRoleFactory(character_sheet=sheet)
+        sheet.character.covenant_roles.invalidate()
+
+        template = ItemTemplateFactory(gear_archetype=GearArchetype.MELEE_ONE_HAND)
+        item = ItemInstanceFactory(template=template)
+        EquippedItemFactory(character=char, item_instance=item)
+        char.equipped_items.invalidate()
+
+        # No GearArchetypeCompatibility row → incompatible
+
+        with (
+            patch("world.mechanics.services.role_base_bonus_for_target", return_value=10),
+            patch("world.mechanics.services.item_mundane_stat_for_target", return_value=3),
+        ):
+            result = covenant_role_bonus(sheet, target)
+
+        assert result == 10  # max(10, 3)
+
+    def test_incompatible_gear_higher_max_wins(self) -> None:
+        """Patched helpers (role=2, gear=15). No compat row → max(2, 15) = 15."""
+        from unittest.mock import patch
+
+        from evennia_extensions.factories import CharacterFactory
+        from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.items.constants import GearArchetype
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemInstanceFactory,
+            ItemTemplateFactory,
+        )
+
+        char = CharacterFactory(db_key="GearDomChar")
+        sheet = CharacterSheetFactory(character=char, primary_persona=False)
+        target = ModifierTargetFactory(name="GearDomTarget")
+
+        CharacterCovenantRoleFactory(character_sheet=sheet)
+        sheet.character.covenant_roles.invalidate()
+
+        template = ItemTemplateFactory(gear_archetype=GearArchetype.RANGED)
+        item = ItemInstanceFactory(template=template)
+        EquippedItemFactory(character=char, item_instance=item)
+        char.equipped_items.invalidate()
+
+        with (
+            patch("world.mechanics.services.role_base_bonus_for_target", return_value=2),
+            patch("world.mechanics.services.item_mundane_stat_for_target", return_value=15),
+        ):
+            result = covenant_role_bonus(sheet, target)
+
+        assert result == 15  # max(2, 15)
+
+    def test_two_items_aggregate(self) -> None:
+        """Patched helpers (role=5, gear=2). One compatible, one not → (5+2) + max(5,2) = 12."""
+        from unittest.mock import patch
+
+        from evennia_extensions.factories import CharacterFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            GearArchetypeCompatibilityFactory,
+        )
+        from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
+        from world.items.factories import (
+            EquippedItemFactory,
+            ItemInstanceFactory,
+            ItemTemplateFactory,
+        )
+
+        char = CharacterFactory(db_key="TwoItemRoleChar")
+        sheet = CharacterSheetFactory(character=char, primary_persona=False)
+        target = ModifierTargetFactory(name="TwoItemRoleTarget")
+
+        assignment = CharacterCovenantRoleFactory(character_sheet=sheet)
+        sheet.character.covenant_roles.invalidate()
+
+        # Compatible item: HEAVY_ARMOR with compat row
+        compat_template = ItemTemplateFactory(gear_archetype=GearArchetype.HEAVY_ARMOR)
+        compat_item = ItemInstanceFactory(template=compat_template)
+        EquippedItemFactory(
+            character=char,
+            item_instance=compat_item,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        GearArchetypeCompatibilityFactory(
+            covenant_role=assignment.covenant_role,
+            gear_archetype=GearArchetype.HEAVY_ARMOR,
+        )
+
+        # Incompatible item: RANGED, no compat row
+        incompat_template = ItemTemplateFactory(gear_archetype=GearArchetype.RANGED)
+        incompat_item = ItemInstanceFactory(template=incompat_template)
+        EquippedItemFactory(
+            character=char,
+            item_instance=incompat_item,
+            body_region=BodyRegion.RIGHT_HAND,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        char.equipped_items.invalidate()
+
+        with (
+            patch("world.mechanics.services.role_base_bonus_for_target", return_value=5),
+            patch("world.mechanics.services.item_mundane_stat_for_target", return_value=2),
+        ):
+            result = covenant_role_bonus(sheet, target)
+
+        assert result == 12  # (5+2) + max(5,2) = 7 + 5
