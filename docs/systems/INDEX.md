@@ -25,7 +25,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `MagicalAlterationTemplate`, `PendingAlteration`, `MagicalAlterationEvent`
   - **Spec A Thread + Currency (NEW):** `Thread` (discriminator + typed FKs:
     `target_trait` / `target_technique` / `target_object` / `target_relationship_track`
-    / `target_capstone`), `ThreadLevelUnlock`, `ThreadPullCost`,
+    / `target_capstone` / `target_facet` / `target_covenant_role` — last two added in
+    Spec D PR1), `ThreadLevelUnlock`, `ThreadPullCost`,
     `ThreadXPLockedLevel`, `ThreadPullEffect`, `ImbuingProseTemplate`,
     `Ritual`, `RitualComponentRequirement`, `ThreadWeavingUnlock`,
     `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`
@@ -50,20 +51,27 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `threads_blocked_by_cap(character_sheet)`
   - ThreadWeaving acquisition: `compute_thread_weaving_xp_cost(character_sheet, unlock) -> int`,
     `accept_thread_weaving_unlock(character_sheet, unlock, teacher=None)`
-  - Cap helpers: `compute_anchor_cap(thread) -> int`,
+  - Cap helpers: `compute_anchor_cap(thread) -> int` (Spec D PR1: FACET uses
+    `lifetime_earned // DIVISOR` capped at `path_stage × HARD_MAX_PER_STAGE`;
+    COVENANT_ROLE uses `current_level × 10`),
     `compute_path_cap(character_sheet) -> int`, `compute_effective_cap(thread) -> int`
   - VITAL_BONUS routing: `recompute_max_health_with_threads(character_sheet) -> int`,
     `apply_damage_reduction_from_threads(character, damage_amount) -> int`
+  - Outfit trickle (Spec D PR1): `outfit_daily_trickle_for_character(sheet) -> int` —
+    issues `ResonanceGrant` rows (source=OUTFIT_TRICKLE, `outfit_item_facet` typed FK)
+    for each worn item with matching facets; `resonance_daily_tick()` now calls this
+    alongside residence trickle
 - **Key Methods:** `CharacterAura.dominant_affinity`,
   `Thread.target` (populated FK), `Thread.display_name`,
   `ThreadWeavingUnlock.display_name`
-- **Enums:** `AffinityType`, `TargetKind` (Thread discriminator),
-  `EffectKind` (ThreadPullEffect), `VitalBonusTarget`,
+- **Enums:** `AffinityType`, `TargetKind` (Thread discriminator — Spec D PR1 added
+  `FACET` and `COVENANT_ROLE`), `EffectKind` (ThreadPullEffect), `VitalBonusTarget`,
   `RitualExecutionKind`, `AnimaRitualCategory`,
   `PendingAlterationStatus`, `AlterationTier`
 - **Exceptions (used by services + views):** `AnchorCapExceeded`,
   `AnchorCapNotImplemented`, `InvalidImbueAmount`, `ResonanceInsufficient`,
-  `WeavingUnlockMissing`, `XPInsufficient`, `RitualComponentError` —
+  `WeavingUnlockMissing`, `XPInsufficient`, `RitualComponentError`,
+  `NoMatchingWornFacetItemsError` (FACET thread pull with no worn matching item) —
   all with `user_message` properties for safe API responses.
 - **Integrates with:** traits (thread anchor kind TRAIT), progression (XP
   spend for ThreadWeaving and XP-lock crossings), relationships (soul tether,
@@ -329,30 +337,100 @@ Unified modifier system — categories, types, sources, and per-character modifi
 
 - **Models:** `ModifierCategory`, `ModifierTarget`, `ModifierSource`, `CharacterModifier`, `ConsequenceEffect`, `ObjectProperty`, `ChallengeTemplateProperty`
 - **Key Functions:**
-  - `get_modifier_total(sheet, modifier_target) -> int`
+  - `get_modifier_total(sheet, modifier_target) -> int` — Spec D PR1: invokes equipment
+    walk (`passive_facet_bonuses` + `covenant_role_bonus`) when category is in
+    `EQUIPMENT_RELEVANT_CATEGORIES`
   - `get_modifier_breakdown(sheet, modifier_target) -> ModifierBreakdown` — with sources, immunity, amplification
   - `create_distinction_modifiers(char_distinction) -> list[CharacterModifier]`
   - `delete_distinction_modifiers(char_distinction) -> int`
+  - `passive_facet_bonuses(sheet, target) -> int` (Spec D §5.2) — sums tier-0 FACET
+    `ThreadPullEffect` contributions per worn item; called by `get_modifier_total`
+  - `covenant_role_bonus(sheet, target) -> int` (Spec D §5.6) — per-equipped-item
+    additive (compat role) or max (incompat); PR3 wires `role_base_bonus_for_target`
+    and `item_mundane_stat_for_target` (return 0 until PR3)
   - `resolve_challenge(character, challenge_instance, approach, capability_source) -> ChallengeResolutionResult` — resolve a character's action against a challenge
   - `select_consequence(character, check_type, difficulty, consequences) -> PendingResolution` — generic: perform check + select weighted consequence (in `checks/consequence_resolution.py`)
   - `apply_resolution(pending, context) -> list[AppliedEffect]` — generic: dispatch ConsequenceEffects (in `checks/consequence_resolution.py`)
-- **Categories:** stat, magic, affinity, resonance, action_points, development, height_band, condition_control_percent, condition_intensity_percent, condition_penalty_percent, goal
-- **Pattern:** `DistinctionEffect` → `ModifierSource` → `CharacterModifier`. Future: equipment, spells follow same pattern.
+- **Categories:** stat, magic, affinity, resonance, action_points, development, height_band,
+  condition_control_percent, condition_intensity_percent, condition_penalty_percent, goal
+- **Constants (Spec D PR1):**
+  `EQUIPMENT_RELEVANT_CATEGORIES = frozenset({"stat", "magic", "affinity", "resonance"})`
+  — gates the equipment modifier walk in `get_modifier_total`
+- **Pattern:** `DistinctionEffect` → `ModifierSource` → `CharacterModifier`. Equipment
+  bonuses flow through `passive_facet_bonuses` + `covenant_role_bonus` (called inline
+  by `get_modifier_total`, not stored as `CharacterModifier` rows).
 - **Integrates with:** distinctions (modifier sources), conditions (modifier sources), traits (stat modifiers), action_points (AP modifiers), goals (goal domains)
 - **Source:** `src/world/mechanics/`
 - **Details:** [mechanics.md](mechanics.md)
 
 ### Items & Equipment
-Items, equipment, inventory, and currency. Data model foundation — service functions and frontend pending.
+Items, equipment, inventory, and currency. Spec D PR1 shipped facets, equip/unequip
+services, and equipment-modifier integration.
 
-- **Models:** `QualityTier`, `InteractionType`, `ItemTemplate`, `TemplateSlot`, `ItemInstance`, `TemplateInteraction`, `EquippedItem`, `OwnershipEvent`, `CurrencyBalance`
-- **Enums:** `BodyRegion` (17 body regions), `EquipmentLayer` (skin/under/base/over/outer/accessory), `OwnershipEventType` (created/given/stolen/transferred)
-- **API Endpoints:** `/api/items/quality-tiers/`, `/api/items/interaction-types/`, `/api/items/templates/` (all read-only)
-- **Pattern:** Templates define archetypes; instances hold per-item state. Equipment uses region + layer grid (unique constraint per character).
-- **Note:** Data model foundation only — service functions, frontend UI, and full integration pending
-- **Integrates with:** mechanics (future: equipment modifier sources), crafting (future: crafting recipes)
+- **Models:**
+  - `QualityTier`, `InteractionType`, `ItemTemplate`, `TemplateSlot`, `ItemInstance`,
+    `TemplateInteraction`, `EquippedItem`, `OwnershipEvent`, `CurrencyBalance`
+  - `ItemFacet` (Spec D §4.2) — through-model linking `ItemInstance` ↔ `Facet` with
+    `attachment_quality_tier`; unique per (item_instance, facet)
+- **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
+  default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
+- **Enums:** `BodyRegion` (17 body regions), `EquipmentLayer` (skin/under/base/over/outer/
+  accessory), `OwnershipEventType` (created/given/stolen/transferred), `GearArchetype`
+- **Handlers:**
+  - `character.equipped_items` (`CharacterEquipmentHandler`) — `iter()`,
+    `iter_item_facets()`, `item_facets_for(facet)`, `invalidate()`
+- **Key Services:**
+  - `equip_item(*, character_sheet, item_instance, body_region, equipment_layer) -> EquippedItem`
+    — raises `SlotConflict` / `SlotIncompatible`
+  - `unequip_item(*, equipped_item) -> None`
+  - `attach_facet_to_item(*, crafter, item_instance, facet, attachment_quality_tier) -> ItemFacet`
+    — raises `FacetAlreadyAttached` / `FacetCapacityExceeded`
+  - `remove_facet_from_item(*, item_facet) -> None`
+- **Exceptions:** `FacetAlreadyAttached`, `FacetCapacityExceeded`, `SlotConflict`,
+  `SlotIncompatible` — all in `world.items.exceptions`
+- **API Endpoints:**
+  - `/api/items/quality-tiers/`, `/api/items/interaction-types/`, `/api/items/templates/`
+    (read-only catalog)
+  - `GET/POST /api/items/item-facets/` — list/attach (owner-or-staff perm);
+    `DELETE /api/items/item-facets/{id}/` — remove
+  - `GET/POST /api/items/equipped-items/` — list/equip (current-tenure perm);
+    `DELETE /api/items/equipped-items/{id}/` — unequip
+- **Pattern:** Templates define archetypes; instances hold per-item state. Equipment uses
+  region + layer grid (unique constraint per character). Facets attach up to `facet_capacity`
+  per item; worn facets feed the mechanics modifier walk (see Mechanics §EQUIPMENT_RELEVANT).
+- **Integrates with:** mechanics (equipment modifier walk via `passive_facet_bonuses` +
+  `covenant_role_bonus`), magic (outfit trickle, `outfit_item_facet` ResonanceGrant FK),
+  covenants (gear archetype compatibility), crafting (future: crafting recipes)
 - **Source:** `src/world/items/`
 - **Details:** [items.md](items.md)
+
+### Covenants
+Magically-empowered group oaths with roles and gear compatibility. Spec D PR1 shipped
+the role-assignment and gear-compatibility data layer.
+
+- **Models:**
+  - `CharacterCovenantRole` — per-character record of a covenant role assignment;
+    `left_at IS NULL` = currently active (Spec D §4.4)
+  - `GearArchetypeCompatibility` — existence-only join: which `CovenantRole`s are
+    compatible with which `GearArchetype` values (read-only authored content)
+- **Handlers:**
+  - `character.covenant_roles` (`CharacterCovenantRoleHandler`) — `has_ever_held(role)`,
+    `currently_held()`, `invalidate()`
+- **Key Services:**
+  - `assign_covenant_role(sheet, role) -> CharacterCovenantRole`
+  - `end_covenant_role(role_assignment) -> None`
+  - `is_gear_compatible(role, archetype) -> bool` — existence-only join lookup
+- **Exceptions:** `CovenantRoleNeverHeldError` (raised by `weave_thread` when
+  `target_kind=COVENANT_ROLE` and character never held the role) — in
+  `world.covenants.exceptions`
+- **API Endpoints:**
+  - `GET /api/covenants/gear-compatibilities/` — read-only authored content
+  - `GET /api/covenants/character-roles/` — read-only; non-staff scoped to own
+    currently-played sheets
+- **Integrates with:** magic (COVENANT_ROLE Thread anchor cap = `current_level × 10`),
+  mechanics (`covenant_role_bonus` in modifier walk), items (`gear_archetype` on
+  `ItemTemplate`)
+- **Source:** `src/world/covenants/`
 
 ### Relationships
 Character-to-character opinions, conditions, and situational modifier gating.
