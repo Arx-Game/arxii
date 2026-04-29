@@ -1,3 +1,28 @@
+export interface PersonaPayload {
+  id: number;
+  name: string;
+  persona_type: 'primary' | 'established';
+  display_name: string;
+}
+
+export interface AvailableCharacter {
+  id: number;
+  name: string;
+  portrait_url: string | null;
+  character_type: 'PC' | 'GM' | 'STAFF';
+  roster_status: string;
+  personas: PersonaPayload[];
+  last_location: { id: number; name: string } | null;
+  currently_puppeted_in_session: boolean;
+}
+
+export interface PendingApplication {
+  id: number;
+  character_name: string;
+  status: 'pending';
+  applied_date: string;
+}
+
 export interface AccountData {
   id: number;
   username: string;
@@ -8,6 +33,8 @@ export interface AccountData {
   can_create_characters: boolean;
   is_staff: boolean;
   avatar_url?: string;
+  available_characters: AvailableCharacter[];
+  pending_applications: PendingApplication[];
 }
 
 export interface StatusData {

@@ -75,6 +75,8 @@ export function createMockAccount(options: MockAccountOptions = {}): AccountData
     email_verified: true,
     can_create_characters: canCreateCharacters,
     is_staff: isStaff || isStaffTrust(trust),
+    available_characters: [],
+    pending_applications: [],
   };
 }
 

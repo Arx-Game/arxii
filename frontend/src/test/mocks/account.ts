@@ -9,6 +9,8 @@ export const mockAccount: AccountData = {
   email_verified: true,
   can_create_characters: true,
   is_staff: false,
+  available_characters: [],
+  pending_applications: [],
 };
 
 export const mockStaffAccount: AccountData = {
@@ -20,4 +22,6 @@ export const mockStaffAccount: AccountData = {
   email_verified: true,
   can_create_characters: true,
   is_staff: true,
+  available_characters: [],
+  pending_applications: [],
 };
