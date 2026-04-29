@@ -5,7 +5,12 @@ from evennia.accounts.models import AccountDB
 from rest_framework import serializers
 
 from web.api.character_type import derive_character_type
-from world.roster.models import RosterApplication, RosterEntry
+from world.roster.models import (
+    ApplicationStatus,
+    RosterApplication,
+    RosterEntry,
+    RosterType,
+)
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 
@@ -96,6 +101,8 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
     can_create_characters = serializers.SerializerMethodField()
     is_staff = serializers.BooleanField(read_only=True)
     avatar_url = serializers.SerializerMethodField()
+    available_characters = serializers.SerializerMethodField()
+    pending_applications = serializers.SerializerMethodField()
 
     def get_email_verified(self, obj):
         """Check if user's primary email is verified."""
@@ -113,6 +120,32 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
         """Get player's avatar URL if available."""
         return obj.player_data.avatar_url
 
+    def get_available_characters(self, obj) -> list[dict]:
+        """List of ACTIVE-roster characters playable by this account."""
+        puppeted_ids = {char.id for char in obj.get_puppeted_characters()}
+        entries = (
+            RosterEntry.objects.filter(
+                tenures__player_data=obj.player_data,
+                tenures__end_date__isnull=True,
+                roster__name=RosterType.ACTIVE,
+            )
+            .distinct()
+            .select_related("roster", "character_sheet", "profile_picture")
+        )
+        return AvailableCharacterSerializer(
+            entries,
+            many=True,
+            context={"puppeted_character_ids": puppeted_ids},
+        ).data
+
+    def get_pending_applications(self, obj) -> list[dict]:
+        """Account's pending RosterApplications."""
+        apps = RosterApplication.objects.filter(
+            player_data=obj.player_data,
+            status=ApplicationStatus.PENDING,
+        ).select_related("character")
+        return PendingApplicationSerializer(apps, many=True).data
+
     class Meta:
         model = AccountDB
         fields = [
@@ -125,4 +158,6 @@ class AccountPlayerSerializer(serializers.ModelSerializer):
             "can_create_characters",
             "is_staff",
             "avatar_url",
+            "available_characters",
+            "pending_applications",
         ]
