@@ -6,13 +6,15 @@ from rest_framework.test import APIClient
 
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import (
+    EquippedItemFactory,
     InteractionTypeFactory,
     ItemFacetFactory,
     ItemInstanceFactory,
     ItemTemplateFactory,
     QualityTierFactory,
 )
-from world.items.models import ItemFacet, TemplateInteraction, TemplateSlot
+from world.items.models import EquippedItem, ItemFacet, TemplateInteraction, TemplateSlot
+from world.items.services.equip import equip_item
 from world.items.services.facets import attach_facet_to_item
 
 
@@ -308,3 +310,256 @@ class ItemFacetViewTests(ItemViewTestCase):
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         response = self.client.patch(f"/api/items/item-facets/{row.pk}/", {})
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+class EquippedItemViewTests(ItemViewTestCase):
+    """Tests for /api/items/equipped-items/ endpoint."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import AccountFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        super().setUpTestData()
+
+        # Character + sheet + active tenure for the default user.
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
+        cls.roster_entry = RosterEntryFactory(character_sheet=cls.sheet)
+        cls.player_data = PlayerDataFactory(account=cls.user)
+        cls.tenure = RosterTenureFactory(
+            roster_entry=cls.roster_entry,
+            player_data=cls.player_data,
+            end_date=None,
+        )
+
+        # A second character/sheet for non-owner tests.
+        cls.other_sheet = CharacterSheetFactory()
+        cls.other_character = cls.other_sheet.character
+        cls.other_roster_entry = RosterEntryFactory(character_sheet=cls.other_sheet)
+        cls.other_account = AccountFactory(username="equipped_view_other")
+        cls.other_player_data = PlayerDataFactory(account=cls.other_account)
+        cls.other_tenure = RosterTenureFactory(
+            roster_entry=cls.other_roster_entry,
+            player_data=cls.other_player_data,
+            end_date=None,
+        )
+
+        # Template with a slot (TORSO/BASE).
+        cls.template = ItemTemplateFactory(name="EquippedView Tunic")
+        TemplateSlot.objects.create(
+            template=cls.template,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        # Template without any slots (for SlotIncompatible tests).
+        cls.slotless_template = ItemTemplateFactory(name="EquippedView Slotless")
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.client.force_authenticate(user=self.user)
+
+    # ------------------------------------------------------------------
+    # GET list
+    # ------------------------------------------------------------------
+
+    def test_list_returns_equipped(self) -> None:
+        """GET list includes an EquippedItem created via service."""
+        instance = ItemInstanceFactory(template=self.template)
+        row = equip_item(
+            character_sheet=self.sheet,
+            item_instance=instance,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        response = self.client.get("/api/items/equipped-items/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result_ids = [r["id"] for r in response.data["results"]]
+        self.assertIn(row.pk, result_ids)
+        # Clean up so other tests don't see this row.
+        row.delete()
+
+    def test_filter_by_character(self) -> None:
+        """GET ?character=<pk> filters to only that character's equipped items."""
+        instance_a = ItemInstanceFactory(template=self.template)
+        row_a = equip_item(
+            character_sheet=self.sheet,
+            item_instance=instance_a,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        # Equip on the other character's template too (same slot).
+        other_template = ItemTemplateFactory(name="EquippedView Filter OtherTunic")
+        TemplateSlot.objects.create(
+            template=other_template,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        instance_b = ItemInstanceFactory(template=other_template)
+        row_b = equip_item(
+            character_sheet=self.other_sheet,
+            item_instance=instance_b,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        response = self.client.get(f"/api/items/equipped-items/?character={self.character.pk}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result_ids = [r["id"] for r in response.data["results"]]
+        self.assertIn(row_a.pk, result_ids)
+        self.assertNotIn(row_b.pk, result_ids)
+        row_a.delete()
+        row_b.delete()
+
+    # ------------------------------------------------------------------
+    # POST (equip)
+    # ------------------------------------------------------------------
+
+    def test_post_create_calls_service(self) -> None:
+        """POST with valid data creates an EquippedItem and returns 201."""
+        instance = ItemInstanceFactory(template=self.template)
+        response = self.client.post(
+            "/api/items/equipped-items/",
+            {
+                "character_sheet": self.sheet.pk,
+                "item_instance": instance.pk,
+                "body_region": BodyRegion.TORSO,
+                "equipment_layer": EquipmentLayer.BASE,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(
+            EquippedItem.objects.filter(
+                character=self.character,
+                item_instance=instance,
+                body_region=BodyRegion.TORSO,
+                equipment_layer=EquipmentLayer.BASE,
+            ).exists()
+        )
+        EquippedItem.objects.filter(character=self.character).delete()
+
+    def test_post_rejects_non_player(self) -> None:
+        """Non-player POST (wrong account) is rejected with 403."""
+        self.client.force_authenticate(user=self.other_account)
+        instance = ItemInstanceFactory(template=self.template)
+        response = self.client.post(
+            "/api/items/equipped-items/",
+            {
+                "character_sheet": self.sheet.pk,
+                "item_instance": instance.pk,
+                "body_region": BodyRegion.TORSO,
+                "equipment_layer": EquipmentLayer.BASE,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_post_slot_conflict_returns_400(self) -> None:
+        """POST when slot already occupied returns 400 with user_message."""
+        instance_a = ItemInstanceFactory(template=self.template)
+        equip_item(
+            character_sheet=self.sheet,
+            item_instance=instance_a,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        instance_b = ItemInstanceFactory(template=self.template)
+        response = self.client.post(
+            "/api/items/equipped-items/",
+            {
+                "character_sheet": self.sheet.pk,
+                "item_instance": instance_b.pk,
+                "body_region": BodyRegion.TORSO,
+                "equipment_layer": EquipmentLayer.BASE,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Something is already worn there.", str(response.data))
+        EquippedItem.objects.filter(character=self.character).delete()
+
+    def test_post_slot_incompatible_returns_400(self) -> None:
+        """POST with a slot the template doesn't declare returns 400."""
+        instance = ItemInstanceFactory(template=self.slotless_template)
+        response = self.client.post(
+            "/api/items/equipped-items/",
+            {
+                "character_sheet": self.sheet.pk,
+                "item_instance": instance.pk,
+                "body_region": BodyRegion.TORSO,
+                "equipment_layer": EquipmentLayer.BASE,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("That item cannot be worn there.", str(response.data))
+
+    # ------------------------------------------------------------------
+    # DELETE (unequip)
+    # ------------------------------------------------------------------
+
+    def test_delete_calls_unequip_service(self) -> None:
+        """DELETE removes the EquippedItem row and returns 204."""
+        instance = ItemInstanceFactory(template=self.template)
+        row = equip_item(
+            character_sheet=self.sheet,
+            item_instance=instance,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        response = self.client.delete(f"/api/items/equipped-items/{row.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(EquippedItem.objects.filter(pk=row.pk).exists())
+
+    def test_delete_rejects_non_player(self) -> None:
+        """Non-player DELETE is rejected with 403."""
+        instance = ItemInstanceFactory(template=self.template)
+        row = equip_item(
+            character_sheet=self.sheet,
+            item_instance=instance,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        self.client.force_authenticate(user=self.other_account)
+        response = self.client.delete(f"/api/items/equipped-items/{row.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        row.delete()
+
+    # ------------------------------------------------------------------
+    # Auth / method guards
+    # ------------------------------------------------------------------
+
+    def test_unauthenticated_denied(self) -> None:
+        """Unauthenticated requests are rejected with 403."""
+        self.client.force_authenticate(user=None)
+        response = self.client.get("/api/items/equipped-items/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_put_method_not_allowed(self) -> None:
+        """PUT and PATCH are disabled — model has no editable fields after create."""
+        instance = ItemInstanceFactory(template=self.template)
+        row = EquippedItemFactory(
+            character=self.character,
+            item_instance=instance,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        response = self.client.put(
+            f"/api/items/equipped-items/{row.pk}/",
+            {
+                "character_sheet": self.sheet.pk,
+                "item_instance": instance.pk,
+                "body_region": BodyRegion.TORSO,
+                "equipment_layer": EquipmentLayer.BASE,
+            },
+        )
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        response = self.client.patch(f"/api/items/equipped-items/{row.pk}/", {})
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        row.delete()

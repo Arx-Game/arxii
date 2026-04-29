@@ -2,15 +2,24 @@
 
 from rest_framework import serializers
 
-from world.items.exceptions import FacetAlreadyAttached, FacetCapacityExceeded
+from world.character_sheets.models import CharacterSheet
+from world.items.exceptions import (
+    FacetAlreadyAttached,
+    FacetCapacityExceeded,
+    SlotConflict,
+    SlotIncompatible,
+)
 from world.items.models import (
+    EquippedItem,
     InteractionType,
     ItemFacet,
+    ItemInstance,
     ItemTemplate,
     QualityTier,
     TemplateInteraction,
     TemplateSlot,
 )
+from world.items.services.equip import equip_item
 from world.items.services.facets import attach_facet_to_item
 
 
@@ -107,6 +116,63 @@ class ItemFacetWriteSerializer(serializers.ModelSerializer):
         except FacetAlreadyAttached as exc:
             raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
         except FacetCapacityExceeded as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+
+
+class EquippedItemReadSerializer(serializers.ModelSerializer):
+    """Read serializer for EquippedItem (GET list/detail)."""
+
+    body_region_display = serializers.CharField(source="get_body_region_display", read_only=True)
+    equipment_layer_display = serializers.CharField(
+        source="get_equipment_layer_display", read_only=True
+    )
+
+    class Meta:
+        model = EquippedItem
+        fields = [
+            "id",
+            "character",
+            "item_instance",
+            "body_region",
+            "equipment_layer",
+            "body_region_display",
+            "equipment_layer_display",
+        ]
+        read_only_fields = fields
+
+
+class _CharacterSheetRelatedField(serializers.PrimaryKeyRelatedField):
+    """PrimaryKeyRelatedField whose queryset is the full CharacterSheet table."""
+
+    def get_queryset(self):  # type: ignore[override]
+        return CharacterSheet.objects.all()
+
+
+class EquippedItemWriteSerializer(serializers.ModelSerializer):
+    """Write serializer for EquippedItem (POST create)."""
+
+    character_sheet = _CharacterSheetRelatedField(write_only=True)
+    item_instance = serializers.PrimaryKeyRelatedField(
+        queryset=ItemInstance.objects.all(),
+    )
+
+    class Meta:
+        model = EquippedItem
+        fields = ["character_sheet", "item_instance", "body_region", "equipment_layer"]
+
+    def create(self, validated_data: dict) -> EquippedItem:  # type: ignore[override]
+        """Delegate creation to the equip service."""
+        sheet = validated_data.pop("character_sheet")
+        try:
+            return equip_item(
+                character_sheet=sheet,
+                item_instance=validated_data["item_instance"],
+                body_region=validated_data["body_region"],
+                equipment_layer=validated_data["equipment_layer"],
+            )
+        except SlotConflict as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        except SlotIncompatible as exc:
             raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
 
 
