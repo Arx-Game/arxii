@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from world.covenants.models import CovenantRole, GearArchetypeCompatibility
+from world.covenants.models import CharacterCovenantRole, CovenantRole, GearArchetypeCompatibility
 
 
 class CovenantRoleSerializer(serializers.ModelSerializer):
@@ -27,6 +27,21 @@ class CovenantRoleSerializer(serializers.ModelSerializer):
             "description",
         ]
         read_only_fields = fields
+
+
+class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
+    """Read-only serializer for a character's covenant role assignment."""
+
+    covenant_role = CovenantRoleSerializer(read_only=True)
+    is_active = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CharacterCovenantRole
+        fields = ["id", "character_sheet", "covenant_role", "joined_at", "left_at", "is_active"]
+        read_only_fields = fields
+
+    def get_is_active(self, obj: CharacterCovenantRole) -> bool:
+        return obj.left_at is None
 
 
 class GearArchetypeCompatibilitySerializer(serializers.ModelSerializer):

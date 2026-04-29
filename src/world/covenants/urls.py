@@ -2,9 +2,14 @@
 
 from rest_framework.routers import DefaultRouter
 
-from world.covenants.views import GearArchetypeCompatibilityViewSet
+from world.covenants.views import CharacterCovenantRoleViewSet, GearArchetypeCompatibilityViewSet
 
 router = DefaultRouter()
+router.register(
+    "character-roles",
+    CharacterCovenantRoleViewSet,
+    basename="character-covenant-role",
+)
 router.register(
     "gear-compatibilities",
     GearArchetypeCompatibilityViewSet,
