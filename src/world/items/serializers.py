@@ -141,17 +141,13 @@ class EquippedItemReadSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class _CharacterSheetRelatedField(serializers.PrimaryKeyRelatedField):
-    """PrimaryKeyRelatedField whose queryset is the full CharacterSheet table."""
-
-    def get_queryset(self):  # type: ignore[override]
-        return CharacterSheet.objects.all()
-
-
 class EquippedItemWriteSerializer(serializers.ModelSerializer):
     """Write serializer for EquippedItem (POST create)."""
 
-    character_sheet = _CharacterSheetRelatedField(write_only=True)
+    character_sheet = serializers.PrimaryKeyRelatedField(
+        queryset=CharacterSheet.objects.all(),
+        write_only=True,
+    )
     item_instance = serializers.PrimaryKeyRelatedField(
         queryset=ItemInstance.objects.all(),
     )

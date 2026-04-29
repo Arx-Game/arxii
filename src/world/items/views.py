@@ -208,6 +208,7 @@ class EquippedItemViewSet(viewsets.ModelViewSet):
         "item_instance",
         "item_instance__template",
         "character",
+        "character__sheet_data",
     ).order_by("-pk")
 
     def get_serializer_class(self) -> type[serializers.ModelSerializer]:
