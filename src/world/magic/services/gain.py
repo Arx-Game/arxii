@@ -58,6 +58,7 @@ Accessor reference (verified 2026-04-23 during implementation):
 
 from __future__ import annotations
 
+from decimal import Decimal
 import math
 
 from django.db import transaction
@@ -501,8 +502,6 @@ def outfit_daily_trickle_for_character(sheet: CharacterSheet) -> int:
 
     Returns: count of grants issued for this sheet.
     """
-    from decimal import Decimal  # noqa: PLC0415
-
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 
