@@ -18,6 +18,7 @@ from world.distinctions.models import CharacterDistinction
 from world.magic.constants import EffectKind, TargetKind
 from world.magic.models import Resonance, TechniqueCapabilityGrant, ThreadPullEffect
 from world.mechanics.constants import (
+    EQUIPMENT_RELEVANT_CATEGORIES,
     CapabilitySourceType,
     DifficultyIndicator,
 )
@@ -137,19 +138,26 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
 
 
 def get_modifier_total(character, modifier_target: ModifierTarget) -> int:
-    """
-    Get total modifier value for a target.
+    """Get total modifier value for a target.
 
-    Convenience wrapper around get_modifier_breakdown.
+    Combines the eager modifier total (CharacterModifier rows, distinctions, etc.) with the
+    equipment walk (Spec D §5.5) for equipment-relevant categories. The equipment walk adds
+    passive_facet_bonuses and covenant_role_bonus when the target's category is in
+    EQUIPMENT_RELEVANT_CATEGORIES (stat, magic, affinity, resonance).
 
     Args:
         character: CharacterSheet instance
         modifier_target: The ModifierTarget to aggregate
 
     Returns:
-        Total modifier value (with amplification/immunity applied)
+        Total modifier value (eager + equipment contributions, amplification/immunity applied)
     """
-    return get_modifier_breakdown(character, modifier_target).total
+    eager_total = get_modifier_breakdown(character, modifier_target).total
+    equipment_total = 0
+    if modifier_target.category.name in EQUIPMENT_RELEVANT_CATEGORIES:
+        equipment_total = passive_facet_bonuses(character, modifier_target)
+        equipment_total += covenant_role_bonus(character, modifier_target)
+    return eager_total + equipment_total
 
 
 # =============================================================================

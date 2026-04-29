@@ -687,6 +687,7 @@ class CovenantRoleBonusTests(TestCase):
 
     def test_two_items_aggregate(self) -> None:
         """Patched helpers (role=5, gear=2). One compatible, one not → (5+2) + max(5,2) = 12."""
+
         from unittest.mock import patch
 
         from evennia_extensions.factories import CharacterFactory
@@ -741,3 +742,77 @@ class CovenantRoleBonusTests(TestCase):
             result = covenant_role_bonus(sheet, target)
 
         assert result == 12  # (5+2) + max(5,2) = 7 + 5
+
+
+class GetModifierTotalEquipmentWalkTests(TestCase):
+    """Tests for get_modifier_total equipment walk extension (Spec D §5.5)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.mechanics.factories import ModifierCategoryFactory
+
+        cls.character = CharacterSheetFactory()
+        # Equipment-relevant category
+        cls.eq_category = ModifierCategoryFactory(name="resonance")
+        cls.eq_target = ModifierTargetFactory(name="EqWalkTarget", category=cls.eq_category)
+        # Non-equipment category (not in EQUIPMENT_RELEVANT_CATEGORIES)
+        cls.other_category = ModifierCategoryFactory(name="goal")
+        cls.other_target = ModifierTargetFactory(name="NonEqTarget", category=cls.other_category)
+
+    def test_invokes_equipment_walk_for_relevant_categories(self) -> None:
+        """Equipment walk fires when target.category.name is in EQUIPMENT_RELEVANT_CATEGORIES.
+
+        With no eager modifiers and stubs returning 5 + 7, total == 12.
+        """
+        from unittest.mock import patch
+
+        with (
+            patch("world.mechanics.services.passive_facet_bonuses", return_value=5) as mock_pfb,
+            patch("world.mechanics.services.covenant_role_bonus", return_value=7) as mock_crb,
+        ):
+            result = get_modifier_total(self.character, self.eq_target)
+
+        assert result == 12
+        mock_pfb.assert_called_once_with(self.character, self.eq_target)
+        mock_crb.assert_called_once_with(self.character, self.eq_target)
+
+    def test_skips_walk_for_non_equipment_categories(self) -> None:
+        """Equipment walk does NOT fire when target.category.name is not in the set."""
+        from unittest.mock import patch
+
+        with (
+            patch("world.mechanics.services.passive_facet_bonuses", return_value=5) as mock_pfb,
+            patch("world.mechanics.services.covenant_role_bonus", return_value=7) as mock_crb,
+        ):
+            result = get_modifier_total(self.character, self.other_target)
+
+        # No eager modifiers → 0; walk skipped → still 0
+        assert result == 0
+        mock_pfb.assert_not_called()
+        mock_crb.assert_not_called()
+
+    def test_combines_eager_and_equipment_totals(self) -> None:
+        """Eager CharacterModifier (10) + patched facet (3) + patched role (4) = 17."""
+        from unittest.mock import patch
+
+        from world.distinctions.factories import (
+            CharacterDistinctionFactory,
+            DistinctionEffectFactory,
+            DistinctionFactory,
+        )
+        from world.mechanics.services import create_distinction_modifiers
+
+        distinction = DistinctionFactory(name="EqWalkDistinction")
+        DistinctionEffectFactory(distinction=distinction, target=self.eq_target, value_per_rank=10)
+        cd = CharacterDistinctionFactory(
+            character=self.character.character, distinction=distinction, rank=1
+        )
+        create_distinction_modifiers(cd)
+
+        with (
+            patch("world.mechanics.services.passive_facet_bonuses", return_value=3),
+            patch("world.mechanics.services.covenant_role_bonus", return_value=4),
+        ):
+            result = get_modifier_total(self.character, self.eq_target)
+
+        assert result == 17  # 10 (eager) + 3 (facet) + 4 (role)
