@@ -328,3 +328,13 @@ class EquipTests(TestCase):
         with patch.object(ItemState, "can_equip", return_value=False):
             with self.assertRaises(PermissionDenied):
                 equip(self.character_state, self.item_state)
+
+    def test_equip_same_item_already_equipped_is_idempotent(self) -> None:
+        """Re-equipping an already-equipped item is a silent no-op (UI double-click safe)."""
+        equip(self.character_state, self.item_state)
+        # Second equip should not raise and should leave exactly one row.
+        equip(self.character_state, self.item_state)
+        self.assertEqual(
+            EquippedItem.objects.filter(character=self.character, item_instance=self.item).count(),
+            1,
+        )

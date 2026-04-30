@@ -101,7 +101,10 @@ def equip(character: CharacterState, item: ItemState) -> None:
             body_region=slot.body_region,
             equipment_layer=slot.equipment_layer,
         ).first()
-        if existing is not None and existing.item_instance != item.instance:
+        if existing is not None:
+            if existing.item_instance == item.instance:
+                # Already equipped here — re-equip is a silent no-op.
+                continue
             unequip_item(equipped_item=existing)
         equip_item(
             character_sheet=sheet,
