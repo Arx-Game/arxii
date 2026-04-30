@@ -211,6 +211,62 @@ def _build_combat_result(
     )
 
 
+def resolve_combat_technique(  # noqa: PLR0913 - many args needed for resolver construction
+    *,
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    target: CombatOpponent,
+    fatigue_category: str,
+    offense_check_type: CheckType,
+    offense_check_fn: PerformCheckFn | None,
+) -> CombatTechniqueResult:
+    """Route a damage-path combat technique through use_technique.
+
+    Builds a CombatAttackResolver and passes it to use_technique as
+    resolve_fn. The magic envelope handles anima, soulfray, mishap,
+    PRE_CAST/CAST events, reactive scar interception, and corruption.
+    The resolver does the offense check + damage application inside
+    that envelope.
+
+    Soulfray warning is auto-confirmed at round resolution time —
+    frontend handles preview before submission.
+
+    AFFECTED-per-target events are deferred (CombatOpponent is not an
+    ObjectDB; targets=[] until the opponent <-> ObjectDB relationship
+    is decided).
+
+    Other pull effect kinds are deferred:
+    - INTENSITY_BUMP: needs runtime stats to accept combat context
+    - CAPABILITY_GRANT: tied to non-attack pipeline
+    - NARRATIVE_ONLY: cosmetic surfacing
+    - VITAL_BONUS: already wired through recompute_max_health_with_threads
+    """
+    from world.magic.services import use_technique  # noqa: PLC0415
+
+    encounter = participant.encounter
+    pull_flat_bonus = _sum_active_flat_bonuses(participant, encounter)
+
+    resolver = CombatAttackResolver(
+        participant=participant,
+        action=action,
+        target=target,
+        pull_flat_bonus=pull_flat_bonus,
+        fatigue_category=fatigue_category,
+        offense_check_type=offense_check_type,
+        offense_check_fn=offense_check_fn,
+    )
+
+    technique_use_result = use_technique(
+        character=participant.character_sheet.character,
+        technique=action.focused_action,
+        resolve_fn=resolver,
+        confirm_soulfray_risk=True,
+        targets=[],
+    )
+
+    return _build_combat_result(technique_use_result, resolver)
+
+
 # ---------------------------------------------------------------------------
 # ActionCategory -> FatigueCategory mapping (same values)
 # ---------------------------------------------------------------------------
