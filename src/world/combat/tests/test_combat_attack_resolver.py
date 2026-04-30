@@ -72,3 +72,20 @@ class CombatAttackResolverRollCheckTests(TestCase):
         kwargs = mock_perform.call_args.kwargs
         # extra_modifiers contains pull bonus + effort modifier (MEDIUM = 0)
         self.assertGreaterEqual(kwargs["extra_modifiers"], 3)
+
+
+class CombatAttackResolverScaleTests(TestCase):
+    def test_full_success_returns_full_damage(self) -> None:
+        resolver = _build_resolver(base_power=20)
+        check = MagicMock(success_level=2)
+        self.assertEqual(resolver._scale(check), 20)
+
+    def test_partial_success_returns_half_damage(self) -> None:
+        resolver = _build_resolver(base_power=20)
+        check = MagicMock(success_level=1)
+        self.assertEqual(resolver._scale(check), 10)
+
+    def test_miss_returns_zero_damage(self) -> None:
+        resolver = _build_resolver(base_power=20)
+        check = MagicMock(success_level=0)
+        self.assertEqual(resolver._scale(check), 0)

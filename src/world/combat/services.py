@@ -131,6 +131,17 @@ class CombatAttackResolver:
             fatigue_penalty=penalty,
         )
 
+    def _scale(self, check_result: CheckResult) -> int:
+        """Scale base_power by success_level: full / half / zero."""
+        base_power = self.action.focused_action.effect_type.base_power
+        if base_power is None:
+            return 0
+        if check_result.success_level >= OFFENSE_FULL_THRESHOLD:
+            return base_power
+        if check_result.success_level >= OFFENSE_HALF_THRESHOLD:
+            return base_power // 2
+        return 0
+
 
 # ---------------------------------------------------------------------------
 # ActionCategory -> FatigueCategory mapping (same values)
