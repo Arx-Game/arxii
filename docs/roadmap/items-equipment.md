@@ -78,8 +78,10 @@ attach_facet_to_item / remove_facet_from_item — narrow, atomic, no permission 
 while `flows/service_functions/inventory.py` owns the player-facing actions (pick_up,
 drop, give, equip, unequip, put_in, take_out — permission checks via `ItemState`,
 `OwnershipEvent` rows on transfers, auto-unequip on drop/give, slot-conflict auto-swap on
-equip). Both telnet commands and the WebSocket `inventory_action` inputfunc call the same
-flows-layer functions, so the two transports cannot diverge.
+equip). The 7 service functions back the `Action` classes in `actions/definitions/items.py`
+(plus the refactored Get/Drop/Give in `actions/definitions/movement.py`); telnet commands
+and the existing web action dispatcher both call `action.run()`, so the two transports
+cannot diverge.
 
 What landed:
 
@@ -94,9 +96,14 @@ What landed:
   `transaction.atomic`, all delegating row-level mutations to `world.items.services`
 - **`OwnershipEvent(GIVEN)`** rows written on `give` so the ownership ledger tracks
   player-to-player transfers (crafting will write its own `OwnershipEvent.CREATED`)
-- **Telnet inventory commands** wired to the new service functions
-- **WebSocket `inventory_action` inputfunc** so the React frontend can drive the same
-  mutations without going through telnet command parsing
+- **Action classes** for equip/unequip/put_in/take_out in `actions/definitions/items.py`,
+  plus the existing Get/Drop/Give in `actions/definitions/movement.py` refactored to use
+  the new service functions (so they now track ownership and write OwnershipEvent rows)
+- **Telnet commands** `wear`, `remove`, `put`, `withdraw` in
+  `commands/evennia_overrides/items.py`, registered in `CharacterCmdSet`. The existing
+  `get`/`drop`/`give` commands continue to work unchanged
+- **No new web inputfunc was needed** — the existing action dispatcher exposes any
+  registered action to the React frontend, so the new actions are immediately available
 
 ## What's Needed for MVP
 - ~~Equipment slot / body part model~~ — **done** (TemplateSlot with BodyRegion + EquipmentLayer)
@@ -104,12 +111,12 @@ What landed:
 - ~~Item type system~~ — **partially done** (ItemTemplate with container/stacking/consumable flags; no weapon/armor stat blocks yet)
 - ~~Item quality~~ — **done** (QualityTier lookup table with stat multipliers)
 - ~~Item facet system~~ — **done** (ItemFacet through-model, attach/remove services, modifier integration — Spec D PR1)
-- ~~Inventory service functions~~ — **done** (pick_up, drop, give, equip, unequip, put_in, take_out — both telnet and WebSocket transports)
+- ~~Inventory service functions~~ — **done** (pick_up, drop, give, equip, unequip, put_in, take_out — backing 7 Action classes; telnet commands and existing web action dispatcher both supported)
 - Item stats model — combat properties, condition/durability (not started)
 - Visible equipment display — what others see when looking at a character; perception-layer integration into `look` output (not started)
 - Item interaction service functions — using items, consuming charges (not started)
 - Crafting integration — `OwnershipEvent.CREATED` rows written when crafted items are produced (not started; tracked under crafting roadmap)
-- Equipment UI — inventory management, equipping/unequipping, viewing item details; React components consuming the new `inventory_action` inputfunc (not started)
+- Equipment UI — inventory management, equipping/unequipping, viewing item details; React components dispatching the registered equip/unequip/put_in/take_out actions through the existing action dispatcher (not started)
 
 ## Magic Integration (Spec A)
 - **Items as thread anchors** — The new `Thread` model supports an `ITEM` anchor kind
