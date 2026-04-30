@@ -1,6 +1,7 @@
 """Tests for `_typeclass_path_in_registry` helper.
 
-The helper drives ITEM-kind Thread validation. It must:
+A general utility for checking whether an Evennia typeclass path (or any of
+its MRO ancestors) is present in a registry. It must:
 - Return True on exact path match.
 - Return True when any base class in the MRO is in the registry
   (so registering a base typeclass admits all subclasses).

@@ -387,6 +387,53 @@ Not in Spec C (authored separately): Spec B (Relational Resilience, Soul Tether,
 Ritual Capstones), Spec D (Ritual-grade items + ITEM / ROOM anchor cap formulas —
 Imbuing against ITEM/ROOM currently raises `AnchorCapNotImplemented`).
 
+**Resonance Pivot — Spec D PR1 (Fashion Facets + Covenant Gear) — DONE:**
+
+**Spec:** `docs/superpowers/specs/2026-04-26-items-fashion-mantles-spec-d-design.md`
+**Branch:** `spec-d-items-fashion-mantles-design`
+
+PR1 of four: wires the facet + covenant data layer into the resonance/modifier pipeline.
+No crafting UI yet; the outfit trickle is now live.
+
+What was built:
+
+- **`FACET` and `COVENANT_ROLE` `TargetKind` values** added to `world.magic.constants.TargetKind`.
+  `Thread.target_facet` (FK to `magic.Facet`) and `Thread.target_covenant_role` (FK to
+  `covenants.CovenantRole`) typed FKs added to the discriminator family.
+- **FACET anchor cap formula** (Spec D §6.1) in `compute_anchor_cap`:
+  `min(lifetime_earned // ANCHOR_CAP_FACET_DIVISOR, path_stage × ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE)`
+  — earned resonance gates how much anchor capacity a facet thread can accrue, with a
+  per-path-stage hard ceiling.
+- **COVENANT_ROLE anchor cap** (Spec D §6.3): `current_level × 10` — scales with
+  the character's current covenant level.
+- **Worn-items gate on `spend_resonance_for_pull`** — FACET-kind threads check
+  `character.equipped_items.item_facets_for(facet)` before allowing a pull; raises
+  `NoMatchingWornFacetItemsError` (with `user_message`) if no matching worn item exists.
+- **FACET-aware scaling in `resolve_pull_effects`** — `ThreadPullEffect` tier-0 passive
+  rows for FACET threads scale by worn-item attachment quality tier.
+- **`outfit_daily_trickle_for_character(sheet) -> int`** — iterates worn items, matches
+  `ItemFacet.facet` against character's `CharacterResonance` rows, and issues typed
+  `ResonanceGrant` rows (`source=OUTFIT_TRICKLE`, `outfit_item_facet` FK). Returns count
+  of grants issued.
+- **`outfit_item_facet` typed FK on `ResonanceGrant`** — Spec C shipped the model with an
+  OUTFIT_TRICKLE source; PR1 activates it by populating the FK. The discriminator pattern
+  enforces exactly one typed FK is non-null per source kind.
+- **`resonance_daily_tick()` wired** — now calls `outfit_daily_trickle_for_character`
+  alongside the existing residence trickle, completing the Spec C deferred outfit stub.
+- **Typed exceptions:**
+  - `NoMatchingWornFacetItemsError` (`world.magic.exceptions`) — raised by
+    `spend_resonance_for_pull` for FACET threads with no worn matching item
+  - `CovenantRoleNeverHeldError` (`world.covenants.exceptions`) — raised by
+    `weave_thread` when `target_kind=COVENANT_ROLE` and character has never held the role
+
+Decoupling: Depends on Items (EquippedItem + ItemFacet models) and Covenants
+(CharacterCovenantRole). Does NOT depend on Spec B. Shipped on the
+`spec-d-items-fashion-mantles-design` branch.
+
+Deferred to PR2–PR4: crafting UI for attaching facets, ITEM/ROOM anchor cap formulas
+(still raises `AnchorCapNotImplemented`), mantle system (covenant group attunement),
+fashion combat integration.
+
 **Scope #5.5 — Reactive Foundations (DONE — branch `design/reactive-layer`):**
 
 Shipped the reactive layer wedge: events are now emitted at damage, attack,
@@ -711,7 +758,18 @@ share the protagonism-lock aggregator but design independently.
 - **Budget-based technique builder** — replaces restriction-based power for post-CG technique creation
 - Thread system UI integration (models exist, needs frontend)
 - Aura farming mechanics — how perception at scenes feeds into resonance strength
-- Fashion-to-resonance integration (requires Items & Crafting systems)
+- Fashion-to-resonance integration (requires Items & Crafting systems —
+  designed in `docs/superpowers/specs/2026-04-26-items-fashion-mantles-spec-d-design.md`,
+  implementation phased across 4 PRs)
+- **Style / motif / aura magical-significance axis (post-Spec D, dedicated future spec).**
+  Resonance + facets cover *what* a character's magic is about; they don't cover
+  *vibe* — "seductive," "beguiling," "menacing," "regal," "feral." Existing
+  `Motif`/`MotifResonance`/`MotifResonanceAssociation` models in
+  `world/magic/models/motifs.py` are scaffolding without a coherent system.
+  Spec D's Section 13.3 has the design sub-questions that the future spec needs
+  to answer. **Important design intent:** flamboyant fashion (battle lingerie
+  on a Sword warrior, paladin getup, evil-sorceress robes) should be a *strong*
+  mechanical axis — this is intentional, not flavor garnish.
 - Magical discovery through gameplay — unpredictable moments during RP where magic manifests
 - Thread strengthening through relationship development
 - Tradition gameplay (beyond CG templates — what traditions do during play)

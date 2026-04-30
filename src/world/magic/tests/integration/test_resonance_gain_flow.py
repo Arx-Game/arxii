@@ -227,11 +227,13 @@ class ResonanceGainPipelineTests(TestCase):
         cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=r_matched)
         self.assertEqual(cr.balance, cfg.residence_daily_trickle_per_resonance)
 
-    def test_outfit_stub_runs_cleanly(self) -> None:
-        """Daily tick runs without errors; outfit portion always returns 0.
+    def test_outfit_tick_no_items_returns_zero(self) -> None:
+        """Daily tick runs without errors; outfit grants is 0 when no items
+        equipped.
 
         Pipeline: resonance_daily_tick → assert outfit_grants_issued == 0.
-        The outfit surface is intentionally stubbed (Items app not yet shipped).
+        The outfit pipeline is live as of Spec D §5.1; this test verifies the
+        empty-state baseline.
         """
         from world.magic.services.gain import resonance_daily_tick
 

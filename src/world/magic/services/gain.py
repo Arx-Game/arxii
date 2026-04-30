@@ -58,6 +58,7 @@ Accessor reference (verified 2026-04-23 during implementation):
 
 from __future__ import annotations
 
+from decimal import Decimal
 import math
 
 from django.db import transaction
@@ -485,36 +486,86 @@ def residence_trickle_tick() -> ResonanceDailyTickSummary:
     )
 
 
-def get_outfit_resonance_contributions(
-    sheet: CharacterSheet,  # noqa: ARG001
-) -> list[tuple[Resonance, int]]:
-    """Stub — empty until Items app ships (Spec C §5.4).
+def outfit_daily_trickle_for_character(sheet: CharacterSheet) -> int:
+    """Daily resonance trickle from worn facet-bearing items (Spec D §5.1).
 
-    Placeholder argument preserves the future signature when the Items app ships.
-    When Items lands, returns a list of (resonance, per_item_count) tuples
-    aggregated across the character's worn item instances.
+    For each equipped item:
+      For each ItemFacet on the item:
+        If the wearer has a Thread on that Facet:
+          grant_resonance(
+            sheet,
+            thread.resonance,
+            amount=trickle_for(item, item_facet, thread),
+            source=GainSource.OUTFIT_TRICKLE,
+            outfit_item_facet=item_facet,
+          )
+
+    Returns: count of grants issued for this sheet.
     """
-    return []
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    config = get_resonance_gain_config()
+    base = config.outfit_daily_trickle_per_item_resonance
+    grants_issued = 0
+
+    for item_facet in sheet.character.equipped_items.iter_item_facets():
+        item = item_facet.item_instance
+        item_q_mult = item.quality_tier.stat_multiplier if item.quality_tier else Decimal(1)
+        attach_q_mult = item_facet.attachment_quality_tier.stat_multiplier
+
+        thread = sheet.character.threads.thread_for_facet(item_facet.facet)
+        if thread is None:
+            continue
+
+        level_factor = max(1, thread.level)  # level 0 = ×1, level 5 = ×5
+        amount = int(base * item_q_mult * attach_q_mult * level_factor)
+        if amount <= 0:
+            continue
+
+        grant_resonance(
+            sheet,
+            thread.resonance,
+            amount=amount,
+            source=GainSource.OUTFIT_TRICKLE,
+            outfit_item_facet=item_facet,
+        )
+        grants_issued += 1
+
+    return grants_issued
 
 
 def outfit_trickle_tick() -> int:
-    """Outfit trickle tick. Currently a no-op (Items app not yet present).
+    """Outfit trickle tick (Spec D §5.1).
 
-    Returns: count of grants issued (always 0 at launch).
+    Iterates all CharacterSheets, skipping protagonism-locked sheets. For each
+    sheet, delegates to outfit_daily_trickle_for_character per-sheet in its own
+    atomic block so a single failure does not poison the whole tick.
+
+    Returns: total count of grants issued across all sheets.
     """
-    # When Items lands, iterate sheets × worn items × resonance tags, grant
-    # per-item. Guarded so nothing is granted with OUTFIT_ITEM source value
-    # before the source_item_instance FK exists in the schema.
-    return 0
+    total_grants = 0
+
+    for sheet in CharacterSheet.objects.all().iterator():
+        if sheet.is_protagonism_locked:
+            continue
+        try:
+            with transaction.atomic():
+                total_grants += outfit_daily_trickle_for_character(sheet)
+        except Exception:  # noqa: BLE001, S112 — log + continue to avoid tick poison
+            # TODO: structured log via Evennia logger.
+            continue
+
+    return total_grants
 
 
 def resonance_daily_tick() -> ResonanceDailyTickSummary:
     """Master daily tick (Spec C §5). Runs residence + outfit trickle."""
     residence_summary = residence_trickle_tick()
-    _outfit_grants = outfit_trickle_tick()  # always 0 at launch
+    outfit_grants = outfit_trickle_tick()
     return ResonanceDailyTickSummary(
         residence_grants_issued=residence_summary.residence_grants_issued,
-        outfit_grants_issued=0,
+        outfit_grants_issued=outfit_grants,
         sheets_processed=residence_summary.sheets_processed,
     )
 

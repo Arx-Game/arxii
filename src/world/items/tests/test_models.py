@@ -3,7 +3,7 @@
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
+from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype, OwnershipEventType
 from world.items.factories import (
     InteractionTypeFactory,
     ItemInstanceFactory,
@@ -336,6 +336,27 @@ class OwnershipEventTests(TestCase):
         self.assertEqual(events[1].event_type, OwnershipEventType.CREATED)
 
 
+class ItemTemplateGearFieldsTests(TestCase):
+    def test_facet_capacity_defaults_to_zero(self) -> None:
+        from world.items.factories import ItemTemplateFactory
+
+        tpl = ItemTemplateFactory()
+        self.assertEqual(tpl.facet_capacity, 0)
+
+    def test_gear_archetype_defaults_to_other(self) -> None:
+        from world.items.factories import ItemTemplateFactory
+
+        tpl = ItemTemplateFactory()
+        self.assertEqual(tpl.gear_archetype, GearArchetype.OTHER)
+
+    def test_facet_capacity_and_archetype_settable(self) -> None:
+        from world.items.factories import ItemTemplateFactory
+
+        tpl = ItemTemplateFactory(facet_capacity=3, gear_archetype=GearArchetype.HEAVY_ARMOR)
+        self.assertEqual(tpl.facet_capacity, 3)
+        self.assertEqual(tpl.gear_archetype, GearArchetype.HEAVY_ARMOR)
+
+
 class CurrencyBalanceTests(TestCase):
     """Tests for CurrencyBalance model."""
 
@@ -355,3 +376,45 @@ class CurrencyBalanceTests(TestCase):
         CurrencyBalance.objects.create(character=self.character)
         with self.assertRaises(IntegrityError):
             CurrencyBalance.objects.create(character=self.character)
+
+
+class ItemFacetTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from world.items.factories import (
+            ItemInstanceFactory,
+            ItemTemplateFactory,
+            QualityTierFactory,
+        )
+        from world.magic.factories import FacetFactory
+
+        cls.template = ItemTemplateFactory(facet_capacity=2)
+        cls.instance = ItemInstanceFactory(template=cls.template)
+        cls.facet = FacetFactory(name="Spider")
+        cls.attach_q = QualityTierFactory(name="Fine attach")
+
+    def test_create_item_facet(self):
+        from world.items.models import ItemFacet
+
+        row = ItemFacet.objects.create(
+            item_instance=self.instance,
+            facet=self.facet,
+            attachment_quality_tier=self.attach_q,
+        )
+        self.assertEqual(row.item_instance, self.instance)
+        self.assertEqual(row.facet, self.facet)
+
+    def test_unique_per_instance(self):
+        from world.items.models import ItemFacet
+
+        ItemFacet.objects.create(
+            item_instance=self.instance,
+            facet=self.facet,
+            attachment_quality_tier=self.attach_q,
+        )
+        with self.assertRaises(IntegrityError):
+            ItemFacet.objects.create(
+                item_instance=self.instance,
+                facet=self.facet,
+                attachment_quality_tier=self.attach_q,
+            )

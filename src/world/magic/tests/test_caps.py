@@ -28,11 +28,6 @@ class AnchorCapTests(TestCase):
         thread = ThreadFactory(as_capstone_thread=True, _path_stage=2)
         self.assertEqual(compute_anchor_cap(thread), 20)
 
-    def test_item_raises_not_implemented(self) -> None:
-        thread = ThreadFactory(as_item_thread=True)
-        with self.assertRaises(AnchorCapNotImplemented):
-            compute_anchor_cap(thread)
-
     def test_room_raises_not_implemented(self) -> None:
         thread = ThreadFactory(as_room_thread=True)
         with self.assertRaises(AnchorCapNotImplemented):

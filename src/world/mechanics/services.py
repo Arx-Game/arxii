@@ -6,6 +6,7 @@ Service layer for modifier aggregation, calculation, and management.
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -14,8 +15,10 @@ from django.db.models import Prefetch
 from world.checks.services import chart_has_success_outcomes, preview_check_difficulty
 from world.conditions.services import get_all_capability_values
 from world.distinctions.models import CharacterDistinction
-from world.magic.models import Resonance, TechniqueCapabilityGrant
+from world.magic.constants import EffectKind, TargetKind
+from world.magic.models import Resonance, TechniqueCapabilityGrant, ThreadPullEffect
 from world.mechanics.constants import (
+    EQUIPMENT_RELEVANT_CATEGORIES,
     CapabilitySourceType,
     DifficultyIndicator,
 )
@@ -43,6 +46,8 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import CheckType
+    from world.covenants.models import CovenantRole
+    from world.items.models import ItemInstance
 
 
 def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> ModifierBreakdown:
@@ -133,19 +138,206 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
 
 
 def get_modifier_total(character, modifier_target: ModifierTarget) -> int:
-    """
-    Get total modifier value for a target.
+    """Get total modifier value for a target.
 
-    Convenience wrapper around get_modifier_breakdown.
+    Combines the eager modifier total (CharacterModifier rows, distinctions, etc.) with the
+    equipment walk (Spec D §5.5) for equipment-relevant categories. The equipment walk adds
+    passive_facet_bonuses and covenant_role_bonus when the target's category is in
+    EQUIPMENT_RELEVANT_CATEGORIES (stat, magic, affinity, resonance).
 
     Args:
         character: CharacterSheet instance
         modifier_target: The ModifierTarget to aggregate
 
     Returns:
-        Total modifier value (with amplification/immunity applied)
+        Total modifier value (eager + equipment contributions, amplification/immunity applied)
     """
-    return get_modifier_breakdown(character, modifier_target).total
+    eager_total = get_modifier_breakdown(character, modifier_target).total
+    equipment_total = 0
+    if modifier_target.category.name in EQUIPMENT_RELEVANT_CATEGORIES:
+        equipment_total = passive_facet_bonuses(character, modifier_target)
+        equipment_total += covenant_role_bonus(character, modifier_target)
+    return eager_total + equipment_total
+
+
+# =============================================================================
+# Passive Facet Bonuses (Spec D §5.2)
+# =============================================================================
+
+
+def passive_facet_bonuses(sheet: object, target: ModifierTarget) -> int:
+    """Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).
+
+    For each FACET-kind thread the character owns, look up equipped items that
+    carry the thread's anchor facet. For each matching (item, item_facet) pair,
+    compute the contribution from every tier-0 FLAT_BONUS ThreadPullEffect that
+    maps this thread's resonance to ``target`` via the ModifierTarget.target_resonance
+    OneToOne. Sum all contributions and return the integer total.
+
+    This composes with the existing ``passive_vital_bonuses`` pattern — same shape,
+    keyed by ModifierTarget instead of vital_target. See CharacterThreadHandler in
+    world/magic/handlers.py for the parallel.
+
+    Args:
+        sheet: CharacterSheet instance (the character whose threads and items are used).
+        target: The ModifierTarget to aggregate bonuses for.
+
+    Returns:
+        Integer total of all passive facet contributions for ``target``.
+    """
+    char = sheet.character
+    # Defensive: raw ObjectDB fixtures (without _typeclass_path) don't have
+    # Character typeclass handlers. Skip the walk gracefully.
+    if not hasattr(char, "threads") or not hasattr(char, "equipped_items"):
+        return 0
+    total = 0
+    for thread in char.threads.threads_of_kind(TargetKind.FACET):
+        matching = char.equipped_items.item_facets_for(thread.target_facet)
+        if not matching:
+            continue
+        effects = _facet_pull_effects_for(thread.resonance, target, tier=0)
+        for effect in effects:
+            for item_facet in matching:
+                total += _facet_effect_contribution(
+                    effect=effect,
+                    thread=thread,
+                    item=item_facet.item_instance,
+                    item_facet=item_facet,
+                )
+    return total
+
+
+def _facet_pull_effects_for(
+    resonance: object,
+    target: ModifierTarget,
+    tier: int,
+) -> list[ThreadPullEffect]:
+    """Return tier-0 FACET FLAT_BONUS effects gated by resonance→target link.
+
+    Gate: a ModifierTarget contributes only when its ``target_resonance`` OneToOne
+    points to ``resonance``. Targets in the stat/magic/affinity categories lack
+    this link and return [] — PR3 may add other linking mechanisms.
+
+    Args:
+        resonance: The Resonance instance from the thread.
+        target: The ModifierTarget being aggregated.
+        tier: Effect tier to filter on (0 = passive always-on).
+
+    Returns:
+        List of ThreadPullEffect rows (may be empty).
+    """
+    # ModifierTarget owns the FK; .target_resonance_id is the FK column, so
+    # this is a direct PK compare with no extra query.
+    if target.target_resonance_id is None or target.target_resonance_id != resonance.pk:
+        return []
+    return list(
+        ThreadPullEffect.objects.filter(
+            target_kind=TargetKind.FACET,
+            resonance=resonance,
+            tier=tier,
+            effect_kind=EffectKind.FLAT_BONUS,
+        ).exclude(flat_bonus_amount__isnull=True)
+    )
+
+
+def _facet_effect_contribution(
+    *,
+    effect: ThreadPullEffect,
+    thread: object,
+    item: object,
+    item_facet: object,
+) -> int:
+    """Compute one (item, facet) contribution to a tier-0 FLAT_BONUS effect.
+
+    Formula: base × item_quality_multiplier × attachment_quality_multiplier × max(1, level).
+
+    Decimal(str(...)) coercion guards against float stat_multiplier values from
+    factories or .values() queries; DecimalField normally returns Decimal, but
+    this is belt-and-suspenders consistent with the resonance.py FACET branch.
+
+    Args:
+        effect: The ThreadPullEffect row (FLAT_BONUS, tier 0).
+        thread: The Thread instance (supplies ``level``).
+        item: The ItemInstance (supplies ``quality_tier.stat_multiplier``).
+        item_facet: The ItemFacet (supplies ``attachment_quality_tier.stat_multiplier``).
+
+    Returns:
+        Integer contribution (truncated via int()).
+    """
+    base = effect.flat_bonus_amount or 0
+    item_mult = (
+        Decimal(str(item.quality_tier.stat_multiplier))
+        if item.quality_tier is not None
+        else Decimal(1)
+    )
+    # Non-nullable FK — always present
+    attach_mult = Decimal(str(item_facet.attachment_quality_tier.stat_multiplier))
+    level_mult = max(1, thread.level)
+    return int(base * item_mult * attach_mult * level_mult)
+
+
+# =============================================================================
+# Covenant Role Bonus (Spec D §5.6)
+# =============================================================================
+
+
+def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
+    """Sum covenant-role contributions across equipped items for a ModifierTarget (Spec D §5.6).
+
+    Per slot:
+    - Compatible gear (GearArchetypeCompatibility row exists): role_bonus + gear_stat (additive)
+    - Incompatible gear (no row): max(role_bonus, gear_stat) (highest wins)
+
+    At low character levels gear_stat dominates; incompatible gear costs nothing.
+    At high levels role_bonus dominates; incompatible gear's mundane stat is wasted.
+
+    Args:
+        sheet: CharacterSheet instance.
+        target: The ModifierTarget to aggregate bonuses for.
+
+    Returns:
+        Integer total of all covenant-role contributions across equipped items.
+    """
+    from world.covenants.services import (  # noqa: PLC0415 — PR3 wires covenant callbacks
+        is_gear_compatible,  # defer import to break future cycle
+    )
+
+    char = sheet.character
+    # Defensive: raw ObjectDB fixtures (without _typeclass_path) don't have
+    # Character typeclass handlers. Skip the walk gracefully.
+    if not hasattr(char, "covenant_roles") or not hasattr(char, "equipped_items"):
+        return 0
+    role = char.covenant_roles.currently_held()
+    if role is None:
+        return 0
+    role_bonus = role_base_bonus_for_target(role, target, sheet.current_level)
+    total = 0
+    for equipped in char.equipped_items:
+        item = equipped.item_instance
+        gear_stat = item_mundane_stat_for_target(item, target)
+        archetype = item.template.gear_archetype
+        if is_gear_compatible(role, archetype):
+            total += role_bonus + gear_stat
+        else:
+            total += max(role_bonus, gear_stat)
+    return total
+
+
+def role_base_bonus_for_target(
+    role: CovenantRole,  # noqa: ARG001 — placeholder; PR3 wires real computation
+    target: ModifierTarget,  # noqa: ARG001 — placeholder; PR3 wires real computation
+    character_level: int,  # noqa: ARG001 — placeholder; PR3 wires real computation
+) -> int:
+    """PLACEHOLDER — returns 0 in PR1. PR3 wires authored values."""
+    return 0
+
+
+def item_mundane_stat_for_target(
+    item: ItemInstance,  # noqa: ARG001 — placeholder; PR3 wires real computation
+    target: ModifierTarget,  # noqa: ARG001 — placeholder; PR3 wires real computation
+) -> int:
+    """PLACEHOLDER — returns 0 in PR1. PR3 reads ItemCombatStat."""
+    return 0
 
 
 def create_distinction_modifiers(

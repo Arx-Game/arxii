@@ -50,7 +50,7 @@ from world.magic.services.techniques import (
     use_technique,
 )
 from world.magic.services.threads import (
-    _typeclass_path_in_registry,  # external: world.magic.models.threads + weaving
+    _typeclass_path_in_registry,  # external: test_typeclass_registry uses this helper
     accept_thread_weaving_unlock,
     apply_damage_reduction_from_threads,
     compute_anchor_cap,

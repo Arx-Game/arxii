@@ -18,6 +18,7 @@ from world.magic.factories import (
     CharacterResonanceFactory,
     CharacterSheetFactory,
     CharacterThreadWeavingUnlockFactory,
+    FacetFactory,
     ResonanceFactory,
     ThreadFactory,
     ThreadLevelUnlockFactory,
@@ -393,6 +394,61 @@ class WeaveThreadTests(TestCase):
         with self.assertRaises(WeavingUnlockMissing):
             weave_thread(sheet, TargetKind.TRAIT, trait, res)
 
+    def test_weave_thread_facet(self) -> None:
+        """Character with global FACET weaving unlock can create a FACET thread."""
+        from world.magic.models import ThreadWeavingUnlock
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        facet = FacetFactory()
+        # Single global unlock for FACET kind — all FK args NULL, bypasses full_clean()
+        unlock = ThreadWeavingUnlock.objects.create(target_kind=TargetKind.FACET, xp_cost=100)
+        CharacterThreadWeavingUnlockFactory(character=sheet, unlock=unlock, xp_spent=100)
+
+        thread = weave_thread(sheet, TargetKind.FACET, facet, res, name="Silk Thread")
+        self.assertEqual(thread.owner, sheet)
+        self.assertEqual(thread.resonance, res)
+        self.assertEqual(thread.target_kind, TargetKind.FACET)
+        self.assertEqual(thread.target_facet, facet)
+        self.assertEqual(thread.name, "Silk Thread")
+        self.assertEqual(thread.level, 0)
+
+    def test_weave_thread_facet_no_unlock_raises(self) -> None:
+        """Character without FACET weaving unlock → raises WeavingUnlockMissing."""
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        facet = FacetFactory()
+        with self.assertRaises(WeavingUnlockMissing):
+            weave_thread(sheet, TargetKind.FACET, facet, res)
+
+    def test_weave_thread_covenant_role_never_held_raises(self) -> None:
+        """Character who has never held the role → raises CovenantRoleNeverHeldError."""
+        from world.covenants.exceptions import CovenantRoleNeverHeldError
+        from world.covenants.factories import CovenantRoleFactory
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        role = CovenantRoleFactory()
+        with self.assertRaises(CovenantRoleNeverHeldError):
+            weave_thread(sheet, TargetKind.COVENANT_ROLE, role, res)
+
+    def test_weave_thread_covenant_role_with_historical_role_succeeds(self) -> None:
+        """Character who has held the role (active or ended) can weave a COVENANT_ROLE thread."""
+        from world.covenants.factories import CharacterCovenantRoleFactory, CovenantRoleFactory
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        role = CovenantRoleFactory()
+        CharacterCovenantRoleFactory(character_sheet=sheet, covenant_role=role)
+
+        thread = weave_thread(sheet, TargetKind.COVENANT_ROLE, role, res, name="Vanguard Thread")
+        self.assertEqual(thread.owner, sheet)
+        self.assertEqual(thread.resonance, res)
+        self.assertEqual(thread.target_kind, TargetKind.COVENANT_ROLE)
+        self.assertEqual(thread.target_covenant_role, role)
+        self.assertEqual(thread.name, "Vanguard Thread")
+        self.assertEqual(thread.level, 0)
+
 
 class UpdateThreadNarrativeTests(TestCase):
     def test_update_name_and_description(self) -> None:
@@ -504,6 +560,102 @@ class ThreadsBlockedByCapTests(TestCase):
         thread = ThreadFactory(owner=sheet, resonance=res, level=5, _trait_value=100)
         result = threads_blocked_by_cap(sheet)
         self.assertNotIn(thread, result)
+
+
+# =============================================================================
+# compute_anchor_cap — FACET + COVENANT_ROLE arms (Spec D Task 25)
+# =============================================================================
+
+
+class ComputeAnchorCapFacetCovenantTests(TestCase):
+    """Tests for FACET and COVENANT_ROLE arms of compute_anchor_cap."""
+
+    def test_facet_cap_uses_lifetime_divided(self) -> None:
+        """lifetime_earned=100, divisor=50 → cap = 2. Path stage defaults to 1, hard_max=20."""
+        from world.magic.models import CharacterResonance, Thread
+        from world.magic.services.threads import compute_anchor_cap
+
+        sheet = CharacterSheetFactory(_path_stage=1)
+        res = ResonanceFactory()
+        facet = FacetFactory()
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=res,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            name="Test Facet Thread",
+        )
+        CharacterResonance.objects.create(
+            character_sheet=sheet, resonance=res, balance=0, lifetime_earned=100
+        )
+        # 100 // 50 = 2, hard_max = 1 * 20 = 20, so result = min(2, 20) = 2
+        self.assertEqual(compute_anchor_cap(thread), 2)
+
+    def test_facet_cap_capped_by_path_stage_x_20(self) -> None:
+        """lifetime_earned=10000 would give 200 from division; path_stage=1 hard_max=20 wins."""
+        from world.magic.models import CharacterResonance, Thread
+        from world.magic.services.threads import compute_anchor_cap
+
+        sheet = CharacterSheetFactory(_path_stage=1)
+        res = ResonanceFactory()
+        facet = FacetFactory()
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=res,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            name="Test Facet Thread High",
+        )
+        CharacterResonance.objects.create(
+            character_sheet=sheet, resonance=res, balance=0, lifetime_earned=10000
+        )
+        # 10000 // 50 = 200, hard_max = 1 * 20 = 20, so result = min(200, 20) = 20
+        self.assertEqual(compute_anchor_cap(thread), 20)
+
+    def test_covenant_role_cap_equals_level_x_10(self) -> None:
+        """current_level=3 → cap = 30."""
+        from world.classes.factories import CharacterClassLevelFactory
+        from world.covenants.factories import CovenantRoleFactory
+        from world.magic.models import Thread
+        from world.magic.services.threads import compute_anchor_cap
+
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        role = CovenantRoleFactory()
+        # Set current_level=3 via a class assignment
+        CharacterClassLevelFactory(character=sheet.character, level=3)
+        sheet.invalidate_class_level_cache()
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=res,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            name="Test Covenant Role Thread",
+        )
+        self.assertEqual(compute_anchor_cap(thread), 30)
+
+    def test_item_kind_dropped_from_target_kind(self) -> None:
+        """ITEM is gone from TargetKind; ROOM still raises AnchorCapNotImplemented."""
+        from world.magic.exceptions import AnchorCapNotImplemented
+        from world.magic.models import Thread
+        from world.magic.services.threads import compute_anchor_cap
+
+        self.assertNotIn("ITEM", TargetKind.values)
+
+        # Any ObjectDB works as target_object; AnchorCapNotImplemented fires
+        # before the target is inspected.
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        obj = sheet.character
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=res,
+            target_kind=TargetKind.ROOM,
+            target_object=obj,
+            name="Test Room Thread",
+        )
+        with self.assertRaises(AnchorCapNotImplemented):
+            compute_anchor_cap(thread)
 
 
 # =============================================================================

@@ -77,10 +77,11 @@ MIN_ALTERATION_DESCRIPTION_LENGTH = 40
 class TargetKind(models.TextChoices):
     TRAIT = "TRAIT", "Trait"
     TECHNIQUE = "TECHNIQUE", "Technique"
-    ITEM = "ITEM", "Item"
+    FACET = "FACET", "Facet"
     ROOM = "ROOM", "Room"
     RELATIONSHIP_TRACK = "RELATIONSHIP_TRACK", "Relationship Track"
     RELATIONSHIP_CAPSTONE = "RELATIONSHIP_CAPSTONE", "Relationship Capstone"
+    COVENANT_ROLE = "COVENANT_ROLE", "Covenant Role"
 
 
 class EffectKind(models.TextChoices):
@@ -106,18 +107,6 @@ class SoulTetherRole(models.TextChoices):
     SINEATER = "SINEATER", "Sineater Side"
 
 
-# Item-typeclass paths registered for ThreadWeavingUnlock(target_kind=ITEM).
-# Spec §2.1 line 332 — validated at save(); subclasses inherit eligibility
-# via typeclass-inheritance walk in eligibility checks.
-THREADWEAVING_ITEM_TYPECLASSES: tuple[str, ...] = (
-    # Populate during Phase 5 / authoring pass — start with whatever item
-    # typeclasses already exist in src/typeclasses/items.py and weapons.py.
-    # For Phase 1, the registry exists with at minimum the base paths Spec §6.4
-    # references: swords, daggers, polearms, holy symbols, tomes, etc.
-    # The exact list is content; the registry shape is the contract.
-)
-
-
 class GainSource(models.TextChoices):
     """Discriminator for ResonanceGrant audit rows. Identifies which
     typed source FK is populated on a given grant row."""
@@ -125,5 +114,21 @@ class GainSource(models.TextChoices):
     POSE_ENDORSEMENT = "POSE_ENDORSEMENT", "Pose endorsement"
     SCENE_ENTRY = "SCENE_ENTRY", "Scene entry endorsement"
     ROOM_RESIDENCE = "ROOM_RESIDENCE", "Room residence trickle"
-    OUTFIT_ITEM = "OUTFIT_ITEM", "Outfit item trickle (reserved — stubbed)"
+    OUTFIT_TRICKLE = "OUTFIT_TRICKLE", "Outfit trickle"
     STAFF_GRANT = "STAFF_GRANT", "Staff grant"
+
+
+# FACET anchor cap tuning (Spec D §6.1)
+ANCHOR_CAP_FACET_DIVISOR: int = 50
+"""Divisor applied to lifetime_earned(resonance) to derive FACET anchor cap.
+
+500 lifetime resonance → cap level 10. Tunable via playtest.
+"""
+
+ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE: int = 20
+"""Hard ceiling on FACET anchor cap, scaled by character path stage.
+
+path_stage × 20 = ceiling. At stage 1, hard max = 20 (well above path cap of 10).
+At stage 6, hard max = 120 (well above path cap of 60). Prevents runaway at the
+extreme tail of lifetime accumulation.
+"""

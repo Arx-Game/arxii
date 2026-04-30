@@ -2,7 +2,7 @@
 
 Covers:
 - Cap & lock math (Spec A §2.4): anchor/path/effective cap helpers
-- Typeclass-registry lookup for ITEM-kind anchors
+- Typeclass-registry lookup utility (_typeclass_path_in_registry)
 - Weaving unlock eligibility + thread creation + narrative update
 - Thread imbue/XP-lock-boundary queries for the Imbuing ritual UI
 - ThreadWeaving teaching-offer acceptance (Spec A §6.1, §6.2)
@@ -16,7 +16,12 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.constants import TargetKind, VitalBonusTarget
+from world.magic.constants import (
+    ANCHOR_CAP_FACET_DIVISOR,
+    ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE,
+    TargetKind,
+    VitalBonusTarget,
+)
 from world.magic.exceptions import (
     AnchorCapExceeded,
     AnchorCapNotImplemented,
@@ -47,10 +52,8 @@ if TYPE_CHECKING:
 def _typeclass_path_in_registry(path: str, registry: tuple[str, ...]) -> bool:
     """Return True iff ``path`` (or any of its MRO base paths) is in ``registry``.
 
-    Honors typeclass inheritance per Spec A §2.1 lines 138-141: a registered
-    base typeclass admits all subclasses (e.g. registering Sword admits
-    LongSword). Used by Thread.clean() to validate ITEM-kind targets against
-    THREADWEAVING_ITEM_TYPECLASSES.
+    Honors typeclass inheritance: a registered base typeclass admits all
+    subclasses (e.g. registering Sword admits LongSword).
 
     Empty registry rejects everything — callers explicitly want "no items
     registered" to mean "no items eligible".
@@ -91,7 +94,7 @@ def _current_path_stage(character_sheet: CharacterSheet) -> int:
     return int(history.path.stage)
 
 
-def compute_anchor_cap(thread: Thread) -> int:
+def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911 — one arm per TargetKind, hard to collapse further
     """Return the anchor-side cap for this thread (Spec A §2.4).
 
     Rules per target_kind:
@@ -105,7 +108,10 @@ def compute_anchor_cap(thread: Thread) -> int:
       defaults to 0 if no tier reached.
     - RELATIONSHIP_CAPSTONE: character's current path stage × 10 (same
       formula as path cap; capstone threads are gated by the mage's growth).
-    - ITEM / ROOM: not yet implemented — raises AnchorCapNotImplemented.
+    - FACET: min(lifetime_earned // ANCHOR_CAP_FACET_DIVISOR,
+      path_stage × ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE).
+    - COVENANT_ROLE: current_level × 10.
+    - ROOM: not yet implemented — raises AnchorCapNotImplemented.
     """
     match thread.target_kind:
         case TargetKind.TRAIT:
@@ -127,7 +133,13 @@ def compute_anchor_cap(thread: Thread) -> int:
         case TargetKind.RELATIONSHIP_CAPSTONE:
             stage = _current_path_stage(thread.owner)
             return int(stage * 10)
-        case TargetKind.ITEM | TargetKind.ROOM:
+        case TargetKind.FACET:
+            lifetime = thread.owner.character.resonances.lifetime(thread.resonance)
+            hard_max = _current_path_stage(thread.owner) * ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE
+            return min(lifetime // ANCHOR_CAP_FACET_DIVISOR, hard_max)
+        case TargetKind.COVENANT_ROLE:
+            return thread.owner.current_level * 10
+        case TargetKind.ROOM:
             msg = thread.target_kind + " anchor cap awaits Spec D."
             raise AnchorCapNotImplemented(msg)
     return 0
@@ -240,10 +252,6 @@ def _has_weaving_unlock(
             return base.filter(unlock__unlock_trait=target).exists()
         case TargetKind.TECHNIQUE:
             return base.filter(unlock__unlock_gift=target.gift).exists()  # type: ignore[union-attr]
-        case TargetKind.ITEM:
-            return base.filter(
-                unlock__unlock_item_typeclass_path=target.db_typeclass_path,  # type: ignore[union-attr]
-            ).exists()
         case TargetKind.ROOM:
             # Match if the unlock's room property is one of the anchor's properties.
             return base.filter(
@@ -253,6 +261,9 @@ def _has_weaving_unlock(
             # Both RelationshipTrackProgress and RelationshipCapstone expose .track
             track = target.track  # type: ignore[union-attr]  # noqa: GETATTR_LITERAL — both relationship anchor types expose .track
             return base.filter(unlock__unlock_track=track).exists()
+        case TargetKind.FACET:
+            # Single global FACET unlock — no per-facet variant; any FACET-kind unlock suffices.
+            return base.filter(unlock__target_kind=TargetKind.FACET).exists()
     return False
 
 
@@ -275,7 +286,7 @@ def weave_thread(  # noqa: PLR0913 — kw-only args; target+resonance+kind are d
         character_sheet: Character creating the thread.
         target_kind: TargetKind discriminator string.
         target: The anchor object (Trait, Technique, ObjectDB, RelationshipTrackProgress,
-                RelationshipCapstone).
+                RelationshipCapstone, Facet, CovenantRole).
         resonance: Resonance this thread channels.
         name: Optional narrative name.
         description: Optional narrative description.
@@ -285,20 +296,28 @@ def weave_thread(  # noqa: PLR0913 — kw-only args; target+resonance+kind are d
 
     Raises:
         WeavingUnlockMissing: If the character lacks the required weaving unlock.
+        CovenantRoleNeverHeldError: If target_kind is COVENANT_ROLE and the
+                character has never held the role.
     """
     from world.magic.constants import TargetKind  # noqa: PLC0415
 
-    if not _has_weaving_unlock(character_sheet, target_kind, target):
+    if target_kind == TargetKind.COVENANT_ROLE:
+        from world.covenants.exceptions import CovenantRoleNeverHeldError  # noqa: PLC0415
+
+        if not character_sheet.character.covenant_roles.has_ever_held(target):
+            raise CovenantRoleNeverHeldError
+    elif not _has_weaving_unlock(character_sheet, target_kind, target):
         msg = "Character lacks the required ThreadWeavingUnlock for this anchor."
         raise WeavingUnlockMissing(msg)
 
     field_map: dict[str, str] = {
         TargetKind.TRAIT: "target_trait",
         TargetKind.TECHNIQUE: "target_technique",
-        TargetKind.ITEM: "target_object",
         TargetKind.ROOM: "target_object",
         TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
         TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
+        TargetKind.FACET: "target_facet",
+        TargetKind.COVENANT_ROLE: "target_covenant_role",
     }
     kwargs: dict[str, object] = {
         "owner": character_sheet,

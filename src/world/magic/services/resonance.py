@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -10,6 +11,7 @@ from world.magic.constants import EffectKind, GainSource, TargetKind
 from world.magic.exceptions import (
     AnchorCapExceeded,
     InvalidImbueAmount,
+    NoMatchingWornFacetItemsError,
     ResonanceInsufficient,
 )
 from world.magic.models import (
@@ -41,6 +43,7 @@ if TYPE_CHECKING:
 
     from world.character_sheets.models import CharacterSheet
     from world.combat.models import CombatEncounter
+    from world.items.models import ItemFacet
     from world.magic.models import (
         PoseEndorsement,
         Resonance as ResonanceModel,
@@ -65,11 +68,11 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
     scene_entry_endorsement: SceneEntryEndorsement | None = None,
     room_aura_profile: RoomAuraProfile | None = None,
     staff_account: AccountDB | None = None,
+    outfit_item_facet: ItemFacet | None = None,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
 
-    Validates that the typed source kwarg matches the discriminator. Raises
-    ValueError for OUTFIT_ITEM source — that typed FK ships with the Items system.
+    Validates that the typed source kwarg matches the discriminator.
 
     Args:
         character_sheet: The character receiving resonance.
@@ -80,13 +83,14 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
         scene_entry_endorsement: Required for SCENE_ENTRY source.
         room_aura_profile: Required for ROOM_RESIDENCE source.
         staff_account: Optional for STAFF_GRANT source (nullable by design).
+        outfit_item_facet: Required for OUTFIT_TRICKLE source.
 
     Returns:
         The updated CharacterResonance instance.
 
     Raises:
         InvalidImbueAmount: If amount <= 0.
-        ValueError: If source/kwarg shape is invalid or source is not yet supported.
+        ValueError: If source/kwarg shape is invalid.
     """
     if amount <= 0:
         msg = "Resonance grant amount must be positive."
@@ -97,6 +101,7 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
         room_aura_profile=room_aura_profile,
         pose_endorsement=pose_endorsement,
         scene_entry_endorsement=scene_entry_endorsement,
+        outfit_item_facet=outfit_item_facet,
     )
 
     cr, _ = CharacterResonance.objects.get_or_create(
@@ -117,6 +122,7 @@ def grant_resonance(  # noqa: PLR0913 — typed-FK kwargs are inherently numerou
         source_staff_account=staff_account,
         source_pose_endorsement=pose_endorsement,
         source_scene_entry_endorsement=scene_entry_endorsement,
+        outfit_item_facet=outfit_item_facet,
     )
     return cr
 
@@ -127,6 +133,7 @@ def _validate_grant_source_shape(
     room_aura_profile: RoomAuraProfile | None,
     pose_endorsement: PoseEndorsement | None = None,
     scene_entry_endorsement: SceneEntryEndorsement | None = None,
+    outfit_item_facet: ItemFacet | None = None,
 ) -> None:
     """Raise ValueError if the source discriminator doesn't match the supplied kwargs."""
     if source == GainSource.POSE_ENDORSEMENT:
@@ -139,9 +146,11 @@ def _validate_grant_source_shape(
             msg = "SCENE_ENTRY source requires scene_entry_endorsement= kwarg."
             raise ValueError(msg)
         return
-    if source == GainSource.OUTFIT_ITEM:
-        msg = "OUTFIT_ITEM source is reserved; item_instance FK ships with Items system."
-        raise ValueError(msg)
+    if source == GainSource.OUTFIT_TRICKLE:
+        if outfit_item_facet is None:
+            msg = "OUTFIT_TRICKLE source requires outfit_item_facet= kwarg."
+            raise ValueError(msg)
+        return
     if source == GainSource.ROOM_RESIDENCE:
         if room_aura_profile is None:
             msg = "ROOM_RESIDENCE source requires room_aura_profile= kwarg."
@@ -256,8 +265,17 @@ def spend_resonance_for_imbuing(  # noqa: C901 — sequential guards + greedy lo
 
 # Always-in-action target kinds: relationship anchors are the player's assertion
 # of involvement; the system never validates them per Spec §5.4 line 1450.
+# FACET threads are gated by the worn-items check (NoMatchingWornFacetItemsError),
+# not by anchor-involvement — so they bypass the generic in-action check here.
+# COVENANT_ROLE threads similarly have their own gate (role held at action time);
+# they bypass anchor-involvement in the same way.
 _ALWAYS_IN_ACTION_KINDS = frozenset(
-    {TargetKind.RELATIONSHIP_TRACK, TargetKind.RELATIONSHIP_CAPSTONE}
+    {
+        TargetKind.RELATIONSHIP_TRACK,
+        TargetKind.RELATIONSHIP_CAPSTONE,
+        TargetKind.FACET,
+        TargetKind.COVENANT_ROLE,
+    }
 )
 
 
@@ -274,7 +292,7 @@ def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:
         return thread.target_trait_id in ctx.involved_traits
     if thread.target_kind == TargetKind.TECHNIQUE:
         return thread.target_technique_id in ctx.involved_techniques
-    if thread.target_kind in (TargetKind.ITEM, TargetKind.ROOM):
+    if thread.target_kind == TargetKind.ROOM:
         return thread.target_object_id in ctx.involved_objects
     return False
 
@@ -311,9 +329,35 @@ def resolve_pull_effects(
                     EffectKind.CAPABILITY_GRANT,
                     EffectKind.NARRATIVE_ONLY,
                 )
-                base_scaled: int | None = (
-                    (authored or 0) * multiplier if has_numeric_payload else None
-                )
+
+                if t.target_kind == TargetKind.FACET:
+                    matching = t.owner.character.equipped_items.item_facets_for(t.target_facet)
+                    if not matching:
+                        # No worn items bearing this facet — skip this effect row.
+                        # Other threads in the outer loop still resolve normally.
+                        continue
+                    # Decimal(str(...)) coerces in case a multiplier surfaces as
+                    # float (e.g. via factory or .values() in test fixtures);
+                    # DecimalField normally returns Decimal but this is
+                    # belt-and-suspenders.
+                    items_aggregate = [
+                        (
+                            Decimal(str(item_facet.item_instance.quality_tier.stat_multiplier))
+                            if item_facet.item_instance.quality_tier is not None
+                            else Decimal(1)
+                        )
+                        * Decimal(str(item_facet.attachment_quality_tier.stat_multiplier))
+                        for item_facet in matching
+                    ]
+                    worn_aggregate = sum(items_aggregate, Decimal(0))
+                    base_scaled = (
+                        int((authored or 0) * multiplier * worn_aggregate)
+                        if has_numeric_payload
+                        else None
+                    )
+                else:
+                    base_scaled = (authored or 0) * multiplier if has_numeric_payload else None
+
                 inactive = row.effect_kind == EffectKind.VITAL_BONUS and not in_combat
                 resolved.append(
                     ResolvedPullEffect(
@@ -469,7 +513,7 @@ def _persist_combat_pull(  # noqa: PLR0913
 
 
 @transaction.atomic
-def spend_resonance_for_pull(  # noqa: C901 — sequential guards + combat/ephemeral branches, complexity is inherent
+def spend_resonance_for_pull(  # noqa: C901, PLR0912 — sequential guards + combat/ephemeral branches, complexity is inherent
     character_sheet: CharacterSheet,
     resonance: ResonanceModel,
     tier: int,
@@ -522,6 +566,9 @@ def spend_resonance_for_pull(  # noqa: C901 — sequential guards + combat/ephem
         if not _anchor_in_action(t, action_context):
             msg = "Thread anchor is not involved in this action."
             raise InvalidImbueAmount(msg)
+        if t.target_kind == TargetKind.FACET:
+            if not character_sheet.character.equipped_items.item_facets_for(t.target_facet):
+                raise NoMatchingWornFacetItemsError
 
     # select_for_update on cr + anima so concurrent ephemeral pulls cannot
     # both pass the balance check against an unlocked read and double-spend.

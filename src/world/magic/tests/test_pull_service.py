@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.db import IntegrityError
 from django.test import TestCase
 
@@ -11,21 +13,31 @@ from world.combat.factories import (
     CombatParticipantFactory,
 )
 from world.combat.models import CombatPull
+from world.covenants.factories import CovenantRoleFactory
+from world.items.constants import BodyRegion
+from world.items.factories import (
+    EquippedItemFactory,
+    ItemFacetFactory,
+    ItemInstanceFactory,
+    QualityTierFactory,
+)
 from world.magic.constants import EffectKind, TargetKind, VitalBonusTarget
 from world.magic.exceptions import (
     InvalidImbueAmount,
+    NoMatchingWornFacetItemsError,
     ResonanceInsufficient,
 )
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterResonanceFactory,
+    FacetFactory,
     ResonanceFactory,
     ThreadFactory,
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
 )
-from world.magic.models import CharacterAnima, CharacterResonance
-from world.magic.services import _anchor_in_action, spend_resonance_for_pull
+from world.magic.models import CharacterAnima, CharacterResonance, Thread
+from world.magic.services import _anchor_in_action, resolve_pull_effects, spend_resonance_for_pull
 from world.magic.types import PullActionContext
 
 
@@ -446,3 +458,237 @@ class AnchorInActionTests(TestCase):
         ctx_out = PullActionContext(involved_techniques=())
         self.assertTrue(_anchor_in_action(thread, ctx_in))
         self.assertFalse(_anchor_in_action(thread, ctx_out))
+
+    def test_facet_always_in_action(self) -> None:
+        """FACET threads bypass the anchor-involvement check (gated by worn-items instead)."""
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+        )
+        ctx = PullActionContext(combat_encounter=None, participant=None)
+        self.assertTrue(_anchor_in_action(thread, ctx))
+
+    def test_covenant_role_always_in_action(self) -> None:
+        """COVENANT_ROLE threads bypass the anchor-involvement check."""
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        thread = Thread.objects.create(
+            owner=sheet,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+        )
+        ctx = PullActionContext(combat_encounter=None, participant=None)
+        self.assertTrue(_anchor_in_action(thread, ctx))
+
+
+class FacetWornItemsGateTests(TestCase):
+    """Tests for the FACET worn-items gate in spend_resonance_for_pull."""
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        CharacterAnimaFactory(character=self.sheet.character, current=10, maximum=10)
+        self.resonance = ResonanceFactory()
+        CharacterResonanceFactory(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+            balance=10,
+            lifetime_earned=10,
+        )
+        ThreadPullCostFactory(tier=1, resonance_cost=2, anima_per_thread=1)
+        self.facet = FacetFactory()
+
+    def _make_facet_thread(self) -> Thread:
+        return Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.FACET,
+            target_facet=self.facet,
+            level=0,
+            developed_points=0,
+        )
+
+    def test_facet_pull_without_matching_worn_item_raises(self) -> None:
+        """FACET pull with no items wearing the facet raises NoMatchingWornFacetItemsError
+        and leaves the resonance balance untouched."""
+        thread = self._make_facet_thread()
+        ctx = PullActionContext(combat_encounter=None, participant=None)
+
+        pre_balance = 10
+        with self.assertRaises(NoMatchingWornFacetItemsError):
+            spend_resonance_for_pull(
+                self.sheet,
+                self.resonance,
+                tier=1,
+                threads=[thread],
+                action_context=ctx,
+            )
+
+        cr = CharacterResonance.objects.get(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+        )
+        self.assertEqual(cr.balance, pre_balance)
+
+    def test_facet_pull_with_matching_worn_item_succeeds(self) -> None:
+        """FACET pull with a worn item bearing the facet debits resonance and returns a result."""
+        thread = self._make_facet_thread()
+        # Equip an item with an ItemFacet for self.facet on self.sheet.character.
+        instance = ItemInstanceFactory()
+        ItemFacetFactory(item_instance=instance, facet=self.facet)
+        EquippedItemFactory(character=self.sheet.character, item_instance=instance)
+        # Invalidate so the handler re-loads from DB (setUp may have touched the cache).
+        self.sheet.character.equipped_items.invalidate()
+
+        # Add a NARRATIVE_ONLY tier-1 effect so resolve_pull_effects doesn't fail.
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.FACET,
+            resonance=self.resonance,
+            tier=1,
+            as_narrative_only=True,
+        )
+
+        ctx = PullActionContext(combat_encounter=None, participant=None)
+        result = spend_resonance_for_pull(
+            self.sheet,
+            self.resonance,
+            tier=1,
+            threads=[thread],
+            action_context=ctx,
+        )
+
+        self.assertEqual(result.resonance_spent, 2)
+        cr = CharacterResonance.objects.get(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+        )
+        self.assertEqual(cr.balance, 8)  # 10 − 2
+
+
+class ResolvePullEffectsFacetScalingTests(TestCase):
+    """Tests for FACET-aware worn-aggregate scaling in resolve_pull_effects."""
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.resonance = ResonanceFactory()
+        self.facet = FacetFactory()
+
+    def _equip_item_with_quality(
+        self,
+        item_quality_multiplier: str,
+        attachment_quality_multiplier: str,
+        body_region: str = BodyRegion.TORSO,
+    ) -> None:
+        """Create an equipped ItemInstance with an ItemFacet for self.facet."""
+        item_quality = QualityTierFactory(
+            stat_multiplier=Decimal(item_quality_multiplier),
+        )
+        attachment_quality = QualityTierFactory(
+            stat_multiplier=Decimal(attachment_quality_multiplier),
+        )
+        instance = ItemInstanceFactory(quality_tier=item_quality)
+        ItemFacetFactory(
+            item_instance=instance,
+            facet=self.facet,
+            attachment_quality_tier=attachment_quality,
+        )
+        EquippedItemFactory(
+            character=self.sheet.character,
+            item_instance=instance,
+            body_region=body_region,
+        )
+
+    def test_facet_pull_effect_scales_by_worn_aggregate(self) -> None:
+        """FACET thread scales scaled_value by sum of (item_quality × attachment_quality)
+        across all equipped items bearing the facet.
+
+        Two items:
+          item 1: item_quality=1.0, attachment_quality=2.0 → contributes 2.0
+          item 2: item_quality=1.0, attachment_quality=3.0 → contributes 3.0
+          worn_aggregate = 5.0
+
+        Thread level=2 → multiplier = max(1, 2//10) = 1.
+        authored_value = 10.
+        Expected scaled_value = 10 × 1 × 5 = 50.
+        """
+        self._equip_item_with_quality("1.00", "2.00", body_region=BodyRegion.TORSO)
+        self._equip_item_with_quality("1.00", "3.00", body_region=BodyRegion.HEAD)
+        # Force fresh handler load — character factory may have primed
+        # equipped_items before items were attached.
+        self.sheet.character.equipped_items.invalidate()
+
+        thread = Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.FACET,
+            target_facet=self.facet,
+            level=2,
+            developed_points=0,
+        )
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.FACET,
+            resonance=self.resonance,
+            tier=0,
+            min_thread_level=0,
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=10,
+        )
+
+        resolved = resolve_pull_effects([thread], tier=0, in_combat=False)
+
+        self.assertEqual(len(resolved), 1)
+        self.assertEqual(resolved[0].kind, EffectKind.FLAT_BONUS)
+        self.assertEqual(resolved[0].authored_value, 10)
+        self.assertEqual(resolved[0].level_multiplier, 1)
+        self.assertEqual(resolved[0].scaled_value, 50)
+
+    def test_facet_effect_skipped_when_no_worn_items(self) -> None:
+        """FACET thread with no equipped items bearing the facet skips the effect row."""
+        thread = Thread.objects.create(
+            owner=self.sheet,
+            resonance=self.resonance,
+            target_kind=TargetKind.FACET,
+            target_facet=self.facet,
+            level=0,
+            developed_points=0,
+        )
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.FACET,
+            resonance=self.resonance,
+            tier=0,
+            min_thread_level=0,
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=5,
+        )
+
+        resolved = resolve_pull_effects([thread], tier=0, in_combat=False)
+
+        self.assertEqual(len(resolved), 0)
+
+    def test_non_facet_thread_uses_basic_multiplier(self) -> None:
+        """Non-FACET threads use the plain level multiplier without worn-aggregate factor."""
+        thread = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.resonance,
+            level=20,
+        )
+        ThreadPullEffectFactory(
+            target_kind=thread.target_kind,
+            resonance=self.resonance,
+            tier=0,
+            min_thread_level=0,
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=5,
+        )
+
+        resolved = resolve_pull_effects([thread], tier=0, in_combat=False)
+
+        flat_rows = [r for r in resolved if r.kind == EffectKind.FLAT_BONUS]
+        self.assertEqual(len(flat_rows), 1)
+        # level=20 → multiplier = max(1, 20//10) = 2; scaled = 5 × 2 = 10.
+        self.assertEqual(flat_rows[0].level_multiplier, 2)
+        self.assertEqual(flat_rows[0].scaled_value, 10)

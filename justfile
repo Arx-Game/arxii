@@ -95,6 +95,16 @@ fe-typecheck:
 fe-lint *args:
     cd frontend && pnpm lint {{args}}
 
+# --- Cache / scratch ---------------------------------------------------------
+
+# Delete all Python bytecode caches under src/.
+# Useful when stale .pyc files cause import errors (e.g. after renaming/moving
+# modules). Safe to run at any time; Python will recompile on next import.
+#   just clean-pyc
+clean-pyc:
+    uv run python -c "import pathlib, shutil; [shutil.rmtree(p) for p in pathlib.Path('src').rglob('__pycache__')]"
+    @echo "clean-pyc: bytecode caches removed."
+
 # --- API codegen -------------------------------------------------------------
 
 # Regenerate the OpenAPI schema + frontend TypeScript API types.

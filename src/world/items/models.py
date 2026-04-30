@@ -13,7 +13,7 @@ from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
+from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype, OwnershipEventType
 
 
 class QualityTier(SharedMemoryModel):
@@ -178,6 +178,22 @@ class ItemTemplate(SharedMemoryModel):
         blank=True,
         related_name="item_templates",
         help_text="Default reference image for items of this type. Instances can override.",
+    )
+    facet_capacity = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Number of Facet slots this template can carry. "
+            "Plain items = 0 or 1; fine items = 2-3; ceremonial = 4-5."
+        ),
+    )
+    gear_archetype = models.CharField(
+        max_length=20,
+        choices=GearArchetype.choices,
+        default=GearArchetype.OTHER,
+        help_text=(
+            "Gear category. Drives covenant role × gear compatibility. "
+            "Immutable across instances of this template."
+        ),
     )
 
     class Meta:
@@ -379,6 +395,18 @@ class ItemInstance(SharedMemoryModel):
         """Return custom image if set, otherwise template image."""
         return self.image or self.template.image
 
+    @cached_property
+    def cached_item_facets(self) -> list[ItemFacet]:
+        """Facets attached to this item instance.
+
+        Targeted by Prefetch(..., to_attr=). When prefetched, Django populates
+        this directly. When accessed without prefetch, falls back to a fresh
+        query.
+
+        To invalidate: del instance.cached_item_facets
+        """
+        return list(self.item_facets.select_related("facet", "attachment_quality_tier"))
+
 
 class TemplateInteraction(SharedMemoryModel):
     """
@@ -526,3 +554,50 @@ class CurrencyBalance(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.character}: {self.gold} gold"
+
+
+class ItemFacet(SharedMemoryModel):
+    """A single facet attached to an item instance.
+
+    Spec D §4.2. Items carry facets either at craft time or via post-craft
+    decoration. Each row carries its own attachment quality, independent of
+    the item's overall quality tier. Threads anchor on the global Facet
+    (not on ItemFacet); when computing wearer bonuses, the pipeline walks
+    worn items → ItemFacet rows → matches against the wearer's Threads on
+    those Facets.
+    """
+
+    item_instance = models.ForeignKey(
+        "items.ItemInstance",
+        on_delete=models.CASCADE,
+        related_name="item_facets",
+    )
+    facet = models.ForeignKey(
+        "magic.Facet",
+        on_delete=models.PROTECT,
+        related_name="item_attachments",
+    )
+    applied_by_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="facet_applications",
+    )
+    attachment_quality_tier = models.ForeignKey(
+        "items.QualityTier",
+        on_delete=models.PROTECT,
+        related_name="facet_attachments",
+    )
+    applied_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_instance", "facet"],
+                name="items_unique_itemfacet_per_instance",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.item_instance} ← {self.facet}"

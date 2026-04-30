@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from world.magic.models.corruption_config import CorruptionConfig
     from world.magic.models.gain_config import ResonanceGainConfig
     from world.magic.models.threads import ThreadPullCost, ThreadPullEffect
+    from world.magic.models.weaving import ThreadWeavingUnlock
     from world.mechanics.models import Property
 
 # Maps action_key → technique name (narrative, not mechanical)
@@ -1176,6 +1177,13 @@ def seed_cantrip_starter_catalog() -> CantripStarterCatalogResult:
 
 
 @dataclass
+class FacetThreadUnlockResult:
+    """Returned by seed_facet_thread_unlock()."""
+
+    unlock: ThreadWeavingUnlock
+
+
+@dataclass
 class MagicDevSeedResult:
     """Returned by seed_magic_dev().
 
@@ -1189,6 +1197,25 @@ class MagicDevSeedResult:
     thread_pull_catalog: ThreadPullCatalogResult
     cantrip_catalog: CantripStarterCatalogResult
     magic_content: MagicContentResult
+    facet_thread_unlock: FacetThreadUnlockResult
+
+
+def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
+    """Lazy-create the single global ThreadWeavingUnlock for FACET kind.
+
+    No specific facet is pinned — the unlock applies to weaving any Facet
+    thread. Idempotency is guaranteed by ``get_or_create`` semantics keyed on
+    ``target_kind=FACET``. The model has no DB-level uniqueness for FACET
+    unlocks, but only one global unlock is ever needed (no per-facet variant).
+    """
+    from world.magic.constants import TargetKind  # noqa: PLC0415
+    from world.magic.models.weaving import ThreadWeavingUnlock  # noqa: PLC0415
+
+    unlock, _ = ThreadWeavingUnlock.objects.get_or_create(
+        target_kind=TargetKind.FACET,
+        defaults={"xp_cost": 50},  # baseline cost; staff may tune
+    )
+    return FacetThreadUnlockResult(unlock=unlock)
 
 
 def seed_magic_dev() -> MagicDevSeedResult:
@@ -1207,6 +1234,7 @@ def seed_magic_dev() -> MagicDevSeedResult:
        Spiders (Abyssal) Corruption ConditionTemplates + CORRUPTION_TWIST entries
     6. ``MagicContent.create_all()`` — 6 social action Techniques + 6
        ActionEnhancements
+    7. ``seed_facet_thread_unlock()`` — single global FACET ThreadWeavingUnlock
 
     All writes are idempotent (get_or_create throughout). Re-running on a
     populated database is a no-op; staff edits to existing rows are preserved.
@@ -1222,6 +1250,7 @@ def seed_magic_dev() -> MagicDevSeedResult:
     cantrip_catalog = seed_cantrip_starter_catalog()
     author_reference_corruption_content()
     magic_content = MagicContent.create_all()
+    facet_thread_unlock = seed_facet_thread_unlock()
 
     return MagicDevSeedResult(
         config=config,
@@ -1229,4 +1258,5 @@ def seed_magic_dev() -> MagicDevSeedResult:
         thread_pull_catalog=thread_pull_catalog,
         cantrip_catalog=cantrip_catalog,
         magic_content=magic_content,
+        facet_thread_unlock=facet_thread_unlock,
     )

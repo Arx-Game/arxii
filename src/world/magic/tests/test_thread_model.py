@@ -1,25 +1,25 @@
 """Tests for the Phase 4 Thread model (discriminator + typed-FK pattern).
 
 Spec A §2.1 lines 83-151 — Thread is per-character, anchored to a trait,
-technique, item, room, relationship-track, or relationship-capstone via
-exactly one populated target_* FK matching the target_kind discriminator.
+technique, room, relationship-track, relationship-capstone, facet, or
+covenant-role via exactly one populated target_* FK matching the target_kind
+discriminator.
 
 Coverage:
 - Field shape and defaults via factory.
 - clean() rejects missing target_* and wrong-target-for-kind, accepts correct combos.
-- Per-kind partial UniqueConstraints fire only within the same target_kind, so two
-  threads for the same ObjectDB but different kinds (ITEM vs ROOM) can coexist.
+- Per-kind partial UniqueConstraints fire only within the same target_kind.
 - ThreadLevelUnlock unique-together (thread, unlocked_level) and multi-level coexistence.
 """
 
 from django.core.exceptions import ValidationError
 from django.db.utils import IntegrityError
 from django.test import TestCase
-from evennia.utils import create
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.constants import TargetKind
 from world.magic.factories import (
+    FacetFactory,
     ResonanceFactory,
     ThreadFactory,
     ThreadLevelUnlockFactory,
@@ -75,26 +75,6 @@ class ThreadCleanTests(TestCase):
         )
         thread.clean()  # no exception
 
-    def test_clean_rejects_item_not_in_registry(self) -> None:
-        """ITEM-kind threads validate target_object.db_typeclass_path against the
-        THREADWEAVING_ITEM_TYPECLASSES registry. Phase 1 left it empty, so any
-        item must be rejected at this layer."""
-        sheet = CharacterSheetFactory()
-        res = ResonanceFactory()
-        obj = create.create_object(
-            typeclass="typeclasses.objects.Object",
-            key="unregistered-item",
-            nohome=True,
-        )
-        thread = Thread(
-            owner=sheet,
-            resonance=res,
-            target_kind=TargetKind.ITEM,
-            target_object=obj,
-        )
-        with self.assertRaises(ValidationError):
-            thread.clean()
-
 
 class ThreadPartialUniqueTests(TestCase):
     def test_two_trait_threads_same_owner_same_trait_same_resonance_collide(self) -> None:
@@ -115,33 +95,6 @@ class ThreadPartialUniqueTests(TestCase):
                 target_trait=trait,
             )
 
-    def test_two_threads_different_target_kind_same_object_coexist(self) -> None:
-        """Same target_object FK (ObjectDB) but different discriminator —
-        partial uniques don't collide."""
-        sheet = CharacterSheetFactory()
-        res = ResonanceFactory()
-        obj = create.create_object(
-            typeclass="typeclasses.objects.Object",
-            key="test-anchor",
-            nohome=True,
-        )
-        ThreadFactory(
-            owner=sheet,
-            resonance=res,
-            target_kind=TargetKind.ITEM,
-            target_object=obj,
-            target_trait=None,  # explicitly null factory's default TRAIT FK
-        )
-        # ROOM thread on the same object — same target_object, different
-        # target_kind — should NOT collide.
-        ThreadFactory(
-            owner=sheet,
-            resonance=res,
-            target_kind=TargetKind.ROOM,
-            target_object=obj,
-            target_trait=None,
-        )
-
 
 class ThreadLevelUnlockTests(TestCase):
     def test_same_thread_same_level_collides(self) -> None:
@@ -155,3 +108,236 @@ class ThreadLevelUnlockTests(TestCase):
         ThreadLevelUnlockFactory(thread=thread, unlocked_level=20)
         ThreadLevelUnlockFactory(thread=thread, unlocked_level=30)
         self.assertEqual(thread.level_unlocks.count(), 2)
+
+
+class ThreadFacetKindTests(TestCase):
+    """Tests for the FACET TargetKind and target_facet typed FK (Spec D Task 9)."""
+
+    def test_create_facet_thread(self) -> None:
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        res = ResonanceFactory()
+        thread = Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            resonance=res,
+            level=0,
+        )
+        self.assertEqual(thread.target_kind, TargetKind.FACET)
+        self.assertEqual(thread.target_facet, facet)
+
+    def test_target_property_returns_facet(self) -> None:
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        res = ResonanceFactory()
+        thread = Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            resonance=res,
+        )
+        self.assertEqual(thread.target, facet)
+
+    def test_clean_accepts_facet_kind_with_target_facet(self) -> None:
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        res = ResonanceFactory()
+        thread = Thread(
+            owner=sheet,
+            resonance=res,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+        )
+        thread.clean()  # no exception
+
+    def test_clean_rejects_facet_kind_without_target_facet(self) -> None:
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        thread = Thread(
+            owner=sheet,
+            resonance=res,
+            target_kind=TargetKind.FACET,
+        )
+        with self.assertRaises(ValidationError):
+            thread.clean()
+
+    def test_facet_kind_requires_only_target_facet(self) -> None:
+        """Setting any other typed FK alongside target_facet with kind=FACET must fail."""
+        sheet = CharacterSheetFactory()
+        trait = TraitFactory()
+        with self.assertRaises(IntegrityError):
+            Thread.objects.create(
+                owner=sheet,
+                target_kind=TargetKind.FACET,
+                target_facet=FacetFactory(),
+                target_trait=trait,
+                resonance=ResonanceFactory(),
+            )
+
+    def test_two_active_facet_threads_same_owner_facet_same_resonance_collide(self) -> None:
+        """Two active threads with identical (owner, facet, resonance) must collide."""
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        res = ResonanceFactory()
+        Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            resonance=res,
+        )
+        with self.assertRaises(IntegrityError):
+            Thread.objects.create(
+                owner=sheet,
+                target_kind=TargetKind.FACET,
+                target_facet=facet,
+                resonance=res,
+            )
+
+    def test_two_active_facet_threads_same_owner_facet_different_resonance_collide(
+        self,
+    ) -> None:
+        """Two active threads on the same (owner, facet) with different resonances must
+        still collide — resonance is a property of the single identity thread, not a
+        second dimension that allows duplicates."""
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        res_a = ResonanceFactory()
+        res_b = ResonanceFactory()
+        Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            resonance=res_a,
+        )
+        with self.assertRaises(IntegrityError):
+            Thread.objects.create(
+                owner=sheet,
+                target_kind=TargetKind.FACET,
+                target_facet=facet,
+                resonance=res_b,
+            )
+
+    def test_retired_facet_thread_allows_new_active_thread_on_same_facet(self) -> None:
+        """Retiring a facet thread (setting retired_at) must allow a new active thread
+        on the same (owner, facet), even with a different resonance (e.g. Spider/Praedari
+        → Spider/Brimscar)."""
+
+        from django.utils import timezone
+
+        sheet = CharacterSheetFactory()
+        facet = FacetFactory()
+        res_a = ResonanceFactory()
+        res_b = ResonanceFactory()
+        retired = Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            resonance=res_a,
+        )
+        retired.retired_at = timezone.now()
+        retired.save()
+        # New active thread on the same facet with a different resonance should succeed.
+        new_thread = Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.FACET,
+            target_facet=facet,
+            resonance=res_b,
+        )
+        self.assertIsNone(new_thread.retired_at)
+
+
+class ThreadCovenantRoleKindTests(TestCase):
+    """Tests for the COVENANT_ROLE TargetKind and target_covenant_role typed FK (Spec D Task 10)."""
+
+    def test_create_covenant_role_thread(self) -> None:
+        from world.covenants.factories import CovenantRoleFactory
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        res = ResonanceFactory()
+        thread = Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            resonance=res,
+        )
+        self.assertEqual(thread.target_covenant_role, role)
+        self.assertEqual(thread.target, role)
+
+    def test_clean_rejects_covenant_role_kind_without_target(self) -> None:
+        sheet = CharacterSheetFactory()
+        res = ResonanceFactory()
+        thread = Thread(
+            owner=sheet,
+            resonance=res,
+            target_kind=TargetKind.COVENANT_ROLE,
+        )
+        with self.assertRaises(ValidationError):
+            thread.clean()
+
+    def test_check_constraint_rejects_covenant_role_with_extra_fk(self) -> None:
+        """Setting both target_covenant_role and target_trait under COVENANT_ROLE kind
+        must fail at the DB layer."""
+        from world.covenants.factories import CovenantRoleFactory
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        trait = TraitFactory()
+        with self.assertRaises(IntegrityError):
+            Thread.objects.create(
+                owner=sheet,
+                target_kind=TargetKind.COVENANT_ROLE,
+                target_covenant_role=role,
+                target_trait=trait,
+                resonance=ResonanceFactory(),
+            )
+
+    def test_two_active_covenant_role_threads_same_owner_role_collide(self) -> None:
+        """Two active threads on (owner, role) must raise IntegrityError."""
+        from world.covenants.factories import CovenantRoleFactory
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        res_a = ResonanceFactory()
+        res_b = ResonanceFactory()
+        Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            resonance=res_a,
+        )
+        with self.assertRaises(IntegrityError):
+            Thread.objects.create(
+                owner=sheet,
+                target_kind=TargetKind.COVENANT_ROLE,
+                target_covenant_role=role,
+                resonance=res_b,
+            )
+
+    def test_retired_covenant_role_thread_allows_new_active_thread(self) -> None:
+        """Retiring a covenant role thread allows a new active thread on the same
+        (owner, role)."""
+        from django.utils import timezone
+
+        from world.covenants.factories import CovenantRoleFactory
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        res_a = ResonanceFactory()
+        res_b = ResonanceFactory()
+        retired = Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            resonance=res_a,
+        )
+        retired.retired_at = timezone.now()
+        retired.save()
+        new_thread = Thread.objects.create(
+            owner=sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            resonance=res_b,
+        )
+        self.assertIsNone(new_thread.retired_at)

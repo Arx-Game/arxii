@@ -2,7 +2,16 @@
 
 import factory
 
-from world.items.models import InteractionType, ItemInstance, ItemTemplate, QualityTier
+from world.items.constants import BodyRegion, EquipmentLayer
+from world.items.models import (
+    EquippedItem,
+    InteractionType,
+    ItemFacet,
+    ItemInstance,
+    ItemTemplate,
+    QualityTier,
+    TemplateSlot,
+)
 
 
 class QualityTierFactory(factory.django.DjangoModelFactory):
@@ -57,3 +66,50 @@ class ItemInstanceFactory(factory.django.DjangoModelFactory):
     custom_name = ""
     custom_description = ""
     quantity = 1
+
+
+class TemplateSlotFactory(factory.django.DjangoModelFactory):
+    """Factory for TemplateSlot.
+
+    Caller should pass ``template`` explicitly; body_region and equipment_layer
+    default to TORSO/BASE for convenience.
+    """
+
+    class Meta:
+        model = TemplateSlot
+        django_get_or_create = ("template", "body_region", "equipment_layer")
+
+    template = factory.SubFactory(ItemTemplateFactory)
+    body_region = BodyRegion.TORSO
+    equipment_layer = EquipmentLayer.BASE
+    covers_lower_layers = False
+
+
+class ItemFacetFactory(factory.django.DjangoModelFactory):
+    """Factory for ItemFacet."""
+
+    class Meta:
+        model = ItemFacet
+        django_get_or_create = ("item_instance", "facet")
+
+    item_instance = factory.SubFactory(ItemInstanceFactory)
+    facet = factory.SubFactory("world.magic.factories.FacetFactory")
+    attachment_quality_tier = factory.SubFactory(QualityTierFactory)
+
+
+class EquippedItemFactory(factory.django.DjangoModelFactory):
+    """Factory for EquippedItem.
+
+    Caller must pass ``character`` (an ObjectDB / Character instance) explicitly;
+    there is no safe default since EquippedItem.character is a FK to ObjectDB and
+    the available character-creation helpers are outside this app.
+    """
+
+    class Meta:
+        model = EquippedItem
+        django_get_or_create = ("character", "body_region", "equipment_layer")
+
+    item_instance = factory.SubFactory(ItemInstanceFactory)
+    body_region = BodyRegion.TORSO
+    equipment_layer = EquipmentLayer.BASE
+    # character — caller must provide; no default

@@ -349,43 +349,6 @@ class FacetTreeSerializerTest(TestCase):
         self.assertEqual(len(data["children"][0]["children"]), 2)  # Wolf, Bear
 
 
-class CharacterFacetSerializerTest(TestCase):
-    """Tests for CharacterFacetSerializer."""
-
-    @classmethod
-    def setUpTestData(cls):
-        from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.factories import ResonanceFactory
-        from world.magic.models import Facet
-
-        cls.sheet = CharacterSheetFactory()
-        cls.resonance = ResonanceFactory(name="Praedari")
-        cls.creatures = Facet.objects.create(name="Creatures")
-        cls.spider = Facet.objects.create(name="Spider", parent=cls.creatures)
-
-    def test_serialization(self):
-        """Test CharacterFacetSerializer includes all fields."""
-        from world.magic.models import CharacterFacet
-        from world.magic.serializers import CharacterFacetSerializer
-
-        char_facet = CharacterFacet.objects.create(
-            character=self.sheet,
-            facet=self.spider,
-            resonance=self.resonance,
-            flavor_text="Patient predator",
-        )
-
-        serializer = CharacterFacetSerializer(char_facet)
-        data = serializer.data
-
-        self.assertEqual(data["facet"], self.spider.id)
-        self.assertEqual(data["facet_name"], "Spider")
-        self.assertEqual(data["facet_path"], "Creatures > Spider")
-        self.assertEqual(data["resonance"], self.resonance.id)
-        self.assertEqual(data["resonance_name"], "Praedari")
-        self.assertEqual(data["flavor_text"], "Patient predator")
-
-
 class ResonanceSerializerTest(TestCase):
     """Tests for ResonanceSerializer with codex_entry_id."""
 

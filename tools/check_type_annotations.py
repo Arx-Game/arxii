@@ -34,6 +34,7 @@ TYPED_DIRS = [
     "src/world/vitals",
     "src/world/combat",
     "src/world/covenants",
+    "src/world/items",
     "src/world/narrative",
 ]
 

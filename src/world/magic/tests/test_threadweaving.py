@@ -5,7 +5,7 @@ Coverage:
   target_kind (one unlock per anchor).
 - ThreadWeavingUnlock display_name derives the label from the discriminator FK.
 - ThreadWeavingUnlock.clean() mirrors Thread.clean() (per-kind required FK,
-  others null) plus ITEM typeclass-registry validation.
+  others null).
 - CharacterThreadWeavingUnlock unique_together (character, unlock) — one purchase
   record per character per unlock.
 - ThreadWeavingTeachingOffer FK shape (teacher + unlock + banked_ap).
@@ -58,11 +58,11 @@ class ThreadWeavingUnlockPartialUniqueTests(TestCase):
             target_kind=TargetKind.TRAIT,
             unlock_trait=TraitFactory(),
         )
-        # ITEM uses a typeclass path string, not a FK
+        # ROOM uses a FK, not a string path
         ThreadWeavingUnlockFactory(
-            target_kind=TargetKind.ITEM,
+            target_kind=TargetKind.ROOM,
             unlock_trait=None,
-            unlock_item_typeclass_path="typeclasses.objects.Object",
+            unlock_room_property=PropertyFactory(name="Consecrated"),
         )
 
 
@@ -80,14 +80,6 @@ class ThreadWeavingUnlockDisplayNameTests(TestCase):
             unlock_gift=gift,
         )
         self.assertEqual(u.display_name, "ThreadWeaving: Gift of Blade")
-
-    def test_item_display_name_strips_module_path(self) -> None:
-        u = ThreadWeavingUnlockFactory(
-            target_kind=TargetKind.ITEM,
-            unlock_trait=None,
-            unlock_item_typeclass_path="typeclasses.objects.Object",
-        )
-        self.assertEqual(u.display_name, "ThreadWeaving: Object")
 
     def test_room_display_name(self) -> None:
         prop = PropertyFactory(name="Consecrated")
@@ -124,16 +116,6 @@ class ThreadWeavingUnlockCleanTests(TestCase):
             unlock_trait=trait,
         )
         u.clean()  # no exception
-
-    def test_clean_rejects_item_path_not_in_registry(self) -> None:
-        """ITEM kind validates unlock_item_typeclass_path against the registry."""
-        u = ThreadWeavingUnlockFactory.build(
-            target_kind=TargetKind.ITEM,
-            unlock_trait=None,
-            unlock_item_typeclass_path="typeclasses.objects.Object",
-        )
-        with self.assertRaises(ValidationError):
-            u.clean()
 
     def test_db_rejects_capstone_target_kind(self) -> None:
         """CAPSTONE has no slot on this model — DB must reject it directly."""

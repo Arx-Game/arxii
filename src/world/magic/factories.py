@@ -21,7 +21,6 @@ from world.magic.models import (
     CharacterAnima,
     CharacterAnimaRitual,
     CharacterAura,
-    CharacterFacet,
     CharacterGift,
     CharacterResonance,
     CharacterTechnique,
@@ -370,18 +369,6 @@ class FacetFactory(factory.django.DjangoModelFactory):
     parent = None
 
 
-class CharacterFacetFactory(factory.django.DjangoModelFactory):
-    """Factory for CharacterFacet model."""
-
-    class Meta:
-        model = CharacterFacet
-
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    facet = factory.SubFactory(FacetFactory)
-    resonance = factory.SubFactory(ResonanceFactory)
-    flavor_text = factory.LazyAttribute(lambda o: f"The meaning of {o.facet.name}")
-
-
 class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):
     """Factory for MotifResonanceAssociation - facet linkage."""
 
@@ -715,7 +702,6 @@ class ThreadFactory(factory.django.DjangoModelFactory):
     - as_capstone_thread=True  → switch to RELATIONSHIP_CAPSTONE kind
     - _path_stage=<int>        → add a CharacterPathHistory row for thread.owner with
                                  a Path of that stage (applies to capstone + effective cap)
-    - as_item_thread=True   → switch to ITEM kind (raises AnchorCapNotImplemented)
     - as_room_thread=True   → switch to ROOM kind (raises AnchorCapNotImplemented)
 
     NOTE: this factory intentionally does NOT call full_clean(). DB-level
@@ -849,23 +835,6 @@ class ThreadFactory(factory.django.DjangoModelFactory):
 
         path = PathFactory(stage=stage)
         CharacterPathHistory.objects.create(character=self.owner.character, path=path)
-
-    @factory.post_generation  # type: ignore[misc]
-    def as_item_thread(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
-        """Switch to ITEM kind: create an ObjectDB."""
-        if not create or not extracted:
-            return
-        from evennia_extensions.factories import ObjectDBFactory
-
-        obj = ObjectDBFactory()
-        Thread.objects.filter(pk=self.pk).update(
-            target_kind=TargetKind.ITEM,
-            target_object=obj,
-            target_trait=None,
-        )
-        self.target_kind = TargetKind.ITEM
-        self.target_object = obj
-        self.target_trait = None  # type: ignore[assignment]
 
     @factory.post_generation  # type: ignore[misc]
     def as_room_thread(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:

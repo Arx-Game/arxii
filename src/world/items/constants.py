@@ -44,3 +44,23 @@ class OwnershipEventType(models.TextChoices):
     GIVEN = "given", "Given"
     STOLEN = "stolen", "Stolen"
     TRANSFERRED = "transferred", "Transferred"
+
+
+class GearArchetype(models.TextChoices):
+    """Gear categorization for covenant role compatibility.
+
+    Final list TBD via playtest; this is the starting set per Spec D §4.1.
+    """
+
+    LIGHT_ARMOR = "light_armor", "Light Armor"
+    MEDIUM_ARMOR = "medium_armor", "Medium Armor"
+    HEAVY_ARMOR = "heavy_armor", "Heavy Armor"
+    ROBE = "robe", "Robe"
+    MELEE_ONE_HAND = "melee_one_hand", "One-Handed Melee"
+    MELEE_TWO_HAND = "melee_two_hand", "Two-Handed Melee"
+    RANGED = "ranged", "Ranged"
+    THROWN = "thrown", "Thrown"
+    SHIELD = "shield", "Shield"
+    JEWELRY = "jewelry", "Jewelry"
+    CLOTHING = "clothing", "Clothing"
+    OTHER = "other", "Other"

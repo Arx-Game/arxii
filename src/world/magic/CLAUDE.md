@@ -9,11 +9,11 @@ The magic system for Arx II. Power flows from identity and connection.
 - **Resonance**: Style tags that define magical identity - proper domain models with FK to Affinity and optional ModifierTarget link
 - **Motif**: Character-level magical aesthetic containing resonances and facets
 - **Facet**: Hierarchical imagery/symbolism (Spider, Silk, Fire) assigned to resonances
-- **Threads**: Per-character attachments anchored to a trait/technique/item/room/
-  relationship-track/relationship-capstone. Each Thread channels a single
-  Resonance (currency) and accrues `developed_points` → `level` via the Imbuing
-  ritual. The legacy 5-axis Thread family was removed and replaced in Phase 4
-  of the resonance pivot.
+- **Threads**: Per-character attachments anchored to a trait/technique/facet/room/
+  relationship-track/relationship-capstone/covenant-role. Each Thread channels a
+  single Resonance (currency) and accrues `developed_points` → `level` via the
+  Imbuing ritual. The legacy 5-axis Thread family was removed and replaced in
+  Phase 4 of the resonance pivot.
 - **Resonance currency**: `CharacterResonance.balance` is spendable currency
   earned via `grant_resonance` (Spec C surfaces will write here) and spent
   via `spend_resonance_for_imbuing` (advances Thread level) or
@@ -73,7 +73,6 @@ system. Anima rituals are set up post-CG. CharacterAnimaRitual references Resona
 - `Motif` - Character-level magical aesthetic
 - `MotifResonance` - Resonances in a motif (from gifts or optional)
 - `Facet` - Hierarchical imagery/symbolism (Category > Subcategory > Specific)
-- `CharacterFacet` - Links characters to facets with resonance assignments
 - `MotifResonanceAssociation` - Links resonances to facets in a motif
 
 ### Thread System (Resonance Pivot Spec A)
@@ -92,7 +91,7 @@ system. Anima rituals are set up post-CG. CharacterAnimaRitual references Resona
   enforce payload/effect_kind shape.
 - `ThreadWeavingUnlock` - Authored catalog of "you can weave threads on X"
   unlocks. Same discriminator + typed-FK pattern as Thread: `unlock_trait`,
-  `unlock_gift`, `unlock_item_typeclass_path`, `unlock_room_property`,
+  `unlock_gift`, `unlock_room_property`,
   `unlock_track`. `xp_cost` + M2M to `Path` (in-band) + `out_of_path_multiplier`.
 - `ImbuingProseTemplate` - Fallback prose for the Imbuing ritual keyed on
   `(resonance, target_kind)`. The row with both NULL is the universal fallback.
@@ -105,12 +104,13 @@ system. Anima rituals are set up post-CG. CharacterAnimaRitual references Resona
 
 **Per-thread and per-character records:**
 - `Thread` - The thread row. Discriminator (`target_kind`) + typed FKs:
-  `target_trait`, `target_technique`, `target_object` (ITEM and ROOM),
-  `target_relationship_track`, `target_capstone`. Fields: `owner` (FK
-  CharacterSheet), `resonance` (FK Resonance), `name`, `description`,
-  `developed_points`, `level`, timestamps, `retired_at` (soft-retire).
-  All typed FKs use `on_delete=PROTECT`. Three layers of integrity: `clean()`,
-  per-kind CheckConstraints, per-kind partial UniqueConstraints.
+  `target_trait`, `target_technique`, `target_facet`, `target_object` (ROOM),
+  `target_relationship_track`, `target_capstone`, `target_covenant_role`.
+  Fields: `owner` (FK CharacterSheet), `resonance` (FK Resonance), `name`,
+  `description`, `developed_points`, `level`, timestamps, `retired_at`
+  (soft-retire). All typed FKs use `on_delete=PROTECT`. Three layers of
+  integrity: `clean()`, per-kind CheckConstraints, per-kind partial
+  UniqueConstraints.
 - `ThreadLevelUnlock` - Per-thread XP-locked-boundary receipt. Unique per
   `(thread, unlocked_level)`. Records that a thread paid XP to cross a
   specific boundary (20, 30, ...).

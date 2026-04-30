@@ -66,6 +66,14 @@ class ResonanceGrant(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="resonance_grants",
     )
+    outfit_item_facet = models.ForeignKey(
+        "items.ItemFacet",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resonance_grants",
+        help_text="Set when source=OUTFIT_TRICKLE; the ItemFacet that produced this trickle.",
+    )
 
     class Meta:
         indexes = [
@@ -88,6 +96,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
                 )
                 | ~Q(source="ROOM_RESIDENCE"),
             ),
@@ -100,6 +109,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_room_aura_profile__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
                 )
                 | ~Q(source="STAFF_GRANT"),
             ),
@@ -112,6 +122,7 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_room_aura_profile__isnull=True)
                     & Q(source_staff_account__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
                 )
                 | ~Q(source="POSE_ENDORSEMENT"),
             ),
@@ -124,8 +135,22 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_room_aura_profile__isnull=True)
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
+                    & Q(outfit_item_facet__isnull=True)
                 )
                 | ~Q(source="SCENE_ENTRY"),
+            ),
+            # OUTFIT_TRICKLE: exactly outfit_item_facet populated, other source FKs null
+            models.CheckConstraint(
+                name="res_grant_outfit_trickle_shape",
+                check=(
+                    Q(source="OUTFIT_TRICKLE")
+                    & Q(outfit_item_facet__isnull=False)
+                    & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_staff_account__isnull=True)
+                    & Q(source_pose_endorsement__isnull=True)
+                    & Q(source_scene_entry_endorsement__isnull=True)
+                )
+                | ~Q(source="OUTFIT_TRICKLE"),
             ),
         ]
 

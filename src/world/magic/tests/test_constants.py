@@ -1,7 +1,6 @@
 from django.test import SimpleTestCase
 
 from world.magic.constants import (
-    THREADWEAVING_ITEM_TYPECLASSES,
     EffectKind,
     RitualExecutionKind,
     SoulTetherRole,
@@ -11,10 +10,18 @@ from world.magic.constants import (
 
 
 class TargetKindTests(SimpleTestCase):
-    def test_six_target_kinds(self):
+    def test_seven_target_kinds(self):
         self.assertEqual(
             set(TargetKind.values),
-            {"TRAIT", "TECHNIQUE", "ITEM", "ROOM", "RELATIONSHIP_TRACK", "RELATIONSHIP_CAPSTONE"},
+            {
+                "TRAIT",
+                "TECHNIQUE",
+                "FACET",
+                "ROOM",
+                "RELATIONSHIP_TRACK",
+                "RELATIONSHIP_CAPSTONE",
+                "COVENANT_ROLE",
+            },
         )
 
 
@@ -44,14 +51,6 @@ class SoulTetherRoleTests(SimpleTestCase):
         self.assertEqual(set(SoulTetherRole.values), {"ABYSSAL", "SINEATER"})
 
 
-class ItemTypeclassRegistryTests(SimpleTestCase):
-    def test_registry_is_a_tuple_of_strings(self):
-        self.assertIsInstance(THREADWEAVING_ITEM_TYPECLASSES, tuple)
-        for path in THREADWEAVING_ITEM_TYPECLASSES:
-            self.assertIsInstance(path, str)
-            self.assertIn(".", path)  # at least namespaced
-
-
 class GainSourceTests(SimpleTestCase):
     def test_gain_source_values(self) -> None:
         from world.magic.constants import GainSource
@@ -59,7 +58,7 @@ class GainSourceTests(SimpleTestCase):
         self.assertEqual(GainSource.POSE_ENDORSEMENT, "POSE_ENDORSEMENT")
         self.assertEqual(GainSource.SCENE_ENTRY, "SCENE_ENTRY")
         self.assertEqual(GainSource.ROOM_RESIDENCE, "ROOM_RESIDENCE")
-        self.assertEqual(GainSource.OUTFIT_ITEM, "OUTFIT_ITEM")
+        self.assertEqual(GainSource.OUTFIT_TRICKLE, "OUTFIT_TRICKLE")
         self.assertEqual(GainSource.STAFF_GRANT, "STAFF_GRANT")
 
     def test_gain_source_label_present(self) -> None:

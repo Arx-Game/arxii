@@ -14,7 +14,6 @@ from world.magic.views import (
     CharacterAnimaRitualViewSet,
     CharacterAnimaViewSet,
     CharacterAuraViewSet,
-    CharacterFacetViewSet,
     CharacterGiftViewSet,
     CharacterResonanceViewSet,
     EffectTypeViewSet,
@@ -56,8 +55,6 @@ router.register("character-anima", CharacterAnimaViewSet, basename="character-an
 router.register(
     "character-anima-rituals", CharacterAnimaRitualViewSet, basename="character-anima-ritual"
 )
-router.register("character-facets", CharacterFacetViewSet, basename="character-facet")
-
 # Alterations
 router.register(
     "pending-alterations",

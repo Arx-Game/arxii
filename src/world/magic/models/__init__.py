@@ -12,7 +12,7 @@ Submodules (see Scope 6 §4.4):
 - techniques: EffectType, TechniqueStyle, Restriction, IntensityTier, Technique,
   TechniqueCapabilityGrant, CharacterTechnique, TechniqueOutcomeModifier
 - cantrips: Cantrip
-- motifs: Facet, CharacterFacet, Motif, MotifResonance, MotifResonanceAssociation
+- motifs: Facet, Motif, MotifResonance, MotifResonanceAssociation
 - soulfray: SoulfrayConfig, MishapPoolTier
 - alterations: MagicalAlterationTemplate, PendingAlteration, MagicalAlterationEvent
 - threads: Thread, ThreadLevelUnlock, ThreadPullCost, ThreadXPLockedLevel,
@@ -69,7 +69,6 @@ from world.magic.models.gifts import (
 )
 from world.magic.models.grant import ResonanceGrant
 from world.magic.models.motifs import (
-    CharacterFacet,
     Facet,
     FacetManager,
     Motif,
@@ -126,8 +125,6 @@ __all__ = [
     "CharacterAnima",
     "CharacterAnimaRitual",
     "CharacterAura",
-    # motifs
-    "CharacterFacet",
     # gifts
     "CharacterGift",
     "CharacterResonance",

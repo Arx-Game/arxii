@@ -1,6 +1,6 @@
 """Threads and thread-pull infrastructure.
 
-Per-character Thread rows anchored to a trait/technique/item/room/relationship.
+Per-character Thread rows anchored to a trait/technique/room/relationship/facet/covenant-role.
 ThreadLevelUnlock is the per-thread XP-locked-boundary receipt.
 ThreadPullCost is the per-tier pull-cost tuning table.
 ThreadXPLockedLevel is the XP-locked boundary price list.
@@ -15,7 +15,6 @@ from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.constants import (
-    THREADWEAVING_ITEM_TYPECLASSES,
     EffectKind,
     TargetKind,
     VitalBonusTarget,
@@ -247,21 +246,18 @@ class ThreadPullEffect(SharedMemoryModel):
 
 
 class Thread(SharedMemoryModel):
-    """Per-character thread anchored to a trait/technique/item/room/relationship.
+    """Per-character thread anchored to a trait/technique/room/relationship/facet/covenant-role.
 
     Discriminator + typed-FK pattern (Spec A §2.1 lines 83-151). Exactly one
     target_* column is populated, matching ``target_kind``. Three layers of
     enforcement:
 
-    - ``clean()`` raises ValidationError on missing / mismatched targets and on
-      ITEM-kind targets whose typeclass isn't in THREADWEAVING_ITEM_TYPECLASSES.
+    - ``clean()`` raises ValidationError on missing / mismatched targets.
     - Per-kind CheckConstraints mirror the "exactly one target_* set, matching
       target_kind" rule at the DB layer (so misuse via .objects.create() also
       fails).
     - Per-kind partial UniqueConstraints prevent duplicate threads within the
-      same (owner, resonance, target_kind, target_*) combination, while still
-      allowing — for example — an ITEM thread and a ROOM thread on the same
-      ObjectDB.
+      same (owner, resonance, target_kind, target_*) combination.
     """
 
     owner = models.ForeignKey(
@@ -345,6 +341,22 @@ class Thread(SharedMemoryModel):
         related_name="anchored_threads",
         help_text="Set when target_kind=RELATIONSHIP_CAPSTONE; null otherwise.",
     )
+    target_facet = models.ForeignKey(
+        "magic.Facet",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=FACET; null otherwise.",
+    )
+    target_covenant_role = models.ForeignKey(
+        "covenants.CovenantRole",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchored_threads",
+        help_text="Set when target_kind=COVENANT_ROLE; null otherwise.",
+    )
 
     class Meta:
         constraints = [
@@ -358,11 +370,6 @@ class Thread(SharedMemoryModel):
                 fields=["owner", "resonance", "target_technique"],
                 condition=models.Q(target_kind=TargetKind.TECHNIQUE),
                 name="uniq_thread_technique",
-            ),
-            models.UniqueConstraint(
-                fields=["owner", "resonance", "target_object"],
-                condition=models.Q(target_kind=TargetKind.ITEM),
-                name="uniq_thread_item",
             ),
             models.UniqueConstraint(
                 fields=["owner", "resonance", "target_object"],
@@ -390,6 +397,8 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
                     )
                 ),
             ),
@@ -403,19 +412,8 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
-                    )
-                ),
-            ),
-            models.CheckConstraint(
-                name="thread_item_payload",
-                check=(
-                    ~models.Q(target_kind=TargetKind.ITEM)
-                    | (
-                        models.Q(target_trait__isnull=True)
-                        & models.Q(target_technique__isnull=True)
-                        & models.Q(target_object__isnull=False)
-                        & models.Q(target_relationship_track__isnull=True)
-                        & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
                     )
                 ),
             ),
@@ -429,6 +427,8 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_object__isnull=False)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
                     )
                 ),
             ),
@@ -442,6 +442,8 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=False)
                         & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
                     )
                 ),
             ),
@@ -455,6 +457,58 @@ class Thread(SharedMemoryModel):
                         & models.Q(target_object__isnull=True)
                         & models.Q(target_relationship_track__isnull=True)
                         & models.Q(target_capstone__isnull=False)
+                        & models.Q(target_facet__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
+                    )
+                ),
+            ),
+            # ---- FACET -------------------------------------------------------
+            # One active thread per (owner, facet) — the chosen resonance is a
+            # property of that single thread, not a second dimension of identity.
+            # Retired threads (retired_at IS NOT NULL) are excluded so a character
+            # can retire a Spider/Praedari thread and later weave a Spider/Brimscar
+            # thread on the same facet.
+            models.UniqueConstraint(
+                fields=["owner", "target_facet"],
+                condition=models.Q(target_kind=TargetKind.FACET, retired_at__isnull=True),
+                name="uniq_thread_facet_active",
+            ),
+            models.CheckConstraint(
+                name="thread_facet_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.FACET)
+                    | (
+                        models.Q(target_facet__isnull=False)
+                        & models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=True)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_covenant_role__isnull=True)
+                    )
+                ),
+            ),
+            # ---- COVENANT_ROLE -----------------------------------------------
+            # One active thread per (owner, covenant_role). Retired threads
+            # (retired_at IS NOT NULL) are excluded so a character can retire a
+            # role thread and later weave a new one on the same role.
+            models.UniqueConstraint(
+                fields=["owner", "target_covenant_role"],
+                condition=models.Q(target_kind=TargetKind.COVENANT_ROLE, retired_at__isnull=True),
+                name="uniq_thread_covenant_role_active",
+            ),
+            models.CheckConstraint(
+                name="thread_covenant_role_payload",
+                check=(
+                    ~models.Q(target_kind=TargetKind.COVENANT_ROLE)
+                    | (
+                        models.Q(target_covenant_role__isnull=False)
+                        & models.Q(target_trait__isnull=True)
+                        & models.Q(target_technique__isnull=True)
+                        & models.Q(target_object__isnull=True)
+                        & models.Q(target_relationship_track__isnull=True)
+                        & models.Q(target_capstone__isnull=True)
+                        & models.Q(target_facet__isnull=True)
                     )
                 ),
             ),
@@ -466,41 +520,43 @@ class Thread(SharedMemoryModel):
     @property
     def target(self) -> models.Model | None:
         """Return the populated FK object, picked by target_kind."""
-        match self.target_kind:
-            case TargetKind.TRAIT:
-                return self.target_trait
-            case TargetKind.TECHNIQUE:
-                return self.target_technique
-            case TargetKind.ITEM | TargetKind.ROOM:
-                return self.target_object
-            case TargetKind.RELATIONSHIP_TRACK:
-                return self.target_relationship_track
-            case TargetKind.RELATIONSHIP_CAPSTONE:
-                return self.target_capstone
-        return None
+        _kind_to_attr: dict[str, str] = {
+            TargetKind.TRAIT: "target_trait",
+            TargetKind.TECHNIQUE: "target_technique",
+            TargetKind.ROOM: "target_object",
+            TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
+            TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
+            TargetKind.FACET: "target_facet",
+            TargetKind.COVENANT_ROLE: "target_covenant_role",
+        }
+        attr = _kind_to_attr.get(self.target_kind)
+        return getattr(self, attr) if attr is not None else None
 
     def clean(self) -> None:
-        """Validate exactly-one-target rule + ITEM typeclass registry membership.
+        """Validate exactly-one-target rule.
 
         DB constraints catch the same shape errors at write time; ``clean()``
         is the user-facing error path (forms / serializers / tests calling
         ``full_clean()``).
         """
-        # Map target_kind -> (expected_field_name, list_of_other_field_names)
+        # Map target_kind -> expected_field_name
         kind_to_field: dict[str, str] = {
             TargetKind.TRAIT: "target_trait",
             TargetKind.TECHNIQUE: "target_technique",
-            TargetKind.ITEM: "target_object",
+            TargetKind.FACET: "target_facet",
             TargetKind.ROOM: "target_object",
             TargetKind.RELATIONSHIP_TRACK: "target_relationship_track",
             TargetKind.RELATIONSHIP_CAPSTONE: "target_capstone",
+            TargetKind.COVENANT_ROLE: "target_covenant_role",
         }
         all_target_fields = (
             "target_trait",
             "target_technique",
+            "target_facet",
             "target_object",
             "target_relationship_track",
             "target_capstone",
+            "target_covenant_role",
         )
 
         expected_field = kind_to_field.get(self.target_kind)
@@ -522,22 +578,6 @@ class Thread(SharedMemoryModel):
                     {
                         field_name: (
                             f"target_kind={self.target_kind} requires {field_name} to be null."
-                        ),
-                    },
-                )
-
-        # ITEM-kind: validate the target_object's typeclass is in the
-        # THREADWEAVING_ITEM_TYPECLASSES registry (subclass-aware).
-        if self.target_kind == TargetKind.ITEM:
-            from world.magic.services import _typeclass_path_in_registry  # noqa: PLC0415
-
-            tc_path = self.target_object.db_typeclass_path
-            if not _typeclass_path_in_registry(tc_path, THREADWEAVING_ITEM_TYPECLASSES):
-                raise ValidationError(
-                    {
-                        "target_object": (
-                            f"Typeclass {tc_path!r} is not in "
-                            "THREADWEAVING_ITEM_TYPECLASSES registry."
                         ),
                     },
                 )

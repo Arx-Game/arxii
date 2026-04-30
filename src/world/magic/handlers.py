@@ -12,12 +12,12 @@ from typing import TYPE_CHECKING
 
 from django.utils.functional import cached_property
 
-from world.magic.constants import EffectKind
+from world.magic.constants import EffectKind, TargetKind
 from world.magic.models import CharacterResonance, Thread, ThreadPullEffect
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character
-    from world.magic.models import Resonance
+    from world.magic.models import Facet, Resonance
 
 
 class CharacterThreadHandler:
@@ -42,6 +42,8 @@ class CharacterThreadHandler:
                 "target_object",
                 "target_relationship_track",
                 "target_capstone",
+                "target_facet",
+                "target_covenant_role",
             )
         )
 
@@ -52,6 +54,17 @@ class CharacterThreadHandler:
     def by_resonance(self, resonance: Resonance) -> list[Thread]:
         """Return threads filtered to a single resonance."""
         return [t for t in self._all if t.resonance_id == resonance.pk]
+
+    def thread_for_facet(self, facet: Facet) -> Thread | None:
+        """Return the active FACET-kind thread anchored to ``facet``, if any."""
+        for thread in self._all:
+            if thread.target_kind == TargetKind.FACET and thread.target_facet_id == facet.pk:
+                return thread
+        return None
+
+    def threads_of_kind(self, kind: str) -> list[Thread]:
+        """Return all active threads with the given ``target_kind``."""
+        return [t for t in self._all if t.target_kind == kind]
 
     def with_anchor_involved(self, action_context: object) -> list[Thread]:
         """Return threads whose anchor is in scope for the given action.
