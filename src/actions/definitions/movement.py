@@ -3,18 +3,35 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
+
+from evennia.objects.models import ObjectDB
 
 from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
+from flows.object_states.item_state import ItemState
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location, send_room_state
+from flows.service_functions.inventory import drop, give, pick_up
 from flows.service_functions.movement import check_exit_traversal, move_object, traverse_exit
+from world.items.exceptions import InventoryError
+from world.items.models import ItemInstance
 from world.mechanics.constants import ChallengeType
 from world.mechanics.models import ChallengeInstance
 
-if TYPE_CHECKING:
-    from evennia.objects.models import ObjectDB
+
+def _resolve_item_instance(target: ObjectDB) -> ItemInstance | None:
+    """Return the ``ItemInstance`` linked to ``target``, or ``None`` if none exists.
+
+    The actions layer accepts an ``ObjectDB`` as the target, but the inventory
+    service functions operate on ``ItemInstance``. This bridges the two via
+    the ``OneToOneField`` reverse accessor, returning ``None`` for plain
+    ObjectDBs that have no ItemInstance row (e.g. NPCs picked up by mistake).
+    """
+    try:
+        return target.item_instance
+    except ObjectDB.item_instance.RelatedObjectDoesNotExist:  # type: ignore[attr-defined]
+        return None
 
 
 @dataclass
@@ -40,11 +57,18 @@ class GetAction(Action):
         if target is None:
             return ActionResult(success=False, message="Get what?")
 
-        sdm = context.scene_data if context else SceneDataManager()
-        item_state = sdm.initialize_state_for_object(target)
-        actor_state = sdm.initialize_state_for_object(actor)
+        item_instance = _resolve_item_instance(target)
+        if item_instance is None:
+            return ActionResult(success=False, message="That can't be picked up.")
 
-        move_object(item_state, actor_state)
+        sdm = context.scene_data if context else SceneDataManager()
+        actor_state = sdm.initialize_state_for_object(actor)
+        item_state = ItemState(item_instance, context=sdm)
+
+        try:
+            pick_up(actor_state, item_state)
+        except InventoryError as exc:
+            return ActionResult(success=False, message=exc.user_message)
 
         message_location(
             actor_state,
@@ -78,16 +102,18 @@ class DropAction(Action):
         if target is None:
             return ActionResult(success=False, message="Drop what?")
 
-        if actor.location is None:
-            return ActionResult(success=False, message="You have nowhere to drop that.")
+        item_instance = _resolve_item_instance(target)
+        if item_instance is None:
+            return ActionResult(success=False, message="That can't be dropped.")
 
         sdm = context.scene_data if context else SceneDataManager()
-        item_state = sdm.initialize_state_for_object(target)
-        location_state = sdm.initialize_state_for_object(actor.location)
-
-        move_object(item_state, location_state)
-
         actor_state = sdm.initialize_state_for_object(actor)
+        item_state = ItemState(item_instance, context=sdm)
+
+        try:
+            drop(actor_state, item_state)
+        except InventoryError as exc:
+            return ActionResult(success=False, message=exc.user_message)
 
         message_location(
             actor_state,
@@ -122,13 +148,19 @@ class GiveAction(Action):
         if target is None or recipient is None:
             return ActionResult(success=False, message="Give what to whom?")
 
+        item_instance = _resolve_item_instance(target)
+        if item_instance is None:
+            return ActionResult(success=False, message="That can't be given.")
+
         sdm = context.scene_data if context else SceneDataManager()
-        item_state = sdm.initialize_state_for_object(target)
-        recipient_state = sdm.initialize_state_for_object(recipient)
-
-        move_object(item_state, recipient_state)
-
         actor_state = sdm.initialize_state_for_object(actor)
+        recipient_state = sdm.initialize_state_for_object(recipient)
+        item_state = ItemState(item_instance, context=sdm)
+
+        try:
+            give(actor_state, recipient_state, item_state)
+        except InventoryError as exc:
+            return ActionResult(success=False, message=exc.user_message)
 
         message_location(
             actor_state,
