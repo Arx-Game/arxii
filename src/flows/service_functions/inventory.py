@@ -42,8 +42,8 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     if item.instance.contained_in is not None:
         item.instance.contained_in = None
         item.instance.save(update_fields=["contained_in"])
-    item.instance.game_object.location = character.obj
-    item.instance.game_object.save()
+    if not item.instance.game_object.move_to(character.obj, quiet=True):
+        raise NotReachable
     if item.instance.owner is None:
         item.instance.owner = character.obj.account
         item.instance.save(update_fields=["owner"])
@@ -69,8 +69,8 @@ def drop(character: CharacterState, item: ItemState) -> None:
     # Snapshot rows before iteration — unequip_item deletes them as we go.
     for equipped in list(item.instance.equipped_slots.all()):
         unequip_item(equipped_item=equipped)
-    item.instance.game_object.location = character.obj.location
-    item.instance.game_object.save()
+    if not item.instance.game_object.move_to(character.obj.location, quiet=True):
+        raise NotReachable
 
 
 @transaction.atomic
@@ -95,8 +95,8 @@ def give(
     for equipped in list(item.instance.equipped_slots.all()):
         unequip_item(equipped_item=equipped)
 
-    item.instance.game_object.location = recipient.obj
-    item.instance.game_object.save()
+    if not item.instance.game_object.move_to(recipient.obj, quiet=True):
+        raise NotReachable
     item.instance.owner = recipient.obj.account
     item.instance.save(update_fields=["owner"])
     OwnershipEvent.objects.create(
@@ -165,9 +165,9 @@ def put_in(
 
     Validates the container is reachable by ``character``, the container's
     template/state, and the item's possession by ``character``. Sets
-    ``item.contained_in = container``. Does NOT change the item's underlying
-    ObjectDB location — the container still lives in the character's
-    inventory; the item lives "inside" via the FK.
+    ``item.contained_in = container`` and moves the underlying ``ObjectDB``
+    into the container's ``ObjectDB`` so Evennia's ``look``/contents traversal
+    sees the item as being inside the container.
     """
     if not container.is_reachable_by(character.obj):
         raise NotReachable
@@ -191,6 +191,8 @@ def put_in(
 
     item.instance.contained_in = container.instance
     item.instance.save(update_fields=["contained_in"])
+    if not item.instance.game_object.move_to(container.instance.game_object, quiet=True):
+        raise NotReachable
 
 
 @transaction.atomic
@@ -208,5 +210,5 @@ def take_out(character: CharacterState, item: ItemState) -> None:
         raise NotInContainer
     item.instance.contained_in = None
     item.instance.save(update_fields=["contained_in"])
-    item.instance.game_object.location = character.obj
-    item.instance.game_object.save()
+    if not item.instance.game_object.move_to(character.obj, quiet=True):
+        raise NotReachable
