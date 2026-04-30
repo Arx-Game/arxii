@@ -125,3 +125,63 @@ class CombatAttackResolverCallTests(TestCase):
         self.assertEqual(result.pull_flat_bonus, 2)
         self.assertEqual(len(result.damage_results), 1)
         self.assertIsNotNone(result.check_result)
+
+
+class SumActiveFlatBonusesTests(TestCase):
+    def test_returns_zero_when_no_pulls(self) -> None:
+        from world.combat.services import _sum_active_flat_bonuses
+
+        resolver = _build_resolver()
+        self.assertEqual(
+            _sum_active_flat_bonuses(resolver.participant, resolver.participant.encounter),
+            0,
+        )
+
+    def test_sums_flat_bonus_scaled_values_across_active_pulls(self) -> None:
+        from world.combat.factories import (
+            CombatPullFactory,
+            CombatPullResolvedEffectFactory,
+        )
+        from world.combat.services import _sum_active_flat_bonuses
+        from world.magic.constants import EffectKind
+
+        resolver = _build_resolver()
+        pull = CombatPullFactory(
+            participant=resolver.participant,
+            round_number=resolver.participant.encounter.round_number,
+        )
+        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.FLAT_BONUS, scaled_value=4)
+        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.FLAT_BONUS, scaled_value=2)
+
+        resolver.participant.character_sheet.character.combat_pulls.invalidate()
+
+        self.assertEqual(
+            _sum_active_flat_bonuses(resolver.participant, resolver.participant.encounter),
+            6,
+        )
+
+    def test_ignores_non_flat_bonus_kinds(self) -> None:
+        from world.combat.factories import (
+            CombatPullFactory,
+            CombatPullResolvedEffectFactory,
+        )
+        from world.combat.services import _sum_active_flat_bonuses
+        from world.magic.constants import EffectKind, VitalBonusTarget
+
+        resolver = _build_resolver()
+        pull = CombatPullFactory(
+            participant=resolver.participant,
+            round_number=resolver.participant.encounter.round_number,
+        )
+        CombatPullResolvedEffectFactory(
+            pull=pull,
+            kind=EffectKind.VITAL_BONUS,
+            scaled_value=99,
+            vital_target=VitalBonusTarget.MAX_HEALTH,
+        )
+        resolver.participant.character_sheet.character.combat_pulls.invalidate()
+
+        self.assertEqual(
+            _sum_active_flat_bonuses(resolver.participant, resolver.participant.encounter),
+            0,
+        )

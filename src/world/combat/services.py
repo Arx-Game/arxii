@@ -164,6 +164,27 @@ class CombatAttackResolver:
         )
 
 
+def _sum_active_flat_bonuses(
+    participant: CombatParticipant,
+    encounter: CombatEncounter,
+) -> int:
+    """Sum scaled_value across FLAT_BONUS resolved-effect rows on the
+    participant's active CombatPull rows for this encounter.
+
+    Reads through CharacterCombatPullHandler so the cached/prefetched
+    list is honored — avoids re-querying.
+    """
+    from world.magic.constants import EffectKind  # noqa: PLC0415
+
+    character = participant.character_sheet.character
+    total = 0
+    for pull in character.combat_pulls.active_for_encounter(encounter):
+        for eff in pull.resolved_effects_cached:
+            if eff.kind == EffectKind.FLAT_BONUS and eff.scaled_value:
+                total += eff.scaled_value
+    return total
+
+
 # ---------------------------------------------------------------------------
 # ActionCategory -> FatigueCategory mapping (same values)
 # ---------------------------------------------------------------------------
