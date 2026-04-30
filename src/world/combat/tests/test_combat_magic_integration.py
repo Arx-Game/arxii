@@ -303,3 +303,40 @@ class ReactiveScarCancelTest(TestCase):
             svc_mod.emit_event = original
 
         self.assertEqual(cast_fired, [])
+
+
+class MishapTest(TestCase):
+    """When intensity > control, mishap rider fires after the cast."""
+
+    def test_mishap_path_invoked_on_control_deficit(self) -> None:
+        participant, action, opponent, _, _, _ = _setup_pc_attacking_mook(
+            technique_intensity=15,
+            technique_control=2,
+        )
+
+        captured: list = []
+        import world.magic.services.techniques as svc_mod
+
+        original_mishap = svc_mod._resolve_mishap
+
+        def capturing_mishap(character, pool, check_result):
+            captured.append((character, pool, check_result))
+            return original_mishap(character, pool, check_result)
+
+        with (
+            patch("world.combat.services.perform_check") as mock_perform,
+            patch.object(svc_mod, "select_mishap_pool", return_value=MagicMock()) as mock_select,
+            patch.object(svc_mod, "_resolve_mishap", side_effect=capturing_mishap),
+        ):
+            mock_perform.return_value = MagicMock(success_level=2)
+            resolve_combat_technique(
+                participant=participant,
+                action=action,
+                target=opponent,
+                fatigue_category=FatigueCategory.PHYSICAL,
+                offense_check_type=MagicMock(),
+                offense_check_fn=None,
+            )
+
+            mock_select.assert_called_once()
+            self.assertEqual(len(captured), 1)
