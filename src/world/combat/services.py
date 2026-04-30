@@ -142,6 +142,15 @@ class CombatAttackResolver:
             return base_power // 2
         return 0
 
+    def _apply(self, scaled_damage: int) -> list[OpponentDamageResult]:
+        """Apply damage to target if alive and damage > 0."""
+        if scaled_damage <= 0:
+            return []
+        self.target.refresh_from_db()
+        if self.target.status == OpponentStatus.DEFEATED:
+            return []
+        return [apply_damage_to_opponent(self.target, scaled_damage)]
+
 
 # ---------------------------------------------------------------------------
 # ActionCategory -> FatigueCategory mapping (same values)

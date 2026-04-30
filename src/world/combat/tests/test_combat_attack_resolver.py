@@ -89,3 +89,25 @@ class CombatAttackResolverScaleTests(TestCase):
         resolver = _build_resolver(base_power=20)
         check = MagicMock(success_level=0)
         self.assertEqual(resolver._scale(check), 0)
+
+
+class CombatAttackResolverApplyTests(TestCase):
+    def test_apply_returns_damage_results_when_target_alive(self) -> None:
+        resolver = _build_resolver()
+        results = resolver._apply(scaled_damage=10)
+        self.assertEqual(len(results), 1)
+        self.assertGreater(results[0].damage_dealt, 0)
+
+    def test_apply_skips_defeated_target(self) -> None:
+        from world.combat.constants import OpponentStatus
+
+        resolver = _build_resolver()
+        resolver.target.status = OpponentStatus.DEFEATED
+        resolver.target.save(update_fields=["status"])
+        results = resolver._apply(scaled_damage=10)
+        self.assertEqual(results, [])
+
+    def test_apply_returns_empty_on_zero_damage(self) -> None:
+        resolver = _build_resolver()
+        results = resolver._apply(scaled_damage=0)
+        self.assertEqual(results, [])
