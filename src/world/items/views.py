@@ -6,6 +6,7 @@ from rest_framework import serializers, viewsets
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import SAFE_METHODS, IsAuthenticated
 from rest_framework.request import Request
+from rest_framework.views import APIView
 
 from world.character_sheets.models import CharacterSheet
 from world.items.filters import (
@@ -48,7 +49,7 @@ def _account_currently_plays(account: object, sheet: CharacterSheet) -> bool:
 class ItemFacetWritePermission(IsAuthenticated):
     """Allow attach/remove only if the user owns the item_instance, or is staff."""
 
-    def has_permission(self, request: Request, view: viewsets.ViewSet) -> bool:
+    def has_permission(self, request: Request, view: APIView) -> bool:
         if not super().has_permission(request, view):
             return False
         if request.method in SAFE_METHODS:
@@ -65,9 +66,7 @@ class ItemFacetWritePermission(IsAuthenticated):
             return ItemInstance.objects.filter(pk=instance_pk, owner=request.user).exists()
         return True  # DELETE checked at object level
 
-    def has_object_permission(
-        self, request: Request, view: viewsets.ViewSet, obj: ItemFacet
-    ) -> bool:
+    def has_object_permission(self, request: Request, view: APIView, obj: ItemFacet) -> bool:
         if request.user.is_staff:
             return True
         return obj.item_instance.owner_id == request.user.pk
@@ -76,7 +75,7 @@ class ItemFacetWritePermission(IsAuthenticated):
 class EquippedItemWritePermission(IsAuthenticated):
     """Allow equip/unequip only when the request.user is currently playing the character."""
 
-    def has_permission(self, request: Request, view: viewsets.ViewSet) -> bool:
+    def has_permission(self, request: Request, view: APIView) -> bool:
         if not super().has_permission(request, view):
             return False
         if request.method in SAFE_METHODS or request.user.is_staff:
@@ -95,9 +94,7 @@ class EquippedItemWritePermission(IsAuthenticated):
             return True
         return _account_currently_plays(request.user, sheet)
 
-    def has_object_permission(
-        self, request: Request, view: viewsets.ViewSet, obj: EquippedItem
-    ) -> bool:
+    def has_object_permission(self, request: Request, view: APIView, obj: EquippedItem) -> bool:
         if request.user.is_staff:
             return True
         try:
