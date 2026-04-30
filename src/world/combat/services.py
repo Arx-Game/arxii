@@ -85,6 +85,7 @@ from world.combat.types import (
 )
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel, FatigueCategory
 from world.fatigue.services import apply_fatigue, get_fatigue_penalty
+from world.magic.constants import EffectKind
 from world.vitals.constants import (
     DEATH_HEALTH_THRESHOLD,
     KNOCKOUT_HEALTH_THRESHOLD,
@@ -99,7 +100,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-@dataclass
+@dataclass(frozen=True)
 class CombatAttackResolver:
     """Resolves the inner damage step of a combat-cast attack technique.
 
@@ -176,8 +177,6 @@ def _sum_active_flat_bonuses(
     Reads through CharacterCombatPullHandler so the cached/prefetched
     list is honored — avoids re-querying.
     """
-    from world.magic.constants import EffectKind  # noqa: PLC0415
-
     character = participant.character_sheet.character
     total = 0
     for pull in character.combat_pulls.active_for_encounter(encounter):
@@ -211,7 +210,7 @@ def _build_combat_result(
     )
 
 
-def resolve_combat_technique(  # noqa: PLR0913 - many args needed for resolver construction
+def resolve_combat_technique(  # noqa: PLR0913 — keyword-only orchestrator args
     *,
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -1446,9 +1445,11 @@ def _resolve_pc_action(
                     )
                     outcome.damage_results.extend(combat_result.damage_results)
                 else:
-                    # No offense check type configured — apply raw base_power
-                    # directly. Preserves existing test fixtures that don't
-                    # set up check types.
+                    # TODO(combat-magic-pipeline): Remove this bypass once all combat
+                    # tests/fixtures provide an offense_check_type. Without one, this
+                    # branch skips the magic pipeline entirely (no anima cost, no events,
+                    # no soulfray), which is a temporary test-compatibility shim, not
+                    # production behavior.
                     dmg_result = apply_damage_to_opponent(target, technique.effect_type.base_power)
                     outcome.damage_results.append(dmg_result)
 
