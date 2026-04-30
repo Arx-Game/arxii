@@ -185,9 +185,14 @@ def passive_facet_bonuses(sheet: object, target: ModifierTarget) -> int:
     Returns:
         Integer total of all passive facet contributions for ``target``.
     """
+    char = sheet.character
+    # Defensive: raw ObjectDB fixtures (without _typeclass_path) don't have
+    # Character typeclass handlers. Skip the walk gracefully.
+    if not hasattr(char, "threads") or not hasattr(char, "equipped_items"):
+        return 0
     total = 0
-    for thread in sheet.character.threads.threads_of_kind(TargetKind.FACET):
-        matching = sheet.character.equipped_items.item_facets_for(thread.target_facet)
+    for thread in char.threads.threads_of_kind(TargetKind.FACET):
+        matching = char.equipped_items.item_facets_for(thread.target_facet)
         if not matching:
             continue
         effects = _facet_pull_effects_for(thread.resonance, target, tier=0)
@@ -297,12 +302,17 @@ def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
         is_gear_compatible,  # defer import to break future cycle
     )
 
-    role = sheet.character.covenant_roles.currently_held()
+    char = sheet.character
+    # Defensive: raw ObjectDB fixtures (without _typeclass_path) don't have
+    # Character typeclass handlers. Skip the walk gracefully.
+    if not hasattr(char, "covenant_roles") or not hasattr(char, "equipped_items"):
+        return 0
+    role = char.covenant_roles.currently_held()
     if role is None:
         return 0
     role_bonus = role_base_bonus_for_target(role, target, sheet.current_level)
     total = 0
-    for equipped in sheet.character.equipped_items:
+    for equipped in char.equipped_items:
         item = equipped.item_instance
         gear_stat = item_mundane_stat_for_target(item, target)
         archetype = item.template.gear_archetype

@@ -816,3 +816,40 @@ class GetModifierTotalEquipmentWalkTests(TestCase):
             result = get_modifier_total(self.character, self.eq_target)
 
         assert result == 17  # 10 (eager) + 3 (facet) + 4 (role)
+
+
+class EquipmentWalkRawObjectDBSafetyTests(TestCase):
+    """Regression: passive_facet_bonuses + covenant_role_bonus must handle
+    raw-ObjectDB sheet.character (typeclass not set up) gracefully.
+    Caught by CI no-keepdb regression on Phase 8.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia.objects.models import ObjectDB
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
+
+        # Mirror the trait test fixture: raw ObjectDB, no Character typeclass.
+        cls.character = ObjectDB.objects.create(db_key="RawChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.target = ModifierTargetFactory(
+            category=ModifierCategoryFactory(name="raw_stat"),
+            name="example_stat",
+        )
+
+    def test_passive_facet_bonuses_returns_zero_for_raw_objectdb(self) -> None:
+        from world.mechanics.services import passive_facet_bonuses
+
+        self.assertEqual(passive_facet_bonuses(self.sheet, self.target), 0)
+
+    def test_covenant_role_bonus_returns_zero_for_raw_objectdb(self) -> None:
+        from world.mechanics.services import covenant_role_bonus
+
+        self.assertEqual(covenant_role_bonus(self.sheet, self.target), 0)
+
+    def test_get_modifier_total_returns_zero_for_raw_objectdb(self) -> None:
+        from world.mechanics.services import get_modifier_total
+
+        self.assertEqual(get_modifier_total(self.sheet, self.target), 0)
