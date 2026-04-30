@@ -12,6 +12,7 @@ from django.db import transaction
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
 from world.items.exceptions import PermissionDenied
+from world.items.services import unequip_item
 
 
 @transaction.atomic
@@ -38,10 +39,9 @@ def drop(character: CharacterState, item: ItemState) -> None:
     removed first via ``world.items.services.unequip_item`` so the
     character's cached equipment handler is invalidated correctly.
     """
-    from world.items.services import unequip_item  # noqa: PLC0415
-
     if not item.can_drop(dropper=character):
         raise PermissionDenied
+    # Snapshot rows before iteration — unequip_item deletes them as we go.
     for equipped in list(item.instance.equipped_slots.all()):
         unequip_item(equipped_item=equipped)
     item.instance.game_object.location = character.obj.location
