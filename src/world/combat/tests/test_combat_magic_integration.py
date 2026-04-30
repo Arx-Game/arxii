@@ -340,3 +340,39 @@ class MishapTest(TestCase):
 
             mock_select.assert_called_once()
             self.assertEqual(len(captured), 1)
+
+
+class FlatBonusPullCheckTest(TestCase):
+    """Active FLAT_BONUS CombatPull rows feed extra_modifiers into perform_check."""
+
+    def test_active_flat_bonus_pulls_added_to_extra_modifiers(self) -> None:
+        from world.combat.factories import (
+            CombatPullFactory,
+            CombatPullResolvedEffectFactory,
+        )
+        from world.magic.constants import EffectKind
+
+        participant, action, opponent, _, _, _ = _setup_pc_attacking_mook()
+        pull = CombatPullFactory(
+            participant=participant,
+            round_number=participant.encounter.round_number,
+        )
+        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.FLAT_BONUS, scaled_value=3)
+        CombatPullResolvedEffectFactory(pull=pull, kind=EffectKind.FLAT_BONUS, scaled_value=1)
+
+        participant.character_sheet.character.combat_pulls.invalidate()
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            resolve_combat_technique(
+                participant=participant,
+                action=action,
+                target=opponent,
+                fatigue_category=FatigueCategory.PHYSICAL,
+                offense_check_type=MagicMock(),
+                offense_check_fn=None,
+            )
+
+        kwargs = mock_perform.call_args.kwargs
+        # 3 + 1 from pulls; effort EffortLevel.MEDIUM is 0.
+        self.assertGreaterEqual(kwargs["extra_modifiers"], 4)
