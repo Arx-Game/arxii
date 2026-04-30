@@ -13,11 +13,11 @@ from evennia_extensions.factories import (
 )
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
-from flows.service_functions.inventory import drop, pick_up
-from world.items.constants import BodyRegion, EquipmentLayer
+from flows.service_functions.inventory import drop, give, pick_up
+from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
 from world.items.exceptions import PermissionDenied
 from world.items.factories import ItemInstanceFactory
-from world.items.models import EquippedItem
+from world.items.models import EquippedItem, OwnershipEvent
 
 
 class PickUpTests(TestCase):
@@ -130,3 +130,73 @@ class DropTests(TestCase):
         with patch.object(ItemState, "can_drop", return_value=False):
             with self.assertRaises(PermissionDenied):
                 drop(self.character_state, self.item_state)
+
+
+class GiveTests(TestCase):
+    """Cover the three behaviors of ``give``."""
+
+    def setUp(self) -> None:
+        # Same per-test setUp pattern as the other test classes.
+        self.giver_account = AccountFactory(username="giver_account")
+        self.recipient_account = AccountFactory(username="recipient_account")
+        self.room = ObjectDBFactory(
+            db_key="GiveTestRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.giver = CharacterFactory(
+            db_key="GiveTestGiver",
+            location=self.room,
+        )
+        self.giver.db_account = self.giver_account
+        self.giver.save()
+        self.recipient = CharacterFactory(
+            db_key="GiveTestRecipient",
+            location=self.room,
+        )
+        self.recipient.db_account = self.recipient_account
+        self.recipient.save()
+
+        # Item starts in the giver's possession, owned by the giver's account.
+        item_obj = ObjectDBFactory(
+            db_key="GiveTestItemObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        item_obj.location = self.giver
+        item_obj.save()
+        self.item = ItemInstanceFactory(game_object=item_obj, owner=self.giver_account)
+
+        ctx = MagicMock()
+        self.giver_state = CharacterState(self.giver, context=ctx)
+        self.recipient_state = CharacterState(self.recipient, context=ctx)
+        self.item_state = ItemState(self.item, context=ctx)
+
+    def test_give_transfers_location_and_owner(self) -> None:
+        give(self.giver_state, self.recipient_state, self.item_state)
+        self.item.refresh_from_db()
+        self.item.game_object.refresh_from_db()
+        self.assertEqual(self.item.game_object.location, self.recipient)
+        self.assertEqual(self.item.owner, self.recipient_account)
+
+    def test_give_writes_ownership_event(self) -> None:
+        give(self.giver_state, self.recipient_state, self.item_state)
+        event = OwnershipEvent.objects.get(item_instance=self.item)
+        self.assertEqual(event.event_type, OwnershipEventType.GIVEN)
+        self.assertEqual(event.from_account, self.giver_account)
+        self.assertEqual(event.to_account, self.recipient_account)
+
+    def test_give_auto_unequips_first(self) -> None:
+        EquippedItem.objects.create(
+            character=self.giver,
+            item_instance=self.item,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        give(self.giver_state, self.recipient_state, self.item_state)
+        self.assertFalse(EquippedItem.objects.filter(item_instance=self.item).exists())
+        self.item.game_object.refresh_from_db()
+        self.assertEqual(self.item.game_object.location, self.recipient)
+
+    def test_give_denied_raises(self) -> None:
+        with patch.object(ItemState, "can_give", return_value=False):
+            with self.assertRaises(PermissionDenied):
+                give(self.giver_state, self.recipient_state, self.item_state)

@@ -11,7 +11,9 @@ from django.db import transaction
 
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
+from world.items.constants import OwnershipEventType
 from world.items.exceptions import PermissionDenied
+from world.items.models import OwnershipEvent
 from world.items.services import unequip_item
 
 
@@ -46,3 +48,35 @@ def drop(character: CharacterState, item: ItemState) -> None:
         unequip_item(equipped_item=equipped)
     item.instance.game_object.location = character.obj.location
     item.instance.game_object.save()
+
+
+@transaction.atomic
+def give(
+    giver: CharacterState,
+    recipient: CharacterState,
+    item: ItemState,
+) -> None:
+    """Transfer ``item`` from ``giver`` to ``recipient``.
+
+    Writes an ``OwnershipEvent(GIVEN)`` row, transfers ``owner``, and
+    moves the underlying ``ObjectDB`` to the recipient. Auto-unequips
+    if the item is currently equipped.
+    """
+    if not item.can_give(giver=giver, recipient=recipient):
+        raise PermissionDenied
+
+    previous_owner = item.instance.owner
+    # Snapshot rows before iteration — unequip_item deletes them as we go.
+    for equipped in list(item.instance.equipped_slots.all()):
+        unequip_item(equipped_item=equipped)
+
+    item.instance.game_object.location = recipient.obj
+    item.instance.game_object.save()
+    item.instance.owner = recipient.obj.account
+    item.instance.save(update_fields=["owner"])
+    OwnershipEvent.objects.create(
+        item_instance=item.instance,
+        event_type=OwnershipEventType.GIVEN,
+        from_account=previous_owner,
+        to_account=recipient.obj.account,
+    )
