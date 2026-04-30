@@ -200,6 +200,78 @@ class CombatTechniqueResolution:
 because combat doesn't have an action-resolution wrapper to nest under.
 `use_technique`'s extractor handles both shapes.
 
+### `CombatTechniqueResult` (new — `world/combat/types.py`)
+
+```python
+@dataclass(frozen=True)
+class CombatTechniqueResult:
+    """Adapter's return shape — what _resolve_pc_action consumes.
+
+    Wraps the magic-pipeline outcome (TechniqueUseResult) plus the
+    combat-side damage_results extracted from it. Frozen because the
+    cast is over by the time this is constructed.
+    """
+    damage_results: list[OpponentDamageResult]
+    technique_use_result: TechniqueUseResult
+```
+
+`damage_results` is the only field `_resolve_pc_action` reads to populate
+`ActionOutcome.damage_results`. `technique_use_result` is exposed for
+future consumers that want to surface mishap text, soulfray warnings, or
+overburn flags into the round narration — none of which this PR wires up,
+but keeping the field avoids re-extracting later.
+
+### `_build_combat_result` (new — `world/combat/services.py`)
+
+```python
+def _build_combat_result(
+    technique_use_result: TechniqueUseResult,
+    resolver: CombatAttackResolver,
+) -> CombatTechniqueResult:
+    """Translate use_technique's outcome into the adapter's return shape."""
+    if not technique_use_result.confirmed:
+        # PRE_CAST cancellation or unconfirmed soulfray warning —
+        # resolver was never called; no damage to report.
+        return CombatTechniqueResult(
+            damage_results=[],
+            technique_use_result=technique_use_result,
+        )
+
+    resolution = technique_use_result.resolution_result
+    # Type contract: resolver returns CombatTechniqueResolution; if
+    # use_technique passed it through unmodified, this isinstance check
+    # is a defensive assertion, not user-input validation.
+    assert isinstance(resolution, CombatTechniqueResolution)
+    return CombatTechniqueResult(
+        damage_results=list(resolution.damage_results),
+        technique_use_result=technique_use_result,
+    )
+```
+
+### `_sum_active_flat_bonuses` (new — `world/combat/services.py`)
+
+```python
+def _sum_active_flat_bonuses(
+    participant: CombatParticipant,
+    encounter: CombatEncounter,
+) -> int:
+    """Sum scaled_value across FLAT_BONUS resolved-effect rows on the
+    participant's active CombatPull rows for this encounter.
+
+    Uses the existing CharacterCombatPullHandler (cached, prefetched)
+    rather than querying directly — reads from
+    ``character.combat_pulls.active_for_encounter(encounter)`` and walks
+    each pull's ``resolved_effects_cached`` (already prefetched).
+    """
+    character = participant.character_sheet.character
+    total = 0
+    for pull in character.combat_pulls.active_for_encounter(encounter):
+        for eff in pull.resolved_effects_cached:
+            if eff.kind == EffectKind.FLAT_BONUS and eff.scaled_value:
+                total += eff.scaled_value
+    return total
+```
+
 ### `CombatAttackResolver` (new — `world/combat/services.py`)
 
 ```python
