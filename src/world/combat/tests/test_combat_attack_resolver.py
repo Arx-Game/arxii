@@ -111,3 +111,17 @@ class CombatAttackResolverApplyTests(TestCase):
         resolver = _build_resolver()
         results = resolver._apply(scaled_damage=0)
         self.assertEqual(results, [])
+
+
+class CombatAttackResolverCallTests(TestCase):
+    def test_call_returns_resolution_with_all_fields(self) -> None:
+        resolver = _build_resolver(pull_flat_bonus=2, base_power=20)
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            result = resolver()
+
+        self.assertEqual(result.scaled_damage, 20)
+        self.assertEqual(result.pull_flat_bonus, 2)
+        self.assertEqual(len(result.damage_results), 1)
+        self.assertIsNotNone(result.check_result)

@@ -74,6 +74,7 @@ from world.combat.models import (
 from world.combat.types import (
     ActionOutcome,
     AvailableCombo,
+    CombatTechniqueResolution,
     ComboSlotMatch,
     DefenseResult,
     OpponentDamageResult,
@@ -150,6 +151,17 @@ class CombatAttackResolver:
         if self.target.status == OpponentStatus.DEFEATED:
             return []
         return [apply_damage_to_opponent(self.target, scaled_damage)]
+
+    def __call__(self) -> CombatTechniqueResolution:
+        check_result = self._roll_check()
+        scaled_damage = self._scale(check_result)
+        damage_results = self._apply(scaled_damage)
+        return CombatTechniqueResolution(
+            check_result=check_result,
+            damage_results=damage_results,
+            pull_flat_bonus=self.pull_flat_bonus,
+            scaled_damage=scaled_damage,
+        )
 
 
 # ---------------------------------------------------------------------------
