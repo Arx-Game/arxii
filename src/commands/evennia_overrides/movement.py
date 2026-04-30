@@ -5,13 +5,20 @@ from __future__ import annotations
 import re
 from typing import Any, ClassVar
 
+from actions.definitions.items import TakeOutAction
 from actions.definitions.movement import DropAction, GetAction, GiveAction, HomeAction
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 
 
 class CmdGet(ArxCommand):
-    """Pick up an item."""
+    """Pick up an item from the room or take an item out of a container.
+
+    Telnet grammars:
+        ``get <item>`` / ``take <item>``                 — pick up from the room
+        ``get <item> from <container>``                  — take out of a container
+        ``take <item> from <container>`` (alias)
+    """
 
     key = "get"
     aliases: ClassVar[list[str]] = ["take"]
@@ -23,6 +30,23 @@ class CmdGet(ArxCommand):
         if not args:
             msg = "Get what?"
             raise CommandError(msg)
+        match = re.match(r"^(.+?)\s+from\s+(.+)$", args, flags=re.IGNORECASE)
+        if match:
+            item_name = match.group(1).strip()
+            container_name = match.group(2).strip()
+            container = self.caller.search(container_name)
+            if not container:
+                msg = f"Could not find '{container_name}'."
+                raise CommandError(msg)
+            target = self.caller.search(item_name, location=container)
+            if not target:
+                msg = f"Could not find '{item_name}' in '{container_name}'."
+                raise CommandError(msg)
+            # Switch dispatch to TakeOutAction for this invocation. Safe because
+            # ``func()`` reads ``self.action`` after ``resolve_action_args()``,
+            # and Evennia instantiates commands per invocation.
+            self.action = TakeOutAction()
+            return {"target": target}
         target = self.caller.search(args)
         if not target:
             msg = f"Could not find '{args}'."
