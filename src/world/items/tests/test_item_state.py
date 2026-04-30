@@ -31,3 +31,27 @@ class ItemStateDefaultsTests(TestCase):
 
     def test_can_equip_default_true(self) -> None:
         self.assertTrue(self.state.can_equip(wearer=MagicMock()))
+
+
+class ItemStatePackageHookTests(TestCase):
+    """Behavior packages can deny ItemState permission checks via hooks."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.item = ItemInstanceFactory()
+
+    def setUp(self) -> None:
+        self.state = ItemState(self.item, context=MagicMock())
+
+    def _attach_denying_package(self, hook_name: str) -> None:
+        """Attach a fake package whose ``hook_name`` hook returns ``False``."""
+
+        package = MagicMock()
+        package.get_hook.side_effect = (
+            lambda name, _hook=hook_name: (lambda *_a, **_kw: False) if name == _hook else None
+        )
+        self.state.packages = [package]
+
+    def test_can_take_denied_by_package_hook(self) -> None:
+        self._attach_denying_package("can_take")
+        self.assertFalse(self.state.can_take(taker=MagicMock()))
