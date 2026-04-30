@@ -8,6 +8,7 @@ from typing import Any
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
+from actions.definitions._item_helpers import resolve_item_instance
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.object_states.item_state import ItemState
 from flows.scene_data_manager import SceneDataManager
@@ -15,23 +16,8 @@ from flows.service_functions.communication import message_location, send_room_st
 from flows.service_functions.inventory import drop, give, pick_up
 from flows.service_functions.movement import check_exit_traversal, move_object, traverse_exit
 from world.items.exceptions import InventoryError
-from world.items.models import ItemInstance
 from world.mechanics.constants import ChallengeType
 from world.mechanics.models import ChallengeInstance
-
-
-def _resolve_item_instance(target: ObjectDB) -> ItemInstance | None:
-    """Return the ``ItemInstance`` linked to ``target``, or ``None`` if none exists.
-
-    The actions layer accepts an ``ObjectDB`` as the target, but the inventory
-    service functions operate on ``ItemInstance``. This bridges the two via
-    the ``OneToOneField`` reverse accessor, returning ``None`` for plain
-    ObjectDBs that have no ItemInstance row (e.g. NPCs picked up by mistake).
-    """
-    try:
-        return target.item_instance
-    except ObjectDB.item_instance.RelatedObjectDoesNotExist:  # type: ignore[attr-defined]
-        return None
 
 
 @dataclass
@@ -57,7 +43,7 @@ class GetAction(Action):
         if target is None:
             return ActionResult(success=False, message="Get what?")
 
-        item_instance = _resolve_item_instance(target)
+        item_instance = resolve_item_instance(target)
         if item_instance is None:
             return ActionResult(success=False, message="That can't be picked up.")
 
@@ -102,7 +88,7 @@ class DropAction(Action):
         if target is None:
             return ActionResult(success=False, message="Drop what?")
 
-        item_instance = _resolve_item_instance(target)
+        item_instance = resolve_item_instance(target)
         if item_instance is None:
             return ActionResult(success=False, message="That can't be dropped.")
 
@@ -148,7 +134,7 @@ class GiveAction(Action):
         if target is None or recipient is None:
             return ActionResult(success=False, message="Give what to whom?")
 
-        item_instance = _resolve_item_instance(target)
+        item_instance = resolve_item_instance(target)
         if item_instance is None:
             return ActionResult(success=False, message="That can't be given.")
 

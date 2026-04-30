@@ -8,7 +8,7 @@ from typing import Any
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
-from actions.definitions.movement import _resolve_item_instance
+from actions.definitions._item_helpers import resolve_item_instance
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.object_states.item_state import ItemState
 from flows.scene_data_manager import SceneDataManager
@@ -40,7 +40,7 @@ class EquipAction(Action):
         if target is None:
             return ActionResult(success=False, message="Equip what?")
 
-        item_instance = _resolve_item_instance(target)
+        item_instance = resolve_item_instance(target)
         if item_instance is None:
             return ActionResult(success=False, message="That can't be equipped.")
 
@@ -85,7 +85,7 @@ class UnequipAction(Action):
         if target is None:
             return ActionResult(success=False, message="Remove what?")
 
-        item_instance = _resolve_item_instance(target)
+        item_instance = resolve_item_instance(target)
         if item_instance is None:
             return ActionResult(success=False, message="That can't be removed.")
 
@@ -131,11 +131,11 @@ class PutInAction(Action):
         if target is None or container is None:
             return ActionResult(success=False, message="Put what into what?")
 
-        item_instance = _resolve_item_instance(target)
+        item_instance = resolve_item_instance(target)
         if item_instance is None:
             return ActionResult(success=False, message="That can't be put away.")
 
-        container_instance = _resolve_item_instance(container)
+        container_instance = resolve_item_instance(container)
         if container_instance is None:
             return ActionResult(success=False, message="That isn't a container.")
 
@@ -184,7 +184,7 @@ class TakeOutAction(Action):
         if target is None:
             return ActionResult(success=False, message="Take what out?")
 
-        item_instance = _resolve_item_instance(target)
+        item_instance = resolve_item_instance(target)
         if item_instance is None:
             return ActionResult(success=False, message="That can't be taken out.")
 
