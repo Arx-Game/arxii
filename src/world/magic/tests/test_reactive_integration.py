@@ -13,7 +13,7 @@ Tests verify:
 - TECHNIQUE_AFFECTED has correct target and effect
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
@@ -459,22 +459,23 @@ class TechniqueCheckResultExtractorTest(TestCase):
 
         import world.magic.services.techniques as svc_mod
 
-        original = svc_mod._resolve_mishap
+        original_resolve_mishap = svc_mod._resolve_mishap
 
         def capturing(character, pool, check_result):
             captured.append(check_result)
-            return original(character, pool, check_result)
+            return original_resolve_mishap(character, pool, check_result)
 
-        svc_mod._resolve_mishap = capturing
-        svc_mod.select_mishap_pool = MagicMock(return_value=MagicMock())
-        try:
+        # select_mishap_pool returns a truthy pool so _resolve_mishap fires;
+        # patch.object guarantees both are restored on exit.
+        with (
+            patch.object(svc_mod, "_resolve_mishap", side_effect=capturing),
+            patch.object(svc_mod, "select_mishap_pool", return_value=MagicMock()),
+        ):
             use_technique(
                 character=self.char,
                 technique=self.technique,
                 resolve_fn=lambda: resolution,
             )
-        finally:
-            svc_mod._resolve_mishap = original
 
         # The extractor must have found .check_result and passed it through.
         self.assertEqual(len(captured), 1)
