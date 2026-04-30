@@ -28,6 +28,7 @@ from world.items.exceptions import (
     ContainerClosed,
     ContainerFull,
     ItemTooLarge,
+    NotAContainer,
     NotEquipped,
     NotInPossession,
     PermissionDenied,
@@ -544,7 +545,7 @@ class PutInTests(TestCase):
         non_obj.save()
         non_container = ItemInstanceFactory(template=non_template, game_object=non_obj)
         non_state = ItemState(non_container, context=MagicMock())
-        with self.assertRaises(ItemTooLarge):
+        with self.assertRaises(NotAContainer):
             put_in(self.character_state, self.item_state, non_state)
 
     def test_put_in_not_in_possession_raises(self) -> None:

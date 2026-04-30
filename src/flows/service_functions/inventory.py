@@ -16,6 +16,7 @@ from world.items.exceptions import (
     ContainerClosed,
     ContainerFull,
     ItemTooLarge,
+    NotAContainer,
     NotEquipped,
     NotInPossession,
     PermissionDenied,
@@ -152,8 +153,7 @@ def put_in(
     """
     container_template = container.instance.template
     if not container_template.is_container:
-        # Treat non-containers as "won't fit" — they have no interior.
-        raise ItemTooLarge
+        raise NotAContainer
     if container_template.supports_open_close and not container.instance.is_open:
         raise ContainerClosed
     if (

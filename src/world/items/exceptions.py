@@ -104,6 +104,11 @@ class ItemTooLarge(InventoryError):
     )
 
 
+class NotAContainer(InventoryError):
+    user_message = "That isn't a container."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That isn't a container."})
+
+
 class RecipientNotAdjacent(InventoryError):
     user_message = "They are not here to receive it."
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"They are not here to receive it."})
