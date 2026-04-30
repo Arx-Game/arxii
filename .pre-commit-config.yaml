@@ -29,6 +29,13 @@ repos:
         language: system
         pass_filenames: true
         types: [python]
+      - id: cached-property-import
+        name: Forbid functools.cached_property in src/
+        entry: uv run python tools/lint_cached_property_import.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/
       - id: string-literal
         name: Block bare string literals as identifiers
         entry: uv run python tools/lint_string_literal.py

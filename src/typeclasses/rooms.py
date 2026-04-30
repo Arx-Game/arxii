@@ -5,8 +5,7 @@ Rooms are simple containers that has no location of their own.
 
 """
 
-from functools import cached_property
-
+from django.utils.functional import cached_property
 from evennia.objects.objects import DefaultRoom
 
 from evennia_extensions.models import RoomProfile

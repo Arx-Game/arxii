@@ -2,14 +2,15 @@
 
 These handlers wire onto the ``Character`` typeclass alongside the established
 ``character.traits`` etc. handlers. They cache per-character data via
-``functools.cached_property`` and rely on service functions to call
-``.invalidate()`` after mutation.
+``django.utils.functional.cached_property`` and rely on service functions to
+call ``.invalidate()`` after mutation.
 """
 
 from __future__ import annotations
 
-from functools import cached_property
 from typing import TYPE_CHECKING
+
+from django.utils.functional import cached_property
 
 from world.magic.constants import EffectKind
 from world.magic.models import CharacterResonance, Thread, ThreadPullEffect

@@ -4,9 +4,8 @@ Gifts are thematic collections of magical techniques.
 Traditions represent schools of practice or philosophy.
 """
 
-from functools import cached_property
-
 from django.db import models
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin

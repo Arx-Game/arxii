@@ -22,11 +22,11 @@ several more options for customizing the Guest account system.
 
 """
 
-from functools import cached_property
-
+from django.utils.functional import cached_property
 from evennia.accounts.accounts import DefaultAccount, DefaultGuest
 
 from commands.utils import serialize_cmdset
+from web.webclient.message_types import WebsocketMessageType
 
 
 class CharacterList:
@@ -142,6 +142,36 @@ class Account(DefaultAccount):
 
         return True, ""
 
+    def _broadcast_puppet_changed(self, session, character) -> None:
+        """Notify all of this account's sessions that a puppet swap occurred.
+
+        Other tabs/sessions use this to update their portrait-grid indicators
+        (e.g., "currently puppeted in another session" badge).
+        """
+        payload = {
+            "session_id": session.sessid,
+            "character_id": character.id if character else None,
+            "character_name": character.key if character else None,
+        }
+        for sess in self.sessions.all():
+            sess.msg(type=WebsocketMessageType.PUPPET_CHANGED.value, args=[payload])
+
+    def puppet_object(self, session, obj):
+        """Puppet a character on a session, then broadcast puppet_changed.
+
+        Overrides Evennia's puppet_object so the broadcast covers all paths
+        that lead to a puppet change — not just `puppet_character_in_session`.
+        Multisession takeover, session reuse, and any direct callers all
+        flow through here.
+
+        Evennia's puppet_object can early-return without puppeting (permission
+        denied, already-puppeted-by-other-account, max-puppets). We check
+        session.puppet to confirm success before broadcasting.
+        """
+        super().puppet_object(session, obj)
+        if session.puppet is obj:
+            self._broadcast_puppet_changed(session, obj)
+
     def puppet_character_in_session(self, character, session):
         """Puppet a character in a specific session."""
         can_puppet, reason = self.can_puppet_character(character)
@@ -153,9 +183,20 @@ class Account(DefaultAccount):
             session.msg(f"Switching from {session.puppet.name} to {character.name}.")
             self.unpuppet_object(session)
 
-        # Puppet the new character
+        # Puppet the new character — broadcast handled by puppet_object override
         self.puppet_object(session, character)
         return True, f"Now controlling {character.name}."
+
+    def unpuppet_object(self, session) -> None:
+        """Unpuppet a character from a session and broadcast the change.
+
+        Triggered both by explicit @ic swaps (which call this internally before
+        re-puppeting) and by session disconnects (browser tab close, telnet quit).
+        Broadcasting on every unpuppet keeps other tabs' portrait-grid state
+        consistent without requiring a refresh.
+        """
+        super().unpuppet_object(session)
+        self._broadcast_puppet_changed(session, character=None)
 
     def at_account_creation(self):
         """Called when account is first created."""

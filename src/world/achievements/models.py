@@ -6,9 +6,8 @@ increments into StatTracker; the achievements engine evaluates requirements
 and awards achievements when thresholds are met.
 """
 
-from functools import cached_property
-
 from django.db import models
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.achievements.constants import ComparisonType, NotificationLevel, RewardType

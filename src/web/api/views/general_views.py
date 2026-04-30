@@ -15,6 +15,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from web.api.payload_helpers import build_account_payload_context
 from web.api.serializers import AccountPlayerSerializer
 from world.roster.models import RosterEntry
 
@@ -122,7 +123,10 @@ class CurrentUserAPIView(APIView):
         """Return the current account."""
         data = None
         if request.user.is_authenticated:
-            data = AccountPlayerSerializer(request.user).data
+            data = AccountPlayerSerializer(
+                request.user,
+                context=build_account_payload_context(request.user),
+            ).data
         return Response(data)
 
 

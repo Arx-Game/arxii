@@ -1,5 +1,6 @@
-from functools import cached_property
 from typing import TYPE_CHECKING, Self, Union
+
+from django.utils.functional import cached_property
 
 from flows.object_states.base_state import BaseState
 from flows.scene_data_manager import SceneDataManager

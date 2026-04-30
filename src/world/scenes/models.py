@@ -1,9 +1,9 @@
-from functools import cached_property
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.utils import timezone
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin

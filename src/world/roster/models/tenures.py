@@ -4,10 +4,10 @@ RosterTenure model for tracking player-character relationships.
 
 from __future__ import annotations
 
-from functools import cached_property
 from typing import ClassVar, cast
 
 from django.db import models
+from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 

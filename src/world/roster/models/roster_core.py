@@ -4,12 +4,12 @@ Core roster models: Roster and RosterEntry.
 
 from __future__ import annotations
 
-from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
+from django.utils.functional import cached_property
 
 if TYPE_CHECKING:
     from world.roster.models.tenures import RosterTenure

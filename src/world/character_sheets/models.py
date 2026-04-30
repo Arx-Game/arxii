@@ -10,7 +10,6 @@ and the evennia_extensions/object_extensions/models.py display name system.
 
 from __future__ import annotations
 
-from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -24,6 +23,7 @@ if TYPE_CHECKING:
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.utils.functional import cached_property
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -299,6 +299,38 @@ class CharacterSheet(SharedMemoryModel):
         from world.scenes.constants import PersonaType  # noqa: PLC0415
 
         return self.personas.get(persona_type=PersonaType.PRIMARY)
+
+    @cached_property
+    def cached_payload_personas(self) -> list[Persona]:
+        """PRIMARY + ESTABLISHED personas, ordered for the account payload.
+
+        Serves as the ``to_attr`` target for::
+
+            Prefetch(
+                "character_sheet__personas",
+                queryset=Persona.objects.filter(
+                    persona_type__in=[PersonaType.PRIMARY, PersonaType.ESTABLISHED]
+                ).order_by("-persona_type", "created_at", "id"),
+                to_attr="cached_payload_personas",
+            )
+
+        PRIMARY first (descending alphabetical: 'p' > 'e'), then ESTABLISHED
+        by ``created_at`` with ``id`` as a deterministic tiebreaker.
+        TEMPORARY personas are excluded — they are scene-bound and not
+        selectable from a portrait grid.
+
+        When prefetched, Django populates this directly. When accessed without
+        prefetch, falls back to a fresh query. The fallback ordering MUST
+        match the Prefetch ordering exactly, or prefetched vs. non-prefetched
+        rows will diverge.
+        """
+        from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+        return list(
+            self.personas.filter(
+                persona_type__in=[PersonaType.PRIMARY, PersonaType.ESTABLISHED]
+            ).order_by("-persona_type", "created_at", "id")
+        )
 
     @cached_property
     def cached_character_class_levels(self) -> list[CharacterClassLevel]:

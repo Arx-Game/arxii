@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from functools import cached_property
 import math
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.constants import SoulTetherRole

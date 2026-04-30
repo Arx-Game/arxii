@@ -3,7 +3,9 @@ Mixins for Evennia extensions.
 Provides utilities for managing cached properties and other common patterns.
 """
 
-from functools import cached_property as functools_cached_property
+from functools import (
+    cached_property as functools_cached_property,  # noqa: CACHED_PROPERTY_IMPORT — type-check target alongside Django's cached_property; defensive isinstance handling, never used as a producer
+)
 from typing import ClassVar
 
 from django.utils.functional import cached_property as django_cached_property
@@ -14,8 +16,11 @@ class CachedPropertiesMixin:
     Mixin that provides automatic cache clearing for cached_property decorators.
 
     This mixin automatically clears all @cached_property values when save() is called,
-    preventing stale cached data. Models using this mixin should use the standard
-    @cached_property decorator from functools.
+    preventing stale cached data. Models using this mixin should use the
+    @cached_property decorator from django.utils.functional (see
+    src/evennia_extensions/CACHED_PROPERTY_STANDARD.md). The mixin still
+    isinstance-checks against functools.cached_property defensively to handle
+    any legacy or non-Django callers.
 
     Example:
         class MyModel(CachedPropertiesMixin, models.Model):

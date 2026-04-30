@@ -10,11 +10,11 @@ Models for the staged character creation flow:
 from __future__ import annotations
 
 from datetime import timedelta
-from functools import cached_property
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
+from django.utils.functional import cached_property
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel

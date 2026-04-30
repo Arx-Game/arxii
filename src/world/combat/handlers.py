@@ -9,10 +9,10 @@ liveness check.
 
 from __future__ import annotations
 
-from functools import cached_property
 from typing import TYPE_CHECKING
 
 from django.db.models import F, Prefetch
+from django.utils.functional import cached_property
 
 from world.combat.models import CombatPull, CombatPullResolvedEffect
 from world.magic.constants import EffectKind

@@ -3,11 +3,11 @@ Extensions to Evennia models.
 This app extends Evennia's core models rather than replacing them.
 """
 
-from functools import cached_property
 from typing import Union
 
 from allauth.account.models import EmailAddress
 from django.db import models
+from django.utils.functional import cached_property
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
