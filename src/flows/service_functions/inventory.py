@@ -13,8 +13,8 @@ from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
 from world.items.constants import OwnershipEventType
 from world.items.exceptions import PermissionDenied
-from world.items.models import OwnershipEvent
-from world.items.services import unequip_item
+from world.items.models import EquippedItem, OwnershipEvent
+from world.items.services import equip_item, unequip_item
 
 
 @transaction.atomic
@@ -80,3 +80,32 @@ def give(
         from_account=previous_owner,
         to_account=recipient.obj.account,
     )
+
+
+@transaction.atomic
+def equip(character: CharacterState, item: ItemState) -> None:
+    """Equip ``item`` on ``character`` in every slot its template declares.
+
+    For each declared slot, if the same (body_region, equipment_layer) is
+    already occupied on this character by a different item, that item is
+    unequipped first (auto-swap). Different layers at the same body region
+    are left alone. Multi-region items create one row per region atomically.
+    """
+    if not item.can_equip(wearer=character):
+        raise PermissionDenied
+
+    sheet = character.obj.sheet_data
+    for slot in item.instance.template.cached_slots:
+        existing = EquippedItem.objects.filter(
+            character=character.obj,
+            body_region=slot.body_region,
+            equipment_layer=slot.equipment_layer,
+        ).first()
+        if existing is not None and existing.item_instance != item.instance:
+            unequip_item(equipped_item=existing)
+        equip_item(
+            character_sheet=sheet,
+            item_instance=item.instance,
+            body_region=slot.body_region,
+            equipment_layer=slot.equipment_layer,
+        )

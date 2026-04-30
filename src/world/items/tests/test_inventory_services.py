@@ -13,11 +13,13 @@ from evennia_extensions.factories import (
 )
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
-from flows.service_functions.inventory import drop, give, pick_up
+from flows.service_functions.inventory import drop, equip, give, pick_up
+from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
 from world.items.exceptions import PermissionDenied
-from world.items.factories import ItemInstanceFactory
+from world.items.factories import ItemInstanceFactory, ItemTemplateFactory, TemplateSlotFactory
 from world.items.models import EquippedItem, OwnershipEvent
+from world.items.services import equip_item
 
 
 class PickUpTests(TestCase):
@@ -200,3 +202,129 @@ class GiveTests(TestCase):
         with patch.object(ItemState, "can_give", return_value=False):
             with self.assertRaises(PermissionDenied):
                 give(self.giver_state, self.recipient_state, self.item_state)
+
+
+class EquipTests(TestCase):
+    """Cover the five behaviors of ``equip``."""
+
+    def setUp(self) -> None:
+        # Same per-test setUp pattern — DbHolder isn't deepcopy-safe, so
+        # setUpTestData breaks for Evennia typeclasses.
+        self.account = AccountFactory()
+        self.room = ObjectDBFactory(
+            db_key="EquipTestRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.character = CharacterFactory(
+            db_key="EquipTestChar",
+            location=self.room,
+        )
+        self.character.db_account = self.account
+        self.character.save()
+        self.sheet = CharacterSheetFactory(character=self.character)
+
+        # Single TORSO/BASE slot template.
+        self.template = ItemTemplateFactory(name="Equip Test Shirt")
+        TemplateSlotFactory(
+            template=self.template,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        item_obj = ObjectDBFactory(
+            db_key="EquipTestItemObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        item_obj.location = self.character
+        item_obj.save()
+        self.item = ItemInstanceFactory(template=self.template, game_object=item_obj)
+
+        ctx = MagicMock()
+        self.character_state = CharacterState(self.character, context=ctx)
+        self.item_state = ItemState(self.item, context=ctx)
+
+    def test_equip_into_empty_slot_creates_row(self) -> None:
+        equip(self.character_state, self.item_state)
+        self.assertTrue(
+            EquippedItem.objects.filter(character=self.character, item_instance=self.item).exists()
+        )
+
+    def test_equip_same_layer_swaps_existing(self) -> None:
+        # Pre-equip a different item in TORSO/BASE.
+        existing_obj = ObjectDBFactory(
+            db_key="EquipTestExistingObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        existing_obj.location = self.character
+        existing_obj.save()
+        existing_item = ItemInstanceFactory(template=self.template, game_object=existing_obj)
+        equip_item(
+            character_sheet=self.sheet,
+            item_instance=existing_item,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        equip(self.character_state, self.item_state)
+
+        equipped = EquippedItem.objects.filter(character=self.character)
+        self.assertEqual(equipped.count(), 1)
+        self.assertEqual(equipped.first().item_instance, self.item)
+
+    def test_equip_different_layer_at_same_region_keeps_both(self) -> None:
+        # Build a template at TORSO/OUTER, equip it.
+        outer_template = ItemTemplateFactory(name="Equip Test Coat")
+        TemplateSlotFactory(
+            template=outer_template,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.OUTER,
+        )
+        outer_obj = ObjectDBFactory(
+            db_key="EquipTestOuterObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        outer_obj.location = self.character
+        outer_obj.save()
+        outer_item = ItemInstanceFactory(template=outer_template, game_object=outer_obj)
+        equip_item(
+            character_sheet=self.sheet,
+            item_instance=outer_item,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.OUTER,
+        )
+
+        # Now equip our BASE-layer item — should keep both.
+        equip(self.character_state, self.item_state)
+
+        self.assertEqual(
+            EquippedItem.objects.filter(character=self.character).count(),
+            2,
+        )
+
+    def test_equip_multi_region_creates_all_rows(self) -> None:
+        plate_template = ItemTemplateFactory(name="Equip Test Plate")
+        for region in (BodyRegion.TORSO, BodyRegion.LEFT_ARM, BodyRegion.RIGHT_ARM):
+            TemplateSlotFactory(
+                template=plate_template,
+                body_region=region,
+                equipment_layer=EquipmentLayer.OUTER,
+            )
+        plate_obj = ObjectDBFactory(
+            db_key="EquipTestPlateObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        plate_obj.location = self.character
+        plate_obj.save()
+        plate = ItemInstanceFactory(template=plate_template, game_object=plate_obj)
+        plate_state = ItemState(plate, context=MagicMock())
+
+        equip(self.character_state, plate_state)
+
+        self.assertEqual(
+            EquippedItem.objects.filter(character=self.character, item_instance=plate).count(),
+            3,
+        )
+
+    def test_equip_denied_raises(self) -> None:
+        with patch.object(ItemState, "can_equip", return_value=False):
+            with self.assertRaises(PermissionDenied):
+                equip(self.character_state, self.item_state)
