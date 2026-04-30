@@ -1,7 +1,16 @@
 """Typed exceptions for the items app.
 
 Per CLAUDE.md `ViewSet & API Design`: typed exceptions with `user_message`
-property + `SAFE_MESSAGES` allowlist for safe API surfacing.
+property + `SAFE_MESSAGES` allowlist for safe API surfacing. View and
+inputfunc layers read `exc.user_message` — never `str(exc)`.
+
+Two families share `ItemError` as the base so `except ItemError:` catches
+both:
+
+* Data-layer errors raised by `world.items.services.*` for invalid slot,
+  facet capacity, etc.
+* Inventory action errors raised by `flows.service_functions.inventory.*`
+  for permission denial, possession mismatches, container constraints, etc.
 """
 
 from typing import ClassVar
@@ -12,6 +21,11 @@ class ItemError(Exception):
 
     user_message: str = "An items error occurred."
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"An items error occurred."})
+
+
+# ---------------------------------------------------------------------------
+# Data-layer errors (slot validity, facet capacity, etc.)
+# ---------------------------------------------------------------------------
 
 
 class SlotConflict(ItemError):
@@ -44,3 +58,52 @@ class FacetAlreadyAttached(ItemError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
         {"That facet is already attached to this item."},
     )
+
+
+# ---------------------------------------------------------------------------
+# Inventory action errors (pick_up, drop, give, equip, etc.)
+# ---------------------------------------------------------------------------
+
+
+class InventoryError(ItemError):
+    """Base for inventory-action failures (pick_up, drop, give, equip, etc.)."""
+
+    user_message: str = "That action could not be completed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That action could not be completed."})
+
+
+class PermissionDenied(InventoryError):
+    user_message = "You cannot do that with that item."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"You cannot do that with that item."})
+
+
+class NotInPossession(InventoryError):
+    user_message = "You are not carrying that."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"You are not carrying that."})
+
+
+class NotEquipped(InventoryError):
+    user_message = "You are not wearing that."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"You are not wearing that."})
+
+
+class ContainerFull(InventoryError):
+    user_message = "That container is already full."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That container is already full."})
+
+
+class ContainerClosed(InventoryError):
+    user_message = "That container is closed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That container is closed."})
+
+
+class ItemTooLarge(InventoryError):
+    user_message = "That item is too large to fit in there."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"That item is too large to fit in there."},
+    )
+
+
+class RecipientNotAdjacent(InventoryError):
+    user_message = "They are not here to receive it."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"They are not here to receive it."})
