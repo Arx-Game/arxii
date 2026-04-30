@@ -21,6 +21,7 @@ from world.items.exceptions import (
     NotEquipped,
     NotInPossession,
     PermissionDenied,
+    RecipientNotAdjacent,
 )
 from world.items.models import EquippedItem, OwnershipEvent
 from world.items.services import equip_item, unequip_item
@@ -75,6 +76,8 @@ def give(
     """
     if not item.can_give(giver=giver, recipient=recipient):
         raise PermissionDenied
+    if recipient.obj.location != giver.obj.location:
+        raise RecipientNotAdjacent
 
     previous_owner = item.instance.owner
     # Snapshot rows before iteration — unequip_item deletes them as we go.

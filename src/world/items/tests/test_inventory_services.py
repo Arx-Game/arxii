@@ -33,6 +33,7 @@ from world.items.exceptions import (
     NotEquipped,
     NotInPossession,
     PermissionDenied,
+    RecipientNotAdjacent,
 )
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory, TemplateSlotFactory
 from world.items.models import EquippedItem, OwnershipEvent
@@ -226,6 +227,14 @@ class GiveTests(TestCase):
         with patch.object(ItemState, "can_give", return_value=False):
             with self.assertRaises(PermissionDenied):
                 give(self.giver_state, self.recipient_state, self.item_state)
+
+    def test_give_to_recipient_in_different_room_raises(self) -> None:
+        """Cannot give to someone in another room."""
+        other_room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+        self.recipient.location = other_room
+        self.recipient.save()
+        with self.assertRaises(RecipientNotAdjacent):
+            give(self.giver_state, self.recipient_state, self.item_state)
 
 
 class EquipTests(TestCase):
