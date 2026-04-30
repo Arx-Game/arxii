@@ -13,10 +13,25 @@ from evennia_extensions.factories import (
 )
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
-from flows.service_functions.inventory import drop, equip, give, pick_up, unequip
+from flows.service_functions.inventory import (
+    drop,
+    equip,
+    give,
+    pick_up,
+    put_in,
+    take_out,
+    unequip,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
-from world.items.exceptions import NotEquipped, PermissionDenied
+from world.items.exceptions import (
+    ContainerClosed,
+    ContainerFull,
+    ItemTooLarge,
+    NotEquipped,
+    NotInPossession,
+    PermissionDenied,
+)
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory, TemplateSlotFactory
 from world.items.models import EquippedItem, OwnershipEvent
 from world.items.services import equip_item
@@ -424,3 +439,168 @@ class UnequipTests(TestCase):
     def test_unequip_not_equipped_raises(self) -> None:
         with self.assertRaises(NotEquipped):
             unequip(self.character_state, self.item_state)
+
+
+class PutInTests(TestCase):
+    """Cover container validation paths in ``put_in``."""
+
+    def setUp(self) -> None:
+        # Same per-test setUp pattern — DbHolder isn't deepcopy-safe.
+        self.account = AccountFactory()
+        self.room = ObjectDBFactory(
+            db_key="PutInTestRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.character = CharacterFactory(
+            db_key="PutInTestChar",
+            location=self.room,
+        )
+        self.character.db_account = self.account
+        self.character.save()
+
+        # Container template — is_container with capacity, max size, supports open/close.
+        self.container_template = ItemTemplateFactory(
+            name="PutInTest Bag",
+            is_container=True,
+            container_capacity=2,
+            container_max_item_size=5,
+            supports_open_close=True,
+        )
+        container_obj = ObjectDBFactory(
+            db_key="PutInTestContainerObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        container_obj.location = self.character
+        container_obj.save()
+        self.container = ItemInstanceFactory(
+            template=self.container_template,
+            game_object=container_obj,
+            is_open=True,
+        )
+
+        # Item to put in — small, in character's possession.
+        self.item_template = ItemTemplateFactory(name="PutInTest Coin", size=1)
+        item_obj = ObjectDBFactory(
+            db_key="PutInTestItemObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        item_obj.location = self.character
+        item_obj.save()
+        self.item = ItemInstanceFactory(template=self.item_template, game_object=item_obj)
+
+        ctx = MagicMock()
+        self.character_state = CharacterState(self.character, context=ctx)
+        self.item_state = ItemState(self.item, context=ctx)
+        self.container_state = ItemState(self.container, context=ctx)
+
+    def test_put_in_sets_contained_in(self) -> None:
+        put_in(self.character_state, self.item_state, self.container_state)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.contained_in, self.container)
+
+    def test_put_in_closed_container_raises(self) -> None:
+        self.container.is_open = False
+        self.container.save()
+        with self.assertRaises(ContainerClosed):
+            put_in(self.character_state, self.item_state, self.container_state)
+
+    def test_put_in_full_container_raises(self) -> None:
+        # Fill up to capacity.
+        for idx in range(self.container_template.container_capacity):
+            obj = ObjectDBFactory(
+                db_key=f"PutInTestFillerObj{idx}",
+                db_typeclass_path="typeclasses.objects.Object",
+            )
+            obj.location = self.character
+            obj.save()
+            ItemInstanceFactory(
+                template=self.item_template,
+                game_object=obj,
+                contained_in=self.container,
+            )
+        with self.assertRaises(ContainerFull):
+            put_in(self.character_state, self.item_state, self.container_state)
+
+    def test_put_in_oversized_item_raises(self) -> None:
+        big_template = ItemTemplateFactory(name="PutInTest Boulder", size=99)
+        big_obj = ObjectDBFactory(
+            db_key="PutInTestBoulderObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        big_obj.location = self.character
+        big_obj.save()
+        big_item = ItemInstanceFactory(template=big_template, game_object=big_obj)
+        big_state = ItemState(big_item, context=MagicMock())
+        with self.assertRaises(ItemTooLarge):
+            put_in(self.character_state, big_state, self.container_state)
+
+    def test_put_in_non_container_raises(self) -> None:
+        non_template = ItemTemplateFactory(name="PutInTest Brick", is_container=False)
+        non_obj = ObjectDBFactory(
+            db_key="PutInTestBrickObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        non_obj.location = self.character
+        non_obj.save()
+        non_container = ItemInstanceFactory(template=non_template, game_object=non_obj)
+        non_state = ItemState(non_container, context=MagicMock())
+        with self.assertRaises(ItemTooLarge):
+            put_in(self.character_state, self.item_state, non_state)
+
+    def test_put_in_not_in_possession_raises(self) -> None:
+        self.item.game_object.location = self.room
+        self.item.game_object.save()
+        with self.assertRaises(NotInPossession):
+            put_in(self.character_state, self.item_state, self.container_state)
+
+
+class TakeOutTests(TestCase):
+    """Cover the happy path of ``take_out``."""
+
+    def setUp(self) -> None:
+        # Same per-test setUp pattern — DbHolder isn't deepcopy-safe.
+        self.account = AccountFactory()
+        self.room = ObjectDBFactory(
+            db_key="TakeOutTestRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.character = CharacterFactory(
+            db_key="TakeOutTestChar",
+            location=self.room,
+        )
+        self.character.db_account = self.account
+        self.character.save()
+
+        container_template = ItemTemplateFactory(
+            name="TakeOutTest Box",
+            is_container=True,
+        )
+        container_obj = ObjectDBFactory(
+            db_key="TakeOutTestContainerObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        container_obj.location = self.character
+        container_obj.save()
+        self.container = ItemInstanceFactory(
+            template=container_template,
+            game_object=container_obj,
+        )
+
+        item_obj = ObjectDBFactory(
+            db_key="TakeOutTestItemObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        item_obj.location = container_obj  # nested location
+        item_obj.save()
+        self.item = ItemInstanceFactory(game_object=item_obj, contained_in=self.container)
+
+        ctx = MagicMock()
+        self.character_state = CharacterState(self.character, context=ctx)
+        self.item_state = ItemState(self.item, context=ctx)
+
+    def test_take_out_clears_contained_in_and_moves_to_character(self) -> None:
+        take_out(self.character_state, self.item_state)
+        self.item.refresh_from_db()
+        self.item.game_object.refresh_from_db()
+        self.assertIsNone(self.item.contained_in)
+        self.assertEqual(self.item.game_object.location, self.character)

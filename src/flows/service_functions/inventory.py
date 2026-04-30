@@ -12,7 +12,14 @@ from django.db import transaction
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
 from world.items.constants import OwnershipEventType
-from world.items.exceptions import NotEquipped, PermissionDenied
+from world.items.exceptions import (
+    ContainerClosed,
+    ContainerFull,
+    ItemTooLarge,
+    NotEquipped,
+    NotInPossession,
+    PermissionDenied,
+)
 from world.items.models import EquippedItem, OwnershipEvent
 from world.items.services import equip_item, unequip_item
 
@@ -128,3 +135,52 @@ def unequip(character: CharacterState, item: ItemState) -> None:
         raise NotEquipped
     for row in equipped_rows:
         unequip_item(equipped_item=row)
+
+
+@transaction.atomic
+def put_in(
+    character: CharacterState,
+    item: ItemState,
+    container: ItemState,
+) -> None:
+    """Move ``item`` into ``container`` (an item that is itself a container).
+
+    Validates the container's template/state and the item's possession by
+    ``character``. Sets ``item.contained_in = container``. Does NOT change
+    the item's underlying ObjectDB location — the container still lives in
+    the character's inventory; the item lives "inside" via the FK.
+    """
+    container_template = container.instance.template
+    if not container_template.is_container:
+        # Treat non-containers as "won't fit" — they have no interior.
+        raise ItemTooLarge
+    if container_template.supports_open_close and not container.instance.is_open:
+        raise ContainerClosed
+    if (
+        container_template.container_capacity
+        and container.instance.contents.count() >= container_template.container_capacity
+    ):
+        raise ContainerFull
+    if (
+        container_template.container_max_item_size
+        and item.instance.template.size > container_template.container_max_item_size
+    ):
+        raise ItemTooLarge
+    if item.instance.game_object.location != character.obj:
+        raise NotInPossession
+
+    item.instance.contained_in = container.instance
+    item.instance.save(update_fields=["contained_in"])
+
+
+@transaction.atomic
+def take_out(character: CharacterState, item: ItemState) -> None:
+    """Move ``item`` out of its container into ``character``'s possession.
+
+    Clears ``item.contained_in`` and moves the underlying ``ObjectDB`` to
+    the character.
+    """
+    item.instance.contained_in = None
+    item.instance.save(update_fields=["contained_in"])
+    item.instance.game_object.location = character.obj
+    item.instance.game_object.save()
