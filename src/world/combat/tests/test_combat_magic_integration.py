@@ -210,3 +210,96 @@ class EventEmissionTest(TestCase):
 
         self.assertEqual(len(captured), 1)
         self.assertIsInstance(captured[0], TechniqueCastPayload)
+
+
+class ReactiveScarCancelTest(TestCase):
+    """A reactive condition on TECHNIQUE_PRE_CAST cancels the combat cast.
+    No damage applied, no anima deducted, no TECHNIQUE_CAST emitted."""
+
+    SELF_FILTER = {"path": "caster", "op": "==", "value": "self"}
+
+    def _make_cancel_flow(self):
+        from flows.consts import FlowActionChoices
+        from flows.factories import FlowDefinitionFactory, FlowStepDefinitionFactory
+
+        flow = FlowDefinitionFactory()
+        FlowStepDefinitionFactory(
+            flow=flow,
+            parent_id=None,
+            action=FlowActionChoices.CANCEL_EVENT,
+            parameters={},
+        )
+        return flow
+
+    def test_cancel_returns_zero_damage_and_no_anima_deducted(self) -> None:
+        from world.conditions.factories import ReactiveConditionFactory
+
+        participant, action, opponent, anima, _, _ = _setup_pc_attacking_mook(
+            technique_anima_cost=5,
+            technique_intensity=10,
+            technique_control=2,
+        )
+        cancel_flow = self._make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventName.TECHNIQUE_PRE_CAST,
+            filter_condition=self.SELF_FILTER,
+            flow_definition=cancel_flow,
+            target=participant.character_sheet.character,
+        )
+
+        with patch("world.combat.services.perform_check") as mock_perform:
+            mock_perform.return_value = MagicMock(success_level=2)
+            result = resolve_combat_technique(
+                participant=participant,
+                action=action,
+                target=opponent,
+                fatigue_category=FatigueCategory.PHYSICAL,
+                offense_check_type=MagicMock(),
+                offense_check_fn=None,
+            )
+
+        opponent.refresh_from_db()
+        self.assertEqual(opponent.health, opponent.max_health)
+        anima.refresh_from_db()
+        self.assertEqual(anima.current, 20)
+        self.assertEqual(result.damage_results, [])
+        mock_perform.assert_not_called()
+
+    def test_cancel_suppresses_technique_cast_event(self) -> None:
+        from world.conditions.factories import ReactiveConditionFactory
+
+        participant, action, opponent, _, _, _ = _setup_pc_attacking_mook()
+        cancel_flow = self._make_cancel_flow()
+        ReactiveConditionFactory(
+            event_name=EventName.TECHNIQUE_PRE_CAST,
+            filter_condition=self.SELF_FILTER,
+            flow_definition=cancel_flow,
+            target=participant.character_sheet.character,
+        )
+        cast_fired: list = []
+
+        import world.magic.services.techniques as svc_mod
+
+        original = svc_mod.emit_event
+
+        def capturing(name, payload, **kw):
+            if name == EventName.TECHNIQUE_CAST:
+                cast_fired.append(True)
+            return original(name, payload, **kw)
+
+        svc_mod.emit_event = capturing
+        try:
+            with patch("world.combat.services.perform_check") as mock_perform:
+                mock_perform.return_value = MagicMock(success_level=2)
+                resolve_combat_technique(
+                    participant=participant,
+                    action=action,
+                    target=opponent,
+                    fatigue_category=FatigueCategory.PHYSICAL,
+                    offense_check_type=MagicMock(),
+                    offense_check_fn=None,
+                )
+        finally:
+            svc_mod.emit_event = original
+
+        self.assertEqual(cast_fired, [])
