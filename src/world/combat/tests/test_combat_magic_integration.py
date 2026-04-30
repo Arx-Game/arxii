@@ -376,3 +376,51 @@ class FlatBonusPullCheckTest(TestCase):
         kwargs = mock_perform.call_args.kwargs
         # 3 + 1 from pulls; effort EffortLevel.MEDIUM is 0.
         self.assertGreaterEqual(kwargs["extra_modifiers"], 4)
+
+
+class FullHappyPathTest(TestCase):
+    """End-to-end: damage applied, anima deducted, events emitted, no errors."""
+
+    def test_full_happy_path(self) -> None:
+        participant, action, opponent, _anima, _, _ = _setup_pc_attacking_mook(
+            technique_anima_cost=2,
+            technique_intensity=5,
+            technique_control=10,
+            base_power=20,
+            opponent_health=50,
+        )
+
+        captured_events: list = []
+        import world.magic.services.techniques as svc_mod
+
+        original = svc_mod.emit_event
+
+        def capturing(name, payload, **kw):
+            captured_events.append(name)
+            return original(name, payload, **kw)
+
+        svc_mod.emit_event = capturing
+        try:
+            with patch("world.combat.services.perform_check") as mock_perform:
+                mock_perform.return_value = MagicMock(success_level=2)
+                result = resolve_combat_technique(
+                    participant=participant,
+                    action=action,
+                    target=opponent,
+                    fatigue_category=FatigueCategory.PHYSICAL,
+                    offense_check_type=MagicMock(),
+                    offense_check_fn=None,
+                )
+        finally:
+            svc_mod.emit_event = original
+
+        self.assertEqual(len(result.damage_results), 1)
+        self.assertGreater(result.damage_results[0].damage_dealt, 0)
+
+        opponent.refresh_from_db()
+        self.assertLess(opponent.health, 50)
+
+        self.assertIn(EventName.TECHNIQUE_PRE_CAST, captured_events)
+        self.assertIn(EventName.TECHNIQUE_CAST, captured_events)
+
+        self.assertTrue(result.technique_use_result.confirmed)
