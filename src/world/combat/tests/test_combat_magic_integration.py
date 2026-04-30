@@ -11,6 +11,8 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from flows.constants import EventName
+from flows.events.payloads import TechniqueCastPayload, TechniquePreCastPayload
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
     ActionCategory,
@@ -141,3 +143,70 @@ class AnimaDeductionTest(TestCase):
         anima.refresh_from_db()
         # control_delta = 2 - 10 = -8; effective_cost = max(5 - (-8), 0) = 13.
         self.assertEqual(anima.current, 7)
+
+
+class EventEmissionTest(TestCase):
+    """PRE_CAST and CAST events fire during combat round resolution."""
+
+    def test_pre_cast_emitted_in_combat(self) -> None:
+        participant, action, opponent, _, _, _ = _setup_pc_attacking_mook()
+        captured: list = []
+
+        import world.magic.services.techniques as svc_mod
+
+        original = svc_mod.emit_event
+
+        def capturing(name, payload, **kw):
+            if name == EventName.TECHNIQUE_PRE_CAST:
+                captured.append(payload)
+            return original(name, payload, **kw)
+
+        svc_mod.emit_event = capturing
+        try:
+            with patch("world.combat.services.perform_check") as mock_perform:
+                mock_perform.return_value = MagicMock(success_level=2)
+                resolve_combat_technique(
+                    participant=participant,
+                    action=action,
+                    target=opponent,
+                    fatigue_category=FatigueCategory.PHYSICAL,
+                    offense_check_type=MagicMock(),
+                    offense_check_fn=None,
+                )
+        finally:
+            svc_mod.emit_event = original
+
+        self.assertEqual(len(captured), 1)
+        self.assertIsInstance(captured[0], TechniquePreCastPayload)
+        self.assertIs(captured[0].caster, participant.character_sheet.character)
+
+    def test_cast_emitted_in_combat(self) -> None:
+        participant, action, opponent, _, _, _ = _setup_pc_attacking_mook()
+        captured: list = []
+
+        import world.magic.services.techniques as svc_mod
+
+        original = svc_mod.emit_event
+
+        def capturing(name, payload, **kw):
+            if name == EventName.TECHNIQUE_CAST:
+                captured.append(payload)
+            return original(name, payload, **kw)
+
+        svc_mod.emit_event = capturing
+        try:
+            with patch("world.combat.services.perform_check") as mock_perform:
+                mock_perform.return_value = MagicMock(success_level=2)
+                resolve_combat_technique(
+                    participant=participant,
+                    action=action,
+                    target=opponent,
+                    fatigue_category=FatigueCategory.PHYSICAL,
+                    offense_check_type=MagicMock(),
+                    offense_check_fn=None,
+                )
+        finally:
+            svc_mod.emit_event = original
+
+        self.assertEqual(len(captured), 1)
+        self.assertIsInstance(captured[0], TechniqueCastPayload)
