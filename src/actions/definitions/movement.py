@@ -8,7 +8,7 @@ from typing import Any
 from evennia.objects.models import ObjectDB
 
 from actions.base import Action
-from actions.definitions._item_helpers import resolve_item_instance
+from actions.definitions.item_helpers import resolve_item_instance
 from actions.types import ActionContext, ActionResult, TargetType
 from flows.object_states.item_state import ItemState
 from flows.scene_data_manager import SceneDataManager
