@@ -30,7 +30,12 @@ from world.combat.services import resolve_round, upgrade_action_to_combo
 from world.covenants.factories import CovenantRoleFactory
 from world.fatigue.constants import EffortLevel
 from world.fatigue.models import FatiguePool
-from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
+from world.magic.factories import (
+    CharacterAnimaFactory,
+    EffectTypeFactory,
+    GiftFactory,
+    TechniqueFactory,
+)
 from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
@@ -420,6 +425,7 @@ class ResolveRoundOffenseCheckTests(TestCase):
             max_health=100,
             status=CharacterStatus.ALIVE,
         )
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
         technique = TechniqueFactory(
             gift=self.gift,
             effect_type=self.effect_attack,

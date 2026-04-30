@@ -1391,35 +1391,6 @@ def check_and_advance_boss_phase(
 # ---------------------------------------------------------------------------
 
 
-def _scale_damage_by_check(  # noqa: PLR0913 - check params are all required
-    raw: int,
-    participant: CombatParticipant,
-    action: CombatRoundAction,
-    fatigue_category: str,
-    offense_check_type: CheckType,
-    offense_check_fn: PerformCheckFn | None,
-) -> int:
-    """Roll an offense check and scale raw damage by success level."""
-    check_fn = offense_check_fn
-    if check_fn is None:
-        from world.checks.services import perform_check as check_fn  # noqa: PLC0415
-
-    penalty = get_fatigue_penalty(participant.character_sheet, fatigue_category)
-    effort_mod = EFFORT_CHECK_MODIFIER.get(action.effort_level, 0)
-    character = participant.character_sheet.character
-    result = check_fn(
-        character,
-        offense_check_type,
-        extra_modifiers=effort_mod,
-        fatigue_penalty=penalty,
-    )
-    if result.success_level >= OFFENSE_FULL_THRESHOLD:
-        return raw
-    if result.success_level >= OFFENSE_HALF_THRESHOLD:
-        return raw // 2
-    return 0
-
-
 def _resolve_pc_action(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -1460,23 +1431,26 @@ def _resolve_pc_action(
                 )
                 outcome.combo_used = combo
                 outcome.damage_results.append(dmg_result)
-            else:
-                base_power = technique.effect_type.base_power
-                if base_power is not None:
-                    if offense_check_type is not None:
-                        scaled = _scale_damage_by_check(
-                            base_power,
-                            participant,
-                            action,
-                            fatigue_category,
-                            offense_check_type,
-                            offense_check_fn,
-                        )
-                    else:
-                        scaled = base_power
-                    if scaled > 0:
-                        dmg_result = apply_damage_to_opponent(target, scaled)
-                        outcome.damage_results.append(dmg_result)
+            elif technique.effect_type.base_power is not None:
+                # Damage path — route through magic pipeline (use_technique).
+                # Non-attack effect types (base_power is None) stay no-op until
+                # the conditions-from-techniques resolver lands (next PR).
+                if offense_check_type is not None:
+                    combat_result = resolve_combat_technique(
+                        participant=participant,
+                        action=action,
+                        target=target,
+                        fatigue_category=fatigue_category,
+                        offense_check_type=offense_check_type,
+                        offense_check_fn=offense_check_fn,
+                    )
+                    outcome.damage_results.extend(combat_result.damage_results)
+                else:
+                    # No offense check type configured — apply raw base_power
+                    # directly. Preserves existing test fixtures that don't
+                    # set up check types.
+                    dmg_result = apply_damage_to_opponent(target, technique.effect_type.base_power)
+                    outcome.damage_results.append(dmg_result)
 
     # Apply fatigue after action resolves
     apply_fatigue(
