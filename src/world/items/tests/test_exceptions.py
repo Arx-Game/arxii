@@ -9,7 +9,9 @@ from world.items.exceptions import (
     ItemError,
     ItemTooLarge,
     NotEquipped,
+    NotInContainer,
     NotInPossession,
+    NotReachable,
     PermissionDenied,
     RecipientNotAdjacent,
 )
@@ -22,6 +24,8 @@ INVENTORY_SUBCLASSES = (
     ItemTooLarge,
     RecipientNotAdjacent,
     PermissionDenied,
+    NotReachable,
+    NotInContainer,
 )
 
 

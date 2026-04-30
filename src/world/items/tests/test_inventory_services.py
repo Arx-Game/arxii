@@ -31,8 +31,9 @@ from world.items.exceptions import (
     NoDropLocation,
     NotAContainer,
     NotEquipped,
+    NotInContainer,
     NotInPossession,
-    PermissionDenied,
+    NotReachable,
     RecipientNotAdjacent,
 )
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory, TemplateSlotFactory
@@ -94,8 +95,76 @@ class PickUpTests(TestCase):
 
     def test_pickup_denied_by_can_take_raises(self) -> None:
         with patch.object(ItemState, "can_take", return_value=False):
-            with self.assertRaises(PermissionDenied):
+            with self.assertRaises(NotReachable):
                 pick_up(self.character_state, self.item_state)
+
+    def test_pickup_rejects_item_in_another_room(self) -> None:
+        """can_take should reject items in a different room (no reach)."""
+        other_room = ObjectDBFactory(
+            db_key="PickUpOtherRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.item.game_object.location = other_room
+        self.item.game_object.save()
+        with self.assertRaises(NotReachable):
+            pick_up(self.character_state, self.item_state)
+
+    def test_pickup_rejects_item_in_closed_container(self) -> None:
+        """Item in a closed container in the room is unreachable."""
+        container_template = ItemTemplateFactory(
+            name="PickUpClosedBox",
+            is_container=True,
+            supports_open_close=True,
+        )
+        container_obj = ObjectDBFactory(
+            db_key="PickUpClosedContainerObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        container_obj.location = self.room
+        container_obj.save()
+        container = ItemInstanceFactory(
+            template=container_template,
+            game_object=container_obj,
+            is_open=False,
+        )
+        # Place the item inside the closed container.
+        self.item.contained_in = container
+        self.item.save()
+        self.item.game_object.location = container_obj
+        self.item.game_object.save()
+
+        with self.assertRaises(NotReachable):
+            pick_up(self.character_state, self.item_state)
+
+    def test_pickup_clears_contained_in_when_picking_from_container(self) -> None:
+        """Picking from an OPEN container clears contained_in and moves item to character."""
+        container_template = ItemTemplateFactory(
+            name="PickUpOpenBox",
+            is_container=True,
+            supports_open_close=True,
+        )
+        container_obj = ObjectDBFactory(
+            db_key="PickUpOpenContainerObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        container_obj.location = self.room
+        container_obj.save()
+        container = ItemInstanceFactory(
+            template=container_template,
+            game_object=container_obj,
+            is_open=True,
+        )
+        self.item.contained_in = container
+        self.item.save()
+        self.item.game_object.location = container_obj
+        self.item.game_object.save()
+
+        pick_up(self.character_state, self.item_state)
+
+        self.item.refresh_from_db()
+        self.item.game_object.refresh_from_db()
+        self.assertIsNone(self.item.contained_in)
+        self.assertEqual(self.item.game_object.location, self.character)
 
 
 class DropTests(TestCase):
@@ -148,7 +217,7 @@ class DropTests(TestCase):
 
     def test_drop_denied_raises(self) -> None:
         with patch.object(ItemState, "can_drop", return_value=False):
-            with self.assertRaises(PermissionDenied):
+            with self.assertRaises(NotInPossession):
                 drop(self.character_state, self.item_state)
 
     def test_drop_without_location_raises(self) -> None:
@@ -157,6 +226,48 @@ class DropTests(TestCase):
         self.character.save()
         with self.assertRaises(NoDropLocation):
             drop(self.character_state, self.item_state)
+
+    def test_drop_rejects_when_not_in_possession(self) -> None:
+        """Item in another room is not in actor's possession → NotInPossession."""
+        other_room = ObjectDBFactory(
+            db_key="DropOtherRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.item.game_object.location = other_room
+        self.item.game_object.save()
+        with self.assertRaises(NotInPossession):
+            drop(self.character_state, self.item_state)
+
+    def test_drop_clears_contained_in_when_dropping_from_inventory_container(self) -> None:
+        """Dropping an item from a container in the inventory clears contained_in."""
+        backpack_template = ItemTemplateFactory(
+            name="DropBackpack",
+            is_container=True,
+            supports_open_close=True,
+        )
+        backpack_obj = ObjectDBFactory(
+            db_key="DropBackpackObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        backpack_obj.location = self.character
+        backpack_obj.save()
+        backpack = ItemInstanceFactory(
+            template=backpack_template,
+            game_object=backpack_obj,
+            is_open=True,
+        )
+        # Move the item into the backpack.
+        self.item.contained_in = backpack
+        self.item.save()
+        self.item.game_object.location = backpack_obj
+        self.item.game_object.save()
+
+        drop(self.character_state, self.item_state)
+
+        self.item.refresh_from_db()
+        self.item.game_object.refresh_from_db()
+        self.assertIsNone(self.item.contained_in)
+        self.assertEqual(self.item.game_object.location, self.room)
 
 
 class GiveTests(TestCase):
@@ -225,7 +336,7 @@ class GiveTests(TestCase):
 
     def test_give_denied_raises(self) -> None:
         with patch.object(ItemState, "can_give", return_value=False):
-            with self.assertRaises(PermissionDenied):
+            with self.assertRaises(NotInPossession):
                 give(self.giver_state, self.recipient_state, self.item_state)
 
     def test_give_to_recipient_in_different_room_raises(self) -> None:
@@ -234,6 +345,17 @@ class GiveTests(TestCase):
         self.recipient.location = other_room
         self.recipient.save()
         with self.assertRaises(RecipientNotAdjacent):
+            give(self.giver_state, self.recipient_state, self.item_state)
+
+    def test_give_rejects_when_giver_does_not_have_item(self) -> None:
+        """Giver must possess the item — items in someone else's inventory don't count."""
+        bystander = CharacterFactory(
+            db_key="GiveBystander",
+            location=self.room,
+        )
+        self.item.game_object.location = bystander
+        self.item.game_object.save()
+        with self.assertRaises(NotInPossession):
             give(self.giver_state, self.recipient_state, self.item_state)
 
 
@@ -359,8 +481,15 @@ class EquipTests(TestCase):
 
     def test_equip_denied_raises(self) -> None:
         with patch.object(ItemState, "can_equip", return_value=False):
-            with self.assertRaises(PermissionDenied):
+            with self.assertRaises(NotInPossession):
                 equip(self.character_state, self.item_state)
+
+    def test_equip_rejects_when_item_not_in_possession(self) -> None:
+        """Equipping an item that lives in the room (not on actor) → NotInPossession."""
+        self.item.game_object.location = self.room
+        self.item.game_object.save()
+        with self.assertRaises(NotInPossession):
+            equip(self.character_state, self.item_state)
 
     def test_equip_same_item_already_equipped_is_idempotent(self) -> None:
         """Re-equipping an already-equipped item is a silent no-op (UI double-click safe)."""
@@ -571,6 +700,17 @@ class PutInTests(TestCase):
         with self.assertRaises(NotInPossession):
             put_in(self.character_state, self.item_state, self.container_state)
 
+    def test_put_in_rejects_when_container_in_another_room(self) -> None:
+        """Container that the actor cannot reach → NotReachable."""
+        other_room = ObjectDBFactory(
+            db_key="PutInOtherRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.container.game_object.location = other_room
+        self.container.game_object.save()
+        with self.assertRaises(NotReachable):
+            put_in(self.character_state, self.item_state, self.container_state)
+
 
 class TakeOutTests(TestCase):
     """Cover the happy path of ``take_out``."""
@@ -622,3 +762,40 @@ class TakeOutTests(TestCase):
         self.item.game_object.refresh_from_db()
         self.assertIsNone(self.item.contained_in)
         self.assertEqual(self.item.game_object.location, self.character)
+
+    def test_take_out_rejects_when_item_not_in_container(self) -> None:
+        """Item with no contained_in → NotInContainer."""
+        # Re-stage: item lives directly in character's inventory, not in a container.
+        self.item.contained_in = None
+        self.item.save()
+        self.item.game_object.location = self.character
+        self.item.game_object.save()
+
+        with self.assertRaises(NotInContainer):
+            take_out(self.character_state, self.item_state)
+
+    def test_take_out_rejects_when_container_in_another_room(self) -> None:
+        """Container in a different room → NotReachable."""
+        other_room = ObjectDBFactory(
+            db_key="TakeOutOtherRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.container.game_object.location = other_room
+        self.container.game_object.save()
+        with self.assertRaises(NotReachable):
+            take_out(self.character_state, self.item_state)
+
+    def test_take_out_rejects_when_container_is_closed(self) -> None:
+        """A closed container that supports open/close → NotReachable."""
+        # Rebuild the container with supports_open_close=True so closed state matters.
+        closed_template = ItemTemplateFactory(
+            name="TakeOutClosedBox",
+            is_container=True,
+            supports_open_close=True,
+        )
+        self.container.template = closed_template
+        self.container.is_open = False
+        self.container.save()
+
+        with self.assertRaises(NotReachable):
+            take_out(self.character_state, self.item_state)

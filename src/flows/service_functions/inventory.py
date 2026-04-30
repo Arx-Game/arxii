@@ -19,8 +19,9 @@ from world.items.exceptions import (
     NoDropLocation,
     NotAContainer,
     NotEquipped,
+    NotInContainer,
     NotInPossession,
-    PermissionDenied,
+    NotReachable,
     RecipientNotAdjacent,
 )
 from world.items.models import EquippedItem, OwnershipEvent
@@ -32,10 +33,15 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     """Move ``item`` from its current location into ``character``'s possession.
 
     If the item is currently unowned (``owner`` is null), ``character``'s
-    account becomes the owner. Pre-existing ownership is preserved.
+    account becomes the owner. Pre-existing ownership is preserved. If the
+    item is in an open container in the room, ``contained_in`` is cleared
+    so the item ends up plainly in the character's inventory.
     """
     if not item.can_take(taker=character):
-        raise PermissionDenied
+        raise NotReachable
+    if item.instance.contained_in is not None:
+        item.instance.contained_in = None
+        item.instance.save(update_fields=["contained_in"])
     item.instance.game_object.location = character.obj
     item.instance.game_object.save()
     if item.instance.owner is None:
@@ -49,12 +55,17 @@ def drop(character: CharacterState, item: ItemState) -> None:
 
     If the item is currently equipped, all ``EquippedItem`` rows are
     removed first via ``world.items.services.unequip_item`` so the
-    character's cached equipment handler is invalidated correctly.
+    character's cached equipment handler is invalidated correctly. If the
+    item is in a container in the character's inventory, ``contained_in``
+    is cleared as part of the drop.
     """
     if not item.can_drop(dropper=character):
-        raise PermissionDenied
+        raise NotInPossession
     if character.obj.location is None:
         raise NoDropLocation
+    if item.instance.contained_in is not None:
+        item.instance.contained_in = None
+        item.instance.save(update_fields=["contained_in"])
     # Snapshot rows before iteration — unequip_item deletes them as we go.
     for equipped in list(item.instance.equipped_slots.all()):
         unequip_item(equipped_item=equipped)
@@ -75,7 +86,7 @@ def give(
     if the item is currently equipped.
     """
     if not item.can_give(giver=giver, recipient=recipient):
-        raise PermissionDenied
+        raise NotInPossession
     if recipient.obj.location != giver.obj.location:
         raise RecipientNotAdjacent
 
@@ -106,7 +117,7 @@ def equip(character: CharacterState, item: ItemState) -> None:
     are left alone. Multi-region items create one row per region atomically.
     """
     if not item.can_equip(wearer=character):
-        raise PermissionDenied
+        raise NotInPossession
 
     sheet = character.obj.sheet_data
     for slot in item.instance.template.cached_slots:
@@ -152,11 +163,14 @@ def put_in(
 ) -> None:
     """Move ``item`` into ``container`` (an item that is itself a container).
 
-    Validates the container's template/state and the item's possession by
-    ``character``. Sets ``item.contained_in = container``. Does NOT change
-    the item's underlying ObjectDB location — the container still lives in
-    the character's inventory; the item lives "inside" via the FK.
+    Validates the container is reachable by ``character``, the container's
+    template/state, and the item's possession by ``character``. Sets
+    ``item.contained_in = container``. Does NOT change the item's underlying
+    ObjectDB location — the container still lives in the character's
+    inventory; the item lives "inside" via the FK.
     """
+    if not container.is_reachable_by(character.obj):
+        raise NotReachable
     container_template = container.instance.template
     if not container_template.is_container:
         raise NotAContainer
@@ -183,9 +197,15 @@ def put_in(
 def take_out(character: CharacterState, item: ItemState) -> None:
     """Move ``item`` out of its container into ``character``'s possession.
 
-    Clears ``item.contained_in`` and moves the underlying ``ObjectDB`` to
+    Validates the item is reachable (which walks the container chain and
+    rejects closed containers) and that it actually has a ``contained_in``
+    set. Clears ``contained_in`` and moves the underlying ``ObjectDB`` to
     the character.
     """
+    if not item.can_take(taker=character):
+        raise NotReachable
+    if item.instance.contained_in is None:
+        raise NotInContainer
     item.instance.contained_in = None
     item.instance.save(update_fields=["contained_in"])
     item.instance.game_object.location = character.obj

@@ -21,16 +21,18 @@ class ItemStateDefaultsTests(TestCase):
         self.state = ItemState(self.item, context=MagicMock())
 
     def test_can_take_default_true(self) -> None:
-        self.assertTrue(self.state.can_take(taker=MagicMock()))
+        # No actor supplied — short-circuits to permissive (used by tests /
+        # package hooks). With a real actor, can_take consults reach.
+        self.assertTrue(self.state.can_take())
 
     def test_can_drop_default_true(self) -> None:
-        self.assertTrue(self.state.can_drop(dropper=MagicMock()))
+        self.assertTrue(self.state.can_drop())
 
     def test_can_give_default_true(self) -> None:
-        self.assertTrue(self.state.can_give(giver=MagicMock(), recipient=MagicMock()))
+        self.assertTrue(self.state.can_give())
 
     def test_can_equip_default_true(self) -> None:
-        self.assertTrue(self.state.can_equip(wearer=MagicMock()))
+        self.assertTrue(self.state.can_equip())
 
     def test_instance_property_returns_wrapped_obj(self) -> None:
         # ``instance`` is a typed alias for ``obj``; cast is a runtime no-op.
