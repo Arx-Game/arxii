@@ -109,6 +109,13 @@ class NotAContainer(InventoryError):
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That isn't a container."})
 
 
+class NoDropLocation(InventoryError):
+    user_message = "You have nowhere to drop that."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"You have nowhere to drop that."},
+    )
+
+
 class RecipientNotAdjacent(InventoryError):
     user_message = "They are not here to receive it."
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"They are not here to receive it."})

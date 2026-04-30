@@ -16,6 +16,7 @@ from world.items.exceptions import (
     ContainerClosed,
     ContainerFull,
     ItemTooLarge,
+    NoDropLocation,
     NotAContainer,
     NotEquipped,
     NotInPossession,
@@ -51,6 +52,8 @@ def drop(character: CharacterState, item: ItemState) -> None:
     """
     if not item.can_drop(dropper=character):
         raise PermissionDenied
+    if character.obj.location is None:
+        raise NoDropLocation
     # Snapshot rows before iteration — unequip_item deletes them as we go.
     for equipped in list(item.instance.equipped_slots.all()):
         unequip_item(equipped_item=equipped)

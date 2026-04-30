@@ -28,6 +28,7 @@ from world.items.exceptions import (
     ContainerClosed,
     ContainerFull,
     ItemTooLarge,
+    NoDropLocation,
     NotAContainer,
     NotEquipped,
     NotInPossession,
@@ -148,6 +149,13 @@ class DropTests(TestCase):
         with patch.object(ItemState, "can_drop", return_value=False):
             with self.assertRaises(PermissionDenied):
                 drop(self.character_state, self.item_state)
+
+    def test_drop_without_location_raises(self) -> None:
+        """Cannot drop when the character has no current room."""
+        self.character.location = None
+        self.character.save()
+        with self.assertRaises(NoDropLocation):
+            drop(self.character_state, self.item_state)
 
 
 class GiveTests(TestCase):
