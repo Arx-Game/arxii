@@ -415,3 +415,67 @@ class TechniqueAffectedEmissionTest(TestCase):
         self.assertIs(p.caster, self.char)
         self.assertIs(p.technique, self.technique)
         self.assertIs(p.target, self.target1)
+
+
+# ---------------------------------------------------------------------------
+# check_result extractor — combat-shape resolution_result
+# ---------------------------------------------------------------------------
+
+
+class TechniqueCheckResultExtractorTest(TestCase):
+    """use_technique extracts check_result from a resolution_result that
+    exposes .check_result directly (combat shape), not just from
+    .main_result.check_result (social shape)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        # intensity > control to force mishap pool selection — that path
+        # only fires if check_result is non-None, so it doubles as the
+        # extractor assertion.
+        cls.technique = TechniqueFactory(intensity=10, control=2, anima_cost=1)
+
+    def setUp(self) -> None:
+        self.room = _create_room()
+        self.char, self.anima = _setup_caster(room=self.room)
+
+    def test_extractor_reads_top_level_check_result(self) -> None:
+        """When resolve_fn returns a result with top-level .check_result, the
+        extractor finds it and passes it to soulfray/mishap downstream."""
+        from dataclasses import dataclass
+
+        from world.checks.types import CheckResult
+
+        @dataclass
+        class CombatShapeResolution:
+            check_result: CheckResult
+
+        # fake check_result + control_deficit > 0 should trigger _resolve_mishap
+        # if the extractor finds it.
+        fake_check = MagicMock(spec=CheckResult)
+        fake_check.success_level = 0
+        resolution = CombatShapeResolution(check_result=fake_check)
+
+        captured: list = []
+
+        import world.magic.services.techniques as svc_mod
+
+        original = svc_mod._resolve_mishap
+
+        def capturing(character, pool, check_result):
+            captured.append(check_result)
+            return original(character, pool, check_result)
+
+        svc_mod._resolve_mishap = capturing
+        svc_mod.select_mishap_pool = MagicMock(return_value=MagicMock())
+        try:
+            use_technique(
+                character=self.char,
+                technique=self.technique,
+                resolve_fn=lambda: resolution,
+            )
+        finally:
+            svc_mod._resolve_mishap = original
+
+        # The extractor must have found .check_result and passed it through.
+        self.assertEqual(len(captured), 1)
+        self.assertIs(captured[0], fake_check)

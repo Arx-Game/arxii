@@ -302,10 +302,12 @@ def use_technique(  # noqa: PLR0913, PLR0912, C901 — kw-only args are intentio
 
     # Extract check_result from resolution if not provided explicitly
     effective_check_result = check_result
-    if effective_check_result is None and hasattr(resolution_result, "main_result"):
-        main = resolution_result.main_result
-        if main is not None and hasattr(main, "check_result"):
-            effective_check_result = main.check_result
+    if effective_check_result is None:
+        effective_check_result = getattr(resolution_result, "check_result", None)  # noqa: GETATTR_LITERAL — protocol-style introspection
+        if effective_check_result is None and hasattr(resolution_result, "main_result"):
+            main = resolution_result.main_result
+            if main is not None and hasattr(main, "check_result"):
+                effective_check_result = main.check_result
 
     # Step 7: Soulfray accumulation and stage consequences
     soulfray_result = None
