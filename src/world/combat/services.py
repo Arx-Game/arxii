@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable
+from dataclasses import dataclass
 import logging
 import math
 import random
@@ -35,6 +36,7 @@ from flows.events.payloads import (
     DamageAppliedPayload,
     DamagePreApplyPayload,
 )
+from world.checks.services import perform_check
 from world.combat.constants import (
     DEFENSE_CRITICAL_MULTIPLIER,
     DEFENSE_FULL_MULTIPLIER,
@@ -88,6 +90,47 @@ from world.vitals.constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# CombatAttackResolver - Damage resolution for combat techniques
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CombatAttackResolver:
+    """Resolves the inner damage step of a combat-cast attack technique.
+
+    Built by resolve_combat_technique() and passed to use_technique() as
+    resolve_fn. State is inspectable at any point during/after the cast,
+    which closures don't allow. Subclassable when non-attack effect types
+    arrive (next PR): CombatBuffResolver, CombatDefenseResolver, etc.
+    """
+
+    participant: CombatParticipant
+    action: CombatRoundAction
+    target: CombatOpponent
+    pull_flat_bonus: int
+    fatigue_category: str
+    offense_check_type: CheckType
+    offense_check_fn: PerformCheckFn | None
+
+    def _roll_check(self) -> CheckResult:
+        """Roll the offense check with effort + pull-bonus modifiers."""
+        check_fn = self.offense_check_fn or perform_check
+        penalty = get_fatigue_penalty(
+            self.participant.character_sheet,
+            self.fatigue_category,
+        )
+        effort_mod = EFFORT_CHECK_MODIFIER.get(self.action.effort_level, 0)
+        extra_modifiers = effort_mod + self.pull_flat_bonus
+        character = self.participant.character_sheet.character
+        return check_fn(
+            character,
+            self.offense_check_type,
+            extra_modifiers=extra_modifiers,
+            fatigue_penalty=penalty,
+        )
+
 
 # ---------------------------------------------------------------------------
 # ActionCategory -> FatigueCategory mapping (same values)
