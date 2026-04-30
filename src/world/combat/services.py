@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate
     from world.covenants.models import CovenantRole
     from world.magic.models import Technique
+    from world.magic.types import TechniqueUseResult
     from world.scenes.models import Persona
 
     PerformCheckFn = Callable[..., CheckResult]
@@ -75,6 +76,7 @@ from world.combat.types import (
     ActionOutcome,
     AvailableCombo,
     CombatTechniqueResolution,
+    CombatTechniqueResult,
     ComboSlotMatch,
     DefenseResult,
     OpponentDamageResult,
@@ -183,6 +185,30 @@ def _sum_active_flat_bonuses(
             if eff.kind == EffectKind.FLAT_BONUS and eff.scaled_value:
                 total += eff.scaled_value
     return total
+
+
+def _build_combat_result(
+    technique_use_result: TechniqueUseResult,
+    resolver: CombatAttackResolver,  # noqa: ARG001 - kept for future extensibility
+) -> CombatTechniqueResult:
+    """Translate use_technique's outcome into the adapter's return shape."""
+    if not technique_use_result.confirmed:
+        return CombatTechniqueResult(
+            damage_results=[],
+            technique_use_result=technique_use_result,
+        )
+
+    resolution = technique_use_result.resolution_result
+    # Defensive assertion against programmer error — service contract
+    # is that combat resolvers return CombatTechniqueResolution.
+    if not isinstance(resolution, CombatTechniqueResolution):
+        msg = f"Expected CombatTechniqueResolution, got {type(resolution).__name__}"
+        raise TypeError(msg)
+
+    return CombatTechniqueResult(
+        damage_results=list(resolution.damage_results),
+        technique_use_result=technique_use_result,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -185,3 +185,59 @@ class SumActiveFlatBonusesTests(TestCase):
             _sum_active_flat_bonuses(resolver.participant, resolver.participant.encounter),
             0,
         )
+
+
+class BuildCombatResultTests(TestCase):
+    def test_cancelled_returns_empty_damage_results(self) -> None:
+        from world.combat.services import _build_combat_result
+        from world.magic.types import AnimaCostResult, TechniqueUseResult
+
+        resolver = _build_resolver()
+        cost = AnimaCostResult(
+            base_cost=1,
+            effective_cost=1,
+            control_delta=0,
+            current_anima=10,
+            deficit=0,
+        )
+        cancelled = TechniqueUseResult(
+            anima_cost=cost,
+            confirmed=False,
+            resolution_result=None,
+            technique=resolver.action.focused_action,
+        )
+
+        result = _build_combat_result(cancelled, resolver)
+        self.assertEqual(result.damage_results, [])
+        self.assertIs(result.technique_use_result, cancelled)
+
+    def test_confirmed_extracts_damage_results_from_resolution(self) -> None:
+        from world.combat.services import _build_combat_result
+        from world.combat.types import CombatTechniqueResolution
+        from world.magic.types import AnimaCostResult, TechniqueUseResult
+
+        resolver = _build_resolver()
+        cost = AnimaCostResult(
+            base_cost=1,
+            effective_cost=1,
+            control_delta=0,
+            current_anima=10,
+            deficit=0,
+        )
+        damage_results = [MagicMock(damage_dealt=5)]
+        resolution = CombatTechniqueResolution(
+            check_result=MagicMock(success_level=2),
+            damage_results=damage_results,
+            pull_flat_bonus=0,
+            scaled_damage=20,
+        )
+        confirmed = TechniqueUseResult(
+            anima_cost=cost,
+            confirmed=True,
+            resolution_result=resolution,
+            technique=resolver.action.focused_action,
+        )
+
+        result = _build_combat_result(confirmed, resolver)
+        self.assertEqual(result.damage_results, damage_results)
+        self.assertIs(result.technique_use_result, confirmed)
