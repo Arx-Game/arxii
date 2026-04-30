@@ -28,3 +28,21 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     if item.instance.owner is None:
         item.instance.owner = character.obj.account
         item.instance.save(update_fields=["owner"])
+
+
+@transaction.atomic
+def drop(character: CharacterState, item: ItemState) -> None:
+    """Move ``item`` from ``character``'s possession into their current room.
+
+    If the item is currently equipped, all ``EquippedItem`` rows are
+    removed first via ``world.items.services.unequip_item`` so the
+    character's cached equipment handler is invalidated correctly.
+    """
+    from world.items.services import unequip_item  # noqa: PLC0415
+
+    if not item.can_drop(dropper=character):
+        raise PermissionDenied
+    for equipped in list(item.instance.equipped_slots.all()):
+        unequip_item(equipped_item=equipped)
+    item.instance.game_object.location = character.obj.location
+    item.instance.game_object.save()
