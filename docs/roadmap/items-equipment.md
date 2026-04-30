@@ -102,8 +102,17 @@ What landed:
 - **Telnet commands** `wear`, `remove`, `put`, `withdraw` in
   `commands/evennia_overrides/items.py`, registered in `CharacterCmdSet`. The existing
   `get`/`drop`/`give` commands continue to work unchanged
-- **No new web inputfunc was needed** — the existing action dispatcher exposes any
-  registered action to the React frontend, so the new actions are immediately available
+- **`execute_action` WebSocket inputfunc** in `src/server/conf/inputfuncs.py` —
+  generic action dispatcher: the React frontend sends
+  `{type: "execute_action", action: "<key>", kwargs: {target_id: N, ...}}`,
+  the inputfunc resolves `_id`-suffix kwargs to ObjectDB instances and runs the
+  registered action against `session.puppet`. Returns the result via the new
+  `ACTION_RESULT` WebSocket message type. This is now the canonical mutation
+  channel for the React client — REST is read-only
+- **Removed the REST POST/DELETE on `/api/items/equipped-items/`** — they were a
+  duplicate path that bypassed the action layer's policy (raised `SlotConflict`
+  instead of auto-swapping). All inventory mutations now flow through the action
+  layer; the ViewSet remains as a read-only list/retrieve endpoint
 
 ## What's Needed for MVP
 - ~~Equipment slot / body part model~~ — **done** (TemplateSlot with BodyRegion + EquipmentLayer)

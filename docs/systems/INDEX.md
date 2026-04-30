@@ -393,8 +393,10 @@ services, and equipment-modifier integration.
     (read-only catalog)
   - `GET/POST /api/items/item-facets/` — list/attach (owner-or-staff perm);
     `DELETE /api/items/item-facets/{id}/` — remove
-  - `GET/POST /api/items/equipped-items/` — list/equip (current-tenure perm);
-    `DELETE /api/items/equipped-items/{id}/` — unequip
+  - `GET /api/items/equipped-items/` — list/retrieve (read-only); equip and
+    unequip route through the action layer via the WebSocket `execute_action`
+    inputfunc (`{action: "equip" | "unequip", kwargs: {target_id: N, ...}}`)
+    or the telnet `wear` / `remove` / `get` / `drop` commands
 - **Pattern:** Templates define archetypes; instances hold per-item state. Equipment uses
   region + layer grid (unique constraint per character). Facets attach up to `facet_capacity`
   per item; worn facets feed the mechanics modifier walk (see Mechanics §EQUIPMENT_RELEVANT).
