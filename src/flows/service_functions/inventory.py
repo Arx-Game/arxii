@@ -12,7 +12,7 @@ from django.db import transaction
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
 from world.items.constants import OwnershipEventType
-from world.items.exceptions import PermissionDenied
+from world.items.exceptions import NotEquipped, PermissionDenied
 from world.items.models import EquippedItem, OwnershipEvent
 from world.items.services import equip_item, unequip_item
 
@@ -112,3 +112,19 @@ def equip(character: CharacterState, item: ItemState) -> None:
             body_region=slot.body_region,
             equipment_layer=slot.equipment_layer,
         )
+
+
+@transaction.atomic
+def unequip(character: CharacterState, item: ItemState) -> None:
+    """Remove all ``EquippedItem`` rows for ``item`` on ``character``.
+
+    Raises ``NotEquipped`` if the item has no equipped rows. The item
+    stays in the character's inventory — its underlying ``ObjectDB``
+    location is unchanged.
+    """
+    # Snapshot rows before iteration — unequip_item deletes them as we go.
+    equipped_rows = list(item.instance.equipped_slots.filter(character=character.obj))
+    if not equipped_rows:
+        raise NotEquipped
+    for row in equipped_rows:
+        unequip_item(equipped_item=row)

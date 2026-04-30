@@ -13,10 +13,10 @@ from evennia_extensions.factories import (
 )
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
-from flows.service_functions.inventory import drop, equip, give, pick_up
+from flows.service_functions.inventory import drop, equip, give, pick_up, unequip
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer, OwnershipEventType
-from world.items.exceptions import PermissionDenied
+from world.items.exceptions import NotEquipped, PermissionDenied
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory, TemplateSlotFactory
 from world.items.models import EquippedItem, OwnershipEvent
 from world.items.services import equip_item
@@ -338,3 +338,89 @@ class EquipTests(TestCase):
             EquippedItem.objects.filter(character=self.character, item_instance=self.item).count(),
             1,
         )
+
+
+class UnequipTests(TestCase):
+    """Cover the three behaviors of ``unequip``."""
+
+    def setUp(self) -> None:
+        # Same per-test setUp pattern — DbHolder isn't deepcopy-safe, so
+        # setUpTestData breaks for Evennia typeclasses.
+        self.account = AccountFactory()
+        self.room = ObjectDBFactory(
+            db_key="UnequipTestRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.character = CharacterFactory(
+            db_key="UnequipTestChar",
+            location=self.room,
+        )
+        self.character.db_account = self.account
+        self.character.save()
+        self.sheet = CharacterSheetFactory(character=self.character)
+
+        # Single TORSO/BASE slot template.
+        self.template = ItemTemplateFactory(name="Unequip Test Shirt")
+        TemplateSlotFactory(
+            template=self.template,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        item_obj = ObjectDBFactory(
+            db_key="UnequipTestItemObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        item_obj.location = self.character
+        item_obj.save()
+        self.item = ItemInstanceFactory(template=self.template, game_object=item_obj)
+
+        ctx = MagicMock()
+        self.character_state = CharacterState(self.character, context=ctx)
+        self.item_state = ItemState(self.item, context=ctx)
+
+    def test_unequip_removes_row_and_keeps_item_in_inventory(self) -> None:
+        equip_item(
+            character_sheet=self.sheet,
+            item_instance=self.item,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        unequip(self.character_state, self.item_state)
+        self.assertFalse(
+            EquippedItem.objects.filter(item_instance=self.item).exists(),
+        )
+        self.item.game_object.refresh_from_db()
+        self.assertEqual(self.item.game_object.location, self.character)
+
+    def test_unequip_multi_region_removes_all_rows(self) -> None:
+        plate_template = ItemTemplateFactory(name="Unequip Test Plate")
+        for region in (BodyRegion.TORSO, BodyRegion.LEFT_ARM, BodyRegion.RIGHT_ARM):
+            TemplateSlotFactory(
+                template=plate_template,
+                body_region=region,
+                equipment_layer=EquipmentLayer.OUTER,
+            )
+        plate_obj = ObjectDBFactory(
+            db_key="UnequipTestPlateObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        plate_obj.location = self.character
+        plate_obj.save()
+        plate = ItemInstanceFactory(template=plate_template, game_object=plate_obj)
+        plate_state = ItemState(plate, context=MagicMock())
+
+        for region in (BodyRegion.TORSO, BodyRegion.LEFT_ARM, BodyRegion.RIGHT_ARM):
+            equip_item(
+                character_sheet=self.sheet,
+                item_instance=plate,
+                body_region=region,
+                equipment_layer=EquipmentLayer.OUTER,
+            )
+
+        unequip(self.character_state, plate_state)
+
+        self.assertFalse(EquippedItem.objects.filter(item_instance=plate).exists())
+
+    def test_unequip_not_equipped_raises(self) -> None:
+        with self.assertRaises(NotEquipped):
+            unequip(self.character_state, self.item_state)
