@@ -32,6 +32,10 @@ class ItemStateDefaultsTests(TestCase):
     def test_can_equip_default_true(self) -> None:
         self.assertTrue(self.state.can_equip(wearer=MagicMock()))
 
+    def test_instance_property_returns_wrapped_obj(self) -> None:
+        # ``instance`` is a typed alias for ``obj``; cast is a runtime no-op.
+        self.assertIs(self.state.instance, self.state.obj)
+
 
 class ItemStatePackageHookTests(TestCase):
     """Behavior packages can deny ItemState permission checks via hooks."""

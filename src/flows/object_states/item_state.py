@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, cast
+
 from flows.object_states.base_state import BaseState
+
+if TYPE_CHECKING:
+    from world.items.models import ItemInstance
 
 
 class ItemState(BaseState):
@@ -12,6 +17,11 @@ class ItemState(BaseState):
     ``_run_package_hook`` to deny actions for cursed, soulbound, or
     locked items without changing the service surface.
     """
+
+    @property
+    def instance(self) -> ItemInstance:
+        """Return the wrapped ItemInstance, narrowed for type-checkers."""
+        return cast("ItemInstance", self.obj)
 
     def can_take(self, taker: BaseState | None = None) -> bool:
         """Whether ``taker`` may pick up this item."""
