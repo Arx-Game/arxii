@@ -50,3 +50,69 @@ as argument.
 #
 #     """
 #     pass
+
+
+def execute_action(session, *args, **kwargs):  # noqa: ARG001 — Evennia inputfunc signature
+    """Run a registered Action for the session's puppeted character.
+
+    This is the unified web entry point for game mutations. Both telnet
+    commands and the React frontend converge on ``Action.run()``; this
+    inputfunc is how the frontend reaches it. REST stays read-only.
+
+    Inbound payload (kwargs):
+        action: str — the action key (e.g. "equip", "give")
+        kwargs: dict — action kwargs. Any key ending in ``_id`` is resolved
+                       from int → ObjectDB before dispatch (so the wire
+                       format stays simple integer ids).
+
+    Outbound: ``session.msg`` with
+        ``type=WebsocketMessageType.ACTION_RESULT.value`` and a kwargs
+        payload of ``{"success": bool, "message": str | None,
+        "data": dict | None}``.
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    from actions.registry import get_action  # noqa: PLC0415
+    from actions.types import ActionInterrupted  # noqa: PLC0415
+    from web.webclient.message_types import WebsocketMessageType  # noqa: PLC0415
+
+    def _send(success, message=None, data=None):
+        session.msg(
+            type=WebsocketMessageType.ACTION_RESULT.value,
+            kwargs={"success": success, "message": message, "data": data},
+        )
+
+    actor = session.puppet
+    if actor is None:
+        _send(False, "You must be playing a character to do that.")
+        return
+
+    action_key = kwargs.get("action")
+    if not action_key:
+        _send(False, "No action specified.")
+        return
+
+    action = get_action(action_key)
+    if action is None:
+        _send(False, f"Unknown action: {action_key}.")
+        return
+
+    raw_action_kwargs = kwargs.get("kwargs") or {}
+    resolved = {}
+    for key, value in raw_action_kwargs.items():
+        if key.endswith("_id") and isinstance(value, int):
+            try:
+                resolved[key[:-3]] = ObjectDB.objects.get(pk=value)
+            except ObjectDB.DoesNotExist:
+                _send(False, f"Object not found: {key}={value}.")
+                return
+        else:
+            resolved[key] = value
+
+    try:
+        result = action.run(actor, **resolved)
+    except ActionInterrupted as exc:
+        _send(False, str(exc) or "Action interrupted.")
+        return
+
+    _send(result.success, result.message, result.data)
