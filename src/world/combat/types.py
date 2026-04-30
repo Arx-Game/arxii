@@ -8,12 +8,14 @@ from typing import TYPE_CHECKING
 from world.vitals.types import DamageConsequenceResult
 
 if TYPE_CHECKING:
+    from world.checks.types import CheckResult
     from world.combat.models import (
         CombatOpponent,
         CombatParticipant,
         CombatRoundAction,
         ComboDefinition,
     )
+    from world.magic.types import TechniqueUseResult
 
 
 @dataclass(frozen=True)
@@ -88,3 +90,38 @@ class RoundResolutionResult:
     phase_transitions: list[tuple[CombatOpponent, int]] = field(default_factory=list)
     encounter_completed: bool = False
     available_combos: list[AvailableCombo] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Combat magic pipeline integration (Spec: 2026-04-30)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CombatTechniqueResolution:
+    """Returned from a combat resolver into use_technique.
+
+    Frozen — once the inner resolution is computed it cannot change.
+    Read by the adapter to populate the outer ActionOutcome. Exposes
+    check_result at the top level (no main_result wrapper) — the
+    use_technique extractor accepts this shape per spec
+    2026-04-30-combat-magic-pipeline-integration-design.
+    """
+
+    check_result: CheckResult
+    damage_results: list[OpponentDamageResult]
+    pull_flat_bonus: int
+    scaled_damage: int
+
+
+@dataclass(frozen=True)
+class CombatTechniqueResult:
+    """Adapter's return shape — what _resolve_pc_action consumes.
+
+    Wraps the magic-pipeline outcome (TechniqueUseResult) plus the
+    combat-side damage_results extracted from it. Frozen because the
+    cast is over by the time this is constructed.
+    """
+
+    damage_results: list[OpponentDamageResult]
+    technique_use_result: TechniqueUseResult

@@ -232,3 +232,35 @@ class FactorySmokeTest(TestCase):
 
         phase = BossPhaseFactory()
         self.assertIsNotNone(phase.opponent)
+
+
+class CombatTechniqueIntegrationTests(TestCase):
+    """Smoke tests for combat-magic pipeline dataclasses."""
+
+    def test_combat_technique_resolution_importable(self) -> None:
+        """Smoke test: CombatTechniqueResolution importable and constructible."""
+        from unittest.mock import MagicMock
+
+        from world.checks.types import CheckResult
+        from world.combat.types import CombatTechniqueResolution
+
+        res = CombatTechniqueResolution(
+            check_result=MagicMock(spec=CheckResult),
+            damage_results=[],
+            pull_flat_bonus=0,
+            scaled_damage=0,
+        )
+        self.assertEqual(res.scaled_damage, 0)
+
+    def test_combat_technique_result_importable(self) -> None:
+        """Smoke test: CombatTechniqueResult importable and constructible."""
+        from unittest.mock import MagicMock
+
+        from world.combat.types import CombatTechniqueResult
+        from world.magic.types import TechniqueUseResult
+
+        res = CombatTechniqueResult(
+            damage_results=[],
+            technique_use_result=MagicMock(spec=TechniqueUseResult),
+        )
+        self.assertEqual(res.damage_results, [])
