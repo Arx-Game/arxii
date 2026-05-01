@@ -61,9 +61,11 @@ def execute_action(session, *args, **kwargs):  # noqa: ARG001 — Evennia inputf
 
     Inbound payload (kwargs):
         action: str — the action key (e.g. "equip", "give")
-        kwargs: dict — action kwargs. Any key ending in ``_id`` is resolved
-                       from int → ObjectDB before dispatch (so the wire
-                       format stays simple integer ids).
+        kwargs: dict — action kwargs. Keys whose stripped name (``foo_id`` →
+                       ``foo``) appears in the action's ``objectdb_target_kwargs``
+                       set are resolved from int → ObjectDB before dispatch.
+                       All other kwargs (including non-ObjectDB id kwargs like
+                       ``outfit_id``) are passed through unchanged.
 
     Outbound: ``session.msg`` with
         ``type=WebsocketMessageType.ACTION_RESULT.value`` and a kwargs
@@ -99,8 +101,9 @@ def execute_action(session, *args, **kwargs):  # noqa: ARG001 — Evennia inputf
 
     raw_action_kwargs = kwargs.get("kwargs") or {}
     resolved = {}
+    objectdb_targets = action.objectdb_target_kwargs
     for key, value in raw_action_kwargs.items():
-        if key.endswith("_id") and isinstance(value, int):
+        if key.endswith("_id") and isinstance(value, int) and key[:-3] in objectdb_targets:
             try:
                 resolved[key[:-3]] = ObjectDB.objects.get(pk=value)
             except ObjectDB.DoesNotExist:

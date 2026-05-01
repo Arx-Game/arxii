@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 from evennia.objects.models import ObjectDB
 
@@ -29,6 +29,8 @@ class EquipAction(Action):
 
     intent_event: str | None = "before_equip"
     result_event: str | None = "equip"
+
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
     def execute(
         self,
@@ -75,6 +77,8 @@ class UnequipAction(Action):
     intent_event: str | None = "before_unequip"
     result_event: str | None = "unequip"
 
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
+
     def execute(
         self,
         actor: ObjectDB,
@@ -119,6 +123,8 @@ class PutInAction(Action):
 
     intent_event: str | None = "before_put_in"
     result_event: str | None = "put_in"
+
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target", "container"})
 
     def execute(
         self,
@@ -173,6 +179,8 @@ class TakeOutAction(Action):
 
     intent_event: str | None = "before_take_out"
     result_event: str | None = "take_out"
+
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
     def execute(
         self,

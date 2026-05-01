@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
@@ -25,6 +25,8 @@ class LookAction(Action):
 
     intent_event: str | None = "before_look"
     result_event: str | None = "look"
+
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
     def execute(
         self,
