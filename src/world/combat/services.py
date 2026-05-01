@@ -1662,6 +1662,38 @@ def _check_boss_transitions(
     return transitions
 
 
+def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
+    """Delete encounter-ephemeral CombatNPC ObjectDBs. Persistent NPCs and PCs
+    are never touched. Layer 5 of the multi-layer guard: defensive re-check
+    before each delete in case a corrupt row escaped Layers 1–4.
+
+    CombatOpponent rows are preserved (historical record). Only the ephemeral
+    ObjectDB is destroyed; the SET_NULL FK behavior nulls
+    CombatOpponent.objectdb after deletion.
+    """
+    qs = CombatOpponent.objects.filter(
+        encounter=encounter,
+        objectdb_is_ephemeral=True,
+    ).select_related("objectdb")
+    for opp in qs:
+        objectdb = opp.objectdb
+        if objectdb is None:
+            continue
+        if not is_combat_npc_typeclass(objectdb):
+            logger.error(
+                "Refusing to delete: %s is not a CombatNPC typeclass",
+                objectdb,
+            )
+            continue
+        if has_persistent_identity_references(objectdb):
+            logger.error(
+                "Refusing to delete: %s has persistent identity references",
+                objectdb,
+            )
+            continue
+        objectdb.delete()
+
+
 def _check_encounter_completion(encounter: CombatEncounter) -> bool:
     """Return True if the encounter should be marked complete."""
     from world.vitals.models import CharacterVitals  # noqa: PLC0415
@@ -1814,6 +1846,7 @@ def resolve_round(
     if _check_encounter_completion(encounter):
         enc.status = EncounterStatus.COMPLETED
         result.encounter_completed = True
+        cleanup_completed_encounter(encounter)
     else:
         # Note: round_number is NOT advanced here. begin_declaration_phase
         # handles incrementing round_number when transitioning from
