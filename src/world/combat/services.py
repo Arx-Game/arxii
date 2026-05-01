@@ -1539,8 +1539,11 @@ def _resolve_npc_action(
     # Bulk-apply all conditions from this NPC action
     if condition_applications:
         from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
+        from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
 
-        bulk_apply_conditions(condition_applications)
+        bulk_apply_conditions(
+            [BulkConditionApplication(target=t, template=ct) for (t, ct) in condition_applications]
+        )
 
     return outcome
 

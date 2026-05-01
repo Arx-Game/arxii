@@ -44,6 +44,7 @@ from world.conditions.services import (
     bulk_apply_conditions,
     remove_condition,
 )
+from world.conditions.types import BulkConditionApplication
 
 # ---------------------------------------------------------------------------
 # Module-level helpers
@@ -441,7 +442,10 @@ class BulkApplyConditionsCancellationTest(TestCase):
         )
 
         bulk_apply_conditions(
-            [(target1, template), (target2, template)],
+            [
+                BulkConditionApplication(target=target1, template=template),
+                BulkConditionApplication(target=target2, template=template),
+            ],
         )
 
         # target1 cancelled, target2 should succeed

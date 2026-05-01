@@ -11,6 +11,7 @@ from django.db import models
 
 if TYPE_CHECKING:
     from django.db.models import Q
+    from evennia.objects.models import ObjectDB
 
     from world.conditions.models import (
         ConditionInstance,
@@ -35,6 +36,17 @@ class AdvancementResistFailureKind(models.TextChoices):
 
     ADVANCE_AT_THRESHOLD = "ADVANCE_AT_THRESHOLD", "Advance immediately on threshold crossing"
     HOLD_OVERFLOW = "HOLD_OVERFLOW", "Severity accumulates over threshold; each accrual rolls"
+
+
+@dataclass(frozen=True)
+class BulkConditionApplication:
+    """One target/template/per-entry-knobs binding for bulk_apply_conditions."""
+
+    target: "ObjectDB"
+    template: "ConditionTemplate"
+    severity: int = 1
+    duration_rounds: int | None = None
+    stack_count: int = 1
 
 
 @dataclass

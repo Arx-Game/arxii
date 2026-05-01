@@ -56,6 +56,7 @@ from world.conditions.services import (
     suppress_condition,
     unsuppress_condition,
 )
+from world.conditions.types import BulkConditionApplication
 
 
 class GetActiveConditionsTest(TestCase):
@@ -1540,7 +1541,10 @@ class BulkApplyConditionsTest(TestCase):
 
     def test_applies_to_multiple_targets(self):
         results = bulk_apply_conditions(
-            [(self.target1, self.template1), (self.target2, self.template1)],
+            [
+                BulkConditionApplication(target=self.target1, template=self.template1),
+                BulkConditionApplication(target=self.target2, template=self.template1),
+            ],
         )
         assert len(results) == 2
         assert all(r.success for r in results)
@@ -1548,7 +1552,10 @@ class BulkApplyConditionsTest(TestCase):
 
     def test_applies_multiple_conditions_to_one_target(self):
         results = bulk_apply_conditions(
-            [(self.target1, self.template1), (self.target1, self.template2)],
+            [
+                BulkConditionApplication(target=self.target1, template=self.template1),
+                BulkConditionApplication(target=self.target1, template=self.template2),
+            ],
         )
         assert len(results) == 2
         assert all(r.success for r in results)
@@ -1564,7 +1571,10 @@ class BulkApplyConditionsTest(TestCase):
             outcome=ConditionInteractionOutcome.PREVENT_OTHER,
         )
         results = bulk_apply_conditions(
-            [(self.target1, self.template1), (self.target1, self.template2)],
+            [
+                BulkConditionApplication(target=self.target1, template=self.template1),
+                BulkConditionApplication(target=self.target1, template=self.template2),
+            ],
         )
         assert results[0].success is True
         assert results[1].success is False
@@ -1577,8 +1587,7 @@ class BulkApplyConditionsTest(TestCase):
     def test_severity_and_source_passed_through(self):
         source = CharacterFactory(db_key="caster")
         results = bulk_apply_conditions(
-            [(self.target1, self.template1)],
-            severity=3,
+            [BulkConditionApplication(target=self.target1, template=self.template1, severity=3)],
             source_character=source,
             source_description="spell hit",
         )
@@ -1612,7 +1621,10 @@ class BulkApplyConditionsTest(TestCase):
         )
 
         results = bulk_apply_conditions(
-            [(self.target1, self.template1), (self.target1, self.template2)],
+            [
+                BulkConditionApplication(target=self.target1, template=self.template1),
+                BulkConditionApplication(target=self.target1, template=self.template2),
+            ],
         )
         # template1 succeeds and removes existing_cond
         assert results[0].success is True
@@ -1630,7 +1642,10 @@ class BulkApplyConditionsTest(TestCase):
             max_stacks=5,
         )
         results = bulk_apply_conditions(
-            [(self.target1, stackable), (self.target1, stackable)],
+            [
+                BulkConditionApplication(target=self.target1, template=stackable),
+                BulkConditionApplication(target=self.target1, template=stackable),
+            ],
         )
         assert results[0].success is True
         assert results[1].success is True
@@ -1666,7 +1681,7 @@ class BulkApplyConditionsTest(TestCase):
         )
 
         results = bulk_apply_conditions(
-            [(self.target1, self.template1)],
+            [BulkConditionApplication(target=self.target1, template=self.template1)],
         )
         # Should NOT be prevented — blocker is suppressed
         assert results[0].success is True
@@ -1690,7 +1705,10 @@ class BulkApplyConditionsTest(TestCase):
         )
 
         results = bulk_apply_conditions(
-            [(self.target1, wet), (self.target1, burning)],
+            [
+                BulkConditionApplication(target=self.target1, template=wet),
+                BulkConditionApplication(target=self.target1, template=burning),
+            ],
         )
         # wet succeeds and removes existing burning
         assert results[0].success is True
@@ -1722,7 +1740,10 @@ class BulkApplyConditionsTest(TestCase):
 
         # Apply ice first, then fire — fire should trigger ice removal
         results = bulk_apply_conditions(
-            [(self.target1, ice), (self.target1, fire)],
+            [
+                BulkConditionApplication(target=self.target1, template=ice),
+                BulkConditionApplication(target=self.target1, template=fire),
+            ],
         )
         assert results[0].success is True  # ice applied
         assert results[1].success is True  # fire applied, removes ice
@@ -1731,3 +1752,82 @@ class BulkApplyConditionsTest(TestCase):
         remaining = ConditionInstance.objects.filter(target=self.target1)
         assert remaining.count() == 1
         assert remaining.first().condition == fire
+
+
+class BulkApplyConditionsPerEntryTests(TestCase):
+    """Verifies the per-entry severity/duration/stack_count signature."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.target_a = CharacterFactory(db_key="per_entry_a")
+        cls.target_b = CharacterFactory(db_key="per_entry_b")
+        cls.template_x = ConditionTemplateFactory(name="EmpoweredX")
+        cls.template_y = ConditionTemplateFactory(name="SlowedY")
+
+    def test_per_entry_severity(self) -> None:
+        """Each BulkConditionApplication carries its own severity."""
+        results = bulk_apply_conditions(
+            [
+                BulkConditionApplication(
+                    target=self.target_a, template=self.template_x, severity=3
+                ),
+                BulkConditionApplication(
+                    target=self.target_b, template=self.template_y, severity=1
+                ),
+            ]
+        )
+        assert len(results) == 2
+        assert all(r.success for r in results)
+        instance_x = ConditionInstance.objects.get(target=self.target_a, condition=self.template_x)
+        instance_y = ConditionInstance.objects.get(target=self.target_b, condition=self.template_y)
+        assert instance_x.severity == 3
+        assert instance_y.severity == 1
+
+    def test_per_entry_duration(self) -> None:
+        """Each BulkConditionApplication carries its own duration_rounds."""
+        template_r = ConditionTemplateFactory(
+            name="RoundsDurationR",
+            default_duration_type=DurationType.ROUNDS,
+            default_duration_value=5,
+        )
+        template_s = ConditionTemplateFactory(
+            name="RoundsDurationS",
+            default_duration_type=DurationType.ROUNDS,
+            default_duration_value=5,
+        )
+        results = bulk_apply_conditions(
+            [
+                BulkConditionApplication(
+                    target=self.target_a, template=template_r, duration_rounds=10
+                ),
+                BulkConditionApplication(
+                    target=self.target_b, template=template_s, duration_rounds=2
+                ),
+            ]
+        )
+        assert all(r.success for r in results)
+        instance_r = ConditionInstance.objects.get(target=self.target_a, condition=template_r)
+        instance_s = ConditionInstance.objects.get(target=self.target_b, condition=template_s)
+        assert instance_r.rounds_remaining == 10
+        assert instance_s.rounds_remaining == 2
+
+    def test_empty_list_returns_empty(self) -> None:
+        assert bulk_apply_conditions([]) == []
+
+    def test_per_entry_stack_count(self) -> None:
+        """stack_count > 1 increments stacks by that amount instead of 1."""
+        stackable = ConditionTemplateFactory(
+            name="StackablePerEntry",
+            is_stackable=True,
+            max_stacks=10,
+        )
+        # First application creates the instance (stack_count=1 default)
+        bulk_apply_conditions([BulkConditionApplication(target=self.target_a, template=stackable)])
+        # Second application with stack_count=3 should add 3 stacks
+        results = bulk_apply_conditions(
+            [BulkConditionApplication(target=self.target_a, template=stackable, stack_count=3)]
+        )
+        assert results[0].success is True
+        assert results[0].stacks_added == 3
+        instance = ConditionInstance.objects.get(target=self.target_a, condition=stackable)
+        assert instance.stacks == 4  # 1 initial + 3 added
