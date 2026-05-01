@@ -8,13 +8,22 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from actions.definitions.items import TakeOutAction
+from actions.definitions.items import EquipAction, TakeOutAction
 from actions.definitions.movement import GetAction
+from actions.definitions.outfits import ApplyOutfitAction, UndressAction
 from actions.types import ActionResult
 from commands.evennia_overrides.communication import CmdPose, CmdSay, CmdWhisper
+from commands.evennia_overrides.items import CmdUndress, CmdWear
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
+from commands.exceptions import CommandError
 from evennia_extensions.factories import ObjectDBFactory
+from world.character_sheets.factories import CharacterSheetFactory
+from world.items.factories import (
+    ItemInstanceFactory,
+    ItemTemplateFactory,
+    OutfitFactory,
+)
 
 
 def _make_cmd(cls, caller, args="", obj=None):
@@ -317,3 +326,107 @@ class CmdHomeTests(TestCase):
         with patch.object(cmd.action, "run", return_value=result) as mock_run:
             cmd.func()
             mock_run.assert_called_once_with(actor=caller)
+
+
+class CmdUndressTests(TestCase):
+    def test_undress_resolves_with_no_args(self) -> None:
+        room = ObjectDBFactory(
+            db_key="UndressRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        caller = ObjectDBFactory(
+            db_key="UndressAlice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        cmd = _make_cmd(CmdUndress, caller, args="")
+        self.assertEqual(cmd.resolve_action_args(), {})
+        self.assertIsInstance(cmd.action, UndressAction)
+
+
+class CmdWearTests(TestCase):
+    def _make_character(self, key: str):
+        room = ObjectDBFactory(
+            db_key=f"WearRoom_{key}",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        character = ObjectDBFactory(
+            db_key=f"WearChar_{key}",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        sheet = CharacterSheetFactory(character=character)
+        return room, character, sheet
+
+    def test_wear_outfit_name_dispatches_apply_outfit_action(self) -> None:
+        """Typing 'wear outfit Court Attire' switches dispatch to ApplyOutfitAction."""
+        room, character, sheet = self._make_character("apply")
+        wardrobe_template = ItemTemplateFactory(
+            name="WearTestWardrobe",
+            is_wardrobe=True,
+            is_container=True,
+        )
+        wardrobe_obj = ObjectDBFactory(
+            db_key="WearTestWardrobeObj",
+            db_typeclass_path="typeclasses.objects.Object",
+            location=room,
+        )
+        wardrobe = ItemInstanceFactory(template=wardrobe_template, game_object=wardrobe_obj)
+        outfit = OutfitFactory(
+            character_sheet=sheet,
+            wardrobe=wardrobe,
+            name="Court Attire",
+        )
+
+        cmd = _make_cmd(CmdWear, character, args=f"outfit {outfit.name}")
+        kwargs = cmd.resolve_action_args()
+        self.assertIsInstance(cmd.action, ApplyOutfitAction)
+        self.assertEqual(kwargs, {"outfit_id": outfit.pk})
+
+    def test_wear_outfit_name_case_insensitive(self) -> None:
+        """The 'outfit' prefix and outfit name match case-insensitively."""
+        room, character, sheet = self._make_character("case")
+        wardrobe_template = ItemTemplateFactory(
+            name="CaseWardrobeTpl",
+            is_wardrobe=True,
+            is_container=True,
+        )
+        wardrobe_obj = ObjectDBFactory(
+            db_key="CaseWardrobeObj",
+            db_typeclass_path="typeclasses.objects.Object",
+            location=room,
+        )
+        wardrobe = ItemInstanceFactory(template=wardrobe_template, game_object=wardrobe_obj)
+        outfit = OutfitFactory(
+            character_sheet=sheet,
+            wardrobe=wardrobe,
+            name="Court Attire",
+        )
+
+        cmd = _make_cmd(CmdWear, character, args="OUTFIT court attire")
+        kwargs = cmd.resolve_action_args()
+        self.assertIsInstance(cmd.action, ApplyOutfitAction)
+        self.assertEqual(kwargs, {"outfit_id": outfit.pk})
+
+    def test_wear_outfit_unknown_name_raises_command_error(self) -> None:
+        _room, character, _sheet = self._make_character("unknown")
+        cmd = _make_cmd(CmdWear, character, args="outfit DoesNotExist")
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
+
+    def test_wear_item_unchanged(self) -> None:
+        """Plain 'wear <item>' still routes to EquipAction."""
+        _room, character, _sheet = self._make_character("plain")
+        item_obj = ObjectDBFactory(db_key="shirt", location=character)
+        character.search = MagicMock(return_value=item_obj)
+
+        cmd = _make_cmd(CmdWear, character, args="shirt")
+        kwargs = cmd.resolve_action_args()
+        self.assertIsInstance(cmd.action, EquipAction)
+        self.assertEqual(kwargs, {"target": item_obj})
+
+    def test_wear_empty_args_raises(self) -> None:
+        _room, character, _sheet = self._make_character("empty")
+        cmd = _make_cmd(CmdWear, character, args="")
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
