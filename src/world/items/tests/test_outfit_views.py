@@ -168,6 +168,56 @@ class OutfitViewSetTests(_OutfitViewSetSetupMixin, TestCase):
         self.assertIn(own_outfit.pk, result_ids)
         self.assertNotIn(other_outfit.pk, result_ids)
 
+    def test_list_scoped_to_user_even_with_other_sheet_filter(self) -> None:
+        """Filtering by ?character_sheet=<other> still returns nothing for non-staff.
+
+        Regression test for the queryset scope: the filter is a refinement on
+        top of the scoped queryset, not an override. A user passing another
+        character's sheet id sees an empty list, not a 403 — the items are
+        simply not in their queryset.
+        """
+        OutfitFactory(
+            character_sheet=self.sheet_b,
+            wardrobe=self.wardrobe,
+            name="OtherSheetLook",
+        )
+
+        response = self.client.get(f"/api/items/outfits/?character_sheet={self.sheet_b.pk}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["results"], [])
+
+    def test_retrieve_other_users_outfit_returns_404(self) -> None:
+        """GET detail on another user's outfit is hidden from the queryset (404)."""
+        other_outfit = OutfitFactory(
+            character_sheet=self.sheet_b,
+            wardrobe=self.wardrobe,
+            name="OtherUserOutfit",
+        )
+
+        response = self.client.get(f"/api/items/outfits/{other_outfit.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_staff_sees_all_outfits(self) -> None:
+        """Staff users bypass the per-account scope on the outfit list."""
+        staff = AccountFactory(username="outfit_view_staff", is_staff=True)
+        OutfitFactory(
+            character_sheet=self.sheet_a,
+            wardrobe=self.wardrobe,
+            name="StaffSeesAOutfit",
+        )
+        OutfitFactory(
+            character_sheet=self.sheet_b,
+            wardrobe=self.wardrobe,
+            name="StaffSeesBOutfit",
+        )
+        self.client.force_authenticate(user=staff)
+
+        response = self.client.get("/api/items/outfits/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        names = {r["name"] for r in response.data["results"]}
+        self.assertIn("StaffSeesAOutfit", names)
+        self.assertIn("StaffSeesBOutfit", names)
+
     def test_retrieve_returns_outfit_with_slots(self) -> None:
         """GET detail includes nested slots with item details."""
         outfit = OutfitFactory(
@@ -461,3 +511,56 @@ class OutfitSlotViewSetTests(_OutfitViewSetSetupMixin, TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(self.outfit.slots.count(), 0)
+
+    def test_list_excludes_other_users_outfit_slots(self) -> None:
+        """A non-staff user cannot list slots that belong to another user's outfit."""
+        other_outfit = OutfitFactory(
+            character_sheet=self.sheet_b,
+            wardrobe=self.wardrobe,
+            name="OtherSlotOwnerLook",
+        )
+        # Build a slot on the other user's outfit; we expect it to be hidden.
+        other_slot = OutfitSlotFactory(
+            outfit=other_outfit,
+            item_instance=self.shirt,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        response = self.client.get("/api/items/outfit-slots/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result_ids = {row["id"] for row in response.data["results"]}
+        self.assertNotIn(other_slot.pk, result_ids)
+
+    def test_staff_sees_all_outfit_slots(self) -> None:
+        """Staff users bypass the per-account scope on the outfit-slot list."""
+        # Build slots in two outfits (one per sheet).
+        OutfitSlotFactory(
+            outfit=self.outfit,
+            item_instance=self.shirt,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        other_outfit = OutfitFactory(
+            character_sheet=self.sheet_b,
+            wardrobe=self.wardrobe,
+            name="StaffSlotOtherOwnerLook",
+        )
+        OutfitSlotFactory(
+            outfit=other_outfit,
+            item_instance=self.glove,
+            body_region=BodyRegion.LEFT_HAND,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        staff = AccountFactory(username="outfit_slot_view_staff", is_staff=True)
+        self.client.force_authenticate(user=staff)
+
+        response = self.client.get("/api/items/outfit-slots/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Expect both this-test's slots represented (staff sees both outfits).
+        # We can't assert exactly two because other tests in this DB run could
+        # have created slots, but we can confirm both names appear.
+        outfit_ids_in_response = {row["outfit"] for row in response.data["results"]}
+        self.assertIn(self.outfit.pk, outfit_ids_in_response)
+        self.assertIn(other_outfit.pk, outfit_ids_in_response)
