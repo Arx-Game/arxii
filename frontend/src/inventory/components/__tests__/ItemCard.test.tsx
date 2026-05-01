@@ -94,8 +94,11 @@ describe('ItemCard', () => {
 
   it('renders gracefully when no quality tier color is available', () => {
     // Defensive: tinted background uses tier.color_hex; should not crash with empty
-    const item = makeItem();
-    item.quality_tier = { ...item.quality_tier, color_hex: '' };
+    const base = makeItem();
+    const item: ItemInstance = {
+      ...base,
+      quality_tier: { ...base.quality_tier, color_hex: '' },
+    };
     render(<ItemCard item={item} />);
     expect(screen.getByText('Linen Tunic')).toBeInTheDocument();
   });
