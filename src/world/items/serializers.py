@@ -10,6 +10,7 @@ from world.items.exceptions import (
     FacetAlreadyAttached,
     FacetCapacityExceeded,
     NotAContainer,
+    NotReachable,
     PermissionDenied,
     SlotIncompatible,
 )
@@ -314,4 +315,6 @@ class OutfitWriteSerializer(serializers.ModelSerializer):
                 description=validated_data.get("description", ""),
             )
         except NotAContainer as exc:
+            raise serializers.ValidationError({"wardrobe": [exc.user_message]}) from exc
+        except NotReachable as exc:
             raise serializers.ValidationError({"wardrobe": [exc.user_message]}) from exc

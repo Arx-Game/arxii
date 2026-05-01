@@ -24,7 +24,12 @@ from flows.service_functions.outfits import (
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer
-from world.items.exceptions import NotAContainer, NotReachable, PermissionDenied, SlotIncompatible
+from world.items.exceptions import (
+    NotAContainer,
+    NotReachable,
+    PermissionDenied,
+    SlotIncompatible,
+)
 from world.items.factories import (
     ItemInstanceFactory,
     ItemTemplateFactory,
@@ -517,6 +522,33 @@ class SaveOutfitTests(_OutfitServiceSetupMixin, TestCase):
                 wardrobe=self.wardrobe,
                 name="DupeLook",
             )
+
+    def test_save_rejects_when_wardrobe_in_other_room(self) -> None:
+        """Wardrobe out of reach (different room) → NotReachable, no Outfit row created.
+
+        Regression test for I4: previously the docstring claimed REST handled
+        reach validation, but no permission class actually checked it. A
+        player could POST any wardrobe pk on the planet.
+        """
+        other_room = ObjectDBFactory(
+            db_key="OutfitSvcOtherRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.wardrobe.game_object.location = other_room
+        self.wardrobe.game_object.save()
+
+        with self.assertRaises(NotReachable):
+            save_outfit(
+                character_sheet=self.sheet,
+                wardrobe=self.wardrobe,
+                name="UnreachableWardrobeLook",
+            )
+        self.assertFalse(
+            Outfit.objects.filter(
+                character_sheet=self.sheet,
+                name="UnreachableWardrobeLook",
+            ).exists()
+        )
 
 
 class DeleteOutfitTests(_OutfitServiceSetupMixin, TestCase):
