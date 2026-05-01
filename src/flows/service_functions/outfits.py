@@ -132,9 +132,19 @@ def add_outfit_slot(
     """Add or replace a slot in an outfit.
 
     If the same (body_region, equipment_layer) already has a slot, the old
-    one is deleted first and the new one inserted. Validates that the
-    item's template declares (region, layer); otherwise raises
-    ``SlotIncompatible``.
+    one is deleted first and the new one inserted.
+
+    Validation order (raises on first failure):
+        1. The item's template declares (region, layer) → ``SlotIncompatible``
+        2. The item is owned by the outfit's character's account →
+           ``PermissionDenied``
+
+    The ownership check uses account-level ownership rather than current
+    possession: outfits are configuration ("when applied, equip these"),
+    so the question that matters is "will this character ever be able to
+    apply this slot," not "are they carrying the item right now." Apply-time
+    enforces reach separately, so this is the right boundary for the
+    configuration layer.
     """
     template_slots = item_instance.template.cached_slots
     if not any(
@@ -142,6 +152,9 @@ def add_outfit_slot(
         for s in template_slots
     ):
         raise SlotIncompatible
+
+    if item_instance.owner_id != outfit.character_sheet.character.db_account_id:
+        raise PermissionDenied
 
     OutfitSlot.objects.filter(
         outfit=outfit,

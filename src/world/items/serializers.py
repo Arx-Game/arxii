@@ -10,6 +10,7 @@ from world.items.exceptions import (
     FacetAlreadyAttached,
     FacetCapacityExceeded,
     NotAContainer,
+    PermissionDenied,
     SlotIncompatible,
 )
 from world.items.models import (
@@ -256,8 +257,8 @@ class OutfitSlotWriteSerializer(serializers.ModelSerializer):
     def create(self, validated_data: dict) -> OutfitSlot:  # type: ignore[override]
         """Delegate creation to the add_outfit_slot service.
 
-        The service validates template compatibility and replaces any
-        existing slot at the same (region, layer).
+        The service validates template compatibility and item ownership,
+        and replaces any existing slot at the same (region, layer).
         """
         try:
             return add_outfit_slot(
@@ -268,6 +269,8 @@ class OutfitSlotWriteSerializer(serializers.ModelSerializer):
             )
         except SlotIncompatible as exc:
             raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        except PermissionDenied as exc:
+            raise serializers.ValidationError({"item_instance": [exc.user_message]}) from exc
 
 
 class OutfitReadSerializer(serializers.ModelSerializer):

@@ -76,7 +76,13 @@ class _OutfitViewSetSetupMixin:
             game_object=wardrobe_obj,
         )
 
-        # Shirt template + instance (TORSO/BASE).
+        # Bind characters to their accounts so item-ownership checks resolve.
+        self.character_a.db_account = self.account_a
+        self.character_a.save()
+        self.character_b.db_account = self.account_b
+        self.character_b.save()
+
+        # Shirt template + instance (TORSO/BASE) — owned by account A.
         self.shirt_template = ItemTemplateFactory(name="OutfitViewShirt")
         TemplateSlotFactory(
             template=self.shirt_template,
@@ -92,9 +98,10 @@ class _OutfitViewSetSetupMixin:
         self.shirt = ItemInstanceFactory(
             template=self.shirt_template,
             game_object=shirt_obj,
+            owner=self.account_a,
         )
 
-        # Glove template + instance (LEFT_HAND/BASE).
+        # Glove template + instance (LEFT_HAND/BASE) — owned by account A.
         self.glove_template = ItemTemplateFactory(name="OutfitViewGlove")
         TemplateSlotFactory(
             template=self.glove_template,
@@ -110,9 +117,10 @@ class _OutfitViewSetSetupMixin:
         self.glove = ItemInstanceFactory(
             template=self.glove_template,
             game_object=glove_obj,
+            owner=self.account_a,
         )
 
-        # A slotless template (for SlotIncompatible tests).
+        # A slotless template (for SlotIncompatible tests) — owned by account A.
         self.slotless_template = ItemTemplateFactory(name="OutfitViewSlotless")
         slotless_obj = ObjectDBFactory(
             db_key="OutfitViewSlotlessObj",
@@ -123,6 +131,7 @@ class _OutfitViewSetSetupMixin:
         self.slotless_item = ItemInstanceFactory(
             template=self.slotless_template,
             game_object=slotless_obj,
+            owner=self.account_a,
         )
 
         self.client = APIClient()
@@ -438,7 +447,7 @@ class OutfitSlotViewSetTests(_OutfitViewSetSetupMixin, TestCase):
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
-        # Build a second TORSO/BASE-compatible item.
+        # Build a second TORSO/BASE-compatible item, owned by the same account.
         other_shirt_obj = ObjectDBFactory(
             db_key="OutfitViewOtherShirtObj",
             db_typeclass_path="typeclasses.objects.Object",
@@ -448,6 +457,7 @@ class OutfitSlotViewSetTests(_OutfitViewSetSetupMixin, TestCase):
         other_shirt = ItemInstanceFactory(
             template=self.shirt_template,
             game_object=other_shirt_obj,
+            owner=self.account_a,
         )
 
         response = self.client.post(
@@ -479,6 +489,39 @@ class OutfitSlotViewSetTests(_OutfitViewSetSetupMixin, TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("cannot be worn there", str(response.data))
+        self.assertEqual(self.outfit.slots.count(), 0)
+
+    def test_create_rejects_item_owned_by_another_account(self) -> None:
+        """POST with an item_instance whose owner is a different account → 400.
+
+        Regression test for I1: previously the service+permission only checked
+        the outfit's character_sheet, never the item's owner. A player could
+        wedge any item id into their outfit slot rows.
+        """
+        # An item owned by account_b but referenced from account_a's outfit.
+        foreign_obj = ObjectDBFactory(
+            db_key="OutfitViewForeignItem",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        foreign_obj.location = self.character_b
+        foreign_obj.save()
+        foreign_item = ItemInstanceFactory(
+            template=self.shirt_template,
+            game_object=foreign_obj,
+            owner=self.account_b,
+        )
+
+        response = self.client.post(
+            "/api/items/outfit-slots/",
+            {
+                "outfit": self.outfit.pk,
+                "item_instance": foreign_item.pk,
+                "body_region": BodyRegion.TORSO,
+                "equipment_layer": EquipmentLayer.BASE,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(self.outfit.slots.count(), 0)
 
     def test_destroy_removes_slot(self) -> None:

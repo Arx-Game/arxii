@@ -392,7 +392,7 @@ class _OutfitServiceSetupMixin:
             game_object=wardrobe_obj,
         )
 
-        # Shirt template + instance (TORSO/BASE).
+        # Shirt template + instance (TORSO/BASE) — owned by the actor's account.
         self.shirt_template = ItemTemplateFactory(name="OutfitSvcShirt")
         TemplateSlotFactory(
             template=self.shirt_template,
@@ -408,9 +408,10 @@ class _OutfitServiceSetupMixin:
         self.shirt = ItemInstanceFactory(
             template=self.shirt_template,
             game_object=shirt_obj,
+            owner=self.account,
         )
 
-        # Glove template + instance (LEFT_HAND/BASE).
+        # Glove template + instance (LEFT_HAND/BASE) — owned by the actor's account.
         self.glove_template = ItemTemplateFactory(name="OutfitSvcGlove")
         TemplateSlotFactory(
             template=self.glove_template,
@@ -426,6 +427,7 @@ class _OutfitServiceSetupMixin:
         self.glove = ItemInstanceFactory(
             template=self.glove_template,
             game_object=glove_obj,
+            owner=self.account,
         )
 
 
@@ -596,7 +598,7 @@ class OutfitSlotEditTests(_OutfitServiceSetupMixin, TestCase):
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
-        # Build a second TORSO/BASE-compatible item.
+        # Build a second TORSO/BASE-compatible item, owned by the same account.
         other_shirt_obj = ObjectDBFactory(
             db_key="OutfitSvcOtherShirtObj",
             db_typeclass_path="typeclasses.objects.Object",
@@ -606,6 +608,7 @@ class OutfitSlotEditTests(_OutfitServiceSetupMixin, TestCase):
         other_shirt = ItemInstanceFactory(
             template=self.shirt_template,
             game_object=other_shirt_obj,
+            owner=self.account,
         )
 
         add_outfit_slot(
@@ -626,6 +629,34 @@ class OutfitSlotEditTests(_OutfitServiceSetupMixin, TestCase):
                 outfit=self.outfit,
                 item_instance=self.shirt,  # only declares TORSO/BASE
                 body_region=BodyRegion.LEFT_HAND,
+                equipment_layer=EquipmentLayer.BASE,
+            )
+        self.assertEqual(self.outfit.slots.count(), 0)
+
+    def test_add_slot_rejects_item_not_owned_by_character(self) -> None:
+        """Item owned by another account → PermissionDenied, no slot row created.
+
+        Outfits are configuration. The configuration layer's ownership boundary
+        is account-level (an account building an outfit can only reference
+        items its account owns). Apply-time enforces possession/reach
+        separately.
+        """
+        other_account = AccountFactory(username="OutfitSvcSlotOtherAccount")
+        foreign_shirt_obj = ObjectDBFactory(
+            db_key="OutfitSvcSlotForeignShirtObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        foreign_shirt = ItemInstanceFactory(
+            template=self.shirt_template,
+            game_object=foreign_shirt_obj,
+            owner=other_account,
+        )
+
+        with self.assertRaises(PermissionDenied):
+            add_outfit_slot(
+                outfit=self.outfit,
+                item_instance=foreign_shirt,
+                body_region=BodyRegion.TORSO,
                 equipment_layer=EquipmentLayer.BASE,
             )
         self.assertEqual(self.outfit.slots.count(), 0)
