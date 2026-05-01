@@ -17,6 +17,7 @@ from actions.definitions.movement import (
     HomeAction,
     TraverseExitAction,
 )
+from actions.definitions.outfits import ApplyOutfitAction, UndressAction
 from actions.definitions.perception import InventoryAction, LookAction
 from actions.types import TargetType
 
@@ -34,6 +35,8 @@ _ALL_ACTIONS: list[Action] = [
     UnequipAction(),
     PutInAction(),
     TakeOutAction(),
+    ApplyOutfitAction(),
+    UndressAction(),
     TraverseExitAction(),
     HomeAction(),
 ]

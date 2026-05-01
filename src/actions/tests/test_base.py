@@ -151,6 +151,8 @@ class ActionRegistryTests(TestCase):
             "unequip",
             "put_in",
             "take_out",
+            "apply_outfit",
+            "undress",
             "traverse_exit",
             "home",
         }
