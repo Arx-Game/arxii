@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable
+from dataclasses import dataclass
 import logging
 import math
 import random
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from world.conditions.models import ConditionTemplate
     from world.covenants.models import CovenantRole
     from world.magic.models import Technique
+    from world.magic.types import TechniqueUseResult
     from world.scenes.models import Persona
 
     PerformCheckFn = Callable[..., CheckResult]
@@ -35,6 +37,7 @@ from flows.events.payloads import (
     DamageAppliedPayload,
     DamagePreApplyPayload,
 )
+from world.checks.services import perform_check
 from world.combat.constants import (
     DEFENSE_CRITICAL_MULTIPLIER,
     DEFENSE_FULL_MULTIPLIER,
@@ -72,6 +75,8 @@ from world.combat.models import (
 from world.combat.types import (
     ActionOutcome,
     AvailableCombo,
+    CombatTechniqueResolution,
+    CombatTechniqueResult,
     ComboSlotMatch,
     DefenseResult,
     OpponentDamageResult,
@@ -80,6 +85,7 @@ from world.combat.types import (
 )
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel, FatigueCategory
 from world.fatigue.services import apply_fatigue, get_fatigue_penalty
+from world.magic.constants import EffectKind
 from world.vitals.constants import (
     DEATH_HEALTH_THRESHOLD,
     KNOCKOUT_HEALTH_THRESHOLD,
@@ -88,6 +94,177 @@ from world.vitals.constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# CombatAttackResolver - Damage resolution for combat techniques
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class CombatAttackResolver:
+    """Resolves the inner damage step of a combat-cast attack technique.
+
+    Built by resolve_combat_technique() and passed to use_technique() as
+    resolve_fn. State is inspectable at any point during/after the cast,
+    which closures don't allow. Subclassable when non-attack effect types
+    arrive (next PR): CombatBuffResolver, CombatDefenseResolver, etc.
+    """
+
+    participant: CombatParticipant
+    action: CombatRoundAction
+    target: CombatOpponent
+    pull_flat_bonus: int
+    fatigue_category: str
+    offense_check_type: CheckType
+    offense_check_fn: PerformCheckFn | None
+
+    def _roll_check(self) -> CheckResult:
+        """Roll the offense check with effort + pull-bonus modifiers."""
+        check_fn = self.offense_check_fn or perform_check
+        penalty = get_fatigue_penalty(
+            self.participant.character_sheet,
+            self.fatigue_category,
+        )
+        effort_mod = EFFORT_CHECK_MODIFIER.get(self.action.effort_level, 0)
+        extra_modifiers = effort_mod + self.pull_flat_bonus
+        character = self.participant.character_sheet.character
+        return check_fn(
+            character,
+            self.offense_check_type,
+            extra_modifiers=extra_modifiers,
+            fatigue_penalty=penalty,
+        )
+
+    def _scale(self, check_result: CheckResult) -> int:
+        """Scale base_power by success_level: full / half / zero."""
+        base_power = self.action.focused_action.effect_type.base_power
+        if base_power is None:
+            return 0
+        if check_result.success_level >= OFFENSE_FULL_THRESHOLD:
+            return base_power
+        if check_result.success_level >= OFFENSE_HALF_THRESHOLD:
+            return base_power // 2
+        return 0
+
+    def _apply(self, scaled_damage: int) -> list[OpponentDamageResult]:
+        """Apply damage to target if alive and damage > 0."""
+        if scaled_damage <= 0:
+            return []
+        self.target.refresh_from_db()
+        if self.target.status == OpponentStatus.DEFEATED:
+            return []
+        return [apply_damage_to_opponent(self.target, scaled_damage)]
+
+    def __call__(self) -> CombatTechniqueResolution:
+        check_result = self._roll_check()
+        scaled_damage = self._scale(check_result)
+        damage_results = self._apply(scaled_damage)
+        return CombatTechniqueResolution(
+            check_result=check_result,
+            damage_results=damage_results,
+            pull_flat_bonus=self.pull_flat_bonus,
+            scaled_damage=scaled_damage,
+        )
+
+
+def _sum_active_flat_bonuses(
+    participant: CombatParticipant,
+    encounter: CombatEncounter,
+) -> int:
+    """Sum scaled_value across FLAT_BONUS resolved-effect rows on the
+    participant's active CombatPull rows for this encounter.
+
+    Reads through CharacterCombatPullHandler so the cached/prefetched
+    list is honored — avoids re-querying.
+    """
+    character = participant.character_sheet.character
+    total = 0
+    for pull in character.combat_pulls.active_for_encounter(encounter):
+        for eff in pull.resolved_effects_cached:
+            if eff.kind == EffectKind.FLAT_BONUS and eff.scaled_value:
+                total += eff.scaled_value
+    return total
+
+
+def _build_combat_result(
+    technique_use_result: TechniqueUseResult,
+    resolver: CombatAttackResolver,  # noqa: ARG001 - kept for future extensibility
+) -> CombatTechniqueResult:
+    """Translate use_technique's outcome into the adapter's return shape."""
+    if not technique_use_result.confirmed:
+        return CombatTechniqueResult(
+            damage_results=[],
+            technique_use_result=technique_use_result,
+        )
+
+    resolution = technique_use_result.resolution_result
+    # Defensive assertion against programmer error — service contract
+    # is that combat resolvers return CombatTechniqueResolution.
+    if not isinstance(resolution, CombatTechniqueResolution):
+        msg = f"Expected CombatTechniqueResolution, got {type(resolution).__name__}"
+        raise TypeError(msg)
+
+    return CombatTechniqueResult(
+        damage_results=list(resolution.damage_results),
+        technique_use_result=technique_use_result,
+    )
+
+
+def resolve_combat_technique(  # noqa: PLR0913 — keyword-only orchestrator args
+    *,
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+    target: CombatOpponent,
+    fatigue_category: str,
+    offense_check_type: CheckType,
+    offense_check_fn: PerformCheckFn | None,
+) -> CombatTechniqueResult:
+    """Route a damage-path combat technique through use_technique.
+
+    Builds a CombatAttackResolver and passes it to use_technique as
+    resolve_fn. The magic envelope handles anima, soulfray, mishap,
+    PRE_CAST/CAST events, reactive scar interception, and corruption.
+    The resolver does the offense check + damage application inside
+    that envelope.
+
+    Soulfray warning is auto-confirmed at round resolution time —
+    frontend handles preview before submission.
+
+    AFFECTED-per-target events are deferred (CombatOpponent is not an
+    ObjectDB; targets=[] until the opponent <-> ObjectDB relationship
+    is decided).
+
+    Other pull effect kinds are deferred:
+    - INTENSITY_BUMP: needs runtime stats to accept combat context
+    - CAPABILITY_GRANT: tied to non-attack pipeline
+    - NARRATIVE_ONLY: cosmetic surfacing
+    - VITAL_BONUS: already wired through recompute_max_health_with_threads
+    """
+    from world.magic.services import use_technique  # noqa: PLC0415
+
+    encounter = participant.encounter
+    pull_flat_bonus = _sum_active_flat_bonuses(participant, encounter)
+
+    resolver = CombatAttackResolver(
+        participant=participant,
+        action=action,
+        target=target,
+        pull_flat_bonus=pull_flat_bonus,
+        fatigue_category=fatigue_category,
+        offense_check_type=offense_check_type,
+        offense_check_fn=offense_check_fn,
+    )
+
+    technique_use_result = use_technique(
+        character=participant.character_sheet.character,
+        technique=action.focused_action,
+        resolve_fn=resolver,
+        confirm_soulfray_risk=True,
+        targets=[],
+    )
+
+    return _build_combat_result(technique_use_result, resolver)
+
 
 # ---------------------------------------------------------------------------
 # ActionCategory -> FatigueCategory mapping (same values)
@@ -1213,35 +1390,6 @@ def check_and_advance_boss_phase(
 # ---------------------------------------------------------------------------
 
 
-def _scale_damage_by_check(  # noqa: PLR0913 - check params are all required
-    raw: int,
-    participant: CombatParticipant,
-    action: CombatRoundAction,
-    fatigue_category: str,
-    offense_check_type: CheckType,
-    offense_check_fn: PerformCheckFn | None,
-) -> int:
-    """Roll an offense check and scale raw damage by success level."""
-    check_fn = offense_check_fn
-    if check_fn is None:
-        from world.checks.services import perform_check as check_fn  # noqa: PLC0415
-
-    penalty = get_fatigue_penalty(participant.character_sheet, fatigue_category)
-    effort_mod = EFFORT_CHECK_MODIFIER.get(action.effort_level, 0)
-    character = participant.character_sheet.character
-    result = check_fn(
-        character,
-        offense_check_type,
-        extra_modifiers=effort_mod,
-        fatigue_penalty=penalty,
-    )
-    if result.success_level >= OFFENSE_FULL_THRESHOLD:
-        return raw
-    if result.success_level >= OFFENSE_HALF_THRESHOLD:
-        return raw // 2
-    return 0
-
-
 def _resolve_pc_action(
     participant: CombatParticipant,
     action: CombatRoundAction,
@@ -1282,23 +1430,28 @@ def _resolve_pc_action(
                 )
                 outcome.combo_used = combo
                 outcome.damage_results.append(dmg_result)
-            else:
-                base_power = technique.effect_type.base_power
-                if base_power is not None:
-                    if offense_check_type is not None:
-                        scaled = _scale_damage_by_check(
-                            base_power,
-                            participant,
-                            action,
-                            fatigue_category,
-                            offense_check_type,
-                            offense_check_fn,
-                        )
-                    else:
-                        scaled = base_power
-                    if scaled > 0:
-                        dmg_result = apply_damage_to_opponent(target, scaled)
-                        outcome.damage_results.append(dmg_result)
+            elif technique.effect_type.base_power is not None:
+                # Damage path — route through magic pipeline (use_technique).
+                # Non-attack effect types (base_power is None) stay no-op until
+                # the conditions-from-techniques resolver lands (next PR).
+                if offense_check_type is not None:
+                    combat_result = resolve_combat_technique(
+                        participant=participant,
+                        action=action,
+                        target=target,
+                        fatigue_category=fatigue_category,
+                        offense_check_type=offense_check_type,
+                        offense_check_fn=offense_check_fn,
+                    )
+                    outcome.damage_results.extend(combat_result.damage_results)
+                else:
+                    # TODO(combat-magic-pipeline): Remove this bypass once all combat
+                    # tests/fixtures provide an offense_check_type. Without one, this
+                    # branch skips the magic pipeline entirely (no anima cost, no events,
+                    # no soulfray), which is a temporary test-compatibility shim, not
+                    # production behavior.
+                    dmg_result = apply_damage_to_opponent(target, technique.effect_type.base_power)
+                    outcome.damage_results.append(dmg_result)
 
     # Apply fatigue after action resolves
     apply_fatigue(
