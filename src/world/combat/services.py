@@ -642,6 +642,25 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     enc.status = EncounterStatus.DECLARING
     enc.round_started_at = timezone.now()
     enc.save(update_fields=["round_number", "status", "round_started_at"])
+
+    # --- Round-tick: fire start-of-round DoT ---
+    from world.conditions.services import process_round_start  # noqa: PLC0415
+
+    active_participants_start = CombatParticipant.objects.filter(
+        encounter=enc,
+        status=ParticipantStatus.ACTIVE,
+    ).select_related("character_sheet__character")
+    for p in active_participants_start:
+        process_round_start(p.character_sheet.character)
+
+    active_opponents_start = CombatOpponent.objects.filter(
+        encounter=enc,
+        status=OpponentStatus.ACTIVE,
+    ).select_related("objectdb")
+    for opp in active_opponents_start:
+        if opp.objectdb is not None:
+            process_round_start(opp.objectdb)
+
     # Spec A §3.8 + §7.4 lines 2031–2039: expire pulls for the previous
     # round *after* round_number has advanced so the < comparison catches
     # the old rows. recompute_max_health_with_threads runs per affected
@@ -1983,6 +2002,24 @@ def resolve_round(
         vitals.dying_final_round = False
         vitals.status = CharacterStatus.DEAD
         vitals.save(update_fields=["status", "dying_final_round"])
+
+    # --- Round-tick: decrement rounds_remaining, tick DoT, fire expiry events ---
+    from world.conditions.services import process_round_end  # noqa: PLC0415
+
+    active_participants = CombatParticipant.objects.filter(
+        encounter=encounter,
+        status=ParticipantStatus.ACTIVE,
+    ).select_related("character_sheet__character")
+    for p in active_participants:
+        process_round_end(p.character_sheet.character)
+
+    active_opponents_end = CombatOpponent.objects.filter(
+        encounter=encounter,
+        status=OpponentStatus.ACTIVE,
+    ).select_related("objectdb")
+    for opp in active_opponents_end:
+        if opp.objectdb is not None:
+            process_round_end(opp.objectdb)
 
     # --- Boss phase transitions ---
     result.phase_transitions = _check_boss_transitions(encounter)
