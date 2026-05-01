@@ -26,6 +26,10 @@ phases.
 - `ItemTemplate.is_wardrobe` flag — marks a template as a wardrobe
 - `apply_outfit(character, outfit)` service — atomic equip of all pieces
 - `ApplyOutfitAction` — action-layer wrapper for the apply, telnet + web
+- `undress(character)` service — unequip every worn item; items stay in
+  inventory (the default unequip behavior — only EquippedItem rows are
+  removed)
+- `UndressAction` — action-layer wrapper for undress, telnet + web
 - `save_outfit`, `delete_outfit`, edit-slot ops — REST CRUD with permission
   checks
 - REST endpoints: `OutfitViewSet` with full CRUD on player-owned outfits
@@ -191,6 +195,17 @@ def apply_outfit(character: CharacterState, outfit_state: OutfitState) -> None:
 
 
 @transaction.atomic
+def undress(character: CharacterState) -> None:
+    """Unequip every item currently worn by the character.
+
+    Items stay in inventory (the default unequip behavior — only
+    EquippedItem rows are removed; ObjectDB.location is unchanged because
+    equipped items already lived on the character). Idempotent: undressing
+    a fully-naked character is a no-op, not an error.
+    """
+
+
+@transaction.atomic
 def save_outfit(
     character_sheet: CharacterSheet,
     wardrobe: ItemInstance,
@@ -233,8 +248,10 @@ def remove_outfit_slot(
     """Remove a slot from an outfit. The item is not touched."""
 ```
 
-Note: `apply_outfit` is the only one that gets exposed via the action layer.
-The others are called from REST serializers' `create`/`update`/`destroy`.
+Note: `apply_outfit` and `undress` are exposed via the action layer (they're
+IC actions — your character physically changes clothes). The save/edit/delete
+service functions are called from REST serializers' `create`/`update`/`destroy`
+since they're player bookkeeping with no IC effect.
 
 ### Object state
 
@@ -286,14 +303,17 @@ any `*_id` kwarg to an `ObjectDB`. Outfits aren't ObjectDBs. Options:
 naive, and each action knows its own argument shape. We'll document this
 pattern as the standard for non-ObjectDB targets.
 
-Register in `actions/registry.py`.
+Also a parallel `UndressAction` (key `undress`, target_type `SELF`, no
+target argument). Register both in `actions/registry.py`.
 
-### Telnet command (deferred to follow-up)
+### Telnet commands
 
-A `wear outfit <name>` command (or similar) is a natural telnet affordance
-but isn't a Phase A blocker — the frontend is the primary surface and
-telnet players can still use the underlying `wear <item>` for individual
-pieces. Defer to a polish PR after the frontend lands.
+- **`undress`** — ships in Phase A. Trivial parser (no args), dispatches to
+  `UndressAction`. Players will type this often; worth landing now.
+- **`wear outfit <name>`** — natural telnet affordance for `ApplyOutfitAction`,
+  but more parser work (resolve outfit by name + reachable wardrobe). Defer
+  to a polish PR after frontend lands; web players cover the apply flow with
+  the wardrobe page.
 
 ### REST endpoints
 
@@ -482,9 +502,13 @@ that future PRs can hook into.
 - **Delete outfit** → confirmation dialog, then REST DELETE.
 - **Drag-to-equip** for individual items (out of scope for Phase A; tracked
   as a follow-up). The outfit-first model means dragging is secondary.
-- **WS action_result** subscription updates the UI after `apply_outfit`
-  completes — paper doll re-renders, items move from "available" to "worn"
-  in the lists.
+- **"Undress" button** lives in the "Currently Worn" panel header — a
+  small subdued button that fires `UndressAction` via WS execute_action.
+  Confirmation modal only if the character is wearing 3+ items (avoid the
+  "I changed one accessory" case from needing a confirm).
+- **WS action_result** subscription updates the UI after `apply_outfit` /
+  `UndressAction` completes — paper doll re-renders, items move from
+  "available" to "worn" in the lists.
 
 ### Edge cases
 
