@@ -116,6 +116,26 @@ class OutfitModelTests(TestCase):
 
         self.assertFalse(Outfit.objects.filter(pk=outfit_pk).exists())
 
+    def test_clean_rejects_non_wardrobe_template(self) -> None:
+        """An ItemInstance whose template is_wardrobe=False can't be a wardrobe."""
+        from django.core.exceptions import ValidationError
+
+        non_wardrobe_template = ItemTemplateFactory(
+            name="Plain Box", is_wardrobe=False, is_container=True
+        )
+        box_obj = ObjectDBFactory(
+            db_key="PlainBox",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        box = ItemInstanceFactory(template=non_wardrobe_template, game_object=box_obj)
+        outfit = OutfitFactory.build(
+            character_sheet=self.sheet,
+            wardrobe=box,
+            name="Bad Outfit",
+        )
+        with self.assertRaises(ValidationError):
+            outfit.full_clean()
+
 
 class OutfitSlotModelTests(TestCase):
     """Cover OutfitSlot invariants."""

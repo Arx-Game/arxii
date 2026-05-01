@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from evennia_extensions.models import PlayerMedia
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 from django.utils.functional import cached_property
@@ -614,6 +615,11 @@ class Outfit(SharedMemoryModel):
     in a wardrobe (an ItemInstance whose template is_wardrobe=True).
     Applying an outfit equips its pieces atomically. Deleting an outfit
     removes the definition only — items are not affected.
+
+    The model permits any wardrobe item regardless of who owns it; the
+    service and REST layers enforce that the wardrobe is reachable by the
+    character. Future shared-storage features (organizations, co-housing)
+    can use this permissive shape.
     """
 
     name = models.CharField(max_length=100)
@@ -643,6 +649,13 @@ class Outfit(SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        super().clean()
+        if not self.wardrobe.template.is_wardrobe:
+            raise ValidationError(
+                {"wardrobe": "Outfits can only be stored in items flagged as wardrobes."}
+            )
 
 
 class OutfitSlot(SharedMemoryModel):
