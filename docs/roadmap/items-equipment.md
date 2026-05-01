@@ -114,6 +114,71 @@ What landed:
   instead of auto-swapping). All inventory mutations now flow through the action
   layer; the ViewSet remains as a read-only list/retrieve endpoint
 
+## Outfits Phase A (DONE)
+
+**Branch:** `outfits-phase-a`
+
+Saved outfits — named groupings of equipped items a character can re-apply in one
+action. Phase A is the data layer, action layer, and the wardrobe UI scaffold; it
+does not yet include fashion bonuses, modeling, or legendary mechanics (those are
+Phases B–D below).
+
+What landed:
+
+- **`Outfit` and `OutfitSlot` models** in `world.items.models` — `Outfit` is owned
+  by a `CharacterSheet` (the source-of-truth above personas) and stored in a
+  wardrobe `ItemInstance`; unique name per character_sheet; `clean()` validates
+  that the wardrobe's template has `is_wardrobe=True`. `OutfitSlot` pins a
+  specific `ItemInstance` to a `(BodyRegion, EquipmentLayer)` pair on the outfit.
+  Added an `is_wardrobe` flag on `ItemTemplate` to mark items that can store
+  outfits
+- **Service functions** in `flows.service_functions.outfits`:
+  - `apply_outfit(character, outfit_state)` — atomic equip of all slots; uses
+    the existing equip auto-swap policy; raises `PermissionDenied` for
+    cross-character outfits, `NotReachable` if the wardrobe or any slot's item
+    is out of reach
+  - `undress(character)` — unequips everything currently worn; idempotent on
+    naked characters; items stay in inventory
+  - `save_outfit(*, character_sheet, wardrobe, name, description="")` — snapshots
+    the character's currently-equipped items into a new Outfit
+  - `delete_outfit(outfit)` — removes the outfit definition; items untouched
+  - `add_outfit_slot(*, outfit, item_instance, body_region, equipment_layer)` —
+    adds or replaces a slot; rejects template-incompatible slots
+  - `remove_outfit_slot(*, outfit, body_region, equipment_layer)` — idempotent
+- **`OutfitIncomplete` typed exception** for use when an outfit references items
+  that no longer exist (cascade-deletes on `OutfitSlot.item_instance` mean the
+  slot row vanishes; the exception is reserved for callers that want to surface
+  "this outfit has missing pieces" to the user)
+- **`OutfitState`** flow object state with `can_apply` (routed through
+  `_run_package_hook`) and `is_reachable_by` that delegates to the wrapped
+  wardrobe's `ItemState.is_reachable_by` — so behavior packages can intercept
+  outfit-apply just like they intercept item operations
+- **`ApplyOutfitAction` and `UndressAction`** in `actions/definitions/items.py`
+  (registered in the action registry), so both telnet and the web action
+  dispatcher route through the same service layer
+- **Telnet commands** — `wear outfit <name>` is a new branch on the existing
+  `CmdWear`; `undress` is a new command in `commands/evennia_overrides/items.py`,
+  registered in `CharacterCmdSet`
+- **REST endpoints** at `/api/items/`:
+  - `OutfitViewSet` — full CRUD on outfits (owner-or-staff)
+  - `OutfitSlotViewSet` — full CRUD on slot pins
+  - `ItemInstanceViewSet` — read-only inventory list/retrieve so the wardrobe page
+    can paint the inventory grid without a websocket round-trip on first load
+- **Frontend wardrobe page** (`frontend/src/inventory/`):
+  - `WardrobePage` shell with paper doll, currently-worn list, inventory grid,
+    item detail side drawer, and an outfit cards row
+  - `OutfitCard` with placeholder regions for future Phase B fashion bonuses,
+    Phase C modeling stats, Phase D legendary level / mantle indicator — wired
+    but empty so we don't have to retrofit the layout later
+  - Save / Edit / Delete outfit dialogs
+- **WebSocket plumbing** — new `execute_action` outbound message type and
+  `action_result` inbound message type, plus a small action result bus the
+  wardrobe page subscribes to so apply/undress feedback surfaces immediately
+
+Explicitly NOT in Phase A: fashion compatibility, fashion bonuses, modeling /
+peer judging, outfit legendary level, outfit-bound mantles. Placeholders are in
+the UI but no server-side mechanics back them.
+
 ## What's Needed for MVP
 - ~~Equipment slot / body part model~~ — **done** (TemplateSlot with BodyRegion + EquipmentLayer)
 - ~~Worn items tracking~~ — **done** (EquippedItem model + equip/unequip services)
@@ -121,11 +186,15 @@ What landed:
 - ~~Item quality~~ — **done** (QualityTier lookup table with stat multipliers)
 - ~~Item facet system~~ — **done** (ItemFacet through-model, attach/remove services, modifier integration — Spec D PR1)
 - ~~Inventory service functions~~ — **done** (pick_up, drop, give, equip, unequip, put_in, take_out — backing 7 Action classes; telnet commands and existing web action dispatcher both supported)
+- ~~Saved outfits (Phase A)~~ — **done** (Outfit / OutfitSlot models, apply_outfit / undress / save_outfit / delete_outfit / add_outfit_slot / remove_outfit_slot services, ApplyOutfit/Undress actions, `wear outfit <name>` + `undress` telnet commands, REST CRUD, wardrobe page)
 - Item stats model — combat properties, condition/durability (not started)
 - Visible equipment display — what others see when looking at a character; perception-layer integration into `look` output (not started)
 - Item interaction service functions — using items, consuming charges (not started)
 - Crafting integration — `OwnershipEvent.CREATED` rows written when crafted items are produced (not started; tracked under crafting roadmap)
-- Equipment UI — inventory management, equipping/unequipping, viewing item details; React components dispatching the registered equip/unequip/put_in/take_out actions through the existing action dispatcher (not started)
+- Outfits Phase B (Fashion) — `FashionStyle` model, item-fashion compatibility rules, current-fashion rotation, aggregate per-outfit fashion bonuses (not started)
+- Outfits Phase C (Modeling) — present an outfit at events, peer judging, leaderboards (not started)
+- Outfits Phase D (Legendary + Mantle) — outfit legend accrual, outfit-bound mantles, famous outfits as referenceable artifacts in the magic / story layer (not started)
+- Servant retrieval — fetching items from off-character storage; parked in `docs/roadmap/rooms-and-estates.md` (not started)
 
 ## Magic Integration (Spec A)
 - **Items as thread anchors** — The new `Thread` model supports an `ITEM` anchor kind

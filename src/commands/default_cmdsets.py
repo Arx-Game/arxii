@@ -30,7 +30,13 @@ from commands.evennia_overrides.communication import (
     CmdTabletalk,
     CmdWhisper,
 )
-from commands.evennia_overrides.items import CmdPut, CmdRemove, CmdWear, CmdWithdraw
+from commands.evennia_overrides.items import (
+    CmdPut,
+    CmdRemove,
+    CmdUndress,
+    CmdWear,
+    CmdWithdraw,
+)
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
 
@@ -74,6 +80,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdGive())
         self.add(CmdWear())
         self.add(CmdRemove())
+        self.add(CmdUndress())
         self.add(CmdPut())
         self.add(CmdWithdraw())
         self.add(CmdHome())

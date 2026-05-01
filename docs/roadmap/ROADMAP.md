@@ -72,6 +72,7 @@ broken regardless of technical correctness.
 | [Missions & Living Grid](missions.md) | not-started | Branching narrative quests, world consequences, CK-style events |
 | [Crafting, Fashion & Economy](crafting-economy.md) | not-started | Crafting, fashion-resonance loop, housing, shops, domains, ships |
 | [Items & Equipment](items-equipment.md) | not-started | Worn items, body slots, item stats, fashion integration |
+| [Rooms, Buildings & Estates](rooms-and-estates.md) | skeleton | What ownership of rooms/buildings/estates unlocks — servants, decoration, vaults, special-purpose rooms |
 | [Relationships & Bonds](relationships.md) | in-progress | Relationship types, situational mods, soul tethers, party bonds |
 | [RP Interaction & Scenes](rp-scenes.md) | in-progress | Rich text editor, action-attached poses, scene engagement |
 | [Events](events.md) | **MVP complete** | Scheduled RP gatherings, calendar, invitations, room modifications |

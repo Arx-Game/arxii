@@ -9,6 +9,8 @@ from world.items.models import (
     ItemFacet,
     ItemInstance,
     ItemTemplate,
+    Outfit,
+    OutfitSlot,
     QualityTier,
     TemplateSlot,
 )
@@ -113,3 +115,20 @@ class EquippedItemFactory(factory.django.DjangoModelFactory):
     body_region = BodyRegion.TORSO
     equipment_layer = EquipmentLayer.BASE
     # character — caller must provide; no default
+
+
+class OutfitFactory(factory.django.DjangoModelFactory):
+    """Factory for Outfit. character_sheet and wardrobe must be provided by the caller."""
+
+    class Meta:
+        model = Outfit
+
+    name = factory.Sequence(lambda n: f"Outfit {n}")
+    description = ""
+
+
+class OutfitSlotFactory(factory.django.DjangoModelFactory):
+    """Factory for OutfitSlot. All fields must be provided by the caller."""
+
+    class Meta:
+        model = OutfitSlot

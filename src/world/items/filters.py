@@ -2,7 +2,16 @@
 
 import django_filters
 
-from world.items.models import EquippedItem, InteractionType, ItemFacet, ItemTemplate, QualityTier
+from world.items.models import (
+    EquippedItem,
+    InteractionType,
+    ItemFacet,
+    ItemInstance,
+    ItemTemplate,
+    Outfit,
+    OutfitSlot,
+    QualityTier,
+)
 
 
 class QualityTierFilter(django_filters.FilterSet):
@@ -39,6 +48,20 @@ class EquippedItemFilter(django_filters.FilterSet):
         fields = ["character", "body_region", "equipment_layer"]
 
 
+class ItemInstanceFilter(django_filters.FilterSet):
+    """Filters for ItemInstance — chiefly the character holding the item.
+
+    ``game_object.location`` is a Python property on ObjectDB, not an ORM
+    alias — at the database level the FK is named ``db_location``.
+    """
+
+    character = django_filters.NumberFilter(field_name="game_object__db_location__id")
+
+    class Meta:
+        model = ItemInstance
+        fields = ["character"]
+
+
 class ItemTemplateFilter(django_filters.FilterSet):
     """Filters for ItemTemplate."""
 
@@ -53,3 +76,19 @@ class ItemTemplateFilter(django_filters.FilterSet):
             "is_consumable",
             "is_craftable",
         ]
+
+
+class OutfitFilter(django_filters.FilterSet):
+    """Filters for Outfit."""
+
+    class Meta:
+        model = Outfit
+        fields = ["character_sheet", "wardrobe"]
+
+
+class OutfitSlotFilter(django_filters.FilterSet):
+    """Filters for OutfitSlot."""
+
+    class Meta:
+        model = OutfitSlot
+        fields = ["outfit"]

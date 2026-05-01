@@ -489,6 +489,12 @@ def residence_trickle_tick() -> ResonanceDailyTickSummary:
 def outfit_daily_trickle_for_character(sheet: CharacterSheet) -> int:
     """Daily resonance trickle from worn facet-bearing items (Spec D §5.1).
 
+    Note: "outfit" here refers to the character's *current loadout* (whatever
+    is worn right now), not the saved Outfit entity in
+    ``world.items.models.Outfit``. The two concepts coexist: a saved Outfit
+    is a named arrangement; the current loadout is whatever EquippedItem
+    rows exist on the character at this moment.
+
     For each equipped item:
       For each ItemFacet on the item:
         If the wearer has a Thread on that Facet:

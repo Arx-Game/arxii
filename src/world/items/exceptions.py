@@ -129,3 +129,10 @@ class NotReachable(InventoryError):
 class NotInContainer(InventoryError):
     user_message = "That isn't in a container."
     SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset({"That isn't in a container."})
+
+
+class OutfitIncomplete(InventoryError):
+    user_message = "Some pieces of that outfit are missing."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"Some pieces of that outfit are missing."},
+    )

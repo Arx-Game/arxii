@@ -1,18 +1,26 @@
 """API ViewSets for items."""
 
+from typing import cast
+
 from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
+from evennia.accounts.models import AccountDB
 from rest_framework import serializers, viewsets
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import SAFE_METHODS, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.views import APIView
 
+from flows.service_functions.outfits import delete_outfit, remove_outfit_slot
+from world.character_sheets.models import CharacterSheet
 from world.items.filters import (
     EquippedItemFilter,
     InteractionTypeFilter,
     ItemFacetFilter,
+    ItemInstanceFilter,
     ItemTemplateFilter,
+    OutfitFilter,
+    OutfitSlotFilter,
     QualityTierFilter,
 )
 from world.items.models import (
@@ -21,6 +29,8 @@ from world.items.models import (
     ItemFacet,
     ItemInstance,
     ItemTemplate,
+    Outfit,
+    OutfitSlot,
     QualityTier,
     TemplateInteraction,
     TemplateSlot,
@@ -30,11 +40,22 @@ from world.items.serializers import (
     InteractionTypeSerializer,
     ItemFacetReadSerializer,
     ItemFacetWriteSerializer,
+    ItemInstanceReadSerializer,
     ItemTemplateDetailSerializer,
     ItemTemplateListSerializer,
+    OutfitReadSerializer,
+    OutfitSlotReadSerializer,
+    OutfitSlotWriteSerializer,
+    OutfitWriteSerializer,
     QualityTierSerializer,
 )
 from world.items.services.facets import remove_facet_from_item
+from world.roster.models import RosterEntry
+
+
+def _account_currently_plays(user: AccountDB, sheet: CharacterSheet) -> bool:
+    """True if ``user`` has an active roster tenure on ``sheet``."""
+    return RosterEntry.objects.for_account(user).filter(character_sheet=sheet).exists()
 
 
 class ItemFacetWritePermission(IsAuthenticated):
@@ -152,6 +173,38 @@ class ItemFacetViewSet(viewsets.ModelViewSet):
         remove_facet_from_item(item_facet=instance)
 
 
+class ItemInstanceViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only listing of ItemInstance rows for a character's inventory.
+
+    The wardrobe page uses this to render carried-but-not-worn items. The
+    ``character`` query parameter filters to items whose ``game_object.location``
+    is the requested character (i.e., currently held by them).
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = ItemInstanceReadSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ItemInstanceFilter
+    pagination_class = ItemTemplatePagination
+    queryset = (
+        ItemInstance.objects.select_related(
+            "template",
+            "quality_tier",
+            "game_object",
+            "image",
+            "template__image",
+        )
+        .prefetch_related(
+            Prefetch(
+                "item_facets",
+                queryset=ItemFacet.objects.select_related("facet", "attachment_quality_tier"),
+                to_attr="cached_item_facets",
+            ),
+        )
+        .order_by("-pk")
+    )
+
+
 class EquippedItemViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only ViewSet for EquippedItem (GET list/detail).
 
@@ -170,3 +223,139 @@ class EquippedItemViewSet(viewsets.ReadOnlyModelViewSet):
         "character",
         "character__sheet_data",
     ).order_by("-pk")
+
+
+class OutfitWritePermission(IsAuthenticated):
+    """Allow Outfit writes only if the user currently plays the character_sheet.
+
+    Mirrors ``ItemFacetWritePermission`` shape. Object-level checks fall
+    through to ``has_object_permission`` for PATCH/DELETE; POST validates
+    by reading ``character_sheet`` from request data.
+    """
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        if not super().has_permission(request, view):
+            return False
+        if request.method in SAFE_METHODS or request.user.is_staff:
+            return True
+        if request.method != "POST":
+            # PATCH/DELETE delegated to has_object_permission.
+            return True
+        sheet_pk = request.data.get("character_sheet")
+        if sheet_pk is None:
+            # Serializer rejects missing field with 400 — defer there.
+            return True
+        try:
+            sheet = CharacterSheet.objects.get(pk=sheet_pk)
+        except (CharacterSheet.DoesNotExist, ValueError, TypeError):
+            return True
+        return _account_currently_plays(cast(AccountDB, request.user), sheet)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Outfit) -> bool:
+        if request.user.is_staff:
+            return True
+        return _account_currently_plays(cast(AccountDB, request.user), obj.character_sheet)
+
+
+class OutfitSlotWritePermission(IsAuthenticated):
+    """Allow OutfitSlot writes only if the user currently plays the outfit's sheet."""
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        if not super().has_permission(request, view):
+            return False
+        if request.method in SAFE_METHODS or request.user.is_staff:
+            return True
+        if request.method != "POST":
+            return True
+        outfit_pk = request.data.get("outfit")
+        if outfit_pk is None:
+            return True
+        try:
+            outfit = Outfit.objects.select_related("character_sheet").get(pk=outfit_pk)
+        except (Outfit.DoesNotExist, ValueError, TypeError):
+            return True
+        return _account_currently_plays(cast(AccountDB, request.user), outfit.character_sheet)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: OutfitSlot) -> bool:
+        if request.user.is_staff:
+            return True
+        return _account_currently_plays(cast(AccountDB, request.user), obj.outfit.character_sheet)
+
+
+class OutfitViewSet(viewsets.ModelViewSet):
+    """ViewSet for Outfit definitions (save / list / rename / delete).
+
+    Save delegates to ``save_outfit`` (snapshots current loadout). PATCH
+    updates the Outfit row directly. DELETE delegates to ``delete_outfit``.
+    Per design, equip/unequip and apply/undress flow through the action
+    dispatcher — this ViewSet only handles configuration CRUD.
+    """
+
+    permission_classes = [OutfitWritePermission]
+    pagination_class = ItemTemplatePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = OutfitFilter
+    queryset = (
+        Outfit.objects.select_related(
+            "character_sheet",
+            "wardrobe",
+            "wardrobe__template",
+        )
+        .prefetch_related(
+            Prefetch(
+                "slots",
+                queryset=OutfitSlot.objects.select_related(
+                    "item_instance",
+                    "item_instance__template",
+                    "item_instance__quality_tier",
+                ),
+                to_attr="cached_outfit_slots",
+            ),
+        )
+        .order_by("name")
+    )
+
+    def get_serializer_class(self) -> type[serializers.ModelSerializer]:
+        """Use write serializer for create/update; read serializer otherwise."""
+        if self.action in ("create", "update", "partial_update"):
+            return OutfitWriteSerializer
+        return OutfitReadSerializer
+
+    def perform_destroy(self, instance: Outfit) -> None:
+        """Delegate destruction to the delete_outfit service."""
+        delete_outfit(instance)
+
+
+class OutfitSlotViewSet(viewsets.ModelViewSet):
+    """ViewSet for OutfitSlot create/list/delete.
+
+    Flat per-slot endpoint (matches ``EquippedItemViewSet`` shape — one
+    POST adds or replaces a single slot, one DELETE removes one slot).
+    """
+
+    http_method_names = ["get", "post", "delete", "head", "options"]
+    permission_classes = [OutfitSlotWritePermission]
+    pagination_class = ItemTemplatePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = OutfitSlotFilter
+    queryset = OutfitSlot.objects.select_related(
+        "outfit",
+        "outfit__character_sheet",
+        "item_instance",
+        "item_instance__template",
+        "item_instance__quality_tier",
+    ).order_by("body_region", "equipment_layer")
+
+    def get_serializer_class(self) -> type[serializers.ModelSerializer]:
+        """Use write serializer for create; read serializer otherwise."""
+        if self.action == "create":
+            return OutfitSlotWriteSerializer
+        return OutfitSlotReadSerializer
+
+    def perform_destroy(self, instance: OutfitSlot) -> None:
+        """Delegate destruction to remove_outfit_slot (idempotent)."""
+        remove_outfit_slot(
+            outfit=instance.outfit,
+            body_region=instance.body_region,
+            equipment_layer=instance.equipment_layer,
+        )

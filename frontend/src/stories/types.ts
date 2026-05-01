@@ -17,12 +17,13 @@ import type { components } from '@/generated/api';
 export type StoryList = components['schemas']['StoryList'];
 export type StoryDetailBase = components['schemas']['StoryDetail'];
 
-// StoryDetail extended with primary_table — field added in Phase 5 Wave 2 but
-// not yet reflected in the generated schema. The serializer returns this field
-// as a nullable integer (the GMTable PK).
-export interface StoryDetail extends StoryDetailBase {
+// StoryDetail with primary_table forced to nullable. The generated schema
+// types this as `number` (non-null) because spectacular cannot infer
+// nullability from a read-only PrimaryKeyRelatedField, but the backing model
+// is `null=True` and the API does return null for stories without a table.
+export type StoryDetail = Omit<StoryDetailBase, 'primary_table'> & {
   readonly primary_table: number | null;
-}
+};
 export type Story = StoryDetail;
 
 // Chapters have three shapes: ChapterList, ChapterDetail, ChapterCreate.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from actions.definitions.items import (
@@ -10,19 +11,55 @@ from actions.definitions.items import (
     TakeOutAction,
     UnequipAction,
 )
+from actions.definitions.outfits import ApplyOutfitAction, UndressAction
 from commands.command import ArxCommand
+from commands.exceptions import CommandError
+from world.items.models import Outfit
 
 
 class CmdWear(ArxCommand):
-    """Equip (wear/wield) an item from your inventory."""
+    """Equip an item from your inventory, or wear a saved outfit.
+
+    Telnet grammars:
+        ``wear <item>``                 — equip an item from your inventory
+        ``wear outfit <name>``          — apply a saved outfit by name
+    """
 
     key = "wear"
     locks = "cmd:all()"
     action = EquipAction()
 
     def resolve_action_args(self) -> dict[str, Any]:
-        name = self.require_args("Wear what?")
-        return {"target": self.search_or_raise(name, location=self.caller)}
+        args = self.require_args("Wear what?")
+        outfit_match = re.match(r"^outfit\s+(.+)$", args, flags=re.IGNORECASE)
+        if outfit_match:
+            outfit_name = outfit_match.group(1).strip()
+            sheet = self.caller.sheet_data
+            outfit = Outfit.objects.filter(
+                character_sheet=sheet,
+                name__iexact=outfit_name,
+            ).first()
+            if outfit is None:
+                msg = f"You have no outfit named '{outfit_name}'."
+                raise CommandError(msg)
+            # Switch dispatch to ApplyOutfitAction for this invocation. Safe
+            # because ``func()`` reads ``self.action`` after
+            # ``resolve_action_args()``, and Evennia instantiates commands
+            # per invocation.
+            self.action = ApplyOutfitAction()
+            return {"outfit_id": outfit.pk}
+        return {"target": self.search_or_raise(args, location=self.caller)}
+
+
+class CmdUndress(ArxCommand):
+    """Remove all worn items at once. They go back to your inventory."""
+
+    key = "undress"
+    locks = "cmd:all()"
+    action = UndressAction()
+
+    def resolve_action_args(self) -> dict[str, Any]:
+        return {}
 
 
 class CmdRemove(ArxCommand):
