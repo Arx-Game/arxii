@@ -12,6 +12,7 @@ from world.items.exceptions import (
     NotInContainer,
     NotInPossession,
     NotReachable,
+    OutfitIncomplete,
     PermissionDenied,
     RecipientNotAdjacent,
 )
@@ -26,6 +27,7 @@ INVENTORY_SUBCLASSES = (
     PermissionDenied,
     NotReachable,
     NotInContainer,
+    OutfitIncomplete,
 )
 
 
