@@ -248,6 +248,7 @@ class CombatTechniqueIntegrationTests(TestCase):
         res = CombatTechniqueResolution(
             check_result=MagicMock(spec=CheckResult),
             damage_results=[],
+            applied_conditions=[],
             pull_flat_bonus=0,
             scaled_damage=0,
         )
@@ -262,6 +263,7 @@ class CombatTechniqueIntegrationTests(TestCase):
 
         res = CombatTechniqueResult(
             damage_results=[],
+            applied_conditions=[],
             technique_use_result=MagicMock(spec=TechniqueUseResult),
         )
         self.assertEqual(res.damage_results, [])

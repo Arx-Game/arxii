@@ -74,6 +74,7 @@ from world.combat.models import (
 )
 from world.combat.types import (
     ActionOutcome,
+    AppliedConditionResult,
     AvailableCombo,
     CombatTechniqueResolution,
     CombatTechniqueResult,
@@ -130,23 +131,19 @@ def has_persistent_identity_references(objectdb: ObjectDB) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# CombatAttackResolver - Damage resolution for combat techniques
+# CombatTechniqueResolver - Damage and condition resolution for combat techniques
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
-class CombatAttackResolver:
-    """Resolves the inner damage step of a combat-cast attack technique.
-
-    Built by resolve_combat_technique() and passed to use_technique() as
-    resolve_fn. State is inspectable at any point during/after the cast,
-    which closures don't allow. Subclassable when non-attack effect types
-    arrive (next PR): CombatBuffResolver, CombatDefenseResolver, etc.
+class CombatTechniqueResolver:
+    """Resolves the inner step of a combat-cast technique. Single class
+    handles both damage and condition application; behavior differences
+    live in technique-authored data (base_power, TechniqueAppliedCondition rows).
     """
 
     participant: CombatParticipant
     action: CombatRoundAction
-    target: CombatOpponent
     pull_flat_bonus: int
     fatigue_category: str
     offense_check_type: CheckType
@@ -169,35 +166,45 @@ class CombatAttackResolver:
             fatigue_penalty=penalty,
         )
 
-    def _scale(self, check_result: CheckResult) -> int:
-        """Scale base_power by success_level: full / half / zero."""
-        base_power = self.action.focused_action.effect_type.base_power
+    def _apply_damage(self, check_result: CheckResult) -> list[OpponentDamageResult]:
+        """Damage path. No-op when base_power is None, no opponent target, or target DEFEATED."""
+        target = self.action.focused_opponent_target
+        if target is None:
+            return []
+        technique = self.action.focused_action
+        base_power = technique.effect_type.base_power
         if base_power is None:
-            return 0
+            return []
         if check_result.success_level >= OFFENSE_FULL_THRESHOLD:
-            return base_power
-        if check_result.success_level >= OFFENSE_HALF_THRESHOLD:
-            return base_power // 2
-        return 0
+            scaled = base_power
+        elif check_result.success_level >= OFFENSE_HALF_THRESHOLD:
+            scaled = base_power // 2
+        else:
+            scaled = 0
+        if scaled <= 0:
+            return []
+        target.refresh_from_db()
+        if target.status == OpponentStatus.DEFEATED:
+            return []
+        return [apply_damage_to_opponent(target, scaled)]
 
-    def _apply(self, scaled_damage: int) -> list[OpponentDamageResult]:
-        """Apply damage to target if alive and damage > 0."""
-        if scaled_damage <= 0:
-            return []
-        self.target.refresh_from_db()
-        if self.target.status == OpponentStatus.DEFEATED:
-            return []
-        return [apply_damage_to_opponent(self.target, scaled_damage)]
+    def _apply_conditions(
+        self,
+        check_result: CheckResult,  # noqa: ARG002
+    ) -> list[AppliedConditionResult]:
+        """Stub — real implementation lands in Task 14."""
+        return []
 
     def __call__(self) -> CombatTechniqueResolution:
         check_result = self._roll_check()
-        scaled_damage = self._scale(check_result)
-        damage_results = self._apply(scaled_damage)
+        damage_results = self._apply_damage(check_result)
+        applied_conditions = self._apply_conditions(check_result)
         return CombatTechniqueResolution(
             check_result=check_result,
             damage_results=damage_results,
+            applied_conditions=applied_conditions,
             pull_flat_bonus=self.pull_flat_bonus,
-            scaled_damage=scaled_damage,
+            scaled_damage=sum(r.damage_dealt for r in damage_results),
         )
 
 
@@ -222,12 +229,13 @@ def _sum_active_flat_bonuses(
 
 def _build_combat_result(
     technique_use_result: TechniqueUseResult,
-    resolver: CombatAttackResolver,  # noqa: ARG001 - kept for future extensibility
+    resolver: CombatTechniqueResolver,  # noqa: ARG001 - kept for future extensibility
 ) -> CombatTechniqueResult:
     """Translate use_technique's outcome into the adapter's return shape."""
     if not technique_use_result.confirmed:
         return CombatTechniqueResult(
             damage_results=[],
+            applied_conditions=[],
             technique_use_result=technique_use_result,
         )
 
@@ -240,22 +248,22 @@ def _build_combat_result(
 
     return CombatTechniqueResult(
         damage_results=list(resolution.damage_results),
+        applied_conditions=list(resolution.applied_conditions),
         technique_use_result=technique_use_result,
     )
 
 
-def resolve_combat_technique(  # noqa: PLR0913 — keyword-only orchestrator args
+def resolve_combat_technique(
     *,
     participant: CombatParticipant,
     action: CombatRoundAction,
-    target: CombatOpponent,
     fatigue_category: str,
     offense_check_type: CheckType,
     offense_check_fn: PerformCheckFn | None,
 ) -> CombatTechniqueResult:
     """Route a damage-path combat technique through use_technique.
 
-    Builds a CombatAttackResolver and passes it to use_technique as
+    Builds a CombatTechniqueResolver and passes it to use_technique as
     resolve_fn. The magic envelope handles anima, soulfray, mishap,
     PRE_CAST/CAST events, reactive scar interception, and corruption.
     The resolver does the offense check + damage application inside
@@ -279,10 +287,9 @@ def resolve_combat_technique(  # noqa: PLR0913 — keyword-only orchestrator arg
     encounter = participant.encounter
     pull_flat_bonus = _sum_active_flat_bonuses(participant, encounter)
 
-    resolver = CombatAttackResolver(
+    resolver = CombatTechniqueResolver(
         participant=participant,
         action=action,
-        target=target,
         pull_flat_bonus=pull_flat_bonus,
         fatigue_category=fatigue_category,
         offense_check_type=offense_check_type,
@@ -294,7 +301,7 @@ def resolve_combat_technique(  # noqa: PLR0913 — keyword-only orchestrator arg
         technique=action.focused_action,
         resolve_fn=resolver,
         confirm_soulfray_risk=True,
-        targets=[],
+        targets=[],  # task 15 will replace with _build_affected_targets
     )
 
     return _build_combat_result(technique_use_result, resolver)
@@ -1500,7 +1507,6 @@ def _resolve_pc_action(
                     combat_result = resolve_combat_technique(
                         participant=participant,
                         action=action,
-                        target=target,
                         fatigue_category=fatigue_category,
                         offense_check_type=offense_check_type,
                         offense_check_fn=offense_check_fn,

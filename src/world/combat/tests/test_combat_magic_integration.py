@@ -101,7 +101,7 @@ class AnimaDeductionTest(TestCase):
     """Combat-cast technique deducts anima cost from CharacterAnima.current."""
 
     def test_combat_cast_deducts_anima(self) -> None:
-        participant, action, opponent, anima, _technique, _ = _setup_pc_attacking_mook(
+        participant, action, _opponent, anima, _technique, _ = _setup_pc_attacking_mook(
             technique_anima_cost=3,
             technique_intensity=5,
             technique_control=10,
@@ -112,7 +112,6 @@ class AnimaDeductionTest(TestCase):
             resolve_combat_technique(
                 participant=participant,
                 action=action,
-                target=opponent,
                 fatigue_category=FatigueCategory.PHYSICAL,
                 offense_check_type=MagicMock(),
                 offense_check_fn=None,
@@ -123,7 +122,7 @@ class AnimaDeductionTest(TestCase):
         self.assertEqual(anima.current, 20)
 
     def test_combat_cast_with_high_intensity_deducts_anima(self) -> None:
-        participant, action, opponent, anima, _technique, _ = _setup_pc_attacking_mook(
+        participant, action, _opponent, anima, _technique, _ = _setup_pc_attacking_mook(
             technique_anima_cost=5,
             technique_intensity=10,
             technique_control=2,
@@ -134,7 +133,6 @@ class AnimaDeductionTest(TestCase):
             resolve_combat_technique(
                 participant=participant,
                 action=action,
-                target=opponent,
                 fatigue_category=FatigueCategory.PHYSICAL,
                 offense_check_type=MagicMock(),
                 offense_check_fn=None,
@@ -149,7 +147,7 @@ class EventEmissionTest(TestCase):
     """PRE_CAST and CAST events fire during combat round resolution."""
 
     def test_pre_cast_emitted_in_combat(self) -> None:
-        participant, action, opponent, _, _, _ = _setup_pc_attacking_mook()
+        participant, action, _opponent, _, _, _ = _setup_pc_attacking_mook()
         captured: list = []
 
         import world.magic.services.techniques as svc_mod
@@ -168,7 +166,6 @@ class EventEmissionTest(TestCase):
                 resolve_combat_technique(
                     participant=participant,
                     action=action,
-                    target=opponent,
                     fatigue_category=FatigueCategory.PHYSICAL,
                     offense_check_type=MagicMock(),
                     offense_check_fn=None,
@@ -181,7 +178,7 @@ class EventEmissionTest(TestCase):
         self.assertIs(captured[0].caster, participant.character_sheet.character)
 
     def test_cast_emitted_in_combat(self) -> None:
-        participant, action, opponent, _, _, _ = _setup_pc_attacking_mook()
+        participant, action, _opponent, _, _, _ = _setup_pc_attacking_mook()
         captured: list = []
 
         import world.magic.services.techniques as svc_mod
@@ -200,7 +197,6 @@ class EventEmissionTest(TestCase):
                 resolve_combat_technique(
                     participant=participant,
                     action=action,
-                    target=opponent,
                     fatigue_category=FatigueCategory.PHYSICAL,
                     offense_check_type=MagicMock(),
                     offense_check_fn=None,
@@ -252,7 +248,6 @@ class ReactiveScarCancelTest(TestCase):
             result = resolve_combat_technique(
                 participant=participant,
                 action=action,
-                target=opponent,
                 fatigue_category=FatigueCategory.PHYSICAL,
                 offense_check_type=MagicMock(),
                 offense_check_fn=None,
@@ -268,7 +263,7 @@ class ReactiveScarCancelTest(TestCase):
     def test_cancel_suppresses_technique_cast_event(self) -> None:
         from world.conditions.factories import ReactiveConditionFactory
 
-        participant, action, opponent, _, _, _ = _setup_pc_attacking_mook()
+        participant, action, _opponent, _, _, _ = _setup_pc_attacking_mook()
         cancel_flow = self._make_cancel_flow()
         ReactiveConditionFactory(
             event_name=EventName.TECHNIQUE_PRE_CAST,
@@ -294,7 +289,6 @@ class ReactiveScarCancelTest(TestCase):
                 resolve_combat_technique(
                     participant=participant,
                     action=action,
-                    target=opponent,
                     fatigue_category=FatigueCategory.PHYSICAL,
                     offense_check_type=MagicMock(),
                     offense_check_fn=None,
@@ -309,7 +303,7 @@ class MishapTest(TestCase):
     """When intensity > control, mishap rider fires after the cast."""
 
     def test_mishap_path_invoked_on_control_deficit(self) -> None:
-        participant, action, opponent, _, _, _ = _setup_pc_attacking_mook(
+        participant, action, _opponent, _, _, _ = _setup_pc_attacking_mook(
             technique_intensity=15,
             technique_control=2,
         )
@@ -332,7 +326,6 @@ class MishapTest(TestCase):
             resolve_combat_technique(
                 participant=participant,
                 action=action,
-                target=opponent,
                 fatigue_category=FatigueCategory.PHYSICAL,
                 offense_check_type=MagicMock(),
                 offense_check_fn=None,
@@ -352,7 +345,7 @@ class FlatBonusPullCheckTest(TestCase):
         )
         from world.magic.constants import EffectKind
 
-        participant, action, opponent, _, _, _ = _setup_pc_attacking_mook()
+        participant, action, _opponent, _, _, _ = _setup_pc_attacking_mook()
         pull = CombatPullFactory(
             participant=participant,
             round_number=participant.encounter.round_number,
@@ -367,7 +360,6 @@ class FlatBonusPullCheckTest(TestCase):
             resolve_combat_technique(
                 participant=participant,
                 action=action,
-                target=opponent,
                 fatigue_category=FatigueCategory.PHYSICAL,
                 offense_check_type=MagicMock(),
                 offense_check_fn=None,
@@ -406,7 +398,6 @@ class FullHappyPathTest(TestCase):
                 result = resolve_combat_technique(
                     participant=participant,
                     action=action,
-                    target=opponent,
                     fatigue_category=FatigueCategory.PHYSICAL,
                     offense_check_type=MagicMock(),
                     offense_check_fn=None,

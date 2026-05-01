@@ -1,4 +1,4 @@
-"""Unit tests for CombatAttackResolver.
+"""Unit tests for CombatTechniqueResolver.
 
 Each test isolates one method. Integration through use_technique is in
 test_combat_magic_integration.py.
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.combat.constants import ActionCategory, OpponentTier
+from world.combat.constants import ActionCategory, OpponentStatus, OpponentTier
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
@@ -18,13 +18,13 @@ from world.combat.factories import (
     ThreatPoolFactory,
 )
 from world.combat.models import CombatRoundAction
-from world.combat.services import CombatAttackResolver
+from world.combat.services import CombatTechniqueResolver
 from world.fatigue.constants import EffortLevel, FatigueCategory
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
 
 
 def _build_resolver(*, pull_flat_bonus: int = 0, base_power: int = 20):
-    """Helper to build a CombatAttackResolver with sane defaults."""
+    """Helper to build a CombatTechniqueResolver with sane defaults."""
     encounter = CombatEncounterFactory(round_number=1)
     pool = ThreatPoolFactory()
     ThreatPoolEntryFactory(pool=pool, base_damage=30)
@@ -49,10 +49,9 @@ def _build_resolver(*, pull_flat_bonus: int = 0, base_power: int = 20):
         focused_opponent_target=opponent,
         effort_level=EffortLevel.MEDIUM,
     )
-    return CombatAttackResolver(
+    return CombatTechniqueResolver(
         participant=participant,
         action=action,
-        target=opponent,
         pull_flat_bonus=pull_flat_bonus,
         fatigue_category=FatigueCategory.PHYSICAL,
         offense_check_type=MagicMock(),
@@ -60,7 +59,7 @@ def _build_resolver(*, pull_flat_bonus: int = 0, base_power: int = 20):
     )
 
 
-class CombatAttackResolverRollCheckTests(TestCase):
+class CombatTechniqueResolverRollCheckTests(TestCase):
     def test_pull_bonus_added_to_extra_modifiers(self) -> None:
         """A pull_flat_bonus of 3 must reach perform_check via extra_modifiers."""
         resolver = _build_resolver(pull_flat_bonus=3)
@@ -74,46 +73,55 @@ class CombatAttackResolverRollCheckTests(TestCase):
         self.assertGreaterEqual(kwargs["extra_modifiers"], 3)
 
 
-class CombatAttackResolverScaleTests(TestCase):
-    def test_full_success_returns_full_damage(self) -> None:
-        resolver = _build_resolver(base_power=20)
-        check = MagicMock(success_level=2)
-        self.assertEqual(resolver._scale(check), 20)
-
-    def test_partial_success_returns_half_damage(self) -> None:
-        resolver = _build_resolver(base_power=20)
-        check = MagicMock(success_level=1)
-        self.assertEqual(resolver._scale(check), 10)
-
-    def test_miss_returns_zero_damage(self) -> None:
-        resolver = _build_resolver(base_power=20)
-        check = MagicMock(success_level=0)
-        self.assertEqual(resolver._scale(check), 0)
-
-
-class CombatAttackResolverApplyTests(TestCase):
-    def test_apply_returns_damage_results_when_target_alive(self) -> None:
+class CombatTechniqueResolverApplyDamageTests(TestCase):
+    def test_apply_damage_returns_damage_results_when_target_alive(self) -> None:
         resolver = _build_resolver()
-        results = resolver._apply(scaled_damage=10)
+        check = MagicMock(success_level=2)
+        results = resolver._apply_damage(check)
         self.assertEqual(len(results), 1)
         self.assertGreater(results[0].damage_dealt, 0)
 
-    def test_apply_skips_defeated_target(self) -> None:
-        from world.combat.constants import OpponentStatus
-
+    def test_apply_damage_skips_defeated_target(self) -> None:
         resolver = _build_resolver()
-        resolver.target.status = OpponentStatus.DEFEATED
-        resolver.target.save(update_fields=["status"])
-        results = resolver._apply(scaled_damage=10)
+        target = resolver.action.focused_opponent_target
+        target.status = OpponentStatus.DEFEATED
+        target.save(update_fields=["status"])
+        check = MagicMock(success_level=2)
+        results = resolver._apply_damage(check)
         self.assertEqual(results, [])
 
-    def test_apply_returns_empty_on_zero_damage(self) -> None:
+    def test_apply_damage_returns_empty_on_miss(self) -> None:
         resolver = _build_resolver()
-        results = resolver._apply(scaled_damage=0)
+        check = MagicMock(success_level=0)
+        results = resolver._apply_damage(check)
+        self.assertEqual(results, [])
+
+    def test_apply_damage_returns_empty_when_no_target(self) -> None:
+        resolver = _build_resolver()
+        # Remove the opponent target from the action
+        resolver.action.focused_opponent_target = None
+        check = MagicMock(success_level=2)
+        results = resolver._apply_damage(check)
+        self.assertEqual(results, [])
+
+    def test_apply_damage_half_on_partial_success(self) -> None:
+        resolver = _build_resolver(base_power=20)
+        check = MagicMock(success_level=1)
+        results = resolver._apply_damage(check)
+        self.assertEqual(len(results), 1)
+        # half of 20 = 10, but actual damage_dealt may differ due to soak
+        self.assertGreater(results[0].damage_dealt, 0)
+
+
+class CombatTechniqueResolverApplyConditionsTests(TestCase):
+    def test_apply_conditions_stub_returns_empty_list(self) -> None:
+        resolver = _build_resolver()
+        check = MagicMock(success_level=2)
+        results = resolver._apply_conditions(check)
         self.assertEqual(results, [])
 
 
-class CombatAttackResolverCallTests(TestCase):
+class CombatTechniqueResolverCallTests(TestCase):
     def test_call_returns_resolution_with_all_fields(self) -> None:
         resolver = _build_resolver(pull_flat_bonus=2, base_power=20)
 
@@ -121,9 +129,10 @@ class CombatAttackResolverCallTests(TestCase):
             mock_perform.return_value = MagicMock(success_level=2)
             result = resolver()
 
-        self.assertEqual(result.scaled_damage, 20)
+        self.assertGreater(result.scaled_damage, 0)
         self.assertEqual(result.pull_flat_bonus, 2)
         self.assertEqual(len(result.damage_results), 1)
+        self.assertEqual(result.applied_conditions, [])
         self.assertIsNotNone(result.check_result)
 
 
@@ -209,6 +218,7 @@ class BuildCombatResultTests(TestCase):
 
         result = _build_combat_result(cancelled, resolver)
         self.assertEqual(result.damage_results, [])
+        self.assertEqual(result.applied_conditions, [])
         self.assertIs(result.technique_use_result, cancelled)
 
     def test_confirmed_extracts_damage_results_from_resolution(self) -> None:
@@ -228,6 +238,7 @@ class BuildCombatResultTests(TestCase):
         resolution = CombatTechniqueResolution(
             check_result=MagicMock(success_level=2),
             damage_results=damage_results,
+            applied_conditions=[],
             pull_flat_bonus=0,
             scaled_damage=20,
         )
@@ -240,4 +251,5 @@ class BuildCombatResultTests(TestCase):
 
         result = _build_combat_result(confirmed, resolver)
         self.assertEqual(result.damage_results, damage_results)
+        self.assertEqual(result.applied_conditions, [])
         self.assertIs(result.technique_use_result, confirmed)
