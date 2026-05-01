@@ -1633,39 +1633,32 @@ def _resolve_pc_action(
         action.focused_category, FatigueCategory.PHYSICAL
     )
 
-    if target is not None:
+    # Combo upgrades require an active opponent target — bail out early if defeated.
+    if target is not None and action.combo_upgrade:
         target.refresh_from_db()
         if target.status != OpponentStatus.DEFEATED:
-            if action.combo_upgrade:
-                combo = action.combo_upgrade
-                dmg_result = apply_damage_to_opponent(
-                    target,
-                    combo.bonus_damage,
-                    bypass_soak=combo.bypass_soak,
-                )
-                outcome.combo_used = combo
-                outcome.damage_results.append(dmg_result)
-            elif technique.effect_type.base_power is not None:
-                # Damage path — route through magic pipeline (use_technique).
-                # Non-attack effect types (base_power is None) stay no-op until
-                # the conditions-from-techniques resolver lands (next PR).
-                if offense_check_type is not None:
-                    combat_result = resolve_combat_technique(
-                        participant=participant,
-                        action=action,
-                        fatigue_category=fatigue_category,
-                        offense_check_type=offense_check_type,
-                        offense_check_fn=offense_check_fn,
-                    )
-                    outcome.damage_results.extend(combat_result.damage_results)
-                else:
-                    # TODO(combat-magic-pipeline): Remove this bypass once all combat
-                    # tests/fixtures provide an offense_check_type. Without one, this
-                    # branch skips the magic pipeline entirely (no anima cost, no events,
-                    # no soulfray), which is a temporary test-compatibility shim, not
-                    # production behavior.
-                    dmg_result = apply_damage_to_opponent(target, technique.effect_type.base_power)
-                    outcome.damage_results.append(dmg_result)
+            combo = action.combo_upgrade
+            dmg_result = apply_damage_to_opponent(
+                target,
+                combo.bonus_damage,
+                bypass_soak=combo.bypass_soak,
+            )
+            outcome.combo_used = combo
+            outcome.damage_results.append(dmg_result)
+    elif not action.combo_upgrade:
+        # All non-combo techniques (damage AND non-attack) route through the magic
+        # pipeline. The resolver internally handles damage (if base_power) and
+        # conditions (if condition_applications rows exist).
+        if offense_check_type is not None:
+            combat_result = resolve_combat_technique(
+                participant=participant,
+                action=action,
+                fatigue_category=fatigue_category,
+                offense_check_type=offense_check_type,
+                offense_check_fn=offense_check_fn,
+            )
+            outcome.damage_results.extend(combat_result.damage_results)
+        # else: no offense_check_type — legacy test-only fallback; stay silent.
 
     # Apply fatigue after action resolves
     apply_fatigue(

@@ -496,3 +496,62 @@ class BuildCombatResultTests(TestCase):
         self.assertEqual(result.damage_results, damage_results)
         self.assertEqual(result.applied_conditions, [])
         self.assertIs(result.technique_use_result, confirmed)
+
+
+class NonAttackPCActionRoutingTests(TestCase):
+    """Integration: _resolve_pc_action routes non-attack techniques through the
+    magic pipeline (no more silent no-op for base_power=None)."""
+
+    def test_non_attack_technique_routes_through_pipeline(self) -> None:
+        """A Buff technique (base_power=None) must reach resolve_combat_technique.
+
+        We mock resolve_combat_technique at the services module level to verify
+        it is called regardless of whether the effect type has a base_power.
+        This isolates the routing logic from the full magic pipeline.
+        """
+        from world.combat.services import _resolve_pc_action
+        from world.combat.types import CombatTechniqueResolution
+
+        # Build encounter / participant / technique (no base_power => non-attack)
+        encounter = CombatEncounterFactory(round_number=1)
+        sheet = CharacterSheetFactory()
+        participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
+        technique = TechniqueFactory(
+            gift=GiftFactory(),
+            effect_type=EffectTypeFactory(name="Buff", base_power=None),
+        )
+        action = CombatRoundAction.objects.create(
+            participant=participant,
+            round_number=1,
+            focused_category=ActionCategory.PHYSICAL,
+            focused_action=technique,
+            focused_opponent_target=None,
+            effort_level=EffortLevel.MEDIUM,
+        )
+
+        mock_check_type = MagicMock()
+
+        fake_resolution = CombatTechniqueResolution(
+            check_result=MagicMock(success_level=2),
+            damage_results=[],
+            applied_conditions=[],
+            pull_flat_bonus=0,
+            scaled_damage=0,
+        )
+
+        with patch("world.combat.services.resolve_combat_technique") as mock_resolve:
+            mock_resolve.return_value = fake_resolution
+            outcome = _resolve_pc_action(
+                participant=participant,
+                action=action,
+                offense_check_fn=None,
+                offense_check_type=mock_check_type,
+            )
+
+        # resolve_combat_technique must have been called — non-attack no longer a no-op
+        mock_resolve.assert_called_once()
+        call_kwargs = mock_resolve.call_args.kwargs
+        self.assertIs(call_kwargs["participant"], participant)
+        self.assertIs(call_kwargs["action"], action)
+        # outcome is returned cleanly (no exception)
+        self.assertIsNotNone(outcome)
