@@ -256,6 +256,34 @@ def compute_effective_intensity(
     return base + pull_bonus
 
 
+def _build_affected_targets(
+    participant: CombatParticipant,  # noqa: ARG001 - reserved for future signature additions
+    action: CombatRoundAction,
+) -> list[ObjectDB]:
+    """Return the dedup'd ObjectDB list for use_technique's targets parameter.
+
+    Resolution rules:
+    - opponent target → opp.objectdb (always present after CombatOpponent refactor;
+      None-guarded for pathological state)
+    - ally target → ally.character_sheet.character
+    - both null → empty list
+    """
+    targets: list = []
+    seen: set[int] = set()
+    if action.focused_opponent_target_id:
+        opp = action.focused_opponent_target
+        od = opp.objectdb
+        if od is not None and od.pk not in seen:
+            targets.append(od)
+            seen.add(od.pk)
+    if action.focused_ally_target_id:
+        ally_od = action.focused_ally_target.character_sheet.character
+        if ally_od.pk not in seen:
+            targets.append(ally_od)
+            seen.add(ally_od.pk)
+    return targets
+
+
 def _build_combat_result(
     technique_use_result: TechniqueUseResult,
     resolver: CombatTechniqueResolver,  # noqa: ARG001 - kept for future extensibility
