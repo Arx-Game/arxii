@@ -262,11 +262,11 @@ class CombatEncounterViewSet(ModelViewSet):
         if focused_action_id:
             focused_action = get_object_or_404(Technique, pk=focused_action_id)
 
-        # Resolve focused target FK
-        focused_target = None
-        target_id = data.get("focused_target")
+        # Resolve focused opponent target FK
+        focused_opponent_target = None
+        target_id = data.get("focused_opponent_target")
         if target_id:
-            focused_target = get_object_or_404(
+            focused_opponent_target = get_object_or_404(
                 CombatOpponent,
                 pk=target_id,
                 encounter=encounter,
@@ -288,7 +288,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 focused_action=focused_action,
                 focused_category=data.get("focused_category"),
                 effort_level=data["effort_level"],
-                focused_target=focused_target,
+                focused_opponent_target=focused_opponent_target,
                 **passive_kwargs,
             )
         except ValueError:

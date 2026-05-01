@@ -189,7 +189,7 @@ class KnockoutDeathProcessingTest(TestCase):
             round_number=1,
             focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
-            focused_target=opponent,
+            focused_opponent_target=opponent,
         )
         npc_action = CombatOpponentAction.objects.create(
             opponent=opponent,
@@ -256,7 +256,7 @@ class KnockoutDeathProcessingTest(TestCase):
             round_number=1,
             focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
-            focused_target=encounter.opponents.first(),
+            focused_opponent_target=encounter.opponents.first(),
         )
 
         resolve_round(encounter)

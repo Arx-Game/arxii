@@ -21,6 +21,7 @@ from world.combat.models import (
     CombatParticipant,
     CombatPull,
     CombatPullResolvedEffect,
+    CombatRoundAction,
     ComboDefinition,
     ComboLearning,
     ComboSlot,
@@ -203,3 +204,15 @@ class CombatPullResolvedEffectFactory(factory_django.DjangoModelFactory):
     source_tier = 1
     granted_capability = None
     narrative_snippet = ""
+
+
+class CombatRoundActionFactory(factory_django.DjangoModelFactory):
+    """Factory for CombatRoundAction."""
+
+    class Meta:
+        model = CombatRoundAction
+
+    participant = factory.SubFactory(CombatParticipantFactory)
+    round_number = 1
+    focused_opponent_target = None
+    focused_ally_target = None

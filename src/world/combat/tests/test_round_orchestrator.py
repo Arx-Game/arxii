@@ -83,7 +83,7 @@ class ResolveRoundBasicTests(TestCase):
             round_number=1,
             focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
-            focused_target=opponent,
+            focused_opponent_target=opponent,
         )
         # NPC action targeting the PC
         npc_action = CombatOpponentAction.objects.create(
@@ -174,7 +174,7 @@ class ResolveRoundBasicTests(TestCase):
             round_number=1,
             focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
-            focused_target=opponent,
+            focused_opponent_target=opponent,
         )
 
         result = resolve_round(encounter)
@@ -235,7 +235,7 @@ class ResolveRoundComboTests(TestCase):
             round_number=1,
             focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
-            focused_target=opponent,
+            focused_opponent_target=opponent,
         )
         upgrade_action_to_combo(action, combo)
 
@@ -295,7 +295,7 @@ class ResolveRoundDefenseCheckTests(TestCase):
             round_number=1,
             focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
-            focused_target=opponent,
+            focused_opponent_target=opponent,
         )
         npc_action = CombatOpponentAction.objects.create(
             opponent=opponent,
@@ -378,7 +378,7 @@ class ResolveRoundBossPhaseTests(TestCase):
             round_number=1,
             focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
-            focused_target=boss,
+            focused_opponent_target=boss,
         )
 
         result = resolve_round(encounter)
@@ -437,7 +437,7 @@ class ResolveRoundOffenseCheckTests(TestCase):
             focused_category=ActionCategory.PHYSICAL,
             effort_level=EffortLevel.MEDIUM,
             focused_action=technique,
-            focused_target=opponent,
+            focused_opponent_target=opponent,
         )
         return encounter, participant, opponent
 

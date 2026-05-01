@@ -164,7 +164,8 @@ class RoundActionSerializer(serializers.ModelSerializer):
             "focused_category",
             "effort_level",
             "focused_action",
-            "focused_target",
+            "focused_opponent_target",
+            "focused_ally_target",
             "physical_passive",
             "social_passive",
             "mental_passive",
@@ -358,7 +359,7 @@ class DeclareActionSerializer(serializers.Serializer):
         choices=EffortLevel.choices,
         default=EffortLevel.MEDIUM,
     )
-    focused_target = serializers.IntegerField(
+    focused_opponent_target = serializers.IntegerField(
         required=False,
         allow_null=True,
     )

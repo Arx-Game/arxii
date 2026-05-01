@@ -414,13 +414,21 @@ class CombatRoundAction(SharedMemoryModel):
         default=False,
         help_text="Player signals they are done with declaration and combo decisions.",
     )
-    focused_target = models.ForeignKey(
+    focused_opponent_target = models.ForeignKey(
         CombatOpponent,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="+",
     )
+    focused_ally_target = models.ForeignKey(
+        "CombatParticipant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
     physical_passive = models.ForeignKey(
         "magic.Technique",
         on_delete=models.SET_NULL,
@@ -458,6 +466,12 @@ class CombatRoundAction(SharedMemoryModel):
                 name="unique_action_per_participant_per_round",
             ),
         ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.focused_opponent_target_id and self.focused_ally_target_id:
+            msg = "Action cannot target both an opponent and an ally simultaneously."
+            raise ValidationError(msg)
 
     def __str__(self) -> str:
         action_name = self.focused_action.name if self.focused_action else "passives only"

@@ -254,7 +254,7 @@ class DeclareActionTest(TestCase):
             focused_action=self.technique,
             focused_category=ActionCategory.PHYSICAL,
             effort_level=EffortLevel.MEDIUM,
-            focused_target=self.opponent,
+            focused_opponent_target=self.opponent,
         )
         self.assertEqual(action.participant, self.participant)
         self.assertEqual(action.round_number, 1)

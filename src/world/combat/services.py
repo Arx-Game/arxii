@@ -360,7 +360,7 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
             "focused_action": None,
             "focused_category": None,
             "effort_level": EffortLevel.VERY_LOW,
-            "focused_target": None,
+            "focused_opponent_target": None,
             "physical_passive": None,
             "social_passive": None,
             "mental_passive": None,
@@ -487,7 +487,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     focused_action: Technique | None = None,
     focused_category: str | None = None,
     effort_level: str,
-    focused_target: CombatOpponent | None = None,
+    focused_opponent_target: CombatOpponent | None = None,
     physical_passive: Technique | None = None,
     social_passive: Technique | None = None,
     mental_passive: Technique | None = None,
@@ -540,7 +540,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
         )
         raise ValueError(msg)
 
-    if focused_target and focused_target.status != OpponentStatus.ACTIVE:
+    if focused_opponent_target and focused_opponent_target.status != OpponentStatus.ACTIVE:
         msg = "Cannot target a defeated opponent."
         raise ValueError(msg)
 
@@ -551,7 +551,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             "focused_action": focused_action,
             "focused_category": focused_category,
             "effort_level": effort_level,
-            "focused_target": focused_target,
+            "focused_opponent_target": focused_opponent_target,
             "physical_passive": physical_passive,
             "social_passive": social_passive,
             "mental_passive": mental_passive,
@@ -1413,7 +1413,7 @@ def _resolve_pc_action(
         # Passives-only round (e.g. flee) — no focused action to resolve.
         return outcome
 
-    target = action.focused_target
+    target = action.focused_opponent_target
     fatigue_category = _ACTION_TO_FATIGUE_CATEGORY.get(
         action.focused_category, FatigueCategory.PHYSICAL
     )
@@ -1685,7 +1685,7 @@ def resolve_round(
         "participant__character_sheet",
         "focused_action",
         "focused_action__effect_type",
-        "focused_target",
+        "focused_opponent_target",
         "combo_upgrade",
     ):
         pc_actions[action.participant_id] = action

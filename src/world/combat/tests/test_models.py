@@ -303,3 +303,32 @@ class CombatOpponentSchemaConstraintTests(EvenniaTestCase):
                     objectdb=objdb,
                     objectdb_is_ephemeral=True,  # violates check
                 )
+
+
+class CombatRoundActionAllyTargetTests(EvenniaTestCase):
+    """Tests for ally targeting on CombatRoundAction."""
+
+    def test_action_can_have_ally_target(self) -> None:
+        from world.combat.factories import CombatParticipantFactory, CombatRoundActionFactory
+
+        ally = CombatParticipantFactory()
+        action = CombatRoundActionFactory(focused_ally_target=ally)
+        self.assertEqual(action.focused_ally_target, ally)
+
+    def test_xor_target_validation(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        from world.combat.factories import (
+            CombatOpponentFactory,
+            CombatParticipantFactory,
+            CombatRoundActionFactory,
+        )
+
+        ally = CombatParticipantFactory()
+        opp = CombatOpponentFactory()
+        action = CombatRoundActionFactory.build(
+            focused_ally_target=ally,
+            focused_opponent_target=opp,
+        )
+        with self.assertRaises(ValidationError):
+            action.full_clean()

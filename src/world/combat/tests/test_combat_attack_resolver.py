@@ -46,7 +46,7 @@ def _build_resolver(*, pull_flat_bonus: int = 0, base_power: int = 20):
         round_number=1,
         focused_category=ActionCategory.PHYSICAL,
         focused_action=technique,
-        focused_target=opponent,
+        focused_opponent_target=opponent,
         effort_level=EffortLevel.MEDIUM,
     )
     return CombatAttackResolver(

@@ -91,7 +91,7 @@ def _setup_pc_attacking_mook(
         round_number=1,
         focused_category=ActionCategory.PHYSICAL,
         focused_action=technique,
-        focused_target=opponent,
+        focused_opponent_target=opponent,
         effort_level=EffortLevel.MEDIUM,
     )
     return participant, action, opponent, anima, technique, room
