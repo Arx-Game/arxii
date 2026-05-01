@@ -657,6 +657,21 @@ class Outfit(SharedMemoryModel):
                 {"wardrobe": "Outfits can only be stored in items flagged as wardrobes."}
             )
 
+    @cached_property
+    def cached_outfit_slots(self) -> list[OutfitSlot]:
+        """Slots on this outfit, with item_instance + template prefetched.
+
+        Cache target for ``Prefetch(..., to_attr="cached_outfit_slots")``.
+        Falls back to a fresh query if accessed without prefetch.
+        """
+        return list(
+            self.slots.select_related(
+                "item_instance",
+                "item_instance__template",
+                "item_instance__quality_tier",
+            ).all()
+        )
+
 
 class OutfitSlot(SharedMemoryModel):
     """One item assignment within an outfit definition.

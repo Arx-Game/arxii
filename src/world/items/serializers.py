@@ -2,9 +2,15 @@
 
 from rest_framework import serializers
 
+from flows.service_functions.outfits import (
+    add_outfit_slot,
+    save_outfit,
+)
 from world.items.exceptions import (
     FacetAlreadyAttached,
     FacetCapacityExceeded,
+    NotAContainer,
+    SlotIncompatible,
 )
 from world.items.models import (
     EquippedItem,
@@ -12,6 +18,8 @@ from world.items.models import (
     ItemFacet,
     ItemInstance,
     ItemTemplate,
+    Outfit,
+    OutfitSlot,
     QualityTier,
     TemplateInteraction,
     TemplateSlot,
@@ -225,3 +233,82 @@ class ItemTemplateDetailSerializer(serializers.ModelSerializer):
             "image_url",
         ]
         read_only_fields = fields
+
+
+class OutfitSlotReadSerializer(serializers.ModelSerializer):
+    """Read serializer for OutfitSlot — nests the item instance."""
+
+    item_instance = ItemInstanceReadSerializer(read_only=True)
+
+    class Meta:
+        model = OutfitSlot
+        fields = ["id", "outfit", "item_instance", "body_region", "equipment_layer"]
+        read_only_fields = fields
+
+
+class OutfitSlotWriteSerializer(serializers.ModelSerializer):
+    """Write serializer for OutfitSlot — delegates to add_outfit_slot service."""
+
+    class Meta:
+        model = OutfitSlot
+        fields = ["id", "outfit", "item_instance", "body_region", "equipment_layer"]
+
+    def create(self, validated_data: dict) -> OutfitSlot:  # type: ignore[override]
+        """Delegate creation to the add_outfit_slot service.
+
+        The service validates template compatibility and replaces any
+        existing slot at the same (region, layer).
+        """
+        try:
+            return add_outfit_slot(
+                outfit=validated_data["outfit"],
+                item_instance=validated_data["item_instance"],
+                body_region=validated_data["body_region"],
+                equipment_layer=validated_data["equipment_layer"],
+            )
+        except SlotIncompatible as exc:
+            raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+
+
+class OutfitReadSerializer(serializers.ModelSerializer):
+    """Read serializer for Outfit — nests slot rows."""
+
+    slots = OutfitSlotReadSerializer(source="cached_outfit_slots", many=True, read_only=True)
+
+    class Meta:
+        model = Outfit
+        fields = [
+            "id",
+            "name",
+            "description",
+            "character_sheet",
+            "wardrobe",
+            "slots",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class OutfitWriteSerializer(serializers.ModelSerializer):
+    """Write serializer for Outfit — POST snapshots current loadout via save_outfit."""
+
+    class Meta:
+        model = Outfit
+        fields = ["id", "name", "description", "character_sheet", "wardrobe"]
+
+    def create(self, validated_data: dict) -> Outfit:  # type: ignore[override]
+        """Delegate creation to the save_outfit service.
+
+        The service captures the current EquippedItem loadout for the
+        sheet's character into OutfitSlot rows.
+        """
+        try:
+            return save_outfit(
+                character_sheet=validated_data["character_sheet"],
+                wardrobe=validated_data["wardrobe"],
+                name=validated_data["name"],
+                description=validated_data.get("description", ""),
+            )
+        except NotAContainer as exc:
+            raise serializers.ValidationError({"wardrobe": [exc.user_message]}) from exc

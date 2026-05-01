@@ -8,6 +8,8 @@ from world.items.views import (
     ItemFacetViewSet,
     ItemInstanceViewSet,
     ItemTemplateViewSet,
+    OutfitSlotViewSet,
+    OutfitViewSet,
     QualityTierViewSet,
 )
 
@@ -18,5 +20,7 @@ router.register("templates", ItemTemplateViewSet, basename="item-template")
 router.register("item-facets", ItemFacetViewSet, basename="item-facet")
 router.register("equipped-items", EquippedItemViewSet, basename="equipped-item")
 router.register("inventory", ItemInstanceViewSet, basename="item-instance")
+router.register("outfits", OutfitViewSet, basename="outfit")
+router.register("outfit-slots", OutfitSlotViewSet, basename="outfit-slot")
 
 urlpatterns = router.urls

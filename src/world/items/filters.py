@@ -8,6 +8,8 @@ from world.items.models import (
     ItemFacet,
     ItemInstance,
     ItemTemplate,
+    Outfit,
+    OutfitSlot,
     QualityTier,
 )
 
@@ -74,3 +76,19 @@ class ItemTemplateFilter(django_filters.FilterSet):
             "is_consumable",
             "is_craftable",
         ]
+
+
+class OutfitFilter(django_filters.FilterSet):
+    """Filters for Outfit."""
+
+    class Meta:
+        model = Outfit
+        fields = ["character_sheet", "wardrobe"]
+
+
+class OutfitSlotFilter(django_filters.FilterSet):
+    """Filters for OutfitSlot."""
+
+    class Meta:
+        model = OutfitSlot
+        fields = ["outfit"]
