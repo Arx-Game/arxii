@@ -9,13 +9,13 @@ class IsCombatNPCTypeclassTests(EvenniaTestCase):
         from world.combat.services import is_combat_npc_typeclass
         from world.combat.typeclasses.combat_npc import CombatNPC
 
-        npc = create_object(CombatNPC, key="Mook")
+        npc = create_object(CombatNPC, key="Mook", nohome=True)
         self.assertTrue(is_combat_npc_typeclass(npc))
 
     def test_returns_false_for_plain_character(self):
         from world.combat.services import is_combat_npc_typeclass
 
-        char = create_object("typeclasses.characters.Character", key="PC")
+        char = create_object("typeclasses.characters.Character", key="PC", nohome=True)
         self.assertFalse(is_combat_npc_typeclass(char))
 
 
@@ -31,5 +31,5 @@ class HasPersistentIdentityReferencesTests(EvenniaTestCase):
         from world.combat.services import has_persistent_identity_references
         from world.combat.typeclasses.combat_npc import CombatNPC
 
-        npc = create_object(CombatNPC, key="Mook")
+        npc = create_object(CombatNPC, key="Mook", nohome=True)
         self.assertFalse(has_persistent_identity_references(npc))

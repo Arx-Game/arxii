@@ -8,6 +8,6 @@ class CombatNPCTypeclassTests(EvenniaTestCase):
     def test_create_combat_npc(self):
         from world.combat.typeclasses.combat_npc import CombatNPC
 
-        npc = create_object(CombatNPC, key="Test Mook")
+        npc = create_object(CombatNPC, key="Test Mook", nohome=True)
         self.assertIsInstance(npc, CombatNPC)
         self.assertEqual(npc.key, "Test Mook")

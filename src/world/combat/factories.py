@@ -45,7 +45,7 @@ class CombatEncounterFactory(factory_django.DjangoModelFactory):
     def room(self) -> object:
         from evennia import create_object
 
-        return create_object("typeclasses.rooms.Room", key="Test Combat Room")
+        return create_object("typeclasses.rooms.Room", key="Test Combat Room", nohome=True)
 
 
 class ThreatPoolFactory(factory_django.DjangoModelFactory):
@@ -113,7 +113,7 @@ class CombatOpponentFactory(factory_django.DjangoModelFactory):
         # setUpTestData deepcopy (DbHolder is not deepcopyable).
         room_id = self.encounter.room_id
         room = ObjectDB.objects.get(pk=room_id) if room_id else None
-        npc = create_object(CombatNPC, key=self.name, location=room)
+        npc = create_object(CombatNPC, key=self.name, location=room, nohome=True)
         return npc.pk
 
 

@@ -275,7 +275,7 @@ class CombatEncounterRoomTests(EvenniaTestCase):
 
         from world.combat.factories import CombatEncounterFactory
 
-        room = create_object("typeclasses.rooms.Room", key="Combat Room")
+        room = create_object("typeclasses.rooms.Room", key="Combat Room", nohome=True)
         enc = CombatEncounterFactory(room=room)
         self.assertEqual(enc.room, room)
 
@@ -331,7 +331,7 @@ class CombatOpponentCleanTests(EvenniaTestCase):
         from world.combat.typeclasses.combat_npc import CombatNPC
         from world.scenes.factories import PersonaFactory
 
-        npc = create_object(CombatNPC, key="Conflicted")
+        npc = create_object(CombatNPC, key="Conflicted", nohome=True)
         persona = PersonaFactory()
         # objectdb_id=npc.pk ensures the factory uses the given NPC, not a new one.
         opp = CombatOpponentFactory.build(
@@ -349,7 +349,7 @@ class CombatOpponentCleanTests(EvenniaTestCase):
 
         from world.combat.factories import CombatOpponentFactory
 
-        regular_char = create_object("typeclasses.characters.Character", key="NotANPC")
+        regular_char = create_object("typeclasses.characters.Character", key="NotANPC", nohome=True)
         # objectdb_id=regular_char.pk ensures the factory uses the given char, not a new CombatNPC.
         opp = CombatOpponentFactory.build(
             objectdb=regular_char,

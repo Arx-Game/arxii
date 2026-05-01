@@ -19,7 +19,7 @@ class CleanupCompletedEncounterTests(EvenniaTestCase):
         named = add_opponent(
             encounter, name="Boss", tier="boss", max_health=100, threat_pool=pool, persona=persona
         )
-        existing = create_object("typeclasses.characters.Character", key="Survivor")
+        existing = create_object("typeclasses.characters.Character", key="Survivor", nohome=True)
         pvp = add_opponent(
             encounter,
             name="PvP",

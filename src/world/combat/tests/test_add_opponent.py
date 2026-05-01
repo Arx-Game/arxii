@@ -45,7 +45,9 @@ class AddOpponentTests(EvenniaTestCase):
         from world.combat.factories import CombatEncounterFactory, ThreatPoolFactory
         from world.combat.services import add_opponent
 
-        existing = create_object("typeclasses.characters.Character", key="Pre-existing")
+        existing = create_object(
+            "typeclasses.characters.Character", key="Pre-existing", nohome=True
+        )
         encounter = CombatEncounterFactory()
         pool = ThreatPoolFactory()
         opp = add_opponent(

@@ -593,7 +593,7 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
         if encounter.room is None:
             msg = "Cannot create ephemeral CombatNPC: encounter has no room."
             raise ValueError(msg)
-        objectdb = create_object(CombatNPC, key=name, location=encounter.room)
+        objectdb = create_object(CombatNPC, key=name, location=encounter.room, nohome=True)
         is_ephemeral = True
 
     opp = CombatOpponent(
