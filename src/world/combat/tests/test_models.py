@@ -305,6 +305,78 @@ class CombatOpponentSchemaConstraintTests(EvenniaTestCase):
                 )
 
 
+class CombatOpponentCleanTests(EvenniaTestCase):
+    """Layer 2 multi-validation guards on CombatOpponent."""
+
+    def test_clean_rejects_ephemeral_with_no_objectdb(self):
+        from django.core.exceptions import ValidationError
+
+        from world.combat.factories import CombatOpponentFactory
+
+        opp = CombatOpponentFactory.build(objectdb=None, objectdb_is_ephemeral=True)
+        with self.assertRaises(ValidationError):
+            opp.clean()
+
+    def test_clean_rejects_ephemeral_with_persona(self):
+        from django.core.exceptions import ValidationError
+        from evennia import create_object
+
+        from world.combat.factories import CombatOpponentFactory
+        from world.combat.typeclasses.combat_npc import CombatNPC
+        from world.scenes.factories import PersonaFactory
+
+        npc = create_object(CombatNPC, key="Conflicted")
+        persona = PersonaFactory()
+        opp = CombatOpponentFactory.build(
+            persona=persona,
+            objectdb=npc,
+            objectdb_is_ephemeral=True,
+        )
+        with self.assertRaises(ValidationError):
+            opp.clean()
+
+    def test_clean_rejects_ephemeral_non_combat_npc_typeclass(self):
+        from django.core.exceptions import ValidationError
+        from evennia import create_object
+
+        from world.combat.factories import CombatOpponentFactory
+
+        regular_char = create_object("typeclasses.characters.Character", key="NotANPC")
+        opp = CombatOpponentFactory.build(
+            objectdb=regular_char,
+            objectdb_is_ephemeral=True,
+        )
+        with self.assertRaises(ValidationError):
+            opp.clean()
+
+    def test_clean_rejects_ephemeral_with_persistent_references(self):
+        from django.core.exceptions import ValidationError
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.factories import CombatOpponentFactory
+
+        sheet = CharacterSheetFactory()
+        opp = CombatOpponentFactory.build(
+            objectdb=sheet.character,
+            objectdb_is_ephemeral=True,
+        )
+        with self.assertRaises(ValidationError):
+            opp.clean()
+
+    def test_clean_passes_for_non_ephemeral_persona_bearing(self):
+        # Sanity: non-ephemeral with persona is allowed
+        from world.combat.factories import CombatOpponentFactory
+        from world.scenes.factories import PersonaFactory
+
+        persona = PersonaFactory()
+        opp = CombatOpponentFactory.build(
+            persona=persona,
+            objectdb=persona.character_sheet.character,
+            objectdb_is_ephemeral=False,
+        )
+        opp.clean()  # should not raise
+
+
 class CombatRoundActionAllyTargetTests(EvenniaTestCase):
     """Tests for ally targeting on CombatRoundAction."""
 

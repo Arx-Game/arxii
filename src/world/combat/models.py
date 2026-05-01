@@ -201,6 +201,38 @@ class CombatOpponent(SharedMemoryModel):
             ),
         ]
 
+    def clean(self) -> None:
+        super().clean()
+        if not self.objectdb_is_ephemeral:
+            return
+        from world.combat.services import (  # noqa: PLC0415
+            has_persistent_identity_references,
+            is_combat_npc_typeclass,
+        )
+
+        if self.objectdb is None:
+            raise ValidationError({"objectdb": "Ephemeral CombatOpponent must have an ObjectDB."})
+        if self.persona is not None:
+            raise ValidationError(
+                {"objectdb_is_ephemeral": ("Persona-bearing CombatOpponent cannot be ephemeral.")}
+            )
+        if not is_combat_npc_typeclass(self.objectdb):
+            raise ValidationError(
+                {
+                    "objectdb_is_ephemeral": (
+                        "Only CombatNPC-typeclass ObjectDBs can be marked ephemeral."
+                    )
+                }
+            )
+        if has_persistent_identity_references(self.objectdb):
+            raise ValidationError(
+                {
+                    "objectdb_is_ephemeral": (
+                        "ObjectDB has persistent identity references; cannot be marked ephemeral."
+                    )
+                }
+            )
+
     @property
     def health_percentage(self) -> float:
         if self.max_health == 0:
