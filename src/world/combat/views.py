@@ -289,7 +289,10 @@ class CombatEncounterViewSet(ModelViewSet):
                 focused_category=data.get("focused_category"),
                 effort_level=data["effort_level"],
                 focused_opponent_target=focused_opponent_target,
-                **passive_kwargs,
+                focused_ally_target=None,
+                physical_passive=passive_kwargs.get("physical_passive"),
+                social_passive=passive_kwargs.get("social_passive"),
+                mental_passive=passive_kwargs.get("mental_passive"),
             )
         except ValueError:
             return Response(

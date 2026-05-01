@@ -715,13 +715,14 @@ def expire_pulls_for_round(encounter: CombatEncounter) -> None:
         recompute_max_health_with_threads(p.character_sheet)
 
 
-def declare_action(  # noqa: PLR0913 - action declaration requires all slot fields
+def declare_action(  # noqa: PLR0913, PLR0912, C901 - action declaration requires all slot fields
     participant: CombatParticipant,
     *,
     focused_action: Technique | None = None,
     focused_category: str | None = None,
     effort_level: str,
     focused_opponent_target: CombatOpponent | None = None,
+    focused_ally_target: CombatParticipant | None = None,
     physical_passive: Technique | None = None,
     social_passive: Technique | None = None,
     mental_passive: Technique | None = None,
@@ -733,6 +734,9 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     - Encounter must be in DECLARING status.
     - Round number must match encounter's current round.
     - The passive slot matching the focused_category must be None.
+    - focused_opponent_target and focused_ally_target are mutually exclusive.
+    - focused_action's condition_applications target_kinds must match the supplied target.
+    - A pure-damage technique (base_power, no condition rows) requires focused_opponent_target.
 
     Raises ValueError with clear messages for validation failures.
     """
@@ -778,6 +782,44 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
         msg = "Cannot target a defeated opponent."
         raise ValueError(msg)
 
+    # XOR target validation
+    if focused_opponent_target and focused_ally_target:
+        msg = "Action cannot target both an opponent and an ally."
+        raise ValueError(msg)
+
+    # Target-kind alignment with technique authoring
+    if focused_action is not None:
+        from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+
+        rows = list(focused_action.condition_applications.all())
+        has_base_power = focused_action.effect_type.base_power is not None
+        if rows:
+            kinds = {row.target_kind for row in rows}
+            target_supplied_kind = None
+            if focused_ally_target is not None:
+                target_supplied_kind = (
+                    ConditionTargetKind.SELF
+                    if focused_ally_target == participant
+                    else ConditionTargetKind.ALLY
+                )
+            elif focused_opponent_target is not None:
+                target_supplied_kind = ConditionTargetKind.ENEMY
+            # Accept SELF/ALLY interchangeably for ally-targets
+            accepted = kinds.copy()
+            if ConditionTargetKind.ALLY in accepted:
+                accepted.add(ConditionTargetKind.SELF)
+            if ConditionTargetKind.SELF in accepted:
+                accepted.add(ConditionTargetKind.ALLY)
+            if target_supplied_kind is not None and target_supplied_kind not in accepted:
+                msg = (
+                    f"Technique target_kinds {sorted(kinds)} do not match supplied "
+                    f"target kind '{target_supplied_kind}'."
+                )
+                raise ValueError(msg)
+        if has_base_power and not rows and focused_opponent_target is None:
+            msg = "Damage technique requires focused_opponent_target."
+            raise ValueError(msg)
+
     action, _created = CombatRoundAction.objects.update_or_create(
         participant=participant,
         round_number=encounter.round_number,
@@ -786,6 +828,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             "focused_category": focused_category,
             "effort_level": effort_level,
             "focused_opponent_target": focused_opponent_target,
+            "focused_ally_target": focused_ally_target,
             "physical_passive": physical_passive,
             "social_passive": social_passive,
             "mental_passive": mental_passive,
