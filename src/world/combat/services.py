@@ -95,6 +95,40 @@ from world.vitals.constants import (
 
 logger = logging.getLogger(__name__)
 
+
+# ---------------------------------------------------------------------------
+# Identity guard helpers
+# ---------------------------------------------------------------------------
+
+
+def is_combat_npc_typeclass(objectdb: ObjectDB) -> bool:
+    """Return True iff the ObjectDB's typeclass is the CombatNPC class."""
+    from world.combat.typeclasses.combat_npc import CombatNPC  # noqa: PLC0415
+
+    return isinstance(objectdb, CombatNPC)
+
+
+def has_persistent_identity_references(objectdb: ObjectDB) -> bool:
+    """Return True if this ObjectDB is referenced by any model that signals
+    persistent identity (Persona, RosterEntry, CharacterSheet, etc.).
+
+    Single source of truth for "is this an ObjectDB any persistent system
+    cares about?" — when a new persistent-identity model is added, this
+    function adds the corresponding check.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    if CharacterSheet.objects.filter(character=objectdb).exists():
+        return True
+    if Persona.objects.filter(character_sheet__character=objectdb).exists():
+        return True
+    if RosterEntry.objects.filter(character_sheet__character=objectdb).exists():
+        return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # CombatAttackResolver - Damage resolution for combat techniques
 # ---------------------------------------------------------------------------
