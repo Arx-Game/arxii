@@ -7,14 +7,19 @@ live alongside but are called from the REST layer for player bookkeeping.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.db import transaction
 
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
 from flows.object_states.outfit_state import OutfitState
 from flows.service_functions.inventory import equip, unequip
-from world.items.exceptions import NotReachable, PermissionDenied
-from world.items.models import EquippedItem, ItemInstance
+from world.items.exceptions import NotAContainer, NotReachable, PermissionDenied, SlotIncompatible
+from world.items.models import EquippedItem, ItemInstance, Outfit, OutfitSlot
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
 
 
 @transaction.atomic
@@ -61,3 +66,106 @@ def undress(character: CharacterState) -> None:
     for item in ItemInstance.objects.filter(id__in=item_ids):
         item_state = ItemState(item, context=character.context)
         unequip(character, item_state)
+
+
+def save_outfit(
+    *,
+    character_sheet: CharacterSheet,
+    wardrobe: ItemInstance,
+    name: str,
+    description: str = "",
+) -> Outfit:
+    """Snapshot the character's currently-equipped items into a new Outfit.
+
+    Validation:
+        - ``wardrobe.template.is_wardrobe`` is True (raises ``NotAContainer``)
+        - Reach validation (wardrobe in actor's reach) is enforced by the
+          REST permission class — not duplicated here.
+        - Uniqueness of (character_sheet, name) is enforced at the database
+          level via UniqueConstraint; callers see ``IntegrityError`` on
+          collision.
+
+    Returns the new Outfit with its OutfitSlot rows populated.
+    """
+    if not wardrobe.template.is_wardrobe:
+        raise NotAContainer
+
+    with transaction.atomic():
+        outfit = Outfit.objects.create(
+            character_sheet=character_sheet,
+            wardrobe=wardrobe,
+            name=name,
+            description=description,
+        )
+        rows = EquippedItem.objects.filter(character=character_sheet.character)
+        OutfitSlot.objects.bulk_create(
+            [
+                OutfitSlot(
+                    outfit=outfit,
+                    item_instance=row.item_instance,
+                    body_region=row.body_region,
+                    equipment_layer=row.equipment_layer,
+                )
+                for row in rows
+            ]
+        )
+    return outfit
+
+
+def delete_outfit(outfit: Outfit) -> None:
+    """Delete an outfit definition.
+
+    Items are not touched — the OutfitSlot rows cascade-delete with the
+    Outfit, but never the underlying ItemInstance.
+    """
+    outfit.delete()
+
+
+@transaction.atomic
+def add_outfit_slot(
+    *,
+    outfit: Outfit,
+    item_instance: ItemInstance,
+    body_region: str,
+    equipment_layer: str,
+) -> OutfitSlot:
+    """Add or replace a slot in an outfit.
+
+    If the same (body_region, equipment_layer) already has a slot, the old
+    one is deleted first and the new one inserted. Validates that the
+    item's template declares (region, layer); otherwise raises
+    ``SlotIncompatible``.
+    """
+    template_slots = item_instance.template.cached_slots
+    if not any(
+        s.body_region == body_region and s.equipment_layer == equipment_layer
+        for s in template_slots
+    ):
+        raise SlotIncompatible
+
+    OutfitSlot.objects.filter(
+        outfit=outfit,
+        body_region=body_region,
+        equipment_layer=equipment_layer,
+    ).delete()
+    return OutfitSlot.objects.create(
+        outfit=outfit,
+        item_instance=item_instance,
+        body_region=body_region,
+        equipment_layer=equipment_layer,
+    )
+
+
+@transaction.atomic
+def remove_outfit_slot(
+    *,
+    outfit: Outfit,
+    body_region: str,
+    equipment_layer: str,
+) -> None:
+    """Remove a slot from an outfit. Idempotent — no error if not present."""
+    OutfitSlot.objects.filter(
+        outfit=outfit,
+        body_region=body_region,
+        equipment_layer=equipment_layer,
+    ).delete()

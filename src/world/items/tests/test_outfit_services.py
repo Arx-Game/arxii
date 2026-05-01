@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from django.db import IntegrityError
 from django.test import TestCase
 
 from evennia_extensions.factories import (
@@ -13,10 +14,17 @@ from evennia_extensions.factories import (
 )
 from flows.object_states.character_state import CharacterState
 from flows.object_states.outfit_state import OutfitState
-from flows.service_functions.outfits import apply_outfit, undress
+from flows.service_functions.outfits import (
+    add_outfit_slot,
+    apply_outfit,
+    delete_outfit,
+    remove_outfit_slot,
+    save_outfit,
+    undress,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer
-from world.items.exceptions import NotReachable, PermissionDenied
+from world.items.exceptions import NotAContainer, NotReachable, PermissionDenied, SlotIncompatible
 from world.items.factories import (
     ItemInstanceFactory,
     ItemTemplateFactory,
@@ -24,7 +32,7 @@ from world.items.factories import (
     OutfitSlotFactory,
     TemplateSlotFactory,
 )
-from world.items.models import EquippedItem
+from world.items.models import EquippedItem, ItemInstance, Outfit, OutfitSlot
 from world.items.services import equip_item
 
 
@@ -343,3 +351,310 @@ class UndressTests(TestCase):
         for item in self.items:
             item.game_object.refresh_from_db()
             self.assertEqual(item.game_object.location, self.character)
+
+
+class _OutfitServiceSetupMixin:
+    """Shared setUp building a character + wardrobe + two equipable templates.
+
+    Mirrors the structure of ApplyOutfitTests but tailored for save/delete/slot
+    edit testing — provides a wardrobe instance and two distinct templates
+    (TORSO/BASE shirt, LEFT_HAND/BASE glove) along with item instances.
+    """
+
+    def setUp(self) -> None:
+        self.account = AccountFactory()
+        self.room = ObjectDBFactory(
+            db_key="OutfitSvcRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.character = CharacterFactory(
+            db_key="OutfitSvcChar",
+            location=self.room,
+        )
+        self.character.db_account = self.account
+        self.character.save()
+        self.sheet = CharacterSheetFactory(character=self.character)
+
+        # Wardrobe instance (template flagged is_wardrobe).
+        self.wardrobe_template = ItemTemplateFactory(
+            name="OutfitSvcWardrobe",
+            is_wardrobe=True,
+            is_container=True,
+        )
+        wardrobe_obj = ObjectDBFactory(
+            db_key="OutfitSvcWardrobeObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        wardrobe_obj.location = self.room
+        wardrobe_obj.save()
+        self.wardrobe = ItemInstanceFactory(
+            template=self.wardrobe_template,
+            game_object=wardrobe_obj,
+        )
+
+        # Shirt template + instance (TORSO/BASE).
+        self.shirt_template = ItemTemplateFactory(name="OutfitSvcShirt")
+        TemplateSlotFactory(
+            template=self.shirt_template,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        shirt_obj = ObjectDBFactory(
+            db_key="OutfitSvcShirtObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        shirt_obj.location = self.character
+        shirt_obj.save()
+        self.shirt = ItemInstanceFactory(
+            template=self.shirt_template,
+            game_object=shirt_obj,
+        )
+
+        # Glove template + instance (LEFT_HAND/BASE).
+        self.glove_template = ItemTemplateFactory(name="OutfitSvcGlove")
+        TemplateSlotFactory(
+            template=self.glove_template,
+            body_region=BodyRegion.LEFT_HAND,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        glove_obj = ObjectDBFactory(
+            db_key="OutfitSvcGloveObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        glove_obj.location = self.character
+        glove_obj.save()
+        self.glove = ItemInstanceFactory(
+            template=self.glove_template,
+            game_object=glove_obj,
+        )
+
+
+class SaveOutfitTests(_OutfitServiceSetupMixin, TestCase):
+    """Cover snapshot-from-current-loadout behavior of ``save_outfit``."""
+
+    def test_save_creates_outfit_with_current_loadout(self) -> None:
+        """Two equipped items become two OutfitSlot rows on the new Outfit."""
+        equip_item(
+            character_sheet=self.sheet,
+            item_instance=self.shirt,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        equip_item(
+            character_sheet=self.sheet,
+            item_instance=self.glove,
+            body_region=BodyRegion.LEFT_HAND,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        outfit = save_outfit(
+            character_sheet=self.sheet,
+            wardrobe=self.wardrobe,
+            name="SnapshotLook",
+        )
+
+        self.assertEqual(outfit.character_sheet, self.sheet)
+        self.assertEqual(outfit.wardrobe, self.wardrobe)
+        self.assertEqual(outfit.name, "SnapshotLook")
+        slots = outfit.slots.all()
+        self.assertEqual(slots.count(), 2)
+        slot_tuples = {(s.item_instance_id, s.body_region, s.equipment_layer) for s in slots}
+        self.assertEqual(
+            slot_tuples,
+            {
+                (self.shirt.id, BodyRegion.TORSO, EquipmentLayer.BASE),
+                (self.glove.id, BodyRegion.LEFT_HAND, EquipmentLayer.BASE),
+            },
+        )
+
+    def test_save_with_naked_character_creates_empty_outfit(self) -> None:
+        """No equipped items → outfit with zero slots (still created)."""
+        outfit = save_outfit(
+            character_sheet=self.sheet,
+            wardrobe=self.wardrobe,
+            name="NakedLook",
+        )
+
+        self.assertIsInstance(outfit, Outfit)
+        self.assertEqual(outfit.slots.count(), 0)
+
+    def test_save_rejects_when_template_not_wardrobe(self) -> None:
+        """Wardrobe arg pointing to a non-wardrobe item → NotAContainer."""
+        non_wardrobe_obj = ObjectDBFactory(
+            db_key="OutfitSvcNonWardrobeObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        non_wardrobe_obj.location = self.room
+        non_wardrobe_obj.save()
+        non_wardrobe = ItemInstanceFactory(
+            template=self.shirt_template,  # not is_wardrobe
+            game_object=non_wardrobe_obj,
+        )
+
+        with self.assertRaises(NotAContainer):
+            save_outfit(
+                character_sheet=self.sheet,
+                wardrobe=non_wardrobe,
+                name="ShouldFail",
+            )
+        self.assertFalse(
+            Outfit.objects.filter(character_sheet=self.sheet, name="ShouldFail").exists()
+        )
+
+    def test_save_rejects_duplicate_name(self) -> None:
+        """Same (character_sheet, name) violates the DB unique constraint."""
+        save_outfit(
+            character_sheet=self.sheet,
+            wardrobe=self.wardrobe,
+            name="DupeLook",
+        )
+
+        with self.assertRaises(IntegrityError):
+            save_outfit(
+                character_sheet=self.sheet,
+                wardrobe=self.wardrobe,
+                name="DupeLook",
+            )
+
+
+class DeleteOutfitTests(_OutfitServiceSetupMixin, TestCase):
+    """Cover ``delete_outfit`` — outfit + slots gone, items untouched."""
+
+    def _build_outfit_with_slots(self) -> Outfit:
+        outfit = OutfitFactory(
+            character_sheet=self.sheet,
+            wardrobe=self.wardrobe,
+            name="DeleteLook",
+        )
+        OutfitSlotFactory(
+            outfit=outfit,
+            item_instance=self.shirt,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        OutfitSlotFactory(
+            outfit=outfit,
+            item_instance=self.glove,
+            body_region=BodyRegion.LEFT_HAND,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        return outfit
+
+    def test_delete_removes_outfit_and_slots(self) -> None:
+        """Outfit row + its slot rows both vanish."""
+        outfit = self._build_outfit_with_slots()
+        outfit_id = outfit.id
+
+        delete_outfit(outfit)
+
+        self.assertFalse(Outfit.objects.filter(id=outfit_id).exists())
+        self.assertFalse(OutfitSlot.objects.filter(outfit_id=outfit_id).exists())
+
+    def test_delete_does_not_touch_items(self) -> None:
+        """Item instances persist after the outfit is deleted."""
+        outfit = self._build_outfit_with_slots()
+        shirt_id = self.shirt.id
+        glove_id = self.glove.id
+
+        delete_outfit(outfit)
+
+        self.assertTrue(ItemInstance.objects.filter(id=shirt_id).exists())
+        self.assertTrue(ItemInstance.objects.filter(id=glove_id).exists())
+
+
+class OutfitSlotEditTests(_OutfitServiceSetupMixin, TestCase):
+    """Cover ``add_outfit_slot`` / ``remove_outfit_slot``."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.outfit = OutfitFactory(
+            character_sheet=self.sheet,
+            wardrobe=self.wardrobe,
+            name="SlotEditLook",
+        )
+
+    def test_add_slot_creates_row(self) -> None:
+        """Empty outfit + add → 1 OutfitSlot row at the requested slot."""
+        slot = add_outfit_slot(
+            outfit=self.outfit,
+            item_instance=self.shirt,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        self.assertEqual(self.outfit.slots.count(), 1)
+        self.assertEqual(slot.item_instance, self.shirt)
+        self.assertEqual(slot.body_region, BodyRegion.TORSO)
+        self.assertEqual(slot.equipment_layer, EquipmentLayer.BASE)
+
+    def test_add_slot_replaces_existing_at_same_region_layer(self) -> None:
+        """Two adds at the same (region, layer) → only the new slot remains."""
+        # First shirt at TORSO/BASE.
+        OutfitSlotFactory(
+            outfit=self.outfit,
+            item_instance=self.shirt,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        # Build a second TORSO/BASE-compatible item.
+        other_shirt_obj = ObjectDBFactory(
+            db_key="OutfitSvcOtherShirtObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        other_shirt_obj.location = self.character
+        other_shirt_obj.save()
+        other_shirt = ItemInstanceFactory(
+            template=self.shirt_template,
+            game_object=other_shirt_obj,
+        )
+
+        add_outfit_slot(
+            outfit=self.outfit,
+            item_instance=other_shirt,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        slots = self.outfit.slots.all()
+        self.assertEqual(slots.count(), 1)
+        self.assertEqual(slots.first().item_instance, other_shirt)
+
+    def test_add_slot_rejects_template_incompatible(self) -> None:
+        """Item whose template doesn't declare (region, layer) → SlotIncompatible."""
+        with self.assertRaises(SlotIncompatible):
+            add_outfit_slot(
+                outfit=self.outfit,
+                item_instance=self.shirt,  # only declares TORSO/BASE
+                body_region=BodyRegion.LEFT_HAND,
+                equipment_layer=EquipmentLayer.BASE,
+            )
+        self.assertEqual(self.outfit.slots.count(), 0)
+
+    def test_remove_slot_deletes_row(self) -> None:
+        """Existing slot → remove → 0 rows."""
+        OutfitSlotFactory(
+            outfit=self.outfit,
+            item_instance=self.shirt,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        self.assertEqual(self.outfit.slots.count(), 1)
+
+        remove_outfit_slot(
+            outfit=self.outfit,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        self.assertEqual(self.outfit.slots.count(), 0)
+
+    def test_remove_slot_idempotent_when_no_match(self) -> None:
+        """No slot at (region, layer) → remove is a no-op, no exception."""
+        # Outfit has no slots — should not raise.
+        remove_outfit_slot(
+            outfit=self.outfit,
+            body_region=BodyRegion.NECK,
+            equipment_layer=EquipmentLayer.ACCESSORY,
+        )
+
+        self.assertEqual(self.outfit.slots.count(), 0)
