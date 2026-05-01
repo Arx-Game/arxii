@@ -773,27 +773,10 @@ share the protagonism-lock aggregator but design independently.
 - Magical discovery through gameplay — unpredictable moments during RP where magic manifests
 - Thread strengthening through relationship development
 - Tradition gameplay (beyond CG templates — what traditions do during play)
-- **Covenants** — magically-empowered adventuring parties (see below)
-
-## Covenants (Post-MVP)
-
-Covenants are magically-empowered oaths — blood rituals that enshrine each participant's role and bind them to a shared goal. Every covenant has a sworn objective that all members commit to achieving together. The magic is real: the oath grants power, and the roles shape how that power manifests.
-
-**Covenant types — not one-size-fits-all:**
-- **Covenant of the Durance** — The foundational type. An adventuring party swears to support each other as they pursue the Durance (their overarching story of magical discovery). Long-lived, deeply personal, built around relationship bonds
-- **Covenant of Battle** — Formed for a specific war or battle scene. Assigns war roles that empower participants for large-scale conflict. Shorter-lived, can stack with a character's existing Durance covenant. Dissolved when the battle ends or objective is achieved
-- **Other types TBD** — The covenant framework should support different oath types with different durations, goals, and role sets. A covenant of investigation, a covenant of vengeance, a trade pact — anywhere a sworn magical oath with defined roles makes narrative sense
-
-**Three foundational archetypes (for Durance covenants):** Sword (offense) / Shield (defense) / Crown (support). At early levels, players pick from these three basic roles. As the covenant or members level up, specialized sub-roles unlock within each archetype. Battle covenants and other types may have their own role sets. Specific role names TBD.
-
-**Key constraints:**
-- Roles are unique within a covenant — no two members hold the same role
-- Covenant bonds function like enhanced Threads with shared resonance
-- Covenant role influences which techniques are empowered during group content
-- Covenant-level progression unlocks group abilities
-- Battle covenants stack with Durance covenants — a character can be in both simultaneously
-
-**Dependencies:** Thread system UI, group content (missions/combat), post-CG technique system, role definitions.
+- **Covenants** — magically-empowered adventuring parties. Role mechanics
+  + COVENANT_ROLE Thread anchor + gear compatibility shipped (Spec D PR1);
+  covenant entity / formation ritual / lifecycle still post-MVP. See
+  `docs/roadmap/covenants.md` for the full picture.
 
 ## Notes
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from evennia.commands.command import Command
@@ -64,6 +65,65 @@ class ArxCommand(Command):
             CommandError: If the input cannot be parsed.
         """
         return {}
+
+    def require_args(self, empty_msg: str) -> str:
+        """Return stripped ``self.args``; raise ``CommandError`` if blank."""
+        args = (self.args or "").strip()
+        if not args:
+            raise CommandError(empty_msg)
+        return args
+
+    def search_or_raise(
+        self,
+        name: str,
+        *,
+        location: object | None = None,
+        not_found_msg: str | None = None,
+    ) -> Any:
+        """Search for ``name`` near the caller; raise ``CommandError`` if not found.
+
+        Args:
+            name: The text to search for.
+            location: Restrict search to this object's contents
+                (default: caller's room).
+            not_found_msg: Override the default
+                ``"Could not find '<name>'."`` message.
+        """
+        if location is None:
+            target = self.caller.search(name)
+        else:
+            target = self.caller.search(name, location=location)
+        if not target:
+            msg = not_found_msg or f"Could not find '{name}'."
+            raise CommandError(msg)
+        return target
+
+    def parse_two_args(
+        self,
+        connector: str,
+        *,
+        empty_msg: str,
+        usage_msg: str,
+    ) -> tuple[str, str]:
+        """Parse ``"a <connector> b"`` from ``self.args``.
+
+        Returns:
+            ``(a, b)`` as stripped strings.
+
+        Raises:
+            CommandError: If args are blank (with ``empty_msg``) or do not
+                match the expected ``a <connector> b`` shape (with
+                ``usage_msg``).
+        """
+        args = self.require_args(empty_msg)
+        match = re.match(
+            rf"^(.+?)\s+{re.escape(connector)}\s+(.+)$",
+            args,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            raise CommandError(usage_msg)
+        return match.group(1).strip(), match.group(2).strip()
 
     def func(self) -> None:
         """Execute the command by delegating to the action.

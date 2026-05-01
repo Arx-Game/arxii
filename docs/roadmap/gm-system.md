@@ -76,7 +76,7 @@ The GM system defines these role relationships; the stories app uses them for pe
 - **`world.gm` app** — GMProfile, GMApplication models with factories, admin, ViewSet, filters, serializers
 - **`typeclasses.gm_characters`** — GMCharacter and StaffCharacter typeclasses (combat immune, fun rejection messages)
 - **Staff inbox integration** — GMApplication appears as a triage category alongside other submission types
-- **Prerequisites in place:** Roster system, Stories app (partial), Scenes, Covenants stub, Combat (for GM combat tools)
+- **Prerequisites in place:** Roster system, Stories app (partial), Scenes, Covenants (role mechanics + Thread anchor; covenant-entity lifecycle still post-MVP — see `covenants.md`), Combat (for GM combat tools)
 
 ## What's Needed for MVP
 

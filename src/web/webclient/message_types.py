@@ -15,6 +15,7 @@ class WebsocketMessageType(str, Enum):
     SCENE = "scene"
     COMMAND_ERROR = "command_error"
     PUPPET_CHANGED = "puppet_changed"
+    ACTION_RESULT = "action_result"
 
 
 @dataclass

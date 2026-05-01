@@ -83,7 +83,7 @@ broken regardless of technical correctness.
 | [OOC Social & Community](ooc-social.md) | in-progress | Kudos, friend tracking, visibility controls, engagement tools |
 | [World Clock & Scheduled Systems](world-clock.md) | in-progress | Game clock, scheduler, weather, timed emits, holidays, rate limit resets |
 | [Tooling](tooling.md) | in-progress | Player building tools, GM tools (level-gated), staff tools |
-| Covenants | skeleton | Covenant roles (stub), speed ranks — needs party model, rituals, bonuses, API |
+| [Covenants](covenants.md) | in-progress | Roles, speed ranks, gear compatibility, Thread anchor + API shipped — covenant entity / lifecycle / formation ritual still post-MVP |
 | Vitals | skeleton | CharacterStatus, CharacterVitals model — needs non-combat integration, API, frontend |
 | [GM System](gm-system.md) | in-progress | Phases 0-3 complete: identity, tables, roster/invites. Phase 4 dissolved into Stories; Phase 5 UI deferred until after Stories |
 | [Staff Inbox & Player Submissions](staff-inbox.md) | in-progress | Staff frontend complete; player-facing submission forms pending (Phase 5b) |
