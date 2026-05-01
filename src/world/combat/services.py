@@ -227,6 +227,35 @@ def _sum_active_flat_bonuses(
     return total
 
 
+def compute_effective_intensity(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+) -> int:
+    """Aggregate the caster's effective scaling input for this cast.
+
+    Sources today:
+    - technique.intensity (caster's invested power baseline)
+    - sum of INTENSITY_BUMP scaled_values from active CombatPulls
+
+    Future hooks (additive, no signature change required):
+    - Condition-derived intensity bumps
+    - Item-derived intensity bumps
+    - Environmental modifiers
+    """
+    technique = action.focused_action
+    if technique is None:
+        return 0
+    base = technique.intensity
+    encounter = participant.encounter
+    pull_bonus = 0
+    character = participant.character_sheet.character
+    for pull in character.combat_pulls.active_for_encounter(encounter):
+        for eff in pull.resolved_effects_cached:
+            if eff.kind == EffectKind.INTENSITY_BUMP and eff.scaled_value:
+                pull_bonus += eff.scaled_value
+    return base + pull_bonus
+
+
 def _build_combat_result(
     technique_use_result: TechniqueUseResult,
     resolver: CombatTechniqueResolver,  # noqa: ARG001 - kept for future extensibility
