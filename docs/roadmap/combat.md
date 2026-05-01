@@ -195,6 +195,25 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - Nullable focused_action for passives-only rounds (AFK/fleeing players)
 - Permanent wound pool routing stubbed pending content authoring
 
+**Phase 4 (complete):** Magic pipeline integration (damage path)
+- Combat-cast techniques route through `use_technique` for damage. Anima deduction, soulfray, mishap rolls, TECHNIQUE_PRE_CAST/CAST events, reactive scar interception, and corruption checks all fire on combat-cast attacks
+- `CombatTechniqueResolver` (frozen dataclass) is the resolve_fn. Active `CombatPull` FLAT_BONUS effects feed offense check `extra_modifiers` per Spec A §5.8
+- See `docs/superpowers/specs/2026-04-30-combat-magic-pipeline-integration-design.md`
+
+**Phase 5 (complete):** Non-attack effect routing + CombatOpponent identity refactor
+- **Non-attack techniques apply conditions in combat.** `TechniqueAppliedCondition` through model authors which conditions a technique applies, with formula-based severity and duration scaling: `base + intensity_mult × effective_intensity + per_extra_sl × max(0, SL − min_sl)`. Buff, Defense, Movement, and Debuff techniques are now functional in combat
+- **Attack techniques can also apply conditions.** A "Burning Strike" can do damage AND apply Burning via the same authoring path
+- **`compute_effective_intensity` aggregates** technique.intensity + active `INTENSITY_BUMP` pull contributions; opens future hooks for item/condition/environmental modifiers without signature changes
+- **Ally / self targeting on `CombatRoundAction`.** `focused_target` renamed to `focused_opponent_target`; new `focused_ally_target` FK to CombatParticipant. XOR-validated in `clean()`. Self-cast = ally target = caster's participant
+- **`bulk_apply_conditions` accepts per-entry severity/duration/stack_count** via `BulkConditionApplication` dataclass. Replaces the predecessor's shared-knobs signature; per-target formula values now expressible in one batched call
+- **`CombatOpponent` → `ObjectDB` linkage with multi-layered safeguards.** OneToOne FK with SET_NULL, `objectdb_is_ephemeral` flag, DB CheckConstraint, model `clean()` with four checks, `add_opponent` chokepoint with `full_clean()`, and `cleanup_completed_encounter` re-check before deletion. Persona-bearing NPCs and pre-existing ObjectDBs (PvP, named NPCs without persona) are never destroyed by combat cleanup
+- **`CombatNPC` typeclass** for encounter-scoped ephemeral mooks. Created at `add_opponent` with `existing_objectdb=None, persona=None`; lives at `encounter.room`; cleaned up at `cleanup_completed_encounter`
+- **`CombatEncounter.room` FK** added — ephemeral CombatNPCs are placed here at creation
+- **TECHNIQUE_AFFECTED fires uniformly** on every target including mooks (lifesteal-style on-affected reactive triggers now work against generic NPCs)
+- **Round-tick wiring.** `process_round_start` / `process_round_end` now called from `begin_declaration_phase` / `resolve_round` for active participants and active opponents — conditions in combat actually decay and DoT-tick
+- **`declare_action` target validation.** XOR check, target-kind alignment with technique authoring (SELF/ALLY interchangeable), damage-only requires opponent target
+- See `docs/superpowers/specs/2026-05-01-combat-magic-non-attack-effects-design.md`
+
 ### Open Encounters (future — builds on Party Combat)
 - Spontaneous combat for any number of participants, drop-in/drop-out
 - Nullable covenant, participants can join/leave mid-fight

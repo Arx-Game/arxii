@@ -21,6 +21,7 @@ from world.combat.models import (
     CombatParticipant,
     CombatPull,
     CombatPullResolvedEffect,
+    CombatRoundAction,
     ComboDefinition,
     ComboLearning,
     ComboSlot,
@@ -39,6 +40,12 @@ class CombatEncounterFactory(factory_django.DjangoModelFactory):
     encounter_type = EncounterType.PARTY_COMBAT
     pace_mode = PaceMode.TIMED
     pace_timer_minutes = DEFAULT_PACE_TIMER_MINUTES
+
+    @factory.lazy_attribute
+    def room(self) -> object:
+        from evennia import create_object
+
+        return create_object("typeclasses.rooms.Room", key="Test Combat Room", nohome=True)
 
 
 class ThreatPoolFactory(factory_django.DjangoModelFactory):
@@ -66,7 +73,15 @@ class ThreatPoolEntryFactory(factory_django.DjangoModelFactory):
 
 
 class CombatOpponentFactory(factory_django.DjangoModelFactory):
-    """Factory for CombatOpponent (default: MOOK tier)."""
+    """Factory for CombatOpponent.
+
+    Default: ephemeral MOOK backed by a fresh CombatNPC at the encounter's room.
+    When ``persona`` is supplied: uses the persona's character ObjectDB (non-ephemeral).
+
+    Stores objectdb_id (FK integer, not the instance) to avoid caching an Evennia
+    ObjectDB in the model's __dict__, which would break setUpTestData deepcopy
+    (DbHolder is not deepcopyable).
+    """
 
     class Meta:
         model = CombatOpponent
@@ -77,6 +92,29 @@ class CombatOpponentFactory(factory_django.DjangoModelFactory):
     health = 50
     max_health = 50
     threat_pool = factory.SubFactory(ThreatPoolFactory)
+    persona = None
+
+    @factory.lazy_attribute
+    def objectdb_is_ephemeral(self) -> bool:
+        return self.persona is None
+
+    @factory.lazy_attribute
+    def objectdb_id(self) -> int | None:  # type: ignore[override]
+        if self.persona is not None:
+            return self.persona.character_sheet.character_id
+
+        from evennia import create_object
+        from evennia.objects.models import ObjectDB
+
+        from world.combat.typeclasses.combat_npc import CombatNPC
+
+        # Fetch the room via PK rather than encounter.room to avoid caching an
+        # Evennia ObjectDB instance on the encounter's FK cache, which would break
+        # setUpTestData deepcopy (DbHolder is not deepcopyable).
+        room_id = self.encounter.room_id
+        room = ObjectDB.objects.get(pk=room_id) if room_id else None
+        npc = create_object(CombatNPC, key=self.name, location=room, nohome=True)
+        return npc.pk
 
 
 class BossOpponentFactory(CombatOpponentFactory):
@@ -197,3 +235,15 @@ class CombatPullResolvedEffectFactory(factory_django.DjangoModelFactory):
     source_tier = 1
     granted_capability = None
     narrative_snippet = ""
+
+
+class CombatRoundActionFactory(factory_django.DjangoModelFactory):
+    """Factory for CombatRoundAction."""
+
+    class Meta:
+        model = CombatRoundAction
+
+    participant = factory.SubFactory(CombatParticipantFactory)
+    round_number = 1
+    focused_opponent_target = None
+    focused_ally_target = None

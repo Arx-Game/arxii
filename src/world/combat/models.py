@@ -2,6 +2,7 @@
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.combat.constants import (
@@ -37,6 +38,15 @@ class CombatEncounter(SharedMemoryModel):
         null=True,
         blank=True,
         related_name="combat_encounters",
+    )
+    room = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.PROTECT,
+        related_name="combat_encounters",
+        null=True,
+        blank=True,
+        help_text="Room where the encounter takes place. Ephemeral CombatNPC "
+        "ObjectDBs are placed here at creation.",
     )
     round_number = models.PositiveIntegerField(default=0)
     status = models.CharField(
@@ -167,6 +177,61 @@ class CombatOpponent(SharedMemoryModel):
         related_name="combat_opponents",
         help_text="Links to a persistent NPC identity for story NPCs.",
     )
+    objectdb = models.OneToOneField(
+        "objects.ObjectDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="combat_opponent",
+        help_text="The in-world ObjectDB representation. Set at creation; "
+        "nulled if the ObjectDB is destroyed externally.",
+    )
+    objectdb_is_ephemeral = models.BooleanField(
+        default=False,
+        help_text="If True, the ObjectDB was created for this encounter only "
+        "and will be cleaned up at encounter completion. Persona-bearing "
+        "or pre-existing ObjectDBs MUST NOT be flagged ephemeral.",
+    )
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=Q(persona__isnull=True) | Q(objectdb_is_ephemeral=False),
+                name="persona_bearing_opponent_not_ephemeral",
+            ),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if not self.objectdb_is_ephemeral:
+            return
+        from world.combat.services import (  # noqa: PLC0415
+            has_persistent_identity_references,
+            is_combat_npc_typeclass,
+        )
+
+        if self.objectdb is None:
+            raise ValidationError({"objectdb": "Ephemeral CombatOpponent must have an ObjectDB."})
+        if self.persona is not None:
+            raise ValidationError(
+                {"objectdb_is_ephemeral": ("Persona-bearing CombatOpponent cannot be ephemeral.")}
+            )
+        if not is_combat_npc_typeclass(self.objectdb):
+            raise ValidationError(
+                {
+                    "objectdb_is_ephemeral": (
+                        "Only CombatNPC-typeclass ObjectDBs can be marked ephemeral."
+                    )
+                }
+            )
+        if has_persistent_identity_references(self.objectdb):
+            raise ValidationError(
+                {
+                    "objectdb_is_ephemeral": (
+                        "ObjectDB has persistent identity references; cannot be marked ephemeral."
+                    )
+                }
+            )
 
     @property
     def health_percentage(self) -> float:
@@ -381,13 +446,21 @@ class CombatRoundAction(SharedMemoryModel):
         default=False,
         help_text="Player signals they are done with declaration and combo decisions.",
     )
-    focused_target = models.ForeignKey(
+    focused_opponent_target = models.ForeignKey(
         CombatOpponent,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="+",
     )
+    focused_ally_target = models.ForeignKey(
+        "CombatParticipant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+
     physical_passive = models.ForeignKey(
         "magic.Technique",
         on_delete=models.SET_NULL,
@@ -425,6 +498,12 @@ class CombatRoundAction(SharedMemoryModel):
                 name="unique_action_per_participant_per_round",
             ),
         ]
+
+    def clean(self) -> None:
+        super().clean()
+        if self.focused_opponent_target_id and self.focused_ally_target_id:
+            msg = "Action cannot target both an opponent and an ally simultaneously."
+            raise ValidationError(msg)
 
     def __str__(self) -> str:
         action_name = self.focused_action.name if self.focused_action else "passives only"

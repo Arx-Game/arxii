@@ -201,7 +201,7 @@ describe('ScheduleEventDialog', () => {
 
     // Fill time
     const timeInput = screen.getByLabelText(/scheduled time/i);
-    await user.type(timeInput, '2026-05-01T18:00');
+    await user.type(timeInput, '2126-12-25T18:00');
 
     // Select persona
     const personaInput = screen.getByPlaceholderText(/search for a persona/i);
@@ -240,7 +240,7 @@ describe('ScheduleEventDialog', () => {
 
     // Fill required fields minimally
     const timeInput = screen.getByLabelText(/scheduled time/i);
-    await user.type(timeInput, '2026-05-01T18:00');
+    await user.type(timeInput, '2126-12-25T18:00');
 
     const personaInput = screen.getByPlaceholderText(/search for a persona/i);
     await user.type(personaInput, 'Lady');
@@ -277,7 +277,7 @@ describe('ScheduleEventDialog', () => {
     await user.click(screen.getByRole('button', { name: /schedule/i }));
 
     const timeInput = screen.getByLabelText(/scheduled time/i);
-    await user.type(timeInput, '2026-05-01T18:00');
+    await user.type(timeInput, '2126-12-25T18:00');
 
     const personaInput = screen.getByPlaceholderText(/search for a persona/i);
     await user.type(personaInput, 'Lady');

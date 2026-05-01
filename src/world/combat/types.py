@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 from world.vitals.types import DamageConsequenceResult
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.checks.types import CheckResult
     from world.combat.models import (
         CombatOpponent,
@@ -15,6 +17,7 @@ if TYPE_CHECKING:
         CombatRoundAction,
         ComboDefinition,
     )
+    from world.conditions.models import ConditionTemplate
     from world.magic.types import TechniqueUseResult
 
 
@@ -98,6 +101,17 @@ class RoundResolutionResult:
 
 
 @dataclass(frozen=True)
+class AppliedConditionResult:
+    """Per-condition apply outcome from CombatTechniqueResolver._apply_conditions."""
+
+    target: ObjectDB
+    condition: ConditionTemplate
+    severity_applied: int
+    duration_rounds: int | None
+    success: bool
+
+
+@dataclass(frozen=True)
 class CombatTechniqueResolution:
     """Returned from a combat resolver into use_technique.
 
@@ -110,6 +124,7 @@ class CombatTechniqueResolution:
 
     check_result: CheckResult
     damage_results: list[OpponentDamageResult]
+    applied_conditions: list[AppliedConditionResult]
     pull_flat_bonus: int
     scaled_damage: int
 
@@ -124,4 +139,5 @@ class CombatTechniqueResult:
     """
 
     damage_results: list[OpponentDamageResult]
+    applied_conditions: list[AppliedConditionResult]
     technique_use_result: TechniqueUseResult

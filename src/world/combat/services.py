@@ -74,6 +74,7 @@ from world.combat.models import (
 )
 from world.combat.types import (
     ActionOutcome,
+    AppliedConditionResult,
     AvailableCombo,
     CombatTechniqueResolution,
     CombatTechniqueResult,
@@ -95,24 +96,54 @@ from world.vitals.constants import (
 
 logger = logging.getLogger(__name__)
 
+
 # ---------------------------------------------------------------------------
-# CombatAttackResolver - Damage resolution for combat techniques
+# Identity guard helpers
+# ---------------------------------------------------------------------------
+
+
+def is_combat_npc_typeclass(objectdb: ObjectDB) -> bool:
+    """Return True iff the ObjectDB's typeclass is the CombatNPC class."""
+    from world.combat.typeclasses.combat_npc import CombatNPC  # noqa: PLC0415
+
+    return isinstance(objectdb, CombatNPC)
+
+
+def has_persistent_identity_references(objectdb: ObjectDB) -> bool:
+    """Return True if this ObjectDB is referenced by any model that signals
+    persistent identity (Persona, RosterEntry, CharacterSheet, etc.).
+
+    Single source of truth for "is this an ObjectDB any persistent system
+    cares about?" — when a new persistent-identity model is added, this
+    function adds the corresponding check.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    if CharacterSheet.objects.filter(character=objectdb).exists():
+        return True
+    if Persona.objects.filter(character_sheet__character=objectdb).exists():
+        return True
+    if RosterEntry.objects.filter(character_sheet__character=objectdb).exists():
+        return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# CombatTechniqueResolver - Damage and condition resolution for combat techniques
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
-class CombatAttackResolver:
-    """Resolves the inner damage step of a combat-cast attack technique.
-
-    Built by resolve_combat_technique() and passed to use_technique() as
-    resolve_fn. State is inspectable at any point during/after the cast,
-    which closures don't allow. Subclassable when non-attack effect types
-    arrive (next PR): CombatBuffResolver, CombatDefenseResolver, etc.
+class CombatTechniqueResolver:
+    """Resolves the inner step of a combat-cast technique. Single class
+    handles both damage and condition application; behavior differences
+    live in technique-authored data (base_power, TechniqueAppliedCondition rows).
     """
 
     participant: CombatParticipant
     action: CombatRoundAction
-    target: CombatOpponent
     pull_flat_bonus: int
     fatigue_category: str
     offense_check_type: CheckType
@@ -135,35 +166,107 @@ class CombatAttackResolver:
             fatigue_penalty=penalty,
         )
 
-    def _scale(self, check_result: CheckResult) -> int:
-        """Scale base_power by success_level: full / half / zero."""
-        base_power = self.action.focused_action.effect_type.base_power
+    def _apply_damage(self, check_result: CheckResult) -> list[OpponentDamageResult]:
+        """Damage path. No-op when base_power is None, no opponent target, or target DEFEATED."""
+        target = self.action.focused_opponent_target
+        if target is None:
+            return []
+        technique = self.action.focused_action
+        base_power = technique.effect_type.base_power
         if base_power is None:
-            return 0
+            return []
         if check_result.success_level >= OFFENSE_FULL_THRESHOLD:
-            return base_power
-        if check_result.success_level >= OFFENSE_HALF_THRESHOLD:
-            return base_power // 2
-        return 0
+            scaled = base_power
+        elif check_result.success_level >= OFFENSE_HALF_THRESHOLD:
+            scaled = base_power // 2
+        else:
+            scaled = 0
+        if scaled <= 0:
+            return []
+        target.refresh_from_db()
+        if target.status == OpponentStatus.DEFEATED:
+            return []
+        return [apply_damage_to_opponent(target, scaled)]
 
-    def _apply(self, scaled_damage: int) -> list[OpponentDamageResult]:
-        """Apply damage to target if alive and damage > 0."""
-        if scaled_damage <= 0:
+    def _apply_conditions(
+        self,
+        check_result: CheckResult,
+    ) -> list[AppliedConditionResult]:
+        """Apply technique-authored conditions to appropriate targets.
+
+        Iterates all TechniqueAppliedCondition rows on the technique, skips rows
+        whose minimum_success_level exceeds the check result, resolves each row's
+        target_kind to a concrete ObjectDB, computes severity/duration via the row's
+        formula methods, and delegates to bulk_apply_conditions for the whole batch.
+        """
+        from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
+        from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
+
+        technique = self.action.focused_action
+        sl = check_result.success_level
+        rows = list(technique.condition_applications.select_related("condition").all())
+        if not rows:
             return []
-        self.target.refresh_from_db()
-        if self.target.status == OpponentStatus.DEFEATED:
+
+        eff_intensity = compute_effective_intensity(self.participant, self.action)
+        caster_od = self.participant.character_sheet.character
+
+        bulk_applications: list[BulkConditionApplication] = []
+        for row in rows:
+            if sl < row.minimum_success_level:
+                continue
+            target = _resolve_condition_target(row.target_kind, self.action, caster_od)
+            if target is None:
+                continue
+            severity = row.compute_severity(
+                effective_intensity=eff_intensity,
+                success_level=sl,
+            )
+            duration = row.compute_duration_rounds(
+                effective_intensity=eff_intensity,
+                success_level=sl,
+            )
+            bulk_applications.append(
+                BulkConditionApplication(
+                    target=target,
+                    template=row.condition,
+                    severity=severity,
+                    duration_rounds=duration,
+                    stack_count=row.stack_count,
+                )
+            )
+
+        if not bulk_applications:
             return []
-        return [apply_damage_to_opponent(self.target, scaled_damage)]
+
+        bulk_results = bulk_apply_conditions(
+            bulk_applications,
+            source_character=caster_od,
+            source_technique=technique,
+        )
+        out: list[AppliedConditionResult] = []
+        for app, result in zip(bulk_applications, bulk_results, strict=True):
+            out.append(
+                AppliedConditionResult(
+                    target=app.target,
+                    condition=app.template,
+                    severity_applied=app.severity,
+                    duration_rounds=app.duration_rounds,
+                    success=result.success,
+                )
+            )
+        return out
 
     def __call__(self) -> CombatTechniqueResolution:
         check_result = self._roll_check()
-        scaled_damage = self._scale(check_result)
-        damage_results = self._apply(scaled_damage)
+        damage_results = self._apply_damage(check_result)
+        applied_conditions = self._apply_conditions(check_result)
         return CombatTechniqueResolution(
             check_result=check_result,
             damage_results=damage_results,
+            applied_conditions=applied_conditions,
             pull_flat_bonus=self.pull_flat_bonus,
-            scaled_damage=scaled_damage,
+            scaled_damage=sum(r.damage_dealt for r in damage_results),
         )
 
 
@@ -186,14 +289,98 @@ def _sum_active_flat_bonuses(
     return total
 
 
+def compute_effective_intensity(
+    participant: CombatParticipant,
+    action: CombatRoundAction,
+) -> int:
+    """Aggregate the caster's effective scaling input for this cast.
+
+    Sources today:
+    - technique.intensity (caster's invested power baseline)
+    - sum of INTENSITY_BUMP scaled_values from active CombatPulls
+
+    Future hooks (additive, no signature change required):
+    - Condition-derived intensity bumps
+    - Item-derived intensity bumps
+    - Environmental modifiers
+    """
+    technique = action.focused_action
+    if technique is None:
+        return 0
+    base = technique.intensity
+    encounter = participant.encounter
+    pull_bonus = 0
+    character = participant.character_sheet.character
+    for pull in character.combat_pulls.active_for_encounter(encounter):
+        for eff in pull.resolved_effects_cached:
+            if eff.kind == EffectKind.INTENSITY_BUMP and eff.scaled_value:
+                pull_bonus += eff.scaled_value
+    return base + pull_bonus
+
+
+def _resolve_condition_target(
+    kind: str,
+    action: CombatRoundAction,
+    caster_od: ObjectDB,
+) -> ObjectDB | None:
+    """Resolve a ConditionTargetKind value to a concrete ObjectDB.
+
+    Returns None when the named target is absent or ineligible (e.g. opponent
+    already DEFEATED).
+    """
+    from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+
+    if kind == ConditionTargetKind.SELF:
+        return caster_od
+    if kind == ConditionTargetKind.ALLY:
+        ally = action.focused_ally_target
+        return ally.character_sheet.character if ally is not None else None
+    if kind == ConditionTargetKind.ENEMY:
+        opp = action.focused_opponent_target
+        if opp is not None:
+            opp.refresh_from_db()
+        active = opp is not None and opp.status != OpponentStatus.DEFEATED
+        return opp.objectdb if active else None
+    return None
+
+
+def _build_affected_targets(
+    participant: CombatParticipant,  # noqa: ARG001 - reserved for future signature additions
+    action: CombatRoundAction,
+) -> list[ObjectDB]:
+    """Return the dedup'd ObjectDB list for use_technique's targets parameter.
+
+    Resolution rules:
+    - opponent target → opp.objectdb (always present after CombatOpponent refactor;
+      None-guarded for pathological state)
+    - ally target → ally.character_sheet.character
+    - both null → empty list
+    """
+    targets: list = []
+    seen: set[int] = set()
+    if action.focused_opponent_target_id:
+        opp = action.focused_opponent_target
+        od = opp.objectdb
+        if od is not None and od.pk not in seen:
+            targets.append(od)
+            seen.add(od.pk)
+    if action.focused_ally_target_id:
+        ally_od = action.focused_ally_target.character_sheet.character
+        if ally_od.pk not in seen:
+            targets.append(ally_od)
+            seen.add(ally_od.pk)
+    return targets
+
+
 def _build_combat_result(
     technique_use_result: TechniqueUseResult,
-    resolver: CombatAttackResolver,  # noqa: ARG001 - kept for future extensibility
+    resolver: CombatTechniqueResolver,  # noqa: ARG001 - kept for future extensibility
 ) -> CombatTechniqueResult:
     """Translate use_technique's outcome into the adapter's return shape."""
     if not technique_use_result.confirmed:
         return CombatTechniqueResult(
             damage_results=[],
+            applied_conditions=[],
             technique_use_result=technique_use_result,
         )
 
@@ -206,22 +393,22 @@ def _build_combat_result(
 
     return CombatTechniqueResult(
         damage_results=list(resolution.damage_results),
+        applied_conditions=list(resolution.applied_conditions),
         technique_use_result=technique_use_result,
     )
 
 
-def resolve_combat_technique(  # noqa: PLR0913 — keyword-only orchestrator args
+def resolve_combat_technique(
     *,
     participant: CombatParticipant,
     action: CombatRoundAction,
-    target: CombatOpponent,
     fatigue_category: str,
     offense_check_type: CheckType,
     offense_check_fn: PerformCheckFn | None,
 ) -> CombatTechniqueResult:
     """Route a damage-path combat technique through use_technique.
 
-    Builds a CombatAttackResolver and passes it to use_technique as
+    Builds a CombatTechniqueResolver and passes it to use_technique as
     resolve_fn. The magic envelope handles anima, soulfray, mishap,
     PRE_CAST/CAST events, reactive scar interception, and corruption.
     The resolver does the offense check + damage application inside
@@ -230,9 +417,8 @@ def resolve_combat_technique(  # noqa: PLR0913 — keyword-only orchestrator arg
     Soulfray warning is auto-confirmed at round resolution time —
     frontend handles preview before submission.
 
-    AFFECTED-per-target events are deferred (CombatOpponent is not an
-    ObjectDB; targets=[] until the opponent <-> ObjectDB relationship
-    is decided).
+    TECHNIQUE_AFFECTED fires per target via _build_affected_targets:
+    opponent target → opp.objectdb; ally target → ally character ObjectDB.
 
     Other pull effect kinds are deferred:
     - INTENSITY_BUMP: needs runtime stats to accept combat context
@@ -245,22 +431,23 @@ def resolve_combat_technique(  # noqa: PLR0913 — keyword-only orchestrator arg
     encounter = participant.encounter
     pull_flat_bonus = _sum_active_flat_bonuses(participant, encounter)
 
-    resolver = CombatAttackResolver(
+    resolver = CombatTechniqueResolver(
         participant=participant,
         action=action,
-        target=target,
         pull_flat_bonus=pull_flat_bonus,
         fatigue_category=fatigue_category,
         offense_check_type=offense_check_type,
         offense_check_fn=offense_check_fn,
     )
 
+    targets = _build_affected_targets(participant, action)
+
     technique_use_result = use_technique(
         character=participant.character_sheet.character,
         technique=action.focused_action,
         resolve_fn=resolver,
         confirm_soulfray_risk=True,
-        targets=[],
+        targets=targets,
     )
 
     return _build_combat_result(technique_use_result, resolver)
@@ -360,7 +547,7 @@ def declare_flee(participant: CombatParticipant) -> CombatRoundAction:
             "focused_action": None,
             "focused_category": None,
             "effort_level": EffortLevel.VERY_LOW,
-            "focused_target": None,
+            "focused_opponent_target": None,
             "physical_passive": None,
             "social_passive": None,
             "mental_passive": None,
@@ -384,9 +571,32 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     soak_value: int = 0,
     probing_threshold: int | None = None,
     persona: Persona | None = None,
+    existing_objectdb: ObjectDB | None = None,
 ) -> CombatOpponent:
-    """Create a CombatOpponent with health equal to max_health."""
-    return CombatOpponent.objects.create(
+    """Create a CombatOpponent. Three sources for the ObjectDB:
+
+    - existing_objectdb: pre-existing OD (PvP, named NPC w/o persona). Never ephemeral.
+    - persona: reuses persona's character ObjectDB. Never ephemeral.
+    - neither: creates a new CombatNPC OD scoped to this encounter. Ephemeral.
+    """
+    from evennia.utils.create import create_object  # noqa: PLC0415
+
+    from world.combat.typeclasses.combat_npc import CombatNPC  # noqa: PLC0415
+
+    if existing_objectdb is not None:
+        objectdb = existing_objectdb
+        is_ephemeral = False
+    elif persona is not None:
+        objectdb = persona.character_sheet.character
+        is_ephemeral = False
+    else:
+        if encounter.room is None:
+            msg = "Cannot create ephemeral CombatNPC: encounter has no room."
+            raise ValueError(msg)
+        objectdb = create_object(CombatNPC, key=name, location=encounter.room, nohome=True)
+        is_ephemeral = True
+
+    opp = CombatOpponent(
         encounter=encounter,
         name=name,
         tier=tier,
@@ -397,7 +607,12 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
         soak_value=soak_value,
         probing_threshold=probing_threshold,
         persona=persona,
+        objectdb=objectdb,
+        objectdb_is_ephemeral=is_ephemeral,
     )
+    opp.full_clean()
+    opp.save()
+    return opp
 
 
 @transaction.atomic
@@ -427,6 +642,25 @@ def begin_declaration_phase(encounter: CombatEncounter) -> None:
     enc.status = EncounterStatus.DECLARING
     enc.round_started_at = timezone.now()
     enc.save(update_fields=["round_number", "status", "round_started_at"])
+
+    # --- Round-tick: fire start-of-round DoT ---
+    from world.conditions.services import process_round_start  # noqa: PLC0415
+
+    active_participants_start = CombatParticipant.objects.filter(
+        encounter=enc,
+        status=ParticipantStatus.ACTIVE,
+    ).select_related("character_sheet__character")
+    for p in active_participants_start:
+        process_round_start(p.character_sheet.character)
+
+    active_opponents_start = CombatOpponent.objects.filter(
+        encounter=enc,
+        status=OpponentStatus.ACTIVE,
+    ).select_related("objectdb")
+    for opp in active_opponents_start:
+        if opp.objectdb is not None:
+            process_round_start(opp.objectdb)
+
     # Spec A §3.8 + §7.4 lines 2031–2039: expire pulls for the previous
     # round *after* round_number has advanced so the < comparison catches
     # the old rows. recompute_max_health_with_threads runs per affected
@@ -481,13 +715,14 @@ def expire_pulls_for_round(encounter: CombatEncounter) -> None:
         recompute_max_health_with_threads(p.character_sheet)
 
 
-def declare_action(  # noqa: PLR0913 - action declaration requires all slot fields
+def declare_action(  # noqa: PLR0913, PLR0912, C901 - action declaration requires all slot fields
     participant: CombatParticipant,
     *,
     focused_action: Technique | None = None,
     focused_category: str | None = None,
     effort_level: str,
-    focused_target: CombatOpponent | None = None,
+    focused_opponent_target: CombatOpponent | None = None,
+    focused_ally_target: CombatParticipant | None = None,
     physical_passive: Technique | None = None,
     social_passive: Technique | None = None,
     mental_passive: Technique | None = None,
@@ -499,6 +734,9 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     - Encounter must be in DECLARING status.
     - Round number must match encounter's current round.
     - The passive slot matching the focused_category must be None.
+    - focused_opponent_target and focused_ally_target are mutually exclusive.
+    - focused_action's condition_applications target_kinds must match the supplied target.
+    - A pure-damage technique (base_power, no condition rows) requires focused_opponent_target.
 
     Raises ValueError with clear messages for validation failures.
     """
@@ -540,9 +778,47 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
         )
         raise ValueError(msg)
 
-    if focused_target and focused_target.status != OpponentStatus.ACTIVE:
+    if focused_opponent_target and focused_opponent_target.status != OpponentStatus.ACTIVE:
         msg = "Cannot target a defeated opponent."
         raise ValueError(msg)
+
+    # XOR target validation
+    if focused_opponent_target and focused_ally_target:
+        msg = "Action cannot target both an opponent and an ally."
+        raise ValueError(msg)
+
+    # Target-kind alignment with technique authoring
+    if focused_action is not None:
+        from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+
+        rows = list(focused_action.condition_applications.all())
+        has_base_power = focused_action.effect_type.base_power is not None
+        if rows:
+            kinds = {row.target_kind for row in rows}
+            target_supplied_kind = None
+            if focused_ally_target is not None:
+                target_supplied_kind = (
+                    ConditionTargetKind.SELF
+                    if focused_ally_target == participant
+                    else ConditionTargetKind.ALLY
+                )
+            elif focused_opponent_target is not None:
+                target_supplied_kind = ConditionTargetKind.ENEMY
+            # Accept SELF/ALLY interchangeably for ally-targets
+            accepted = kinds.copy()
+            if ConditionTargetKind.ALLY in accepted:
+                accepted.add(ConditionTargetKind.SELF)
+            if ConditionTargetKind.SELF in accepted:
+                accepted.add(ConditionTargetKind.ALLY)
+            if target_supplied_kind is not None and target_supplied_kind not in accepted:
+                msg = (
+                    f"Technique target_kinds {sorted(kinds)} do not match supplied "
+                    f"target kind '{target_supplied_kind}'."
+                )
+                raise ValueError(msg)
+        if has_base_power and not rows and focused_opponent_target is None:
+            msg = "Damage technique requires focused_opponent_target."
+            raise ValueError(msg)
 
     action, _created = CombatRoundAction.objects.update_or_create(
         participant=participant,
@@ -551,7 +827,8 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             "focused_action": focused_action,
             "focused_category": focused_category,
             "effort_level": effort_level,
-            "focused_target": focused_target,
+            "focused_opponent_target": focused_opponent_target,
+            "focused_ally_target": focused_ally_target,
             "physical_passive": physical_passive,
             "social_passive": social_passive,
             "mental_passive": mental_passive,
@@ -1413,45 +1690,37 @@ def _resolve_pc_action(
         # Passives-only round (e.g. flee) — no focused action to resolve.
         return outcome
 
-    target = action.focused_target
+    target = action.focused_opponent_target
     fatigue_category = _ACTION_TO_FATIGUE_CATEGORY.get(
         action.focused_category, FatigueCategory.PHYSICAL
     )
 
-    if target is not None:
+    # Combo upgrades require an active opponent target — bail out early if defeated.
+    if target is not None and action.combo_upgrade:
         target.refresh_from_db()
         if target.status != OpponentStatus.DEFEATED:
-            if action.combo_upgrade:
-                combo = action.combo_upgrade
-                dmg_result = apply_damage_to_opponent(
-                    target,
-                    combo.bonus_damage,
-                    bypass_soak=combo.bypass_soak,
-                )
-                outcome.combo_used = combo
-                outcome.damage_results.append(dmg_result)
-            elif technique.effect_type.base_power is not None:
-                # Damage path — route through magic pipeline (use_technique).
-                # Non-attack effect types (base_power is None) stay no-op until
-                # the conditions-from-techniques resolver lands (next PR).
-                if offense_check_type is not None:
-                    combat_result = resolve_combat_technique(
-                        participant=participant,
-                        action=action,
-                        target=target,
-                        fatigue_category=fatigue_category,
-                        offense_check_type=offense_check_type,
-                        offense_check_fn=offense_check_fn,
-                    )
-                    outcome.damage_results.extend(combat_result.damage_results)
-                else:
-                    # TODO(combat-magic-pipeline): Remove this bypass once all combat
-                    # tests/fixtures provide an offense_check_type. Without one, this
-                    # branch skips the magic pipeline entirely (no anima cost, no events,
-                    # no soulfray), which is a temporary test-compatibility shim, not
-                    # production behavior.
-                    dmg_result = apply_damage_to_opponent(target, technique.effect_type.base_power)
-                    outcome.damage_results.append(dmg_result)
+            combo = action.combo_upgrade
+            dmg_result = apply_damage_to_opponent(
+                target,
+                combo.bonus_damage,
+                bypass_soak=combo.bypass_soak,
+            )
+            outcome.combo_used = combo
+            outcome.damage_results.append(dmg_result)
+    elif not action.combo_upgrade:
+        # All non-combo techniques (damage AND non-attack) route through the magic
+        # pipeline. The resolver internally handles damage (if base_power) and
+        # conditions (if condition_applications rows exist).
+        if offense_check_type is not None:
+            combat_result = resolve_combat_technique(
+                participant=participant,
+                action=action,
+                fatigue_category=fatigue_category,
+                offense_check_type=offense_check_type,
+                offense_check_fn=offense_check_fn,
+            )
+            outcome.damage_results.extend(combat_result.damage_results)
+        # else: no offense_check_type — legacy test-only fallback; stay silent.
 
     # Apply fatigue after action resolves
     apply_fatigue(
@@ -1539,8 +1808,11 @@ def _resolve_npc_action(
     # Bulk-apply all conditions from this NPC action
     if condition_applications:
         from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
+        from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
 
-        bulk_apply_conditions(condition_applications)
+        bulk_apply_conditions(
+            [BulkConditionApplication(target=t, template=ct) for (t, ct) in condition_applications]
+        )
 
     return outcome
 
@@ -1595,6 +1867,38 @@ def _check_boss_transitions(
         if new_phase is not None:
             transitions.append((boss, new_phase.phase_number))
     return transitions
+
+
+def cleanup_completed_encounter(encounter: CombatEncounter) -> None:
+    """Delete encounter-ephemeral CombatNPC ObjectDBs. Persistent NPCs and PCs
+    are never touched. Layer 5 of the multi-layer guard: defensive re-check
+    before each delete in case a corrupt row escaped Layers 1–4.
+
+    CombatOpponent rows are preserved (historical record). Only the ephemeral
+    ObjectDB is destroyed; the SET_NULL FK behavior nulls
+    CombatOpponent.objectdb after deletion.
+    """
+    qs = CombatOpponent.objects.filter(
+        encounter=encounter,
+        objectdb_is_ephemeral=True,
+    ).select_related("objectdb")
+    for opp in qs:
+        objectdb = opp.objectdb
+        if objectdb is None:
+            continue
+        if not is_combat_npc_typeclass(objectdb):
+            logger.error(
+                "Refusing to delete: %s is not a CombatNPC typeclass",
+                objectdb,
+            )
+            continue
+        if has_persistent_identity_references(objectdb):
+            logger.error(
+                "Refusing to delete: %s has persistent identity references",
+                objectdb,
+            )
+            continue
+        objectdb.delete()
 
 
 def _check_encounter_completion(encounter: CombatEncounter) -> bool:
@@ -1685,7 +1989,7 @@ def resolve_round(
         "participant__character_sheet",
         "focused_action",
         "focused_action__effect_type",
-        "focused_target",
+        "focused_opponent_target",
         "combo_upgrade",
     ):
         pc_actions[action.participant_id] = action
@@ -1742,6 +2046,24 @@ def resolve_round(
         vitals.status = CharacterStatus.DEAD
         vitals.save(update_fields=["status", "dying_final_round"])
 
+    # --- Round-tick: decrement rounds_remaining, tick DoT, fire expiry events ---
+    from world.conditions.services import process_round_end  # noqa: PLC0415
+
+    active_participants = CombatParticipant.objects.filter(
+        encounter=encounter,
+        status=ParticipantStatus.ACTIVE,
+    ).select_related("character_sheet__character")
+    for p in active_participants:
+        process_round_end(p.character_sheet.character)
+
+    active_opponents_end = CombatOpponent.objects.filter(
+        encounter=encounter,
+        status=OpponentStatus.ACTIVE,
+    ).select_related("objectdb")
+    for opp in active_opponents_end:
+        if opp.objectdb is not None:
+            process_round_end(opp.objectdb)
+
     # --- Boss phase transitions ---
     result.phase_transitions = _check_boss_transitions(encounter)
 
@@ -1749,6 +2071,7 @@ def resolve_round(
     if _check_encounter_completion(encounter):
         enc.status = EncounterStatus.COMPLETED
         result.encounter_completed = True
+        cleanup_completed_encounter(encounter)
     else:
         # Note: round_number is NOT advanced here. begin_declaration_phase
         # handles incrementing round_number when transitioning from

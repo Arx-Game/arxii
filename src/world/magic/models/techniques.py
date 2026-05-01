@@ -6,6 +6,8 @@ technique to a conditions.Capability with intensity-scaled value.
 CharacterTechnique links a character to a known technique.
 TechniqueOutcomeModifier maps technique check outcomes to Soulfray resilience
 modifiers.
+TechniqueAppliedCondition is an authored through-model binding a Technique to a
+ConditionTemplate with formula-based severity/duration scaling.
 """
 
 from decimal import Decimal
@@ -16,6 +18,14 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.magic.models.gifts import Gift
+
+
+class ConditionTargetKind(models.TextChoices):
+    """Who a condition applied by a technique targets."""
+
+    SELF = "self", "Self"
+    ALLY = "ally", "Ally"
+    ENEMY = "enemy", "Enemy"
 
 
 class EffectTypeManager(NaturalKeyManager):
@@ -295,6 +305,13 @@ class Technique(SharedMemoryModel):
         related_name="techniques",
         help_text="Resolution spec for using this technique outside challenge contexts.",
     )
+    applied_conditions = models.ManyToManyField(
+        "conditions.ConditionTemplate",
+        through="magic.TechniqueAppliedCondition",
+        related_name="techniques_applying",
+        blank=True,
+        help_text="Conditions this technique can apply, with formula-based scaling.",
+    )
 
     class Meta:
         verbose_name = "Technique"
@@ -445,3 +462,116 @@ class TechniqueOutcomeModifier(SharedMemoryModel):
     def __str__(self) -> str:
         sign = "+" if self.modifier_value >= 0 else ""
         return f"{self.outcome}: {sign}{self.modifier_value} to resilience"
+
+
+class TechniqueAppliedCondition(SharedMemoryModel):
+    """Authored row binding a Technique to a ConditionTemplate with formula-based
+    severity / duration scaling. One Technique may have many of these.
+
+    Severity formula:
+        base_severity + floor(severity_intensity_multiplier * effective_intensity)
+            + severity_per_extra_sl * max(0, success_level - minimum_success_level)
+
+    Duration formula (falls back to condition.default_duration_value when base_duration_rounds
+    is None):
+        base + floor(duration_intensity_multiplier * effective_intensity)
+            + duration_per_extra_sl * max(0, success_level - minimum_success_level)
+    """
+
+    technique = models.ForeignKey(
+        Technique,
+        on_delete=models.CASCADE,
+        related_name="condition_applications",
+    )
+    condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.PROTECT,
+        related_name="applied_by_techniques",
+    )
+    target_kind = models.CharField(
+        max_length=16,
+        choices=ConditionTargetKind.choices,
+        default=ConditionTargetKind.ENEMY,
+    )
+    minimum_success_level = models.PositiveIntegerField(
+        default=1,
+        help_text="Minimum success level required to apply this condition.",
+    )
+
+    base_severity = models.PositiveIntegerField(
+        default=1,
+        help_text="Flat base severity applied when the condition triggers.",
+    )
+    severity_intensity_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal(0),
+        help_text="Multiplied by effective_intensity and added to severity.",
+    )
+    severity_per_extra_sl = models.PositiveIntegerField(
+        default=0,
+        help_text="Extra severity added per success level above the minimum.",
+    )
+
+    base_duration_rounds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Base duration in rounds. When null, falls back to condition.default_duration_value."
+        ),
+    )
+    duration_intensity_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal(0),
+        help_text="Multiplied by effective_intensity and added to duration.",
+    )
+    duration_per_extra_sl = models.PositiveIntegerField(
+        default=0,
+        help_text="Extra duration rounds added per success level above the minimum.",
+    )
+
+    stack_count = models.PositiveIntegerField(
+        default=1,
+        help_text="Number of condition stacks applied when triggered.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["technique", "condition", "target_kind"],
+                name="unique_applied_condition_per_technique",
+            ),
+        ]
+        verbose_name = "Technique Applied Condition"
+        verbose_name_plural = "Technique Applied Conditions"
+
+    def __str__(self) -> str:
+        return f"{self.technique.name} → {self.condition.name} ({self.target_kind})"
+
+    def compute_severity(
+        self,
+        *,
+        effective_intensity: int,
+        success_level: int,
+    ) -> int:
+        """Return the severity to apply at the given intensity and success level."""
+        intensity_contribution = int(self.severity_intensity_multiplier * effective_intensity)
+        sl_above = max(0, success_level - self.minimum_success_level)
+        sl_contribution = self.severity_per_extra_sl * sl_above
+        return self.base_severity + intensity_contribution + sl_contribution
+
+    def compute_duration_rounds(
+        self,
+        *,
+        effective_intensity: int,
+        success_level: int,
+    ) -> int | None:
+        """Return the duration in rounds, falling back to condition.default_duration_value."""
+        base = self.base_duration_rounds
+        if base is None:
+            base = self.condition.default_duration_value
+        intensity_contribution = int(self.duration_intensity_multiplier * effective_intensity)
+        sl_above = max(0, success_level - self.minimum_success_level)
+        sl_contribution = self.duration_per_extra_sl * sl_above
+        return base + intensity_contribution + sl_contribution

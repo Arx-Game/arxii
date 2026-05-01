@@ -44,6 +44,7 @@ from world.magic.models import (
     RitualComponentRequirement,
     SoulfrayConfig,
     Technique,
+    TechniqueAppliedCondition,
     TechniqueCapabilityGrant,
     TechniqueOutcomeModifier,
     TechniqueStyle,
@@ -230,6 +231,25 @@ class TechniqueCapabilityGrantFactory(factory.django.DjangoModelFactory):
     capability = factory.SubFactory("world.conditions.factories.CapabilityTypeFactory")
     base_value = 5
     intensity_multiplier = Decimal("1.0")
+
+
+class TechniqueAppliedConditionFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueAppliedCondition — technique-to-condition through model."""
+
+    class Meta:
+        model = TechniqueAppliedCondition
+
+    technique = factory.SubFactory(TechniqueFactory)
+    condition = factory.SubFactory("world.conditions.factories.ConditionTemplateFactory")
+    target_kind = "enemy"
+    minimum_success_level = 1
+    base_severity = 1
+    severity_intensity_multiplier = Decimal(0)
+    severity_per_extra_sl = 0
+    base_duration_rounds = None
+    duration_intensity_multiplier = Decimal(0)
+    duration_per_extra_sl = 0
+    stack_count = 1
 
 
 class IntensityTierFactory(factory.django.DjangoModelFactory):

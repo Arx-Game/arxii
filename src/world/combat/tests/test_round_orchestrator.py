@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock
 
 from django.test import TestCase
+from evennia.objects.models import ObjectDB
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import (
@@ -36,6 +37,7 @@ from world.magic.factories import (
     GiftFactory,
     TechniqueFactory,
 )
+from world.mechanics.factories import CharacterEngagementFactory
 from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
@@ -49,7 +51,12 @@ class ResolveRoundBasicTests(TestCase):
         cls.gift = GiftFactory()
 
     def _setup_encounter(self):
-        """Create a simple encounter: 1 PC, 1 mook, declaration phase."""
+        """Create a simple encounter: 1 PC, 1 mook, declaration phase.
+
+        Sets up the full magic pipeline requirements (CharacterAnima,
+        CharacterEngagement, room location) so tests can pass an
+        offense_check_fn to route through resolve_combat_technique.
+        """
         encounter = CombatEncounterFactory(
             status=EncounterStatus.DECLARING,
             round_number=1,
@@ -74,6 +81,15 @@ class ResolveRoundBasicTests(TestCase):
             max_health=100,
             status=CharacterStatus.ALIVE,
         )
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet.character)
+        room = ObjectDB.objects.create(
+            db_key="TestRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        sheet.character.location = room
+        sheet.character.save()
+
         technique = TechniqueFactory(
             gift=self.gift,
             effect_type=self.effect_attack,
@@ -83,7 +99,7 @@ class ResolveRoundBasicTests(TestCase):
             round_number=1,
             focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
-            focused_target=opponent,
+            focused_opponent_target=opponent,
         )
         # NPC action targeting the PC
         npc_action = CombatOpponentAction.objects.create(
@@ -111,10 +127,17 @@ class ResolveRoundBasicTests(TestCase):
         )
 
     def test_pc_deals_damage(self) -> None:
-        """PC's action deals damage to the opponent."""
+        """PC's action deals damage to the opponent via the magic pipeline."""
         encounter, _participant, opponent, _action, _npc_action = self._setup_encounter()
 
-        resolve_round(encounter)
+        def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
+            return MagicMock(success_level=2)
+
+        resolve_round(
+            encounter,
+            offense_check_fn=mock_check_fn,
+            offense_check_type=MagicMock(),
+        )
 
         opponent.refresh_from_db()
         # base_power is 20, mook has 0 soak, so should take 20 damage
@@ -164,6 +187,15 @@ class ResolveRoundBasicTests(TestCase):
             max_health=100,
             status=CharacterStatus.ALIVE,
         )
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet.character)
+        room = ObjectDB.objects.create(
+            db_key="TestRoomComplete",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        sheet.character.location = room
+        sheet.character.save()
+
         # Attack with base_power 20 > opponent health 10
         technique = TechniqueFactory(
             gift=self.gift,
@@ -174,10 +206,17 @@ class ResolveRoundBasicTests(TestCase):
             round_number=1,
             focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
-            focused_target=opponent,
+            focused_opponent_target=opponent,
         )
 
-        result = resolve_round(encounter)
+        def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
+            return MagicMock(success_level=2)
+
+        result = resolve_round(
+            encounter,
+            offense_check_fn=mock_check_fn,
+            offense_check_type=MagicMock(),
+        )
 
         self.assertTrue(result.encounter_completed)
         encounter.refresh_from_db()
@@ -235,7 +274,7 @@ class ResolveRoundComboTests(TestCase):
             round_number=1,
             focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
-            focused_target=opponent,
+            focused_opponent_target=opponent,
         )
         upgrade_action_to_combo(action, combo)
 
@@ -295,7 +334,7 @@ class ResolveRoundDefenseCheckTests(TestCase):
             round_number=1,
             focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
-            focused_target=opponent,
+            focused_opponent_target=opponent,
         )
         npc_action = CombatOpponentAction.objects.create(
             opponent=opponent,
@@ -369,6 +408,15 @@ class ResolveRoundBossPhaseTests(TestCase):
             max_health=500,
             status=CharacterStatus.ALIVE,
         )
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet.character)
+        room = ObjectDB.objects.create(
+            db_key="TestRoomBoss",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        sheet.character.location = room
+        sheet.character.save()
+
         technique = TechniqueFactory(
             gift=self.gift,
             effect_type=self.effect_attack,
@@ -378,10 +426,17 @@ class ResolveRoundBossPhaseTests(TestCase):
             round_number=1,
             focused_category=ActionCategory.PHYSICAL,
             focused_action=technique,
-            focused_target=boss,
+            focused_opponent_target=boss,
         )
 
-        result = resolve_round(encounter)
+        def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
+            return MagicMock(success_level=2)
+
+        result = resolve_round(
+            encounter,
+            offense_check_fn=mock_check_fn,
+            offense_check_type=MagicMock(),
+        )
 
         boss.refresh_from_db()
         # 200 damage → health 300/500 = 60%, below 70% trigger
@@ -437,7 +492,7 @@ class ResolveRoundOffenseCheckTests(TestCase):
             focused_category=ActionCategory.PHYSICAL,
             effort_level=EffortLevel.MEDIUM,
             focused_action=technique,
-            focused_target=opponent,
+            focused_opponent_target=opponent,
         )
         return encounter, participant, opponent
 

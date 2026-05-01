@@ -56,6 +56,7 @@ from world.conditions.types import (
     AdvancementOutcome,
     AdvancementResistFailureKind,
     ApplyConditionResult,
+    BulkConditionApplication,
     CapabilityStatus,
     CheckModifierResult,
     ConditionStageAdvanceCheckPayload,
@@ -179,6 +180,7 @@ class _ApplyConditionParams:
     target: "ObjectDB"
     severity: int = 1
     duration_rounds: int | None = None
+    stack_count: int = 1
     source_character: "ObjectDB | None" = None
     source_technique: "Technique | None" = None
     source_description: str = ""
@@ -478,7 +480,7 @@ def _handle_stacking(
     interaction_results: InteractionResult,
 ) -> ApplyConditionResult:
     """Handle stacking for an existing condition instance."""
-    existing.stacks += 1
+    existing.stacks += params.stack_count
 
     if template.stack_behavior in (
         StackBehavior.INTENSITY,
@@ -499,7 +501,7 @@ def _handle_stacking(
     return ApplyConditionResult(
         success=True,
         instance=existing,
-        stacks_added=1,
+        stacks_added=params.stack_count,
         message=f"{template.name} stacked to {existing.stacks}",
         removed_conditions=interaction_results.removed,
         applied_conditions=interaction_results.applied,
@@ -609,16 +611,18 @@ def apply_condition(  # noqa: PLR0913
 
 
 @transaction.atomic
-def bulk_apply_conditions(  # noqa: PLR0913
-    applications: list[tuple["ObjectDB", ConditionTemplate]],
+def bulk_apply_conditions(
+    applications: list[BulkConditionApplication],
     *,
-    severity: int = 1,
-    duration_rounds: int | None = None,
     source_character: "ObjectDB | None" = None,
     source_technique: "Technique | None" = None,
     source_description: str = "",
 ) -> list[ApplyConditionResult]:
     """Apply multiple conditions in a single transaction with batched queries.
+
+    Each BulkConditionApplication carries its own severity, duration_rounds,
+    and stack_count. Source attribution (caster, technique, description) is
+    shared across the batch — a single cast is the source of all entries.
 
     Fetches all needed data (active instances, interactions, stages) in ~5
     queries regardless of how many (target, condition) pairs are passed.
@@ -627,18 +631,18 @@ def bulk_apply_conditions(  # noqa: PLR0913
     if not applications:
         return []
 
-    targets = list({target for target, _ in applications})
-    templates = list({template for _, template in applications})
+    targets = list({app.target for app in applications})
+    templates = list({app.template for app in applications})
 
     ctx = _build_bulk_context(targets, templates)
 
     results: list[ApplyConditionResult] = []
-    for target, template in applications:
+    for app in applications:
         source = source_character or source_technique
-        target_location = getattr(target, "location", None)  # noqa: GETATTR_LITERAL
+        target_location = getattr(app.target, "location", None)  # noqa: GETATTR_LITERAL
         pre_payload = ConditionPreApplyPayload(
-            target=target,
-            template=template,
+            target=app.target,
+            template=app.template,
             source=source,
             stage=None,
         )
@@ -661,20 +665,21 @@ def bulk_apply_conditions(  # noqa: PLR0913
                 continue
 
         params = _ApplyConditionParams(
-            target=target,
-            severity=severity,
-            duration_rounds=duration_rounds,
+            target=app.target,
+            severity=app.severity,
+            duration_rounds=app.duration_rounds,
+            stack_count=app.stack_count,
             source_character=source_character,
             source_technique=source_technique,
             source_description=source_description,
         )
-        result = _apply_single(target, template, params, ctx)
+        result = _apply_single(app.target, app.template, params, ctx)
 
         if result.instance is not None and target_location is not None:
             emit_event(
                 EventName.CONDITION_APPLIED,
                 ConditionAppliedPayload(
-                    target=target,
+                    target=app.target,
                     instance=result.instance,
                     stage=result.instance.current_stage,
                 ),
@@ -682,7 +687,7 @@ def bulk_apply_conditions(  # noqa: PLR0913
             )
 
         if result.success and result.instance is not None:
-            _notify_stories_condition_applied(target, result.instance)
+            _notify_stories_condition_applied(app.target, result.instance)
 
         results.append(result)
 

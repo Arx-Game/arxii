@@ -58,46 +58,43 @@ class DamageMultiplierTests(TestCase):
 
 
 class ResolveNpcAttackTests(TestCase):
-    """Tests for resolve_npc_attack with mocked perform_check."""
+    """Tests for resolve_npc_attack with mocked perform_check.
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.encounter = CombatEncounterFactory(
+    Uses setUp (not setUpTestData) because CombatOpponentFactory creates a CombatNPC
+    ObjectDB at the encounter's room, and Evennia's SharedMemoryModel identity map means
+    that room Python object accumulates contents across tests. This makes the room
+    non-deepcopyable (DbHolder), breaking setUpTestData's per-test deepcopy.
+    """
+
+    def setUp(self) -> None:
+        self.encounter = CombatEncounterFactory(
             status=EncounterStatus.DECLARING,
             round_number=1,
         )
         pool = ThreatPoolFactory()
-        cls.entry = ThreatPoolEntryFactory(pool=pool, base_damage=100)
-        cls.opponent = CombatOpponentFactory(
-            encounter=cls.encounter,
+        self.entry = ThreatPoolEntryFactory(pool=pool, base_damage=100)
+        self.opponent = CombatOpponentFactory(
+            encounter=self.encounter,
             threat_pool=pool,
         )
-        cls.sheet = CharacterSheetFactory()
-        cls.participant = CombatParticipantFactory(
-            encounter=cls.encounter,
-            character_sheet=cls.sheet,
+        self.sheet = CharacterSheetFactory()
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=self.sheet,
         )
         CharacterVitals.objects.create(
-            character_sheet=cls.sheet,
+            character_sheet=self.sheet,
             health=200,
             max_health=200,
             status=CharacterStatus.ALIVE,
         )
-        cls.npc_action = CombatOpponentAction.objects.create(
-            opponent=cls.opponent,
+        self.npc_action = CombatOpponentAction.objects.create(
+            opponent=self.opponent,
             round_number=1,
-            threat_entry=cls.entry,
+            threat_entry=self.entry,
         )
-        cls.npc_action.targets.add(cls.participant)
-        cls.mock_check_type = MagicMock()
-
-    def setUp(self) -> None:
-        # Reset vitals health before each test since apply_damage modifies it
-        vitals = CharacterVitals.objects.get(character_sheet=self.sheet)
-        vitals.health = 200
-        vitals.max_health = 200
-        vitals.status = CharacterStatus.ALIVE
-        vitals.save()
+        self.npc_action.targets.add(self.participant)
+        self.mock_check_type = MagicMock()
 
     def _make_mock_check(self, success_level: int) -> MagicMock:
         mock_fn = MagicMock()

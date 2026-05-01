@@ -90,7 +90,21 @@ class ListRetrieveTest(CombatEncounterViewSetTestBase):
 
 
 class GMLifecycleTest(CombatEncounterViewSetTestBase):
-    """Tests for GM-only lifecycle actions."""
+    """Tests for GM-only lifecycle actions.
+
+    Creates a fresh encounter in setUp (not setUpTestData) so that CombatNPCs
+    created during test methods don't contaminate the room's Evennia identity-map
+    cache across tests (DbHolder is not deepcopyable, which breaks setUpTestData).
+    """
+
+    def setUp(self) -> None:
+        # Fresh encounter per test to avoid CombatNPC identity-map contamination.
+        self.encounter = CombatEncounterFactory(scene=self.scene)
+        self.participant = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=self.player_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
 
     def test_begin_round_as_gm(self) -> None:
         """GM can begin a round when encounter is BETWEEN_ROUNDS."""
@@ -250,13 +264,16 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
 
 
 class StaffAccessTest(TestCase):
-    """Staff can access GM endpoints without being scene GM."""
+    """Staff can access GM endpoints without being scene GM.
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.staff = AccountFactory(username="staffuser", is_staff=True)
-        cls.encounter = CombatEncounterFactory(scene=SceneFactory())
-        CombatOpponentFactory(encounter=cls.encounter)
+    Uses setUp (not setUpTestData) because CombatOpponentFactory creates a CombatNPC
+    ObjectDB at the encounter's room, which would break setUpTestData deepcopy.
+    """
+
+    def setUp(self) -> None:
+        self.staff = AccountFactory(username="staffuser", is_staff=True)
+        self.encounter = CombatEncounterFactory(scene=SceneFactory())
+        CombatOpponentFactory(encounter=self.encounter)
 
     def test_staff_begin_round(self) -> None:
         client = APIClient()
