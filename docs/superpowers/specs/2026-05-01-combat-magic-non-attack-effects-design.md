@@ -391,7 +391,9 @@ def add_opponent(
         objectdb = existing_objectdb
         is_ephemeral = False
     elif persona is not None:
-        objectdb = persona.character.objectdb  # walked verified during plan-writing
+        # Persona FK is character_sheet; CharacterSheet.character is OneToOne
+        # to ObjectDB (primary_key=True), so .character already IS the ObjectDB.
+        objectdb = persona.character_sheet.character
         is_ephemeral = False
     else:
         if encounter.room is None:
@@ -949,6 +951,6 @@ These are tuning decisions, not architecture:
 
 - `docs/superpowers/specs/2026-04-30-combat-magic-pipeline-integration-design.md` — predecessor.
 - `src/world/combat/services.py` — existing `CombatAttackResolver`, `_resolve_pc_action`.
-- `src/world/conditions/services.py` — `bulk_apply_conditions`, `process_start_of_round`, `process_end_of_round`.
+- `src/world/conditions/services.py` — `bulk_apply_conditions`, `process_round_start`, `process_round_end`.
 - `src/world/magic/services/techniques.py` — `use_technique`, event emission.
 - `src/world/magic/models/techniques.py` — `Technique`, `TechniqueCapabilityGrant` (pattern for formula-based scaling).
