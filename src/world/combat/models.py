@@ -38,6 +38,15 @@ class CombatEncounter(SharedMemoryModel):
         blank=True,
         related_name="combat_encounters",
     )
+    room = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.PROTECT,
+        related_name="combat_encounters",
+        null=True,
+        blank=True,
+        help_text="Room where the encounter takes place. Ephemeral CombatNPC "
+        "ObjectDBs are placed here at creation.",
+    )
     round_number = models.PositiveIntegerField(default=0)
     status = models.CharField(
         max_length=30,

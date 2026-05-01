@@ -2,6 +2,7 @@
 
 from django.db import IntegrityError
 from django.test import TestCase
+from evennia.utils.test_resources import EvenniaTestCase
 
 from world.combat.constants import (
     ActionCategory,
@@ -264,3 +265,14 @@ class CombatTechniqueIntegrationTests(TestCase):
             technique_use_result=MagicMock(spec=TechniqueUseResult),
         )
         self.assertEqual(res.damage_results, [])
+
+
+class CombatEncounterRoomTests(EvenniaTestCase):
+    def test_encounter_has_room_fk(self) -> None:
+        from evennia import create_object
+
+        from world.combat.factories import CombatEncounterFactory
+
+        room = create_object("typeclasses.rooms.Room", key="Combat Room")
+        enc = CombatEncounterFactory(room=room)
+        self.assertEqual(enc.room, room)

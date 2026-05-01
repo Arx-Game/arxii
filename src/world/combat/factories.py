@@ -40,6 +40,12 @@ class CombatEncounterFactory(factory_django.DjangoModelFactory):
     pace_mode = PaceMode.TIMED
     pace_timer_minutes = DEFAULT_PACE_TIMER_MINUTES
 
+    @factory.lazy_attribute
+    def room(self) -> object:
+        from evennia import create_object
+
+        return create_object("typeclasses.rooms.Room", key="Test Combat Room")
+
 
 class ThreatPoolFactory(factory_django.DjangoModelFactory):
     """Factory for ThreatPool."""
