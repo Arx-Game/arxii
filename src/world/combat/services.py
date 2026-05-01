@@ -417,9 +417,8 @@ def resolve_combat_technique(
     Soulfray warning is auto-confirmed at round resolution time —
     frontend handles preview before submission.
 
-    AFFECTED-per-target events are deferred (CombatOpponent is not an
-    ObjectDB; targets=[] until the opponent <-> ObjectDB relationship
-    is decided).
+    TECHNIQUE_AFFECTED fires per target via _build_affected_targets:
+    opponent target → opp.objectdb; ally target → ally character ObjectDB.
 
     Other pull effect kinds are deferred:
     - INTENSITY_BUMP: needs runtime stats to accept combat context
@@ -441,12 +440,14 @@ def resolve_combat_technique(
         offense_check_fn=offense_check_fn,
     )
 
+    targets = _build_affected_targets(participant, action)
+
     technique_use_result = use_technique(
         character=participant.character_sheet.character,
         technique=action.focused_action,
         resolve_fn=resolver,
         confirm_soulfray_risk=True,
-        targets=[],  # task 15 will replace with _build_affected_targets
+        targets=targets,
     )
 
     return _build_combat_result(technique_use_result, resolver)
