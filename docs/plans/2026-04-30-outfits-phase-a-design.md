@@ -308,12 +308,21 @@ target argument). Register both in `actions/registry.py`.
 
 ### Telnet commands
 
-- **`undress`** — ships in Phase A. Trivial parser (no args), dispatches to
-  `UndressAction`. Players will type this often; worth landing now.
-- **`wear outfit <name>`** — natural telnet affordance for `ApplyOutfitAction`,
-  but more parser work (resolve outfit by name + reachable wardrobe). Defer
-  to a polish PR after frontend lands; web players cover the apply flow with
-  the wardrobe page.
+Both telnet commands ship in Phase A so the feature is complete on every
+transport:
+
+- **`undress`** — trivial parser (no args), dispatches to `UndressAction`.
+- **`wear outfit <name>`** — extend the existing `CmdWear` to fork on the
+  `outfit ` prefix. Pattern mirrors `CmdGet`'s `from <container>` extension:
+  `resolve_action_args` detects the `outfit ` prefix, looks up the outfit
+  by `(character_sheet, name)` (the unique constraint guarantees no
+  ambiguity), reassigns `self.action = ApplyOutfitAction()`, and returns
+  `{"outfit_id": outfit.pk}`. Wardrobe-reach validation happens in the
+  service function.
+
+If the outfit isn't found by name, raise `CommandError` with a clear
+"You have no outfit named '<name>'." message. Don't leak whether other
+characters have outfits by that name.
 
 ### REST endpoints
 
@@ -571,8 +580,6 @@ No data migration needed.
 
 - Phase B (Fashion), Phase C (Modeling), Phase D (Legendary + Mantle) —
   separate brainstorm sessions, separate PRs.
-- Telnet `wear outfit <name>` command — natural follow-up after frontend
-  lands.
 - Drag-to-equip individual items in the wardrobe view.
 - Servant retrieval (rooms-and-estates roadmap).
 - Outfit sharing / cross-character viewing — not planned.
