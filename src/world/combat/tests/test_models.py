@@ -276,3 +276,30 @@ class CombatEncounterRoomTests(EvenniaTestCase):
         room = create_object("typeclasses.rooms.Room", key="Combat Room")
         enc = CombatEncounterFactory(room=room)
         self.assertEqual(enc.room, room)
+
+
+class CombatOpponentSchemaConstraintTests(EvenniaTestCase):
+    def test_persona_bearing_opponent_cannot_be_ephemeral_db_layer(self) -> None:
+        from django.db import IntegrityError, transaction
+
+        from world.combat.factories import CombatEncounterFactory, ThreatPoolFactory
+        from world.combat.models import CombatOpponent
+        from world.scenes.factories import PersonaFactory
+
+        persona = PersonaFactory()
+        encounter = CombatEncounterFactory()
+        threat_pool = ThreatPoolFactory()
+        objdb = persona.character_sheet.character
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                CombatOpponent.objects.create(
+                    encounter=encounter,
+                    name="Bad Mook",
+                    tier="minor",
+                    max_health=10,
+                    health=10,
+                    threat_pool=threat_pool,
+                    persona=persona,
+                    objectdb=objdb,
+                    objectdb_is_ephemeral=True,  # violates check
+                )
