@@ -418,9 +418,32 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     soak_value: int = 0,
     probing_threshold: int | None = None,
     persona: Persona | None = None,
+    existing_objectdb: ObjectDB | None = None,
 ) -> CombatOpponent:
-    """Create a CombatOpponent with health equal to max_health."""
-    return CombatOpponent.objects.create(
+    """Create a CombatOpponent. Three sources for the ObjectDB:
+
+    - existing_objectdb: pre-existing OD (PvP, named NPC w/o persona). Never ephemeral.
+    - persona: reuses persona's character ObjectDB. Never ephemeral.
+    - neither: creates a new CombatNPC OD scoped to this encounter. Ephemeral.
+    """
+    from evennia.utils.create import create_object  # noqa: PLC0415
+
+    from world.combat.typeclasses.combat_npc import CombatNPC  # noqa: PLC0415
+
+    if existing_objectdb is not None:
+        objectdb = existing_objectdb
+        is_ephemeral = False
+    elif persona is not None:
+        objectdb = persona.character_sheet.character
+        is_ephemeral = False
+    else:
+        if encounter.room is None:
+            msg = "Cannot create ephemeral CombatNPC: encounter has no room."
+            raise ValueError(msg)
+        objectdb = create_object(CombatNPC, key=name, location=encounter.room)
+        is_ephemeral = True
+
+    opp = CombatOpponent(
         encounter=encounter,
         name=name,
         tier=tier,
@@ -431,7 +454,12 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
         soak_value=soak_value,
         probing_threshold=probing_threshold,
         persona=persona,
+        objectdb=objectdb,
+        objectdb_is_ephemeral=is_ephemeral,
     )
+    opp.full_clean()
+    opp.save()
+    return opp
 
 
 @transaction.atomic

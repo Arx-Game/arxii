@@ -313,7 +313,11 @@ class CombatOpponentCleanTests(EvenniaTestCase):
 
         from world.combat.factories import CombatOpponentFactory
 
-        opp = CombatOpponentFactory.build(objectdb=None, objectdb_is_ephemeral=True)
+        # objectdb_id=None suppresses the factory's lazy_attribute so we can
+        # test clean() with a genuinely null ObjectDB reference.
+        opp = CombatOpponentFactory.build(
+            objectdb=None, objectdb_id=None, objectdb_is_ephemeral=True
+        )
         with self.assertRaises(ValidationError):
             opp.clean()
 
@@ -327,9 +331,11 @@ class CombatOpponentCleanTests(EvenniaTestCase):
 
         npc = create_object(CombatNPC, key="Conflicted")
         persona = PersonaFactory()
+        # objectdb_id=npc.pk ensures the factory uses the given NPC, not a new one.
         opp = CombatOpponentFactory.build(
             persona=persona,
             objectdb=npc,
+            objectdb_id=npc.pk,
             objectdb_is_ephemeral=True,
         )
         with self.assertRaises(ValidationError):
@@ -342,8 +348,10 @@ class CombatOpponentCleanTests(EvenniaTestCase):
         from world.combat.factories import CombatOpponentFactory
 
         regular_char = create_object("typeclasses.characters.Character", key="NotANPC")
+        # objectdb_id=regular_char.pk ensures the factory uses the given char, not a new CombatNPC.
         opp = CombatOpponentFactory.build(
             objectdb=regular_char,
+            objectdb_id=regular_char.pk,
             objectdb_is_ephemeral=True,
         )
         with self.assertRaises(ValidationError):
@@ -356,8 +364,11 @@ class CombatOpponentCleanTests(EvenniaTestCase):
         from world.combat.factories import CombatOpponentFactory
 
         sheet = CharacterSheetFactory()
+        # objectdb_id=sheet.character.pk ensures the factory uses the given char,
+        # not a new CombatNPC from the lazy_attribute.
         opp = CombatOpponentFactory.build(
             objectdb=sheet.character,
+            objectdb_id=sheet.character.pk,
             objectdb_is_ephemeral=True,
         )
         with self.assertRaises(ValidationError):
@@ -369,9 +380,12 @@ class CombatOpponentCleanTests(EvenniaTestCase):
         from world.scenes.factories import PersonaFactory
 
         persona = PersonaFactory()
+        char = persona.character_sheet.character
+        # objectdb_id=char.pk ensures the factory uses the persona's char, not a new CombatNPC.
         opp = CombatOpponentFactory.build(
             persona=persona,
-            objectdb=persona.character_sheet.character,
+            objectdb=char,
+            objectdb_id=char.pk,
             objectdb_is_ephemeral=False,
         )
         opp.clean()  # should not raise
