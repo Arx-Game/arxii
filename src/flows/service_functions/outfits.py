@@ -14,6 +14,7 @@ from django.db import transaction
 from flows.object_states.character_state import CharacterState
 from flows.object_states.item_state import ItemState
 from flows.object_states.outfit_state import OutfitState
+from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.inventory import equip, unequip
 from world.items.exceptions import NotAContainer, NotReachable, PermissionDenied, SlotIncompatible
 from world.items.models import EquippedItem, ItemInstance, Outfit, OutfitSlot
@@ -79,8 +80,10 @@ def save_outfit(
 
     Validation:
         - ``wardrobe.template.is_wardrobe`` is True (raises ``NotAContainer``)
-        - Reach validation (wardrobe in actor's reach) is enforced by the
-          REST permission class — not duplicated here.
+        - Wardrobe is reachable by the character (raises ``NotReachable``).
+          Validated here at the service layer, not in a permission class —
+          both REST and any future caller (e.g. a save command from telnet)
+          get the check for free.
         - Uniqueness of (character_sheet, name) is enforced at the database
           level via UniqueConstraint; callers see ``IntegrityError`` on
           collision.
@@ -89,6 +92,15 @@ def save_outfit(
     """
     if not wardrobe.template.is_wardrobe:
         raise NotAContainer
+
+    sdm = SceneDataManager()
+    # ItemState wraps ItemInstance (Django model); BaseState type-hints
+    # ArxTypeclass for typeclass-backed objects like Character/Room. The
+    # state class itself accepts ItemInstance — the existing apply_outfit
+    # below does the same. ty: ignore[invalid-argument-type]
+    wardrobe_state = ItemState(wardrobe, context=sdm)  # ty: ignore[invalid-argument-type]
+    if not wardrobe_state.is_reachable_by(character_sheet.character):
+        raise NotReachable
 
     with transaction.atomic():
         outfit = Outfit.objects.create(

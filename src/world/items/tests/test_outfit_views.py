@@ -37,9 +37,15 @@ class _OutfitViewSetSetupMixin:
     """
 
     def setUp(self) -> None:
+        # Shared room so the wardrobe is in reach of character A.
+        self.room = ObjectDBFactory(
+            db_key="OutfitViewRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+
         # Account A → plays character/sheet A.
         self.account_a = AccountFactory(username="outfit_view_account_a")
-        self.character_a = CharacterFactory(db_key="OutfitViewCharA")
+        self.character_a = CharacterFactory(db_key="OutfitViewCharA", location=self.room)
         self.sheet_a = CharacterSheetFactory(character=self.character_a)
         self.entry_a = RosterEntryFactory(character_sheet=self.sheet_a)
         self.player_data_a = PlayerDataFactory(account=self.account_a)
@@ -51,7 +57,7 @@ class _OutfitViewSetSetupMixin:
 
         # Account B → plays character/sheet B (used for non-owner tests).
         self.account_b = AccountFactory(username="outfit_view_account_b")
-        self.character_b = CharacterFactory(db_key="OutfitViewCharB")
+        self.character_b = CharacterFactory(db_key="OutfitViewCharB", location=self.room)
         self.sheet_b = CharacterSheetFactory(character=self.character_b)
         self.entry_b = RosterEntryFactory(character_sheet=self.sheet_b)
         self.player_data_b = PlayerDataFactory(account=self.account_b)
@@ -61,7 +67,8 @@ class _OutfitViewSetSetupMixin:
             end_date=None,
         )
 
-        # Wardrobe instance for sheet A.
+        # Wardrobe instance for sheet A — placed in the shared room so reach
+        # validation in save_outfit passes for character A.
         self.wardrobe_template = ItemTemplateFactory(
             name="OutfitViewWardrobeA",
             is_wardrobe=True,
@@ -71,6 +78,8 @@ class _OutfitViewSetSetupMixin:
             db_key="OutfitViewWardrobeAObj",
             db_typeclass_path="typeclasses.objects.Object",
         )
+        wardrobe_obj.location = self.room
+        wardrobe_obj.save()
         self.wardrobe = ItemInstanceFactory(
             template=self.wardrobe_template,
             game_object=wardrobe_obj,
@@ -301,6 +310,40 @@ class OutfitViewSetTests(_OutfitViewSetSetupMixin, TestCase):
 
         # Cleanup so other tests don't see the equipped rows.
         EquippedItem.objects.filter(character=self.character_a).delete()
+
+    def test_create_rejects_when_wardrobe_unreachable(self) -> None:
+        """POST with a wardrobe in a different room → 400 (NotReachable).
+
+        Regression test for I4: previously save_outfit's docstring claimed
+        REST validated reach, but no permission class actually checked. The
+        service now validates reach itself, and the serializer surfaces it
+        as a 400 ValidationError on the wardrobe field.
+        """
+        other_room = ObjectDBFactory(
+            db_key="OutfitViewOtherRoomForReach",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        # Move our wardrobe somewhere the actor can't see.
+        self.wardrobe.game_object.location = other_room
+        self.wardrobe.game_object.save()
+
+        response = self.client.post(
+            "/api/items/outfits/",
+            {
+                "character_sheet": self.sheet_a.pk,
+                "wardrobe": self.wardrobe.pk,
+                "name": "UnreachableWardrobeLook",
+                "description": "",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("can't reach that", str(response.data))
+        self.assertFalse(
+            Outfit.objects.filter(
+                character_sheet=self.sheet_a, name="UnreachableWardrobeLook"
+            ).exists()
+        )
 
     def test_create_rejects_non_wardrobe_template(self) -> None:
         """POST with a wardrobe arg pointing at a non-wardrobe item → 400."""
