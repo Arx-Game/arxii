@@ -147,6 +147,10 @@ class ActionRegistryTests(TestCase):
             "get",
             "drop",
             "give",
+            "equip",
+            "unequip",
+            "put_in",
+            "take_out",
             "traverse_exit",
             "home",
         }

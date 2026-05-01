@@ -8,7 +8,6 @@ from rest_framework.permissions import SAFE_METHODS, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.views import APIView
 
-from world.character_sheets.models import CharacterSheet
 from world.items.filters import (
     EquippedItemFilter,
     InteractionTypeFilter,
@@ -28,7 +27,6 @@ from world.items.models import (
 )
 from world.items.serializers import (
     EquippedItemReadSerializer,
-    EquippedItemWriteSerializer,
     InteractionTypeSerializer,
     ItemFacetReadSerializer,
     ItemFacetWriteSerializer,
@@ -36,14 +34,7 @@ from world.items.serializers import (
     ItemTemplateListSerializer,
     QualityTierSerializer,
 )
-from world.items.services.equip import unequip_item
 from world.items.services.facets import remove_facet_from_item
-from world.magic.services.gain import account_for_sheet
-
-
-def _account_currently_plays(account: object, sheet: CharacterSheet) -> bool:
-    """Return True iff ``account`` has the active tenure on ``sheet``'s roster entry."""
-    return account_for_sheet(sheet) == account
 
 
 class ItemFacetWritePermission(IsAuthenticated):
@@ -70,38 +61,6 @@ class ItemFacetWritePermission(IsAuthenticated):
         if request.user.is_staff:
             return True
         return obj.item_instance.owner_id == request.user.pk
-
-
-class EquippedItemWritePermission(IsAuthenticated):
-    """Allow equip/unequip only when the request.user is currently playing the character."""
-
-    def has_permission(self, request: Request, view: APIView) -> bool:
-        if not super().has_permission(request, view):
-            return False
-        if request.method in SAFE_METHODS or request.user.is_staff:
-            return True
-        if request.method != "POST":
-            # DELETE: ownership checked at object level via has_object_permission.
-            return True
-        sheet_pk = request.data.get("character_sheet")
-        if sheet_pk is None:
-            # Missing field — serializer will reject as required.
-            return True
-        try:
-            sheet = CharacterSheet.objects.get(pk=sheet_pk)
-        except CharacterSheet.DoesNotExist:
-            # Non-existent sheet — serializer will reject.
-            return True
-        return _account_currently_plays(request.user, sheet)
-
-    def has_object_permission(self, request: Request, view: APIView, obj: EquippedItem) -> bool:
-        if request.user.is_staff:
-            return True
-        try:
-            sheet = obj.character.sheet_data
-        except CharacterSheet.DoesNotExist:
-            return False
-        return _account_currently_plays(request.user, sheet)
 
 
 class ItemTemplatePagination(PageNumberPagination):
@@ -193,11 +152,15 @@ class ItemFacetViewSet(viewsets.ModelViewSet):
         remove_facet_from_item(item_facet=instance)
 
 
-class EquippedItemViewSet(viewsets.ModelViewSet):
-    """ViewSet for EquippedItem equip (POST) / list (GET) / unequip (DELETE)."""
+class EquippedItemViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only ViewSet for EquippedItem (GET list/detail).
 
-    http_method_names = ["get", "post", "delete", "head", "options"]
-    permission_classes = [EquippedItemWritePermission]
+    Mutations (equip/unequip) flow through the unified action dispatcher
+    via the ``execute_action`` websocket inputfunc — REST stays read-only.
+    """
+
+    serializer_class = EquippedItemReadSerializer
+    permission_classes = [IsAuthenticated]
     pagination_class = ItemTemplatePagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = EquippedItemFilter
@@ -207,13 +170,3 @@ class EquippedItemViewSet(viewsets.ModelViewSet):
         "character",
         "character__sheet_data",
     ).order_by("-pk")
-
-    def get_serializer_class(self) -> type[serializers.ModelSerializer]:
-        """Use write serializer for create, read serializer otherwise."""
-        if self.action == "create":
-            return EquippedItemWriteSerializer
-        return EquippedItemReadSerializer
-
-    def perform_destroy(self, instance: EquippedItem) -> None:
-        """Unequip item via service so cache invalidation fires."""
-        unequip_item(equipped_item=instance)

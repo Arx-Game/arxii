@@ -68,17 +68,64 @@ What shipped:
   `SlotIncompatible` in `world.items.exceptions`; `CovenantRoleNeverHeldError` in
   `world.covenants.exceptions`; `NoMatchingWornFacetItemsError` in `world.magic.exceptions`
 
+## Inventory Service Functions (DONE)
+
+**Branch:** `inventory-service-functions-design`
+
+Action-layer service functions composed on top of the items data layer. The split is
+deliberate: `world/items/services/` owns row-level mutations (equip_item / unequip_item /
+attach_facet_to_item / remove_facet_from_item — narrow, atomic, no permission logic),
+while `flows/service_functions/inventory.py` owns the player-facing actions (pick_up,
+drop, give, equip, unequip, put_in, take_out — permission checks via `ItemState`,
+`OwnershipEvent` rows on transfers, auto-unequip on drop/give, slot-conflict auto-swap on
+equip). The 7 service functions back the `Action` classes in `actions/definitions/items.py`
+(plus the refactored Get/Drop/Give in `actions/definitions/movement.py`); telnet commands
+and the existing web action dispatcher both call `action.run()`, so the two transports
+cannot diverge.
+
+What landed:
+
+- **`InventoryError` typed exception family** in `world.items.exceptions` —
+  `PermissionDenied`, `NotEquipped`, `NotInPossession`, `NoDropLocation`, `NotAContainer`,
+  `ContainerClosed`, `ContainerFull`, `ItemTooLarge` — each with a `user_message` for safe
+  surfacing through the API
+- **`ItemState`** flow object state with default-allow `can_take`, `can_drop`, `can_give`,
+  `can_equip` permission methods
+- **Action-layer service functions** in `flows/service_functions/inventory.py`:
+  `pick_up`, `drop`, `give`, `equip`, `unequip`, `put_in`, `take_out` — all wrapped in
+  `transaction.atomic`, all delegating row-level mutations to `world.items.services`
+- **`OwnershipEvent(GIVEN)`** rows written on `give` so the ownership ledger tracks
+  player-to-player transfers (crafting will write its own `OwnershipEvent.CREATED`)
+- **Action classes** for equip/unequip/put_in/take_out in `actions/definitions/items.py`,
+  plus the existing Get/Drop/Give in `actions/definitions/movement.py` refactored to use
+  the new service functions (so they now track ownership and write OwnershipEvent rows)
+- **Telnet commands** `wear`, `remove`, `put`, `withdraw` in
+  `commands/evennia_overrides/items.py`, registered in `CharacterCmdSet`. The existing
+  `get`/`drop`/`give` commands continue to work unchanged
+- **`execute_action` WebSocket inputfunc** in `src/server/conf/inputfuncs.py` —
+  generic action dispatcher: the React frontend sends
+  `{type: "execute_action", action: "<key>", kwargs: {target_id: N, ...}}`,
+  the inputfunc resolves `_id`-suffix kwargs to ObjectDB instances and runs the
+  registered action against `session.puppet`. Returns the result via the new
+  `ACTION_RESULT` WebSocket message type. This is now the canonical mutation
+  channel for the React client — REST is read-only
+- **Removed the REST POST/DELETE on `/api/items/equipped-items/`** — they were a
+  duplicate path that bypassed the action layer's policy (raised `SlotConflict`
+  instead of auto-swapping). All inventory mutations now flow through the action
+  layer; the ViewSet remains as a read-only list/retrieve endpoint
+
 ## What's Needed for MVP
 - ~~Equipment slot / body part model~~ — **done** (TemplateSlot with BodyRegion + EquipmentLayer)
 - ~~Worn items tracking~~ — **done** (EquippedItem model + equip/unequip services)
 - ~~Item type system~~ — **partially done** (ItemTemplate with container/stacking/consumable flags; no weapon/armor stat blocks yet)
 - ~~Item quality~~ — **done** (QualityTier lookup table with stat multipliers)
 - ~~Item facet system~~ — **done** (ItemFacet through-model, attach/remove services, modifier integration — Spec D PR1)
+- ~~Inventory service functions~~ — **done** (pick_up, drop, give, equip, unequip, put_in, take_out — backing 7 Action classes; telnet commands and existing web action dispatcher both supported)
 - Item stats model — combat properties, condition/durability (not started)
-- Visible equipment display — what others see when looking at a character (not started)
-- Inventory service functions — give, pick up, drop (equip/unequip done)
+- Visible equipment display — what others see when looking at a character; perception-layer integration into `look` output (not started)
 - Item interaction service functions — using items, consuming charges (not started)
-- Equipment UI — inventory management, equipping/unequipping, viewing item details (not started)
+- Crafting integration — `OwnershipEvent.CREATED` rows written when crafted items are produced (not started; tracked under crafting roadmap)
+- Equipment UI — inventory management, equipping/unequipping, viewing item details; React components dispatching the registered equip/unequip/put_in/take_out actions through the existing action dispatcher (not started)
 
 ## Magic Integration (Spec A)
 - **Items as thread anchors** — The new `Thread` model supports an `ITEM` anchor kind

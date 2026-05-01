@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
+from actions.definitions.items import TakeOutAction
+from actions.definitions.movement import GetAction
 from actions.types import ActionResult
 from commands.evennia_overrides.communication import CmdPose, CmdSay, CmdWhisper
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
@@ -181,6 +183,80 @@ class CmdGetTests(TestCase):
         with patch.object(cmd.action, "run", return_value=ActionResult(success=True)) as mock_run:
             cmd.func()
             mock_run.assert_called_once_with(actor=caller, target=item)
+        # Plain ``get <item>`` should keep using GetAction.
+        assert isinstance(cmd.action, GetAction)
+
+    def test_get_from_container_dispatches_take_out(self):
+        room = ObjectDBFactory(
+            db_key="Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        chest = ObjectDBFactory(db_key="Chest", location=room)
+        ring = ObjectDBFactory(db_key="Ring", location=chest)
+        caller.search = MagicMock(side_effect=[chest, ring])
+        caller.msg = MagicMock()
+        cmd = _make_cmd(CmdGet, caller, args=" Ring from Chest")
+        # Patch TakeOutAction.run so the test doesn't run the action body.
+        with patch.object(
+            TakeOutAction,
+            "run",
+            return_value=ActionResult(success=True),
+        ) as mock_run:
+            cmd.func()
+            mock_run.assert_called_once_with(actor=caller, target=ring)
+        assert isinstance(cmd.action, TakeOutAction)
+        # Verify search was called for container, then for item-in-container.
+        assert caller.search.call_args_list[0].args[0] == "Chest"
+        assert caller.search.call_args_list[1].args[0] == "Ring"
+        assert caller.search.call_args_list[1].kwargs.get("location") == chest
+
+    def test_take_alias_from_container_dispatches_take_out(self):
+        room = ObjectDBFactory(
+            db_key="Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        chest = ObjectDBFactory(db_key="Chest", location=room)
+        ring = ObjectDBFactory(db_key="Ring", location=chest)
+        caller.search = MagicMock(side_effect=[chest, ring])
+        caller.msg = MagicMock()
+        cmd = _make_cmd(CmdGet, caller, args=" Ring from Chest")
+        # The ``take`` alias resolves to the same CmdGet class — verify by
+        # forcing cmdname to the alias.
+        cmd.cmdname = "take"
+        with patch.object(
+            TakeOutAction,
+            "run",
+            return_value=ActionResult(success=True),
+        ) as mock_run:
+            cmd.func()
+            mock_run.assert_called_once_with(actor=caller, target=ring)
+        assert isinstance(cmd.action, TakeOutAction)
+
+    def test_get_from_missing_container_errors(self):
+        room = ObjectDBFactory(
+            db_key="Room",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        caller = ObjectDBFactory(
+            db_key="Alice",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        caller.search = MagicMock(return_value=None)
+        caller.msg = MagicMock()
+        cmd = _make_cmd(CmdGet, caller, args=" Ring from Chest")
+        cmd.func()
+        assert caller.msg.call_count >= 1
 
 
 class CmdDropTests(TestCase):
