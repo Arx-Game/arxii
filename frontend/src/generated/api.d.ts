@@ -2556,6 +2556,86 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/covenants/character-roles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for character covenant role assignments.
+     *
+     *     Non-staff users only see assignments on character sheets they currently
+     *     play (via the active RosterTenure chain). Staff see all assignments;
+     *     they may filter explicitly by character_sheet PK to scope results.
+     */
+    get: operations['covenants_character_roles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/character-roles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for character covenant role assignments.
+     *
+     *     Non-staff users only see assignments on character sheets they currently
+     *     play (via the active RosterTenure chain). Staff see all assignments;
+     *     they may filter explicitly by character_sheet PK to scope results.
+     */
+    get: operations['covenants_character_roles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/gear-compatibilities/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only ViewSet for authored covenant×archetype compatibility rows. */
+    get: operations['covenants_gear_compatibilities_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/gear-compatibilities/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only ViewSet for authored covenant×archetype compatibility rows. */
+    get: operations['covenants_gear_compatibilities_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/distinctions/categories/': {
     parameters: {
       query?: never;
@@ -2996,6 +3076,136 @@ export interface paths {
     get: operations['episodes_scenes_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eras/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for Era — metaplot era (season) management.
+     *
+     *     Read access: any authenticated user (eras are public metaplot info).
+     *     Write access: staff only.
+     *     Advance/archive actions: staff only (IsAdminUser).
+     *
+     *     Wave 11 will register this route; for now urls.py registers it.
+     */
+    get: operations['eras_list'];
+    put?: never;
+    /**
+     * @description ViewSet for Era — metaplot era (season) management.
+     *
+     *     Read access: any authenticated user (eras are public metaplot info).
+     *     Write access: staff only.
+     *     Advance/archive actions: staff only (IsAdminUser).
+     *
+     *     Wave 11 will register this route; for now urls.py registers it.
+     */
+    post: operations['eras_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eras/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for Era — metaplot era (season) management.
+     *
+     *     Read access: any authenticated user (eras are public metaplot info).
+     *     Write access: staff only.
+     *     Advance/archive actions: staff only (IsAdminUser).
+     *
+     *     Wave 11 will register this route; for now urls.py registers it.
+     */
+    get: operations['eras_retrieve'];
+    /**
+     * @description ViewSet for Era — metaplot era (season) management.
+     *
+     *     Read access: any authenticated user (eras are public metaplot info).
+     *     Write access: staff only.
+     *     Advance/archive actions: staff only (IsAdminUser).
+     *
+     *     Wave 11 will register this route; for now urls.py registers it.
+     */
+    put: operations['eras_update'];
+    post?: never;
+    /**
+     * @description ViewSet for Era — metaplot era (season) management.
+     *
+     *     Read access: any authenticated user (eras are public metaplot info).
+     *     Write access: staff only.
+     *     Advance/archive actions: staff only (IsAdminUser).
+     *
+     *     Wave 11 will register this route; for now urls.py registers it.
+     */
+    delete: operations['eras_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for Era — metaplot era (season) management.
+     *
+     *     Read access: any authenticated user (eras are public metaplot info).
+     *     Write access: staff only.
+     *     Advance/archive actions: staff only (IsAdminUser).
+     *
+     *     Wave 11 will register this route; for now urls.py registers it.
+     */
+    patch: operations['eras_partial_update'];
+    trace?: never;
+  };
+  '/api/eras/{id}/advance/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/eras/{id}/advance/
+     *
+     *     Staff-only. Closes the current ACTIVE era; activates this UPCOMING era.
+     *     Returns 200 with updated EraSerializer data, or 400 with detail on error.
+     */
+    post: operations['eras_advance_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eras/{id}/archive/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/eras/{id}/archive/
+     *
+     *     Staff-only. Marks this era CONCLUDED without advancing to a new one.
+     *     Idempotent for CONCLUDED eras. Returns 200, or 400 with detail on error.
+     */
+    post: operations['eras_archive_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -3571,6 +3781,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/gm/profiles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only list of approved GM profiles.
+     *
+     *     Accessible by any authenticated user so players can pick a GM when
+     *     offering their story. Supports ``?search=<username>`` for autocomplete.
+     */
+    get: operations['gm_profiles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/gm/profiles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only list of approved GM profiles.
+     *
+     *     Accessible by any authenticated user so players can pick a GM when
+     *     offering their story. Supports ``?search=<username>`` for autocomplete.
+     */
+    get: operations['gm_profiles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/gm/queue/': {
     parameters: {
       query?: never;
@@ -3619,7 +3873,14 @@ export interface paths {
     /**
      * @description GM table membership management.
      *
-     *     Staff sees all memberships. GMs see only memberships for tables they own.
+     *     Staff sees all memberships. GMs (table owners) see all memberships at their
+     *     tables. Authenticated players see all memberships at tables where any of
+     *     their personas has an active membership — this gives them the member roster
+     *     for tables they belong to.
+     *
+     *     Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+     *     → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+     *
      *     Creation uses the join_table service to apply temporary-persona validation.
      *     Destroy is a soft-leave — the record remains with left_at set.
      */
@@ -3628,7 +3889,14 @@ export interface paths {
     /**
      * @description GM table membership management.
      *
-     *     Staff sees all memberships. GMs see only memberships for tables they own.
+     *     Staff sees all memberships. GMs (table owners) see all memberships at their
+     *     tables. Authenticated players see all memberships at tables where any of
+     *     their personas has an active membership — this gives them the member roster
+     *     for tables they belong to.
+     *
+     *     Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+     *     → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+     *
      *     Creation uses the join_table service to apply temporary-persona validation.
      *     Destroy is a soft-leave — the record remains with left_at set.
      */
@@ -3649,7 +3917,14 @@ export interface paths {
     /**
      * @description GM table membership management.
      *
-     *     Staff sees all memberships. GMs see only memberships for tables they own.
+     *     Staff sees all memberships. GMs (table owners) see all memberships at their
+     *     tables. Authenticated players see all memberships at tables where any of
+     *     their personas has an active membership — this gives them the member roster
+     *     for tables they belong to.
+     *
+     *     Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+     *     → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+     *
      *     Creation uses the join_table service to apply temporary-persona validation.
      *     Destroy is a soft-leave — the record remains with left_at set.
      */
@@ -3657,7 +3932,14 @@ export interface paths {
     /**
      * @description GM table membership management.
      *
-     *     Staff sees all memberships. GMs see only memberships for tables they own.
+     *     Staff sees all memberships. GMs (table owners) see all memberships at their
+     *     tables. Authenticated players see all memberships at tables where any of
+     *     their personas has an active membership — this gives them the member roster
+     *     for tables they belong to.
+     *
+     *     Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+     *     → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+     *
      *     Creation uses the join_table service to apply temporary-persona validation.
      *     Destroy is a soft-leave — the record remains with left_at set.
      */
@@ -3666,7 +3948,14 @@ export interface paths {
     /**
      * @description GM table membership management.
      *
-     *     Staff sees all memberships. GMs see only memberships for tables they own.
+     *     Staff sees all memberships. GMs (table owners) see all memberships at their
+     *     tables. Authenticated players see all memberships at tables where any of
+     *     their personas has an active membership — this gives them the member roster
+     *     for tables they belong to.
+     *
+     *     Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+     *     → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+     *
      *     Creation uses the join_table service to apply temporary-persona validation.
      *     Destroy is a soft-leave — the record remains with left_at set.
      */
@@ -3676,7 +3965,14 @@ export interface paths {
     /**
      * @description GM table membership management.
      *
-     *     Staff sees all memberships. GMs see only memberships for tables they own.
+     *     Staff sees all memberships. GMs (table owners) see all memberships at their
+     *     tables. Authenticated players see all memberships at tables where any of
+     *     their personas has an active membership — this gives them the member roster
+     *     for tables they belong to.
+     *
+     *     Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+     *     → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+     *
      *     Creation uses the join_table service to apply temporary-persona validation.
      *     Destroy is a soft-leave — the record remains with left_at set.
      */
@@ -3693,16 +3989,26 @@ export interface paths {
     /**
      * @description GM table management.
      *
-     *     Staff sees all tables. GMs see only their own. Archive and transfer
-     *     ownership are staff-only lifecycle actions.
+     *     Staff sees all tables. GMs see their own tables. Players see tables where any
+     *     of their personas has an active GMTableMembership (left_at__isnull=True).
+     *
+     *     Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+     *     → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+     *
+     *     Archive and transfer ownership are staff-only lifecycle actions.
      */
     get: operations['gm_tables_list'];
     put?: never;
     /**
      * @description GM table management.
      *
-     *     Staff sees all tables. GMs see only their own. Archive and transfer
-     *     ownership are staff-only lifecycle actions.
+     *     Staff sees all tables. GMs see their own tables. Players see tables where any
+     *     of their personas has an active GMTableMembership (left_at__isnull=True).
+     *
+     *     Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+     *     → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+     *
+     *     Archive and transfer ownership are staff-only lifecycle actions.
      */
     post: operations['gm_tables_create'];
     delete?: never;
@@ -3721,23 +4027,38 @@ export interface paths {
     /**
      * @description GM table management.
      *
-     *     Staff sees all tables. GMs see only their own. Archive and transfer
-     *     ownership are staff-only lifecycle actions.
+     *     Staff sees all tables. GMs see their own tables. Players see tables where any
+     *     of their personas has an active GMTableMembership (left_at__isnull=True).
+     *
+     *     Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+     *     → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+     *
+     *     Archive and transfer ownership are staff-only lifecycle actions.
      */
     get: operations['gm_tables_retrieve'];
     /**
      * @description GM table management.
      *
-     *     Staff sees all tables. GMs see only their own. Archive and transfer
-     *     ownership are staff-only lifecycle actions.
+     *     Staff sees all tables. GMs see their own tables. Players see tables where any
+     *     of their personas has an active GMTableMembership (left_at__isnull=True).
+     *
+     *     Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+     *     → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+     *
+     *     Archive and transfer ownership are staff-only lifecycle actions.
      */
     put: operations['gm_tables_update'];
     post?: never;
     /**
      * @description GM table management.
      *
-     *     Staff sees all tables. GMs see only their own. Archive and transfer
-     *     ownership are staff-only lifecycle actions.
+     *     Staff sees all tables. GMs see their own tables. Players see tables where any
+     *     of their personas has an active GMTableMembership (left_at__isnull=True).
+     *
+     *     Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+     *     → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+     *
+     *     Archive and transfer ownership are staff-only lifecycle actions.
      */
     delete: operations['gm_tables_destroy'];
     options?: never;
@@ -3745,8 +4066,13 @@ export interface paths {
     /**
      * @description GM table management.
      *
-     *     Staff sees all tables. GMs see only their own. Archive and transfer
-     *     ownership are staff-only lifecycle actions.
+     *     Staff sees all tables. GMs see their own tables. Players see tables where any
+     *     of their personas has an active GMTableMembership (left_at__isnull=True).
+     *
+     *     Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+     *     → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+     *
+     *     Archive and transfer ownership are staff-only lifecycle actions.
      */
     patch: operations['gm_tables_partial_update'];
     trace?: never;
@@ -3763,8 +4089,13 @@ export interface paths {
     /**
      * @description GM table management.
      *
-     *     Staff sees all tables. GMs see only their own. Archive and transfer
-     *     ownership are staff-only lifecycle actions.
+     *     Staff sees all tables. GMs see their own tables. Players see tables where any
+     *     of their personas has an active GMTableMembership (left_at__isnull=True).
+     *
+     *     Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+     *     → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+     *
+     *     Archive and transfer ownership are staff-only lifecycle actions.
      */
     post: operations['gm_tables_archive_create'];
     delete?: never;
@@ -3785,8 +4116,13 @@ export interface paths {
     /**
      * @description GM table management.
      *
-     *     Staff sees all tables. GMs see only their own. Archive and transfer
-     *     ownership are staff-only lifecycle actions.
+     *     Staff sees all tables. GMs see their own tables. Players see tables where any
+     *     of their personas has an active GMTableMembership (left_at__isnull=True).
+     *
+     *     Persona-to-account chain: GMTableMembership.persona → Persona.character_sheet
+     *     → CharacterSheet.character (ObjectDB) → ObjectDB.db_account.
+     *
+     *     Archive and transfer ownership are staff-only lifecycle actions.
      */
     post: operations['gm_tables_transfer_ownership_create'];
     delete?: never;
@@ -4150,6 +4486,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/items/equipped-items/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for EquippedItem (GET list/detail).
+     *
+     *     Mutations (equip/unequip) flow through the unified action dispatcher
+     *     via the ``execute_action`` websocket inputfunc — REST stays read-only.
+     */
+    get: operations['items_equipped_items_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/equipped-items/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for EquippedItem (GET list/detail).
+     *
+     *     Mutations (equip/unequip) flow through the unified action dispatcher
+     *     via the ``execute_action`` websocket inputfunc — REST stays read-only.
+     */
+    get: operations['items_equipped_items_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/items/interaction-types/': {
     parameters: {
       query?: never;
@@ -4182,6 +4562,224 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/items/inventory/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only listing of ItemInstance rows for a character's inventory.
+     *
+     *     The wardrobe page uses this to render carried-but-not-worn items. The
+     *     ``character`` query parameter filters to items whose ``game_object.location``
+     *     is the requested character (i.e., currently held by them).
+     */
+    get: operations['items_inventory_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/inventory/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only listing of ItemInstance rows for a character's inventory.
+     *
+     *     The wardrobe page uses this to render carried-but-not-worn items. The
+     *     ``character`` query parameter filters to items whose ``game_object.location``
+     *     is the requested character (i.e., currently held by them).
+     */
+    get: operations['items_inventory_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/item-facets/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for ItemFacet attach/list/delete. */
+    get: operations['items_item_facets_list'];
+    put?: never;
+    /** @description ViewSet for ItemFacet attach/list/delete. */
+    post: operations['items_item_facets_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/item-facets/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description ViewSet for ItemFacet attach/list/delete. */
+    get: operations['items_item_facets_retrieve'];
+    put?: never;
+    post?: never;
+    /** @description ViewSet for ItemFacet attach/list/delete. */
+    delete: operations['items_item_facets_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/outfit-slots/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for OutfitSlot create/list/delete.
+     *
+     *     Flat per-slot endpoint (matches ``EquippedItemViewSet`` shape — one
+     *     POST adds or replaces a single slot, one DELETE removes one slot).
+     */
+    get: operations['items_outfit_slots_list'];
+    put?: never;
+    /**
+     * @description ViewSet for OutfitSlot create/list/delete.
+     *
+     *     Flat per-slot endpoint (matches ``EquippedItemViewSet`` shape — one
+     *     POST adds or replaces a single slot, one DELETE removes one slot).
+     */
+    post: operations['items_outfit_slots_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/outfit-slots/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for OutfitSlot create/list/delete.
+     *
+     *     Flat per-slot endpoint (matches ``EquippedItemViewSet`` shape — one
+     *     POST adds or replaces a single slot, one DELETE removes one slot).
+     */
+    get: operations['items_outfit_slots_retrieve'];
+    put?: never;
+    post?: never;
+    /**
+     * @description ViewSet for OutfitSlot create/list/delete.
+     *
+     *     Flat per-slot endpoint (matches ``EquippedItemViewSet`` shape — one
+     *     POST adds or replaces a single slot, one DELETE removes one slot).
+     */
+    delete: operations['items_outfit_slots_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/outfits/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for Outfit definitions (save / list / rename / delete).
+     *
+     *     Save delegates to ``save_outfit`` (snapshots current loadout). PATCH
+     *     updates the Outfit row directly. DELETE delegates to ``delete_outfit``.
+     *     Per design, equip/unequip and apply/undress flow through the action
+     *     dispatcher — this ViewSet only handles configuration CRUD.
+     */
+    get: operations['items_outfits_list'];
+    put?: never;
+    /**
+     * @description ViewSet for Outfit definitions (save / list / rename / delete).
+     *
+     *     Save delegates to ``save_outfit`` (snapshots current loadout). PATCH
+     *     updates the Outfit row directly. DELETE delegates to ``delete_outfit``.
+     *     Per design, equip/unequip and apply/undress flow through the action
+     *     dispatcher — this ViewSet only handles configuration CRUD.
+     */
+    post: operations['items_outfits_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/outfits/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for Outfit definitions (save / list / rename / delete).
+     *
+     *     Save delegates to ``save_outfit`` (snapshots current loadout). PATCH
+     *     updates the Outfit row directly. DELETE delegates to ``delete_outfit``.
+     *     Per design, equip/unequip and apply/undress flow through the action
+     *     dispatcher — this ViewSet only handles configuration CRUD.
+     */
+    get: operations['items_outfits_retrieve'];
+    /**
+     * @description ViewSet for Outfit definitions (save / list / rename / delete).
+     *
+     *     Save delegates to ``save_outfit`` (snapshots current loadout). PATCH
+     *     updates the Outfit row directly. DELETE delegates to ``delete_outfit``.
+     *     Per design, equip/unequip and apply/undress flow through the action
+     *     dispatcher — this ViewSet only handles configuration CRUD.
+     */
+    put: operations['items_outfits_update'];
+    post?: never;
+    /**
+     * @description ViewSet for Outfit definitions (save / list / rename / delete).
+     *
+     *     Save delegates to ``save_outfit`` (snapshots current loadout). PATCH
+     *     updates the Outfit row directly. DELETE delegates to ``delete_outfit``.
+     *     Per design, equip/unequip and apply/undress flow through the action
+     *     dispatcher — this ViewSet only handles configuration CRUD.
+     */
+    delete: operations['items_outfits_destroy'];
+    options?: never;
+    head?: never;
+    /**
+     * @description ViewSet for Outfit definitions (save / list / rename / delete).
+     *
+     *     Save delegates to ``save_outfit`` (snapshots current loadout). PATCH
+     *     updates the Outfit row directly. DELETE delegates to ``delete_outfit``.
+     *     Per design, equip/unequip and apply/undress flow through the action
+     *     dispatcher — this ViewSet only handles configuration CRUD.
+     */
+    patch: operations['items_outfits_partial_update'];
     trace?: never;
   };
   '/api/items/quality-tiers/': {
@@ -4523,68 +5121,6 @@ export interface paths {
      *     auras for characters they own (or all if staff).
      */
     patch: operations['magic_character_auras_partial_update'];
-    trace?: never;
-  };
-  '/api/magic/character-facets/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for CharacterFacet records.
-     *
-     *     Manages facet assignments for characters.
-     */
-    get: operations['magic_character_facets_list'];
-    put?: never;
-    /**
-     * @description ViewSet for CharacterFacet records.
-     *
-     *     Manages facet assignments for characters.
-     */
-    post: operations['magic_character_facets_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/magic/character-facets/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for CharacterFacet records.
-     *
-     *     Manages facet assignments for characters.
-     */
-    get: operations['magic_character_facets_retrieve'];
-    /**
-     * @description ViewSet for CharacterFacet records.
-     *
-     *     Manages facet assignments for characters.
-     */
-    put: operations['magic_character_facets_update'];
-    post?: never;
-    /**
-     * @description ViewSet for CharacterFacet records.
-     *
-     *     Manages facet assignments for characters.
-     */
-    delete: operations['magic_character_facets_destroy'];
-    options?: never;
-    head?: never;
-    /**
-     * @description ViewSet for CharacterFacet records.
-     *
-     *     Manages facet assignments for characters.
-     */
-    patch: operations['magic_character_facets_partial_update'];
     trace?: never;
   };
   '/api/magic/character-gifts/': {
@@ -5703,6 +6239,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/narrative/gemits/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only list + staff-only create for Gemit records.
+     *
+     *     GET /api/narrative/gemits/ — paginated list, any authenticated user.
+     *     POST /api/narrative/gemits/ — staff-only broadcast.
+     */
+    get: operations['narrative_gemits_list'];
+    put?: never;
+    /** @description Validate input, broadcast, and return GemitSerializer response. */
+    post: operations['narrative_gemits_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/narrative/my-messages/': {
     parameters: {
       query?: never;
@@ -5715,6 +6274,47 @@ export interface paths {
     put?: never;
     post?: never;
     delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/narrative/story-mutes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Manage the requesting user's UserStoryMutes.
+     *
+     *     GET    /api/narrative/story-mutes/      — list my mutes
+     *     POST   /api/narrative/story-mutes/      — mute a story
+     *     DELETE /api/narrative/story-mutes/{id}/ — unmute
+     */
+    get: operations['narrative_story_mutes_list'];
+    put?: never;
+    /** @description Create the mute and return a UserStoryMuteSerializer response. */
+    post: operations['narrative_story_mutes_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/narrative/story-mutes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description Delete the mute. IsOwnStoryMuteOrStaff enforces ownership via get_object(). */
+    delete: operations['narrative_story_mutes_destroy'];
     options?: never;
     head?: never;
     patch?: never;
@@ -7283,12 +7883,32 @@ export interface paths {
     /**
      * @description ViewSet for Story model.
      *     Provides CRUD operations with proper permissions and filtering.
+     *
+     *     Queryset scoping (Phase 5 Task 1.3):
+     *     - Staff: all stories.
+     *     - GM (table owner): all stories at their tables PLUS all owned stories.
+     *     - Authenticated user: stories they own, stories they actively participate in,
+     *       and all GLOBAL-scope stories (publicly browsable).
+     *     - Unauthenticated: none (permission class rejects).
+     *
+     *     GROUP-scope stories are visible if the user is an active GMTableMember at the
+     *     story's primary_table AND has an active StoryParticipation.
      */
     get: operations['stories_list'];
     put?: never;
     /**
      * @description ViewSet for Story model.
      *     Provides CRUD operations with proper permissions and filtering.
+     *
+     *     Queryset scoping (Phase 5 Task 1.3):
+     *     - Staff: all stories.
+     *     - GM (table owner): all stories at their tables PLUS all owned stories.
+     *     - Authenticated user: stories they own, stories they actively participate in,
+     *       and all GLOBAL-scope stories (publicly browsable).
+     *     - Unauthenticated: none (permission class rejects).
+     *
+     *     GROUP-scope stories are visible if the user is an active GMTableMember at the
+     *     story's primary_table AND has an active StoryParticipation.
      */
     post: operations['stories_create'];
     delete?: never;
@@ -7307,17 +7927,47 @@ export interface paths {
     /**
      * @description ViewSet for Story model.
      *     Provides CRUD operations with proper permissions and filtering.
+     *
+     *     Queryset scoping (Phase 5 Task 1.3):
+     *     - Staff: all stories.
+     *     - GM (table owner): all stories at their tables PLUS all owned stories.
+     *     - Authenticated user: stories they own, stories they actively participate in,
+     *       and all GLOBAL-scope stories (publicly browsable).
+     *     - Unauthenticated: none (permission class rejects).
+     *
+     *     GROUP-scope stories are visible if the user is an active GMTableMember at the
+     *     story's primary_table AND has an active StoryParticipation.
      */
     get: operations['stories_retrieve'];
     /**
      * @description ViewSet for Story model.
      *     Provides CRUD operations with proper permissions and filtering.
+     *
+     *     Queryset scoping (Phase 5 Task 1.3):
+     *     - Staff: all stories.
+     *     - GM (table owner): all stories at their tables PLUS all owned stories.
+     *     - Authenticated user: stories they own, stories they actively participate in,
+     *       and all GLOBAL-scope stories (publicly browsable).
+     *     - Unauthenticated: none (permission class rejects).
+     *
+     *     GROUP-scope stories are visible if the user is an active GMTableMember at the
+     *     story's primary_table AND has an active StoryParticipation.
      */
     put: operations['stories_update'];
     post?: never;
     /**
      * @description ViewSet for Story model.
      *     Provides CRUD operations with proper permissions and filtering.
+     *
+     *     Queryset scoping (Phase 5 Task 1.3):
+     *     - Staff: all stories.
+     *     - GM (table owner): all stories at their tables PLUS all owned stories.
+     *     - Authenticated user: stories they own, stories they actively participate in,
+     *       and all GLOBAL-scope stories (publicly browsable).
+     *     - Unauthenticated: none (permission class rejects).
+     *
+     *     GROUP-scope stories are visible if the user is an active GMTableMember at the
+     *     story's primary_table AND has an active StoryParticipation.
      */
     delete: operations['stories_destroy'];
     options?: never;
@@ -7325,6 +7975,16 @@ export interface paths {
     /**
      * @description ViewSet for Story model.
      *     Provides CRUD operations with proper permissions and filtering.
+     *
+     *     Queryset scoping (Phase 5 Task 1.3):
+     *     - Staff: all stories.
+     *     - GM (table owner): all stories at their tables PLUS all owned stories.
+     *     - Authenticated user: stories they own, stories they actively participate in,
+     *       and all GLOBAL-scope stories (publicly browsable).
+     *     - Unauthenticated: none (permission class rejects).
+     *
+     *     GROUP-scope stories are visible if the user is an active GMTableMember at the
+     *     story's primary_table AND has an active StoryParticipation.
      */
     patch: operations['stories_partial_update'];
     trace?: never;
@@ -7346,6 +8006,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/stories/{id}/assign-to-table/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/stories/{id}/assign-to-table/ — assign a story to a GM's table.
+     *
+     *     Lead GM of the destination table (or staff) calls this to take ownership
+     *     of a story. The serializer validates that the caller owns the destination
+     *     table. Returns 200 with the updated Story on success.
+     */
+    post: operations['stories_assign_to_table_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/stories/{id}/chapters/': {
     parameters: {
       query?: never;
@@ -7357,6 +8040,30 @@ export interface paths {
     get: operations['stories_chapters_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/stories/{id}/detach-from-table/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/stories/{id}/detach-from-table/ — clear a story's primary_table.
+     *
+     *     Allowed by: current Lead GM (story.primary_table.gm), the story's
+     *     character-scope owner (character_sheet.character.db_account == user),
+     *     or staff. Story history and participations are preserved; the story
+     *     enters 'seeking GM' state. Returns 200 with the updated Story.
+     */
+    post: operations['stories_detach_from_table_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -7393,6 +8100,34 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/stories/{id}/offer-to-gm/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/stories/{id}/offer-to-gm/ — player offers their CHARACTER-scope story to a GM.
+     *
+     *     Body: { gm_profile_id: number, message?: string }
+     *
+     *     The serializer enforces:
+     *     - story.scope == CHARACTER
+     *     - story.primary_table is None
+     *     - story.character_sheet.character.db_account == request.user (or staff)
+     *
+     *     Returns 201 with the StoryGMOffer on success.
+     */
+    post: operations['stories_offer_to_gm_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/stories/{id}/participants/': {
     parameters: {
       query?: never;
@@ -7404,6 +8139,36 @@ export interface paths {
     get: operations['stories_participants_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/stories/{id}/send-ooc/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/stories/{id}/send-ooc/ — Lead GM or staff sends an OOC notice.
+     *
+     *     Body: { body: string, ooc_note?: string }
+     *
+     *     Permission: Lead GM of story.primary_table or staff (enforced by
+     *     IsStoryLeadGMOrStaff in permission_classes; has_object_permission fires
+     *     automatically when get_object() is called).
+     *     Input serializer validates body length (>= 1 char).
+     *     Service resolves scope-appropriate recipients and fans out
+     *     NarrativeMessageDelivery rows with category=STORY.
+     *
+     *     Returns 201 with the created NarrativeMessage.
+     */
+    post: operations['stories_send_ooc_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -7568,6 +8333,134 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/story-gm-offers/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for StoryGMOffer.
+     *
+     *     Read: ReadOnlyModelViewSet (list + retrieve).
+     *     State transitions: custom @action endpoints:
+     *       POST /api/story-gm-offers/{id}/accept/   — accept_offer (GM)
+     *       POST /api/story-gm-offers/{id}/decline/  — decline_offer (GM)
+     *       POST /api/story-gm-offers/{id}/withdraw/ — withdraw_offer (player)
+     *
+     *     Queryset scoping:
+     *       - Staff: all offers.
+     *       - GM: offers where offered_to.account == user.
+     *       - Player: offers where offered_by_account == user.
+     */
+    get: operations['story_gm_offers_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/story-gm-offers/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for StoryGMOffer.
+     *
+     *     Read: ReadOnlyModelViewSet (list + retrieve).
+     *     State transitions: custom @action endpoints:
+     *       POST /api/story-gm-offers/{id}/accept/   — accept_offer (GM)
+     *       POST /api/story-gm-offers/{id}/decline/  — decline_offer (GM)
+     *       POST /api/story-gm-offers/{id}/withdraw/ — withdraw_offer (player)
+     *
+     *     Queryset scoping:
+     *       - Staff: all offers.
+     *       - GM: offers where offered_to.account == user.
+     *       - Player: offers where offered_by_account == user.
+     */
+    get: operations['story_gm_offers_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/story-gm-offers/{id}/accept/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/story-gm-offers/{id}/accept/ — GM accepts the offer.
+     *
+     *     Body: { response_note?: string }
+     *
+     *     Assigns story to the GM's first ACTIVE table. Returns 200 with the
+     *     updated StoryGMOffer.
+     */
+    post: operations['story_gm_offers_accept_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/story-gm-offers/{id}/decline/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/story-gm-offers/{id}/decline/ — GM declines the offer.
+     *
+     *     Body: { response_note?: string }
+     *
+     *     Story remains detached. Returns 200 with the updated StoryGMOffer.
+     */
+    post: operations['story_gm_offers_decline_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/story-gm-offers/{id}/withdraw/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/story-gm-offers/{id}/withdraw/ — player rescinds the offer.
+     *
+     *     No body required. Returns 200 with the updated StoryGMOffer.
+     */
+    post: operations['story_gm_offers_withdraw_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/story-participations/': {
     parameters: {
       query?: never;
@@ -7669,6 +8562,108 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/table-bulletin-posts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for TableBulletinPost — bulletin posts on GMTables.
+     *
+     *     Read access: Lead GM / staff (always) + active table members (table-wide
+     *     posts) or story participants (story-scoped posts).
+     *     Create: Lead GM of the target table or staff.
+     *     Update/Delete: Lead GM of the post's table or staff.
+     */
+    get: operations['table_bulletin_posts_list'];
+    put?: never;
+    /** @description Create a bulletin post using the three-layer pattern. */
+    post: operations['table_bulletin_posts_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/table-bulletin-posts/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for TableBulletinPost — bulletin posts on GMTables.
+     *
+     *     Read access: Lead GM / staff (always) + active table members (table-wide
+     *     posts) or story participants (story-scoped posts).
+     *     Create: Lead GM of the target table or staff.
+     *     Update/Delete: Lead GM of the post's table or staff.
+     */
+    get: operations['table_bulletin_posts_retrieve'];
+    /** @description Edit a post (author / staff). */
+    put: operations['table_bulletin_posts_update'];
+    post?: never;
+    /** @description Delete a post (author / staff). */
+    delete: operations['table_bulletin_posts_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Delegate to update (always partial for this viewset). */
+    patch: operations['table_bulletin_posts_partial_update'];
+    trace?: never;
+  };
+  '/api/table-bulletin-replies/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for TableBulletinReply — replies to bulletin posts.
+     *
+     *     Read access: same as the parent post (reader must have read access to post).
+     *     Create: any qualifying reader when post.allow_replies=True (staff bypass).
+     *     Update/Delete: reply author or staff.
+     */
+    get: operations['table_bulletin_replies_list'];
+    put?: never;
+    /** @description Create a reply using the three-layer pattern. */
+    post: operations['table_bulletin_replies_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/table-bulletin-replies/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description ViewSet for TableBulletinReply — replies to bulletin posts.
+     *
+     *     Read access: same as the parent post (reader must have read access to post).
+     *     Create: any qualifying reader when post.allow_replies=True (staff bypass).
+     *     Update/Delete: reply author or staff.
+     */
+    get: operations['table_bulletin_replies_retrieve'];
+    /** @description Edit a reply — IsBulletinReplyAuthorOrStaff enforces author ownership. */
+    put: operations['table_bulletin_replies_update'];
+    post?: never;
+    /** @description Delete a reply — IsBulletinReplyAuthorOrStaff enforces author ownership. */
+    delete: operations['table_bulletin_replies_destroy'];
+    options?: never;
+    head?: never;
+    /** @description Delegate to update. */
+    patch: operations['table_bulletin_replies_partial_update'];
     trace?: never;
   };
   '/api/traits/stat-definitions/': {
@@ -7887,6 +8882,58 @@ export interface paths {
     patch: operations['transitions_partial_update'];
     trace?: never;
   };
+  '/api/transitions/save-with-outcomes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/transitions/save-with-outcomes/
+     *
+     *     Atomically create or update a Transition and replace its routing
+     *     predicate (TransitionRequiredOutcome) rows in a single transaction.
+     *
+     *     Replaces the Phase 4 multi-roundtrip flow:
+     *         POST /api/transitions/  → then N × POST /api/transition-required-outcomes/
+     *
+     *     Body::
+     *
+     *         {
+     *             "source_episode": <int>,
+     *             "target_episode": <int | null>,
+     *             "mode": "auto" | "gm_choice",
+     *             "connection_type": "" | "therefore" | "but",
+     *             "connection_summary": "<str>",
+     *             "order": <int>,
+     *             "outcomes": [{"beat": <int>, "required_outcome": "success" | "failure" | "expired"},
+     *                          ...],
+     *             "existing_id": <int | null>   # omit or null for create
+     *         }
+     *
+     *     Returns the saved Transition (same shape as TransitionSerializer).
+     *
+     *     Permissions: Lead GM of source_episode's story, or staff.
+     *     The permission class cannot inspect the object before the serializer runs
+     *     (source_episode comes from the body, not the URL), so this is a view-level
+     *     guard only — any user with a GMProfile who is a Lead GM of *some* story can
+     *     reach this action; the serializer validates that the source_episode's story
+     *     matches the caller.  Stricter object-level gating is applied in
+     *     IsLeadGMOnTransitionStoryOrStaff.has_object_permission after the service
+     *     creates the object — which effectively means the permission class's
+     *     has_permission gate alone guards creation.  This matches the pattern used
+     *     by all other "create with body data" action endpoints in this ViewSet.
+     */
+    post: operations['transitions_save_with_outcomes_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/user/': {
     parameters: {
       query?: never;
@@ -7986,15 +9033,6 @@ export interface components {
      * @enum {string}
      */
     ArcanaTypeEnum: 'major' | 'minor';
-    /**
-     * @description * `attack` - Attack
-     *     * `defense` - Defense
-     *     * `buff` - Buff
-     *     * `debuff` - Debuff
-     *     * `utility` - Utility
-     * @enum {string}
-     */
-    ArchetypeEnum: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
     AreaList: {
       readonly id: number;
       readonly name: string;
@@ -8135,6 +9173,17 @@ export interface components {
       readonly created_at: string;
       /** Format: date-time */
       readonly updated_at: string;
+      /**
+       * @description Return True if the requesting user may mark this beat.
+       *
+       *     Delegates to CanMarkBeat.has_object_permission.  The view arg is
+       *     passed as None — CanMarkBeat does not use it.
+       *
+       *     Requires the Beat queryset to select_related
+       *     'episode__chapter__story__primary_table' to avoid N+1 on list endpoints.
+       *     BeatViewSet.queryset already includes this chain.
+       */
+      readonly can_mark: boolean;
     };
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     BeatRequest: {
@@ -8370,7 +9419,7 @@ export interface components {
        *     * `debuff` - Debuff
        *     * `utility` - Utility
        */
-      readonly archetype: components['schemas']['ArchetypeEnum'];
+      readonly archetype: components['schemas']['CantripArchetypeEnum'];
       /** @description If true, player must pick a facet (element/damage type) from allowed_facets. */
       readonly requires_facet: boolean;
       /** @description Player-facing dropdown label, e.g. "Choose your element". Only used when requires_facet=True. */
@@ -8382,6 +9431,15 @@ export interface components {
       readonly sort_order: number;
       readonly style_id: number;
     };
+    /**
+     * @description * `attack` - Attack
+     *     * `defense` - Defense
+     *     * `buff` - Buff
+     *     * `debuff` - Debuff
+     *     * `utility` - Utility
+     * @enum {string}
+     */
+    CantripArchetypeEnum: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
     CapabilitySource: {
       capability_name: string;
       capability_id: number;
@@ -8698,6 +9756,18 @@ export interface components {
       /** @description Minimum level required to have this class (0-10) */
       minimum_level?: number;
     };
+    /** @description Read-only serializer for a character's covenant role assignment. */
+    CharacterCovenantRole: {
+      readonly id: number;
+      /** @description The character this sheet belongs to */
+      readonly character_sheet: number;
+      readonly covenant_role: components['schemas']['CovenantRole'];
+      /** Format: date-time */
+      readonly joined_at: string;
+      /** Format: date-time */
+      readonly left_at: string | null;
+      readonly is_active: boolean;
+    };
     /** @description Serializer for character drafts. */
     CharacterDraft: {
       readonly id: number;
@@ -8790,34 +9860,6 @@ export interface components {
       selected_tradition_id?: number | null;
       /** @description Staged data: stats, skills, traits, identity, etc. */
       draft_data?: unknown;
-    };
-    /** @description Serializer for CharacterFacet model. */
-    CharacterFacet: {
-      readonly id: number;
-      /** @description The character who has this facet. */
-      character: number;
-      /** @description The facet imagery. */
-      facet: number;
-      readonly facet_name: string;
-      readonly facet_path: string;
-      /** @description The resonance this facet is linked to. */
-      resonance: number;
-      readonly resonance_name: string;
-      /** @description What this facet means to the character. */
-      flavor_text?: string;
-      /** Format: date-time */
-      readonly created_at: string;
-    };
-    /** @description Serializer for CharacterFacet model. */
-    CharacterFacetRequest: {
-      /** @description The character who has this facet. */
-      character: number;
-      /** @description The facet imagery. */
-      facet: number;
-      /** @description The resonance this facet is linked to. */
-      resonance: number;
-      /** @description What this facet means to the character. */
-      flavor_text?: string;
     };
     CharacterForm: {
       readonly id: number;
@@ -9157,6 +10199,118 @@ export interface components {
      * @enum {string}
      */
     ConnectionTypeEnum: 'therefore' | 'but';
+    /** @description Read-only serializer for CovenantRole lookup data. */
+    CovenantRole: {
+      readonly id: number;
+      /** @description Display name, e.g. 'Vanguard'. */
+      readonly name: string;
+      /** @description Stable identifier for code references, e.g. 'vanguard'. */
+      readonly slug: string;
+      /**
+       * @description Which covenant type this role belongs to.
+       *
+       *     * `durance` - Covenant of the Durance
+       *     * `battle` - Covenant of Battle
+       */
+      readonly covenant_type: components['schemas']['CovenantTypeEnum'];
+      readonly covenant_type_display: string;
+      /**
+       * @description Foundational archetype: Sword (offense), Shield (defense), Crown (support).
+       *
+       *     * `sword` - Sword
+       *     * `shield` - Shield
+       *     * `crown` - Crown
+       */
+      readonly archetype: components['schemas']['CovenantRoleArchetypeEnum'];
+      readonly archetype_display: string;
+      /** @description Combat resolution order. Lower is faster (1 = fastest). */
+      readonly speed_rank: number;
+      /** @description Player-facing description of the role's identity and combat style. */
+      readonly description: string;
+    };
+    /**
+     * @description * `sword` - Sword
+     *     * `shield` - Shield
+     *     * `crown` - Crown
+     * @enum {string}
+     */
+    CovenantRoleArchetypeEnum: 'sword' | 'shield' | 'crown';
+    /**
+     * @description * `durance` - Covenant of the Durance
+     *     * `battle` - Covenant of Battle
+     * @enum {string}
+     */
+    CovenantTypeEnum: 'durance' | 'battle';
+    /**
+     * @description Input for POST /api/table-bulletin-posts/.
+     *
+     *     Validates:
+     *     - ``table`` exists and user is its Lead GM (or staff)
+     *     - ``story`` (if set) belongs to ``table`` (story.primary_table == table)
+     *     - ``author_persona`` belongs to the requesting user's account
+     *
+     *     Stores validated model instances in validated_data.
+     */
+    CreateBulletinPostInput: {
+      table: number;
+      story?: number | null;
+      author_persona: number;
+      title: string;
+      body: string;
+      /** @default true */
+      allow_replies: boolean;
+    };
+    /**
+     * @description Input for POST /api/table-bulletin-posts/.
+     *
+     *     Validates:
+     *     - ``table`` exists and user is its Lead GM (or staff)
+     *     - ``story`` (if set) belongs to ``table`` (story.primary_table == table)
+     *     - ``author_persona`` belongs to the requesting user's account
+     *
+     *     Stores validated model instances in validated_data.
+     */
+    CreateBulletinPostInputRequest: {
+      table: number;
+      story?: number | null;
+      author_persona: number;
+      title: string;
+      body: string;
+      /** @default true */
+      allow_replies: boolean;
+    };
+    /**
+     * @description Input for POST /api/table-bulletin-replies/.
+     *
+     *     Validates:
+     *     - ``post`` exists
+     *     - post.allow_replies=True (or user is staff)
+     *     - requesting user has read access to the post
+     *     - ``author_persona`` belongs to the requesting user's account
+     *
+     *     Stores validated model instances in validated_data.
+     */
+    CreateBulletinReplyInput: {
+      post: number;
+      author_persona: number;
+      body: string;
+    };
+    /**
+     * @description Input for POST /api/table-bulletin-replies/.
+     *
+     *     Validates:
+     *     - ``post`` exists
+     *     - post.allow_replies=True (or user is staff)
+     *     - requesting user has read access to the post
+     *     - ``author_persona`` belongs to the requesting user's account
+     *
+     *     Stores validated model instances in validated_data.
+     */
+    CreateBulletinReplyInputRequest: {
+      post: number;
+      author_persona: number;
+      body: string;
+    };
     /**
      * @description * `1` - Origin
      *     * `2` - Heritage
@@ -9570,6 +10724,57 @@ export interface components {
      * @enum {string}
      */
     EquipmentLayerEnum: 'skin' | 'under' | 'base' | 'over' | 'outer' | 'accessory';
+    /** @description Read serializer for EquippedItem (GET list/detail). */
+    EquippedItemRead: {
+      readonly id: number;
+      /** @description The character wearing/wielding this item. */
+      readonly character: number;
+      readonly item_instance: number;
+      readonly body_region: components['schemas']['BodyRegionEnum'];
+      readonly equipment_layer: components['schemas']['EquipmentLayerEnum'];
+      readonly body_region_display: string;
+      readonly equipment_layer_display: string;
+    };
+    /** @description Full serializer for Era — includes read-only story_count context field. */
+    Era: {
+      readonly id: number;
+      name: string;
+      display_name: string;
+      /** @description Player-facing 'Season N' number. */
+      season_number: number;
+      description?: string;
+      status?: components['schemas']['EraStatusEnum'];
+      /** Format: date-time */
+      readonly activated_at: string | null;
+      /** Format: date-time */
+      readonly concluded_at: string | null;
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * @description Return the number of Story records whose created_in_era matches this era.
+       *
+       *     Reads from the ``story_count`` annotation added by EraViewSet.queryset
+       *     (``Count("stories_created_in_era")``). Falls back to a direct query only
+       *     when the annotation is absent (e.g. in non-viewset serializer calls).
+       */
+      readonly story_count: number;
+    };
+    /** @description Full serializer for Era — includes read-only story_count context field. */
+    EraRequest: {
+      name: string;
+      display_name: string;
+      /** @description Player-facing 'Season N' number. */
+      season_number: number;
+      description?: string;
+      status?: components['schemas']['EraStatusEnum'];
+    };
+    /**
+     * @description * `upcoming` - Upcoming
+     *     * `active` - Active
+     *     * `concluded` - Concluded
+     * @enum {string}
+     */
+    EraStatusEnum: 'upcoming' | 'active' | 'concluded';
     /** @description Serializer for creating events. Host is derived from the request. */
     EventCreate: {
       name: string;
@@ -10058,7 +11263,15 @@ export interface components {
       /** Format: email */
       invited_email?: string;
     };
-    /** @description Serializer for GM tables. */
+    /**
+     * @description Serializer for GM tables.
+     *
+     *     Computed read-only fields:
+     *     - member_count: active memberships (left_at__isnull=True)
+     *     - story_count: stories with primary_table=this table
+     *     - viewer_role: "gm" / "staff" / "member" / "guest" / "none" derived from
+     *       request.user vs. table.gm.account and membership/participation lookups
+     */
     GMTable: {
       readonly id: number;
       gm: number;
@@ -10070,6 +11283,16 @@ export interface components {
       readonly created_at: string;
       /** Format: date-time */
       readonly archived_at: string | null;
+      readonly member_count: number;
+      readonly story_count: number;
+      /**
+       * @description Return the requesting user's role relative to this table.
+       *
+       *     Priority: gm > staff > member > guest > none.
+       *     "guest" means the user participates in a story at this table via
+       *     StoryParticipation but has no active GMTableMembership.
+       */
+      readonly viewer_role: string;
     };
     /** @description Serializer for persona memberships at GM tables. */
     GMTableMembership: {
@@ -10087,7 +11310,15 @@ export interface components {
       table: number;
       persona: number;
     };
-    /** @description Serializer for GM tables. */
+    /**
+     * @description Serializer for GM tables.
+     *
+     *     Computed read-only fields:
+     *     - member_count: active memberships (left_at__isnull=True)
+     *     - story_count: stories with primary_table=this table
+     *     - viewer_role: "gm" / "staff" / "member" / "guest" / "none" derived from
+     *       request.user vs. table.gm.account and membership/participation lookups
+     */
     GMTableRequest: {
       gm: number;
       name: string;
@@ -10099,6 +11330,73 @@ export interface components {
      * @enum {string}
      */
     GMTableStatusEnum: 'active' | 'archived';
+    /** @description Read-only serializer for GearArchetypeCompatibility join rows. */
+    GearArchetypeCompatibility: {
+      readonly id: number;
+      readonly covenant_role: number;
+      readonly gear_archetype: components['schemas']['GearArchetypeEnum'];
+      readonly gear_archetype_display: string;
+    };
+    /**
+     * @description * `light_armor` - Light Armor
+     *     * `medium_armor` - Medium Armor
+     *     * `heavy_armor` - Heavy Armor
+     *     * `robe` - Robe
+     *     * `melee_one_hand` - One-Handed Melee
+     *     * `melee_two_hand` - Two-Handed Melee
+     *     * `ranged` - Ranged
+     *     * `thrown` - Thrown
+     *     * `shield` - Shield
+     *     * `jewelry` - Jewelry
+     *     * `clothing` - Clothing
+     *     * `other` - Other
+     * @enum {string}
+     */
+    GearArchetypeEnum:
+      | 'light_armor'
+      | 'medium_armor'
+      | 'heavy_armor'
+      | 'robe'
+      | 'melee_one_hand'
+      | 'melee_two_hand'
+      | 'ranged'
+      | 'thrown'
+      | 'shield'
+      | 'jewelry'
+      | 'clothing'
+      | 'other';
+    /** @description Full Gemit representation for list and create responses. */
+    Gemit: {
+      readonly id: number;
+      /** @description Broadcast text shown to all connected players. */
+      body: string;
+      /** @description Null = system-generated. */
+      readonly sender_account: number | null;
+      /** @description Optional: link to the era this gemit relates to. */
+      related_era?: number | null;
+      /** @description Optional: link to a specific story this gemit relates to. */
+      related_story?: number | null;
+      /** Format: date-time */
+      readonly sent_at: string;
+    };
+    /** @description Input serializer for staff POST /api/narrative/gemits/. */
+    GemitCreate: {
+      /** @description Broadcast text. Must be at least one non-whitespace character. */
+      body: string;
+      /** @description Optional: link to the era this gemit relates to. */
+      related_era?: number | null;
+      /** @description Optional: link to a specific story this gemit relates to. */
+      related_story?: number | null;
+    };
+    /** @description Input serializer for staff POST /api/narrative/gemits/. */
+    GemitCreateRequest: {
+      /** @description Broadcast text. Must be at least one non-whitespace character. */
+      body: string;
+      /** @description Optional: link to the era this gemit relates to. */
+      related_era?: number | null;
+      /** @description Optional: link to a specific story this gemit relates to. */
+      related_story?: number | null;
+    };
     /** @description Serializer for gender options. */
     Gender: {
       readonly id: number;
@@ -10426,6 +11724,45 @@ export interface components {
       /** @description Description of what this interaction does. */
       readonly description: string;
     };
+    /** @description Read serializer for ItemFacet (GET list/detail). */
+    ItemFacetRead: {
+      readonly id: number;
+      readonly item_instance: number;
+      readonly facet: number;
+      readonly applied_by_account: number | null;
+      readonly attachment_quality_tier: number;
+      /** Format: date-time */
+      readonly applied_at: string;
+    };
+    /** @description Write serializer for ItemFacet (POST create). */
+    ItemFacetWrite: {
+      item_instance: number;
+      facet: number;
+      attachment_quality_tier: number;
+    };
+    /** @description Write serializer for ItemFacet (POST create). */
+    ItemFacetWriteRequest: {
+      item_instance: number;
+      facet: number;
+      attachment_quality_tier: number;
+    };
+    /** @description Read serializer for ItemInstance — used by the inventory listing. */
+    ItemInstanceRead: {
+      readonly id: number;
+      readonly template: components['schemas']['ItemTemplateList'];
+      readonly quality_tier: components['schemas']['QualityTier'];
+      readonly display_name: string;
+      readonly display_description: string;
+      /** @description Return the cloudinary URL for the item's display image, if any. */
+      readonly display_image_url: string | null;
+      readonly contained_in: number;
+      /** @description Stack quantity for stackable items. */
+      readonly quantity: number;
+      /** @description Remaining charges for consumable items. */
+      readonly charges: number;
+      /** @description Whether this item is currently open. */
+      readonly is_open: boolean;
+    };
     /** @description Detail serializer for ItemTemplate with slots and interactions. */
     ItemTemplateDetail: {
       readonly id: number;
@@ -10680,6 +12017,63 @@ export interface components {
      * @enum {string}
      */
     OutcomeEnum: 'unsatisfied' | 'success' | 'failure' | 'expired' | 'pending_gm_review';
+    /** @description Read serializer for Outfit — nests slot rows. */
+    OutfitRead: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      /** @description The character this sheet belongs to */
+      readonly character_sheet: number;
+      /** @description The wardrobe ItemInstance this outfit is stored in. */
+      readonly wardrobe: number;
+      readonly slots: components['schemas']['OutfitSlotRead'][];
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly updated_at: string;
+    };
+    /** @description Read serializer for OutfitSlot — nests the item instance. */
+    OutfitSlotRead: {
+      readonly id: number;
+      readonly outfit: number;
+      readonly item_instance: components['schemas']['ItemInstanceRead'];
+      readonly body_region: components['schemas']['BodyRegionEnum'];
+      readonly equipment_layer: components['schemas']['EquipmentLayerEnum'];
+    };
+    /** @description Write serializer for OutfitSlot — delegates to add_outfit_slot service. */
+    OutfitSlotWrite: {
+      readonly id: number;
+      outfit: number;
+      item_instance: number;
+      body_region: components['schemas']['BodyRegionEnum'];
+      equipment_layer: components['schemas']['EquipmentLayerEnum'];
+    };
+    /** @description Write serializer for OutfitSlot — delegates to add_outfit_slot service. */
+    OutfitSlotWriteRequest: {
+      outfit: number;
+      item_instance: number;
+      body_region: components['schemas']['BodyRegionEnum'];
+      equipment_layer: components['schemas']['EquipmentLayerEnum'];
+    };
+    /** @description Write serializer for Outfit — POST snapshots current loadout via save_outfit. */
+    OutfitWrite: {
+      readonly id: number;
+      name: string;
+      description?: string;
+      /** @description The character this sheet belongs to */
+      character_sheet: number;
+      /** @description The wardrobe ItemInstance this outfit is stored in. */
+      wardrobe: number;
+    };
+    /** @description Write serializer for Outfit — POST snapshots current loadout via save_outfit. */
+    OutfitWriteRequest: {
+      name: string;
+      description?: string;
+      /** @description The character this sheet belongs to */
+      character_sheet: number;
+      /** @description The wardrobe ItemInstance this outfit is stored in. */
+      wardrobe: number;
+    };
     /**
      * @description * `timed` - Timed
      *     * `ready` - Ready
@@ -10837,6 +12231,21 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['ChapterList'][];
     };
+    PaginatedCharacterCovenantRoleList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['CharacterCovenantRole'][];
+    };
     PaginatedCharacterRelationshipListList: {
       /** @example 123 */
       count?: number;
@@ -10927,6 +12336,36 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['EpisodeScene'][];
     };
+    PaginatedEquippedItemReadList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['EquippedItemRead'][];
+    };
+    PaginatedEraList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['Era'][];
+    };
     PaginatedEventInvitationList: {
       /** @example 123 */
       count?: number;
@@ -10987,6 +12426,21 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['GMApplicationQueue'][];
     };
+    PaginatedGMProfileList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['GMProfile'][];
+    };
     PaginatedGMRosterInviteList: {
       /** @example 123 */
       count?: number;
@@ -11031,6 +12485,21 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['GMTableMembership'][];
+    };
+    PaginatedGemitList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['Gemit'][];
     };
     PaginatedGiftListList: {
       /** @example 123 */
@@ -11097,6 +12566,36 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['InteractionList'][];
     };
+    PaginatedItemFacetReadList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['ItemFacetRead'][];
+    };
+    PaginatedItemInstanceReadList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['ItemInstanceRead'][];
+    };
     PaginatedItemTemplateListList: {
       /** @example 123 */
       count?: number;
@@ -11141,6 +12640,36 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['OrganizationSearch'][];
+    };
+    PaginatedOutfitReadList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['OutfitRead'][];
+    };
+    PaginatedOutfitSlotReadList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['OutfitSlotRead'][];
     };
     PaginatedPendingAlterationList: {
       /** @example 123 */
@@ -11397,6 +12926,21 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['StoryFeedback'][];
     };
+    PaginatedStoryGMOfferList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['StoryGMOffer'][];
+    };
     PaginatedStoryListList: {
       /** @example 123 */
       count?: number;
@@ -11426,6 +12970,36 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['StoryParticipation'][];
+    };
+    PaginatedTableBulletinPostList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['TableBulletinPost'][];
+    };
+    PaginatedTableBulletinReplyList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['TableBulletinReply'][];
     };
     PaginatedTechniqueList: {
       /** @example 123 */
@@ -11501,6 +13075,21 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['TransitionRequiredOutcome'][];
+    };
+    PaginatedUserStoryMuteList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['UserStoryMute'][];
     };
     /**
      * @description Read serializer for combat participants.
@@ -11697,17 +13286,6 @@ export interface components {
       /** @description Staged data: stats, skills, traits, identity, etc. */
       draft_data?: unknown;
     };
-    /** @description Serializer for CharacterFacet model. */
-    PatchedCharacterFacetRequest: {
-      /** @description The character who has this facet. */
-      character?: number;
-      /** @description The facet imagery. */
-      facet?: number;
-      /** @description The resonance this facet is linked to. */
-      resonance?: number;
-      /** @description What this facet means to the character. */
-      flavor_text?: string;
-    };
     /** @description Serializer for CharacterGift records. */
     PatchedCharacterGiftRequest: {
       /** @description The character who knows this gift. */
@@ -11774,6 +13352,15 @@ export interface components {
     PatchedEpisodeSceneRequest: {
       order?: number;
     };
+    /** @description Full serializer for Era — includes read-only story_count context field. */
+    PatchedEraRequest: {
+      name?: string;
+      display_name?: string;
+      /** @description Player-facing 'Season N' number. */
+      season_number?: number;
+      description?: string;
+      status?: components['schemas']['EraStatusEnum'];
+    };
     /** @description Serializer for updating events. Only mutable fields are writable. */
     PatchedEventUpdateRequest: {
       name?: string;
@@ -11835,7 +13422,15 @@ export interface components {
       table?: number;
       persona?: number;
     };
-    /** @description Serializer for GM tables. */
+    /**
+     * @description Serializer for GM tables.
+     *
+     *     Computed read-only fields:
+     *     - member_count: active memberships (left_at__isnull=True)
+     *     - story_count: stories with primary_table=this table
+     *     - viewer_role: "gm" / "staff" / "member" / "guest" / "none" derived from
+     *       request.user vs. table.gm.account and membership/participation lookups
+     */
     PatchedGMTableRequest: {
       gm?: number;
       name?: string;
@@ -11863,6 +13458,15 @@ export interface components {
       /** @description Null while the story is at the frontier (unauthored) or before start. */
       current_episode?: number | null;
       is_active?: boolean;
+    };
+    /** @description Write serializer for Outfit — POST snapshots current loadout via save_outfit. */
+    PatchedOutfitWriteRequest: {
+      name?: string;
+      description?: string;
+      /** @description The character this sheet belongs to */
+      character_sheet?: number;
+      /** @description The wardrobe ItemInstance this outfit is stored in. */
+      wardrobe?: number;
     };
     PatchedPersonaRequest: {
       /** @description The character sheet this persona belongs to. */
@@ -12024,10 +13628,11 @@ export interface components {
        *
        *     * `TRAIT` - Trait
        *     * `TECHNIQUE` - Technique
-       *     * `ITEM` - Item
+       *     * `FACET` - Facet
        *     * `ROOM` - Room
        *     * `RELATIONSHIP_TRACK` - Relationship Track
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
+       *     * `COVENANT_ROLE` - Covenant Role
        */
       target_kind?: components['schemas']['TargetKindEnum'];
       target_id?: number;
@@ -12078,6 +13683,25 @@ export interface components {
       transition?: number;
       beat?: number;
       required_outcome?: components['schemas']['RequiredOutcomeEnum'];
+    };
+    /**
+     * @description Input for PATCH /api/table-bulletin-posts/{id}/.
+     *
+     *     Only the post author (Lead GM of the table) or staff may edit.
+     *     No field is required; all are optional.
+     */
+    PatchedUpdateBulletinPostInputRequest: {
+      title?: string;
+      body?: string;
+      allow_replies?: boolean;
+    };
+    /**
+     * @description Input for PATCH /api/table-bulletin-replies/{id}/.
+     *
+     *     Only the reply author or staff may edit.
+     */
+    PatchedUpdateBulletinReplyInputRequest: {
+      body?: string;
     };
     /** @description Serializer for Path in CG context. */
     Path: {
@@ -12798,7 +14422,7 @@ export interface components {
        *     * `POSE_ENDORSEMENT` - Pose endorsement
        *     * `SCENE_ENTRY` - Scene entry endorsement
        *     * `ROOM_RESIDENCE` - Room residence trickle
-       *     * `OUTFIT_ITEM` - Outfit item trickle (reserved — stubbed)
+       *     * `OUTFIT_TRICKLE` - Outfit trickle
        *     * `STAFF_GRANT` - Staff grant
        */
       readonly source: components['schemas']['SourceEnum'];
@@ -13239,7 +14863,7 @@ export interface components {
      * @description * `POSE_ENDORSEMENT` - Pose endorsement
      *     * `SCENE_ENTRY` - Scene entry endorsement
      *     * `ROOM_RESIDENCE` - Room residence trickle
-     *     * `OUTFIT_ITEM` - Outfit item trickle (reserved — stubbed)
+     *     * `OUTFIT_TRICKLE` - Outfit trickle
      *     * `STAFF_GRANT` - Staff grant
      * @enum {string}
      */
@@ -13247,7 +14871,7 @@ export interface components {
       | 'POSE_ENDORSEMENT'
       | 'SCENE_ENTRY'
       | 'ROOM_RESIDENCE'
-      | 'OUTFIT_ITEM'
+      | 'OUTFIT_TRICKLE'
       | 'STAFF_GRANT';
     /**
      * @description * `technique` - TECHNIQUE
@@ -13457,6 +15081,7 @@ export interface components {
       readonly trust_requirements: string;
       /** @description The character this sheet belongs to */
       readonly character_sheet: number;
+      readonly primary_table: number;
       readonly chapters_count: number;
       /** Format: date-time */
       readonly created_at: string;
@@ -13521,6 +15146,32 @@ export interface components {
       is_gm_feedback?: boolean;
       comments: string;
     };
+    /** @description Read serializer for StoryGMOffer records. */
+    StoryGMOffer: {
+      readonly id: number;
+      readonly story: number;
+      readonly offered_to: number;
+      readonly offered_by_account: number;
+      readonly status: components['schemas']['StoryGMOfferStatusEnum'];
+      /** @description Optional note from offerer. */
+      readonly message: string;
+      /** @description Optional GM response. */
+      readonly response_note: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly responded_at: string | null;
+      /** Format: date-time */
+      readonly updated_at: string;
+    };
+    /**
+     * @description * `pending` - Pending
+     *     * `accepted` - Accepted
+     *     * `declined` - Declined
+     *     * `withdrawn` - Withdrawn
+     * @enum {string}
+     */
+    StoryGMOfferStatusEnum: 'pending' | 'accepted' | 'declined' | 'withdrawn';
     /** @description Lightweight serializer for story list views */
     StoryList: {
       readonly id: number;
@@ -13571,21 +15222,54 @@ export interface components {
      */
     SuitEnum: 'swords' | 'cups' | 'wands' | 'coins';
     /**
+     * @description Read serializer for TableBulletinPost — includes nested reply list.
+     *
+     *     Replies are read from ``replies_cached`` (set by the ViewSet's
+     *     Prefetch to_attr) when available, falling back to the reverse manager.
+     */
+    TableBulletinPost: {
+      readonly id: number;
+      readonly table: number;
+      /** @description If set, post is visible to story participants only. If null, post is visible to all active table members. */
+      readonly story: number | null;
+      readonly author_persona: number | null;
+      title: string;
+      body: string;
+      allow_replies?: boolean;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** Format: date-time */
+      readonly updated_at: string;
+      /** @description Return cached replies (from Prefetch to_attr) or query the DB. */
+      readonly replies: unknown[];
+    };
+    /** @description Read serializer for TableBulletinReply. */
+    TableBulletinReply: {
+      readonly id: number;
+      readonly post: number;
+      readonly author_persona: number | null;
+      body: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
      * @description * `TRAIT` - Trait
      *     * `TECHNIQUE` - Technique
-     *     * `ITEM` - Item
+     *     * `FACET` - Facet
      *     * `ROOM` - Room
      *     * `RELATIONSHIP_TRACK` - Relationship Track
      *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
+     *     * `COVENANT_ROLE` - Covenant Role
      * @enum {string}
      */
     TargetKindEnum:
       | 'TRAIT'
       | 'TECHNIQUE'
-      | 'ITEM'
+      | 'FACET'
       | 'ROOM'
       | 'RELATIONSHIP_TRACK'
-      | 'RELATIONSHIP_CAPSTONE';
+      | 'RELATIONSHIP_CAPSTONE'
+      | 'COVENANT_ROLE';
     /**
      * @description * `persona` - Persona
      *     * `organization` - Organization
@@ -13755,10 +15439,11 @@ export interface components {
        *
        *     * `TRAIT` - Trait
        *     * `TECHNIQUE` - Technique
-       *     * `ITEM` - Item
+       *     * `FACET` - Facet
        *     * `ROOM` - Room
        *     * `RELATIONSHIP_TRACK` - Relationship Track
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
+       *     * `COVENANT_ROLE` - Covenant Role
        */
       target_kind: components['schemas']['TargetKindEnum'];
       /** @default  */
@@ -13797,10 +15482,11 @@ export interface components {
        *
        *     * `TRAIT` - Trait
        *     * `TECHNIQUE` - Technique
-       *     * `ITEM` - Item
+       *     * `FACET` - Facet
        *     * `ROOM` - Room
        *     * `RELATIONSHIP_TRACK` - Relationship Track
        *     * `RELATIONSHIP_CAPSTONE` - Relationship Capstone
+       *     * `COVENANT_ROLE` - Covenant Role
        */
       target_kind: components['schemas']['TargetKindEnum'];
       target_id: number;
@@ -14102,6 +15788,59 @@ export interface components {
       description: string;
       /** @description Whether this category is currently in use */
       is_active?: boolean;
+    };
+    /**
+     * @description Input for PATCH /api/table-bulletin-posts/{id}/.
+     *
+     *     Only the post author (Lead GM of the table) or staff may edit.
+     *     No field is required; all are optional.
+     */
+    UpdateBulletinPostInput: {
+      title?: string;
+      body?: string;
+      allow_replies?: boolean;
+    };
+    /**
+     * @description Input for PATCH /api/table-bulletin-posts/{id}/.
+     *
+     *     Only the post author (Lead GM of the table) or staff may edit.
+     *     No field is required; all are optional.
+     */
+    UpdateBulletinPostInputRequest: {
+      title?: string;
+      body?: string;
+      allow_replies?: boolean;
+    };
+    /**
+     * @description Input for PATCH /api/table-bulletin-replies/{id}/.
+     *
+     *     Only the reply author or staff may edit.
+     */
+    UpdateBulletinReplyInput: {
+      body: string;
+    };
+    /**
+     * @description Input for PATCH /api/table-bulletin-replies/{id}/.
+     *
+     *     Only the reply author or staff may edit.
+     */
+    UpdateBulletinReplyInputRequest: {
+      body: string;
+    };
+    /** @description Full UserStoryMute representation. */
+    UserStoryMute: {
+      readonly id: number;
+      story: number;
+      /** Format: date-time */
+      readonly muted_at: string;
+    };
+    /** @description Input serializer for POST /api/narrative/story-mutes/. */
+    UserStoryMuteCreate: {
+      story: number;
+    };
+    /** @description Input serializer for POST /api/narrative/story-mutes/. */
+    UserStoryMuteCreateRequest: {
+      story: number;
     };
     /**
      * @description * `default` - Default
@@ -17374,6 +19113,119 @@ export interface operations {
       };
     };
   };
+  covenants_character_roles_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCharacterCovenantRoleList'];
+        };
+      };
+    };
+  };
+  covenants_character_roles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterCovenantRole'];
+        };
+      };
+    };
+  };
+  covenants_gear_compatibilities_list: {
+    parameters: {
+      query?: {
+        covenant_role?: number;
+        /**
+         * @description * `light_armor` - Light Armor
+         *     * `medium_armor` - Medium Armor
+         *     * `heavy_armor` - Heavy Armor
+         *     * `robe` - Robe
+         *     * `melee_one_hand` - One-Handed Melee
+         *     * `melee_two_hand` - Two-Handed Melee
+         *     * `ranged` - Ranged
+         *     * `thrown` - Thrown
+         *     * `shield` - Shield
+         *     * `jewelry` - Jewelry
+         *     * `clothing` - Clothing
+         *     * `other` - Other
+         */
+        gear_archetype?:
+          | 'clothing'
+          | 'heavy_armor'
+          | 'jewelry'
+          | 'light_armor'
+          | 'medium_armor'
+          | 'melee_one_hand'
+          | 'melee_two_hand'
+          | 'other'
+          | 'ranged'
+          | 'robe'
+          | 'shield'
+          | 'thrown';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GearArchetypeCompatibility'][];
+        };
+      };
+    };
+  };
+  covenants_gear_compatibilities_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this gear archetype compatibility. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GearArchetypeCompatibility'];
+        };
+      };
+    };
+  };
   distinctions_categories_list: {
     parameters: {
       query?: never;
@@ -18053,6 +19905,206 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['EpisodeDetail'];
+        };
+      };
+    };
+  };
+  eras_list: {
+    parameters: {
+      query?: {
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        season_number?: number;
+        season_number_max?: number;
+        season_number_min?: number;
+        status?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedEraList'];
+        };
+      };
+    };
+  };
+  eras_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EraRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Era'];
+        };
+      };
+    };
+  };
+  eras_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this era. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Era'];
+        };
+      };
+    };
+  };
+  eras_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this era. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EraRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Era'];
+        };
+      };
+    };
+  };
+  eras_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this era. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  eras_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this era. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedEraRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Era'];
+        };
+      };
+    };
+  };
+  eras_advance_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this era. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EraRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Era'];
+        };
+      };
+    };
+  };
+  eras_archive_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this era. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EraRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Era'];
         };
       };
     };
@@ -19014,6 +21066,54 @@ export interface operations {
       };
     };
   };
+  gm_profiles_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        /** @description Search by username */
+        search?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGMProfileList'];
+        };
+      };
+    };
+  };
+  gm_profiles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this GM Profile. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GMProfile'];
+        };
+      };
+    };
+  };
   gm_queue_list: {
     parameters: {
       query?: {
@@ -19929,6 +22029,99 @@ export interface operations {
       };
     };
   };
+  items_equipped_items_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description * `head` - Head
+         *     * `face` - Face
+         *     * `neck` - Neck
+         *     * `shoulders` - Shoulders
+         *     * `torso` - Torso
+         *     * `back` - Back
+         *     * `waist` - Waist
+         *     * `left_arm` - Left Arm
+         *     * `right_arm` - Right Arm
+         *     * `left_hand` - Left Hand
+         *     * `right_hand` - Right Hand
+         *     * `left_leg` - Left Leg
+         *     * `right_leg` - Right Leg
+         *     * `feet` - Feet
+         *     * `left_finger` - Left Finger
+         *     * `right_finger` - Right Finger
+         *     * `left_ear` - Left Ear
+         *     * `right_ear` - Right Ear
+         */
+        body_region?:
+          | 'back'
+          | 'face'
+          | 'feet'
+          | 'head'
+          | 'left_arm'
+          | 'left_ear'
+          | 'left_finger'
+          | 'left_hand'
+          | 'left_leg'
+          | 'neck'
+          | 'right_arm'
+          | 'right_ear'
+          | 'right_finger'
+          | 'right_hand'
+          | 'right_leg'
+          | 'shoulders'
+          | 'torso'
+          | 'waist';
+        character?: number;
+        /**
+         * @description * `skin` - Skin
+         *     * `under` - Under
+         *     * `base` - Base
+         *     * `over` - Over
+         *     * `outer` - Outer
+         *     * `accessory` - Accessory
+         */
+        equipment_layer?: 'accessory' | 'base' | 'outer' | 'over' | 'skin' | 'under';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedEquippedItemReadList'];
+        };
+      };
+    };
+  };
+  items_equipped_items_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this equipped item. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EquippedItemRead'];
+        };
+      };
+    };
+  };
   items_interaction_types_list: {
     parameters: {
       query?: {
@@ -19968,6 +22161,372 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['InteractionType'];
+        };
+      };
+    };
+  };
+  items_inventory_list: {
+    parameters: {
+      query?: {
+        character?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedItemInstanceReadList'];
+        };
+      };
+    };
+  };
+  items_inventory_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this item instance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ItemInstanceRead'];
+        };
+      };
+    };
+  };
+  items_item_facets_list: {
+    parameters: {
+      query?: {
+        facet?: number;
+        item_instance?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedItemFacetReadList'];
+        };
+      };
+    };
+  };
+  items_item_facets_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ItemFacetWriteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ItemFacetWrite'];
+        };
+      };
+    };
+  };
+  items_item_facets_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this item facet. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ItemFacetRead'];
+        };
+      };
+    };
+  };
+  items_item_facets_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this item facet. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_outfit_slots_list: {
+    parameters: {
+      query?: {
+        outfit?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOutfitSlotReadList'];
+        };
+      };
+    };
+  };
+  items_outfit_slots_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OutfitSlotWriteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OutfitSlotWrite'];
+        };
+      };
+    };
+  };
+  items_outfit_slots_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this outfit slot. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OutfitSlotRead'];
+        };
+      };
+    };
+  };
+  items_outfit_slots_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this outfit slot. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_outfits_list: {
+    parameters: {
+      query?: {
+        character_sheet?: number;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        wardrobe?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOutfitReadList'];
+        };
+      };
+    };
+  };
+  items_outfits_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OutfitWriteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OutfitWrite'];
+        };
+      };
+    };
+  };
+  items_outfits_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this outfit. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OutfitRead'];
+        };
+      };
+    };
+  };
+  items_outfits_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this outfit. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OutfitWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OutfitWrite'];
+        };
+      };
+    };
+  };
+  items_outfits_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this outfit. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_outfits_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this outfit. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedOutfitWriteRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OutfitWrite'];
         };
       };
     };
@@ -20573,139 +23132,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['CharacterAura'];
-        };
-      };
-    };
-  };
-  magic_character_facets_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['CharacterFacet'][];
-        };
-      };
-    };
-  };
-  magic_character_facets_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['CharacterFacetRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['CharacterFacet'];
-        };
-      };
-    };
-  };
-  magic_character_facets_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['CharacterFacet'];
-        };
-      };
-    };
-  };
-  magic_character_facets_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['CharacterFacetRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['CharacterFacet'];
-        };
-      };
-    };
-  };
-  magic_character_facets_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  magic_character_facets_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedCharacterFacetRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['CharacterFacet'];
         };
       };
     };
@@ -21371,11 +23797,11 @@ export interface operations {
          *     * `POSE_ENDORSEMENT` - Pose endorsement
          *     * `SCENE_ENTRY` - Scene entry endorsement
          *     * `ROOM_RESIDENCE` - Room residence trickle
-         *     * `OUTFIT_ITEM` - Outfit item trickle (reserved — stubbed)
+         *     * `OUTFIT_TRICKLE` - Outfit trickle
          *     * `STAFF_GRANT` - Staff grant
          */
         source?:
-          | 'OUTFIT_ITEM'
+          | 'OUTFIT_TRICKLE'
           | 'POSE_ENDORSEMENT'
           | 'ROOM_RESIDENCE'
           | 'SCENE_ENTRY'
@@ -22296,6 +24722,56 @@ export interface operations {
       };
     };
   };
+  narrative_gemits_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        related_era?: number;
+        related_story?: number;
+        sender_account?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedGemitList'];
+        };
+      };
+    };
+  };
+  narrative_gemits_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['GemitCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GemitCreate'];
+        };
+      };
+    };
+  };
   narrative_my_messages_list: {
     parameters: {
       query?: {
@@ -22317,6 +24793,73 @@ export interface operations {
         content: {
           'application/json': components['schemas']['PaginatedNarrativeMessageDeliveryList'];
         };
+      };
+    };
+  };
+  narrative_story_mutes_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedUserStoryMuteList'];
+        };
+      };
+    };
+  };
+  narrative_story_mutes_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UserStoryMuteCreateRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UserStoryMuteCreate'];
+        };
+      };
+    };
+  };
+  narrative_story_mutes_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
@@ -24881,6 +27424,7 @@ export interface operations {
         page?: number;
         /** @description Number of results to return per page. */
         page_size?: number;
+        primary_table?: number;
         privacy?: string;
         /** @description Requires Trust Category */
         requires_trust_category?: string;
@@ -25056,6 +27600,32 @@ export interface operations {
       };
     };
   };
+  stories_assign_to_table_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryDetail'];
+        };
+      };
+    };
+  };
   stories_chapters_retrieve: {
     parameters: {
       query?: never;
@@ -25067,6 +27637,32 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryDetail'];
+        };
+      };
+    };
+  };
+  stories_detach_from_table_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryDetailRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {
@@ -25100,6 +27696,32 @@ export interface operations {
       };
     };
   };
+  stories_offer_to_gm_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryDetail'];
+        };
+      };
+    };
+  };
   stories_participants_retrieve: {
     parameters: {
       query?: never;
@@ -25111,6 +27733,32 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryDetail'];
+        };
+      };
+    };
+  };
+  stories_send_ooc_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryDetailRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {
@@ -25387,6 +28035,125 @@ export interface operations {
       };
     };
   };
+  story_gm_offers_list: {
+    parameters: {
+      query?: {
+        created_after?: string;
+        offered_by_account?: number;
+        offered_to?: number;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        status?: string;
+        story?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStoryGMOfferList'];
+        };
+      };
+    };
+  };
+  story_gm_offers_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story gm offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryGMOffer'];
+        };
+      };
+    };
+  };
+  story_gm_offers_accept_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story gm offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryGMOffer'];
+        };
+      };
+    };
+  };
+  story_gm_offers_decline_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story gm offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryGMOffer'];
+        };
+      };
+    };
+  };
+  story_gm_offers_withdraw_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story gm offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryGMOffer'];
+        };
+      };
+    };
+  };
   story_participations_list: {
     parameters: {
       query?: {
@@ -25602,6 +28369,301 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SceneSummaryRevision'];
+        };
+      };
+    };
+  };
+  table_bulletin_posts_list: {
+    parameters: {
+      query?: {
+        author_persona?: number;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        story?: number;
+        /** @description Table-wide posts only */
+        story_isnull?: boolean;
+        table?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedTableBulletinPostList'];
+        };
+      };
+    };
+  };
+  table_bulletin_posts_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateBulletinPostInputRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CreateBulletinPostInput'];
+        };
+      };
+    };
+  };
+  table_bulletin_posts_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this table bulletin post. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TableBulletinPost'];
+        };
+      };
+    };
+  };
+  table_bulletin_posts_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this table bulletin post. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['UpdateBulletinPostInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UpdateBulletinPostInput'];
+        };
+      };
+    };
+  };
+  table_bulletin_posts_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this table bulletin post. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  table_bulletin_posts_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this table bulletin post. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedUpdateBulletinPostInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UpdateBulletinPostInput'];
+        };
+      };
+    };
+  };
+  table_bulletin_replies_list: {
+    parameters: {
+      query?: {
+        author_persona?: number;
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        post?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedTableBulletinReplyList'];
+        };
+      };
+    };
+  };
+  table_bulletin_replies_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateBulletinReplyInputRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CreateBulletinReplyInput'];
+        };
+      };
+    };
+  };
+  table_bulletin_replies_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this table bulletin reply. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['TableBulletinReply'];
+        };
+      };
+    };
+  };
+  table_bulletin_replies_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this table bulletin reply. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateBulletinReplyInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UpdateBulletinReplyInput'];
+        };
+      };
+    };
+  };
+  table_bulletin_replies_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this table bulletin reply. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  table_bulletin_replies_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this table bulletin reply. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedUpdateBulletinReplyInputRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UpdateBulletinReplyInput'];
         };
       };
     };
@@ -25929,6 +28991,29 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedTransitionRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Transition'];
+        };
+      };
+    };
+  };
+  transitions_save_with_outcomes_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TransitionRequest'];
       };
     };
     responses: {
