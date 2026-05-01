@@ -23,6 +23,10 @@ export const WS_MESSAGE_TYPE = {
   ROULETTE_RESULT: 'roulette_result',
   INTERACTION: 'interaction',
   PUPPET_CHANGED: 'puppet_changed',
+  /** Inbound: result of an `execute_action` invocation. */
+  ACTION_RESULT: 'action_result',
+  /** Outbound: invoke a registered action by name with kwargs. */
+  EXECUTE_ACTION: 'execute_action',
 } as const;
 
 export type SocketMessageType = (typeof WS_MESSAGE_TYPE)[keyof typeof WS_MESSAGE_TYPE];
@@ -35,7 +39,26 @@ export interface GameMessage {
 
 export type IncomingMessage = [SocketMessageType, unknown[], Record<string, unknown>?];
 
-export type OutgoingMessage = [typeof WS_MESSAGE_TYPE.TEXT, [string], Record<string, unknown>];
+export type OutgoingMessage =
+  | [typeof WS_MESSAGE_TYPE.TEXT, [string], Record<string, unknown>]
+  | [
+      typeof WS_MESSAGE_TYPE.EXECUTE_ACTION,
+      [],
+      { action: string; kwargs: Record<string, unknown> },
+    ];
+
+/**
+ * Result payload for an `execute_action` round-trip. Mirrors the dataclass
+ * returned by the backend's action dispatcher: success indicates whether the
+ * service succeeded, message is a human-readable string (may be null when the
+ * action has no message), and data carries any structured payload the action
+ * elects to return.
+ */
+export interface ActionResultPayload {
+  success: boolean;
+  message: string | null;
+  data: Record<string, unknown> | null;
+}
 
 export interface VnMessagePayload {
   text: string;

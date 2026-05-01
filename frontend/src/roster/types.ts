@@ -3,6 +3,12 @@ import type { Gender } from '@/world/character_sheets/types';
 export interface MyRosterEntry {
   id: number;
   name: CharacterData['name'];
+  /**
+   * The underlying ObjectDB pk for the character. Doubles as the
+   * character_sheet pk because CharacterSheet uses primary_key=True
+   * on its OneToOne to ObjectDB.
+   */
+  character_id: number;
   profile_picture_url: string | null;
   primary_persona_id: number | null;
 }

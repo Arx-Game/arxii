@@ -472,6 +472,16 @@ class MyRosterEntrySerializerTestCase(TestCase):
         assert "name" in data
         assert data["name"] == self.entry.character_sheet.character.db_key
 
+    def test_character_id_matches_character_sheet_pk(self):
+        """character_id is exposed and equals the underlying character/sheet pk."""
+        data = MyRosterEntrySerializer(self.entry).data
+
+        assert "character_id" in data
+        # CharacterSheet uses ObjectDB pk as its own pk (primary_key=True),
+        # so character_id == character_sheet_id == ObjectDB.id.
+        assert data["character_id"] == self.entry.character_sheet.character_id
+        assert data["character_id"] == self.entry.character_sheet.pk
+
     def test_primary_persona_id_returns_pk_when_present(self):
         """primary_persona_id returns the PRIMARY persona's pk."""
         data = MyRosterEntrySerializer(self.entry).data

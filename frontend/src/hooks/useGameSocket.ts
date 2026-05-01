@@ -3,8 +3,10 @@ import { addSessionMessage, resetGame, setSessionConnectionStatus } from '@/stor
 import { setAccount } from '@/store/authSlice';
 import { parseGameMessage } from './parseGameMessage';
 import { GAME_MESSAGE_TYPE, WS_MESSAGE_TYPE } from './types';
+import { emitActionResult } from './actionResultBus';
 
 import type {
+  ActionResultPayload,
   CommandErrorPayload,
   GameMessage,
   IncomingMessage,
@@ -121,6 +123,20 @@ export function useGameSocket() {
             return;
           }
 
+          if (msgType === WS_MESSAGE_TYPE.ACTION_RESULT) {
+            // Defensive: kwargs may be undefined if the server sends a malformed
+            // frame. emitActionResult is a side-effecting bus call only — every
+            // listener is responsible for its own toast/UX.
+            emitActionResult(
+              (kwargs as unknown as ActionResultPayload) ?? {
+                success: false,
+                message: null,
+                data: null,
+              }
+            );
+            return;
+          }
+
           if (msgType === WS_MESSAGE_TYPE.ROULETTE_RESULT) {
             handleRoulettePayload(kwargs as unknown as RoulettePayload, dispatch);
             return;
@@ -167,5 +183,27 @@ export function useGameSocket() {
     }
   }, []);
 
-  return { connect, send, disconnectAll };
+  /**
+   * Invoke a registered backend action over the websocket.
+   *
+   * The action dispatcher resolves `action` against the registry, runs the
+   * backing service, and emits an `ACTION_RESULT` message. Listeners that
+   * care about the outcome should subscribe via `useActionResult`.
+   *
+   * Silently no-ops when the named character has no open socket — callers
+   * should disable buttons until the session is connected, but a missing
+   * socket should not blow up the page.
+   */
+  const executeAction = useCallback(
+    (character: MyRosterEntry['name'], action: string, kwargs: Record<string, unknown> = {}) => {
+      const socket = sockets[character];
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        const message: OutgoingMessage = [WS_MESSAGE_TYPE.EXECUTE_ACTION, [], { action, kwargs }];
+        socket.send(JSON.stringify(message));
+      }
+    },
+    []
+  );
+
+  return { connect, send, disconnectAll, executeAction };
 }

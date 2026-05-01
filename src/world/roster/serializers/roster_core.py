@@ -74,6 +74,14 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     """Serialize a summary of a roster entry for account menus."""
 
     name = serializers.CharField(source="character_sheet.character.db_key")
+    # ``character_id`` doubles as ``character_sheet_id`` because CharacterSheet
+    # uses the ObjectDB pk as its primary key (OneToOne with primary_key=True).
+    # Surfacing it here lets the frontend route per-character API calls (e.g.
+    # the wardrobe page) without a second lookup.
+    character_id = serializers.IntegerField(
+        source="character_sheet.character_id",
+        read_only=True,
+    )
     profile_picture_url = serializers.SerializerMethodField()
     primary_persona_id = serializers.SerializerMethodField()
 
@@ -82,6 +90,7 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
         fields: ClassVar[tuple[str, ...]] = (
             "id",
             "name",
+            "character_id",
             "profile_picture_url",
             "primary_persona_id",
         )

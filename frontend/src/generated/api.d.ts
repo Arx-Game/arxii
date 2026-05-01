@@ -11896,6 +11896,7 @@ export interface components {
     MyRosterEntry: {
       readonly id: number;
       name: string;
+      readonly character_id: number;
       /** @description Return the cloudinary URL for the entry's profile picture, or None. */
       readonly profile_picture_url: string | null;
       /**
