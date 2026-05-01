@@ -30,8 +30,8 @@ This spec adds:
    so PCs and persistent NPCs are never destroyed by combat cleanup. Closes
    the polymorphic-FK escape hatch the predecessor spec hinted at and lets
    `TECHNIQUE_AFFECTED` fire uniformly on every target including mooks.
-5. **Round-tick wiring** so conditions actually decay — `process_start_of_round`
-   and `process_end_of_round` are called from combat lifecycle. Pre-existing
+5. **Round-tick wiring** so conditions actually decay — `process_round_start`
+   and `process_round_end` are called from combat lifecycle. Pre-existing
    gap (NPC threat entries already applied conditions that never ticked); fixed
    here because non-attack conditions make the gap user-visible.
 
@@ -54,7 +54,7 @@ This spec adds:
 - `CombatNPC` typeclass for ephemeral combat-only ObjectDBs.
 - `TECHNIQUE_AFFECTED` per-target events fire uniformly on all targets
   (ally, self, persona-bearing enemy, ephemeral mook).
-- Round-tick (`process_start_of_round` / `process_end_of_round`) called from
+- Round-tick (`process_round_start` / `process_round_end`) called from
   combat lifecycle for active participants and active opponents.
 
 ### Out of scope (deferred)
@@ -144,9 +144,12 @@ world/magic/
 world/conditions/
 ├── models.py
 │   └── ConditionInstance           ← UNCHANGED (target stays single ObjectDB FK)
-└── services.py                     ← UNCHANGED behaviorally; round-tick functions
-                                      already exist (process_start_of_round /
-                                      process_end_of_round); combat now calls them
+└── services.py                     ← bulk_apply_conditions signature widens to
+                                      accept per-entry severity/duration via
+                                      a BulkConditionApplication dataclass.
+                                      Round-tick functions (process_round_start /
+                                      process_round_end) already exist; combat
+                                      now calls them.
 ```
 
 ## Data flow
@@ -226,6 +229,7 @@ resolve_round(encounter)
         │                 │           │     resolve target_kind to ObjectDB   │
         │                 │           │     severity = compute_severity(...)  │
         │                 │           │     duration = compute_duration(...)  │
+        │                 │           │     build BulkConditionApplication    │
         │                 │           └─ bulk_apply_conditions(applications,  │
         │                 │               source_character=caster.character,  │
         │                 │               source_technique=technique)         │
@@ -252,7 +256,7 @@ resolve_round(encounter)
 After all actions resolved:
   ├─ dying final round consumption (existing)
   ├─ boss phase transitions (existing)
-  ├─ NEW: process_end_of_round for each active participant + active opponent
+  ├─ NEW: process_round_end for each active participant + active opponent
   │     # decrements rounds_remaining on conditions, ticks DoT, fires expiry
   └─ encounter completion check
        ├─ if completed: status → COMPLETED
@@ -263,7 +267,7 @@ After all actions resolved:
 
 begin_declaration_phase(encounter)  # next round
   ├─ status BETWEEN_ROUNDS → DECLARING; round_number += 1
-  ├─ NEW: process_start_of_round for each active participant + active opponent
+  ├─ NEW: process_round_start for each active participant + active opponent
   │     # start-of-round DoT (Burning, etc.)
   └─ expire_pulls_for_round (existing)
 ```
@@ -272,8 +276,9 @@ begin_declaration_phase(encounter)  # next round
 
 ### `CombatEncounter` change
 
+`CombatEncounter` currently has a `scene` FK but no room linkage. Adding:
+
 ```python
-# ADD (only if not already present):
 room = models.ForeignKey(
     "objects.ObjectDB",
     on_delete=models.PROTECT,
@@ -282,6 +287,10 @@ room = models.ForeignKey(
               "ObjectDBs are placed here at creation.",
 )
 ```
+
+Existing test factories and any encounter-creation paths must supply `room`.
+Verified: `room` is not currently a field on `CombatEncounter` — this is a
+definite new field, not conditional.
 
 ### `CombatOpponent` changes
 
@@ -447,16 +456,22 @@ def has_persistent_identity_references(objectdb: ObjectDB) -> bool:
     Single source of truth for "is this an ObjectDB any persistent system
     cares about?" — when a new persistent-identity model is added, this
     function adds the corresponding check.
-    """
-    from world.scenes.models import Persona  # noqa: PLC0415
-    from world.roster.models import RosterEntry  # noqa: PLC0415
-    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
 
-    if Persona.objects.filter(character__objectdb=objectdb).exists():
+    Traversal paths reflect the actual schema:
+    - CharacterSheet.character is a OneToOne to ObjectDB (primary_key=True),
+      so the direct filter is `CharacterSheet.objects.filter(character=objectdb)`.
+    - Persona.character_sheet FK; walks through CharacterSheet to ObjectDB.
+    - RosterEntry.character_sheet FK; same walk.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    if CharacterSheet.objects.filter(character=objectdb).exists():
         return True
-    if RosterEntry.objects.filter(character__objectdb=objectdb).exists():
+    if Persona.objects.filter(character_sheet__character=objectdb).exists():
         return True
-    if CharacterSheet.objects.filter(character__objectdb=objectdb).exists():
+    if RosterEntry.objects.filter(character_sheet__character=objectdb).exists():
         return True
     return False
 
@@ -666,30 +681,96 @@ class CombatTechniqueResolution:
     scaled_damage: int
 ```
 
+### `bulk_apply_conditions` interface change
+
+The existing `bulk_apply_conditions(applications, *, severity, duration_rounds, ...)`
+takes a single `severity` and `duration_rounds` applied uniformly to every
+entry in the batch. That doesn't fit our use case: a single technique cast can
+apply Empowered (sev=3, dur=4) to self AND Slowed (sev=1, dur=2) to an enemy
+in the same batch. Per-entry values are required.
+
+Replace the signature (no backward-compatible dual-format, per project rule):
+
+```python
+# world/conditions/types.py — NEW
+
+@dataclass(frozen=True)
+class BulkConditionApplication:
+    """One target/template/per-entry-knobs binding for bulk_apply_conditions."""
+    target: ObjectDB
+    template: ConditionTemplate
+    severity: int = 1
+    duration_rounds: int | None = None
+    stack_count: int = 1
+
+
+# world/conditions/services.py — replaced signature
+
+def bulk_apply_conditions(
+    applications: list[BulkConditionApplication],
+    *,
+    source_character: ObjectDB | None = None,
+    source_technique: Technique | None = None,
+    source_description: str = "",
+) -> list[ApplyConditionResult]:
+    """Apply multiple conditions in one transaction with batched queries.
+
+    Each BulkConditionApplication carries its own severity, duration_rounds,
+    and stack_count. Source attribution (caster, technique, description) is
+    shared across the batch — a single cast is the source of all entries.
+    """
+    if not applications:
+        return []
+    targets = list({a.target for a in applications})
+    templates = list({a.template for a in applications})
+    ctx = _build_bulk_context(targets, templates)
+    results: list[ApplyConditionResult] = []
+    for app in applications:
+        # ... existing CONDITION_PRE_APPLY / _apply_single / CONDITION_APPLIED logic,
+        #     reading severity/duration_rounds/stack_count from app instead of
+        #     shared kwargs ...
+        ...
+    return results
+```
+
+**Caller migration** within this PR:
+- `_resolve_npc_action` in `world/combat/services.py` constructs
+  `BulkConditionApplication` rows from `(target_obj, ct)` tuples with
+  `severity=1, duration_rounds=None` (preserving today's behavior).
+- `CombatTechniqueResolver._apply_conditions` constructs them with the
+  per-row formula outputs from `TechniqueAppliedCondition.compute_severity`
+  and `compute_duration_rounds`.
+- Any other call sites (verified during plan-writing) get the same
+  one-line conversion.
+
+The `apply_condition` single-application function keeps its existing keyword
+arguments (severity, duration_rounds) — it's a thin wrapper over the same
+logic and changing it is not load-bearing.
+
 ### Round-tick wiring
 
 In `begin_declaration_phase`, after `round_number` advances and before
 `expire_pulls_for_round`:
 
 ```python
-from world.conditions.services import process_start_of_round
+from world.conditions.services import process_round_start
 for p in active_participants:
-    process_start_of_round(p.character_sheet.character)
+    process_round_start(p.character_sheet.character)
 for opp in active_opponents:
     if opp.objectdb is not None:
-        process_start_of_round(opp.objectdb)
+        process_round_start(opp.objectdb)
 ```
 
 In `resolve_round`, after dying-final-round consumption and before
 boss-phase transitions:
 
 ```python
-from world.conditions.services import process_end_of_round
+from world.conditions.services import process_round_end
 for p in active_participants:
-    process_end_of_round(p.character_sheet.character)
+    process_round_end(p.character_sheet.character)
 for opp in active_opponents:
     if opp.objectdb is not None:
-        process_end_of_round(opp.objectdb)
+        process_round_end(opp.objectdb)
 ```
 
 The `if opp.objectdb is not None` guard handles the post-cleanup state
@@ -782,9 +863,17 @@ where an ephemeral ObjectDB has been deleted (FK is now null).
 - `test_round_tick_runs_for_active_opponents`.
 - `test_round_tick_skips_completed_encounter`.
 
-### Conditions — minimal regression
+### Conditions — `bulk_apply_conditions` signature change
 
-- `test_bulk_apply_conditions_unchanged_signature` — confirms no behavioral break.
+- `test_bulk_apply_conditions_per_entry_severity` — applications with different
+  severities applied correctly per row.
+- `test_bulk_apply_conditions_per_entry_duration` — same for duration.
+- `test_bulk_apply_conditions_per_entry_stack_count` — same for stack_count.
+- `test_bulk_apply_conditions_shared_source_attribution` — source_character and
+  source_technique apply to all rows in batch.
+- `test_bulk_apply_conditions_empty_list_no_op` — regression.
+- `test_bulk_apply_conditions_one_pre_apply_cancel_does_not_skip_others` —
+  per-entry CONDITION_PRE_APPLY cancel only skips that one entry.
 
 ### Factories
 
@@ -806,11 +895,16 @@ Schema-only. No data migrations; local DB is disposable, CI starts fresh, factor
 
 ### Migration order (dependency-driven)
 
-1. **`combat`** — add `CombatOpponent.objectdb` (OneToOne SET_NULL nullable), `CombatOpponent.objectdb_is_ephemeral` (bool default False), CheckConstraint, optional `CombatEncounter.room` if absent.
-2. **`combat`** — rename `CombatRoundAction.focused_target` → `focused_opponent_target`; add `CombatRoundAction.focused_ally_target`.
-3. **`magic`** — add `TechniqueAppliedCondition` model and `Technique.applied_conditions` M2M.
+1. **`combat`** — add `CombatOpponent.objectdb` (OneToOne SET_NULL nullable),
+   `CombatOpponent.objectdb_is_ephemeral` (bool default False), CheckConstraint,
+   `CombatEncounter.room` (definite new field, not conditional).
+2. **`combat`** — rename `CombatRoundAction.focused_target` → `focused_opponent_target`;
+   add `CombatRoundAction.focused_ally_target`.
+3. **`magic`** — add `TechniqueAppliedCondition` model and
+   `Technique.applied_conditions` M2M.
 
-No `conditions` migration — `ConditionInstance` schema unchanged.
+No `conditions` schema migration — `ConditionInstance` model unchanged. The
+`bulk_apply_conditions` signature change is code-only (caller migration).
 
 ### Code update sequencing
 
@@ -818,12 +912,14 @@ Single branch with commits in this order so reviewers can step through:
 
 1. Combat schema (migrations 1+2) and factory updates — no behavioral change yet.
 2. Magic schema (migration 3) and factory updates.
-3. CombatNPC typeclass + `add_opponent` rewrite + `cleanup_completed_encounter`.
-4. Resolver rename + `_apply_conditions` method.
-5. `compute_effective_intensity` helper + INTENSITY_BUMP wiring.
-6. `_resolve_pc_action` removes the `base_power is None` no-op branch.
-7. Round-tick wiring in `begin_declaration_phase` + `resolve_round`.
-8. Tests added per step (not bulk-at-the-end).
+3. `BulkConditionApplication` dataclass + `bulk_apply_conditions` signature
+   change + caller migration (`_resolve_npc_action`, any other callers).
+4. CombatNPC typeclass + `add_opponent` rewrite + `cleanup_completed_encounter`.
+5. Resolver rename + `_apply_conditions` method.
+6. `compute_effective_intensity` helper + INTENSITY_BUMP wiring.
+7. `_resolve_pc_action` removes the `base_power is None` no-op branch.
+8. Round-tick wiring in `begin_declaration_phase` + `resolve_round`.
+9. Tests added per step (not bulk-at-the-end).
 
 ## Anti-patterns avoided
 
