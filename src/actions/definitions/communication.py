@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.core.exceptions import ObjectDoesNotExist
 
@@ -194,6 +194,8 @@ class WhisperAction(Action):
 
     intent_event: str | None = "before_whisper"
     result_event: str | None = "whisper"
+
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset({"target"})
 
     def execute(
         self,
