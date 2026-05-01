@@ -10,6 +10,7 @@ from world.items.models import (
     EquippedItem,
     InteractionType,
     ItemFacet,
+    ItemInstance,
     ItemTemplate,
     QualityTier,
     TemplateInteraction,
@@ -156,6 +157,38 @@ class ItemTemplateListSerializer(serializers.ModelSerializer):
             "image_url",
         ]
         read_only_fields = fields
+
+
+class ItemInstanceReadSerializer(serializers.ModelSerializer):
+    """Read serializer for ItemInstance — used by the inventory listing."""
+
+    template = ItemTemplateListSerializer(read_only=True)
+    quality_tier = QualityTierSerializer(read_only=True)
+    display_name = serializers.CharField(read_only=True)
+    display_description = serializers.CharField(read_only=True)
+    display_image_url = serializers.SerializerMethodField()
+    contained_in = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = ItemInstance
+        fields = [
+            "id",
+            "template",
+            "quality_tier",
+            "display_name",
+            "display_description",
+            "display_image_url",
+            "contained_in",
+            "quantity",
+            "charges",
+            "is_open",
+        ]
+        read_only_fields = fields
+
+    def get_display_image_url(self, obj: ItemInstance) -> str | None:
+        """Return the cloudinary URL for the item's display image, if any."""
+        media = obj.display_image
+        return media.cloudinary_url if media else None
 
 
 class ItemTemplateDetailSerializer(serializers.ModelSerializer):

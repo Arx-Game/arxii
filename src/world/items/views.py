@@ -12,6 +12,7 @@ from world.items.filters import (
     EquippedItemFilter,
     InteractionTypeFilter,
     ItemFacetFilter,
+    ItemInstanceFilter,
     ItemTemplateFilter,
     QualityTierFilter,
 )
@@ -30,6 +31,7 @@ from world.items.serializers import (
     InteractionTypeSerializer,
     ItemFacetReadSerializer,
     ItemFacetWriteSerializer,
+    ItemInstanceReadSerializer,
     ItemTemplateDetailSerializer,
     ItemTemplateListSerializer,
     QualityTierSerializer,
@@ -150,6 +152,38 @@ class ItemFacetViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance: ItemFacet) -> None:
         """Remove facet via service so cache invalidation fires."""
         remove_facet_from_item(item_facet=instance)
+
+
+class ItemInstanceViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only listing of ItemInstance rows for a character's inventory.
+
+    The wardrobe page uses this to render carried-but-not-worn items. The
+    ``character`` query parameter filters to items whose ``game_object.location``
+    is the requested character (i.e., currently held by them).
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = ItemInstanceReadSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ItemInstanceFilter
+    pagination_class = ItemTemplatePagination
+    queryset = (
+        ItemInstance.objects.select_related(
+            "template",
+            "quality_tier",
+            "game_object",
+            "image",
+            "template__image",
+        )
+        .prefetch_related(
+            Prefetch(
+                "item_facets",
+                queryset=ItemFacet.objects.select_related("facet", "attachment_quality_tier"),
+                to_attr="cached_item_facets",
+            ),
+        )
+        .order_by("-pk")
+    )
 
 
 class EquippedItemViewSet(viewsets.ReadOnlyModelViewSet):
