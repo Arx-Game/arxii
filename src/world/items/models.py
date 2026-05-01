@@ -135,6 +135,10 @@ class ItemTemplate(SharedMemoryModel):
         default=False,
         help_text="Whether this item can hold other items.",
     )
+    is_wardrobe = models.BooleanField(
+        default=False,
+        help_text="Whether instances of this template can store Outfit definitions.",
+    )
     container_capacity = models.PositiveIntegerField(
         default=0,
         help_text="Maximum number of items this container can hold.",
@@ -601,3 +605,73 @@ class ItemFacet(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.item_instance} ← {self.facet}"
+
+
+class Outfit(SharedMemoryModel):
+    """A named saved look — a defined arrangement of items in body slots.
+
+    Owned by a CharacterSheet (the source-of-truth above personas). Stored
+    in a wardrobe (an ItemInstance whose template is_wardrobe=True).
+    Applying an outfit equips its pieces atomically. Deleting an outfit
+    removes the definition only — items are not affected.
+    """
+
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    character_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="outfits",
+    )
+    wardrobe = models.ForeignKey(
+        ItemInstance,
+        on_delete=models.CASCADE,
+        related_name="stored_outfits",
+        help_text="The wardrobe ItemInstance this outfit is stored in.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character_sheet", "name"],
+                name="items_outfit_unique_name_per_character",
+            ),
+        ]
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class OutfitSlot(SharedMemoryModel):
+    """One item assignment within an outfit definition.
+
+    Mirrors EquippedItem's per-slot uniqueness. Multi-region items create
+    multiple OutfitSlot rows just like EquippedItem.
+    """
+
+    outfit = models.ForeignKey(
+        Outfit,
+        on_delete=models.CASCADE,
+        related_name="slots",
+    )
+    item_instance = models.ForeignKey(
+        ItemInstance,
+        on_delete=models.CASCADE,
+        related_name="outfit_slots",
+    )
+    body_region = models.CharField(max_length=20, choices=BodyRegion.choices)
+    equipment_layer = models.CharField(max_length=20, choices=EquipmentLayer.choices)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["outfit", "body_region", "equipment_layer"],
+                name="items_outfit_slot_unique_per_outfit",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.outfit.name}: {self.item_instance.display_name}"
