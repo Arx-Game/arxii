@@ -190,10 +190,72 @@ class CombatTechniqueResolver:
 
     def _apply_conditions(
         self,
-        check_result: CheckResult,  # noqa: ARG002
+        check_result: CheckResult,
     ) -> list[AppliedConditionResult]:
-        """Stub — real implementation lands in Task 14."""
-        return []
+        """Apply technique-authored conditions to appropriate targets.
+
+        Iterates all TechniqueAppliedCondition rows on the technique, skips rows
+        whose minimum_success_level exceeds the check result, resolves each row's
+        target_kind to a concrete ObjectDB, computes severity/duration via the row's
+        formula methods, and delegates to bulk_apply_conditions for the whole batch.
+        """
+        from world.conditions.services import bulk_apply_conditions  # noqa: PLC0415
+        from world.conditions.types import BulkConditionApplication  # noqa: PLC0415
+
+        technique = self.action.focused_action
+        sl = check_result.success_level
+        rows = list(technique.condition_applications.select_related("condition").all())
+        if not rows:
+            return []
+
+        eff_intensity = compute_effective_intensity(self.participant, self.action)
+        caster_od = self.participant.character_sheet.character
+
+        bulk_applications: list[BulkConditionApplication] = []
+        for row in rows:
+            if sl < row.minimum_success_level:
+                continue
+            target = _resolve_condition_target(row.target_kind, self.action, caster_od)
+            if target is None:
+                continue
+            severity = row.compute_severity(
+                effective_intensity=eff_intensity,
+                success_level=sl,
+            )
+            duration = row.compute_duration_rounds(
+                effective_intensity=eff_intensity,
+                success_level=sl,
+            )
+            bulk_applications.append(
+                BulkConditionApplication(
+                    target=target,
+                    template=row.condition,
+                    severity=severity,
+                    duration_rounds=duration,
+                    stack_count=row.stack_count,
+                )
+            )
+
+        if not bulk_applications:
+            return []
+
+        bulk_results = bulk_apply_conditions(
+            bulk_applications,
+            source_character=caster_od,
+            source_technique=technique,
+        )
+        out: list[AppliedConditionResult] = []
+        for app, result in zip(bulk_applications, bulk_results, strict=True):
+            out.append(
+                AppliedConditionResult(
+                    target=app.target,
+                    condition=app.template,
+                    severity_applied=app.severity,
+                    duration_rounds=app.duration_rounds,
+                    success=result.success,
+                )
+            )
+        return out
 
     def __call__(self) -> CombatTechniqueResolution:
         check_result = self._roll_check()
@@ -254,6 +316,32 @@ def compute_effective_intensity(
             if eff.kind == EffectKind.INTENSITY_BUMP and eff.scaled_value:
                 pull_bonus += eff.scaled_value
     return base + pull_bonus
+
+
+def _resolve_condition_target(
+    kind: str,
+    action: CombatRoundAction,
+    caster_od: ObjectDB,
+) -> ObjectDB | None:
+    """Resolve a ConditionTargetKind value to a concrete ObjectDB.
+
+    Returns None when the named target is absent or ineligible (e.g. opponent
+    already DEFEATED).
+    """
+    from world.magic.models.techniques import ConditionTargetKind  # noqa: PLC0415
+
+    if kind == ConditionTargetKind.SELF:
+        return caster_od
+    if kind == ConditionTargetKind.ALLY:
+        ally = action.focused_ally_target
+        return ally.character_sheet.character if ally is not None else None
+    if kind == ConditionTargetKind.ENEMY:
+        opp = action.focused_opponent_target
+        if opp is not None:
+            opp.refresh_from_db()
+        active = opp is not None and opp.status != OpponentStatus.DEFEATED
+        return opp.objectdb if active else None
+    return None
 
 
 def _build_affected_targets(

@@ -121,6 +121,249 @@ class CombatTechniqueResolverApplyConditionsTests(TestCase):
         self.assertEqual(results, [])
 
 
+class ApplyConditionsTests(TestCase):
+    """Tests for CombatTechniqueResolver._apply_conditions (real implementation)."""
+
+    def setUp(self) -> None:
+        from decimal import Decimal
+
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.magic.factories import TechniqueAppliedConditionFactory
+
+        self.resolver = _build_resolver()
+        self.technique = self.resolver.action.focused_action
+
+        # Two conditions on the technique so tests can use either or both.
+        self.cond_a = ConditionTemplateFactory(
+            name="TestCondA",
+            default_duration_value=2,
+        )
+        self.cond_b = ConditionTemplateFactory(
+            name="TestCondB",
+            default_duration_value=3,
+        )
+        self.TechniqueAppliedConditionFactory = TechniqueAppliedConditionFactory
+        self.Decimal = Decimal
+
+    def _make_applied_condition_row(self, **kwargs):
+        return self.TechniqueAppliedConditionFactory(
+            technique=self.technique,
+            **kwargs,
+        )
+
+    def test_returns_empty_when_no_rows(self) -> None:
+        """Technique with no condition_applications rows returns []."""
+        check = MagicMock(success_level=2)
+        results = self.resolver._apply_conditions(check)
+        self.assertEqual(results, [])
+
+    def test_skips_condition_below_minimum_sl(self) -> None:
+        """Rows whose minimum_success_level exceeds the check SL are skipped."""
+        # SL=1: cond_a (min_sl=1) applies, cond_b (min_sl=2) is skipped.
+        self._make_applied_condition_row(
+            condition=self.cond_a,
+            target_kind="enemy",
+            minimum_success_level=1,
+        )
+        self._make_applied_condition_row(
+            condition=self.cond_b,
+            target_kind="enemy",
+            minimum_success_level=2,
+        )
+
+        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+            from world.conditions.types import ApplyConditionResult
+
+            mock_bulk.return_value = [ApplyConditionResult(success=True)]
+            check = MagicMock(success_level=1)
+            results = self.resolver._apply_conditions(check)
+
+        # Only one row passed the SL gate → bulk called with one application
+        self.assertEqual(len(results), 1)
+        call_args = mock_bulk.call_args[0][0]
+        self.assertEqual(len(call_args), 1)
+        self.assertEqual(call_args[0].template, self.cond_a)
+
+    def test_applies_enemy_targeted_condition(self) -> None:
+        """A ENEMY-kind row lands on the focused opponent's ObjectDB."""
+        from world.combat.types import AppliedConditionResult
+        from world.conditions.types import ApplyConditionResult
+
+        self._make_applied_condition_row(
+            condition=self.cond_a,
+            target_kind="enemy",
+            minimum_success_level=1,
+        )
+        expected_target = self.resolver.action.focused_opponent_target.objectdb
+
+        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+            mock_bulk.return_value = [ApplyConditionResult(success=True)]
+            check = MagicMock(success_level=2)
+            results = self.resolver._apply_conditions(check)
+
+        self.assertEqual(len(results), 1)
+        result = results[0]
+        self.assertIsInstance(result, AppliedConditionResult)
+        self.assertEqual(result.target, expected_target)
+        self.assertEqual(result.condition, self.cond_a)
+        self.assertTrue(result.success)
+
+    def test_applies_self_targeted_condition(self) -> None:
+        """A SELF-kind row lands on the caster's ObjectDB."""
+        self._make_applied_condition_row(
+            condition=self.cond_a,
+            target_kind="self",
+            minimum_success_level=1,
+        )
+        expected_target = self.resolver.participant.character_sheet.character
+
+        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+            from world.conditions.types import ApplyConditionResult
+
+            mock_bulk.return_value = [ApplyConditionResult(success=True)]
+            check = MagicMock(success_level=1)
+            results = self.resolver._apply_conditions(check)
+
+        self.assertEqual(len(results), 1)
+        call_args = mock_bulk.call_args[0][0]
+        self.assertEqual(call_args[0].target, expected_target)
+
+    def test_applies_ally_targeted_condition(self) -> None:
+        """An ALLY-kind row lands on the focused_ally_target's ObjectDB."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.combat.factories import CombatParticipantFactory
+
+        ally_sheet = CharacterSheetFactory()
+        ally_participant = CombatParticipantFactory(
+            encounter=self.resolver.participant.encounter,
+            character_sheet=ally_sheet,
+        )
+        # Set the action's ally target
+        self.resolver.action.focused_opponent_target = None
+        self.resolver.action.focused_ally_target = ally_participant
+        self.resolver.action.save(update_fields=["focused_opponent_target", "focused_ally_target"])
+
+        self._make_applied_condition_row(
+            condition=self.cond_a,
+            target_kind="ally",
+            minimum_success_level=1,
+        )
+        expected_target = ally_sheet.character
+
+        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+            from world.conditions.types import ApplyConditionResult
+
+            mock_bulk.return_value = [ApplyConditionResult(success=True)]
+            check = MagicMock(success_level=2)
+            results = self.resolver._apply_conditions(check)
+
+        self.assertEqual(len(results), 1)
+        call_args = mock_bulk.call_args[0][0]
+        self.assertEqual(call_args[0].target, expected_target)
+
+    def test_skips_defeated_enemy(self) -> None:
+        """Enemy-kind rows are skipped when the opponent is DEFEATED."""
+        self._make_applied_condition_row(
+            condition=self.cond_a,
+            target_kind="enemy",
+            minimum_success_level=1,
+        )
+        opponent = self.resolver.action.focused_opponent_target
+        opponent.status = OpponentStatus.DEFEATED
+        opponent.save(update_fields=["status"])
+
+        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+            check = MagicMock(success_level=2)
+            results = self.resolver._apply_conditions(check)
+
+        mock_bulk.assert_not_called()
+        self.assertEqual(results, [])
+
+    def test_severity_uses_effective_intensity(self) -> None:
+        """severity_intensity_multiplier scales with effective intensity."""
+        from decimal import Decimal
+
+        self._make_applied_condition_row(
+            condition=self.cond_a,
+            target_kind="enemy",
+            minimum_success_level=1,
+            base_severity=2,
+            severity_intensity_multiplier=Decimal("1.0"),
+            severity_per_extra_sl=0,
+        )
+
+        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+            from world.conditions.types import ApplyConditionResult
+
+            mock_bulk.return_value = [ApplyConditionResult(success=True)]
+            with patch("world.combat.services.compute_effective_intensity", return_value=5):
+                check = MagicMock(success_level=1)
+                results = self.resolver._apply_conditions(check)
+
+        # base_severity=2, effective_intensity=5 * multiplier=1.0 = 5, total = 7
+        call_args = mock_bulk.call_args[0][0]
+        self.assertEqual(call_args[0].severity, 7)
+        self.assertEqual(len(results), 1)
+
+    def test_duration_falls_back_to_condition_default(self) -> None:
+        """When base_duration_rounds is None, falls back to condition.default_duration_value."""
+        self._make_applied_condition_row(
+            condition=self.cond_a,  # default_duration_value=2
+            target_kind="enemy",
+            minimum_success_level=1,
+            base_duration_rounds=None,
+            duration_intensity_multiplier=self.Decimal("0"),
+            duration_per_extra_sl=0,
+        )
+
+        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+            from world.conditions.types import ApplyConditionResult
+
+            mock_bulk.return_value = [ApplyConditionResult(success=True)]
+            check = MagicMock(success_level=1)
+            results = self.resolver._apply_conditions(check)
+
+        call_args = mock_bulk.call_args[0][0]
+        # cond_a.default_duration_value=2
+        self.assertEqual(call_args[0].duration_rounds, 2)
+        self.assertEqual(len(results), 1)
+
+    def test_success_field_mirrors_bulk_result(self) -> None:
+        """AppliedConditionResult.success mirrors the bulk result's success field."""
+        self._make_applied_condition_row(
+            condition=self.cond_a,
+            target_kind="enemy",
+            minimum_success_level=1,
+        )
+
+        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+            from world.conditions.types import ApplyConditionResult
+
+            mock_bulk.return_value = [ApplyConditionResult(success=False)]
+            check = MagicMock(success_level=2)
+            results = self.resolver._apply_conditions(check)
+
+        self.assertEqual(len(results), 1)
+        self.assertFalse(results[0].success)
+
+    def test_no_opponent_target_skips_enemy_row(self) -> None:
+        """ENEMY-kind row is skipped when focused_opponent_target is None."""
+        self._make_applied_condition_row(
+            condition=self.cond_a,
+            target_kind="enemy",
+            minimum_success_level=1,
+        )
+        self.resolver.action.focused_opponent_target = None
+        self.resolver.action.save(update_fields=["focused_opponent_target"])
+
+        with patch("world.conditions.services.bulk_apply_conditions") as mock_bulk:
+            check = MagicMock(success_level=2)
+            results = self.resolver._apply_conditions(check)
+
+        mock_bulk.assert_not_called()
+        self.assertEqual(results, [])
+
+
 class CombatTechniqueResolverCallTests(TestCase):
     def test_call_returns_resolution_with_all_fields(self) -> None:
         resolver = _build_resolver(pull_flat_bonus=2, base_power=20)
