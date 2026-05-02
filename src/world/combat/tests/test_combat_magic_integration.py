@@ -28,6 +28,7 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction
 from world.combat.services import resolve_combat_technique
+from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.fatigue.constants import EffortLevel, FatigueCategory
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -372,6 +373,17 @@ class FlatBonusPullCheckTest(TestCase):
 
 class FullHappyPathTest(TestCase):
     """End-to-end: damage applied, anima deducted, events emitted, no errors."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from decimal import Decimal
+
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
+        )
 
     def test_full_happy_path(self) -> None:
         participant, action, opponent, _anima, _, _ = _setup_pc_attacking_mook(

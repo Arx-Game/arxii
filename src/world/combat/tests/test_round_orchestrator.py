@@ -28,6 +28,7 @@ from world.combat.models import (
     CombatRoundAction,
 )
 from world.combat.services import resolve_round, upgrade_action_to_combo
+from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.covenants.factories import CovenantRoleFactory
 from world.fatigue.constants import EffortLevel
 from world.fatigue.models import FatiguePool
@@ -47,8 +48,16 @@ class ResolveRoundBasicTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        from decimal import Decimal
+
         cls.effect_attack = EffectTypeFactory(name="Attack", base_power=20)
         cls.gift = GiftFactory()
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
+        )
 
     def _setup_encounter(self):
         """Create a simple encounter: 1 PC, 1 mook, declaration phase.
@@ -368,8 +377,16 @@ class ResolveRoundBossPhaseTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        from decimal import Decimal
+
         cls.effect_attack = EffectTypeFactory(name="Attack", base_power=200)
         cls.gift = GiftFactory()
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
+        )
 
     def test_boss_phase_advances_during_round(self) -> None:
         """Boss phase transitions when health drops below trigger."""

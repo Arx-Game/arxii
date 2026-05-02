@@ -4,9 +4,11 @@ Each test isolates one method. Integration through use_technique is in
 test_combat_magic_integration.py.
 """
 
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
+from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import ActionCategory, OpponentStatus, OpponentTier
@@ -19,6 +21,7 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction
 from world.combat.services import CombatTechniqueResolver
+from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.fatigue.constants import EffortLevel, FatigueCategory
 from world.magic.factories import EffectTypeFactory, GiftFactory, TechniqueFactory
 
@@ -74,6 +77,17 @@ class CombatTechniqueResolverRollCheckTests(TestCase):
 
 
 class CombatTechniqueResolverApplyDamageTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        # Seed the DamageSuccessLevelMultiplier lookup so get_damage_multiplier
+        # returns non-zero values under the new profiles-based pipeline.
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
+        )
+
     def test_apply_damage_returns_damage_results_when_target_alive(self) -> None:
         resolver = _build_resolver()
         check = MagicMock(success_level=2)
@@ -365,6 +379,15 @@ class ApplyConditionsTests(TestCase):
 
 
 class CombatTechniqueResolverCallTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
+        )
+
     def test_call_returns_resolution_with_all_fields(self) -> None:
         resolver = _build_resolver(pull_flat_bonus=2, base_power=20)
 
@@ -555,3 +578,160 @@ class NonAttackPCActionRoutingTests(TestCase):
         self.assertIs(call_kwargs["action"], action)
         # outcome is returned cleanly (no exception)
         self.assertIsNotNone(outcome)
+
+
+class ApplyDamageWithProfilesTests(EvenniaTestCase):
+    """Resolver iterates damage_profiles instead of reading effect_type.base_power."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        # Seed the lookup table — without these, get_damage_multiplier returns 0.
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
+        )
+
+    def test_skips_when_no_damage_profiles(self) -> None:
+        """Technique with no damage_profiles → _apply_damage returns []."""
+
+        resolver = _build_resolver(base_power=20)
+        # Remove the auto-seeded profile so there are none.
+        resolver.action.focused_action.damage_profiles.all().delete()
+        # Sanity: no profiles remain.
+        self.assertEqual(resolver.action.focused_action.damage_profiles.count(), 0)
+        check = MagicMock(success_level=2)
+        results = resolver._apply_damage(check)
+        self.assertEqual(results, [])
+
+    def test_single_component_full_success(self) -> None:
+        """1 profile base_damage=10; SL=2 → multiplier=1.0 → 10 budget → >0 damage after soak."""
+
+        resolver = _build_resolver(base_power=10)
+        # The auto-seeded profile has base_damage=10, damage_intensity_multiplier=0.
+        # SL=2 → multiplier=1.0 → budget=10 → scaled=10 → apply_damage_to_opponent.
+        check = MagicMock(success_level=2)
+        results = resolver._apply_damage(check)
+        self.assertEqual(len(results), 1)
+        self.assertGreater(results[0].damage_dealt, 0)
+
+    def test_single_component_partial_success(self) -> None:
+        """1 profile base_damage=20; SL=1 → multiplier=0.5 → 10 budget → >0 damage after soak."""
+        resolver = _build_resolver(base_power=20)
+        check = MagicMock(success_level=1)
+        results = resolver._apply_damage(check)
+        self.assertEqual(len(results), 1)
+        self.assertGreater(results[0].damage_dealt, 0)
+
+    def test_below_min_sl_yields_no_damage(self) -> None:
+        """Profile with minimum_success_level=2 is skipped when SL=1."""
+        from world.magic.factories import TechniqueDamageProfileFactory
+
+        resolver = _build_resolver(base_power=20)
+        # Replace auto-seeded profile with one that requires SL>=2.
+        resolver.action.focused_action.damage_profiles.all().delete()
+        TechniqueDamageProfileFactory(
+            technique=resolver.action.focused_action,
+            base_damage=20,
+            minimum_success_level=2,
+        )
+        check = MagicMock(success_level=1)
+        results = resolver._apply_damage(check)
+        self.assertEqual(results, [])
+
+    def test_intensity_scales_damage(self) -> None:
+        """A profile with damage_intensity_multiplier=1.0 produces more damage when
+        an INTENSITY_BUMP pull raises effective_intensity above the technique baseline."""
+        from world.combat.factories import (
+            CombatPullFactory,
+            CombatPullResolvedEffectFactory,
+        )
+        from world.magic.constants import EffectKind
+        from world.magic.factories import TechniqueDamageProfileFactory
+
+        resolver = _build_resolver(base_power=0)
+        # Remove the auto-seeded profile (base_power=0, so none was seeded — safe).
+        resolver.action.focused_action.damage_profiles.all().delete()
+
+        # Seed a profile where damage = intensity × multiplier (base=0, mult=1.0).
+        TechniqueDamageProfileFactory(
+            technique=resolver.action.focused_action,
+            base_damage=0,
+            damage_intensity_multiplier=Decimal("1.0"),
+            minimum_success_level=1,
+        )
+        # Add an INTENSITY_BUMP pull to raise effective_intensity by 5.
+        encounter = resolver.participant.encounter
+        pull = CombatPullFactory(
+            participant=resolver.participant,
+            encounter=encounter,
+            round_number=encounter.round_number,
+        )
+        CombatPullResolvedEffectFactory(
+            pull=pull,
+            kind=EffectKind.INTENSITY_BUMP,
+            scaled_value=5,
+        )
+        resolver.participant.character_sheet.character.combat_pulls.invalidate()
+
+        # technique.intensity defaults to some value; after bump effective_intensity > 0.
+        check = MagicMock(success_level=2)
+        results = resolver._apply_damage(check)
+        # budget = intensity × 1.0; must produce at least 1 result with damage > 0.
+        self.assertEqual(len(results), 1)
+        self.assertGreater(results[0].damage_dealt, 0)
+
+    def test_multi_component_damage(self) -> None:
+        """2 profiles (default + fire) both apply at SL=2 → 2 OpponentDamageResults."""
+        from world.conditions.factories import DamageTypeFactory
+        from world.magic.factories import TechniqueDamageProfileFactory
+
+        resolver = _build_resolver(base_power=10)
+        # Auto-seeded profile is the first component. Add a second (fire).
+        fire_damage_type = DamageTypeFactory(name="Fire")
+        TechniqueDamageProfileFactory(
+            technique=resolver.action.focused_action,
+            base_damage=5,
+            damage_type=fire_damage_type,
+            minimum_success_level=1,
+        )
+        check = MagicMock(success_level=2)
+        results = resolver._apply_damage(check)
+        self.assertEqual(len(results), 2)
+        self.assertGreater(results[0].damage_dealt, 0)
+        self.assertGreater(results[1].damage_dealt, 0)
+
+    def test_subsequent_components_skip_after_target_defeated(self) -> None:
+        """First component defeats the target; second component does not fire."""
+        from world.conditions.factories import DamageTypeFactory
+        from world.magic.factories import TechniqueDamageProfileFactory
+
+        resolver = _build_resolver(base_power=10)
+        # Give target just 1 HP so the first hit defeats it.
+        target = resolver.action.focused_opponent_target
+        target.health = 1
+        target.save(update_fields=["health"])
+
+        # Add a second profile — should be skipped after target is defeated.
+        fire_damage_type = DamageTypeFactory(name="Fire2")
+        TechniqueDamageProfileFactory(
+            technique=resolver.action.focused_action,
+            base_damage=5,
+            damage_type=fire_damage_type,
+            minimum_success_level=1,
+        )
+        check = MagicMock(success_level=2)
+        results = resolver._apply_damage(check)
+        # Only 1 result: the second profile was skipped because target was defeated.
+        self.assertEqual(len(results), 1)
+
+    def test_defeated_target_at_start_returns_empty(self) -> None:
+        """Target already DEFEATED before _apply_damage → returns []."""
+        resolver = _build_resolver(base_power=20)
+        target = resolver.action.focused_opponent_target
+        target.status = OpponentStatus.DEFEATED
+        target.save(update_fields=["status"])
+        check = MagicMock(success_level=2)
+        results = resolver._apply_damage(check)
+        self.assertEqual(results, [])

@@ -48,8 +48,6 @@ from world.combat.constants import (
     ENTITY_TYPE_PC,
     NO_ROLE_SPEED_RANK,
     NPC_SPEED_RANK,
-    OFFENSE_FULL_THRESHOLD,
-    OFFENSE_HALF_THRESHOLD,
     ActionCategory,
     EncounterStatus,
     OpponentStatus,
@@ -167,26 +165,58 @@ class CombatTechniqueResolver:
         )
 
     def _apply_damage(self, check_result: CheckResult) -> list[OpponentDamageResult]:
-        """Damage path. No-op when base_power is None, no opponent target, or target DEFEATED."""
+        """Iterate technique.damage_profiles. For each profile:
+        - skip if SL < minimum_success_level
+        - compute formula budget via compute_damage_budget
+        - apply SL multiplier from DamageSuccessLevelMultiplier lookup
+        - call apply_damage_to_opponent (which subtracts soak + resistance)
+        Returns one OpponentDamageResult per applied component.
+        Breaks on defeated target between components.
+        """
+        from world.conditions.services import get_damage_multiplier  # noqa: PLC0415
+
         target = self.action.focused_opponent_target
         if target is None:
-            return []
-        technique = self.action.focused_action
-        base_power = technique.effect_type.base_power
-        if base_power is None:
-            return []
-        if check_result.success_level >= OFFENSE_FULL_THRESHOLD:
-            scaled = base_power
-        elif check_result.success_level >= OFFENSE_HALF_THRESHOLD:
-            scaled = base_power // 2
-        else:
-            scaled = 0
-        if scaled <= 0:
             return []
         target.refresh_from_db()
         if target.status == OpponentStatus.DEFEATED:
             return []
-        return [apply_damage_to_opponent(target, scaled)]
+
+        technique = self.action.focused_action
+        profiles = list(
+            technique.damage_profiles.select_related("damage_type").all(),
+        )
+        if not profiles:
+            return []
+
+        sl = check_result.success_level
+        multiplier = get_damage_multiplier(sl)
+        if multiplier <= 0:
+            return []
+
+        eff_intensity = compute_effective_intensity(self.participant, self.action)
+
+        results: list[OpponentDamageResult] = []
+        for profile in profiles:
+            if sl < profile.minimum_success_level:
+                continue
+            budget = profile.compute_damage_budget(
+                effective_intensity=eff_intensity,
+                success_level=sl,
+            )
+            scaled = int(budget * multiplier)
+            if scaled <= 0:
+                continue
+            target.refresh_from_db()
+            if target.status == OpponentStatus.DEFEATED:
+                break
+            result = apply_damage_to_opponent(
+                target,
+                scaled,
+                damage_type=profile.damage_type,
+            )
+            results.append(result)
+        return results
 
     def _apply_conditions(
         self,
