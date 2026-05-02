@@ -210,11 +210,11 @@ class CharacterConditionHandler:
             .prefetch_related(
                 Prefetch(
                     "condition__conditionresistancemodifier_set",
-                    to_attr="resistance_modifiers_cached",
+                    to_attr="template_resistance_modifiers_cached",
                 ),
                 Prefetch(
                     "current_stage__conditionresistancemodifier_set",
-                    to_attr="resistance_modifiers_cached",
+                    to_attr="stage_resistance_modifiers_cached",
                 ),
             )
         )
@@ -233,11 +233,11 @@ class CharacterConditionHandler:
             return 0
         total = 0
         for instance in self._active:
-            for mod in instance.condition.resistance_modifiers_cached:
+            for mod in instance.condition.template_resistance_modifiers_cached:
                 if mod.damage_type_id in (damage_type.pk, None):
                     total += mod.modifier_value
             if instance.current_stage_id:
-                for mod in instance.current_stage.resistance_modifiers_cached:
+                for mod in instance.current_stage.stage_resistance_modifiers_cached:
                     if mod.damage_type_id in (damage_type.pk, None):
                         total += mod.modifier_value
         return total
@@ -252,6 +252,28 @@ class CharacterConditionHandler:
 the same way `combat_pulls` is installed (via a property or `at_init`).
 Implementation detail for the plan; the spec just says "available as
 `character.conditions`."
+
+**Typeclass invariant for combat damage targets.** Every ObjectDB that
+combat damage paths target is a Character-typeclass instance:
+
+- Mook opponents: `add_opponent` creates a `CombatNPC` ObjectDB, and
+  `CombatNPC` inherits from `Character` (per the previous PR).
+- Persona-bearing opponents: `persona.character_sheet.character` is a
+  Character (CharacterSheet's `character` FK is OneToOne to ObjectDB
+  with `primary_key=True`, populated by `create_character_with_sheet`
+  via the Character typeclass).
+- Pre-existing ObjectDB (PvP / named NPC without persona):
+  `add_opponent` requires this to be a Character-typeclass instance;
+  this is documented as a precondition. The plan adds an isinstance
+  guard at the top of `add_opponent` to raise loud if a caller passes
+  a plain ObjectDB.
+- PC participants: `participant.character_sheet.character` is a Character.
+
+`apply_damage_to_opponent` accesses `opponent.objectdb.conditions`; this
+is safe under the invariant. If `opponent.objectdb` is None (post-cleanup
+edge), the resistance lookup short-circuits to 0 (already in the cancel
+matrix). No other typeclass branches need to handle the absence of the
+handler.
 
 **Invalidation responsibilities.** Existing condition-mutation services
 (`apply_condition`, `bulk_apply_conditions`, `process_round_start`,
