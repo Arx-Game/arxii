@@ -16,7 +16,13 @@ from flows.object_states.item_state import ItemState
 from flows.object_states.outfit_state import OutfitState
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.inventory import equip, unequip
-from world.items.exceptions import NotAContainer, NotReachable, PermissionDenied, SlotIncompatible
+from world.items.exceptions import (
+    NotAContainer,
+    NotReachable,
+    OutfitIncomplete,
+    PermissionDenied,
+    SlotIncompatible,
+)
 from world.items.models import EquippedItem, ItemInstance, Outfit, OutfitSlot
 
 if TYPE_CHECKING:
@@ -35,7 +41,14 @@ def apply_outfit(character: CharacterState, outfit_state: OutfitState) -> None:
     Validation order (raises on first failure):
         1. Outfit's character_sheet matches the actor → PermissionDenied
         2. Wardrobe is reachable by the actor → NotReachable
-        3. Each slot's item is reachable by the actor → NotReachable
+        3. Every slot's item is reachable by the actor → OutfitIncomplete
+
+    The third step collects all unreachable slots before raising, so the
+    user gets a single ``OutfitIncomplete`` (with its clearer
+    "Some pieces of that outfit are missing." message) rather than the
+    less specific ``NotReachable`` from whichever slot happened to be
+    iterated first. The reach pre-pass means the subsequent ``equip()``
+    loop is operating on already-validated items.
     """
     outfit = outfit_state.outfit
     if outfit.character_sheet.character != character.obj:
@@ -43,12 +56,19 @@ def apply_outfit(character: CharacterState, outfit_state: OutfitState) -> None:
     if not outfit_state.can_apply(actor=character):
         raise NotReachable
 
-    for slot in outfit.slots.all():
-        item_state = ItemState(slot.item_instance, context=character.context)
-        if not item_state.is_reachable_by(character.obj):
-            raise NotReachable
+    slot_states = [
+        (slot, ItemState(slot.item_instance, context=character.context))
+        for slot in outfit.slots.all()
+    ]
+    unreachable = [
+        slot for slot, item_state in slot_states if not item_state.is_reachable_by(character.obj)
+    ]
+    if unreachable:
+        raise OutfitIncomplete
+
+    for _slot, item_state in slot_states:
         # equip() handles auto-swap + multi-region atomicity inside the
-        # outer transaction.
+        # outer transaction. Reach was pre-validated above.
         equip(character, item_state)
 
 
