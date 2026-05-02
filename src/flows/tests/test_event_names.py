@@ -36,5 +36,9 @@ class EventNameTests(TestCase):
             "protagonism_locked",
             "protagonism_restored",
             "condition_stage_advance_check_about_to_fire",
+            "before_apply_outfit",
+            "apply_outfit",
+            "before_undress",
+            "undress",
         }
         self.assertEqual(set(EventName.values), expected)
