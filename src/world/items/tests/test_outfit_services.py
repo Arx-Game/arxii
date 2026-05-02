@@ -27,6 +27,7 @@ from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.exceptions import (
     NotAContainer,
     NotReachable,
+    OutfitIncomplete,
     PermissionDenied,
     SlotIncompatible,
 )
@@ -226,7 +227,13 @@ class ApplyOutfitTests(TestCase):
         self.assertFalse(EquippedItem.objects.filter(character=self.character).exists())
 
     def test_apply_rejects_when_item_not_in_reach(self) -> None:
-        """An outfit slot's item lives in another character's inventory → NotReachable."""
+        """An outfit slot's item lives in another character's inventory → OutfitIncomplete.
+
+        Updated for I2: per-slot unreachability now raises the clearer
+        OutfitIncomplete rather than a bare NotReachable, so the UI can
+        say "Some pieces of that outfit are missing." rather than the
+        ambiguous "You can't reach that."
+        """
         bystander = CharacterFactory(
             db_key="ApplyOutfitBystander",
             location=self.room,
@@ -234,9 +241,31 @@ class ApplyOutfitTests(TestCase):
         self.shirt.game_object.location = bystander
         self.shirt.game_object.save()
 
-        with self.assertRaises(NotReachable):
+        with self.assertRaises(OutfitIncomplete):
             apply_outfit(self.character_state, self.outfit_state)
         # Whole transaction rolls back — no rows created.
+        self.assertFalse(EquippedItem.objects.filter(character=self.character).exists())
+
+    def test_apply_collects_all_missing_slots_before_raising(self) -> None:
+        """When multiple items are unreachable, OutfitIncomplete is raised once.
+
+        Regression for I2: prior code raised NotReachable on the first
+        unreachable item, so the user never learned about subsequent
+        missing pieces. Now the service collects all unreachable slots
+        in a single pass before raising.
+        """
+        bystander = CharacterFactory(
+            db_key="ApplyOutfitBystanderTwo",
+            location=self.room,
+        )
+        # Both shirt and glove are unreachable.
+        self.shirt.game_object.location = bystander
+        self.shirt.game_object.save()
+        self.glove.game_object.location = bystander
+        self.glove.game_object.save()
+
+        with self.assertRaises(OutfitIncomplete):
+            apply_outfit(self.character_state, self.outfit_state)
         self.assertFalse(EquippedItem.objects.filter(character=self.character).exists())
 
     def test_apply_rejects_outfit_belonging_to_different_character(self) -> None:
