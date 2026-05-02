@@ -86,11 +86,12 @@ class ExecuteActionInputfuncTests(TestCase):
         self.assertEqual(payload["kwargs"]["data"], {"slot": "torso"})
 
     def test_object_id_kwarg_is_resolved(self) -> None:
-        """Keys ending in ``_id`` with int values are resolved via ObjectDB."""
+        """Keys ending in ``_id`` whose stripped name is declared on the action are resolved."""
         actor = MagicMock()
         session = _make_session(puppet=actor)
         target_obj = MagicMock(name="resolved_target")
         stub_action = MagicMock()
+        stub_action.objectdb_target_kwargs = frozenset({"target"})
         stub_action.run.return_value = ActionResult(success=True)
 
         with (
@@ -110,6 +111,7 @@ class ExecuteActionInputfuncTests(TestCase):
         actor = MagicMock()
         session = _make_session(puppet=actor)
         stub_action = MagicMock()
+        stub_action.objectdb_target_kwargs = frozenset({"target"})
 
         with (
             patch("actions.registry.get_action", return_value=stub_action),
@@ -131,6 +133,7 @@ class ExecuteActionInputfuncTests(TestCase):
         actor = MagicMock()
         session = _make_session(puppet=actor)
         stub_action = MagicMock()
+        stub_action.objectdb_target_kwargs = frozenset()
         stub_action.run.side_effect = ActionInterrupted("A trigger blocked it.")
 
         with patch("actions.registry.get_action", return_value=stub_action):
@@ -151,6 +154,7 @@ class ExecuteActionInputfuncTests(TestCase):
         actor = MagicMock()
         session = _make_session(puppet=actor)
         stub_action = MagicMock()
+        stub_action.objectdb_target_kwargs = frozenset({"identifier"})
         stub_action.run.return_value = ActionResult(success=True)
 
         with (
@@ -161,3 +165,118 @@ class ExecuteActionInputfuncTests(TestCase):
 
         get.assert_not_called()
         stub_action.run.assert_called_once_with(actor, identifier_id="some-slug")
+
+    def test_undeclared_id_kwarg_passes_through_unresolved(self) -> None:
+        """Keys ending in ``_id`` not declared on the action are passed through raw.
+
+        This is the regression test for C1: the frontend sends ``outfit_id`` for
+        ``apply_outfit``, but Outfit is not an ObjectDB. With the opt-in
+        resolver, ``outfit_id`` arrives at the action unchanged (so it can look
+        up ``Outfit.objects.get(pk=...)`` itself).
+        """
+        actor = MagicMock()
+        session = _make_session(puppet=actor)
+        stub_action = MagicMock()
+        # apply_outfit does NOT declare outfit in objectdb_target_kwargs.
+        stub_action.objectdb_target_kwargs = frozenset()
+        stub_action.run.return_value = ActionResult(success=True)
+
+        with (
+            patch("actions.registry.get_action", return_value=stub_action),
+            patch("evennia.objects.models.ObjectDB.objects.get") as get,
+        ):
+            execute_action(session, action="apply_outfit", kwargs={"outfit_id": 42})
+
+        # Resolver did NOT touch the int — kwarg arrives raw.
+        get.assert_not_called()
+        stub_action.run.assert_called_once_with(actor, outfit_id=42)
+
+
+class ApplyOutfitInputfuncIntegrationTests(TestCase):
+    """End-to-end smoke test: ``apply_outfit`` via the real inputfunc + real action.
+
+    This is the regression test for C1 (the resolver was eating ``outfit_id``
+    because it ended in ``_id`` and Outfit isn't an ObjectDB). Without the
+    opt-in resolver, this test would either explode with ``ObjectDB.DoesNotExist``
+    or with the inputfunc sending ``"Wear which outfit?"`` because ``outfit``
+    arrived as ``None``.
+    """
+
+    def test_apply_outfit_via_inputfunc_equips_items(self) -> None:
+        """Real inputfunc + real ApplyOutfitAction → outfit pieces equipped."""
+        from evennia_extensions.factories import (
+            AccountFactory,
+            CharacterFactory,
+            ObjectDBFactory,
+        )
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.items.constants import BodyRegion, EquipmentLayer
+        from world.items.factories import (
+            ItemInstanceFactory,
+            ItemTemplateFactory,
+            OutfitFactory,
+            OutfitSlotFactory,
+            TemplateSlotFactory,
+        )
+        from world.items.models import EquippedItem
+
+        room = ObjectDBFactory(
+            db_key="InputfuncApplyOutfitRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        account = AccountFactory(username="inputfunc_apply_outfit_account")
+        actor = CharacterFactory(db_key="InputfuncApplyOutfitChar", location=room)
+        actor.db_account = account
+        actor.save()
+        sheet = CharacterSheetFactory(character=actor)
+
+        wardrobe_template = ItemTemplateFactory(
+            name="InputfuncApplyOutfitWardrobe",
+            is_wardrobe=True,
+            is_container=True,
+        )
+        wardrobe_obj = ObjectDBFactory(
+            db_key="InputfuncApplyOutfitWardrobeObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        wardrobe_obj.location = room
+        wardrobe_obj.save()
+        wardrobe = ItemInstanceFactory(template=wardrobe_template, game_object=wardrobe_obj)
+
+        shirt_template = ItemTemplateFactory(name="InputfuncApplyOutfitShirt")
+        TemplateSlotFactory(
+            template=shirt_template,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        shirt_obj = ObjectDBFactory(
+            db_key="InputfuncApplyOutfitShirtObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        shirt_obj.location = actor
+        shirt_obj.save()
+        shirt = ItemInstanceFactory(template=shirt_template, game_object=shirt_obj)
+
+        outfit = OutfitFactory(
+            character_sheet=sheet,
+            wardrobe=wardrobe,
+            name="InputfuncApplyOutfitLook",
+        )
+        OutfitSlotFactory(
+            outfit=outfit,
+            item_instance=shirt,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        session = _make_session(puppet=actor)
+        with patch.object(room, "msg_contents"):
+            execute_action(session, action="apply_outfit", kwargs={"outfit_id": outfit.pk})
+
+        payload = _result_payload(session)
+        self.assertEqual(payload["type"], WebsocketMessageType.ACTION_RESULT.value)
+        self.assertTrue(
+            payload["kwargs"]["success"],
+            f"Expected success, got: {payload['kwargs']}",
+        )
+        self.assertTrue(EquippedItem.objects.filter(character=actor, item_instance=shirt).exists())

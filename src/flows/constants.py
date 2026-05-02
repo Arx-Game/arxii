@@ -39,3 +39,8 @@ class EventName(models.TextChoices):
         "condition_stage_advance_check_about_to_fire",
         "Condition stage advance resist check about to fire",
     )
+    # Outfit actions (Items / Outfits Phase A)
+    BEFORE_APPLY_OUTFIT = "before_apply_outfit", "Before Apply Outfit"
+    APPLY_OUTFIT = "apply_outfit", "Apply Outfit"
+    BEFORE_UNDRESS = "before_undress", "Before Undress"
+    UNDRESS = "undress", "Undress"

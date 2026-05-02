@@ -24,7 +24,13 @@ from flows.service_functions.outfits import (
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer
-from world.items.exceptions import NotAContainer, NotReachable, PermissionDenied, SlotIncompatible
+from world.items.exceptions import (
+    NotAContainer,
+    NotReachable,
+    OutfitIncomplete,
+    PermissionDenied,
+    SlotIncompatible,
+)
 from world.items.factories import (
     ItemInstanceFactory,
     ItemTemplateFactory,
@@ -221,7 +227,13 @@ class ApplyOutfitTests(TestCase):
         self.assertFalse(EquippedItem.objects.filter(character=self.character).exists())
 
     def test_apply_rejects_when_item_not_in_reach(self) -> None:
-        """An outfit slot's item lives in another character's inventory → NotReachable."""
+        """An outfit slot's item lives in another character's inventory → OutfitIncomplete.
+
+        Updated for I2: per-slot unreachability now raises the clearer
+        OutfitIncomplete rather than a bare NotReachable, so the UI can
+        say "Some pieces of that outfit are missing." rather than the
+        ambiguous "You can't reach that."
+        """
         bystander = CharacterFactory(
             db_key="ApplyOutfitBystander",
             location=self.room,
@@ -229,9 +241,31 @@ class ApplyOutfitTests(TestCase):
         self.shirt.game_object.location = bystander
         self.shirt.game_object.save()
 
-        with self.assertRaises(NotReachable):
+        with self.assertRaises(OutfitIncomplete):
             apply_outfit(self.character_state, self.outfit_state)
         # Whole transaction rolls back — no rows created.
+        self.assertFalse(EquippedItem.objects.filter(character=self.character).exists())
+
+    def test_apply_collects_all_missing_slots_before_raising(self) -> None:
+        """When multiple items are unreachable, OutfitIncomplete is raised once.
+
+        Regression for I2: prior code raised NotReachable on the first
+        unreachable item, so the user never learned about subsequent
+        missing pieces. Now the service collects all unreachable slots
+        in a single pass before raising.
+        """
+        bystander = CharacterFactory(
+            db_key="ApplyOutfitBystanderTwo",
+            location=self.room,
+        )
+        # Both shirt and glove are unreachable.
+        self.shirt.game_object.location = bystander
+        self.shirt.game_object.save()
+        self.glove.game_object.location = bystander
+        self.glove.game_object.save()
+
+        with self.assertRaises(OutfitIncomplete):
+            apply_outfit(self.character_state, self.outfit_state)
         self.assertFalse(EquippedItem.objects.filter(character=self.character).exists())
 
     def test_apply_rejects_outfit_belonging_to_different_character(self) -> None:
@@ -392,7 +426,7 @@ class _OutfitServiceSetupMixin:
             game_object=wardrobe_obj,
         )
 
-        # Shirt template + instance (TORSO/BASE).
+        # Shirt template + instance (TORSO/BASE) — owned by the actor's account.
         self.shirt_template = ItemTemplateFactory(name="OutfitSvcShirt")
         TemplateSlotFactory(
             template=self.shirt_template,
@@ -408,9 +442,10 @@ class _OutfitServiceSetupMixin:
         self.shirt = ItemInstanceFactory(
             template=self.shirt_template,
             game_object=shirt_obj,
+            owner=self.account,
         )
 
-        # Glove template + instance (LEFT_HAND/BASE).
+        # Glove template + instance (LEFT_HAND/BASE) — owned by the actor's account.
         self.glove_template = ItemTemplateFactory(name="OutfitSvcGlove")
         TemplateSlotFactory(
             template=self.glove_template,
@@ -426,6 +461,7 @@ class _OutfitServiceSetupMixin:
         self.glove = ItemInstanceFactory(
             template=self.glove_template,
             game_object=glove_obj,
+            owner=self.account,
         )
 
 
@@ -516,6 +552,33 @@ class SaveOutfitTests(_OutfitServiceSetupMixin, TestCase):
                 name="DupeLook",
             )
 
+    def test_save_rejects_when_wardrobe_in_other_room(self) -> None:
+        """Wardrobe out of reach (different room) → NotReachable, no Outfit row created.
+
+        Regression test for I4: previously the docstring claimed REST handled
+        reach validation, but no permission class actually checked it. A
+        player could POST any wardrobe pk on the planet.
+        """
+        other_room = ObjectDBFactory(
+            db_key="OutfitSvcOtherRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.wardrobe.game_object.location = other_room
+        self.wardrobe.game_object.save()
+
+        with self.assertRaises(NotReachable):
+            save_outfit(
+                character_sheet=self.sheet,
+                wardrobe=self.wardrobe,
+                name="UnreachableWardrobeLook",
+            )
+        self.assertFalse(
+            Outfit.objects.filter(
+                character_sheet=self.sheet,
+                name="UnreachableWardrobeLook",
+            ).exists()
+        )
+
 
 class DeleteOutfitTests(_OutfitServiceSetupMixin, TestCase):
     """Cover ``delete_outfit`` — outfit + slots gone, items untouched."""
@@ -596,7 +659,7 @@ class OutfitSlotEditTests(_OutfitServiceSetupMixin, TestCase):
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
-        # Build a second TORSO/BASE-compatible item.
+        # Build a second TORSO/BASE-compatible item, owned by the same account.
         other_shirt_obj = ObjectDBFactory(
             db_key="OutfitSvcOtherShirtObj",
             db_typeclass_path="typeclasses.objects.Object",
@@ -606,6 +669,7 @@ class OutfitSlotEditTests(_OutfitServiceSetupMixin, TestCase):
         other_shirt = ItemInstanceFactory(
             template=self.shirt_template,
             game_object=other_shirt_obj,
+            owner=self.account,
         )
 
         add_outfit_slot(
@@ -626,6 +690,34 @@ class OutfitSlotEditTests(_OutfitServiceSetupMixin, TestCase):
                 outfit=self.outfit,
                 item_instance=self.shirt,  # only declares TORSO/BASE
                 body_region=BodyRegion.LEFT_HAND,
+                equipment_layer=EquipmentLayer.BASE,
+            )
+        self.assertEqual(self.outfit.slots.count(), 0)
+
+    def test_add_slot_rejects_item_not_owned_by_character(self) -> None:
+        """Item owned by another account → PermissionDenied, no slot row created.
+
+        Outfits are configuration. The configuration layer's ownership boundary
+        is account-level (an account building an outfit can only reference
+        items its account owns). Apply-time enforces possession/reach
+        separately.
+        """
+        other_account = AccountFactory(username="OutfitSvcSlotOtherAccount")
+        foreign_shirt_obj = ObjectDBFactory(
+            db_key="OutfitSvcSlotForeignShirtObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        foreign_shirt = ItemInstanceFactory(
+            template=self.shirt_template,
+            game_object=foreign_shirt_obj,
+            owner=other_account,
+        )
+
+        with self.assertRaises(PermissionDenied):
+            add_outfit_slot(
+                outfit=self.outfit,
+                item_instance=foreign_shirt,
+                body_region=BodyRegion.TORSO,
                 equipment_layer=EquipmentLayer.BASE,
             )
         self.assertEqual(self.outfit.slots.count(), 0)

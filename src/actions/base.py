@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from actions.prerequisites import Prerequisite
 from actions.types import ActionAvailability, ActionContext, ActionResult, TargetType
@@ -33,6 +33,13 @@ class Action:
         target_type: What kind of target this action operates on.
         intent_event: Event name emitted before execution (e.g., "before_look").
         result_event: Event name emitted after execution (e.g., "look").
+        objectdb_target_kwargs: Names of kwargs whose ``*_id`` form (e.g., ``target_id``)
+            should be resolved by the ``execute_action`` inputfunc from int → ObjectDB
+            before dispatch. Names listed here are the *resolved* names — the inputfunc
+            looks for ``<name>_id`` on the wire and passes ``<name>=<ObjectDB>`` to
+            the action. Kwargs not listed here are passed through raw (so actions
+            using non-ObjectDB pks like ``outfit_id`` are not eaten by the resolver).
+            Default: empty — opt-in per action.
     """
 
     key: str
@@ -43,6 +50,8 @@ class Action:
 
     intent_event: str | None = None
     result_event: str | None = None
+
+    objectdb_target_kwargs: ClassVar[frozenset[str]] = frozenset()
 
     def get_prerequisites(self) -> list[Prerequisite]:
         """Return the prerequisites that must be met for this action.

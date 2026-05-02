@@ -10,6 +10,8 @@ from world.items.exceptions import (
     FacetAlreadyAttached,
     FacetCapacityExceeded,
     NotAContainer,
+    NotReachable,
+    PermissionDenied,
     SlotIncompatible,
 )
 from world.items.models import (
@@ -256,8 +258,8 @@ class OutfitSlotWriteSerializer(serializers.ModelSerializer):
     def create(self, validated_data: dict) -> OutfitSlot:  # type: ignore[override]
         """Delegate creation to the add_outfit_slot service.
 
-        The service validates template compatibility and replaces any
-        existing slot at the same (region, layer).
+        The service validates template compatibility and item ownership,
+        and replaces any existing slot at the same (region, layer).
         """
         try:
             return add_outfit_slot(
@@ -268,6 +270,8 @@ class OutfitSlotWriteSerializer(serializers.ModelSerializer):
             )
         except SlotIncompatible as exc:
             raise serializers.ValidationError({"non_field_errors": [exc.user_message]}) from exc
+        except PermissionDenied as exc:
+            raise serializers.ValidationError({"item_instance": [exc.user_message]}) from exc
 
 
 class OutfitReadSerializer(serializers.ModelSerializer):
@@ -312,3 +316,18 @@ class OutfitWriteSerializer(serializers.ModelSerializer):
             )
         except NotAContainer as exc:
             raise serializers.ValidationError({"wardrobe": [exc.user_message]}) from exc
+        except NotReachable as exc:
+            raise serializers.ValidationError({"wardrobe": [exc.user_message]}) from exc
+
+    def update(self, instance: Outfit, validated_data: dict) -> Outfit:  # type: ignore[override]
+        """Update only renames/redescribes — character_sheet and wardrobe are write-once.
+
+        Allowing PATCH to change ``character_sheet`` would let a user transfer
+        an outfit to a different character; allowing PATCH to change
+        ``wardrobe`` would let them relocate the outfit's anchor item to any
+        item id on the planet. Both are silently dropped here — the serializer
+        accepts the fields on POST (for create) but ignores them on PATCH.
+        """
+        validated_data.pop("character_sheet", None)
+        validated_data.pop("wardrobe", None)
+        return super().update(instance, validated_data)

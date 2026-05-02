@@ -11,10 +11,16 @@ from evennia_extensions.factories import (
     CharacterFactory,
     ObjectDBFactory,
 )
+from world.character_sheets.factories import CharacterSheetFactory
 from world.items.factories import (
     ItemInstanceFactory,
     ItemTemplateFactory,
     QualityTierFactory,
+)
+from world.roster.factories import (
+    PlayerDataFactory,
+    RosterEntryFactory,
+    RosterTenureFactory,
 )
 
 
@@ -36,6 +42,22 @@ class ItemInstanceViewSetTests(TestCase):
         self.character_b = CharacterFactory(
             db_key="InventoryViewCharB",
             location=self.room,
+        )
+
+        # Bind both characters to the request user via active tenures so
+        # the queryset-scoping in ItemInstanceViewSet returns their items.
+        self.sheet_a = CharacterSheetFactory(character=self.character_a)
+        self.sheet_b = CharacterSheetFactory(character=self.character_b)
+        self.player_data = PlayerDataFactory(account=self.user)
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=self.sheet_a),
+            player_data=self.player_data,
+            end_date=None,
+        )
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=self.sheet_b),
+            player_data=self.player_data,
+            end_date=None,
         )
 
         # Quality tier and template for the response shape.
@@ -157,3 +179,53 @@ class ItemInstanceViewSetTests(TestCase):
         self.assertIn("quality_tier", row)
         quality = row["quality_tier"]
         self.assertEqual(quality["color_hex"], "#00FF00")
+
+    # ------------------------------------------------------------------
+    # Permission scoping
+    # ------------------------------------------------------------------
+
+    def test_list_excludes_items_on_characters_user_does_not_play(self) -> None:
+        """A non-staff user cannot see items located on a character they do not play.
+
+        Even if they pass that character's id as a filter — the queryset scope
+        runs first, the filter is just a refinement.
+        """
+        # Build a character the request user does NOT play.
+        other_character = CharacterFactory(
+            db_key="InventoryViewOtherChar",
+            location=self.room,
+        )
+        CharacterSheetFactory(character=other_character)
+        # No tenure for self.user → scope excludes other_character's items.
+        other_item = self._make_item_at(
+            location=other_character,
+            db_key="InvViewOtherItem",
+            quality_tier=self.quality,
+        )
+
+        response = self.client.get(f"/api/items/inventory/?character={other_character.pk}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result_ids = {row["id"] for row in response.data["results"]}
+        self.assertNotIn(other_item.pk, result_ids)
+
+    def test_staff_sees_all_items(self) -> None:
+        """Staff users bypass the per-account scope."""
+        staff = AccountFactory(username="inventory_view_staff", is_staff=True)
+        self.client.force_authenticate(user=staff)
+
+        # Build an item on a character the staff user does NOT play.
+        other_character = CharacterFactory(
+            db_key="InventoryViewStaffOtherChar",
+            location=self.room,
+        )
+        CharacterSheetFactory(character=other_character)
+        other_item = self._make_item_at(
+            location=other_character,
+            db_key="InvViewStaffOtherItem",
+            quality_tier=self.quality,
+        )
+
+        response = self.client.get(f"/api/items/inventory/?character={other_character.pk}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result_ids = {row["id"] for row in response.data["results"]}
+        self.assertIn(other_item.pk, result_ids)

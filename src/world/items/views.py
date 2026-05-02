@@ -179,6 +179,9 @@ class ItemInstanceViewSet(viewsets.ReadOnlyModelViewSet):
     The wardrobe page uses this to render carried-but-not-worn items. The
     ``character`` query parameter filters to items whose ``game_object.location``
     is the requested character (i.e., currently held by them).
+
+    Permission scoping (non-staff): only items located on a character the
+    request user currently plays are returned. Staff see everything.
     """
 
     permission_classes = [IsAuthenticated]
@@ -203,6 +206,16 @@ class ItemInstanceViewSet(viewsets.ReadOnlyModelViewSet):
         )
         .order_by("-pk")
     )
+
+    def get_queryset(self) -> QuerySet[ItemInstance]:
+        """Scope to items located on characters the request user plays."""
+        qs = super().get_queryset()
+        if self.request.user.is_staff:
+            return qs
+        character_ids = RosterEntry.objects.for_account(
+            cast(AccountDB, self.request.user)
+        ).values_list("character_sheet_id", flat=True)
+        return qs.filter(game_object__db_location__id__in=character_ids)
 
 
 class EquippedItemViewSet(viewsets.ReadOnlyModelViewSet):
@@ -315,6 +328,16 @@ class OutfitViewSet(viewsets.ModelViewSet):
         .order_by("name")
     )
 
+    def get_queryset(self) -> QuerySet[Outfit]:
+        """Scope to outfits owned by characters the request user plays."""
+        qs = super().get_queryset()
+        if self.request.user.is_staff:
+            return qs
+        sheet_ids = RosterEntry.objects.for_account(cast(AccountDB, self.request.user)).values_list(
+            "character_sheet_id", flat=True
+        )
+        return qs.filter(character_sheet_id__in=sheet_ids)
+
     def get_serializer_class(self) -> type[serializers.ModelSerializer]:
         """Use write serializer for create/update; read serializer otherwise."""
         if self.action in ("create", "update", "partial_update"):
@@ -345,6 +368,16 @@ class OutfitSlotViewSet(viewsets.ModelViewSet):
         "item_instance__template",
         "item_instance__quality_tier",
     ).order_by("body_region", "equipment_layer")
+
+    def get_queryset(self) -> QuerySet[OutfitSlot]:
+        """Scope to slots whose outfit belongs to a character the user plays."""
+        qs = super().get_queryset()
+        if self.request.user.is_staff:
+            return qs
+        sheet_ids = RosterEntry.objects.for_account(cast(AccountDB, self.request.user)).values_list(
+            "character_sheet_id", flat=True
+        )
+        return qs.filter(outfit__character_sheet_id__in=sheet_ids)
 
     def get_serializer_class(self) -> type[serializers.ModelSerializer]:
         """Use write serializer for create; read serializer otherwise."""

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from actions.base import Action
 from actions.types import ActionContext, ActionResult, TargetType
+from flows.constants import EventName
 from flows.object_states.outfit_state import OutfitState
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
@@ -31,8 +32,8 @@ class ApplyOutfitAction(Action):
     category: str = "items"
     target_type: TargetType = TargetType.SINGLE
 
-    intent_event: str | None = "before_apply_outfit"
-    result_event: str | None = "apply_outfit"
+    intent_event: str | None = EventName.BEFORE_APPLY_OUTFIT.value
+    result_event: str | None = EventName.APPLY_OUTFIT.value
 
     def execute(
         self,
@@ -78,8 +79,8 @@ class UndressAction(Action):
     category: str = "items"
     target_type: TargetType = TargetType.SELF
 
-    intent_event: str | None = "before_undress"
-    result_event: str | None = "undress"
+    intent_event: str | None = EventName.BEFORE_UNDRESS.value
+    result_event: str | None = EventName.UNDRESS.value
 
     def execute(
         self,
