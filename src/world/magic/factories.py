@@ -46,6 +46,7 @@ from world.magic.models import (
     Technique,
     TechniqueAppliedCondition,
     TechniqueCapabilityGrant,
+    TechniqueDamageProfile,
     TechniqueOutcomeModifier,
     TechniqueStyle,
     Thread,
@@ -250,6 +251,20 @@ class TechniqueAppliedConditionFactory(factory.django.DjangoModelFactory):
     duration_intensity_multiplier = Decimal(0)
     duration_per_extra_sl = 0
     stack_count = 1
+
+
+class TechniqueDamageProfileFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueDamageProfile — per-component damage scaling row."""
+
+    class Meta:
+        model = TechniqueDamageProfile
+
+    technique = factory.SubFactory("world.magic.factories.TechniqueFactory")
+    damage_type = None
+    minimum_success_level = 1
+    base_damage = 5
+    damage_intensity_multiplier = Decimal(0)
+    damage_per_extra_sl = 0
 
 
 class IntensityTierFactory(factory.django.DjangoModelFactory):
