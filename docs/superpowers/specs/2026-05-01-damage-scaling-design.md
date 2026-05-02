@@ -86,15 +86,29 @@ world/conditions/
 ├── models.py
 │   ├── ConditionResistanceModifier ← unchanged (model exists; gains a consumer)
 │   └── DamageSuccessLevelMultiplier ← NEW lookup table
+├── handlers.py                      ← NEW: CharacterConditionHandler (mirrors CharacterCombatPullHandler)
 ├── services.py
-│   ├── get_resistance_modifier_for_target(target, damage_type) ← NEW
-│   └── get_damage_multiplier(success_level)                    ← NEW
+│   └── get_damage_multiplier(success_level) ← NEW (single query per cast — table is tiny)
 ├── factories.py
 │   └── DamageSuccessLevelMultiplierFactory ← NEW
 └── tests/
-    ├── test_damage_multiplier.py    ← NEW
-    └── test_resistance_lookup.py    ← NEW
+    ├── test_damage_multiplier.py            ← NEW
+    └── test_character_condition_handler.py  ← NEW
+
+typeclasses/characters.py            ← wire `character.conditions = CharacterConditionHandler(self)`
+                                       (mirrors how `character.combat_pulls` is wired)
 ```
+
+**Why a handler, not a service function.** A
+`get_resistance_modifier_for_target(target, damage_type)` service function
+that queries `target.condition_instances.filter(...)` re-hits the database
+on every call — defeating SharedMemoryModel's identity-map cache and
+forcing the same prefetch work per damage component. The right pattern is
+a per-character handler that loads active ConditionInstances + their
+resistance modifiers once, exposes a `resistance_modifier(damage_type)`
+method that walks the cached list in Python, and is invalidated by
+mutation services. See `world/combat/handlers.py:CharacterCombatPullHandler`
+for the reference.
 
 ## Data flow
 
@@ -129,9 +143,11 @@ _resolve_pc_action(participant, action)
         │     apply_damage_to_opponent(target, scaled, damage_type=profile.damage_type)
         │           │
         │           ├─ effective_soak = target.soak_value
-        │           ├─ resistance = get_resistance_modifier_for_target(
-        │           │       target.objectdb, profile.damage_type)
-        │           │       (0 if damage_type is None; negative = vulnerability)
+        │           ├─ resistance = target.objectdb.conditions.resistance_modifier(
+        │           │       profile.damage_type)
+        │           │       (handler reads the cached active-condition list once
+        │           │        per cast; 0 if damage_type is None;
+        │           │        negative = vulnerability)
         │           ├─ damage_through = max(0, raw_damage − soak − resistance)
         │           ├─ probing_increment = raw_damage  (probing reads pre-soak/resistance)
         │           ├─ apply to health, save status, return OpponentDamageResult
@@ -162,44 +178,89 @@ _resolve_npc_action(opponent, npc_action)
               ├─ DAMAGE_PRE_APPLY emit (cancellable)
               ├─ effective_damage from payload
               ├─ effective_damage = apply_damage_reduction_from_threads(...)  (existing)
-              ├─ resistance = get_resistance_modifier_for_target(character, damage_type)  # NEW
+              ├─ resistance = character.conditions.resistance_modifier(damage_type)  # NEW
               ├─ effective_damage = max(0, effective_damage − resistance)
               ├─ vitals.health -= effective_damage
               └─ DAMAGE_APPLIED emit, incapacitation/death gates (existing)
 ```
 
-### `get_resistance_modifier_for_target` flow
+### `CharacterConditionHandler` (`world/conditions/handlers.py`)
+
+Mirrors `CharacterCombatPullHandler`. Loads active condition instances
+with their resistance modifiers prefetched on first read; subsequent
+reads walk the cached list in Python. Wired onto the Character
+typeclass as `character.conditions`.
 
 ```python
-def get_resistance_modifier_for_target(
-    target: ObjectDB,
-    damage_type: DamageType | None,
-) -> int:
-    """Sum ConditionResistanceModifier values across active conditions
-    on the target whose damage_type matches (specific or null = all-types).
-    Negative return = vulnerability; positive = resistance."""
-    if damage_type is None:
-        return 0
-    instances = target.condition_instances.filter(
-        is_suppressed=False, resolved_at__isnull=True,
-    ).select_related("condition", "current_stage")
-    total = 0
-    for instance in instances:
-        # Template-level (applies at all stages)
-        for mod in ConditionResistanceModifier.objects.filter(
-            condition=instance.condition,
-            damage_type__in=[damage_type, None],
-        ):
-            total += mod.modifier_value
-        # Stage-level (only when at that stage)
-        if instance.current_stage:
-            for mod in ConditionResistanceModifier.objects.filter(
-                stage=instance.current_stage,
-                damage_type__in=[damage_type, None],
-            ):
-                total += mod.modifier_value
-    return total
+class CharacterConditionHandler:
+    """Per-character handler over active ConditionInstance rows."""
+
+    def __init__(self, character: Character) -> None:
+        self.character = character
+
+    @cached_property
+    def _active(self) -> list[ConditionInstance]:
+        return list(
+            ConditionInstance.objects.filter(
+                target=self.character,
+                is_suppressed=False,
+                resolved_at__isnull=True,
+            )
+            .select_related("condition", "current_stage")
+            .prefetch_related(
+                Prefetch(
+                    "condition__conditionresistancemodifier_set",
+                    to_attr="resistance_modifiers_cached",
+                ),
+                Prefetch(
+                    "current_stage__conditionresistancemodifier_set",
+                    to_attr="resistance_modifiers_cached",
+                ),
+            )
+        )
+
+    def active(self) -> list[ConditionInstance]:
+        return self._active
+
+    def resistance_modifier(self, damage_type: DamageType | None) -> int:
+        """Sum ConditionResistanceModifier values across active instances
+        whose damage_type matches (specific) or is null (all-types).
+
+        Walks the cached active list — no DB query past the first access.
+        Negative return = vulnerability; positive = resistance.
+        """
+        if damage_type is None:
+            return 0
+        total = 0
+        for instance in self._active:
+            for mod in instance.condition.resistance_modifiers_cached:
+                if mod.damage_type_id in (damage_type.pk, None):
+                    total += mod.modifier_value
+            if instance.current_stage_id:
+                for mod in instance.current_stage.resistance_modifiers_cached:
+                    if mod.damage_type_id in (damage_type.pk, None):
+                        total += mod.modifier_value
+        return total
+
+    def invalidate(self) -> None:
+        """Clear the cached active list. Called by condition mutation services
+        (apply_condition / bulk_apply_conditions / process_round_end / etc.)."""
+        self.__dict__.pop("_active", None)
 ```
+
+**Wiring on Character.** The Character typeclass installs the handler
+the same way `combat_pulls` is installed (via a property or `at_init`).
+Implementation detail for the plan; the spec just says "available as
+`character.conditions`."
+
+**Invalidation responsibilities.** Existing condition-mutation services
+(`apply_condition`, `bulk_apply_conditions`, `process_round_start`,
+`process_round_end`, treatment / decay / suppression services) must call
+`character.conditions.invalidate()` after writing to keep the cache in
+sync. The plan should grep for ConditionInstance writes (.save(), .create(),
+.update(), .delete()) and ensure each site follows the mutation with
+the invalidate call. Mirror of how combat_pulls invalidation works in
+`expire_pulls_for_round`.
 
 A condition like "Wet" might author:
 - `damage_type=Fire, modifier_value=10` → +10 fire resistance
@@ -353,37 +414,12 @@ damage_type = models.ForeignKey(
 
 ### Helpers in `world/conditions/services.py`
 
+Resistance lookup is on the handler (`character.conditions.resistance_modifier(damage_type)`),
+not a service function. The only damage-related service helper is the
+multiplier lookup, which queries the (tiny) `DamageSuccessLevelMultiplier`
+table once per cast:
+
 ```python
-def get_resistance_modifier_for_target(
-    target: ObjectDB,
-    damage_type: DamageType | None,
-) -> int:
-    """Sum ConditionResistanceModifier values across active conditions on
-    the target whose damage_type matches (or is null = all-types).
-    Returns 0 for null damage_type or no relevant conditions.
-    Negative return values mean vulnerability."""
-    if damage_type is None:
-        return 0
-    instances = target.condition_instances.filter(
-        is_suppressed=False,
-        resolved_at__isnull=True,
-    ).select_related("condition", "current_stage")
-    total = 0
-    for instance in instances:
-        for mod in ConditionResistanceModifier.objects.filter(
-            condition=instance.condition,
-            damage_type__in=[damage_type, None],
-        ):
-            total += mod.modifier_value
-        if instance.current_stage:
-            for mod in ConditionResistanceModifier.objects.filter(
-                stage=instance.current_stage,
-                damage_type__in=[damage_type, None],
-            ):
-                total += mod.modifier_value
-    return total
-
-
 def get_damage_multiplier(success_level: int) -> Decimal:
     """Highest matching threshold wins. SL below the lowest yields 0."""
     rows = DamageSuccessLevelMultiplier.objects.filter(
@@ -393,12 +429,10 @@ def get_damage_multiplier(success_level: int) -> Decimal:
     return first.multiplier if first else Decimal("0")
 ```
 
-The pseudocode for `get_resistance_modifier_for_target` issues a separate
-filter per `ConditionInstance` for the template-level and stage-level
-modifier rows. The implementation should batch these into a single query
-keyed on the candidate (condition, stage) pairs to avoid N+1 — see
-`world/conditions/services.py:_build_bulk_context` for the existing
-pattern. The pseudocode shape is for clarity; the plan refines.
+This is called once per cast (outside the per-component damage loop) so a
+single query per cast is acceptable. The table is typically 2–3 rows
+total; SharedMemoryModel caches them in-memory for subsequent runs in
+the same process.
 
 ### `CombatTechniqueResolver._apply_damage`
 
@@ -464,9 +498,7 @@ def apply_damage_to_opponent(
 
     resistance = 0
     if damage_type is not None and opponent.objectdb is not None:
-        resistance = get_resistance_modifier_for_target(
-            opponent.objectdb, damage_type,
-        )
+        resistance = opponent.objectdb.conditions.resistance_modifier(damage_type)
 
     damage_through = max(0, raw_damage - effective_soak - resistance)
     probing_increment = 0 if bypass_soak else max(0, raw_damage)
@@ -664,7 +696,7 @@ Tests that exercise damage resolution call `DamageSuccessLevelMultiplierFactory(
 - `test_get_damage_multiplier_returns_zero_below_lowest`.
 - `test_highest_threshold_wins`.
 
-### Conditions — resistance lookup (`world/conditions/tests/test_resistance_lookup.py`)
+### Conditions — `CharacterConditionHandler` (`world/conditions/tests/test_character_condition_handler.py`)
 
 - `test_returns_zero_for_no_active_conditions`.
 - `test_returns_zero_for_null_damage_type`.
@@ -675,6 +707,19 @@ Tests that exercise damage resolution call `DamageSuccessLevelMultiplierFactory(
 - `test_aggregates_across_multiple_conditions`.
 - `test_skips_suppressed_instances`.
 - `test_skips_resolved_instances`.
+- `test_handler_caches_active_list_on_first_read` — assert the list is
+  loaded once: a second `resistance_modifier()` call within the same
+  handler instance does not issue further DB queries (use
+  `assertNumQueries`).
+- `test_invalidate_drops_cache` — call `.invalidate()`, then
+  `resistance_modifier()` again; assert the cached property is recomputed.
+- `test_apply_condition_invalidates_handler` — after
+  `apply_condition(target=character, ...)`, calling
+  `character.conditions.resistance_modifier(damage_type)` reflects the
+  newly-applied condition.
+- `test_bulk_apply_conditions_invalidates_handler`.
+- `test_process_round_end_invalidates_handler` — when a condition expires
+  via tick, the handler reflects its absence.
 
 ### Combat — damage pipeline integration (`world/combat/tests/test_damage_scaling_pipeline.py`)
 
@@ -730,16 +775,21 @@ Each is independent of the others.
 
 Single branch. Commits in this order so reviewers can step through:
 
-1. Conditions schema + factory + `get_damage_multiplier` helper.
-2. Magic schema + factory + `compute_damage_budget`.
-3. `TechniqueFactory.post_generation` seeds a damage profile from `EffectType.base_power`.
-4. `TechniqueCapabilityGrant.calculate_value()` `effective_intensity` override.
-5. Combat schema + `ThreatPoolEntry.damage_type` factory updates.
-6. `get_resistance_modifier_for_target` helper.
-7. `apply_damage_to_opponent` and `apply_damage_to_participant` accept `damage_type`; resistance lookup wired.
-8. `_resolve_npc_action` passes `threat_entry.damage_type` (closes TODO).
-9. `CombatTechniqueResolver._apply_damage` rewritten.
-10. Tests added per step (not bulk-at-the-end).
+1. Conditions schema (`DamageSuccessLevelMultiplier`) + factory + `get_damage_multiplier` helper.
+2. `CharacterConditionHandler` in `world/conditions/handlers.py`; wire `character.conditions` on the typeclass.
+3. Invalidation calls added to existing condition-mutation services
+   (`apply_condition`, `bulk_apply_conditions`, `process_round_start`,
+   `process_round_end`, treatment / suppression services). Each mutation
+   ends with `target_character.conditions.invalidate()`.
+4. Magic schema (`TechniqueDamageProfile`) + factory + `compute_damage_budget`.
+5. `TechniqueFactory.post_generation` seeds a damage profile from `EffectType.base_power`.
+6. `TechniqueCapabilityGrant.calculate_value()` `effective_intensity` override.
+7. Combat schema (`ThreatPoolEntry.damage_type`) + factory updates.
+8. Payload migration (`DamagePreApplyPayload.damage_type`, `DamageAppliedPayload.damage_type`) from `str` to `DamageType | None`. Grep for `payload.damage_type` consumers; update.
+9. `apply_damage_to_opponent` and `apply_damage_to_participant` accept `damage_type`; resistance lookup wired via `target.conditions.resistance_modifier(...)`.
+10. `_resolve_npc_action` and `resolve_npc_attack` pass `threat_entry.damage_type` (closes TODO).
+11. `CombatTechniqueResolver._apply_damage` rewritten.
+12. Tests added per step (not bulk-at-the-end).
 
 ## Anti-patterns avoided
 
@@ -749,6 +799,7 @@ Single branch. Commits in this order so reviewers can step through:
 - **Hardcoded SL multipliers.** Replaced with a tunable lookup table so combat damage feel can be retuned without code changes.
 - **Cross-app imports between magic and combat.** Combat reads `technique.damage_profiles` via reverse-FK; no model-import dependency.
 - **Inline narration of removed fields.** No comments noting what was removed or omitted; the schema speaks for itself.
+- **`filter()` on SharedMemoryModel related managers in service functions.** Resistance lookup is on a per-character handler (`CharacterConditionHandler`) that caches the active condition list, mirroring `CharacterCombatPullHandler`. Service functions never call `target.condition_instances.filter(...)` directly; that defeats the identity-map cache.
 
 ## References
 
