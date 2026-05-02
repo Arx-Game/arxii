@@ -33,6 +33,7 @@ if TYPE_CHECKING:
         ConditionInstance,
         ConditionStage,
         ConditionTemplate,
+        DamageType,
     )
     from world.magic.models import Technique
 
@@ -88,7 +89,7 @@ class DamagePreApplyPayload:
 
     target: Character
     amount: int
-    damage_type: str
+    damage_type: DamageType | None
     source: DamageSource
 
 
@@ -96,7 +97,7 @@ class DamagePreApplyPayload:
 class DamageAppliedPayload:
     target: Character
     amount_dealt: int
-    damage_type: str
+    damage_type: DamageType | None
     source: DamageSource
     hp_after: int
 

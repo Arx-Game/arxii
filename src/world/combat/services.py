@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.checks.types import CheckResult
-    from world.conditions.models import ConditionTemplate
+    from world.conditions.models import ConditionTemplate, DamageType
     from world.covenants.models import CovenantRole
     from world.magic.models import Technique
     from world.magic.types import TechniqueUseResult
@@ -1082,7 +1082,7 @@ def apply_damage_to_participant(
     damage: int,
     *,
     force_death: bool = False,
-    damage_type: str = "physical",
+    damage_type: DamageType | None = None,
     source: object | None = None,
 ) -> ParticipantDamageResult:
     """Apply damage to a PC via their CharacterVitals.
@@ -1588,7 +1588,7 @@ def resolve_npc_attack(
     damage_result = apply_damage_to_participant(
         participant,
         final_damage,
-        damage_type=opponent_action.threat_entry.attack_category,
+        damage_type=opponent_action.threat_entry.damage_type,
         source=opponent_action.opponent,
     )
 
@@ -1785,7 +1785,7 @@ def _resolve_npc_action(
             dmg_result = apply_damage_to_participant(
                 target_participant,
                 npc_action.threat_entry.base_damage,
-                damage_type=npc_action.threat_entry.attack_category,
+                damage_type=npc_action.threat_entry.damage_type,
                 source=opponent,
             )
         outcome.damage_results.append(dmg_result)
@@ -1796,7 +1796,7 @@ def _resolve_npc_action(
         consequence = process_damage_consequences(
             character=target_participant.character_sheet.character,
             damage_dealt=dmg_result.damage_dealt,
-            damage_type=None,  # TODO: get from threat entry when damage types are authored
+            damage_type=None,
         )
         outcome.damage_consequences.append(consequence)
 
