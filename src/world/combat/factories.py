@@ -67,6 +67,7 @@ class ThreatPoolEntryFactory(factory_django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Attack {n}")
     attack_category = ActionCategory.PHYSICAL
     base_damage = 10
+    damage_type = None
     weight = 10
     targeting_mode = TargetingMode.SINGLE
     target_selection = TargetSelection.SPECIFIC_ROLE
