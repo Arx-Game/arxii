@@ -256,9 +256,19 @@ class TechniqueDamageProfile(SharedMemoryModel):
 
     class Meta:
         constraints = [
+            # Non-null pairs: one row per (technique, damage_type)
             models.UniqueConstraint(
                 fields=["technique", "damage_type"],
+                condition=Q(damage_type__isnull=False),
                 name="unique_damage_profile_per_technique_per_type",
+            ),
+            # Null pairs: at most one untyped row per technique. PostgreSQL
+            # treats multiple NULLs as distinct under a standard
+            # UniqueConstraint, so the null case needs its own partial.
+            models.UniqueConstraint(
+                fields=["technique"],
+                condition=Q(damage_type__isnull=True),
+                name="unique_untyped_damage_profile_per_technique",
             ),
         ]
 
@@ -538,9 +548,14 @@ class DamageAppliedPayload:
 `apply_damage_to_participant` constructs the payloads with the FK
 directly. Reactive subscribers reading `payload.damage_type` need their
 expectations updated from string comparison to FK identity (or `.name`
-attribute access). A search at implementation time will find them; the
-current grep shows no flow-trigger consumers reading the field — only
-test assertions, which migrate alongside.
+attribute access). The implementation must grep for `payload.damage_type`
+and `damage_type ==` patterns specifically, not only for assertion
+migrations: scar logic that branches on damage type via string
+comparison will silently fail to match after the migration (no
+exception, just a missed branch). The current grep shows no
+flow-trigger consumers reading the field — only test assertions, which
+migrate alongside — but treat this as a verification step at
+implementation time, not a foregone conclusion.
 
 ### `TechniqueCapabilityGrant.calculate_value` extension
 
@@ -638,8 +653,8 @@ Tests that exercise damage resolution call `DamageSuccessLevelMultiplierFactory(
 - `test_compute_damage_budget_intensity_scaling` — `intensity_mult × eff_intensity` term.
 - `test_compute_damage_budget_sl_kicker` — `per_extra_sl × (SL − min_sl)` term.
 - `test_compute_damage_budget_below_min_sl_unaffected_by_kicker`.
-- `test_unique_constraint_per_technique_per_damage_type` — duplicate raises.
-- `test_null_damage_type_allowed_once` — one untyped row per technique.
+- `test_unique_constraint_per_technique_per_typed_pair` — second row with same `(technique, damage_type)` where damage_type is non-null raises IntegrityError.
+- `test_null_damage_type_unique_per_technique` — second untyped (`damage_type=None`) row for the same technique raises IntegrityError. Verifies the partial unique constraint on the NULL case (PostgreSQL would otherwise allow multiple NULLs under a plain UniqueConstraint).
 
 ### Conditions — `DamageSuccessLevelMultiplier` (`world/conditions/tests/test_damage_multiplier.py`)
 
