@@ -1047,14 +1047,21 @@ def apply_damage_to_opponent(
     raw_damage: int,
     *,
     bypass_soak: bool = False,
+    damage_type: DamageType | None = None,
 ) -> OpponentDamageResult:
-    """Apply damage to an NPC opponent, accounting for soak and probing.
+    """Apply damage to an NPC opponent, accounting for soak, probing,
+    and damage-type resistance.
 
     All raw damage (even fully soaked) contributes to probing. Only damage
-    that exceeds soak actually reduces health.
+    that exceeds soak and resistance actually reduces health.
     """
     effective_soak = 0 if bypass_soak else opponent.soak_value
-    damage_through = max(0, raw_damage - effective_soak)
+
+    resistance = 0
+    if damage_type is not None and opponent.objectdb is not None:
+        resistance = opponent.objectdb.conditions.resistance_modifier(damage_type)
+
+    damage_through = max(0, raw_damage - effective_soak - resistance)
     # Combo damage that bypasses soak should not also probe — the combo
     # itself is the reward for probing.
     probing_increment = 0 if bypass_soak else max(0, raw_damage)
@@ -1140,6 +1147,10 @@ def apply_damage_to_participant(
     )
 
     effective_damage = apply_damage_reduction_from_threads(character, effective_damage)
+
+    if damage_type is not None:
+        resistance = character.conditions.resistance_modifier(damage_type)
+        effective_damage = max(0, effective_damage - resistance)
 
     vitals.health -= effective_damage
     health_after = vitals.health
