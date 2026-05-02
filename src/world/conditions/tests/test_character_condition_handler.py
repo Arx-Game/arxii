@@ -198,3 +198,67 @@ class CharacterConditionHandlerTests(EvenniaTestCase):
         # After invalidation, the next read is a fresh query
         second = char.conditions.resistance_modifier(fire)
         self.assertEqual(first, second)
+
+
+class InvalidationOnMutationTests(EvenniaTestCase):
+    """The handler is invalidated by every condition mutation service."""
+
+    def test_apply_condition_invalidates_handler(self):
+        from evennia import create_object
+
+        from world.conditions.factories import (
+            ConditionResistanceModifierFactory,
+            ConditionTemplateFactory,
+            DamageTypeFactory,
+        )
+        from world.conditions.services import apply_condition
+
+        char = create_object("typeclasses.characters.Character", key="A", nohome=True)
+        fire = DamageTypeFactory(name="Fire")
+        wet = ConditionTemplateFactory(name="Wet")
+        ConditionResistanceModifierFactory(condition=wet, damage_type=fire, modifier_value=10)
+        # Prime the cache (no condition yet)
+        self.assertEqual(char.conditions.resistance_modifier(fire), 0)
+        # Apply — invalidation must happen so the next read picks it up
+        apply_condition(char, wet)
+        self.assertEqual(char.conditions.resistance_modifier(fire), 10)
+
+    def test_bulk_apply_conditions_invalidates_handler(self):
+        from evennia import create_object
+
+        from world.conditions.factories import (
+            ConditionResistanceModifierFactory,
+            ConditionTemplateFactory,
+            DamageTypeFactory,
+        )
+        from world.conditions.services import bulk_apply_conditions
+        from world.conditions.types import BulkConditionApplication
+
+        char = create_object("typeclasses.characters.Character", key="A", nohome=True)
+        fire = DamageTypeFactory(name="Fire")
+        wet = ConditionTemplateFactory(name="Wet")
+        ConditionResistanceModifierFactory(condition=wet, damage_type=fire, modifier_value=10)
+        self.assertEqual(char.conditions.resistance_modifier(fire), 0)
+        bulk_apply_conditions([BulkConditionApplication(target=char, template=wet)])
+        self.assertEqual(char.conditions.resistance_modifier(fire), 10)
+
+    def test_process_round_end_invalidates_handler(self):
+        # Apply a 1-round condition; tick end-of-round; expired condition
+        # should no longer contribute resistance.
+        from evennia import create_object
+
+        from world.conditions.factories import (
+            ConditionResistanceModifierFactory,
+            ConditionTemplateFactory,
+            DamageTypeFactory,
+        )
+        from world.conditions.services import apply_condition, process_round_end
+
+        char = create_object("typeclasses.characters.Character", key="A", nohome=True)
+        fire = DamageTypeFactory(name="Fire")
+        wet = ConditionTemplateFactory(name="Wet")
+        ConditionResistanceModifierFactory(condition=wet, damage_type=fire, modifier_value=10)
+        apply_condition(char, wet, duration_rounds=1)
+        self.assertEqual(char.conditions.resistance_modifier(fire), 10)
+        process_round_end(char)
+        self.assertEqual(char.conditions.resistance_modifier(fire), 0)
