@@ -318,3 +318,16 @@ class OutfitWriteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"wardrobe": [exc.user_message]}) from exc
         except NotReachable as exc:
             raise serializers.ValidationError({"wardrobe": [exc.user_message]}) from exc
+
+    def update(self, instance: Outfit, validated_data: dict) -> Outfit:  # type: ignore[override]
+        """Update only renames/redescribes — character_sheet and wardrobe are write-once.
+
+        Allowing PATCH to change ``character_sheet`` would let a user transfer
+        an outfit to a different character; allowing PATCH to change
+        ``wardrobe`` would let them relocate the outfit's anchor item to any
+        item id on the planet. Both are silently dropped here — the serializer
+        accepts the fields on POST (for create) but ignores them on PATCH.
+        """
+        validated_data.pop("character_sheet", None)
+        validated_data.pop("wardrobe", None)
+        return super().update(instance, validated_data)

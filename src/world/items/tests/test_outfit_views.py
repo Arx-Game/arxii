@@ -409,6 +409,63 @@ class OutfitViewSetTests(_OutfitViewSetSetupMixin, TestCase):
         outfit.refresh_from_db()
         self.assertEqual(outfit.name, "NewLook")
 
+    def test_patch_cannot_change_character_sheet(self) -> None:
+        """PATCH attempting to change character_sheet is silently dropped.
+
+        Regression test for I5: previously the write serializer listed
+        character_sheet on Meta.fields without read-only restrictions, so
+        PATCH could transfer an outfit to a different character.
+        """
+        outfit = OutfitFactory(
+            character_sheet=self.sheet_a,
+            wardrobe=self.wardrobe,
+            name="WriteOnceSheetLook",
+        )
+        original_sheet_id = outfit.character_sheet_id
+
+        response = self.client.patch(
+            f"/api/items/outfits/{outfit.pk}/",
+            {"character_sheet": self.sheet_b.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        outfit.refresh_from_db()
+        self.assertEqual(outfit.character_sheet_id, original_sheet_id)
+
+    def test_patch_cannot_change_wardrobe(self) -> None:
+        """PATCH attempting to change wardrobe is silently dropped.
+
+        Regression test for I5: previously wardrobe was a writable field on
+        update, so PATCH could relocate the outfit's anchor to any item.
+        """
+        outfit = OutfitFactory(
+            character_sheet=self.sheet_a,
+            wardrobe=self.wardrobe,
+            name="WriteOnceWardrobeLook",
+        )
+        original_wardrobe_id = outfit.wardrobe_id
+
+        # Build a different wardrobe-templated item to attempt to swap to.
+        other_wardrobe_obj = ObjectDBFactory(
+            db_key="OutfitViewOtherWardrobeObj",
+            db_typeclass_path="typeclasses.objects.Object",
+        )
+        other_wardrobe_obj.location = self.room
+        other_wardrobe_obj.save()
+        other_wardrobe = ItemInstanceFactory(
+            template=self.wardrobe_template,
+            game_object=other_wardrobe_obj,
+        )
+
+        response = self.client.patch(
+            f"/api/items/outfits/{outfit.pk}/",
+            {"wardrobe": other_wardrobe.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        outfit.refresh_from_db()
+        self.assertEqual(outfit.wardrobe_id, original_wardrobe_id)
+
     # ------------------------------------------------------------------
     # DELETE
     # ------------------------------------------------------------------
