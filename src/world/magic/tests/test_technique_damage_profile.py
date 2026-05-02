@@ -1,7 +1,6 @@
 """Tests for TechniqueDamageProfile model and compute_damage_budget formula."""
 
 from decimal import Decimal
-import unittest
 
 from django.db import IntegrityError, transaction
 from evennia.utils.test_resources import EvenniaTestCase
@@ -47,7 +46,6 @@ class ComputeDamageBudgetTests(EvenniaTestCase):
         self.assertEqual(p.compute_damage_budget(effective_intensity=0, success_level=3), 6)
 
 
-@unittest.skip("requires Task 5 — TechniqueFactory.post_generation damage_profile kwarg")
 class UniqueConstraintTests(EvenniaTestCase):
     """Run AFTER Task 5 lands the post_generation skip kwarg.
 
@@ -84,3 +82,45 @@ class UniqueConstraintTests(EvenniaTestCase):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 TechniqueDamageProfileFactory(technique=tech, damage_type=None)
+
+
+class TechniqueFactoryDamageProfileSeedingTests(EvenniaTestCase):
+    def test_factory_seeds_damage_profile_from_effect_type(self):
+        from world.magic.factories import TechniqueFactory
+        from world.magic.models.techniques import EffectType, TechniqueDamageProfile
+
+        et = EffectType.objects.create(
+            name="Test Ranged Attack",
+            base_power=10,
+            base_anima_cost=2,
+            has_power_scaling=True,
+        )
+        tech = TechniqueFactory(effect_type=et)
+        profile = TechniqueDamageProfile.objects.get(technique=tech)
+        self.assertEqual(profile.base_damage, 10)
+
+    def test_factory_skips_when_explicitly_disabled(self):
+        from world.magic.factories import TechniqueFactory
+        from world.magic.models.techniques import EffectType, TechniqueDamageProfile
+
+        et = EffectType.objects.create(
+            name="Test Ranged Attack 2",
+            base_power=10,
+            base_anima_cost=2,
+            has_power_scaling=True,
+        )
+        tech = TechniqueFactory(effect_type=et, damage_profile=False)
+        self.assertFalse(TechniqueDamageProfile.objects.filter(technique=tech).exists())
+
+    def test_factory_skips_when_effect_type_has_no_base_power(self):
+        from world.magic.factories import TechniqueFactory
+        from world.magic.models.techniques import EffectType, TechniqueDamageProfile
+
+        et = EffectType.objects.create(
+            name="Test Buff",
+            base_power=None,
+            base_anima_cost=2,
+            has_power_scaling=False,
+        )
+        tech = TechniqueFactory(effect_type=et)
+        self.assertFalse(TechniqueDamageProfile.objects.filter(technique=tech).exists())
