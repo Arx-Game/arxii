@@ -399,10 +399,21 @@ class TechniqueCapabilityGrant(SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.technique.name} grants {self.capability.name}"
 
-    def calculate_value(self, intensity: int | None = None) -> int:
-        """Calculate effective Capability value."""
-        effective_intensity = intensity if intensity is not None else self.technique.intensity
-        return int(self.base_value + (self.intensity_multiplier * Decimal(effective_intensity)))
+    def calculate_value(
+        self,
+        *,
+        effective_intensity: int | None = None,
+    ) -> int:
+        """Calculate effective Capability value.
+
+        effective_intensity: when provided (e.g., from combat where pull
+        bumps may apply), uses that aggregate. When None (out-of-combat
+        challenges or no combat context), falls back to self.technique.intensity.
+        """
+        intensity = (
+            effective_intensity if effective_intensity is not None else self.technique.intensity
+        )
+        return int(self.base_value + (self.intensity_multiplier * Decimal(intensity)))
 
 
 class CharacterTechnique(SharedMemoryModel):
