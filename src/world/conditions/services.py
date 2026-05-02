@@ -12,6 +12,7 @@ Design principles:
 
 from dataclasses import dataclass, field
 from datetime import timedelta
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -48,6 +49,7 @@ from world.conditions.models import (
     ConditionResistanceModifier,
     ConditionStage,
     ConditionTemplate,
+    DamageSuccessLevelMultiplier,
     DamageType,
     TreatmentAttempt,
     TreatmentTemplate,
@@ -2158,3 +2160,22 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
         helper_backlash_applied=helper_backlash,
         target_resolved=target_resolved,
     )
+
+
+# =============================================================================
+# Damage Scaling Helpers
+# =============================================================================
+
+
+def get_damage_multiplier(success_level: int) -> Decimal:
+    """Look up the damage multiplier for a given success level.
+
+    Returns the multiplier of the highest-threshold row whose
+    `min_success_level` is <= `success_level`. Returns Decimal("0")
+    when no row matches (table empty or SL below lowest threshold).
+    """
+    rows = DamageSuccessLevelMultiplier.objects.filter(
+        min_success_level__lte=success_level,
+    ).order_by("-min_success_level")
+    first = rows.first()
+    return first.multiplier if first else Decimal(0)

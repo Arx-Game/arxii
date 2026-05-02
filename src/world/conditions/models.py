@@ -1159,3 +1159,34 @@ class TreatmentAttempt(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.treatment} on {self.target} by {self.helper}"
+
+
+# =============================================================================
+# Damage Scaling Lookup
+# =============================================================================
+
+
+class DamageSuccessLevelMultiplier(NaturalKeyMixin, SharedMemoryModel):
+    """Tunable lookup: success_level → damage multiplier.
+
+    Resolver picks the highest-threshold row whose `min_success_level` is
+    ≤ the actual SL. SL below the lowest threshold yields zero damage.
+    Defaults seeded by the planned startup-page mechanism (or
+    DamageSuccessLevelMultiplierFactory in tests).
+    """
+
+    min_success_level = models.IntegerField(unique=True)
+    multiplier = models.DecimalField(max_digits=4, decimal_places=2)
+    label = models.CharField(max_length=64, blank=True)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["min_success_level"]
+
+    class Meta:
+        ordering = ["-min_success_level"]
+
+    def __str__(self) -> str:
+        suffix = f" — {self.label}" if self.label else ""
+        return f"SL ≥ {self.min_success_level}: ×{self.multiplier}{suffix}"
