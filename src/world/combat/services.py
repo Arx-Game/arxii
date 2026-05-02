@@ -611,7 +611,16 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     """
     from evennia.utils.create import create_object  # noqa: PLC0415
 
+    from typeclasses.characters import Character  # noqa: PLC0415
     from world.combat.typeclasses.combat_npc import CombatNPC  # noqa: PLC0415
+
+    if existing_objectdb is not None and not isinstance(existing_objectdb, Character):
+        msg = (
+            f"existing_objectdb must be a Character typeclass instance "
+            f"(got {type(existing_objectdb).__name__}). "
+            f"Combat damage paths require character.conditions handler access."
+        )
+        raise TypeError(msg)
 
     if existing_objectdb is not None:
         objectdb = existing_objectdb

@@ -75,3 +75,24 @@ class AddOpponentTests(EvenniaTestCase):
                 max_health=10,
                 threat_pool=pool,
             )
+
+
+class AddOpponentTypeclassGuardTests(EvenniaTestCase):
+    def test_existing_objectdb_must_be_character_typeclass(self):
+        from world.combat.factories import CombatEncounterFactory, ThreatPoolFactory
+        from world.combat.services import add_opponent
+
+        # Plain Object typeclass — not a Character
+        plain = create_object("typeclasses.objects.Object", key="Item", nohome=True)
+        encounter = CombatEncounterFactory()
+        pool = ThreatPoolFactory()
+
+        with self.assertRaises(TypeError):
+            add_opponent(
+                encounter,
+                name="Bad",
+                tier="elite",
+                max_health=50,
+                threat_pool=pool,
+                existing_objectdb=plain,
+            )
