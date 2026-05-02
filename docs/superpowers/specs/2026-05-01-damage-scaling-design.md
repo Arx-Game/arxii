@@ -313,6 +313,21 @@ Defaults seeded by the startup-page (production) or factory (tests):
 
 ### `ThreatPoolEntry` change
 
+`ThreatPoolEntry` already has `attack_category` (a `CharField` with
+`ActionCategory.choices` — PHYSICAL/SOCIAL/MENTAL). That field drives
+**which check type and fatigue pool** the attack uses; it is not a damage
+type. Today it is misused as a damage type because
+`apply_damage_to_participant` accepts `damage_type: str` and the NPC code
+passes `attack_category` through.
+
+This PR adds `damage_type` as a **separate concept** — a true FK to
+`DamageType` for resistance lookup. Both fields coexist:
+
+| Field | Purpose | Type |
+|---|---|---|
+| `attack_category` (existing) | Check / fatigue category. Selects which defense check type + fatigue pool. Values: physical / social / mental. | `CharField(choices=ActionCategory.choices)` |
+| `damage_type` (NEW) | Resistance-lookup type. Identifies the elemental / damage-class identity for `ConditionResistanceModifier` matching. Values: Fire, Cold, Slashing, Holy, etc. | `ForeignKey("conditions.DamageType", null=True, on_delete=PROTECT)` |
+
 ```python
 damage_type = models.ForeignKey(
     "conditions.DamageType",
@@ -323,6 +338,8 @@ damage_type = models.ForeignKey(
     help_text="Damage type for resistance lookup. Null = untyped attack.",
 )
 ```
+
+`attack_category` is unchanged.
 
 ### Helpers in `world/conditions/services.py`
 
@@ -365,6 +382,13 @@ def get_damage_multiplier(success_level: int) -> Decimal:
     first = rows.first()
     return first.multiplier if first else Decimal("0")
 ```
+
+The pseudocode for `get_resistance_modifier_for_target` issues a separate
+filter per `ConditionInstance` for the template-level and stage-level
+modifier rows. The implementation should batch these into a single query
+keyed on the candidate (condition, stage) pairs to avoid N+1 — see
+`world/conditions/services.py:_build_bulk_context` for the existing
+pattern. The pseudocode shape is for clarity; the plan refines.
 
 ### `CombatTechniqueResolver._apply_damage`
 
@@ -455,9 +479,74 @@ def apply_damage_to_opponent(
     )
 ```
 
-`apply_damage_to_participant` gets the same treatment — current `damage_type: str` parameter migrates to `damage_type: DamageType | None` (FK). Caller migration is small (current callers in the combat module only).
+### `apply_damage_to_participant` migration
+
+The current signature is `damage_type: str = "physical"`. The string is
+accepted today because callers conflate `ThreatPoolEntry.attack_category`
+with damage type (see ThreatPoolEntry section above). Migrate to FK:
+
+```python
+def apply_damage_to_participant(
+    participant: CombatParticipant,
+    damage: int,
+    *,
+    force_death: bool = False,
+    damage_type: DamageType | None = None,   # was: str = "physical"
+    source: object | None = None,
+) -> ParticipantDamageResult:
+    ...
+```
+
+Caller updates inside `world/combat/services.py`:
+
+- `_resolve_npc_action` (the direct path, currently passing
+  `damage_type=npc_action.threat_entry.attack_category`) → pass
+  `damage_type=npc_action.threat_entry.damage_type` instead. The
+  `attack_category` is no longer plumbed through this argument; it
+  already drives check type / fatigue selection elsewhere and doesn't
+  belong on this parameter.
+- `resolve_npc_attack` (the defense-check path, currently passing
+  `damage_type=opponent_action.threat_entry.attack_category`) → same
+  change to `threat_entry.damage_type`.
+- `process_damage_consequences` call site at the existing
+  `damage_type=None # TODO` line — no change required (already None);
+  remove the TODO comment since the gap is resolved structurally.
+
+### `DamagePreApplyPayload` and `DamageAppliedPayload` migration
+
+Both payloads currently declare `damage_type: str`. Migrate to
+`damage_type: DamageType | None`:
+
+```python
+@dataclass
+class DamagePreApplyPayload:
+    target: Character
+    amount: int
+    damage_type: DamageType | None   # was: str
+    source: DamageSource
+
+
+@dataclass(frozen=True)
+class DamageAppliedPayload:
+    target: Character
+    amount_dealt: int
+    damage_type: DamageType | None   # was: str
+    source: DamageSource
+    hp_after: int
+```
+
+`apply_damage_to_participant` constructs the payloads with the FK
+directly. Reactive subscribers reading `payload.damage_type` need their
+expectations updated from string comparison to FK identity (or `.name`
+attribute access). A search at implementation time will find them; the
+current grep shows no flow-trigger consumers reading the field — only
+test assertions, which migrate alongside.
 
 ### `TechniqueCapabilityGrant.calculate_value` extension
+
+The current signature is `calculate_value(self, intensity: int | None = None)`
+— one positional parameter named `intensity`. Migrate to keyword-only and
+rename for clarity:
 
 ```python
 def calculate_value(
@@ -474,7 +563,16 @@ def calculate_value(
     return int(self.base_value + (self.intensity_multiplier * Decimal(intensity)))
 ```
 
-Existing callers pass nothing → behavior unchanged. No combat-side caller is added in this PR; the keyword is reserved for future Challenge-in-combat work.
+**Breaking-call-site changes** (search at implementation time, the
+current grep shows these specifically):
+
+- `src/world/magic/tests/test_capability_grants.py:51` —
+  `grant.calculate_value(intensity=20)` → `grant.calculate_value(effective_intensity=20)`
+- All other callers (`grant.calculate_value()` with no args, lines 41
+  and 61 of the same test plus `mechanics/services.py:488`) are unaffected.
+
+No combat-side caller for this keyword is added in this PR; the kwarg
+is reserved for future Challenge-in-combat work.
 
 ### Factory updates
 
