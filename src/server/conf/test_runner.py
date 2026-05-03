@@ -1,8 +1,26 @@
 """
-Custom Evennia test runner with timing information.
+Custom Evennia test runner with timing information and parallel-worker compatibility.
 
-This runner extends Evennia's EvenniaTestSuiteRunner to add timing data
-for individual tests, similar to how migrations display timing.
+This runner extends Evennia's EvenniaTestSuiteRunner to add:
+- Timing data for individual tests (when ARX_TEST_TIMING env var is set)
+- Parallel worker compatibility on Windows (spawn start method)
+
+## Windows parallel worker issue
+
+On Windows, multiprocessing uses the "spawn" start method: each worker boots a fresh
+interpreter. Django's parallel test runner calls `django.setup()` then
+`setup_test_environment()` (the bare utility function from django.test.utils) in workers.
+The bare utility function does NOT call `evennia._init()`, so `evennia.SESSION_HANDLER`
+stays None in workers.
+
+When `AccountFactory()` is called in `setUpTestData`, Evennia tries to add the default
+cmdset. If the cmdset import fails for any reason, Evennia tries to emit an error via
+`account.msg()`, which accesses `evennia.SESSION_HANDLER.sessions_from_account()` and
+crashes with AttributeError because SESSION_HANDLER is None.
+
+The fix: subclass `ParallelTestSuite` with a custom `init_worker` that calls
+`evennia._init()` AFTER `django.setup()` completes (via the base `_init_worker`).
+This initializes `SESSION_HANDLER` so account creation in workers doesn't crash.
 """
 
 import os
@@ -10,16 +28,63 @@ import sys
 import time
 import unittest
 
+from django.test.runner import ParallelTestSuite
 from evennia.server.tests.testrunner import EvenniaTestSuiteRunner
+
+
+def _arx_init_worker(*args, **kwargs) -> None:
+    """
+    Worker initializer for ArxParallelTestSuite.
+
+    Wraps Django's _init_worker to also call evennia._init() in workers where
+    SESSION_HANDLER would otherwise remain None (Windows spawn workers).
+
+    Lives at module level (not as a method) because Django accesses the
+    init_worker class attribute via ``self.init_worker.__func__``, which requires
+    the attribute to be a bound method (not a staticmethod or plain function).
+    Assigning a module-level function to a class attribute creates the required
+    descriptor so that ``instance.init_worker.__func__`` resolves correctly.
+
+    The *args/**kwargs forwarding insulates this wrapper from Django version
+    drift — Django passes initargs positionally, so we forward both positional
+    and keyword arguments to the base _init_worker.
+    """
+    from django.test.runner import _init_worker
+
+    _init_worker(*args, **kwargs)
+
+    # Initialize evennia in workers where SESSION_HANDLER is not already set.
+    # On Linux fork workers, the parent's evennia._init() carries over via the
+    # forked memory image. On Windows spawn workers, the worker is a fresh
+    # interpreter and evennia is uninitialized. The SESSION_HANDLER check
+    # handles both cases without needing a platform-specific branch.
+    import evennia
+
+    if evennia.SESSION_HANDLER is None:
+        evennia._init()
+
+
+class ArxParallelTestSuite(ParallelTestSuite):
+    """
+    ParallelTestSuite that initializes evennia in each spawn worker.
+
+    Overrides init_worker to call evennia._init() after django.setup()
+    so that SESSION_HANDLER and other evennia globals are available in workers.
+    """
+
+    init_worker = _arx_init_worker  # type: ignore[assignment]
 
 
 class TimedEvenniaTestRunner(EvenniaTestSuiteRunner):
     """
-    Custom test runner that extends EvenniaTestSuiteRunner with timing information.
+    Custom test runner that extends EvenniaTestSuiteRunner with timing information
+    and parallel worker compatibility.
 
     Timing is displayed when ARX_TEST_TIMING environment variable is set.
     Uses a minimal approach that doesn't interfere with result class inheritance.
     """
+
+    parallel_test_suite = ArxParallelTestSuite
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

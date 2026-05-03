@@ -133,7 +133,12 @@ def run_tests(
         arx test --production-settings     # Use production settings instead
     """
     setup_env()
-    # Use optimized test settings by default, production settings if requested
+    # Use optimized test settings by default, production settings if requested.
+    # Pass the bare filename to Evennia's --settings flag: Evennia prepends "server.conf."
+    # internally to build the fully-qualified dotted path. Django's management layer
+    # then sets DJANGO_SETTINGS_MODULE to the bare name (e.g. "test_settings"). On
+    # Windows, spawn-mode parallel workers inherit that env var and resolve it via the
+    # src/test_settings.py shim (src/ is on sys.path via the editable install .pth).
     settings_module = "settings" if production_settings else "test_settings"
     command = ["evennia", "test", f"--settings={settings_module}"]
 
