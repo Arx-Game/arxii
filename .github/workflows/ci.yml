@@ -30,7 +30,10 @@ jobs:
       - run: uv run pre-commit install
       - run: uv run pre-commit run --all-files
 
-  backend:
+  # Sharded test execution. Each shard runs a slice of apps in parallel.
+  # The `backend` job below aggregates shard results so existing branch
+  # protection rules requiring a check named "backend" continue to work.
+  backend-shard:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -113,6 +116,22 @@ jobs:
         # boolean flag, so `auto` would fall through as a positional test label
         # and Django would fail trying to import a module named `auto`.
         run: uv run arx test --parallel ${{ matrix.shard.apps }}
+
+  # Aggregator: succeeds iff every backend-shard matrix entry succeeded.
+  # Lets branch protection require a single status check named "backend"
+  # instead of having to enumerate each shard.
+  backend:
+    needs: backend-shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Aggregate shard results
+        run: |
+          if [[ "${{ needs.backend-shard.result }}" != "success" ]]; then
+            echo "One or more backend shards failed (status: ${{ needs.backend-shard.result }})"
+            exit 1
+          fi
+          echo "All backend shards passed."
 
   ty:
     runs-on: ubuntu-latest
