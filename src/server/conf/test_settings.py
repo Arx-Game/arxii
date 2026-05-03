@@ -60,3 +60,21 @@ SENDGRID_API_KEY = ""
 CLOUDINARY_CLOUD_NAME = ""
 CLOUDINARY_API_KEY = ""
 CLOUDINARY_API_SECRET = ""
+
+# These loggers fire ERROR-level messages only from tests that intentionally
+# trigger error paths to verify production behavior. Silencing them at CRITICAL
+# avoids noise without hiding any uninstrumented error in production.
+# Risk: a real regression in one of these services would be silent in tests;
+# mitigation is that the tests themselves assert response/exception behavior.
+for _test_only_silenced, _level in [
+    ("world.character_creation.services", "CRITICAL"),
+    ("world.combat.services", "CRITICAL"),
+    ("web.admin.services", "CRITICAL"),
+    ("world.game_clock.scheduler", "CRITICAL"),
+    ("web.api.exceptions", "CRITICAL"),
+]:
+    LOGGING["loggers"].setdefault(
+        _test_only_silenced,
+        {"handlers": ["console"], "propagate": False},
+    )
+    LOGGING["loggers"][_test_only_silenced]["level"] = _level
