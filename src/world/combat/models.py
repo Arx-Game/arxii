@@ -113,6 +113,14 @@ class ThreatPoolEntry(SharedMemoryModel):
         choices=ActionCategory.choices,
     )
     base_damage = models.PositiveIntegerField(default=0)
+    damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="threat_pool_entries",
+        help_text="Damage type for resistance lookup. Null = untyped attack.",
+    )
     weight = models.PositiveIntegerField(
         default=10,
         help_text="Selection weight",

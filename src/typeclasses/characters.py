@@ -142,6 +142,13 @@ class Character(ObjectParent, DefaultCharacter):
         return CharacterCombatPullHandler(self)
 
     @cached_property
+    def conditions(self):
+        """Handler for this character's active ConditionInstance rows."""
+        from world.conditions.handlers import CharacterConditionHandler
+
+        return CharacterConditionHandler(self)
+
+    @cached_property
     def equipped_items(self):
         """Cached handler for this character's equipped items and their facets (Spec D §3.3)."""
         from world.items.handlers import CharacterEquipmentHandler

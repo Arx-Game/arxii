@@ -214,6 +214,19 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - **`declare_action` target validation.** XOR check, target-kind alignment with technique authoring (SELF/ALLY interchangeable), damage-only requires opponent target
 - See `docs/superpowers/specs/2026-05-01-combat-magic-non-attack-effects-design.md`
 
+**Phase 6 (complete):** Damage scaling by effective intensity
+- **Per-technique damage authoring.** New `TechniqueDamageProfile` through-model. Same formula shape as `TechniqueAppliedCondition` and `TechniqueCapabilityGrant`: `base_damage + intensity_multiplier × effective_intensity + per_extra_sl × max(0, SL − min_sl)`. Authors knob each row independently.
+- **Multi-component damage authoring.** A "slashing fire sword" gets two profile rows (one slashing, one fire). Each applies as a separate damage event with its own resistance lookup. Two-DAMAGE_PRE_APPLY / two-DAMAGE_APPLIED per cast.
+- **Damage types end-to-end.** `TechniqueDamageProfile.damage_type` and `ThreatPoolEntry.damage_type` (FKs to existing `DamageType`). `apply_damage_to_opponent` and `apply_damage_to_participant` accept `damage_type: DamageType | None` and apply resistance lookup. `_resolve_npc_action` passes `threat_entry.damage_type` (closes the long-standing TODO).
+- **`ConditionResistanceModifier` is now consumed.** Wired through a new `CharacterConditionHandler` (mirrors `CharacterCombatPullHandler`) — caches active condition instances + their resistance modifiers; service functions never call `.filter()` on the related manager. Negative `modifier_value` = vulnerability (target takes more damage).
+- **`CharacterConditionHandler` invalidation** is wired into every condition-mutation service (`apply_condition`, `bulk_apply_conditions`, `process_round_start/end`, `process_action_tick`, `remove_condition`, `clear_all_conditions`, `suppress_condition`, `unsuppress_condition`, `advance_condition_severity`, `decay_condition_severity`, `process_damage_interactions`).
+- **`DamageSuccessLevelMultiplier` lookup table** replaces inline full/half/zero thresholds. Tunable in admin without code changes. Defaults seeded by the planned startup-page mechanism (and by factories in tests).
+- **`DamagePreApplyPayload` / `DamageAppliedPayload` `damage_type` migrated** from `str` to `DamageType | None` FK. Closes the long-standing conflation where `attack_category` (PHYSICAL/SOCIAL/MENTAL — a check category) was being passed as the damage type.
+- **`TechniqueCapabilityGrant.calculate_value` extension.** Accepts keyword-only `effective_intensity` override for future Challenge-in-combat work where pull bumps should affect Capability values.
+- **`add_opponent` Character-typeclass guard.** `existing_objectdb` must be a Character typeclass instance — raises `TypeError` otherwise. Damage path's `opponent.objectdb.conditions` access can never miss the handler.
+- **`bypass_soak` stays combo-only.** Architectural rule: solo casts never bypass soak. The `TechniqueDamageProfile` model has no `bypass_soak` field; `_apply_damage` never passes `bypass_soak=True`.
+- See `docs/superpowers/specs/2026-05-01-damage-scaling-design.md`
+
 ### Open Encounters (future — builds on Party Combat)
 - Spontaneous combat for any number of participants, drop-in/drop-out
 - Nullable covenant, participants can join/leave mid-fight

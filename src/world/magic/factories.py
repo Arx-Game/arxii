@@ -46,6 +46,7 @@ from world.magic.models import (
     Technique,
     TechniqueAppliedCondition,
     TechniqueCapabilityGrant,
+    TechniqueDamageProfile,
     TechniqueOutcomeModifier,
     TechniqueStyle,
     Thread,
@@ -220,6 +221,25 @@ class TechniqueFactory(factory.django.DjangoModelFactory):
             for restriction in extracted:
                 self.restrictions.add(restriction)
 
+    @factory.post_generation
+    def damage_profile(self, create, extracted, **kwargs):
+        """Auto-seed a damage profile from EffectType.base_power when present.
+
+        Pass damage_profile=False to skip. Pass any non-False truthy value
+        to also skip (caller has attached their own profile).
+        """
+        if not create:
+            return
+        if extracted is False:
+            return
+        if extracted is not None:
+            return
+        if self.effect_type.base_power:
+            TechniqueDamageProfileFactory(
+                technique=self,
+                base_damage=self.effect_type.base_power,
+            )
+
 
 class TechniqueCapabilityGrantFactory(factory.django.DjangoModelFactory):
     """Factory for TechniqueCapabilityGrant."""
@@ -250,6 +270,20 @@ class TechniqueAppliedConditionFactory(factory.django.DjangoModelFactory):
     duration_intensity_multiplier = Decimal(0)
     duration_per_extra_sl = 0
     stack_count = 1
+
+
+class TechniqueDamageProfileFactory(factory.django.DjangoModelFactory):
+    """Factory for TechniqueDamageProfile — per-component damage scaling row."""
+
+    class Meta:
+        model = TechniqueDamageProfile
+
+    technique = factory.SubFactory("world.magic.factories.TechniqueFactory", damage_profile=False)
+    damage_type = None
+    minimum_success_level = 1
+    base_damage = 5
+    damage_intensity_multiplier = Decimal(0)
+    damage_per_extra_sl = 0
 
 
 class IntensityTierFactory(factory.django.DjangoModelFactory):

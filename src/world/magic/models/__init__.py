@@ -10,8 +10,8 @@ Submodules (see Scope 6 §4.4):
 - anima: CharacterAnima, CharacterAnimaRitual, AnimaRitualPerformance
 - gifts: Gift, CharacterGift, Tradition, CharacterTradition
 - techniques: EffectType, TechniqueStyle, Restriction, IntensityTier, Technique,
-  TechniqueAppliedCondition, TechniqueCapabilityGrant, CharacterTechnique,
-  TechniqueOutcomeModifier
+  TechniqueAppliedCondition, TechniqueCapabilityGrant, TechniqueDamageProfile,
+  CharacterTechnique, TechniqueOutcomeModifier
 - cantrips: Cantrip
 - motifs: Facet, Motif, MotifResonance, MotifResonanceAssociation
 - soulfray: SoulfrayConfig, MishapPoolTier
@@ -94,6 +94,7 @@ from world.magic.models.techniques import (
     Technique,
     TechniqueAppliedCondition,
     TechniqueCapabilityGrant,
+    TechniqueDamageProfile,
     TechniqueOutcomeModifier,
     TechniqueStyle,
     TechniqueStyleManager,
@@ -178,6 +179,7 @@ __all__ = [
     "Technique",
     "TechniqueAppliedCondition",
     "TechniqueCapabilityGrant",
+    "TechniqueDamageProfile",
     "TechniqueOutcomeModifier",
     "TechniqueStyle",
     "TechniqueStyleManager",

@@ -2,6 +2,8 @@
 Factories for conditions app tests.
 """
 
+from decimal import Decimal
+
 import factory
 from factory.django import DjangoModelFactory
 
@@ -29,6 +31,7 @@ from world.conditions.models import (
     ConditionResistanceModifier,
     ConditionStage,
     ConditionTemplate,
+    DamageSuccessLevelMultiplier,
     DamageType,
     TreatmentTemplate,
 )
@@ -396,3 +399,13 @@ class SoulfrayStabilizeMageScarTreatmentFactory(DjangoModelFactory):
     reduction_on_success = 1
     reduction_on_partial = 1
     reduction_on_failure = 0
+
+
+class DamageSuccessLevelMultiplierFactory(DjangoModelFactory):
+    class Meta:
+        model = DamageSuccessLevelMultiplier
+        django_get_or_create = ("min_success_level",)
+
+    min_success_level = 2
+    multiplier = Decimal("1.00")
+    label = "Full"

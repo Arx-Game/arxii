@@ -13,6 +13,7 @@ ConditionTemplate with formula-based severity/duration scaling.
 from decimal import Decimal
 
 from django.db import models
+from django.db.models import Q
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
@@ -398,10 +399,21 @@ class TechniqueCapabilityGrant(SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.technique.name} grants {self.capability.name}"
 
-    def calculate_value(self, intensity: int | None = None) -> int:
-        """Calculate effective Capability value."""
-        effective_intensity = intensity if intensity is not None else self.technique.intensity
-        return int(self.base_value + (self.intensity_multiplier * Decimal(effective_intensity)))
+    def calculate_value(
+        self,
+        *,
+        effective_intensity: int | None = None,
+    ) -> int:
+        """Calculate effective Capability value.
+
+        effective_intensity: when provided (e.g., from combat where pull
+        bumps may apply), uses that aggregate. When None (out-of-combat
+        challenges or no combat context), falls back to self.technique.intensity.
+        """
+        intensity = (
+            effective_intensity if effective_intensity is not None else self.technique.intensity
+        )
+        return int(self.base_value + (self.intensity_multiplier * Decimal(intensity)))
 
 
 class CharacterTechnique(SharedMemoryModel):
@@ -575,3 +587,68 @@ class TechniqueAppliedCondition(SharedMemoryModel):
         sl_above = max(0, success_level - self.minimum_success_level)
         sl_contribution = self.duration_per_extra_sl * sl_above
         return base + intensity_contribution + sl_contribution
+
+
+class TechniqueDamageProfile(SharedMemoryModel):
+    """One damage component a technique deals when used in combat.
+
+    A technique can have multiple rows for multi-component damage
+    (e.g., a slashing fire sword: one slashing row + one fire row).
+    Each row scales independently and applies as a separate damage
+    event on the target.
+    """
+
+    technique = models.ForeignKey(
+        Technique,
+        on_delete=models.CASCADE,
+        related_name="damage_profiles",
+    )
+    damage_type = models.ForeignKey(
+        "conditions.DamageType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="technique_damage_profiles",
+        help_text="Damage type for resistance lookup. Null = untyped damage.",
+    )
+    minimum_success_level = models.PositiveIntegerField(default=1)
+
+    base_damage = models.PositiveIntegerField(default=0)
+    damage_intensity_multiplier = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal(0),
+    )
+    damage_per_extra_sl = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["technique", "damage_type"],
+                condition=Q(damage_type__isnull=False),
+                name="unique_damage_profile_per_technique_per_type",
+            ),
+            models.UniqueConstraint(
+                fields=["technique"],
+                condition=Q(damage_type__isnull=True),
+                name="unique_untyped_damage_profile_per_technique",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        type_str = self.damage_type.name if self.damage_type else "untyped"
+        return f"{self.technique.name} → {self.base_damage} {type_str}"
+
+    def compute_damage_budget(
+        self,
+        *,
+        effective_intensity: int,
+        success_level: int,
+    ) -> int:
+        """Per-formula damage value before SL multiplier and soak."""
+        intensity_contribution = int(
+            self.damage_intensity_multiplier * effective_intensity,
+        )
+        sl_above = max(0, success_level - self.minimum_success_level)
+        sl_contribution = self.damage_per_extra_sl * sl_above
+        return self.base_damage + intensity_contribution + sl_contribution

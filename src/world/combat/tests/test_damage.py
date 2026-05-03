@@ -1,6 +1,7 @@
 """Tests for combat damage resolution service functions."""
 
 from django.test import TestCase
+from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import ActionCategory, EncounterStatus, OpponentStatus, OpponentTier
@@ -264,3 +265,97 @@ class KnockoutDeathProcessingTest(TestCase):
         vitals = CharacterVitals.objects.get(character_sheet=sheet)
         self.assertEqual(vitals.status, CharacterStatus.DEAD)
         self.assertFalse(vitals.dying_final_round)
+
+
+class ApplyDamageToOpponentResistanceTests(EvenniaTestCase):
+    """Tests for resistance modifier in apply_damage_to_opponent."""
+
+    def test_resistance_modifier_reduces_damage(self) -> None:
+        from world.conditions.factories import (
+            ConditionResistanceModifierFactory,
+            ConditionTemplateFactory,
+            DamageTypeFactory,
+        )
+        from world.conditions.services import apply_condition
+
+        fire = DamageTypeFactory(name="Fire")
+        wet = ConditionTemplateFactory(name="Wet")
+        ConditionResistanceModifierFactory(condition=wet, damage_type=fire, modifier_value=10)
+
+        opp = CombatOpponentFactory(soak_value=0, max_health=100, health=100)
+        apply_condition(opp.objectdb, wet)
+
+        result = apply_damage_to_opponent(opp, 15, damage_type=fire)
+        # 15 raw - 0 soak - 10 resistance = 5
+        self.assertEqual(result.damage_dealt, 5)
+
+    def test_no_resistance_when_damage_type_null(self) -> None:
+        opp = CombatOpponentFactory(soak_value=0, max_health=100, health=100)
+        result = apply_damage_to_opponent(opp, 10, damage_type=None)
+        self.assertEqual(result.damage_dealt, 10)
+
+    def test_negative_resistance_amplifies_damage(self) -> None:
+        from world.conditions.factories import (
+            ConditionResistanceModifierFactory,
+            ConditionTemplateFactory,
+            DamageTypeFactory,
+        )
+        from world.conditions.services import apply_condition
+
+        holy = DamageTypeFactory(name="Holy")
+        cursed = ConditionTemplateFactory(name="Cursed")
+        ConditionResistanceModifierFactory(condition=cursed, damage_type=holy, modifier_value=-5)
+
+        opp = CombatOpponentFactory(soak_value=0, max_health=100, health=100)
+        apply_condition(opp.objectdb, cursed)
+
+        result = apply_damage_to_opponent(opp, 10, damage_type=holy)
+        # 10 raw - 0 soak - (-5) resistance = 15
+        self.assertEqual(result.damage_dealt, 15)
+
+    def test_no_resistance_when_objectdb_null(self) -> None:
+        from world.conditions.factories import DamageTypeFactory
+
+        fire = DamageTypeFactory(name="Fire")
+        opp = CombatOpponentFactory(soak_value=0, max_health=100, health=100)
+        opp.objectdb = None
+        opp.save(update_fields=["objectdb"])
+        result = apply_damage_to_opponent(opp, 10, damage_type=fire)
+        self.assertEqual(result.damage_dealt, 10)
+
+
+class ApplyDamageToParticipantResistanceTests(EvenniaTestCase):
+    """Tests for resistance modifier in apply_damage_to_participant."""
+
+    def test_resistance_modifier_reduces_damage(self) -> None:
+        from world.conditions.factories import (
+            ConditionResistanceModifierFactory,
+            ConditionTemplateFactory,
+            DamageTypeFactory,
+        )
+        from world.conditions.services import apply_condition
+
+        encounter = CombatEncounterFactory()
+        participant = CombatParticipantFactory(encounter=encounter)
+        # Move character into the room so DAMAGE_PRE_APPLY can fire (location-scoped)
+        participant.character_sheet.character.location = encounter.room
+        participant.character_sheet.character.save()
+
+        CharacterVitals.objects.get_or_create(
+            character_sheet=participant.character_sheet,
+            defaults={"health": 100, "max_health": 100, "status": CharacterStatus.ALIVE},
+        )
+        vitals = CharacterVitals.objects.get(character_sheet=participant.character_sheet)
+        vitals.health = 100
+        vitals.max_health = 100
+        vitals.status = CharacterStatus.ALIVE
+        vitals.save()
+
+        fire = DamageTypeFactory(name="Fire")
+        wet = ConditionTemplateFactory(name="Wet")
+        ConditionResistanceModifierFactory(condition=wet, damage_type=fire, modifier_value=8)
+        apply_condition(participant.character_sheet.character, wet)
+
+        result = apply_damage_to_participant(participant, 12, damage_type=fire)
+        # 12 - 8 resistance = 4 (no threads on test character, so thread reduction = 0)
+        self.assertEqual(result.damage_dealt, 4)

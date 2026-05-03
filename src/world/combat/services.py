@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
     from world.checks.types import CheckResult
-    from world.conditions.models import ConditionTemplate
+    from world.conditions.models import ConditionTemplate, DamageType
     from world.covenants.models import CovenantRole
     from world.magic.models import Technique
     from world.magic.types import TechniqueUseResult
@@ -48,8 +48,6 @@ from world.combat.constants import (
     ENTITY_TYPE_PC,
     NO_ROLE_SPEED_RANK,
     NPC_SPEED_RANK,
-    OFFENSE_FULL_THRESHOLD,
-    OFFENSE_HALF_THRESHOLD,
     ActionCategory,
     EncounterStatus,
     OpponentStatus,
@@ -167,26 +165,58 @@ class CombatTechniqueResolver:
         )
 
     def _apply_damage(self, check_result: CheckResult) -> list[OpponentDamageResult]:
-        """Damage path. No-op when base_power is None, no opponent target, or target DEFEATED."""
+        """Iterate technique.damage_profiles. For each profile:
+        - skip if SL < minimum_success_level
+        - compute formula budget via compute_damage_budget
+        - apply SL multiplier from DamageSuccessLevelMultiplier lookup
+        - call apply_damage_to_opponent (which subtracts soak + resistance)
+        Returns one OpponentDamageResult per applied component.
+        Breaks on defeated target between components.
+        """
+        from world.conditions.services import get_damage_multiplier  # noqa: PLC0415
+
         target = self.action.focused_opponent_target
         if target is None:
-            return []
-        technique = self.action.focused_action
-        base_power = technique.effect_type.base_power
-        if base_power is None:
-            return []
-        if check_result.success_level >= OFFENSE_FULL_THRESHOLD:
-            scaled = base_power
-        elif check_result.success_level >= OFFENSE_HALF_THRESHOLD:
-            scaled = base_power // 2
-        else:
-            scaled = 0
-        if scaled <= 0:
             return []
         target.refresh_from_db()
         if target.status == OpponentStatus.DEFEATED:
             return []
-        return [apply_damage_to_opponent(target, scaled)]
+
+        technique = self.action.focused_action
+        profiles = list(
+            technique.damage_profiles.select_related("damage_type").all(),
+        )
+        if not profiles:
+            return []
+
+        sl = check_result.success_level
+        multiplier = get_damage_multiplier(sl)
+        if multiplier <= 0:
+            return []
+
+        eff_intensity = compute_effective_intensity(self.participant, self.action)
+
+        results: list[OpponentDamageResult] = []
+        for profile in profiles:
+            if sl < profile.minimum_success_level:
+                continue
+            budget = profile.compute_damage_budget(
+                effective_intensity=eff_intensity,
+                success_level=sl,
+            )
+            scaled = int(budget * multiplier)
+            if scaled <= 0:
+                continue
+            target.refresh_from_db()
+            if target.status == OpponentStatus.DEFEATED:
+                break
+            result = apply_damage_to_opponent(
+                target,
+                scaled,
+                damage_type=profile.damage_type,
+            )
+            results.append(result)
+        return results
 
     def _apply_conditions(
         self,
@@ -581,7 +611,16 @@ def add_opponent(  # noqa: PLR0913 - opponent creation requires all stat fields
     """
     from evennia.utils.create import create_object  # noqa: PLC0415
 
+    from typeclasses.characters import Character  # noqa: PLC0415
     from world.combat.typeclasses.combat_npc import CombatNPC  # noqa: PLC0415
+
+    if existing_objectdb is not None and not isinstance(existing_objectdb, Character):
+        msg = (
+            f"existing_objectdb must be a Character typeclass instance "
+            f"(got {type(existing_objectdb).__name__}). "
+            f"Combat damage paths require character.conditions handler access."
+        )
+        raise TypeError(msg)
 
     if existing_objectdb is not None:
         objectdb = existing_objectdb
@@ -1047,14 +1086,21 @@ def apply_damage_to_opponent(
     raw_damage: int,
     *,
     bypass_soak: bool = False,
+    damage_type: DamageType | None = None,
 ) -> OpponentDamageResult:
-    """Apply damage to an NPC opponent, accounting for soak and probing.
+    """Apply damage to an NPC opponent, accounting for soak, probing,
+    and damage-type resistance.
 
     All raw damage (even fully soaked) contributes to probing. Only damage
-    that exceeds soak actually reduces health.
+    that exceeds soak and resistance actually reduces health.
     """
     effective_soak = 0 if bypass_soak else opponent.soak_value
-    damage_through = max(0, raw_damage - effective_soak)
+
+    resistance = 0
+    if damage_type is not None and opponent.objectdb is not None:
+        resistance = opponent.objectdb.conditions.resistance_modifier(damage_type)
+
+    damage_through = max(0, raw_damage - effective_soak - resistance)
     # Combo damage that bypasses soak should not also probe — the combo
     # itself is the reward for probing.
     probing_increment = 0 if bypass_soak else max(0, raw_damage)
@@ -1082,7 +1128,7 @@ def apply_damage_to_participant(
     damage: int,
     *,
     force_death: bool = False,
-    damage_type: str = "physical",
+    damage_type: DamageType | None = None,
     source: object | None = None,
 ) -> ParticipantDamageResult:
     """Apply damage to a PC via their CharacterVitals.
@@ -1140,6 +1186,10 @@ def apply_damage_to_participant(
     )
 
     effective_damage = apply_damage_reduction_from_threads(character, effective_damage)
+
+    if damage_type is not None:
+        resistance = character.conditions.resistance_modifier(damage_type)
+        effective_damage = max(0, effective_damage - resistance)
 
     vitals.health -= effective_damage
     health_after = vitals.health
@@ -1588,7 +1638,7 @@ def resolve_npc_attack(
     damage_result = apply_damage_to_participant(
         participant,
         final_damage,
-        damage_type=opponent_action.threat_entry.attack_category,
+        damage_type=opponent_action.threat_entry.damage_type,
         source=opponent_action.opponent,
     )
 
@@ -1785,7 +1835,7 @@ def _resolve_npc_action(
             dmg_result = apply_damage_to_participant(
                 target_participant,
                 npc_action.threat_entry.base_damage,
-                damage_type=npc_action.threat_entry.attack_category,
+                damage_type=npc_action.threat_entry.damage_type,
                 source=opponent,
             )
         outcome.damage_results.append(dmg_result)
@@ -1796,7 +1846,7 @@ def _resolve_npc_action(
         consequence = process_damage_consequences(
             character=target_participant.character_sheet.character,
             damage_dealt=dmg_result.damage_dealt,
-            damage_type=None,  # TODO: get from threat entry when damage types are authored
+            damage_type=None,
         )
         outcome.damage_consequences.append(consequence)
 

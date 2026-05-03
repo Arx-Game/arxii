@@ -1,0 +1,126 @@
+"""Tests for TechniqueDamageProfile model and compute_damage_budget formula."""
+
+from decimal import Decimal
+
+from django.db import IntegrityError, transaction
+from evennia.utils.test_resources import EvenniaTestCase
+
+
+class ComputeDamageBudgetTests(EvenniaTestCase):
+    def test_baseline(self):
+        from world.magic.factories import TechniqueDamageProfileFactory
+
+        p = TechniqueDamageProfileFactory(
+            base_damage=5,
+            damage_intensity_multiplier=Decimal(0),
+            damage_per_extra_sl=0,
+            minimum_success_level=1,
+        )
+        self.assertEqual(p.compute_damage_budget(effective_intensity=0, success_level=1), 5)
+        self.assertEqual(p.compute_damage_budget(effective_intensity=10, success_level=3), 5)
+
+    def test_intensity_scaling(self):
+        from world.magic.factories import TechniqueDamageProfileFactory
+
+        p = TechniqueDamageProfileFactory(
+            base_damage=2,
+            damage_intensity_multiplier=Decimal("1.5"),
+            damage_per_extra_sl=0,
+            minimum_success_level=1,
+        )
+        # 2 + floor(1.5 * 4) = 2 + 6 = 8
+        self.assertEqual(p.compute_damage_budget(effective_intensity=4, success_level=1), 8)
+
+    def test_sl_kicker(self):
+        from world.magic.factories import TechniqueDamageProfileFactory
+
+        p = TechniqueDamageProfileFactory(
+            base_damage=2,
+            damage_intensity_multiplier=Decimal(0),
+            damage_per_extra_sl=2,
+            minimum_success_level=1,
+        )
+        # SL=1: 2 + 0 = 2
+        self.assertEqual(p.compute_damage_budget(effective_intensity=0, success_level=1), 2)
+        # SL=3: 2 + 2*2 = 6
+        self.assertEqual(p.compute_damage_budget(effective_intensity=0, success_level=3), 6)
+
+
+class UniqueConstraintTests(EvenniaTestCase):
+    """Run AFTER Task 5 lands the post_generation skip kwarg.
+
+    Until then, instantiate the technique directly via ORM to avoid
+    the auto-seeded damage profile from TechniqueFactory.post_generation.
+    """
+
+    def test_unique_per_technique_per_typed_pair(self):
+        from world.conditions.factories import DamageTypeFactory
+        from world.magic.factories import (
+            TechniqueDamageProfileFactory,
+            TechniqueFactory,
+        )
+
+        # Use damage_profile=False to skip auto-seeding (Task 5 wires this).
+        # If Task 5 isn't done yet, FactoryBoy ignores unknown kwargs and may
+        # auto-seed an untyped row. Pass typed=Fire below — duplicate fire row
+        # raises regardless.
+        tech = TechniqueFactory(damage_profile=False)
+        fire = DamageTypeFactory(name="Fire")
+        TechniqueDamageProfileFactory(technique=tech, damage_type=fire)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                TechniqueDamageProfileFactory(technique=tech, damage_type=fire)
+
+    def test_null_damage_type_unique_per_technique(self):
+        from world.magic.factories import (
+            TechniqueDamageProfileFactory,
+            TechniqueFactory,
+        )
+
+        tech = TechniqueFactory(damage_profile=False)
+        TechniqueDamageProfileFactory(technique=tech, damage_type=None)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                TechniqueDamageProfileFactory(technique=tech, damage_type=None)
+
+
+class TechniqueFactoryDamageProfileSeedingTests(EvenniaTestCase):
+    def test_factory_seeds_damage_profile_from_effect_type(self):
+        from world.magic.factories import TechniqueFactory
+        from world.magic.models.techniques import EffectType, TechniqueDamageProfile
+
+        et = EffectType.objects.create(
+            name="Test Ranged Attack",
+            base_power=10,
+            base_anima_cost=2,
+            has_power_scaling=True,
+        )
+        tech = TechniqueFactory(effect_type=et)
+        profile = TechniqueDamageProfile.objects.get(technique=tech)
+        self.assertEqual(profile.base_damage, 10)
+
+    def test_factory_skips_when_explicitly_disabled(self):
+        from world.magic.factories import TechniqueFactory
+        from world.magic.models.techniques import EffectType, TechniqueDamageProfile
+
+        et = EffectType.objects.create(
+            name="Test Ranged Attack 2",
+            base_power=10,
+            base_anima_cost=2,
+            has_power_scaling=True,
+        )
+        tech = TechniqueFactory(effect_type=et, damage_profile=False)
+        self.assertFalse(TechniqueDamageProfile.objects.filter(technique=tech).exists())
+
+    def test_factory_skips_when_effect_type_has_no_base_power(self):
+        from world.magic.factories import TechniqueFactory
+        from world.magic.models.techniques import EffectType, TechniqueDamageProfile
+
+        et = EffectType.objects.create(
+            name="Test Buff",
+            base_power=None,
+            base_anima_cost=2,
+            has_power_scaling=False,
+        )
+        tech = TechniqueFactory(effect_type=et)
+        self.assertFalse(TechniqueDamageProfile.objects.filter(technique=tech).exists())

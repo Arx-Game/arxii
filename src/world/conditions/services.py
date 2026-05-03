@@ -12,6 +12,7 @@ Design principles:
 
 from dataclasses import dataclass, field
 from datetime import timedelta
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -48,6 +49,7 @@ from world.conditions.models import (
     ConditionResistanceModifier,
     ConditionStage,
     ConditionTemplate,
+    DamageSuccessLevelMultiplier,
     DamageType,
     TreatmentAttempt,
     TreatmentTemplate,
@@ -82,6 +84,19 @@ if TYPE_CHECKING:
 
 # Timing constants
 SECONDS_PER_ROUND = 6
+
+
+def _invalidate_condition_handler_if_character(target: "ObjectDB") -> None:
+    """Invalidate target.conditions handler when target is a Character.
+
+    Non-Character ObjectDBs that can host conditions (rooms, items)
+    don't have the handler and silently skip.
+    """
+    # noqa: GETATTR_LITERAL — duck-type check; ObjectDB targets that aren't
+    # Character (rooms, items) lack the handler and silently skip invalidation.
+    handler = getattr(target, "conditions", None)  # noqa: GETATTR_LITERAL
+    if handler is not None and hasattr(handler, "invalidate"):
+        handler.invalidate()
 
 
 # =============================================================================
@@ -593,6 +608,8 @@ def apply_condition(  # noqa: PLR0913
     )
     result = _apply_single(target, condition, params, ctx)
 
+    _invalidate_condition_handler_if_character(target)
+
     if result.instance is not None and target_location is not None:
         emit_event(
             EventName.CONDITION_APPLIED,
@@ -691,6 +708,9 @@ def bulk_apply_conditions(
 
         results.append(result)
 
+    for target in {a.target for a in applications}:
+        _invalidate_condition_handler_if_character(target)
+
     return results
 
 
@@ -766,6 +786,7 @@ def remove_condition(
     if not remove_all_stacks and instance.stacks > 1:
         instance.stacks -= 1
         instance.save()
+        _invalidate_condition_handler_if_character(target)
         if target_location is not None:
             emit_event(
                 EventName.CONDITION_REMOVED,
@@ -782,6 +803,7 @@ def remove_condition(
         return True
 
     instance.delete()
+    _invalidate_condition_handler_if_character(target)
     if target_location is not None:
         emit_event(
             EventName.CONDITION_REMOVED,
@@ -815,6 +837,7 @@ def remove_conditions_by_category(
     instances = get_active_conditions(target, category=category)
     removed = [i.condition for i in instances]
     instances.delete()
+    _invalidate_condition_handler_if_character(target)
     for template in removed:
         _notify_stories_condition_expired(target, template)
     return removed
@@ -910,6 +933,11 @@ def process_damage_interactions(
             )
             if apply_result.success and apply_result.instance:
                 result.applied_conditions.append(apply_result.instance)
+
+    # Invalidate once after all interactions — covers removed conditions.
+    # apply_condition (above) also invalidates, but if only removals occurred
+    # (no applies), the cache must still be cleared.
+    _invalidate_condition_handler_if_character(target)
 
     return result
 
@@ -1139,7 +1167,9 @@ def process_round_start(target: "ObjectDB") -> RoundTickResult:
     Returns:
         RoundTickResult with damage, progressions, and expirations
     """
-    return _process_round_tick(target, DamageTickTiming.START_OF_ROUND)
+    result = _process_round_tick(target, DamageTickTiming.START_OF_ROUND)
+    _invalidate_condition_handler_if_character(target)
+    return result
 
 
 @transaction.atomic
@@ -1160,6 +1190,8 @@ def process_round_end(target: "ObjectDB") -> RoundTickResult:
     # Process duration countdown and progression
     _process_duration_and_progression(target, result)
 
+    _invalidate_condition_handler_if_character(target)
+
     return result
 
 
@@ -1174,7 +1206,9 @@ def process_action_tick(target: "ObjectDB") -> RoundTickResult:
     Returns:
         RoundTickResult with damage dealt
     """
-    return _process_round_tick(target, DamageTickTiming.ON_ACTION)
+    result = _process_round_tick(target, DamageTickTiming.ON_ACTION)
+    _invalidate_condition_handler_if_character(target)
+    return result
 
 
 def _process_round_tick(
@@ -1303,6 +1337,7 @@ def suppress_condition(
             seconds=duration_rounds * SECONDS_PER_ROUND
         )
     instance.save()
+    _invalidate_condition_handler_if_character(target)
     return True
 
 
@@ -1327,6 +1362,7 @@ def unsuppress_condition(
     instance.is_suppressed = False
     instance.suppressed_until = None
     instance.save()
+    _invalidate_condition_handler_if_character(target)
     return True
 
 
@@ -1358,6 +1394,7 @@ def clear_all_conditions(
     removed_template_ids = list(qs.values_list("condition", flat=True))
     count = len(removed_template_ids)
     qs.delete()
+    _invalidate_condition_handler_if_character(target)
     for template_id in removed_template_ids:
         try:
             template = ConditionTemplate.objects.get(pk=template_id)
@@ -1552,6 +1589,7 @@ def advance_condition_severity(
                     instance.resolved_at = None
                     update_fields.append("resolved_at")
                 instance.save(update_fields=update_fields)
+                _invalidate_condition_handler_if_character(instance.target)
                 return SeverityAdvanceResult(
                     previous_stage=previous_stage,
                     new_stage=previous_stage,
@@ -1570,6 +1608,7 @@ def advance_condition_severity(
         update_fields.append("resolved_at")
 
     instance.save(update_fields=update_fields)
+    _invalidate_condition_handler_if_character(instance.target)
 
     if stage_changed:
         stage_change_payload = ConditionStageChangedPayload(
@@ -1737,6 +1776,7 @@ def decay_condition_severity(
         update_fields.append("resolved_at")
 
     instance.save(update_fields=update_fields)
+    _invalidate_condition_handler_if_character(instance.target)
 
     if new_stage != previous_stage:
         target_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL
@@ -2158,3 +2198,22 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
         helper_backlash_applied=helper_backlash,
         target_resolved=target_resolved,
     )
+
+
+# =============================================================================
+# Damage Scaling Helpers
+# =============================================================================
+
+
+def get_damage_multiplier(success_level: int) -> Decimal:
+    """Look up the damage multiplier for a given success level.
+
+    Returns the multiplier of the highest-threshold row whose
+    `min_success_level` is <= `success_level`. Returns Decimal("0")
+    when no row matches (table empty or SL below lowest threshold).
+    """
+    rows = DamageSuccessLevelMultiplier.objects.filter(
+        min_success_level__lte=success_level,
+    ).order_by("-min_success_level")
+    first = rows.first()
+    return first.multiplier if first else Decimal(0)

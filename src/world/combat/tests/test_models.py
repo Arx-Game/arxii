@@ -420,3 +420,21 @@ class CombatRoundActionAllyTargetTests(EvenniaTestCase):
         )
         with self.assertRaises(ValidationError):
             action.full_clean()
+
+
+class ThreatPoolEntryDamageTypeTests(EvenniaTestCase):
+    """Tests for ThreatPoolEntry.damage_type FK."""
+
+    def test_threat_pool_entry_can_have_damage_type(self) -> None:
+        from world.combat.factories import ThreatPoolEntryFactory
+        from world.conditions.factories import DamageTypeFactory
+
+        fire = DamageTypeFactory(name="Fire")
+        entry = ThreatPoolEntryFactory(damage_type=fire)
+        self.assertEqual(entry.damage_type, fire)
+
+    def test_threat_pool_entry_damage_type_nullable(self) -> None:
+        from world.combat.factories import ThreatPoolEntryFactory
+
+        entry = ThreatPoolEntryFactory(damage_type=None)
+        self.assertIsNone(entry.damage_type)

@@ -48,7 +48,7 @@ class TechniqueCapabilityGrantTests(TestCase):
             intensity_multiplier=Decimal("1.5"),
         )
         # 5 + (1.5 * 20) = 35
-        assert grant.calculate_value(intensity=20) == 35
+        assert grant.calculate_value(effective_intensity=20) == 35
 
     def test_calculate_value_zero_multiplier(self) -> None:
         grant = TechniqueCapabilityGrant.objects.create(
