@@ -12,26 +12,31 @@ logger = logging.getLogger(__name__)
 
 def custom_exception_handler(exc, context):
     """
-    Custom exception handler that logs errors and returns JSON responses.
+    Custom exception handler for DRF.
 
-    This ensures that API errors are properly logged and never return HTML.
+    Handled DRF exceptions (4xx) are logged at DEBUG: they're correct responses
+    to bad input, not server errors. Unhandled exceptions become 5xx and are
+    logged at ERROR with full traceback.
     """
-    # Log the exception with full traceback
-    logger.exception("API error in %s: %s", context.get("view", "unknown"), exc)
-
-    # Call REST framework's default exception handler first
-    # to get the standard error response.
     response = exception_handler(exc, context)
 
+    view = context.get("view", "unknown")
+
     if response is not None:
-        # We have a valid DRF response, return it as-is
+        logger.debug(
+            "API exception in %s: %s (status %s)",
+            view,
+            exc,
+            response.status_code,
+        )
         return response
+
+    logger.exception("Unhandled API exception in %s: %s", view, exc)
+
     if settings.DEBUG:
-        # In DEBUG mode, give error details
         err_message = str(exc)
     else:
         err_message = "An unexpected error occurred"
-    # For unhandled exceptions, return a generic 500 error as JSON
     return Response(
         {
             "error": "Internal server error",
