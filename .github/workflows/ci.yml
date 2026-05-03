@@ -32,6 +32,42 @@ jobs:
 
   backend:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          # Shard groupings by approximate test-method count (as of 2026-05-02).
+          # Run `grep -rc "def test_" src/<app>/tests/ | awk -F: '{s+=$2} END {print s}'`
+          # per app to refresh counts after adding significant test suites.
+          #
+          # shard-1 (~1,215): world.magic (887) + world.combat (328)
+          - name: shard-1
+            apps: "world.magic world.combat"
+          # shard-2 (~1,405): world.stories (759) + world.mechanics (258)
+          #                   + world.conditions (190) + world.items (198)
+          - name: shard-2
+            apps: "world.stories world.mechanics world.conditions world.items"
+          # shard-3 (~1,378): flows (259) + world.progression (255) + world.scenes (227)
+          #                   + world.character_sheets (202) + world.character_creation (200)
+          #                   + world.gm (120) + actions (115)
+          - name: shard-3
+            apps: "flows world.progression world.scenes world.character_sheets world.character_creation world.gm actions"
+          # shard-4 (~1,422): all remaining apps — roster, societies, game_clock, fatigue,
+          #                   events, skills, relationships, distinctions, codex, goals, checks,
+          #                   web, integration_tests, core_management, action_points, narrative,
+          #                   journals, achievements, forms, commands, covenants, tarot, vitals,
+          #                   player_submissions, classes, staff_inbox, typeclasses, consent,
+          #                   behaviors
+          - name: shard-4
+            apps: >-
+              world.roster world.societies world.game_clock world.fatigue world.events
+              world.skills world.relationships world.distinctions world.codex world.goals
+              world.checks world.action_points world.narrative world.journals world.achievements
+              world.forms world.covenants world.tarot world.vitals world.player_submissions
+              world.classes world.staff_inbox world.consent
+              web web.admin web.api
+              integration_tests.pipeline integration_tests.game_content
+              core_management commands typeclasses behaviors
     services:
       postgres:
         image: postgres:15
@@ -65,7 +101,7 @@ jobs:
       - name: Run migrations
         run: uv run arx manage migrate
       - name: Run tests
-        run: uv run arx test --parallel auto
+        run: uv run arx test --parallel auto ${{ matrix.shard.apps }}
 
   ty:
     runs-on: ubuntu-latest
