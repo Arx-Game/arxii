@@ -140,6 +140,7 @@ class ActionRegistryTests(TestCase):
     def test_all_expected_actions_registered(self):
         expected_keys = {
             "look",
+            "look_at_item",
             "inventory",
             "say",
             "pose",
