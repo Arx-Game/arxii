@@ -75,13 +75,17 @@ jobs:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: arxii_test
           POSTGRES_INITDB_ARGS: "--no-sync"
+        # Postgres data dir on tmpfs (RAM) means writes never hit disk regardless of
+        # fsync settings — the main speedup. Runtime tuning (fsync=off etc.) would need
+        # to be passed as a positional COMMAND to docker, but GitHub Actions services
+        # don't expose a slot for that. If we hit lock-exhaustion in CI, switch to a
+        # manual `docker run` step instead of the services block.
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
           --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2g
-          --cmd "postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c bgwriter_lru_maxpages=0 -c max_locks_per_transaction=256"
         ports:
           - 5432:5432
     env:
