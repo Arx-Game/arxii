@@ -112,9 +112,21 @@ def _check_achievements(character_sheet: CharacterSheet, stat: StatDefinition) -
         StatTracker.objects.filter(character_sheet=character_sheet).values_list("stat_id", "value")
     )
 
-    for achievement in candidates:
-        if _achievement_requirements_met(achievement, stats_dict, character_sheet):
-            grant_achievement(achievement, [character_sheet])
+    # Iterate until no more grants happen. A single pass is order-dependent for
+    # chained achievements: if tier2 (prerequisite=tier1) is iterated before
+    # tier1 in the same call, tier2's prereq check sees no tier1 yet and skips.
+    # The convergence loop guarantees the full chain grants regardless of the
+    # queryset's iteration order.
+    pending = list(candidates)
+    while pending:
+        granted_this_pass = []
+        for achievement in pending:
+            if _achievement_requirements_met(achievement, stats_dict, character_sheet):
+                grant_achievement(achievement, [character_sheet])
+                granted_this_pass.append(achievement)
+        if not granted_this_pass:
+            break
+        pending = [a for a in pending if a not in granted_this_pass]
 
 
 def _achievement_requirements_met(

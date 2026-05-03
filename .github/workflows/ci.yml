@@ -30,19 +30,65 @@ jobs:
       - run: uv run pre-commit install
       - run: uv run pre-commit run --all-files
 
-  backend:
+  # Sharded test execution. Each shard runs a slice of apps in parallel.
+  # The `backend` job below aggregates shard results so existing branch
+  # protection rules requiring a check named "backend" continue to work.
+  backend-shard:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          # Shard groupings by approximate test-method count (as of 2026-05-02).
+          # Run `grep -rc "def test_" src/<app>/tests/ | awk -F: '{s+=$2} END {print s}'`
+          # per app to refresh counts after adding significant test suites.
+          #
+          # shard-1 (~1,215): world.magic (887) + world.combat (328)
+          - name: shard-1
+            apps: "world.magic world.combat"
+          # shard-2 (~1,405): world.stories (759) + world.mechanics (258)
+          #                   + world.conditions (190) + world.items (198)
+          - name: shard-2
+            apps: "world.stories world.mechanics world.conditions world.items"
+          # shard-3 (~1,378): flows (259) + world.progression (255) + world.scenes (227)
+          #                   + world.character_sheets (202) + world.character_creation (200)
+          #                   + world.gm (120) + actions (115)
+          - name: shard-3
+            apps: "flows world.progression world.scenes world.character_sheets world.character_creation world.gm actions"
+          # shard-4 (~1,422): all remaining apps — roster, societies, game_clock, fatigue,
+          #                   events, skills, relationships, distinctions, codex, goals, checks,
+          #                   web, integration_tests, core_management, action_points, narrative,
+          #                   journals, achievements, forms, commands, covenants, tarot, vitals,
+          #                   player_submissions, classes, staff_inbox, typeclasses, consent,
+          #                   behaviors
+          - name: shard-4
+            apps: >-
+              world.roster world.societies world.game_clock world.fatigue world.events
+              world.skills world.relationships world.distinctions world.codex world.goals
+              world.checks world.action_points world.narrative world.journals world.achievements
+              world.forms world.covenants world.tarot world.vitals world.player_submissions
+              world.classes world.staff_inbox world.consent
+              web web.admin web.api
+              integration_tests.pipeline integration_tests.game_content
+              core_management commands typeclasses behaviors
     services:
       postgres:
         image: postgres:15
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: arxii_test
+          POSTGRES_INITDB_ARGS: "--no-sync"
+        # Postgres data dir on tmpfs (RAM) means writes never hit disk regardless of
+        # fsync settings — the main speedup. Runtime tuning (fsync=off etc.) would need
+        # to be passed as a positional COMMAND to docker, but GitHub Actions services
+        # don't expose a slot for that. If we hit lock-exhaustion in CI, switch to a
+        # manual `docker run` step instead of the services block.
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+          --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2g
         ports:
           - 5432:5432
     env:
@@ -65,7 +111,27 @@ jobs:
       - name: Run migrations
         run: uv run arx manage migrate
       - name: Run tests
-        run: uv run arx test
+        # Bare --parallel (no value) lets Django auto-detect CPU count.
+        # Don't pass `auto` literally — arx.py declares --parallel as a typer
+        # boolean flag, so `auto` would fall through as a positional test label
+        # and Django would fail trying to import a module named `auto`.
+        run: uv run arx test --parallel ${{ matrix.shard.apps }}
+
+  # Aggregator: succeeds iff every backend-shard matrix entry succeeded.
+  # Lets branch protection require a single status check named "backend"
+  # instead of having to enumerate each shard.
+  backend:
+    needs: backend-shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Aggregate shard results
+        run: |
+          if [[ "${{ needs.backend-shard.result }}" != "success" ]]; then
+            echo "One or more backend shards failed (status: ${{ needs.backend-shard.result }})"
+            exit 1
+          fi
+          echo "All backend shards passed."
 
   ty:
     runs-on: ubuntu-latest

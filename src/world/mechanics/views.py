@@ -146,7 +146,7 @@ class AvailableActionsView(ListAPIView):
 class ChallengeTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     """List and retrieve challenge templates."""
 
-    queryset = ChallengeTemplate.objects.select_related("category")
+    queryset = ChallengeTemplate.objects.select_related("category").order_by("name")
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_class = ChallengeTemplateFilter
@@ -183,7 +183,9 @@ class ChallengeTemplateViewSet(viewsets.ReadOnlyModelViewSet):
 class ChallengeInstanceViewSet(viewsets.ReadOnlyModelViewSet):
     """List and retrieve challenge instances."""
 
-    queryset = ChallengeInstance.objects.select_related("template", "location", "target_object")
+    queryset = ChallengeInstance.objects.select_related(
+        "template", "location", "target_object"
+    ).order_by("-pk")
     serializer_class = ChallengeInstanceSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
@@ -194,7 +196,7 @@ class ChallengeInstanceViewSet(viewsets.ReadOnlyModelViewSet):
 class SituationTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     """List and retrieve situation templates."""
 
-    queryset = SituationTemplate.objects.select_related("category")
+    queryset = SituationTemplate.objects.select_related("category").order_by("name")
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_class = SituationTemplateFilter
@@ -221,7 +223,7 @@ class SituationTemplateViewSet(viewsets.ReadOnlyModelViewSet):
 class SituationInstanceViewSet(viewsets.ReadOnlyModelViewSet):
     """List and retrieve situation instances."""
 
-    queryset = SituationInstance.objects.select_related("template", "location")
+    queryset = SituationInstance.objects.select_related("template", "location").order_by("-pk")
     serializer_class = SituationInstanceSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
