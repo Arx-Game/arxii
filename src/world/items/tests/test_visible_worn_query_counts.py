@@ -208,9 +208,10 @@ class VisibleWornListEndpointQueryCountTests(_SharedSetupMixin, TestCase):
 class VisibleItemDetailQueryCountTests(_SharedSetupMixin, TestCase):
     """Lock in the query count for ``GET /api/items/visible-item-detail/<id>/``.
 
-    The hot path is ``_visible_item_ids`` — two RosterEntry queries
-    (own_entries + same_room_entries) plus one EquippedItem load per
-    observable character via the cached handler.
+    The detail ViewSet walks cached ``equipped_items`` handlers on each
+    observable character to find the matching ``ItemInstance`` in memory —
+    no ``ItemInstance.objects.get`` query fires. The remaining cost is two
+    RosterEntry queries (own_entries + same_room_entries) plus DRF auth.
     """
 
     def test_same_room_detail_query_count(self) -> None:
@@ -219,18 +220,15 @@ class VisibleItemDetailQueryCountTests(_SharedSetupMixin, TestCase):
         After warm-up, the constant-cost queries are:
 
         1. Session lookup (DRF auth).
-        2. ``_visible_item_ids`` — own RosterEntry rows with select_related
-           on character_sheet__character__db_location.
-        3. ``_visible_item_ids`` — same-room RosterEntry rows.
-        4. The ItemInstance retrieval (with prefetched template, facets,
-           etc.).
+        2. Own RosterEntry rows with select_related on
+           ``character_sheet__character__db_location``.
+        3. Same-room RosterEntry rows.
 
-        The two equipment handler loads (one for character A, one for
-        character B) are zero-cost on this call because they were warmed
-        by the prior GET — both characters were identity-mapped via the
-        first request, so their ``cached_property`` handlers are populated.
+        The ItemInstance lookup itself runs zero queries — it's pulled from
+        the cached ``CharacterEquipmentHandler`` for the observable
+        character, which is warm from the prior GET.
 
-        4 queries regardless of how many items each character wears.
+        3 queries regardless of how many items each character wears.
         """
         # Coat was equipped at TORSO/OVER with covers_lower_layers=True —
         # it's the visible item for same-room observers.
@@ -240,6 +238,6 @@ class VisibleItemDetailQueryCountTests(_SharedSetupMixin, TestCase):
         # Warm-up call (loads session, equipment handlers for observable chars).
         self.client.get(f"/api/items/visible-item-detail/{coat.pk}/")
 
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(3):
             response = self.client.get(f"/api/items/visible-item-detail/{coat.pk}/")
         self.assertEqual(response.status_code, 200)
