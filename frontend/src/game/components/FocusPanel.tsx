@@ -14,7 +14,7 @@
  * decides which sub-view to show and provides the back-navigation chrome.
  */
 
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { ChevronLeft } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -22,11 +22,17 @@ import { CharacterFocusView } from '@/inventory/components/CharacterFocusView';
 import { ItemFocusView } from '@/inventory/components/ItemFocusView';
 import type { FocusStackApi } from '@/inventory/hooks/useFocusStack';
 import type { RoomStateObject, SceneSummary } from '@/hooks/types';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 
 import { RoomPanel, type RoomData } from './RoomPanel';
 
 interface FocusPanelProps {
   focus: FocusStackApi;
+  /**
+   * The active puppet's name (matches the redux ``active`` key). Used to
+   * resolve the observer character id by looking it up in the user's
+   * roster entries, which carry ``character_id``.
+   */
   roomCharacter: string | null;
   roomData: RoomData | null;
   sceneData: SceneSummary | null;
@@ -46,6 +52,20 @@ function dbrefToId(dbref: string): number {
 }
 
 export function FocusPanel({ focus, roomCharacter, roomData, sceneData }: FocusPanelProps) {
+  // Resolve the active puppet name to a numeric character id. The
+  // visible-worn endpoints require an ``observer`` query parameter, and
+  // the room-state ``active`` key is just the character's name. The
+  // user's roster entries carry ``character_id`` (the ObjectDB pk),
+  // which is the canonical id for these endpoints.
+  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
+  const observerId = useMemo<number | null>(() => {
+    if (!roomCharacter) {
+      return null;
+    }
+    const match = myRosterEntries.find((entry) => entry.name === roomCharacter);
+    return match?.character_id ?? null;
+  }, [myRosterEntries, roomCharacter]);
+
   // When the underlying room, scene, or active puppet changes (player
   // switches puppets, moves rooms, or starts/ends a scene), reset the
   // focus stack so the sidebar snaps back to the new room as its root.
@@ -106,12 +126,13 @@ export function FocusPanel({ focus, roomCharacter, roomData, sceneData }: FocusP
       body = (
         <CharacterFocusView
           character={focus.current.character}
+          observerId={observerId}
           onItemClick={(item) => focus.push({ kind: 'item', item })}
         />
       );
       break;
     case 'item':
-      body = <ItemFocusView item={focus.current.item} />;
+      body = <ItemFocusView item={focus.current.item} observerId={observerId} />;
       break;
   }
 

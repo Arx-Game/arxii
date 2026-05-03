@@ -154,8 +154,21 @@ export interface VisibleWornItem {
   equipment_layer: EquipmentLayer;
 }
 
-export async function listVisibleWornItems(characterId: number): Promise<VisibleWornItem[]> {
-  const res = await apiFetch(`${BASE_URL}/visible-worn/?character=${characterId}`);
+/**
+ * Fetch the visible-worn list for a target character, observed by the
+ * caller's currently active character (``observerId``).
+ *
+ * The backend requires ``observer`` for non-staff: it identifies which
+ * of the user's characters is doing the looking. Same-room and
+ * self-look bypass rules are enforced server-side.
+ */
+export async function listVisibleWornItems(
+  characterId: number,
+  observerId: number
+): Promise<VisibleWornItem[]> {
+  const res = await apiFetch(
+    `${BASE_URL}/visible-worn/?character=${characterId}&observer=${observerId}`
+  );
   if (!res.ok) {
     throw new Error(await readError(res, 'Failed to load visible worn items'));
   }
@@ -164,8 +177,18 @@ export async function listVisibleWornItems(characterId: number): Promise<Visible
   return (await res.json()) as VisibleWornItem[];
 }
 
-export async function getVisibleItemDetail(itemId: number): Promise<ItemInstance> {
-  const res = await apiFetch(`${BASE_URL}/visible-item-detail/${itemId}/`);
+/**
+ * Fetch the full ItemInstance shape for a visibly worn item.
+ *
+ * The backend permission check requires ``observer`` for non-staff: the
+ * observer must belong to the requesting account, and either match the
+ * wearing character (self-look) or share a room with them.
+ */
+export async function getVisibleItemDetail(
+  itemId: number,
+  observerId: number
+): Promise<ItemInstance> {
+  const res = await apiFetch(`${BASE_URL}/visible-item-detail/${itemId}/?observer=${observerId}`);
   if (!res.ok) {
     throw new Error(await readError(res, 'Failed to load item details'));
   }

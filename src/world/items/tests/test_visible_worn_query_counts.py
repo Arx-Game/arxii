@@ -54,6 +54,8 @@ class _SharedSetupMixin:
         # Account A → character A (the worn-equipment target).
         self.account_a = AccountFactory(username="qc_account_a")
         self.character_a = CharacterFactory(db_key="QCCharA", location=self.room)
+        self.character_a.db_account = self.account_a
+        self.character_a.save()
         self.sheet_a = CharacterSheetFactory(character=self.character_a)
         self.entry_a = RosterEntryFactory(character_sheet=self.sheet_a)
         self.player_data_a = PlayerDataFactory(account=self.account_a)
@@ -66,6 +68,8 @@ class _SharedSetupMixin:
         # Account B → character B (same-room observer).
         self.account_b = AccountFactory(username="qc_account_b")
         self.character_b = CharacterFactory(db_key="QCCharB", location=self.room)
+        self.character_b.db_account = self.account_b
+        self.character_b.save()
         self.sheet_b = CharacterSheetFactory(character=self.character_b)
         self.entry_b = RosterEntryFactory(character_sheet=self.sheet_b)
         self.player_data_b = PlayerDataFactory(account=self.account_b)
@@ -183,35 +187,36 @@ class VisibleWornListEndpointQueryCountTests(_SharedSetupMixin, TestCase):
     def test_same_room_observer_query_count(self) -> None:
         """Same-room observer (account B looking at character A).
 
-        After warm-up, the endpoint runs a small constant number of queries
-        regardless of how many items the target wears:
+        After warm-up, the endpoint runs exactly one query — the DRF
+        session lookup. The two ``ObjectDB.objects.get(pk=...)`` calls
+        (target + observer) hit the SharedMemoryModel identity map and
+        return cached instances; ``visible_worn_items_for`` reads from
+        the cached equipment handler. No RosterEntry walks.
 
-        1. Session lookup (DRF auth).
-        2. ``_is_own_character`` — RosterEntry exists() check for the user.
-        3. ``_account_characters_in_room`` — RosterEntry exists() check.
-
-        The ``visible_worn_items_for`` call itself runs 0 queries because
-        the equipment handler was warmed by the prior GET (the
-        ``character_a`` instance is identity-mapped from the FK walk).
-        Pinning at 3 guards against new N+1 patterns sneaking into the
+        Pinning at 1 guards against new N+1 patterns sneaking into the
         request path.
         """
         self.client.force_authenticate(user=self.account_b)
+        url = (
+            f"/api/items/visible-worn/?character={self.character_a.pk}"
+            f"&observer={self.character_b.pk}"
+        )
         # Warm-up call (loads session, equipment handler, etc.).
-        self.client.get(f"/api/items/visible-worn/?character={self.character_a.pk}")
+        self.client.get(url)
 
-        with self.assertNumQueries(3):
-            response = self.client.get(f"/api/items/visible-worn/?character={self.character_a.pk}")
+        with self.assertNumQueries(1):
+            response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 
 
 class VisibleItemDetailQueryCountTests(_SharedSetupMixin, TestCase):
     """Lock in the query count for ``GET /api/items/visible-item-detail/<id>/``.
 
-    The detail ViewSet walks cached ``equipped_items`` handlers on each
-    observable character to find the matching ``ItemInstance`` in memory —
-    no ``ItemInstance.objects.get`` query fires. The remaining cost is two
-    RosterEntry queries (own_entries + same_room_entries) plus DRF auth.
+    The detail ViewSet fetches the item directly with select_related, then
+    runs a permission check that derives ``wearing_character`` from
+    ``item.game_object.location`` (no extra query — the FK is selected) and
+    walks the cached ``equipped_items`` handler to test concealment. No
+    RosterEntry queries.
     """
 
     def test_same_room_detail_query_count(self) -> None:
@@ -220,24 +225,26 @@ class VisibleItemDetailQueryCountTests(_SharedSetupMixin, TestCase):
         After warm-up, the constant-cost queries are:
 
         1. Session lookup (DRF auth).
-        2. Own RosterEntry rows with select_related on
-           ``character_sheet__character__db_location``.
-        3. Same-room RosterEntry rows.
+        2. ItemInstance fetch with select_related (template, quality_tier,
+           game_object, image, template image).
 
-        The ItemInstance lookup itself runs zero queries — it's pulled from
-        the cached ``CharacterEquipmentHandler`` for the observable
-        character, which is warm from the prior GET.
-
-        3 queries regardless of how many items each character wears.
+        The observer ``ObjectDB.objects.get(pk=...)`` hits the
+        SharedMemoryModel identity map (warmed by prior GETs) and runs no
+        query. The wearing character is derived from
+        ``item.game_object.db_location`` — the FK is already in
+        select_related, so the FK walk is free.
+        ``_is_concealed_for_observer`` walks the cached equipped_items
+        handler that was warmed by the prior GET.
         """
         # Coat was equipped at TORSO/OVER with covers_lower_layers=True —
         # it's the visible item for same-room observers.
         coat = next(item for item in self.items if item.template.name == "QCCoat")
 
         self.client.force_authenticate(user=self.account_b)
+        url = f"/api/items/visible-item-detail/{coat.pk}/?observer={self.character_b.pk}"
         # Warm-up call (loads session, equipment handlers for observable chars).
-        self.client.get(f"/api/items/visible-item-detail/{coat.pk}/")
+        self.client.get(url)
 
-        with self.assertNumQueries(3):
-            response = self.client.get(f"/api/items/visible-item-detail/{coat.pk}/")
+        with self.assertNumQueries(2):
+            response = self.client.get(url)
         self.assertEqual(response.status_code, 200)

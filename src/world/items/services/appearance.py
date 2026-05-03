@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 
 # Layer order from skin (lowest, closest to body) to accessory (highest).
-_LAYER_ORDER = (
+LAYER_ORDER = (
     EquipmentLayer.SKIN.value,
     EquipmentLayer.UNDER.value,
     EquipmentLayer.BASE.value,
@@ -37,7 +37,7 @@ _LAYER_ORDER = (
     EquipmentLayer.OUTER.value,
     EquipmentLayer.ACCESSORY.value,
 )
-_LAYER_RANK = {layer: idx for idx, layer in enumerate(_LAYER_ORDER)}
+LAYER_RANK = {layer: idx for idx, layer in enumerate(LAYER_ORDER)}
 
 
 @dataclass(frozen=True)
@@ -95,7 +95,7 @@ def visible_worn_items_for(
     visible: list[VisibleWornItem] = []
     for region_rows in region_to_rows.values():
         # Sort by layer rank (lowest to highest).
-        region_rows.sort(key=lambda r: _LAYER_RANK.get(r.equipment_layer, 99))
+        region_rows.sort(key=lambda r: LAYER_RANK.get(r.equipment_layer, 99))
 
         # Find the index of the highest covering layer.
         cover_idx = -1

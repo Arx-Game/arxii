@@ -21,12 +21,27 @@ import { useVisibleWornItems } from '../hooks/useVisibleWornItems';
 
 interface CharacterFocusViewProps {
   character: { id: number; name: string };
+  /**
+   * The id of the requester's currently active character — passed to the
+   * backend as the ``observer`` query parameter so visibility rules
+   * (same room / self-look / staff) can be enforced. ``null`` when no
+   * puppet is active; the worn-items list is then disabled.
+   */
+  observerId: number | null;
   onItemClick: (item: { id: number; name: string }) => void;
   className?: string;
 }
 
-export function CharacterFocusView({ character, onItemClick, className }: CharacterFocusViewProps) {
-  const { data: visibleItems = [], isLoading } = useVisibleWornItems(character.id);
+export function CharacterFocusView({
+  character,
+  observerId,
+  onItemClick,
+  className,
+}: CharacterFocusViewProps) {
+  const { data: visibleItems = [], isLoading } = useVisibleWornItems(
+    character.id,
+    observerId ?? undefined
+  );
 
   return (
     <div className={cn('flex flex-col gap-4 p-4', className)}>

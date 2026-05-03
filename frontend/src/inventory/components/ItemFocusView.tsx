@@ -26,11 +26,19 @@ import type { ItemInstance } from '../types';
 
 interface ItemFocusViewProps {
   item: { id: number; name: string };
+  /**
+   * The id of the requester's currently active character — passed to the
+   * backend as the ``observer`` query parameter so visibility rules
+   * (same room / self-look / staff) can be enforced. ``null`` when no
+   * puppet is active; the detail fetch is then disabled and the
+   * "unavailable" state renders.
+   */
+  observerId: number | null;
   className?: string;
 }
 
-export function ItemFocusView({ item, className }: ItemFocusViewProps) {
-  const { data, isLoading, isError } = useVisibleItemDetail(item.id);
+export function ItemFocusView({ item, observerId, className }: ItemFocusViewProps) {
+  const { data, isLoading, isError } = useVisibleItemDetail(item.id, observerId ?? undefined);
 
   if (isLoading) {
     return (

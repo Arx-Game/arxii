@@ -50,6 +50,8 @@ class _VisibleWornSetupMixin:
         # Account A → character A (in room A) — the "target" being looked at.
         self.account_a = AccountFactory(username="vwv_account_a")
         self.character_a = CharacterFactory(db_key="VWVCharA", location=self.room)
+        self.character_a.db_account = self.account_a
+        self.character_a.save()
         self.sheet_a = CharacterSheetFactory(character=self.character_a)
         self.entry_a = RosterEntryFactory(character_sheet=self.sheet_a)
         self.player_data_a = PlayerDataFactory(account=self.account_a)
@@ -62,6 +64,8 @@ class _VisibleWornSetupMixin:
         # Account B → character B (in room A, same room as A) — the "near observer".
         self.account_b = AccountFactory(username="vwv_account_b")
         self.character_b = CharacterFactory(db_key="VWVCharB", location=self.room)
+        self.character_b.db_account = self.account_b
+        self.character_b.save()
         self.sheet_b = CharacterSheetFactory(character=self.character_b)
         self.entry_b = RosterEntryFactory(character_sheet=self.sheet_b)
         self.player_data_b = PlayerDataFactory(account=self.account_b)
@@ -74,6 +78,8 @@ class _VisibleWornSetupMixin:
         # Account C → character C (in room B, different room) — the "far observer".
         self.account_c = AccountFactory(username="vwv_account_c")
         self.character_c = CharacterFactory(db_key="VWVCharC", location=self.other_room)
+        self.character_c.db_account = self.account_c
+        self.character_c.save()
         self.sheet_c = CharacterSheetFactory(character=self.character_c)
         self.entry_c = RosterEntryFactory(character_sheet=self.sheet_c)
         self.player_data_c = PlayerDataFactory(account=self.account_c)
@@ -155,7 +161,10 @@ class VisibleWornItemViewSetTests(_VisibleWornSetupMixin, TestCase):
     def test_same_room_observer_returns_visible_items_only(self) -> None:
         """Account B (same room) sees the coat but not the concealed shirt."""
         self.client.force_authenticate(user=self.account_b)
-        response = self.client.get(f"/api/items/visible-worn/?character={self.character_a.pk}")
+        response = self.client.get(
+            f"/api/items/visible-worn/?character={self.character_a.pk}"
+            f"&observer={self.character_b.pk}"
+        )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = {row["id"] for row in response.data}
         self.assertIn(self.coat.pk, ids)
@@ -164,21 +173,30 @@ class VisibleWornItemViewSetTests(_VisibleWornSetupMixin, TestCase):
     def test_different_room_observer_returns_empty(self) -> None:
         """Account C (different room) sees nothing — out of scope, empty list."""
         self.client.force_authenticate(user=self.account_c)
-        response = self.client.get(f"/api/items/visible-worn/?character={self.character_a.pk}")
+        response = self.client.get(
+            f"/api/items/visible-worn/?character={self.character_a.pk}"
+            f"&observer={self.character_c.pk}"
+        )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, [])
 
     def test_self_look_returns_everything_including_concealed(self) -> None:
         """Account A looking at character A sees the concealed shirt."""
         self.client.force_authenticate(user=self.account_a)
-        response = self.client.get(f"/api/items/visible-worn/?character={self.character_a.pk}")
+        response = self.client.get(
+            f"/api/items/visible-worn/?character={self.character_a.pk}"
+            f"&observer={self.character_a.pk}"
+        )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         ids = {row["id"] for row in response.data}
         self.assertIn(self.shirt.pk, ids)
         self.assertIn(self.coat.pk, ids)
 
     def test_staff_returns_everything_from_anywhere(self) -> None:
-        """Staff bypass: not in the same room, still sees concealed items."""
+        """Staff bypass: not in the same room, still sees concealed items.
+
+        Staff doesn't need to pass an observer (full visibility).
+        """
         staff = AccountFactory(username="vwv_staff", is_staff=True)
         self.client.force_authenticate(user=staff)
         response = self.client.get(f"/api/items/visible-worn/?character={self.character_a.pk}")
@@ -190,14 +208,34 @@ class VisibleWornItemViewSetTests(_VisibleWornSetupMixin, TestCase):
     def test_missing_character_param_returns_empty(self) -> None:
         """No ``?character=`` query → empty list (not an error)."""
         self.client.force_authenticate(user=self.account_a)
-        response = self.client.get("/api/items/visible-worn/")
+        response = self.client.get(f"/api/items/visible-worn/?observer={self.character_a.pk}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, [])
 
     def test_unknown_character_id_returns_empty(self) -> None:
         """An ID that doesn't exist returns an empty list, not 404."""
         self.client.force_authenticate(user=self.account_b)
-        response = self.client.get("/api/items/visible-worn/?character=999999999")
+        response = self.client.get(
+            f"/api/items/visible-worn/?character=999999999&observer={self.character_b.pk}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
+    def test_missing_observer_returns_empty_for_non_staff(self) -> None:
+        """Non-staff requests without ``?observer=`` return empty (no leak)."""
+        self.client.force_authenticate(user=self.account_b)
+        response = self.client.get(f"/api/items/visible-worn/?character={self.character_a.pk}")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data, [])
+
+    def test_observer_not_owned_by_user_returns_empty(self) -> None:
+        """Non-staff supplying an observer they don't own returns empty."""
+        self.client.force_authenticate(user=self.account_b)
+        # Account B tries to claim character A as their observer.
+        response = self.client.get(
+            f"/api/items/visible-worn/?character={self.character_a.pk}"
+            f"&observer={self.character_a.pk}"
+        )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, [])
 
@@ -208,7 +246,9 @@ class VisibleItemDetailViewSetTests(_VisibleWornSetupMixin, TestCase):
     def test_detail_visible_item_returns_full_data(self) -> None:
         """Account B (same room) can fetch the visible coat — full payload."""
         self.client.force_authenticate(user=self.account_b)
-        response = self.client.get(f"/api/items/visible-item-detail/{self.coat.pk}/")
+        response = self.client.get(
+            f"/api/items/visible-item-detail/{self.coat.pk}/?observer={self.character_b.pk}"
+        )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.coat.pk)
         # The detail serializer mirrors ItemInstanceReadSerializer — confirm
@@ -218,11 +258,13 @@ class VisibleItemDetailViewSetTests(_VisibleWornSetupMixin, TestCase):
     def test_detail_concealed_item_returns_404(self) -> None:
         """A concealed shirt is hidden — non-staff non-self gets 404."""
         self.client.force_authenticate(user=self.account_b)
-        response = self.client.get(f"/api/items/visible-item-detail/{self.shirt.pk}/")
+        response = self.client.get(
+            f"/api/items/visible-item-detail/{self.shirt.pk}/?observer={self.character_b.pk}"
+        )
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_detail_staff_can_fetch_concealed(self) -> None:
-        """Staff bypass: concealed item is reachable."""
+        """Staff bypass: concealed item is reachable (no observer needed)."""
         staff = AccountFactory(username="vwv_detail_staff", is_staff=True)
         self.client.force_authenticate(user=staff)
         response = self.client.get(f"/api/items/visible-item-detail/{self.shirt.pk}/")
@@ -232,14 +274,35 @@ class VisibleItemDetailViewSetTests(_VisibleWornSetupMixin, TestCase):
     def test_detail_item_from_another_room_returns_404(self) -> None:
         """Account C is in a different room → both items are out of scope (404)."""
         self.client.force_authenticate(user=self.account_c)
-        coat_response = self.client.get(f"/api/items/visible-item-detail/{self.coat.pk}/")
+        coat_response = self.client.get(
+            f"/api/items/visible-item-detail/{self.coat.pk}/?observer={self.character_c.pk}"
+        )
         self.assertEqual(coat_response.status_code, status.HTTP_404_NOT_FOUND)
-        shirt_response = self.client.get(f"/api/items/visible-item-detail/{self.shirt.pk}/")
+        shirt_response = self.client.get(
+            f"/api/items/visible-item-detail/{self.shirt.pk}/?observer={self.character_c.pk}"
+        )
         self.assertEqual(shirt_response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_detail_self_can_fetch_concealed(self) -> None:
         """Self-look: account A can fetch the concealed shirt on character A."""
         self.client.force_authenticate(user=self.account_a)
-        response = self.client.get(f"/api/items/visible-item-detail/{self.shirt.pk}/")
+        response = self.client.get(
+            f"/api/items/visible-item-detail/{self.shirt.pk}/?observer={self.character_a.pk}"
+        )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], self.shirt.pk)
+
+    def test_detail_missing_observer_returns_404_for_non_staff(self) -> None:
+        """Non-staff requests without ``?observer=`` get 404."""
+        self.client.force_authenticate(user=self.account_b)
+        response = self.client.get(f"/api/items/visible-item-detail/{self.coat.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_detail_observer_not_owned_returns_404(self) -> None:
+        """Non-staff supplying an observer they don't own gets 404."""
+        self.client.force_authenticate(user=self.account_b)
+        # Account B tries to claim character A as their observer.
+        response = self.client.get(
+            f"/api/items/visible-item-detail/{self.coat.pk}/?observer={self.character_a.pk}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

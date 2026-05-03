@@ -87,27 +87,27 @@ describe('ItemFocusView', () => {
 
   it('renders without crashing in the loading state', () => {
     mockUseVisibleItemDetail({ isLoading: true, isPending: true, status: 'pending' });
-    renderWithProviders(<ItemFocusView item={itemRef} />);
+    renderWithProviders(<ItemFocusView item={itemRef} observerId={1} />);
     expect(screen.getByTestId('item-focus-loading')).toBeInTheDocument();
   });
 
   it('renders the unavailable fallback on error', () => {
     mockUseVisibleItemDetail({ isError: true, error: new Error('not found'), status: 'error' });
-    renderWithProviders(<ItemFocusView item={itemRef} />);
+    renderWithProviders(<ItemFocusView item={itemRef} observerId={1} />);
     expect(screen.getByText('Silver Brooch')).toBeInTheDocument();
     expect(screen.getByText(/item details unavailable/i)).toBeInTheDocument();
   });
 
   it('renders the item name and quality tier badge when data resolves', () => {
     mockUseVisibleItemDetail({ data: makeItem(), isSuccess: true });
-    renderWithProviders(<ItemFocusView item={itemRef} />);
+    renderWithProviders(<ItemFocusView item={itemRef} observerId={1} />);
     expect(screen.getByRole('heading', { name: 'Silver Brooch' })).toBeInTheDocument();
     expect(screen.getByText('Exquisite')).toBeInTheDocument();
   });
 
   it('renders the markdown description with bold and list items', () => {
     mockUseVisibleItemDetail({ data: makeItem(), isSuccess: true });
-    renderWithProviders(<ItemFocusView item={itemRef} />);
+    renderWithProviders(<ItemFocusView item={itemRef} observerId={1} />);
     // **silver brooch** -> <strong>silver brooch</strong>
     expect(screen.getByText('silver brooch')).toBeInTheDocument();
     // List items render as plain text
@@ -119,7 +119,7 @@ describe('ItemFocusView', () => {
 
   it('renders the stats grid with weight, size, and value', () => {
     mockUseVisibleItemDetail({ data: makeItem(), isSuccess: true });
-    renderWithProviders(<ItemFocusView item={itemRef} />);
+    renderWithProviders(<ItemFocusView item={itemRef} observerId={1} />);
     expect(screen.getByText(/weight/i)).toBeInTheDocument();
     expect(screen.getByText(/size/i)).toBeInTheDocument();
     expect(screen.getByText(/value/i)).toBeInTheDocument();
@@ -129,7 +129,7 @@ describe('ItemFocusView', () => {
 
   it('applies the quality tier color as the image left-border accent', () => {
     mockUseVisibleItemDetail({ data: makeItem(), isSuccess: true });
-    renderWithProviders(<ItemFocusView item={itemRef} />);
+    renderWithProviders(<ItemFocusView item={itemRef} observerId={1} />);
     const imageWrapper = screen.getByTestId('item-focus-image') as HTMLElement;
     expect(imageWrapper.style.borderLeftColor).toBeTruthy();
     // jsdom normalizes hex to rgb — #a855f7 -> rgb(168, 85, 247)
@@ -138,14 +138,22 @@ describe('ItemFocusView', () => {
 
   it('falls back to the first letter when no display image is provided', () => {
     mockUseVisibleItemDetail({ data: makeItem({ display_image_url: null }), isSuccess: true });
-    const { container } = renderWithProviders(<ItemFocusView item={itemRef} />);
+    const { container } = renderWithProviders(<ItemFocusView item={itemRef} observerId={1} />);
     const initialEl = container.querySelector('[data-fallback-initial]');
     expect(initialEl?.textContent).toBe('S');
   });
 
+  it('passes undefined to useVisibleItemDetail when observerId is null', () => {
+    // Disables the underlying fetch — without an observer the backend
+    // would 404 for non-staff. Render still completes.
+    mockUseVisibleItemDetail({ data: undefined, isLoading: false, isError: false });
+    renderWithProviders(<ItemFocusView item={itemRef} observerId={null} />);
+    expect(visibleItemHooks.useVisibleItemDetail).toHaveBeenCalledWith(itemRef.id, undefined);
+  });
+
   it('does NOT render any action buttons (read-only sidebar drill-in)', () => {
     mockUseVisibleItemDetail({ data: makeItem(), isSuccess: true });
-    renderWithProviders(<ItemFocusView item={itemRef} />);
+    renderWithProviders(<ItemFocusView item={itemRef} observerId={1} />);
     // None of the wardrobe-style actions should appear here.
     expect(screen.queryByRole('button', { name: /^wear$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^remove$/i })).not.toBeInTheDocument();
