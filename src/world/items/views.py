@@ -7,10 +7,11 @@ from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
 from rest_framework import serializers, viewsets
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import SAFE_METHODS, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.views import APIView
 
+from core_management.permissions import PlayerOrStaffPermission
 from flows.service_functions.outfits import delete_outfit, remove_outfit_slot
 from world.character_sheets.models import CharacterSheet
 from world.items.filters import (
@@ -58,16 +59,10 @@ def _account_currently_plays(user: AccountDB, sheet: CharacterSheet) -> bool:
     return RosterEntry.objects.for_account(user).filter(character_sheet=sheet).exists()
 
 
-class ItemFacetWritePermission(IsAuthenticated):
+class ItemFacetWritePermission(PlayerOrStaffPermission):
     """Allow attach/remove only if the user owns the item_instance, or is staff."""
 
-    def has_permission(self, request: Request, view: APIView) -> bool:
-        if not super().has_permission(request, view):
-            return False
-        if request.method in SAFE_METHODS:
-            return True
-        if request.user.is_staff:
-            return True
+    def has_permission_for_player(self, request: Request, view: APIView) -> bool:
         # POST: check the item_instance the request is targeting.
         if request.method == "POST":
             instance_pk = request.data.get("item_instance")
@@ -78,9 +73,9 @@ class ItemFacetWritePermission(IsAuthenticated):
             return ItemInstance.objects.filter(pk=instance_pk, owner=request.user).exists()
         return True  # DELETE checked at object level
 
-    def has_object_permission(self, request: Request, view: APIView, obj: ItemFacet) -> bool:
-        if request.user.is_staff:
-            return True
+    def has_object_permission_for_player(
+        self, request: Request, view: APIView, obj: ItemFacet
+    ) -> bool:
         return obj.item_instance.owner_id == request.user.pk
 
 
@@ -238,7 +233,7 @@ class EquippedItemViewSet(viewsets.ReadOnlyModelViewSet):
     ).order_by("-pk")
 
 
-class OutfitWritePermission(IsAuthenticated):
+class OutfitWritePermission(PlayerOrStaffPermission):
     """Allow Outfit writes only if the user currently plays the character_sheet.
 
     Mirrors ``ItemFacetWritePermission`` shape. Object-level checks fall
@@ -246,11 +241,7 @@ class OutfitWritePermission(IsAuthenticated):
     by reading ``character_sheet`` from request data.
     """
 
-    def has_permission(self, request: Request, view: APIView) -> bool:
-        if not super().has_permission(request, view):
-            return False
-        if request.method in SAFE_METHODS or request.user.is_staff:
-            return True
+    def has_permission_for_player(self, request: Request, view: APIView) -> bool:
         if request.method != "POST":
             # PATCH/DELETE delegated to has_object_permission.
             return True
@@ -264,20 +255,16 @@ class OutfitWritePermission(IsAuthenticated):
             return True
         return _account_currently_plays(cast(AccountDB, request.user), sheet)
 
-    def has_object_permission(self, request: Request, view: APIView, obj: Outfit) -> bool:
-        if request.user.is_staff:
-            return True
+    def has_object_permission_for_player(
+        self, request: Request, view: APIView, obj: Outfit
+    ) -> bool:
         return _account_currently_plays(cast(AccountDB, request.user), obj.character_sheet)
 
 
-class OutfitSlotWritePermission(IsAuthenticated):
+class OutfitSlotWritePermission(PlayerOrStaffPermission):
     """Allow OutfitSlot writes only if the user currently plays the outfit's sheet."""
 
-    def has_permission(self, request: Request, view: APIView) -> bool:
-        if not super().has_permission(request, view):
-            return False
-        if request.method in SAFE_METHODS or request.user.is_staff:
-            return True
+    def has_permission_for_player(self, request: Request, view: APIView) -> bool:
         if request.method != "POST":
             return True
         outfit_pk = request.data.get("outfit")
@@ -289,9 +276,9 @@ class OutfitSlotWritePermission(IsAuthenticated):
             return True
         return _account_currently_plays(cast(AccountDB, request.user), outfit.character_sheet)
 
-    def has_object_permission(self, request: Request, view: APIView, obj: OutfitSlot) -> bool:
-        if request.user.is_staff:
-            return True
+    def has_object_permission_for_player(
+        self, request: Request, view: APIView, obj: OutfitSlot
+    ) -> bool:
         return _account_currently_plays(cast(AccountDB, request.user), obj.outfit.character_sheet)
 
 
