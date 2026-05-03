@@ -38,17 +38,6 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 # the case in fresh test DBs that haven't run Evennia's initial_setup).
 TEST_ENVIRONMENT = True
 
-# Suppress DRF's UnorderedObjectListWarning during tests.
-# Cause: world/mechanics views paginate querysets that aren't .order_by()'d.
-# Project policy (CLAUDE.md) says don't add ordering to ViewSets unless
-# genuinely needed for stable pagination across requests, so we silence the
-# warning here rather than fix the underlying queryset.
-import warnings
-
-from django.core.paginator import UnorderedObjectListWarning
-
-warnings.filterwarnings("ignore", category=UnorderedObjectListWarning)
-
 # Disable external services during tests
 SENDGRID_API_KEY = ""
 CLOUDINARY_CLOUD_NAME = ""
