@@ -17,6 +17,12 @@ side-panel focus stack.
 
 **In scope:**
 
+- **Staff-bypass infrastructure** (cross-cutting, lands here because the
+  visibility service is the first natural use):
+  - `is_staff_observer(observer)` service-layer helper
+  - `PlayerOnlyPermission` and `PlayerOrStaffPermission` DRF base classes
+  - Audit + refactor of existing permission classes that inline
+    `request.user.is_staff` short-circuits
 - Per-(body_region, equipment_layer) visibility computation using existing
   `TemplateSlot.covers_lower_layers` flag
 - `visible_worn_items_for(character_obj)` service in `world.items.services`
@@ -48,6 +54,97 @@ side-panel focus stack.
 - Double-click semantics — single-click drills in everywhere
 
 ## Architecture
+
+### Staff-bypass infrastructure
+
+The principle: **staff bypass is explicitly opt-in per resource, never
+automatic.** Some resources (very private scenes, sealed journals, secret
+pose targets, etc.) must NEVER let staff peek even with admin powers.
+A base class that grants staff bypass *by default* is the trap to avoid —
+new permission classes would inherit the bypass without the author noticing.
+
+The fix: two base classes, picked at class definition time. Picking the
+base class IS the opt-in.
+
+```python
+# src/core_management/permissions.py (or similar shared location)
+
+class PlayerOnlyPermission(IsAuthenticated):
+    """Player-side check only. Staff get NO special bypass.
+
+    Use for sensitive resources where staff shouldn't peek (very private
+    scenes, sealed journals, secret pose targets).
+    """
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        if request.method in SAFE_METHODS:
+            return True
+        return self.has_permission_for_player(request, view)
+
+    def has_object_permission(self, request, view, obj):
+        return self.has_object_permission_for_player(request, view, obj)
+
+    def has_permission_for_player(self, request, view): return True
+    def has_object_permission_for_player(self, request, view, obj): return True
+
+
+class PlayerOrStaffPermission(PlayerOnlyPermission):
+    """Like PlayerOnlyPermission, but staff bypass.
+
+    Use when staff legitimately need cross-player access — the common case
+    (look at gear, edit any character's roster, manage events, etc.).
+    """
+
+    def has_permission(self, request, view):
+        if request.user.is_authenticated and request.user.is_staff:
+            return True
+        return super().has_permission(request, view)
+
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_staff:
+            return True
+        return super().has_object_permission(request, view, obj)
+```
+
+Reading the class declaration tells you the bypass policy.
+`OutfitWritePermission(PlayerOrStaffPermission)` → "staff bypass on."
+`VeryPrivateScenePermission(PlayerOnlyPermission)` → "staff CANNOT bypass."
+
+For service-layer staff-aware logic (the visibility service is the first
+case), a small helper:
+
+```python
+# src/core_management/permissions.py (alongside the base classes)
+
+def is_staff_observer(observer) -> bool:
+    """Whether observer represents a staff user.
+
+    Accepts any of: ObjectDB (character), AccountDB, Django User-like.
+    For ObjectDB, walks character.account.is_staff.
+    Returns False if no account is associated or observer is None.
+
+    The caller decides what to do with the answer. The helper has no
+    policy — no automatic bypass.
+    """
+```
+
+The helper is a yes/no question. The visibility service calls it; other
+services that need staff awareness call it. No surprises.
+
+**Audit step before the visibility work.** Grep for permission classes that
+inline `request.user.is_staff` short-circuits and confirm each:
+
+- If staff bypass is intentional → refactor to inherit
+  `PlayerOrStaffPermission`. Drop the inline check.
+- If staff bypass is dubious → flag for review before refactoring.
+  Don't change behavior in this PR.
+
+The refactor is mechanical: rename `has_permission` →
+`has_permission_for_player`, drop `IsAuthenticated`/`SAFE_METHODS`/
+`is_staff` short-circuits (the base handles them), keep the player-side
+check.
 
 ### Visibility rules
 
@@ -307,11 +404,19 @@ Components:
 
 ### Tests
 
+- `is_staff_observer`: accepts ObjectDB / AccountDB / User; returns True
+  only for staff; None / non-staff / non-account-attached returns False.
+- `PlayerOnlyPermission`: SAFE_METHODS auth check, staff get NO bypass on
+  writes, player-side methods called for non-staff writes.
+- `PlayerOrStaffPermission`: staff bypass on every method (including
+  writes and object-level checks); falls through to player path otherwise.
 - Service: visibility computation across permutations (single layer, two
   layers no covering, two layers with covering, multiple body regions).
 - Service: observer == character (self-look) skips hiding.
 - Service: observer is staff skips hiding.
 - Service: observer is non-staff non-self → hiding applies.
+- Refactored permission classes: existing tests that exercised them
+  continue to pass (behavior preserved).
 - CharacterState: `get_display_worn` returns formatted string with
   `iter_to_str` for visible items, empty string for naked character.
 - CharacterState: `return_appearance` includes `{worn}` slot when populated,
