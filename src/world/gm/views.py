@@ -190,7 +190,7 @@ class GMTableMembershipViewSet(viewsets.ModelViewSet):
     Destroy is a soft-leave — the record remains with left_at set.
     """
 
-    queryset = GMTableMembership.objects.select_related("table", "persona")
+    queryset = GMTableMembership.objects.select_related("table", "persona").order_by("-pk")
     serializer_class = GMTableMembershipSerializer
     filterset_class = GMTableMembershipFilter
     filter_backends = [DjangoFilterBackend]

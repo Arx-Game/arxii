@@ -243,7 +243,9 @@ class InteractionFavoriteViewSet(viewsets.ModelViewSet):
         roster_entries = get_account_roster_entries(self.request)
         if not roster_entries:
             return InteractionFavorite.objects.none()
-        return InteractionFavorite.objects.filter(roster_entry__in=roster_entries)
+        return InteractionFavorite.objects.filter(roster_entry__in=roster_entries).order_by(
+            "-timestamp"
+        )
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Toggle a favorite on or off for the authenticated user."""
@@ -289,7 +291,7 @@ class InteractionReactionViewSet(viewsets.ModelViewSet):
     http_method_names = ["post", "delete"]
 
     def get_queryset(self) -> QuerySet[InteractionReaction]:
-        return InteractionReaction.objects.filter(account=self.request.user)
+        return InteractionReaction.objects.filter(account=self.request.user).order_by("-pk")
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Toggle: delete if exists, create if not."""
