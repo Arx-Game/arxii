@@ -18,7 +18,7 @@ import type { RoomStatePayload, SceneSummary } from '@/hooks/types';
 export type FocusEntry =
   | {
       kind: 'room';
-      room: RoomStatePayload['room'];
+      room: RoomStatePayload['room'] | null;
       sceneSummary: SceneSummary | null;
     }
   | { kind: 'character'; character: { id: number; name: string } }

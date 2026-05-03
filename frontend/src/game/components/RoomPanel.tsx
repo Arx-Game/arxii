@@ -10,7 +10,7 @@ import { CharactersList } from './room-panel/CharactersList';
 import { ExitsList } from './room-panel/ExitsList';
 import { ObjectsList } from './room-panel/ObjectsList';
 
-interface RoomData {
+export interface RoomData {
   id: number;
   name: string;
   description: string;
@@ -24,9 +24,10 @@ interface RoomPanelProps {
   character: string | null;
   room: RoomData | null;
   scene: SceneSummary | null;
+  onCharacterClick?: (character: RoomStateObject) => void;
 }
 
-export function RoomPanel({ character, room, scene }: RoomPanelProps) {
+export function RoomPanel({ character, room, scene, onCharacterClick }: RoomPanelProps) {
   const { send } = useGameSocket();
   const dispatch = useAppDispatch();
 
@@ -84,7 +85,7 @@ export function RoomPanel({ character, room, scene }: RoomPanelProps) {
 
       {room.description && <RoomDescription description={room.description} />}
 
-      <CharactersList characters={room.characters} />
+      <CharactersList characters={room.characters} onCharacterClick={onCharacterClick} />
       <ExitsList exits={room.exits} onExit={handleExit} />
       <ObjectsList objects={room.objects} />
     </div>

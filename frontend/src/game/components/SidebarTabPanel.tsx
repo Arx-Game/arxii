@@ -6,9 +6,22 @@ interface SidebarTabPanelProps {
   roomPanel: ReactNode;
   eventsPanel: ReactNode;
   codexPanel?: ReactNode;
+  /**
+   * Label for the room tab. Defaults to ``"Room"`` but the parent can
+   * pass the currently-focused subject (a character or item name) so the
+   * tab reflects what the right sidebar is actually showing. Long names
+   * are visually truncated; the full label remains accessible via the
+   * tab's ``title`` tooltip.
+   */
+  roomTabLabel?: string;
 }
 
-export function SidebarTabPanel({ roomPanel, eventsPanel, codexPanel }: SidebarTabPanelProps) {
+export function SidebarTabPanel({
+  roomPanel,
+  eventsPanel,
+  codexPanel,
+  roomTabLabel,
+}: SidebarTabPanelProps) {
   const [activeTab, setActiveTab] = useState('room');
   const [activatedTabs, setActivatedTabs] = useState<Set<string>>(new Set(['room']));
 
@@ -22,12 +35,14 @@ export function SidebarTabPanel({ roomPanel, eventsPanel, codexPanel }: SidebarT
     });
   }, []);
 
+  const label = roomTabLabel ?? 'Room';
+
   return (
     <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col">
       <TabsList className="mx-2 mt-2 grid w-auto grid-cols-3">
-        <TabsTrigger value="room" className="gap-1 text-xs">
-          <MapPin className="h-3 w-3" />
-          Room
+        <TabsTrigger value="room" className="gap-1 text-xs" title={label}>
+          <MapPin className="h-3 w-3 shrink-0" />
+          <span className="inline-block max-w-[8rem] truncate">{label}</span>
         </TabsTrigger>
         <TabsTrigger value="events" className="gap-1 text-xs">
           <Calendar className="h-3 w-3" />
