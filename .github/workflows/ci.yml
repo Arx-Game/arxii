@@ -108,7 +108,11 @@ jobs:
       - name: Run migrations
         run: uv run arx manage migrate
       - name: Run tests
-        run: uv run arx test --parallel auto ${{ matrix.shard.apps }}
+        # Bare --parallel (no value) lets Django auto-detect CPU count.
+        # Don't pass `auto` literally — arx.py declares --parallel as a typer
+        # boolean flag, so `auto` would fall through as a positional test label
+        # and Django would fail trying to import a module named `auto`.
+        run: uv run arx test --parallel ${{ matrix.shard.apps }}
 
   ty:
     runs-on: ubuntu-latest
