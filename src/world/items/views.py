@@ -2,13 +2,15 @@
 
 from typing import cast
 
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
+from evennia.objects.models import ObjectDB
 from rest_framework import serializers, viewsets
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from core_management.permissions import PlayerOrStaffPermission
@@ -23,6 +25,7 @@ from world.items.filters import (
     OutfitFilter,
     OutfitSlotFilter,
     QualityTierFilter,
+    VisibleWornItemFilter,
 )
 from world.items.models import (
     EquippedItem,
@@ -49,7 +52,9 @@ from world.items.serializers import (
     OutfitSlotWriteSerializer,
     OutfitWriteSerializer,
     QualityTierSerializer,
+    VisibleWornItemSerializer,
 )
+from world.items.services.appearance import visible_worn_items_for
 from world.items.services.facets import remove_facet_from_item
 from world.roster.models import RosterEntry
 
@@ -379,3 +384,165 @@ class OutfitSlotViewSet(viewsets.ModelViewSet):
             body_region=instance.body_region,
             equipment_layer=instance.equipment_layer,
         )
+
+
+def _is_own_character(user: AccountDB, target: ObjectDB) -> bool:
+    """True if ``user`` currently plays ``target`` (active roster tenure)."""
+    return RosterEntry.objects.for_account(user).filter(character_sheet_id=target.pk).exists()
+
+
+def _account_characters_in_room(user: AccountDB, room: ObjectDB | None) -> bool:
+    """True if any character ``user`` plays is currently in ``room``."""
+    if room is None:
+        return False
+    return (
+        RosterEntry.objects.for_account(user)
+        .filter(character_sheet__character__db_location_id=room.pk)
+        .exists()
+    )
+
+
+class VisibleWornItemViewSet(viewsets.ViewSet):
+    """List visible worn items for a character.
+
+    The ``character`` query parameter selects the target. Visibility scope:
+
+    - same-room observer (any character on the requester's account is in
+      the target's room), OR
+    - self-look (the requester plays the target), OR
+    - staff (bypass).
+
+    Out-of-scope requesters get an empty list (200) — never a 403/404,
+    to avoid leaking presence information about characters in rooms the
+    observer can't see.
+
+    The endpoint result is computed from ``visible_worn_items_for`` rather
+    than a queryset, so this is a plain ``ViewSet`` with a ``list`` action.
+    """
+
+    permission_classes = [PlayerOrStaffPermission]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = VisibleWornItemFilter
+
+    def list(self, request: Request) -> Response:
+        """Return the slim visible-worn list for ``?character=<pk>``."""
+        # The endpoint result is computed from a service, not from a queryset,
+        # so we route the ``character`` parameter through the FilterSet's form
+        # for validation/coercion rather than reading query_params directly.
+        filterset = VisibleWornItemFilter(
+            data=request.query_params,
+            queryset=EquippedItem.objects.none(),
+        )
+        if not filterset.is_valid():
+            return Response([])
+        character_pk = filterset.form.cleaned_data.get("character")
+        if not character_pk:
+            return Response([])
+
+        try:
+            target = ObjectDB.objects.get(pk=character_pk)
+        except ObjectDB.DoesNotExist:
+            return Response([])
+
+        user = cast(AccountDB, request.user)
+        is_staff = bool(user.is_staff)
+        is_self = not is_staff and _is_own_character(user, target)
+        same_room = (
+            not is_staff and not is_self and _account_characters_in_room(user, target.location)
+        )
+        if not (is_staff or is_self or same_room):
+            return Response([])
+
+        # Pick an observer that triggers the right bypass branch in the
+        # service: staff → request user; self → the target itself (so
+        # ``observer is character`` fires); same-room → request user (no bypass).
+        if is_self:
+            observer: object = target
+        else:
+            observer = user
+
+        items = visible_worn_items_for(target, observer=observer)
+        serializer = VisibleWornItemSerializer(items, many=True)
+        return Response(serializer.data)
+
+
+class VisibleItemDetailViewSet(viewsets.ReadOnlyModelViewSet):
+    """Full ItemInstance detail for items currently visibly worn nearby.
+
+    For staff, every item is returned (bypass). For non-staff, the queryset
+    is filtered to items currently equipped on observable characters
+    (own-account characters or characters sharing a room with one of the
+    requester's characters), AND visible (concealed-by-layer items are
+    filtered out so concealed items return 404 — we don't leak existence).
+
+    The visibility filter walks one ``visible_worn_items_for`` call per
+    observable character; in practice the requester is in one room with a
+    small number of characters, so N is bounded.
+    """
+
+    permission_classes = [PlayerOrStaffPermission]
+    serializer_class = ItemInstanceReadSerializer
+    pagination_class = ItemTemplatePagination
+    queryset = (
+        ItemInstance.objects.select_related(
+            "template",
+            "quality_tier",
+            "game_object",
+            "image",
+            "template__image",
+        )
+        .prefetch_related(
+            Prefetch(
+                "item_facets",
+                queryset=ItemFacet.objects.select_related("facet", "attachment_quality_tier"),
+                to_attr="cached_item_facets",
+            ),
+        )
+        .order_by("-pk")
+    )
+
+    def get_queryset(self) -> QuerySet[ItemInstance]:
+        """Scope to currently-visible worn items the requester can observe."""
+        qs = super().get_queryset()
+        if self.request.user.is_staff:
+            return qs
+        return qs.filter(id__in=self._visible_item_ids())
+
+    def _visible_item_ids(self) -> set[int]:
+        """Item IDs currently visibly worn on characters the user can observe."""
+        user = cast(AccountDB, self.request.user)
+        own_entries = RosterEntry.objects.for_account(user)
+        own_char_ids = list(own_entries.values_list("character_sheet_id", flat=True))
+        if not own_char_ids:
+            return set()
+
+        own_locations = list(
+            own_entries.values_list("character_sheet__character__db_location_id", flat=True)
+        )
+        own_locations = [loc for loc in own_locations if loc is not None]
+
+        observable_chars = set(
+            EquippedItem.objects.filter(
+                Q(character_id__in=own_char_ids) | Q(character__db_location_id__in=own_locations)
+            )
+            .values_list("character_id", flat=True)
+            .distinct()
+        )
+
+        visible_ids: set[int] = set()
+        for character_id in observable_chars:
+            try:
+                character = ObjectDB.objects.get(pk=character_id)
+            except ObjectDB.DoesNotExist:
+                continue
+            # Pick the right observer per character so the service applies
+            # the matching bypass: self-look (own character) → bypass; same
+            # room → no bypass (concealed items hidden).
+            observer: object
+            if character_id in own_char_ids:
+                observer = character
+            else:
+                observer = user
+            for entry in visible_worn_items_for(character, observer=observer):
+                visible_ids.add(entry.item_instance.id)
+        return visible_ids

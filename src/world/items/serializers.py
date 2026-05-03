@@ -201,6 +201,21 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
         return media.cloudinary_url if media else None
 
 
+class VisibleWornItemSerializer(serializers.Serializer):
+    """Slim shape for ``VisibleWornItem`` dataclass entries.
+
+    Used by the ``visible-worn`` list endpoint — exposes only the bits
+    needed to render a per-character "what they're wearing" listing
+    (id + display name + region + layer). For full per-item data the
+    client follows up with the visible-item-detail endpoint.
+    """
+
+    id = serializers.IntegerField(source="item_instance.id", read_only=True)
+    display_name = serializers.CharField(source="item_instance.display_name", read_only=True)
+    body_region = serializers.CharField(read_only=True)
+    equipment_layer = serializers.CharField(read_only=True)
+
+
 class ItemTemplateDetailSerializer(serializers.ModelSerializer):
     """Detail serializer for ItemTemplate with slots and interactions."""
 

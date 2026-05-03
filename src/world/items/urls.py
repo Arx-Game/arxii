@@ -11,6 +11,8 @@ from world.items.views import (
     OutfitSlotViewSet,
     OutfitViewSet,
     QualityTierViewSet,
+    VisibleItemDetailViewSet,
+    VisibleWornItemViewSet,
 )
 
 router = DefaultRouter()
@@ -22,5 +24,11 @@ router.register("equipped-items", EquippedItemViewSet, basename="equipped-item")
 router.register("inventory", ItemInstanceViewSet, basename="item-instance")
 router.register("outfits", OutfitViewSet, basename="outfit")
 router.register("outfit-slots", OutfitSlotViewSet, basename="outfit-slot")
+router.register("visible-worn", VisibleWornItemViewSet, basename="visible-worn")
+router.register(
+    "visible-item-detail",
+    VisibleItemDetailViewSet,
+    basename="visible-item-detail",
+)
 
 urlpatterns = router.urls
