@@ -179,6 +179,87 @@ Explicitly NOT in Phase A: fashion compatibility, fashion bonuses, modeling /
 peer judging, outfit legendary level, outfit-bound mantles. Placeholders are in
 the UI but no server-side mechanics back them.
 
+## Visible Worn Equipment (DONE)
+
+**Branch:** `visible-worn-equipment`
+
+Looking at a character now shows their visible worn equipment — names only,
+with deeper layers concealed by covering items. From there, drilling into a
+specific piece reveals its full description. Same data on every transport:
+telnet `look <person>'s <item>` (or `look <item> on <person>` / `look <item>
+in <container>`), and a focus-stack side panel in the React frontend.
+
+What landed:
+
+- **Visibility computation service** in `world.items.services.appearance`:
+  `visible_worn_items_for(character, observer=None)` walks `EquippedItem`
+  rows and applies per-(body_region, equipment_layer) hiding via
+  `TemplateSlot.covers_lower_layers`. Self-look (`observer is character`)
+  and staff observers bypass the hiding pass — staff routinely need to
+  investigate gear in-game without dropping into Django admin.
+- **`CharacterState` appearance extension**: `get_display_worn(looker)` and
+  `get_display_status(looker)` (placeholder for the combat-roadmap
+  follow-up). `return_appearance` adds a "Wearing: ..." line under the
+  description when items are visible; the section is omitted entirely when
+  nothing is visible.
+- **Telnet `CmdLook` parser** handles three new forms — possessive
+  (`look bob's hat`), `on` (`look hat on bob`), `in` (`look coin in pouch`).
+  Plain `look <name>` falls through to the existing `LookAction`.
+- **`LookAtItemAction`** (registered): visibility gate (concealed items
+  rejected unless self/staff), container open/close check, case-insensitive
+  name match with substring fallback.
+- **REST endpoints** at `/api/items/`:
+  - `GET visible-worn/?character=N` — slim list of items visible on the
+    character to the requester. Scoped to same-room observers, plus
+    self-look and staff bypass.
+  - `GET visible-item-detail/<id>/` — full item detail. Concealed items
+    return 404 to avoid leaking existence.
+- **Frontend focus stack** in the right sidebar:
+  - `useFocusStack` hook in `inventory/hooks` manages the entry stack
+    (room → character → item) with `push`, `pop`, `reset`.
+  - `FocusPanel` orchestrates which view renders based on `current.kind`,
+    using the existing `RoomPanel` for the room view and new
+    `CharacterFocusView` / `ItemFocusView` for the drilled views.
+  - Back button shows at depth > 1 and pops the stack.
+  - **Dynamic tab label** — the right-sidebar Room tab's text follows the
+    focus: room name → character name → item name (truncated to 8rem with
+    full-name title tooltip on hover).
+  - Stack resets to the room when the player switches character or moves.
+- **Cross-cutting infrastructure** (lands here because the visibility
+  service is the first natural use):
+  - `core_management.permissions.is_staff_observer(observer)` — yes/no
+    helper accepting ObjectDB / AccountDB / User-like, walks
+    `character.account.is_staff` for ObjectDB. Policy-free; callers decide
+    what to do with the answer.
+  - `core_management.permissions.PlayerOnlyPermission` — base class for
+    sensitive resources; staff get NO bypass. Use for very-private scenes,
+    sealed journals, etc.
+  - `core_management.permissions.PlayerOrStaffPermission` — base class for
+    the common case; staff bypass everything. Subclasses override
+    `has_permission_for_player` and `has_object_permission_for_player`.
+  - The principle: staff bypass is explicitly opt-in per resource, never
+    automatic. Picking the base class IS the per-resource opt-in.
+  - Refactored `ItemFacetWritePermission`, `OutfitWritePermission`,
+    `OutfitSlotWritePermission` to inherit `PlayerOrStaffPermission` and
+    drop their inline `is_staff` short-circuits. Behavior preserved.
+  - **`world.scenes.interaction_permissions.CanViewInteraction` flagged
+    during the audit** — has a non-uniform staff bypass policy (excludes
+    staff from very_private interactions). Worth a separate review before
+    refactoring; left untouched in this PR.
+
+Explicitly NOT in this slice (parked):
+
+- **Narrative status display** — the appearance template's `{status}`
+  slot is wired but renders empty until vitals/fatigue/conditions
+  integration lands. Tracked in
+  [`docs/roadmap/combat.md`](combat.md) under "Narrative Status in
+  Character Descriptions."
+- **Examining items in containers belonging to others** — only the
+  requester's own / same-room containers work today.
+- **Right-click context menu on worn items** ("compliment outfit", etc.).
+- **`CanViewInteraction` permission refactor** — flagged for separate
+  review as noted above.
+
 ## What's Needed for MVP
 - ~~Equipment slot / body part model~~ — **done** (TemplateSlot with BodyRegion + EquipmentLayer)
 - ~~Worn items tracking~~ — **done** (EquippedItem model + equip/unequip services)
