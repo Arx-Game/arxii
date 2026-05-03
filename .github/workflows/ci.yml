@@ -65,7 +65,7 @@ jobs:
       - name: Run migrations
         run: uv run arx manage migrate
       - name: Run tests
-        run: uv run arx test
+        run: uv run arx test --parallel auto
 
   ty:
     runs-on: ubuntu-latest
