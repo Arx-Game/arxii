@@ -260,7 +260,7 @@ class EventInvitationViewSet(CreateModelMixin, DestroyModelMixin, ListModelMixin
             "target_persona",
             "target_organization",
             "target_society",
-        )
+        ).order_by("-pk")
 
     def get_serializer_class(self):  # type: ignore[override]
         if self.action == "create":

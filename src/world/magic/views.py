@@ -558,16 +558,20 @@ class ThreadViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Filter to threads owned by the requesting account; exclude retired."""
         user = self.request.user
-        qs = Thread.objects.filter(retired_at__isnull=True).select_related(
-            "owner",
-            "owner__character",
-            "resonance",
-            "resonance__affinity",
-            "target_trait",
-            "target_technique",
-            "target_object",
-            "target_relationship_track",
-            "target_capstone",
+        qs = (
+            Thread.objects.filter(retired_at__isnull=True)
+            .select_related(
+                "owner",
+                "owner__character",
+                "resonance",
+                "resonance__affinity",
+                "target_trait",
+                "target_technique",
+                "target_object",
+                "target_relationship_track",
+                "target_capstone",
+            )
+            .order_by("-pk")
         )
         if user.is_staff:
             return qs
@@ -744,7 +748,7 @@ class ThreadWeavingTeachingOfferViewSet(viewsets.ReadOnlyModelViewSet):
         "unlock__unlock_gift",
         "unlock__unlock_room_property",
         "unlock__unlock_track",
-    )
+    ).order_by("-pk")
     serializer_class = ThreadWeavingTeachingOfferSerializer
     permission_classes = [IsAuthenticated]
     pagination_class = StandardResultsSetPagination

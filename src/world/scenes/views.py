@@ -58,7 +58,7 @@ class SceneViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def get_queryset(self) -> QuerySet[Scene]:
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().order_by("-date_started")
         if self.action == "list":
             user = self.request.user
             if user.is_authenticated:
