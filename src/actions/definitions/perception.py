@@ -126,6 +126,9 @@ class LookAtItemAction(Action):
         container_id: int,
         item_name: str,
     ) -> ActionResult:
+        from core_management.permissions import is_staff_observer  # noqa: PLC0415
+        from flows.object_states.item_state import ItemState  # noqa: PLC0415
+
         try:
             container_obj = ObjectDB.objects.get(pk=container_id)
         except ObjectDB.DoesNotExist:
@@ -135,6 +138,16 @@ class LookAtItemAction(Action):
             container_instance = container_obj.item_instance
         except ObjectDB.item_instance.RelatedObjectDoesNotExist:  # type: ignore[attr-defined]
             return ActionResult(success=False, message="That isn't a container.")
+
+        # Reach gate: clients can POST any container pk via the action
+        # dispatcher. Without this check, an actor could read the contents
+        # of any open container in the database. Staff bypass mirrors the
+        # rest of the look pipeline (concealed worn items, etc.).
+        if not is_staff_observer(actor):
+            sdm = SceneDataManager()
+            container_state = ItemState(container_instance, context=sdm)
+            if not container_state.is_reachable_by(actor):
+                return ActionResult(success=False, message="That isn't here.")
 
         if container_instance.template.supports_open_close and not container_instance.is_open:
             return ActionResult(success=False, message="That container is closed.")

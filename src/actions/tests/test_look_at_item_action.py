@@ -189,3 +189,58 @@ class LookAtItemActionContainerTests(TestCase):
         )
         self.assertFalse(result.success)
         self.assertIn("closed", (result.message or "").lower())
+
+    def test_look_at_contained_in_other_room_fails(self) -> None:
+        # Container located in a different room than the actor must not be
+        # readable. Without the reach check, any open container's contents
+        # could be read by POSTing its pk through the action dispatcher.
+        actor_room = ObjectDBFactory(
+            db_key="ContActorRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        other_room = ObjectDBFactory(
+            db_key="ContOtherRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.actor.location = actor_room
+        self.actor.save()
+        container = self._make_container(is_open=True)
+        container.game_object.location = other_room
+        container.game_object.save()
+        self._put_in_container(container, "GoldCoin")
+        action = LookAtItemAction()
+        result = action.run(
+            self.actor,
+            container_id=container.game_object.pk,
+            item_name="goldcoin",
+        )
+        self.assertFalse(result.success)
+        self.assertIn("isn't here", (result.message or "").lower())
+
+    def test_look_at_contained_staff_can_see_anywhere(self) -> None:
+        # Staff actors bypass the reach check, mirroring the rest of the
+        # look pipeline (concealed worn items, etc.).
+        self.actor_account.is_staff = True
+        self.actor_account.save()
+        actor_room = ObjectDBFactory(
+            db_key="StaffActorRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        other_room = ObjectDBFactory(
+            db_key="StaffOtherRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.actor.location = actor_room
+        self.actor.save()
+        container = self._make_container(is_open=True)
+        container.game_object.location = other_room
+        container.game_object.save()
+        self._put_in_container(container, "GoldCoin")
+        action = LookAtItemAction()
+        result = action.run(
+            self.actor,
+            container_id=container.game_object.pk,
+            item_name="goldcoin",
+        )
+        self.assertTrue(result.success)
+        self.assertIn("GoldCoin", result.message or "")
