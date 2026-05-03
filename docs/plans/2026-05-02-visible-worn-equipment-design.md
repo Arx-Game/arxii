@@ -65,6 +65,18 @@ Layer hiding is purely per-(region, layer). A cloak that declares slots only
 at SHOULDERS/OVER + BACK/OVER hides only those regions' lower layers — it
 does not affect what's visible on the torso, because it has no torso slot.
 
+**Two observer-based bypasses to layer hiding:**
+
+1. **Looking at yourself** — your own concealed items are visible to you
+   (it'd be silly for the look output to hide your own underwear from
+   yourself).
+2. **Staff** — staff bypass layer hiding entirely. Staff routinely need to
+   investigate equipment in-game and shouldn't have to drop into Django
+   admin to see what's actually on a character. The same bypass applies to
+   the API permission gates.
+
+Both bypasses skip the hiding pass and return everything equipped.
+
 ### Service function
 
 Location: `world/items/services/appearance.py` (new module — sibling of
@@ -80,12 +92,22 @@ class VisibleWornItem:
     equipment_layer: str  # EquipmentLayer choice value
 
 
-def visible_worn_items_for(character: ObjectDB) -> list[VisibleWornItem]:
-    """Return the character's worn items that are visible to an observer.
+def visible_worn_items_for(
+    character: ObjectDB,
+    observer: ObjectDB | AccountDB | None = None,
+) -> list[VisibleWornItem]:
+    """Return the character's worn items that are visible to ``observer``.
 
     Walks EquippedItem rows for ``character``, applies per-(region, layer)
     hiding via TemplateSlot.covers_lower_layers, returns an ordered list
     (top-down by region: head → face → neck → … → feet, then accessories).
+
+    Layer hiding is bypassed when:
+        - ``observer`` is the same character (looking at yourself), OR
+        - ``observer`` is staff (or the AccountDB of a staff user).
+
+    ``observer=None`` (the default) applies hiding. Pass the observer
+    explicitly when the caller has the context.
     """
 ```
 
@@ -207,6 +229,11 @@ Two pieces:
    queryset filter — it keeps the inventory endpoint genuinely private to
    the requester's own carriers.
 
+   Staff bypass: the new endpoint passes `request.user` as the observer to
+   `visible_worn_items_for`, which short-circuits the hiding pass for staff
+   users. Staff can also fetch items they don't otherwise own via the
+   existing `is_staff: True` short-circuit on the inventory detail view.
+
 ### Frontend — focus stack
 
 Right sidebar's "Room" tab evolves into a generic focus stack:
@@ -265,9 +292,11 @@ Components:
 - **Looker can't see the room** (different room, scene-permission gate):
   the look command already fails at the action layer; nothing new needed.
 - **Looker examines themselves** (`look me`): visible worn items include
-  everything they're wearing, not just what an observer would see. Worth a
-  flag on `visible_worn_items_for` (e.g., `for_self: bool = False`) — when
-  True, skip the layer-hiding pass.
+  everything they're wearing — handled by the `observer` parameter on
+  `visible_worn_items_for`.
+- **Staff looking at any character**: staff bypass layer hiding (no Django
+  admin trip required to investigate gear) — also handled by the
+  `observer` parameter.
 - **Item destroyed mid-look**: existing `ItemInstance.objects.get` patterns
   raise `DoesNotExist`; surface as "That item is no longer there."
 - **Possessive `look bob's hat`** when Bob isn't in the room: the search
@@ -280,7 +309,9 @@ Components:
 
 - Service: visibility computation across permutations (single layer, two
   layers no covering, two layers with covering, multiple body regions).
-- Service: `for_self=True` skips hiding.
+- Service: observer == character (self-look) skips hiding.
+- Service: observer is staff skips hiding.
+- Service: observer is non-staff non-self → hiding applies.
 - CharacterState: `get_display_worn` returns formatted string with
   `iter_to_str` for visible items, empty string for naked character.
 - CharacterState: `return_appearance` includes `{worn}` slot when populated,
