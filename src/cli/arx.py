@@ -114,11 +114,11 @@ def run_tests(
     The function name differs from the CLI command to keep ``arx test`` stable
     without relying on test discovery conventions.
 
-    By default, uses test_settings.py which provides:
-    - In-memory SQLite database for speed
-    - Disabled migrations for faster database creation
-    - Fast password hashing
+    By default, uses server.conf.test_settings which provides:
+    - Postgres test DB (test_<DATABASE_NAME>) auto-created from migrations
+    - Fast password hashing (MD5)
     - Reduced logging
+    - Locmem email backend (no real emails sent)
 
     If this is a fresh environment, run ``arx manage migrate`` first so the
     database exists or the tests will fail.
@@ -188,7 +188,7 @@ def run_tests_fast(
     args: list[str] = TEST_ARGS_ARG,
     production_settings: bool = PRODUCTION_SETTINGS_OPTION,
 ) -> None:
-    """Run tests with performance optimizations (no parallel on Windows).
+    """Run tests with performance optimizations.
 
     Uses optimized test settings by default.
     Equivalent to: arx test --keepdb --failfast -v1
