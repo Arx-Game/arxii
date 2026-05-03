@@ -205,4 +205,36 @@ describe('FocusPanel', () => {
       sceneSummary: null,
     });
   });
+
+  it('resets the stack when the active puppet changes in the same room', () => {
+    // Two puppets can share a room. Without including ``roomCharacter``
+    // in the effect deps, swapping puppets in the same room would leak
+    // the previous puppet's focus stack into the new puppet's session.
+    const focus = makeFocusApi({ kind: 'room', room: null, sceneSummary: null }, 1);
+    const room = makeRoomData();
+
+    const { rerender } = renderUI(
+      <FocusPanel focus={focus} roomCharacter="Alice" roomData={room} sceneData={null} />
+    );
+
+    expect(focus.reset).toHaveBeenCalledTimes(1);
+
+    // Simulate the player switching active puppet to ``Bob`` in the
+    // same room — same roomData.id, same sceneData, only roomCharacter
+    // changed. The focus stack must reset.
+    rerender(
+      <Provider store={store}>
+        <QueryClientProvider client={new QueryClient()}>
+          <FocusPanel focus={focus} roomCharacter="Bob" roomData={room} sceneData={null} />
+        </QueryClientProvider>
+      </Provider>
+    );
+
+    expect(focus.reset).toHaveBeenCalledTimes(2);
+    expect(focus.reset).toHaveBeenLastCalledWith({
+      kind: 'room',
+      room: expect.objectContaining({ dbref: '#42', name: 'Throne Room' }),
+      sceneSummary: null,
+    });
+  });
 });

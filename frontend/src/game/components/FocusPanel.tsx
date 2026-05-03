@@ -46,11 +46,15 @@ function dbrefToId(dbref: string): number {
 }
 
 export function FocusPanel({ focus, roomCharacter, roomData, sceneData }: FocusPanelProps) {
-  // When the underlying room or scene changes (player switches puppets,
-  // moves rooms, or starts/ends a scene), reset the focus stack so the
-  // sidebar snaps back to the new room as its root. We key this on the
-  // room id and scene id rather than object identity to avoid resetting
-  // on every redux dispatch that happens to recreate the object.
+  // When the underlying room, scene, or active puppet changes (player
+  // switches puppets, moves rooms, or starts/ends a scene), reset the
+  // focus stack so the sidebar snaps back to the new room as its root.
+  // We key this on the room id, scene id, and active puppet name rather
+  // than object identity to avoid resetting on every redux dispatch
+  // that happens to recreate the object. ``roomCharacter`` is included
+  // because two characters can share a room — without it, swapping
+  // puppets in the same room would leak the previous puppet's focus
+  // stack to the new puppet's session.
   const roomId = roomData?.id ?? null;
   const sceneId = sceneData?.id ?? null;
   const { reset } = focus;
@@ -70,11 +74,12 @@ export function FocusPanel({ focus, roomCharacter, roomData, sceneData }: FocusP
       sceneSummary: sceneData,
     });
     // ``reset`` is referentially stable from useFocusStack, so depending
-    // on the room/scene identifiers is sufficient. We intentionally
-    // exclude ``roomData``/``sceneData`` themselves to avoid resetting on
-    // every redux re-render that recreates the object reference.
+    // on the room/scene identifiers + active puppet is sufficient. We
+    // intentionally exclude ``roomData``/``sceneData`` themselves to
+    // avoid resetting on every redux re-render that recreates the
+    // object reference.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId, sceneId, reset]);
+  }, [roomCharacter, roomId, sceneId, reset]);
 
   const showBack = focus.depth > 1;
 
