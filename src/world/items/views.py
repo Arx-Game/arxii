@@ -2,7 +2,7 @@
 
 from typing import cast
 
-from django.db.models import Prefetch, Q, QuerySet
+from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
@@ -509,40 +509,61 @@ class VisibleItemDetailViewSet(viewsets.ReadOnlyModelViewSet):
         return qs.filter(id__in=self._visible_item_ids())
 
     def _visible_item_ids(self) -> set[int]:
-        """Item IDs currently visibly worn on characters the user can observe."""
+        """Item IDs currently visibly worn on characters the user can observe.
+
+        Walks two RosterEntry querysets — own characters, and characters in
+        the same rooms as own characters — both with ``select_related`` so
+        that ``entry.character_sheet.character`` and its ``db_location`` are
+        free to access. Then iterates ``character.equipped_items`` (the
+        cached handler) for each character, which loads once per character
+        and is free thereafter via the SharedMemoryModel identity map.
+
+        Total query count: 2 RosterEntry queries + 1 EquippedItem load per
+        observable character (cached on the handler), regardless of how many
+        items each character is wearing.
+        """
         user = cast(AccountDB, self.request.user)
-        own_entries = RosterEntry.objects.for_account(user)
-        own_char_ids = list(own_entries.values_list("character_sheet_id", flat=True))
-        if not own_char_ids:
+
+        # Own characters — self-look bypasses layer hiding so concealed
+        # items the user owns are still reachable via this endpoint.
+        own_entries = list(
+            RosterEntry.objects.for_account(user).select_related(
+                "character_sheet__character__db_location",
+            )
+        )
+        if not own_entries:
             return set()
 
-        own_locations = list(
-            own_entries.values_list("character_sheet__character__db_location_id", flat=True)
-        )
-        own_locations = [loc for loc in own_locations if loc is not None]
+        own_chars = [entry.character_sheet.character for entry in own_entries]
+        own_pks = {character.pk for character in own_chars}
+        own_locations = {
+            character.db_location_id
+            for character in own_chars
+            if character.db_location_id is not None
+        }
 
-        observable_chars = set(
-            EquippedItem.objects.filter(
-                Q(character_id__in=own_char_ids) | Q(character__db_location_id__in=own_locations)
+        # Same-room characters — anyone in a room where the user has at
+        # least one of their own characters present. Layer hiding applies.
+        if own_locations:
+            same_room_entries = list(
+                RosterEntry.objects.filter(
+                    character_sheet__character__db_location_id__in=own_locations,
+                ).select_related("character_sheet__character__db_location")
             )
-            .values_list("character_id", flat=True)
-            .distinct()
-        )
+            same_room_chars = [entry.character_sheet.character for entry in same_room_entries]
+        else:
+            same_room_chars = []
 
         visible_ids: set[int] = set()
-        for character_id in observable_chars:
-            try:
-                character = ObjectDB.objects.get(pk=character_id)
-            except ObjectDB.DoesNotExist:
+        seen_pks: set[int] = set()
+        for character in (*own_chars, *same_room_chars):
+            if character.pk in seen_pks:
                 continue
-            # Pick the right observer per character so the service applies
-            # the matching bypass: self-look (own character) → bypass; same
-            # room → no bypass (concealed items hidden).
-            observer: object
-            if character_id in own_char_ids:
-                observer = character
-            else:
-                observer = user
+            seen_pks.add(character.pk)
+            # Self-look bypass: pass the character itself as observer so
+            # ``observer is character`` fires inside the service. Same-room
+            # observers pass the user, which applies hiding.
+            observer: object = character if character.pk in own_pks else user
             for entry in visible_worn_items_for(character, observer=observer):
-                visible_ids.add(entry.item_instance.id)
+                visible_ids.add(entry.item_instance.pk)
         return visible_ids

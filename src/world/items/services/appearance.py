@@ -1,11 +1,17 @@
 """Visibility computation for worn equipment.
 
 The look-output service: which of a character's worn items are visible to
-an observer. Walks ``EquippedItem`` rows, applies per-(body_region,
-equipment_layer) hiding via ``TemplateSlot.covers_lower_layers``.
+an observer. Reads from the cached ``character.equipped_items`` handler
+(``CharacterEquipmentHandler``), applies per-(body_region, equipment_layer)
+hiding via ``TemplateSlot.covers_lower_layers``.
 
 Layer hiding is bypassed for self-look and staff observers - see
 ``visible_worn_items_for`` for the contract.
+
+The handler does the DB load on its first access for a given character;
+this service runs zero queries thereafter. The handler's prefetch chain
+covers ``item_instance.template.cached_slots``, so ``_slot_for_row`` is
+also free.
 """
 
 from __future__ import annotations
@@ -13,15 +19,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from django.db.models import Prefetch
 from evennia.objects.models import ObjectDB
 
 from core_management.permissions import is_staff_observer
 from world.items.constants import EquipmentLayer
-from world.items.models import EquippedItem, TemplateSlot
 
 if TYPE_CHECKING:
-    from world.items.models import ItemInstance
+    from world.items.models import EquippedItem, ItemInstance, TemplateSlot
 
 
 # Layer order from skin (lowest, closest to body) to accessory (highest).
@@ -64,17 +68,11 @@ def visible_worn_items_for(
     """
     bypass_hiding = observer is character or is_staff_observer(observer)
 
-    rows = list(
-        EquippedItem.objects.filter(character=character)
-        .select_related("item_instance", "item_instance__template")
-        .prefetch_related(
-            Prefetch(
-                "item_instance__template__slots",
-                queryset=TemplateSlot.objects.all(),
-                to_attr="cached_slots",
-            ),
-        )
-    )
+    # Read from the cached equipment handler — one DB load per character on
+    # first access, zero queries thereafter (Spec D §3.3). The handler's
+    # prefetch chain covers ``item_instance.template.cached_slots`` so the
+    # slot lookup in ``_slot_for_row`` is also free.
+    rows = list(character.equipped_items)
 
     if not rows:
         return []
