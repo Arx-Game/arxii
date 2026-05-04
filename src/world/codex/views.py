@@ -5,7 +5,16 @@ API viewsets for browsing codex entries with visibility control.
 Public entries visible to all, restricted entries require character knowledge.
 """
 
-from django.db.models import CharField, Exists, IntegerField, OuterRef, Prefetch, Q, Subquery, Value
+from django.db.models import (
+    CharField,
+    Count,
+    Exists,
+    IntegerField,
+    OuterRef,
+    Q,
+    Subquery,
+    Value,
+)
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -47,19 +56,36 @@ class CodexCategoryViewSet(viewsets.ReadOnlyModelViewSet):
         """
         visible_entry_ids = self._get_visible_entry_ids(request)
 
-        # Only prefetch top-level subjects - no nested children
-        categories = CodexCategory.objects.prefetch_related(
-            Prefetch(
-                "subjects",
-                queryset=CodexSubject.objects.filter(parent=None)
-                .annotate(has_children=Exists(CodexSubject.objects.filter(parent=OuterRef("pk"))))
-                .order_by("display_order", "name"),
-                to_attr="cached_top_subjects",
+        # Two flat queries (categories + top-level subjects with annotation),
+        # grouped in Python via the serializer context.
+        # We avoid Prefetch(to_attr=...) here because CodexCategory is a
+        # SharedMemoryModel: a `to_attr` set during one request persists on
+        # the cached instance, and Django's prefetch_related skips re-fetching
+        # when the attribute already exists, leaking annotation values across
+        # requests with different visibility sets.
+        categories = CodexCategory.objects.order_by("display_order", "name")
+        top_subjects = (
+            CodexSubject.objects.filter(parent=None)
+            .annotate(
+                has_children=Exists(CodexSubject.objects.filter(parent=OuterRef("pk"))),
+                entry_count=Count(
+                    "entries",
+                    filter=Q(entries__id__in=visible_entry_ids),
+                ),
             )
+            .order_by("display_order", "name")
         )
+        subjects_by_category: dict[int, list[CodexSubject]] = {}
+        for subject in top_subjects:
+            subjects_by_category.setdefault(subject.category_id, []).append(subject)
 
         serializer = CodexCategoryTreeSerializer(
-            categories, many=True, context={"visible_entry_ids": visible_entry_ids}
+            categories,
+            many=True,
+            context={
+                "visible_entry_ids": visible_entry_ids,
+                "subjects_by_category": subjects_by_category,
+            },
         )
         return Response(serializer.data)
 
@@ -112,7 +138,13 @@ class CodexSubjectViewSet(viewsets.ReadOnlyModelViewSet):
 
         children = (
             CodexSubject.objects.filter(parent=subject)
-            .annotate(has_children=Exists(CodexSubject.objects.filter(parent=OuterRef("pk"))))
+            .annotate(
+                has_children=Exists(CodexSubject.objects.filter(parent=OuterRef("pk"))),
+                entry_count=Count(
+                    "entries",
+                    filter=Q(entries__id__in=visible_entry_ids),
+                ),
+            )
             .order_by("display_order", "name")
         )
 
