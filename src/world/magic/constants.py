@@ -90,6 +90,7 @@ class EffectKind(models.TextChoices):
     VITAL_BONUS = "VITAL_BONUS", "Vital Bonus"
     CAPABILITY_GRANT = "CAPABILITY_GRANT", "Capability Grant"
     NARRATIVE_ONLY = "NARRATIVE_ONLY", "Narrative Only"
+    CORRUPTION_RESISTANCE = "CORRUPTION_RESISTANCE", "Corruption Resistance"
 
 
 class VitalBonusTarget(models.TextChoices):

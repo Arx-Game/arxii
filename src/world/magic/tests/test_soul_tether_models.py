@@ -35,6 +35,13 @@ class CharacterResonanceLifetimeHelpedTests(TestCase):
         self.assertEqual(cr.lifetime_helped, 50)
 
 
+class CorruptionResistanceEffectKindTests(TestCase):
+    def test_corruption_resistance_is_a_valid_effect_kind(self) -> None:
+        from world.magic.constants import EffectKind
+
+        self.assertIn("CORRUPTION_RESISTANCE", EffectKind.values)
+
+
 class SineatingModelTests(TestCase):
     def test_sineating_can_be_created_with_required_fields(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory
