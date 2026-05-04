@@ -132,28 +132,16 @@ class ServiceSkeletonImportsTests(TestCase):
         self.assertTrue(callable(soul_tether.resolve_stage_advance_prompt))
 
     def test_other_stubs_raise_not_implemented(self) -> None:
-        """Phase 4 implemented accept_soul_tether; other stubs remain NotImplemented."""
+        """Phase 5 implemented request_sineating/resolve_sineating.
+
+        dissolve_soul_tether and perform_soul_tether_rescue remain stubs.
+        """
         from world.magic.services import soul_tether
 
         with self.assertRaises(NotImplementedError):
             soul_tether.dissolve_soul_tether(
                 relationship_id=0,
                 initiator_sheet=None,  # type: ignore[arg-type]
-            )
-
-        with self.assertRaises(NotImplementedError):
-            soul_tether.request_sineating(
-                sinner_sheet=None,  # type: ignore[arg-type]
-                sineater_sheet=None,  # type: ignore[arg-type]
-                resonance=None,  # type: ignore[arg-type]
-                max_units=0,
-                scene=None,
-            )
-
-        with self.assertRaises(NotImplementedError):
-            soul_tether.resolve_sineating(
-                prompt_id="",
-                units_accepted=0,
             )
 
         with self.assertRaises(NotImplementedError):
