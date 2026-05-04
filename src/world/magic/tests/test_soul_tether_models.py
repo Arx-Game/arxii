@@ -118,6 +118,33 @@ class TypesImportTests(TestCase):
             offer.max_units_offered = 5  # type: ignore[misc]
 
 
+class ServiceSkeletonImportsTests(TestCase):
+    def test_service_module_imports(self) -> None:
+        from world.magic.services import soul_tether
+
+        self.assertTrue(callable(soul_tether.accept_soul_tether))
+        self.assertTrue(callable(soul_tether.request_sineating))
+        self.assertTrue(callable(soul_tether.resolve_sineating))
+        self.assertTrue(callable(soul_tether.perform_soul_tether_rescue))
+        self.assertTrue(callable(soul_tether.dissolve_soul_tether))
+        self.assertTrue(callable(soul_tether.soul_tether_redirect_handler))
+        self.assertTrue(callable(soul_tether.soul_tether_stage_advance_prompt))
+        self.assertTrue(callable(soul_tether.resolve_stage_advance_prompt))
+
+    def test_stubs_raise_not_implemented(self) -> None:
+        from world.magic.services.soul_tether import accept_soul_tether
+
+        with self.assertRaises(NotImplementedError):
+            accept_soul_tether(
+                initiator_sheet=None,  # type: ignore[arg-type]
+                partner_sheet=None,  # type: ignore[arg-type]
+                sinner_role=None,  # type: ignore[arg-type]
+                resonance=None,  # type: ignore[arg-type]
+                writeup="",
+                ritual_components=[],
+            )
+
+
 class SineatingModelTests(TestCase):
     def test_sineating_can_be_created_with_required_fields(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory
