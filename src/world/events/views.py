@@ -52,7 +52,7 @@ from world.events.types import EventError
 from world.game_clock.constants import TimePhase
 from world.roster.models import RosterEntry
 from world.scenes.constants import PersonaType
-from world.scenes.models import Persona
+from world.scenes.models import Persona, Scene
 from world.societies.models import Organization, Society
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -207,9 +207,29 @@ class EventViewSet(ModelViewSet):
 
         serializer.save()
 
+    def _get_viewer_gm_event_ids(self) -> set[int]:
+        """Return the set of event IDs where the requesting user is a scene GM.
+
+        Computed once per request and surfaced via serializer context so
+        ``EventDetailSerializer.get_is_gm`` can do an O(1) set membership
+        check instead of firing a fresh ``.exists()`` query per row.
+        """
+        if not self.request.user.is_authenticated:
+            return set()
+        return set(
+            Scene.objects.filter(
+                is_active=True,
+                participations__account=self.request.user,
+                participations__is_gm=True,
+            )
+            .values_list("event_id", flat=True)
+            .distinct()
+        )
+
     def get_serializer_context(self) -> dict:
         context = super().get_serializer_context()
         context["persona_ids"] = set(self._get_active_persona_ids())
+        context["viewer_gm_event_ids"] = self._get_viewer_gm_event_ids()
         return context
 
     def _lifecycle_action(self, request: Request, service_fn: Callable[[Event], Event]) -> Response:
@@ -219,7 +239,11 @@ class EventViewSet(ModelViewSet):
             service_fn(event)
         except EventError as e:
             return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        context = {"request": request, "persona_ids": set(self._get_active_persona_ids())}
+        context = {
+            "request": request,
+            "persona_ids": set(self._get_active_persona_ids()),
+            "viewer_gm_event_ids": self._get_viewer_gm_event_ids(),
+        }
         event.flush_from_cache(force=True)
         return Response(
             EventDetailSerializer(self._base_queryset().get(pk=event.pk), context=context).data
