@@ -33,3 +33,29 @@ class CharacterResonanceLifetimeHelpedTests(TestCase):
         cr.save(update_fields=["lifetime_helped"])
         cr.refresh_from_db()
         self.assertEqual(cr.lifetime_helped, 50)
+
+
+class SineatingModelTests(TestCase):
+    def test_sineating_can_be_created_with_required_fields(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceFactory
+        from world.magic.models import Sineating
+        from world.relationships.factories import CharacterRelationshipFactory
+
+        sinner = CharacterSheetFactory()
+        sineater = CharacterSheetFactory()
+        relationship = CharacterRelationshipFactory(source=sinner, target=sineater)
+        resonance = ResonanceFactory()
+
+        row = Sineating.objects.create(
+            sinner_sheet=sinner,
+            sineater_sheet=sineater,
+            relationship=relationship,
+            resonance=resonance,
+            units_offered=10,
+            units_accepted=7,
+            anima_cost=14,
+            fatigue_cost=7,
+        )
+        self.assertEqual(row.units_offered, 10)
+        self.assertEqual(row.units_accepted, 7)
