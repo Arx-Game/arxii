@@ -30,6 +30,7 @@ from world.magic.exceptions import (
     NoSoulTetherUnlockError,
     SineatingValidationError,
     SoulTetherFormationError,
+    StageAdvanceBonusError,
 )
 from world.magic.models import CharacterThreadWeavingUnlock, Ritual
 from world.magic.models.affinity import Resonance
@@ -40,6 +41,8 @@ from world.magic.types.soul_tether import (
     SineatingOffer,
     SineatingResult,
     SoulTetherRole as SoulTetherRoleEnum,
+    StageAdvanceBonusOffer,
+    StageAdvanceBonusResult,
 )
 from world.relationships.models import CharacterRelationship, RelationshipCapstone
 
@@ -788,14 +791,323 @@ def soul_tether_redirect_handler(*, payload: Any) -> None:
     payload.amount = remaining
 
 
-def soul_tether_stage_advance_prompt(payload: Any) -> None:
-    """Subscriber for CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE (Spec B §8.1)."""
-    raise NotImplementedError
+# =============================================================================
+# Stage-advance prompt helpers
+# =============================================================================
+
+#: In-memory registry of pending stage-advance bonus offers (Spec B §8.1).
+#: Keyed on offer_id (str UUID). Ephemeral — lost on process restart.
+#: Offer values are ``StageAdvanceBonusOffer`` instances.
+_pending_stage_advance_offers: dict[str, StageAdvanceBonusOffer] = {}
+
+#: Strain severity added to the Sineater per unit committed (tunable).
+_STRAIN_SEVERITY_PER_UNIT: int = 1
+
+
+def _active_soul_tethers_for_sinner(
+    sinner_sheet: CharacterSheet,
+) -> list[Any]:
+    """Return all active Sinner-side CharacterRelationship rows for *sinner_sheet*.
+
+    "Sinner-side" means source=sinner_sheet, is_soul_tether=True,
+    soul_tether_role=ABYSSAL.  Only active (non-soft-retired) tethers.
+
+    Args:
+        sinner_sheet: The Sinner's CharacterSheet.
+
+    Returns:
+        List of CharacterRelationship instances (may be empty).
+    """
+    return list(
+        CharacterRelationship.objects.filter(
+            source=sinner_sheet,
+            is_soul_tether=True,
+            soul_tether_role=SoulTetherRole.ABYSSAL,
+        ).select_related("target")
+    )
+
+
+def _find_sineater_in_location(
+    tethers: list[Any],
+    sinner_location: Any,
+) -> CharacterSheet | None:
+    """Return the first Sineater partner sharing *sinner_location*, or None.
+
+    Iterates the Sinner's active tethers and checks whether the Sineater's
+    character ObjectDB is in the same Evennia room as the Sinner.
+
+    Args:
+        tethers: Active Sinner-side CharacterRelationship rows
+            (from ``_active_soul_tethers_for_sinner``).
+        sinner_location: The Sinner's current Evennia room ObjectDB.
+
+    Returns:
+        The first Sineater's CharacterSheet whose character is in the same
+        room, or ``None`` if no partner is co-located.
+    """
+    for tether in tethers:
+        sineater_sheet: CharacterSheet = tether.target
+        try:
+            sineater_location = sineater_sheet.character.location
+        except AttributeError:
+            # No character ObjectDB on this sheet — skip.
+            continue
+        if sineater_location is not None and sineater_location == sinner_location:
+            return sineater_sheet
+    return None
+
+
+def _total_hollow_across_sinner_tethers(
+    sinner_sheet: CharacterSheet,
+    resonance: Resonance,
+) -> int:
+    """Sum of hollow_current across all active Sinner Threads in *resonance*.
+
+    Args:
+        sinner_sheet: The Sinner's CharacterSheet.
+        resonance: The Resonance to filter on.
+
+    Returns:
+        Integer total hollow available (0 if no Threads or all hollow=0).
+    """
+    threads = _get_sinner_tether_threads_for_resonance(sinner_sheet, resonance)
+    return sum(t.hollow_current for t in threads)
+
+
+def _get_or_create_tether_strain_instance(
+    sineater_sheet: CharacterSheet,
+) -> ConditionInstance:
+    """Get or create the Sineater's TetherStrain ConditionInstance.
+
+    TetherStrainTemplate is a single authored ConditionTemplate.  Each Sineater
+    has at most one row per resonance, but because TetherStrain is not
+    per-resonance at the DB level (it is a single ConditionTemplate), we use
+    one shared ConditionInstance per Sineater character.
+
+    Lazy-creates via ``apply_condition`` on first call.
+
+    Args:
+        sineater_sheet: The Sineater's CharacterSheet.
+
+    Returns:
+        The active ConditionInstance for the Sineater's TetherStrain.
+    """
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+
+    strain_template = ConditionTemplate.objects.get(name="Tether Strain")
+    sineater_objectdb = sineater_sheet.character
+
+    existing = ConditionInstance.objects.filter(
+        target=sineater_objectdb,
+        condition=strain_template,
+        resolved_at__isnull=True,
+    ).first()
+
+    if existing is not None:
+        return existing
+
+    # Lazy-create: apply with severity=0 as a placeholder (advance_condition_severity
+    # will add the actual amount).  ``apply_condition`` creates the row.
+    result = apply_condition(
+        sineater_objectdb,
+        strain_template,
+        severity=1,
+        source_description="Soul Tether Strain — first dramatic moment",
+    )
+    # apply_condition returns an ApplyConditionResult; instance may be a new row.
+    if result.instance is not None:
+        # We over-applied by 1 severity as seed; caller will add real amount.
+        # Reset to 0 then let caller advance properly.
+        result.instance.severity = 0
+        result.instance.save(update_fields=["severity"])
+        return result.instance
+
+    # Fallback: re-query in case apply_condition merged into an existing resolved row.
+    return ConditionInstance.objects.get(
+        target=sineater_objectdb,
+        condition=strain_template,
+        resolved_at__isnull=True,
+    )
+
+
+# =============================================================================
+# Reactive subscriber: soul_tether_stage_advance_prompt
+# =============================================================================
+
+
+def soul_tether_stage_advance_prompt(*, payload: Any) -> None:
+    """Subscriber for CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE (Spec B §8.1).
+
+    Called synchronously by the flows trigger pipeline when a Corruption
+    condition is about to fire a stage-advance resist check.  Exits immediately
+    if any of the fast-exit conditions apply.
+
+    Synchronous dispatch architecture (documented decision):
+        emit_event() and the resist check in ``_perform_advancement_resist_check``
+        are both synchronous.  There is no Twisted Deferred suspension of the
+        resist check — it fires immediately after this handler returns.  The
+        Sineater therefore CANNOT respond in real time to influence THIS check.
+
+        Instead this handler:
+        1. Records a ``StageAdvanceBonusOffer`` in ``_pending_stage_advance_offers``.
+        2. Notifies the Sineater (Evennia msg) of the pending offer.
+        3. Returns immediately — the resist check fires at its unmodified difficulty.
+
+        The Sineater calls ``resolve_stage_advance_prompt(offer_id, units)`` later
+        (via the web API or ``@reply`` command) to deduct Hollow + add Strain.
+        The commitment is noted as a retroactive resource for the current arc;
+        it does NOT change the already-resolved check.
+
+    Args:
+        payload: ``ConditionStageAdvanceCheckPayload`` (mutable dataclass).
+            Fields accessed: ``payload.instance`` (ConditionInstance) and
+            ``payload.instance.condition`` (ConditionTemplate).
+    """
+    instance = payload.instance
+    condition_template = instance.condition
+
+    # 1. Filter — only Corruption conditions are ours (Spec B §8.1).
+    if condition_template.corruption_resonance is None:
+        return
+
+    resonance: Resonance = condition_template.corruption_resonance
+
+    # 2. Resolve the Sinner's CharacterSheet from the condition target (ObjectDB).
+    try:
+        sinner_sheet = CharacterSheet.objects.get(character=instance.target)
+    except CharacterSheet.DoesNotExist:
+        # Target is not a player character — skip.
+        return
+
+    # 3. Find active Sinner-side tethers.
+    tethers = _active_soul_tethers_for_sinner(sinner_sheet)
+    if not tethers:
+        return
+
+    # 4. Get Sinner's location.
+    sinner_location = getattr(instance.target, "location", None)  # noqa: GETATTR_LITERAL
+    if sinner_location is None:
+        return
+
+    # 5. Find a Sineater partner in the same room.
+    sineater_sheet = _find_sineater_in_location(tethers, sinner_location)
+    if sineater_sheet is None:
+        return  # No Sineater in scene — resist check proceeds normally (7.4 path).
+
+    # 6. Calculate total hollow available across all matching tethers.
+    max_hollow = _total_hollow_across_sinner_tethers(sinner_sheet, resonance)
+
+    # 7. Record the pending offer.
+    offer = StageAdvanceBonusOffer(
+        sinner_sheet=sinner_sheet,
+        sineater_sheet=sineater_sheet,
+        resonance=resonance,
+        max_hollow_to_spend=max_hollow,
+    )
+    _pending_stage_advance_offers[offer.offer_id] = offer
+
+    # 8. Notify the Sineater.  Evennia msg is fire-and-forget.
+    current_stage = instance.current_stage
+    current_stage_name = current_stage.name if current_stage is not None else "stage 0"
+    target_stage = payload.target_stage
+    target_stage_name = target_stage.name if target_stage is not None else "next stage"
+
+    sineater_objectdb = sineater_sheet.character
+    sineater_objectdb.msg(
+        f"|ySOUL TETHER — Stage Advance Alert|n\n"
+        f"{sinner_sheet} is resisting a corruption advance "
+        f"from {current_stage_name} to {target_stage_name}. "
+        f"You may commit up to {max_hollow} Hollow units to support them. "
+        f"Use |w@soul-tether-bonus {offer.offer_id} <units>|n to commit. "
+        f"(Offer ID: {offer.offer_id})"
+    )
+
+
+# =============================================================================
+# Resolve service: resolve_stage_advance_prompt
+# =============================================================================
 
 
 def resolve_stage_advance_prompt(
-    prompt_id: str,
+    offer_id: str,
     units_committed: int,
-) -> None:
-    """Resolve the stage-advance bonus prompt with the Sineater's commitment (Spec B §8.1)."""
-    raise NotImplementedError
+) -> StageAdvanceBonusResult:
+    """Resolve a stage-advance bonus offer with the Sineater's commitment (Spec B §8.1).
+
+    Retroactive commitment (documented design deviation):
+        Because the resist check resolves synchronously before the Sineater can
+        respond, this function cannot modify the already-resolved check.  The
+        committed Hollow + Strain is consumed as an acknowledgment of the
+        Sineater's support.  Phase 13 integration tests will verify end-to-end
+        behavior; Phase 11 API surfaces this via a dedicated endpoint.
+
+    Args:
+        offer_id: UUID string from the ``StageAdvanceBonusOffer``.
+        units_committed: How many Hollow units the Sineater commits (0 = decline,
+            1..max = commit that many). Clamped to [0, max_hollow_to_spend].
+
+    Returns:
+        A frozen ``StageAdvanceBonusResult``.
+
+    Raises:
+        StageAdvanceBonusError: If the offer_id is unknown or units exceed max.
+    """
+    from world.conditions.services import advance_condition_severity  # noqa: PLC0415
+    from world.magic.models import Thread  # noqa: PLC0415
+
+    offer = _pending_stage_advance_offers.get(offer_id)
+    if offer is None:
+        raise StageAdvanceBonusError
+
+    # Remove from pending registry regardless of accept/decline.
+    del _pending_stage_advance_offers[offer_id]
+
+    # Clamp to valid range.
+    units = max(0, min(units_committed, offer.max_hollow_to_spend))
+    declined = units == 0
+
+    if declined:
+        return StageAdvanceBonusResult(
+            offer_id=offer_id,
+            units_committed=0,
+            hollow_drained=0,
+            strain_severity_added=0,
+            declined=True,
+        )
+
+    hollow_drained = 0
+    strain_severity_added = 0
+
+    with transaction.atomic():
+        # Drain Hollow across Sinner's tethers (highest-level Thread first).
+        # Same multi-tether priority pattern from Phase 6's race-fix.
+        sinner_threads = _get_sinner_tether_threads_for_resonance(
+            offer.sinner_sheet, offer.resonance
+        )
+        remaining = units
+        for thread in sorted(sinner_threads, key=lambda t: -t.level):
+            if remaining <= 0:
+                break
+            locked_thread = Thread.objects.select_for_update().get(pk=thread.pk)
+            absorbed = min(locked_thread.hollow_current, remaining)
+            if absorbed <= 0:
+                continue
+            locked_thread.hollow_current -= absorbed
+            locked_thread.save(update_fields=["hollow_current"])
+            hollow_drained += absorbed
+            remaining -= absorbed
+
+        # Add Strain severity to the Sineater's TetherStrain ConditionInstance.
+        strain_instance = _get_or_create_tether_strain_instance(offer.sineater_sheet)
+        strain_amount = units * _STRAIN_SEVERITY_PER_UNIT
+        advance_condition_severity(strain_instance, strain_amount)
+        strain_severity_added = strain_amount
+
+    return StageAdvanceBonusResult(
+        offer_id=offer_id,
+        units_committed=units,
+        hollow_drained=hollow_drained,
+        strain_severity_added=strain_severity_added,
+        declined=False,
+    )

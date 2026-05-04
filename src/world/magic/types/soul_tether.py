@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+import uuid
 
 from world.character_sheets.models import CharacterSheet
 from world.magic.models.affinity import Resonance
@@ -55,3 +56,33 @@ class RescueOutcome:
     sinner_stage_at_end: int
     sineater_strain_taken: int
     protagonism_lock_lifted: bool
+
+
+@dataclass(frozen=True, slots=True)
+class StageAdvanceBonusOffer:
+    """Pending offer recorded in-memory when the stage-advance prompt fires (Spec B §8.1).
+
+    Synchronous dispatch architecture means the resist check resolves before the
+    Sineater can respond.  The offer is stored in the module-level
+    ``_pending_stage_advance_offers`` dict (keyed on ``offer_id``) so the Sineater
+    can later call ``resolve_stage_advance_prompt`` to commit their contribution.
+    The commitment deducts Hollow + adds Strain and is recorded as a
+    retroactive resource.  It does NOT change the already-resolved check.
+    """
+
+    offer_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    sinner_sheet: CharacterSheet = field(default=None)  # type: ignore[assignment]
+    sineater_sheet: CharacterSheet = field(default=None)  # type: ignore[assignment]
+    resonance: Resonance = field(default=None)  # type: ignore[assignment]
+    max_hollow_to_spend: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class StageAdvanceBonusResult:
+    """Result of resolving a StageAdvanceBonusOffer (Spec B §8.1)."""
+
+    offer_id: str
+    units_committed: int
+    hollow_drained: int
+    strain_severity_added: int
+    declined: bool

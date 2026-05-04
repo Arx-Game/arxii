@@ -1565,7 +1565,7 @@ def _build_soul_tether_stage_advance_prompt_flow() -> object:
             flow=flow,
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name=("world.magic.services.soul_tether.soul_tether_stage_advance_prompt"),
-            parameters={},
+            parameters={"payload": "@payload"},
         )
     return flow
 

@@ -185,3 +185,16 @@ class RescueValidationError(SoulTetherError):
             "Sineater has insufficient resonance for the ritual cost.",
         },
     )
+
+
+class StageAdvanceBonusError(SoulTetherError):
+    """Raised when a stage-advance bonus offer resolution fails (Spec B §8.1)."""
+
+    user_message: str = "Stage-advance bonus resolution failed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Stage-advance bonus resolution failed.",
+            "No pending stage-advance offer found with that ID.",
+            "Units committed exceeds the maximum available Hollow.",
+        },
+    )
