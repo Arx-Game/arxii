@@ -289,6 +289,14 @@ class Thread(SharedMemoryModel):
         default=0,
         help_text="Current level on the internal scale (multiples of 10).",
     )
+    hollow_current = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Soul Tether Hollow capacity (Spec B §5). Only meaningful for "
+            "RELATIONSHIP_CAPSTONE Sinner-side Threads. Drains on corruption "
+            "redirect; refills via Sineating. Other Threads ignore this field."
+        ),
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
