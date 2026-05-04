@@ -293,3 +293,110 @@ class TestCodexEntryAPI(CodexAPITestCase):
         data = response.data
         assert data["research_progress"] == 5
         assert data["learn_threshold"] == self.restricted_entry.learn_threshold
+
+
+class TestCodexTreeQueryCount(TestCase):
+    """Lock the query count on the codex tree endpoint.
+
+    Regression guard for the previous N+1 in
+    ``CodexSubjectTreeSerializer.get_entry_count`` — a
+    ``filter(...).count()`` per subject. With the queryset annotation,
+    the count is folded into the subjects prefetch and grows O(1) in the
+    number of subjects (not O(N)).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        # Two categories with several top-level subjects each. Each subject
+        # has a mix of public and (for some) restricted entries.
+        cls.category_a = CodexCategoryFactory(name="QC Cat A")
+        cls.category_b = CodexCategoryFactory(name="QC Cat B")
+
+        cls.subjects = []
+        for category in (cls.category_a, cls.category_b):
+            for index in range(4):  # 8 subjects total
+                subject = CodexSubjectFactory(
+                    category=category, name=f"QC {category.name} Subject {index}"
+                )
+                cls.subjects.append(subject)
+                # Two public entries per subject so entry_count > 0.
+                for entry_index in range(2):
+                    CodexEntryFactory(
+                        subject=subject,
+                        name=f"{subject.name} entry {entry_index}",
+                        is_public=True,
+                    )
+                # One restricted entry that anonymous users won't count.
+                CodexEntryFactory(
+                    subject=subject,
+                    name=f"{subject.name} restricted",
+                    is_public=False,
+                )
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def _count_relevant(self, response_data):
+        """Return {subject_name: entry_count} for our QC-prefixed test rows."""
+        subjects = [subject for category in response_data for subject in category["subjects"]]
+        return {s["name"]: s["entry_count"] for s in subjects if s["name"].startswith("QC ")}
+
+    def test_anonymous_tree_query_count_constant_with_subjects(self):
+        """Anonymous tree fetch is O(1) in subject count, not O(N)."""
+        # Warmup: prime any per-process caches (content type lookups, etc.)
+        # so the assertNumQueries below sees only the steady-state queries.
+        warmup = self.client.get("/api/codex/categories/tree/")
+        assert warmup.status_code == status.HTTP_200_OK
+
+        # Steady-state queries for the anonymous tree endpoint:
+        #   1. SELECT public CodexEntry ids (visibility set)
+        #   2. SELECT CodexCategory list
+        #   3. Prefetch top-level CodexSubjects (with has_children + entry_count)
+        # The prior N+1 added one COUNT per subject (8 here) -> 11 queries.
+        # After the fix the count is constant.
+        with self.assertNumQueries(3):
+            response = self.client.get("/api/codex/categories/tree/")
+        assert response.status_code == status.HTTP_200_OK
+
+        # Sanity check: entry_count is populated from the annotation and
+        # only counts visible (public) entries — 2 per subject for anon.
+        relevant = self._count_relevant(response.data)
+        assert len(relevant) == 8
+        for value in relevant.values():
+            assert value == 2
+
+    def test_authenticated_tree_query_count_constant_with_subjects(self):
+        """Authenticated tree fetch is O(1) in subject count, not O(N)."""
+        User = get_user_model()
+        account = User.objects.create_user(username="qcuser", password="qcpass")
+        tenure = RosterTenureFactory(player_data__account=account)
+        # Mark one restricted entry as known so the visibility set differs
+        # from the public-only set (exercises the union path).
+        restricted = self.subjects[0].entries.filter(is_public=False).first()
+        CharacterCodexKnowledgeFactory(
+            roster_entry=tenure.roster_entry,
+            entry=restricted,
+            status=CharacterCodexKnowledge.Status.KNOWN,
+        )
+
+        self.client.force_authenticate(user=account)
+        warmup = self.client.get("/api/codex/categories/tree/")
+        assert warmup.status_code == status.HTTP_200_OK
+
+        # Steady-state queries for the authenticated tree endpoint:
+        #   1. SELECT public CodexEntry ids
+        #   2. Resolve active RosterEntry (tenures join)
+        #   3. SELECT known CharacterCodexKnowledge entry_ids for that entry
+        #   4. SELECT CodexCategory list
+        #   5. Prefetch top-level CodexSubjects (with has_children + entry_count)
+        # Prior to the fix this also fired one COUNT per subject.
+        with self.assertNumQueries(5):
+            response = self.client.get("/api/codex/categories/tree/")
+        assert response.status_code == status.HTTP_200_OK
+
+        # The subject whose restricted entry is now visible should report
+        # 3; all other subjects should still report 2.
+        relevant = self._count_relevant(response.data)
+        assert relevant[self.subjects[0].name] == 3
+        for subject in self.subjects[1:]:
+            assert relevant[subject.name] == 2

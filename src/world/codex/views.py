@@ -5,7 +5,17 @@ API viewsets for browsing codex entries with visibility control.
 Public entries visible to all, restricted entries require character knowledge.
 """
 
-from django.db.models import CharField, Exists, IntegerField, OuterRef, Prefetch, Q, Subquery, Value
+from django.db.models import (
+    CharField,
+    Count,
+    Exists,
+    IntegerField,
+    OuterRef,
+    Prefetch,
+    Q,
+    Subquery,
+    Value,
+)
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -47,12 +57,20 @@ class CodexCategoryViewSet(viewsets.ReadOnlyModelViewSet):
         """
         visible_entry_ids = self._get_visible_entry_ids(request)
 
-        # Only prefetch top-level subjects - no nested children
+        # Only prefetch top-level subjects - no nested children.
+        # entry_count is a filtered Count annotation so the serializer reads
+        # obj.entry_count directly without firing a query per subject.
         categories = CodexCategory.objects.prefetch_related(
             Prefetch(
                 "subjects",
                 queryset=CodexSubject.objects.filter(parent=None)
-                .annotate(has_children=Exists(CodexSubject.objects.filter(parent=OuterRef("pk"))))
+                .annotate(
+                    has_children=Exists(CodexSubject.objects.filter(parent=OuterRef("pk"))),
+                    entry_count=Count(
+                        "entries",
+                        filter=Q(entries__id__in=visible_entry_ids),
+                    ),
+                )
                 .order_by("display_order", "name"),
                 to_attr="cached_top_subjects",
             )
@@ -112,7 +130,13 @@ class CodexSubjectViewSet(viewsets.ReadOnlyModelViewSet):
 
         children = (
             CodexSubject.objects.filter(parent=subject)
-            .annotate(has_children=Exists(CodexSubject.objects.filter(parent=OuterRef("pk"))))
+            .annotate(
+                has_children=Exists(CodexSubject.objects.filter(parent=OuterRef("pk"))),
+                entry_count=Count(
+                    "entries",
+                    filter=Q(entries__id__in=visible_entry_ids),
+                ),
+            )
             .order_by("display_order", "name")
         )
 
