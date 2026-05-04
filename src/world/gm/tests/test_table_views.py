@@ -361,6 +361,20 @@ class GMTableComputedFieldsTest(TestCase):
         serializer = GMTableSerializer(table, context={"request": FakeRequest()})
         assert serializer.data["viewer_role"] == "none"
 
+    def test_viewer_role_no_request_in_context_returns_none(self) -> None:
+        """get_viewer_role bails out cleanly when context has no request.
+
+        DRF can serialize without a request (e.g. management commands,
+        Celery tasks, ad-hoc usage). The serializer falls back to NONE
+        rather than crashing on ``self.context["request"]``.
+        """
+        from world.gm.models import GMTable
+        from world.gm.serializers import GMTableSerializer
+
+        table = GMTable.objects.get(pk=self.table.pk)
+        serializer = GMTableSerializer(table)
+        assert serializer.data["viewer_role"] == "none"
+
 
 # ────────────────────────────────────────────────────────────────────────────────
 # Wave 1 Gap 3: Player-facing membership visibility

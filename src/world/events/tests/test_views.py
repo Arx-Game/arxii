@@ -377,10 +377,12 @@ class EventDetailQueryCountTestCase(APITestCase):
         # the viewer-GM set: increasing the loop above to 30 events should
         # leave this number unchanged. Steady-state queries:
         #   1. session lookup
-        #   2-3. ``_get_active_persona_ids`` for visibility filter + context
-        #   4. event detail (with select_related / prefetch)
-        #   5. ``_get_viewer_gm_event_ids`` — single query for the GM-event set
-        with self.assertNumQueries(5):
+        #   2. ``_active_persona_ids`` (cached_property) — one Persona query
+        #      with a RosterEntry subquery; shared by visibility filter and
+        #      serializer context
+        #   3. event detail (with select_related / prefetch)
+        #   4. ``_get_viewer_gm_event_ids`` — single query for the GM-event set
+        with self.assertNumQueries(4):
             response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["is_gm"])
