@@ -349,12 +349,13 @@ class TestCodexTreeQueryCount(TestCase):
         assert warmup.status_code == status.HTTP_200_OK
 
         # Steady-state queries for the anonymous tree endpoint:
-        #   1. SELECT public CodexEntry ids (visibility set)
-        #   2. SELECT CodexCategory list
-        #   3. Prefetch top-level CodexSubjects (with has_children + entry_count)
-        # The prior N+1 added one COUNT per subject (8 here) -> 11 queries.
-        # After the fix the count is constant.
-        with self.assertNumQueries(3):
+        #   1. SELECT django_session
+        #   2. SELECT public CodexEntry ids (visibility set)
+        #   3. SELECT top-level CodexSubjects (with has_children + entry_count)
+        #   4. SELECT CodexCategory list
+        # The prior N+1 added one COUNT per subject (8 here) -> 12 queries.
+        # After the fix the count is constant in the number of subjects.
+        with self.assertNumQueries(4):
             response = self.client.get("/api/codex/categories/tree/")
         assert response.status_code == status.HTTP_200_OK
 
@@ -384,13 +385,14 @@ class TestCodexTreeQueryCount(TestCase):
         assert warmup.status_code == status.HTTP_200_OK
 
         # Steady-state queries for the authenticated tree endpoint:
-        #   1. SELECT public CodexEntry ids
-        #   2. Resolve active RosterEntry (tenures join)
-        #   3. SELECT known CharacterCodexKnowledge entry_ids for that entry
-        #   4. SELECT CodexCategory list
-        #   5. Prefetch top-level CodexSubjects (with has_children + entry_count)
+        #   1. SELECT django_session
+        #   2. SELECT public CodexEntry ids
+        #   3. Resolve active RosterEntry (tenures join)
+        #   4. SELECT known CharacterCodexKnowledge entry_ids for that entry
+        #   5. SELECT top-level CodexSubjects (with has_children + entry_count)
+        #   6. SELECT CodexCategory list
         # Prior to the fix this also fired one COUNT per subject.
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(6):
             response = self.client.get("/api/codex/categories/tree/")
         assert response.status_code == status.HTTP_200_OK
 

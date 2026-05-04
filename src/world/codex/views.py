@@ -11,7 +11,6 @@ from django.db.models import (
     Exists,
     IntegerField,
     OuterRef,
-    Prefetch,
     Q,
     Subquery,
     Value,
@@ -57,27 +56,36 @@ class CodexCategoryViewSet(viewsets.ReadOnlyModelViewSet):
         """
         visible_entry_ids = self._get_visible_entry_ids(request)
 
-        # Only prefetch top-level subjects - no nested children.
-        # entry_count is a filtered Count annotation so the serializer reads
-        # obj.entry_count directly without firing a query per subject.
-        categories = CodexCategory.objects.prefetch_related(
-            Prefetch(
-                "subjects",
-                queryset=CodexSubject.objects.filter(parent=None)
-                .annotate(
-                    has_children=Exists(CodexSubject.objects.filter(parent=OuterRef("pk"))),
-                    entry_count=Count(
-                        "entries",
-                        filter=Q(entries__id__in=visible_entry_ids),
-                    ),
-                )
-                .order_by("display_order", "name"),
-                to_attr="cached_top_subjects",
+        # Two flat queries (categories + top-level subjects with annotation),
+        # grouped in Python via the serializer context.
+        # We avoid Prefetch(to_attr=...) here because CodexCategory is a
+        # SharedMemoryModel: a `to_attr` set during one request persists on
+        # the cached instance, and Django's prefetch_related skips re-fetching
+        # when the attribute already exists, leaking annotation values across
+        # requests with different visibility sets.
+        categories = CodexCategory.objects.order_by("display_order", "name")
+        top_subjects = (
+            CodexSubject.objects.filter(parent=None)
+            .annotate(
+                has_children=Exists(CodexSubject.objects.filter(parent=OuterRef("pk"))),
+                entry_count=Count(
+                    "entries",
+                    filter=Q(entries__id__in=visible_entry_ids),
+                ),
             )
+            .order_by("display_order", "name")
         )
+        subjects_by_category: dict[int, list[CodexSubject]] = {}
+        for subject in top_subjects:
+            subjects_by_category.setdefault(subject.category_id, []).append(subject)
 
         serializer = CodexCategoryTreeSerializer(
-            categories, many=True, context={"visible_entry_ids": visible_entry_ids}
+            categories,
+            many=True,
+            context={
+                "visible_entry_ids": visible_entry_ids,
+                "subjects_by_category": subjects_by_category,
+            },
         )
         return Response(serializer.data)
 

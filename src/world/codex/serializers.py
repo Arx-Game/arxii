@@ -80,14 +80,15 @@ class CodexCategoryTreeSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "description", "subjects"]
 
     def get_subjects(self, obj: CodexCategory) -> list[dict]:
-        """Get top-level subjects using prefetched data."""
-        # Access prefetched subjects from view's Prefetch with to_attr
-        if hasattr(obj, "cached_top_subjects"):
-            top_subjects = obj.cached_top_subjects
-        else:
-            # Fallback if not prefetched (shouldn't happen in normal use)
-            top_subjects = list(obj.subjects.filter(parent=None))
-            top_subjects.sort(key=lambda x: (x.display_order, x.name))
+        """Get top-level subjects via the view's request-scoped grouping.
+
+        The view fetches subjects (with annotations) in a flat query and
+        groups them by category_id into ``subjects_by_category``. We can't
+        attach prefetched data to the CodexCategory instance because it's a
+        SharedMemoryModel and the attribute would leak across requests.
+        """
+        subjects_by_category = self.context.get("subjects_by_category", {})
+        top_subjects = subjects_by_category.get(obj.id, [])
         return CodexSubjectTreeSerializer(top_subjects, many=True, context=self.context).data
 
 
