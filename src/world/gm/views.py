@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from django.db.models import Q, QuerySet
+from django.db.models import Count, Q, QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -141,25 +141,89 @@ class GMTableViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     permission_classes = [IsAuthenticated]
 
+    def _annotate_counts(self, qs: QuerySet[GMTable]) -> QuerySet[GMTable]:
+        """Annotate ``member_count`` and ``story_count`` once per queryset.
+
+        Replaces per-row ``.count()`` calls in
+        ``GMTableSerializer.get_member_count`` / ``get_story_count`` with a
+        single grouped query.
+        """
+        return qs.annotate(
+            member_count=Count(
+                "memberships",
+                filter=Q(memberships__left_at__isnull=True),
+                distinct=True,
+            ),
+            story_count=Count("primary_stories", distinct=True),
+        )
+
     def get_queryset(self) -> QuerySet[GMTable]:
         qs = super().get_queryset()
         user = self.request.user
         if user.is_staff:
-            return qs
+            return self._annotate_counts(qs)
         # GM owner of the table OR has an active membership via any persona.
-        return qs.filter(
-            Q(gm__account=user)
-            | Q(
-                memberships__persona__character_sheet__character__db_account=user,
-                memberships__left_at__isnull=True,
+        return self._annotate_counts(
+            qs.filter(
+                Q(gm__account=user)
+                | Q(
+                    memberships__persona__character_sheet__character__db_account=user,
+                    memberships__left_at__isnull=True,
+                )
+            ).distinct()
+        )
+
+    def _get_viewer_member_table_ids(self) -> set[int]:
+        """Return GMTable ids where the requesting user has an active membership.
+
+        One query per request — used by ``GMTableSerializer.get_viewer_role``
+        to avoid per-row ``.exists()`` calls.
+        """
+        user = self.request.user
+        if not user.is_authenticated:
+            return set()
+        return set(
+            GMTableMembership.objects.filter(
+                persona__character_sheet__character__db_account=user,
+                left_at__isnull=True,
             )
-        ).distinct()
+            .values_list("table_id", flat=True)
+            .distinct()
+        )
+
+    def _get_viewer_story_participant_table_ids(self) -> set[int]:
+        """Return GMTable ids where the requesting user participates in a story.
+
+        Used to derive the ``guest`` viewer-role without a per-row query.
+        """
+        from world.stories.models import StoryParticipation  # noqa: PLC0415
+
+        user = self.request.user
+        if not user.is_authenticated:
+            return set()
+        return set(
+            StoryParticipation.objects.filter(
+                story__primary_table__isnull=False,
+                character__db_account=user,
+                is_active=True,
+            )
+            .values_list("story__primary_table_id", flat=True)
+            .distinct()
+        )
+
+    def get_serializer_context(self) -> dict:
+        context = super().get_serializer_context()
+        context["viewer_member_table_ids"] = self._get_viewer_member_table_ids()
+        context["viewer_story_participant_table_ids"] = (
+            self._get_viewer_story_participant_table_ids()
+        )
+        return context
 
     @action(detail=True, methods=["post"], permission_classes=[IsAdminUser])
     def archive(self, request: Request, pk: str | None = None) -> Response:
         table = self.get_object()
         archive_table(table)
-        return Response(GMTableSerializer(table).data)
+        return Response(GMTableSerializer(table, context=self.get_serializer_context()).data)
 
     @action(detail=True, methods=["post"], permission_classes=[IsAdminUser])
     def transfer_ownership(self, request: Request, pk: str | None = None) -> Response:
@@ -172,7 +236,7 @@ class GMTableViewSet(viewsets.ModelViewSet):
         table = self.get_object()
         new_gm = get_object_or_404(GMProfile, pk=new_gm_id)
         transfer_ownership_service(table, new_gm)
-        return Response(GMTableSerializer(table).data)
+        return Response(GMTableSerializer(table, context=self.get_serializer_context()).data)
 
 
 class GMTableMembershipViewSet(viewsets.ModelViewSet):

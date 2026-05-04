@@ -99,8 +99,8 @@ class GMTableSerializer(serializers.ModelSerializer):
     """
 
     gm_username = serializers.CharField(source="gm.account.username", read_only=True)
-    member_count = serializers.SerializerMethodField()
-    story_count = serializers.SerializerMethodField()
+    member_count = serializers.IntegerField(read_only=True)
+    story_count = serializers.IntegerField(read_only=True)
     viewer_role = serializers.SerializerMethodField()
 
     class Meta:
@@ -129,18 +129,18 @@ class GMTableSerializer(serializers.ModelSerializer):
             "viewer_role",
         ]
 
-    def get_member_count(self, table: GMTable) -> int:
-        return table.memberships.filter(left_at__isnull=True).count()
-
-    def get_story_count(self, table: GMTable) -> int:
-        return table.primary_stories.count()
-
     def get_viewer_role(self, table: GMTable) -> str:
         """Return the requesting user's role relative to this table.
 
         Priority: gm > staff > member > guest > none.
         "guest" means the user participates in a story at this table via
         StoryParticipation but has no active GMTableMembership.
+
+        Membership and story-participation lookups read from sets pre-computed
+        once per request in ``GMTableViewSet.get_serializer_context``. When
+        the serializer is invoked outside a viewset (e.g. directly in tests)
+        the sets fall back to lazy ``.exists()`` queries — keeps the test
+        ergonomics while letting the viewset path stay query-free per-row.
         """
         from world.stories.models import StoryParticipation  # noqa: PLC0415
 
@@ -157,17 +157,27 @@ class GMTableSerializer(serializers.ModelSerializer):
         # Active table member via any persona.
         # Chain: GMTableMembership.persona → Persona.character_sheet
         #        → CharacterSheet.character (ObjectDB) → ObjectDB.db_account
-        if table.memberships.filter(
-            persona__character_sheet__character__db_account=user,
-            left_at__isnull=True,
-        ).exists():
+        viewer_member_table_ids = self.context.get("viewer_member_table_ids")
+        if viewer_member_table_ids is not None:
+            is_member = table.id in viewer_member_table_ids
+        else:
+            is_member = table.memberships.filter(
+                persona__character_sheet__character__db_account=user,
+                left_at__isnull=True,
+            ).exists()
+        if is_member:
             return GMTableViewerRole.MEMBER
         # Guest: participates in a story at this table but is not a member.
-        if StoryParticipation.objects.filter(
-            story__primary_table=table,
-            character__db_account=user,
-            is_active=True,
-        ).exists():
+        viewer_story_participant_table_ids = self.context.get("viewer_story_participant_table_ids")
+        if viewer_story_participant_table_ids is not None:
+            is_guest = table.id in viewer_story_participant_table_ids
+        else:
+            is_guest = StoryParticipation.objects.filter(
+                story__primary_table=table,
+                character__db_account=user,
+                is_active=True,
+            ).exists()
+        if is_guest:
             return GMTableViewerRole.GUEST
         return GMTableViewerRole.NONE
 
