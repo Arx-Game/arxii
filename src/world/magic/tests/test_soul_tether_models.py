@@ -42,6 +42,16 @@ class CorruptionResistanceEffectKindTests(TestCase):
         self.assertIn("CORRUPTION_RESISTANCE", EffectKind.values)
 
 
+class SoulTetherExceptionTests(TestCase):
+    def test_user_message_round_trip(self) -> None:
+        from world.magic.exceptions import AffinityGateError
+
+        expected_msg = "Sinner cannot be Celestial-affinity primary."
+        with self.assertRaises(AffinityGateError) as ctx:
+            raise AffinityGateError(expected_msg)
+        self.assertEqual(ctx.exception.user_message, expected_msg)
+
+
 class SineatingModelTests(TestCase):
     def test_sineating_can_be_created_with_required_fields(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory

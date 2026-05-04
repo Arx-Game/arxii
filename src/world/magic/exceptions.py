@@ -99,3 +99,70 @@ class ProtagonismLockedError(CorruptionError):
     SAFE_MESSAGES: ClassVar[set[str]] = {
         "Character is currently locked from protagonism and cannot perform this action.",
     }
+
+
+# =============================================================================
+# Soul Tether exceptions (Spec B)
+# =============================================================================
+
+
+class SoulTetherError(Exception):
+    """Base exception for Soul Tether errors.
+
+    Carries user_message + SAFE_MESSAGES allowlist per project rule
+    (CLAUDE.md: never use str(exc) in API responses).
+    """
+
+    SAFE_MESSAGES: ClassVar[tuple[str, ...]] = ()
+
+    def __init__(self, user_message: str = "") -> None:
+        self.user_message = user_message
+        super().__init__(user_message)
+
+
+class AffinityGateError(SoulTetherError):
+    """Raised when the proposed pairing fails the §3 affinity gates."""
+
+    SAFE_MESSAGES: ClassVar[tuple[str, ...]] = (
+        "Sineater must be Celestial- or Primal-affinity primary.",
+        "Sinner cannot be Celestial-affinity primary.",
+    )
+
+
+class NoSoulTetherUnlockError(SoulTetherError):
+    """Raised when the Sinner has not purchased the RELATIONSHIP_CAPSTONE ThreadWeavingUnlock."""
+
+    SAFE_MESSAGES: ClassVar[tuple[str, ...]] = (
+        "Sinner has not unlocked Relationship Capstone thread weaving yet.",
+    )
+
+
+class SoulTetherFormationError(SoulTetherError):
+    """Raised when formation prerequisites fail (consent, role, etc.)."""
+
+    SAFE_MESSAGES: ClassVar[tuple[str, ...]] = (
+        "Both characters must consent to forming a Soul Tether.",
+        "An active Soul Tether already exists between these characters.",
+    )
+
+
+class SineatingValidationError(SoulTetherError):
+    """Raised when a Sineating request fails validation."""
+
+    SAFE_MESSAGES: ClassVar[tuple[str, ...]] = (
+        "No active Soul Tether exists between these characters.",
+        "Both characters must be in the same scene to perform Sineating.",
+        "Resonance specified is not one the Sinner accrues.",
+        "Per-scene Sineating cap reached for this bond.",
+    )
+
+
+class RescueValidationError(SoulTetherError):
+    """Raised when rescue ritual gates fail."""
+
+    SAFE_MESSAGES: ClassVar[tuple[str, ...]] = (
+        "Sinner must be at corruption stage 3 or higher to be rescued.",
+        "Both characters must be in the same scene for the rescue ritual.",
+        "Rescue ritual already performed for this Sinner this scene.",
+        "Sineater has insufficient resonance for the ritual cost.",
+    )
