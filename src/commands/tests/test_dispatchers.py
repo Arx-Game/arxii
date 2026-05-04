@@ -11,6 +11,7 @@ from django.test import TestCase
 from actions.definitions.items import EquipAction, TakeOutAction
 from actions.definitions.movement import GetAction
 from actions.definitions.outfits import ApplyOutfitAction, UndressAction
+from actions.definitions.perception import LookAction, LookAtItemAction
 from actions.types import ActionResult
 from commands.evennia_overrides.communication import CmdPose, CmdSay, CmdWhisper
 from commands.evennia_overrides.items import CmdUndress, CmdWear
@@ -90,6 +91,152 @@ class CmdLookTests(TestCase):
         cmd = _make_cmd(CmdLook, caller, args=" missing")
         cmd.func()
         assert caller.msg.call_count >= 1
+
+
+class CmdLookParserTests(TestCase):
+    """Tests for the drilled-form parser on CmdLook."""
+
+    def _make_caller(self, key: str = "ParseAlice"):
+        room = ObjectDBFactory(
+            db_key=f"ParseRoom_{key}",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        caller = ObjectDBFactory(
+            db_key=key,
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        return room, caller
+
+    def test_plain_target_uses_look_action(self) -> None:
+        room, caller = self._make_caller("PlainAlice")
+        target = ObjectDBFactory(db_key="ParseSword", location=room)
+        caller.search = MagicMock(return_value=target)
+        cmd = _make_cmd(CmdLook, caller, args=" ParseSword")
+        kwargs = cmd.resolve_action_args()
+        self.assertIsInstance(cmd.action, LookAction)
+        self.assertEqual(kwargs, {"target": target})
+
+    def test_possessive_form_dispatches_look_at_item_action(self) -> None:
+        room, caller = self._make_caller("PossAlice")
+        bob = ObjectDBFactory(
+            db_key="PossBob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        caller.search = MagicMock(return_value=bob)
+        cmd = _make_cmd(CmdLook, caller, args=" PossBob's hat")
+        kwargs = cmd.resolve_action_args()
+        self.assertIsInstance(cmd.action, LookAtItemAction)
+        self.assertEqual(kwargs, {"owner_id": bob.pk, "item_name": "hat"})
+        # Search was for the owner name only.
+        self.assertEqual(caller.search.call_args_list[0].args[0], "PossBob")
+
+    def test_on_form_dispatches_look_at_item_action(self) -> None:
+        room, caller = self._make_caller("OnAlice")
+        bob = ObjectDBFactory(
+            db_key="OnBob",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=room,
+        )
+        caller.search = MagicMock(return_value=bob)
+        cmd = _make_cmd(CmdLook, caller, args=" hat on OnBob")
+        kwargs = cmd.resolve_action_args()
+        self.assertIsInstance(cmd.action, LookAtItemAction)
+        self.assertEqual(kwargs, {"owner_id": bob.pk, "item_name": "hat"})
+        self.assertEqual(caller.search.call_args_list[0].args[0], "OnBob")
+
+    def test_in_form_dispatches_look_at_item_action(self) -> None:
+        room, caller = self._make_caller("InAlice")
+        pouch = ObjectDBFactory(db_key="InPouch", location=room)
+        caller.search = MagicMock(return_value=pouch)
+        cmd = _make_cmd(CmdLook, caller, args=" coin in InPouch")
+        kwargs = cmd.resolve_action_args()
+        self.assertIsInstance(cmd.action, LookAtItemAction)
+        self.assertEqual(
+            kwargs,
+            {"container_id": pouch.pk, "item_name": "coin"},
+        )
+        self.assertEqual(caller.search.call_args_list[0].args[0], "InPouch")
+
+    def test_possessive_unknown_owner_raises_command_error(self) -> None:
+        _room, caller = self._make_caller("GhostAlice")
+        caller.search = MagicMock(return_value=None)
+        cmd = _make_cmd(CmdLook, caller, args=" ghost's hat")
+        with self.assertRaises(CommandError):
+            cmd.resolve_action_args()
+
+    def test_apostrophe_object_name_falls_through_to_plain_search(
+        self,
+    ) -> None:
+        """An object literally named ``L'Aurelia's notebook`` should be
+        findable when no character ``L'Aurelia`` is present. The
+        possessive regex matches (owner=``L'Aurelia``, item=``notebook``),
+        owner search fails, parser falls through to plain search.
+        """
+        room, caller = self._make_caller("ApostAlice")
+        notebook = ObjectDBFactory(
+            db_key="L'Aurelia's notebook",
+            location=room,
+        )
+
+        def fake_search(name, *, quiet=False, **_kwargs):
+            if name == "L'Aurelia":
+                return [] if quiet else None
+            if name == "L'Aurelia's notebook":
+                return notebook
+            return [] if quiet else None
+
+        caller.search = MagicMock(side_effect=fake_search)
+        cmd = _make_cmd(CmdLook, caller, args=" L'Aurelia's notebook")
+        kwargs = cmd.resolve_action_args()
+        self.assertIsInstance(cmd.action, LookAction)
+        self.assertEqual(kwargs, {"target": notebook})
+
+    def test_in_form_unfindable_container_falls_through_to_plain_search(
+        self,
+    ) -> None:
+        """``look bob in armor`` when ``armor`` isn't in the room should
+        fall through to a plain search for ``bob in armor`` so the
+        intent (look at bob) still works if such an object exists.
+        """
+        room, caller = self._make_caller("InFallAlice")
+        target = ObjectDBFactory(db_key="bob in armor", location=room)
+
+        def fake_search(name, *, quiet=False, **_kwargs):
+            if name == "armor":
+                return [] if quiet else None
+            if name == "bob in armor":
+                return target
+            return [] if quiet else None
+
+        caller.search = MagicMock(side_effect=fake_search)
+        cmd = _make_cmd(CmdLook, caller, args=" bob in armor")
+        kwargs = cmd.resolve_action_args()
+        self.assertIsInstance(cmd.action, LookAction)
+        self.assertEqual(kwargs, {"target": target})
+
+    def test_possessive_falls_through_when_named_object_exists(self) -> None:
+        """An object literally named ``bob's hat`` should be findable
+        when no character ``bob`` is present. The possessive regex
+        matches first, owner search fails, parser falls through to
+        plain search and finds the object.
+        """
+        room, caller = self._make_caller("HatAlice")
+        hat = ObjectDBFactory(db_key="bob's hat", location=room)
+
+        def fake_search(name, *, quiet=False, **_kwargs):
+            if name == "bob":
+                return [] if quiet else None
+            if name == "bob's hat":
+                return hat
+            return [] if quiet else None
+
+        caller.search = MagicMock(side_effect=fake_search)
+        cmd = _make_cmd(CmdLook, caller, args=" bob's hat")
+        kwargs = cmd.resolve_action_args()
+        self.assertIsInstance(cmd.action, LookAction)
+        self.assertEqual(kwargs, {"target": hat})
 
 
 class CmdInventoryTests(TestCase):

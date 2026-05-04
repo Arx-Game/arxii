@@ -18,12 +18,13 @@ from actions.definitions.movement import (
     TraverseExitAction,
 )
 from actions.definitions.outfits import ApplyOutfitAction, UndressAction
-from actions.definitions.perception import InventoryAction, LookAction
+from actions.definitions.perception import InventoryAction, LookAction, LookAtItemAction
 from actions.types import TargetType
 
 # All base action instances. Each is a singleton — actions are stateless.
 _ALL_ACTIONS: list[Action] = [
     LookAction(),
+    LookAtItemAction(),
     InventoryAction(),
     SayAction(),
     PoseAction(),

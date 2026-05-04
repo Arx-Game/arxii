@@ -78,6 +78,23 @@ class ItemTemplateFilter(django_filters.FilterSet):
         ]
 
 
+class VisibleWornItemFilter(django_filters.FilterSet):
+    """Filters for the visible-worn-items endpoint.
+
+    The list endpoint is computed from ``visible_worn_items_for`` rather
+    than queried, so this FilterSet only declares the ``character`` query
+    parameter for documentation/schema purposes — the ViewSet reads the
+    parameter directly. We bind it to ``EquippedItem`` (the upstream model)
+    so django-filter has a real Meta.model to introspect.
+    """
+
+    character = django_filters.NumberFilter(field_name="character__id")
+
+    class Meta:
+        model = EquippedItem
+        fields = ["character"]
+
+
 class OutfitFilter(django_filters.FilterSet):
     """Filters for Outfit."""
 

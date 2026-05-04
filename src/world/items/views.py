@@ -1,16 +1,21 @@
 """API ViewSets for items."""
 
+from dataclasses import dataclass
 from typing import cast
 
 from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
+from evennia.objects.models import ObjectDB
 from rest_framework import serializers, viewsets
+from rest_framework.exceptions import NotFound
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import SAFE_METHODS, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from core_management.permissions import PlayerOrStaffPermission
 from flows.service_functions.outfits import delete_outfit, remove_outfit_slot
 from world.character_sheets.models import CharacterSheet
 from world.items.filters import (
@@ -22,6 +27,7 @@ from world.items.filters import (
     OutfitFilter,
     OutfitSlotFilter,
     QualityTierFilter,
+    VisibleWornItemFilter,
 )
 from world.items.models import (
     EquippedItem,
@@ -48,7 +54,9 @@ from world.items.serializers import (
     OutfitSlotWriteSerializer,
     OutfitWriteSerializer,
     QualityTierSerializer,
+    VisibleWornItemSerializer,
 )
+from world.items.services.appearance import LAYER_RANK, visible_worn_items_for
 from world.items.services.facets import remove_facet_from_item
 from world.roster.models import RosterEntry
 
@@ -58,16 +66,10 @@ def _account_currently_plays(user: AccountDB, sheet: CharacterSheet) -> bool:
     return RosterEntry.objects.for_account(user).filter(character_sheet=sheet).exists()
 
 
-class ItemFacetWritePermission(IsAuthenticated):
+class ItemFacetWritePermission(PlayerOrStaffPermission):
     """Allow attach/remove only if the user owns the item_instance, or is staff."""
 
-    def has_permission(self, request: Request, view: APIView) -> bool:
-        if not super().has_permission(request, view):
-            return False
-        if request.method in SAFE_METHODS:
-            return True
-        if request.user.is_staff:
-            return True
+    def has_permission_for_player(self, request: Request, view: APIView) -> bool:
         # POST: check the item_instance the request is targeting.
         if request.method == "POST":
             instance_pk = request.data.get("item_instance")
@@ -78,9 +80,9 @@ class ItemFacetWritePermission(IsAuthenticated):
             return ItemInstance.objects.filter(pk=instance_pk, owner=request.user).exists()
         return True  # DELETE checked at object level
 
-    def has_object_permission(self, request: Request, view: APIView, obj: ItemFacet) -> bool:
-        if request.user.is_staff:
-            return True
+    def has_object_permission_for_player(
+        self, request: Request, view: APIView, obj: ItemFacet
+    ) -> bool:
         return obj.item_instance.owner_id == request.user.pk
 
 
@@ -238,7 +240,7 @@ class EquippedItemViewSet(viewsets.ReadOnlyModelViewSet):
     ).order_by("-pk")
 
 
-class OutfitWritePermission(IsAuthenticated):
+class OutfitWritePermission(PlayerOrStaffPermission):
     """Allow Outfit writes only if the user currently plays the character_sheet.
 
     Mirrors ``ItemFacetWritePermission`` shape. Object-level checks fall
@@ -246,11 +248,7 @@ class OutfitWritePermission(IsAuthenticated):
     by reading ``character_sheet`` from request data.
     """
 
-    def has_permission(self, request: Request, view: APIView) -> bool:
-        if not super().has_permission(request, view):
-            return False
-        if request.method in SAFE_METHODS or request.user.is_staff:
-            return True
+    def has_permission_for_player(self, request: Request, view: APIView) -> bool:
         if request.method != "POST":
             # PATCH/DELETE delegated to has_object_permission.
             return True
@@ -264,20 +262,16 @@ class OutfitWritePermission(IsAuthenticated):
             return True
         return _account_currently_plays(cast(AccountDB, request.user), sheet)
 
-    def has_object_permission(self, request: Request, view: APIView, obj: Outfit) -> bool:
-        if request.user.is_staff:
-            return True
+    def has_object_permission_for_player(
+        self, request: Request, view: APIView, obj: Outfit
+    ) -> bool:
         return _account_currently_plays(cast(AccountDB, request.user), obj.character_sheet)
 
 
-class OutfitSlotWritePermission(IsAuthenticated):
+class OutfitSlotWritePermission(PlayerOrStaffPermission):
     """Allow OutfitSlot writes only if the user currently plays the outfit's sheet."""
 
-    def has_permission(self, request: Request, view: APIView) -> bool:
-        if not super().has_permission(request, view):
-            return False
-        if request.method in SAFE_METHODS or request.user.is_staff:
-            return True
+    def has_permission_for_player(self, request: Request, view: APIView) -> bool:
         if request.method != "POST":
             return True
         outfit_pk = request.data.get("outfit")
@@ -289,9 +283,9 @@ class OutfitSlotWritePermission(IsAuthenticated):
             return True
         return _account_currently_plays(cast(AccountDB, request.user), outfit.character_sheet)
 
-    def has_object_permission(self, request: Request, view: APIView, obj: OutfitSlot) -> bool:
-        if request.user.is_staff:
-            return True
+    def has_object_permission_for_player(
+        self, request: Request, view: APIView, obj: OutfitSlot
+    ) -> bool:
         return _account_currently_plays(cast(AccountDB, request.user), obj.outfit.character_sheet)
 
 
@@ -392,3 +386,248 @@ class OutfitSlotViewSet(viewsets.ModelViewSet):
             body_region=instance.body_region,
             equipment_layer=instance.equipment_layer,
         )
+
+
+def _parse_int_param(value: object) -> int | None:
+    """Parse ``value`` as a positive int, returning None on failure."""
+    if value is None:
+        return None
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+def _fetch_objectdb(raw_pk: object) -> ObjectDB | None:
+    """Parse ``raw_pk`` and fetch the matching ObjectDB, or None on miss."""
+    pk = _parse_int_param(raw_pk)
+    if pk is None:
+        return None
+    try:
+        return ObjectDB.objects.get(pk=pk)
+    except ObjectDB.DoesNotExist:
+        return None
+
+
+def _fetch_owned_observer(request: Request, user: AccountDB) -> ObjectDB | None:
+    """Fetch the ``?observer=<pk>`` ObjectDB iff it belongs to ``user``.
+
+    The visible-worn endpoints are computed views (not queryset-backed),
+    so the FilterSet pattern doesn't apply — the ``observer`` parameter
+    is a permission-context input, not a filter on a queryset.
+    """
+    # noqa: USE_FILTERSET — permission-context param on a computed (non-queryset) view
+    observer = _fetch_objectdb(request.query_params.get("observer"))  # noqa: USE_FILTERSET
+    if observer is None:
+        return None
+    if observer.db_account_id != user.id:
+        return None
+    return observer
+
+
+@dataclass(frozen=True)
+class _VisibleWornContext:
+    """Resolved (target, observer) pair for the visible-worn list endpoint.
+
+    ``observer`` may be the target itself (self-look bypass), an ObjectDB
+    in the same room, or the staff user (full bypass).
+    """
+
+    target: ObjectDB
+    observer: object
+
+
+def _is_concealed_for_observer(item: ItemInstance, wearing_character: ObjectDB) -> bool:
+    """Whether ``item`` is concealed by a higher covering layer at the
+    same body region.
+
+    Walks the cached ``equipped_items`` handler — no queries when the
+    handler is warm. Returns True if the item is not equipped (so it
+    should not be visible to others).
+    """
+    target_row = None
+    for row in wearing_character.equipped_items:
+        if row.item_instance.pk == item.pk:
+            target_row = row
+            break
+    if target_row is None:
+        return True  # not equipped → not visible to others
+
+    target_region = target_row.body_region
+    target_rank = LAYER_RANK.get(target_row.equipment_layer, 99)
+
+    for row in wearing_character.equipped_items:
+        if row.pk == target_row.pk:
+            continue
+        if row.body_region != target_region:
+            continue
+        other_rank = LAYER_RANK.get(row.equipment_layer, 99)
+        if other_rank <= target_rank:
+            continue
+        for slot in row.item_instance.template.cached_slots:
+            if (
+                slot.body_region == target_region
+                and slot.equipment_layer == row.equipment_layer
+                and slot.covers_lower_layers
+            ):
+                return True
+    return False
+
+
+class VisibleWornItemViewSet(viewsets.ViewSet):
+    """List visible worn items for a character.
+
+    Item-first permission shape:
+
+    - ``character`` query parameter selects the target being looked at.
+    - ``observer`` query parameter selects which of the requester's
+      characters is doing the looking (required for non-staff).
+
+    Permission rules:
+
+    - Staff: full visibility (no observer required).
+    - Non-staff: observer must belong to the requester, and either match
+      the target (self-look) or share a room with the target.
+
+    Out-of-scope requests return ``[]`` (200) — never 403/404 — to avoid
+    leaking presence information about characters in rooms the observer
+    can't see.
+    """
+
+    permission_classes = [PlayerOrStaffPermission]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = VisibleWornItemFilter
+
+    def list(self, request: Request) -> Response:
+        """Return the slim visible-worn list for ``?character=<pk>``."""
+        user = cast(AccountDB, request.user)
+        observer = self._resolve_observer(request, user)
+        if observer is None:
+            return Response([])
+
+        items = visible_worn_items_for(observer.target, observer=observer.observer)
+        serializer = VisibleWornItemSerializer(items, many=True)
+        return Response(serializer.data)
+
+    def _resolve_observer(self, request: Request, user: AccountDB) -> _VisibleWornContext | None:
+        """Resolve target + observer for the request, or None if out of scope.
+
+        Computed (non-queryset) view — character/observer parameters are
+        identity inputs, not queryset filters, so the FilterSet pattern
+        doesn't apply.
+        """
+        # noqa: USE_FILTERSET — computed view, not queryset filtering
+        target = _fetch_objectdb(request.query_params.get("character"))  # noqa: USE_FILTERSET
+        if target is None:
+            return None
+
+        if user.is_staff:
+            # Staff bypass: no observer needed, layer hiding bypassed.
+            return _VisibleWornContext(target=target, observer=user)
+
+        observer_obj = _fetch_owned_observer(request, user)
+        if observer_obj is None:
+            return None
+
+        if observer_obj.pk == target.pk:
+            # Self-look: pass the target itself so the service's
+            # ``observer is character`` bypass fires.
+            return _VisibleWornContext(target=target, observer=target)
+
+        # Must share a room.
+        if observer_obj.db_location_id != target.db_location_id:
+            return None
+        return _VisibleWornContext(target=target, observer=observer_obj)
+
+
+class VisibleItemDetailViewSet(viewsets.ViewSet):
+    """Read-only detail for a single visibly worn item.
+
+    Item-first permission shape: fetch the item directly, then check
+    whether the requester is allowed to view it.
+
+    The wearing character is derived from ``item.game_object.location``
+    (equipped items have their location set to the wearing character) —
+    no RosterEntry walk, no roster queries.
+
+    Permission rules:
+
+    - Staff: 200 (bypass).
+    - Non-staff with ``?observer=<own_char_pk>``:
+      - Observer must belong to the requester.
+      - Self-look (observer == wearing character): 200 even for concealed
+        items.
+      - Same-room: 200 if the item is not concealed by a higher covering
+        layer; 404 if concealed.
+      - Different room or no observer: 404.
+    """
+
+    permission_classes = [PlayerOrStaffPermission]
+
+    def retrieve(self, request: Request, pk: str | None = None) -> Response:
+        """Return the ItemInstance for ``pk`` if the requester may view it."""
+        item_pk = _parse_int_param(pk)
+        if item_pk is None:
+            raise NotFound
+
+        user = cast(AccountDB, request.user)
+
+        # Fetch the item with the same prefetch chain the read serializer
+        # uses, so serialization runs zero extra queries. Identity map will
+        # share these instances with any other code path that already
+        # loaded them.
+        try:
+            item = (
+                ItemInstance.objects.select_related(
+                    "template",
+                    "quality_tier",
+                    "game_object",
+                    "image",
+                    "template__image",
+                )
+                .prefetch_related(
+                    Prefetch(
+                        "item_facets",
+                        queryset=ItemFacet.objects.select_related(
+                            "facet",
+                            "attachment_quality_tier",
+                        ),
+                        to_attr="cached_item_facets",
+                    ),
+                )
+                .get(pk=item_pk)
+            )
+        except ItemInstance.DoesNotExist as exc:
+            raise NotFound from exc
+
+        if not self._user_can_view(user, item, request):
+            raise NotFound  # don't leak existence
+
+        serializer = ItemInstanceReadSerializer(item)
+        return Response(serializer.data)
+
+    def _user_can_view(self, user: AccountDB, item: ItemInstance, request: Request) -> bool:
+        """Permission check for ``item`` against ``user`` and the observer."""
+        if user.is_staff:
+            return True
+
+        observer = _fetch_owned_observer(request, user)
+        if observer is None:
+            return False
+
+        # Wearing character is derived from item location — equipped
+        # items have their game_object's location set to the wearer.
+        wearing_character = item.game_object.db_location
+        if wearing_character is None:
+            return False
+
+        # Self-look: bypass hiding.
+        if observer.pk == wearing_character.pk:
+            return True
+
+        # Same-room check.
+        if observer.db_location_id != wearing_character.db_location_id:
+            return False
+
+        # Visible (not concealed by a covering layer)?
+        return not _is_concealed_for_observer(item, wearing_character)

@@ -10,9 +10,11 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import type {
+  BodyRegion,
   CreateOutfitPayload,
   CreateOutfitSlotPayload,
   EquippedItem,
+  EquipmentLayer,
   ItemInstance,
   Outfit,
   OutfitSlot,
@@ -132,4 +134,63 @@ export async function listEquipped(characterId: number): Promise<EquippedItem[]>
   }
   const data = (await res.json()) as PaginatedResponse<EquippedItem>;
   return data.results;
+}
+
+// ---------------------------------------------------------------------------
+// Visible-worn (look-at-character) read-only endpoints
+// ---------------------------------------------------------------------------
+
+/**
+ * Slim shape returned by ``GET /api/items/visible-worn/?character=N``.
+ *
+ * The list endpoint intentionally omits quality/template details — callers
+ * follow up with ``getVisibleItemDetail`` to fetch the full ItemInstance
+ * shape when the player drills into a specific item.
+ */
+export interface VisibleWornItem {
+  id: number;
+  display_name: string;
+  body_region: BodyRegion;
+  equipment_layer: EquipmentLayer;
+}
+
+/**
+ * Fetch the visible-worn list for a target character, observed by the
+ * caller's currently active character (``observerId``).
+ *
+ * The backend requires ``observer`` for non-staff: it identifies which
+ * of the user's characters is doing the looking. Same-room and
+ * self-look bypass rules are enforced server-side.
+ */
+export async function listVisibleWornItems(
+  characterId: number,
+  observerId: number
+): Promise<VisibleWornItem[]> {
+  const res = await apiFetch(
+    `${BASE_URL}/visible-worn/?character=${characterId}&observer=${observerId}`
+  );
+  if (!res.ok) {
+    throw new Error(await readError(res, 'Failed to load visible worn items'));
+  }
+  // The visible-worn list endpoint is computed from a service rather than a
+  // queryset, so it returns a plain array (no DRF pagination wrapper).
+  return (await res.json()) as VisibleWornItem[];
+}
+
+/**
+ * Fetch the full ItemInstance shape for a visibly worn item.
+ *
+ * The backend permission check requires ``observer`` for non-staff: the
+ * observer must belong to the requesting account, and either match the
+ * wearing character (self-look) or share a room with them.
+ */
+export async function getVisibleItemDetail(
+  itemId: number,
+  observerId: number
+): Promise<ItemInstance> {
+  const res = await apiFetch(`${BASE_URL}/visible-item-detail/${itemId}/?observer=${observerId}`);
+  if (!res.ok) {
+    throw new Error(await readError(res, 'Failed to load item details'));
+  }
+  return (await res.json()) as ItemInstance;
 }

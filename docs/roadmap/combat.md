@@ -252,6 +252,22 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - **Knockout/death roll services** — actual rolls using eligibility flags from damage resolution
 - **Permanent wound application** — connect permanent_wound_eligible to ConditionTemplate instances
 
+### Narrative Status in Character Descriptions (future)
+
+When a character is wounded, fatigued, or otherwise visibly affected, their
+appearance to other characters should reflect it — narrative text appended
+to their description, e.g. *"She looks pale and unsteady, leaning on the
+wall."* This belongs to combat's domain because the source data is vitals /
+fatigue / conditions which combat owns. Hooks into the perception layer's
+appearance template (`CharacterState` already exposes display-component
+methods like `get_display_worn`; add a sibling `get_display_status` that
+reads from vitals/fatigue/conditions and returns the narrative line).
+
+Out of scope for the visible-worn-equipment slice — that one only adds
+visible equipment to the look output; the appearance template gets a
+`{status}` slot ready for this work but renders empty until this
+follow-up lands.
+
 ### Cross-System Dependencies (not owned by combat)
 - **Covenants (world.covenants)** — needs: full covenant/party model (formation, ritual, membership), covenant passive bonuses, covenant armor/thread integration, API + frontend for covenant management
 - **Vitals (world.vitals)** — needs: integration with non-combat damage sources (poison, spells, exhaustion), vitals display on character sheet frontend, death/unconscious state transitions from non-combat contexts (e.g., dream-walking, traps), API endpoints for vitals status
