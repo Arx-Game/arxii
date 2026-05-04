@@ -190,19 +190,35 @@ class SceneViewSet(viewsets.ModelViewSet):
         Endpoint that matches frontend expectations: /api/scenes/spotlight/
         Returns in_progress and recent scenes
         """
+        # Spotlight reuses SceneListSerializer, so the same prefetch is
+        # required to keep get_participants from firing a per-scene
+        # Persona query.
+        interactions_prefetch = Prefetch(
+            "interactions",
+            queryset=Interaction.objects.select_related(
+                "persona__character_sheet__character",
+                "persona__character_sheet__roster_entry",
+            ),
+            to_attr="cached_interactions",
+        )
+
         # Get active scenes
         active_scenes = Scene.objects.filter(
             is_active=True,
             privacy_mode=ScenePrivacyMode.PUBLIC,
-        )[:10]
+        ).prefetch_related(interactions_prefetch)[:10]
 
         # Get recently finished scenes (last 7 days)
         seven_days_ago = timezone.now() - timedelta(days=7)
-        recent_scenes = Scene.objects.filter(
-            is_active=False,
-            privacy_mode=ScenePrivacyMode.PUBLIC,
-            date_finished__gte=seven_days_ago,
-        ).order_by("-date_finished")[:10]
+        recent_scenes = (
+            Scene.objects.filter(
+                is_active=False,
+                privacy_mode=ScenePrivacyMode.PUBLIC,
+                date_finished__gte=seven_days_ago,
+            )
+            .order_by("-date_finished")
+            .prefetch_related(interactions_prefetch)[:10]
+        )
 
         # Prepare data for serializer
         data = {"active_scenes": active_scenes, "recent_scenes": recent_scenes}

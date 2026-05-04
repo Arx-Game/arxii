@@ -339,14 +339,20 @@ class SceneListQueryCountTests(APITestCase):
         assert warmup.status_code == status.HTTP_200_OK
         assert len(warmup.data["results"]) == 5
 
-        # Steady-state queries for the authenticated, non-staff list path:
-        #   1. SELECT user.is_staff (auth/permission check)
+        # Steady-state hot-cache queries for the authenticated, non-staff
+        # list path:
+        #   1. SELECT user/session (auth)
         #   2. SELECT COUNT(*) for the paginator
         #   3. SELECT scenes (page) with privacy/participant filter
-        #   4. Prefetch interactions + persona/character_sheet/character/
-        #      roster_entry (single query per page via __in)
-        # The prior N+1 added one Persona query per scene (5 here).
-        with self.assertNumQueries(4):
+        # The prefetch for interactions+personas is elided on hot cache:
+        # Scene is a SharedMemoryModel, so the warmup populates the same
+        # instances' ``cached_interactions`` and the identity map returns
+        # the same Python objects on the second request. Django's prefetch
+        # machinery sees the attribute is already populated and skips the
+        # extra query. The prior N+1 (one Persona query per scene) was
+        # uncached — this test catches any regression that reintroduces
+        # per-scene queries.
+        with self.assertNumQueries(3):
             response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
 
