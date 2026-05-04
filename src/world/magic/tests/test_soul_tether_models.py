@@ -133,8 +133,9 @@ class ServiceSkeletonImportsTests(TestCase):
 
     def test_other_stubs_raise_not_implemented(self) -> None:
         """Phase 5 implemented request_sineating/resolve_sineating.
+        Phase 8 implemented perform_soul_tether_rescue.
 
-        dissolve_soul_tether and perform_soul_tether_rescue remain stubs.
+        dissolve_soul_tether remains a stub.
         """
         from world.magic.services import soul_tether
 
@@ -142,14 +143,6 @@ class ServiceSkeletonImportsTests(TestCase):
             soul_tether.dissolve_soul_tether(
                 relationship_id=0,
                 initiator_sheet=None,  # type: ignore[arg-type]
-            )
-
-        with self.assertRaises(NotImplementedError):
-            soul_tether.perform_soul_tether_rescue(
-                sineater_sheet=None,  # type: ignore[arg-type]
-                sinner_sheet=None,  # type: ignore[arg-type]
-                resonance=None,  # type: ignore[arg-type]
-                components=[],
             )
 
 

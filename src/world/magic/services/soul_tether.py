@@ -28,6 +28,7 @@ from world.magic.constants import SoulTetherRole, TargetKind
 from world.magic.exceptions import (
     AffinityGateError,
     NoSoulTetherUnlockError,
+    RescueValidationError,
     SineatingValidationError,
     SoulTetherFormationError,
     StageAdvanceBonusError,
@@ -689,10 +690,337 @@ def perform_soul_tether_rescue(
     sineater_sheet: CharacterSheet,
     sinner_sheet: CharacterSheet,
     resonance: Resonance,
-    components: list[Any],
+    components: list[Any],  # noqa: ARG001 — consumed by caller; validated pre-call
+    scene: Any = None,
 ) -> RescueOutcome:
-    """Perform a stage-3+ rescue ritual (Spec B §9.4)."""
-    raise NotImplementedError
+    """Perform a stage-3+ rescue ritual (Spec B §9.4).
+
+    The Sineater performs a climactic rescue ritual to pull the Sinner back from
+    advancing Corruption stages. This is the primary narrative beat of the Soul
+    Tether bond.
+
+    Gates (in order, each raises RescueValidationError on failure):
+    1. Sinner has Corruption stage >= 3 in the given resonance.
+    2. Active Soul Tether exists between Sineater and Sinner.
+    3. Both characters are in the same scene (scene must not be None).
+    4. Sineater is not in an active CharacterEngagement.
+    5. No prior rescue this scene for this (sineater, sinner) pair.
+    6. Sineater has sufficient CharacterResonance.balance for the ritual cost.
+
+    Costs (paid before effect resolution):
+    - Strain severity added to Sineater's TetherStrain ConditionInstance
+      (scaled to Sinner's current stage — stage 3=5, stage 4=10, stage 5=18).
+    - Resonance deducted from Sineater's CharacterResonance.balance
+      (stage 3=10, stage 4=20, stage 5=35).
+
+    Effect:
+    - Rolls Magical Endurance check (using existing CheckType row).
+    - Budget = severity to reduce (function of check outcome × sinner stage).
+    - Calls reduce_corruption() with budget.
+    - Increments Sineater's lifetime_helped by severity_reduced.
+    - Writes SoulTetherRescue audit row.
+    - Fires safe stat increments (graceful no-op if StatDefinition absent).
+    - If Sinner drops from stage 5 below threshold, is_protagonism_locked lifts
+      automatically via reduce_corruption's cleanup logic.
+
+    Tuning placeholders (TODO Phase 14 — surface via SoulTetherConfig):
+    - Strain cost: stage 3 = 5, stage 4 = 10, stage 5 = 18
+    - Resonance cost: stage 3 = 10, stage 4 = 20, stage 5 = 35
+    - Budget: check.success_level × (stage * 5) + 10, capped at 1 stage worth
+
+    Args:
+        sineater_sheet: CharacterSheet of the character performing the ritual.
+        sinner_sheet: CharacterSheet of the Sinner being rescued.
+        resonance: The Resonance whose corruption is being reduced.
+        components: Ritual components consumed by the ritual.
+        scene: The active Scene (required; raises if None or missing participation).
+
+    Returns:
+        RescueOutcome dataclass with full audit data.
+
+    Raises:
+        RescueValidationError: If any validation gate fails.
+    """
+    from world.conditions.services import advance_condition_severity  # noqa: PLC0415
+    from world.magic.models.aura import CharacterResonance  # noqa: PLC0415
+    from world.magic.models.soul_tether import SoulTetherRescue  # noqa: PLC0415
+    from world.magic.services.corruption import reduce_corruption  # noqa: PLC0415
+    from world.magic.types.corruption import CorruptionRecoverySource  # noqa: PLC0415
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+
+    with transaction.atomic():
+        # 1. Gate: Sinner must be at corruption stage 3+
+        sinner_stage_at_start = sinner_sheet.get_corruption_stage(resonance)
+        if sinner_stage_at_start < _RESCUE_MIN_STAGE:
+            msg = "Sinner must be at corruption stage 3 or higher to be rescued."
+            raise RescueValidationError(msg)
+
+        # 2. Gate: Active Soul Tether must exist (Sineater→Sinner direction: Sineater is source,
+        #    target is Sinner). The Sineater-side relationship has soul_tether_role=SINEATER.
+        relationship: CharacterRelationship | None = CharacterRelationship.objects.filter(
+            source=sineater_sheet,
+            target=sinner_sheet,
+            is_soul_tether=True,
+            soul_tether_role=SoulTetherRole.SINEATER,
+        ).first()
+        if relationship is None:
+            msg = "No active Soul Tether exists between these characters."
+            raise RescueValidationError(msg)
+
+        # 3. Gate: Both characters must be in the same scene.
+        #    ``_both_in_scene`` returns False when scene is None or either character
+        #    has no active roster tenure — both cases produce the same user message.
+        if not _both_in_scene(sinner_sheet, sineater_sheet, scene):
+            msg = "Both characters must be in the same scene for the rescue ritual."
+            raise RescueValidationError(msg)
+
+        # 4. Gate: Sineater must not be in active engagement.
+        if CharacterEngagement.objects.filter(character=sineater_sheet.character).exists():
+            msg = "Rescue ritual cannot be performed during combat."
+            raise RescueValidationError(msg)
+
+        # 5. Gate: One rescue per (sineater, sinner) pair per scene.
+        if SoulTetherRescue.objects.filter(
+            sineater_sheet=sineater_sheet,
+            sinner_sheet=sinner_sheet,
+            scene=scene,
+        ).exists():
+            msg = "Rescue ritual already performed for this Sinner this scene."
+            raise RescueValidationError(msg)
+
+        # 6. Compute costs for this stage.
+        sineater_strain_taken = _compute_strain_cost(sinner_stage_at_start)
+        resonance_cost = _compute_resonance_cost(sinner_stage_at_start)
+
+        # 7. Gate: Sineater must have sufficient resonance balance.
+        sineater_resonance, _ = CharacterResonance.objects.select_for_update().get_or_create(
+            character_sheet=sineater_sheet,
+            resonance=resonance,
+        )
+        if sineater_resonance.balance < resonance_cost:
+            msg = "Sineater has insufficient resonance for the ritual cost."
+            raise RescueValidationError(msg)
+
+        # 8. Roll Magical Endurance check.
+        check_result = _perform_rescue_check(sineater_sheet)
+        check_outcome = check_result.outcome
+
+        # 9. Compute budget from check outcome + sinner stage.
+        # TODO: Phase 14: surface tuning knobs via SoulTetherConfig singleton.
+        thread_level = _get_sineater_thread_level(sineater_sheet, relationship, resonance)
+        budget = _compute_rescue_budget(
+            check_result.success_level, sinner_stage_at_start, thread_level
+        )
+
+        # 10. Apply Strain to Sineater (lazy-create instance if first dramatic moment).
+        strain_instance = _get_or_create_tether_strain_instance(sineater_sheet)
+        advance_condition_severity(strain_instance, sineater_strain_taken)
+
+        # 11. Deduct resonance from Sineater balance.
+        sineater_resonance.balance -= resonance_cost
+        sineater_resonance.save(update_fields=["balance"])
+
+        # 12. Reduce Sinner's corruption (Scope 7 primitive handles stage retreat,
+        #     condition cleanup, and is_protagonism_locked lift when crossing stage 5).
+        reduction_result = reduce_corruption(
+            character_sheet=sinner_sheet,
+            resonance=resonance,
+            amount=budget,
+            source=CorruptionRecoverySource.SPEC_B_RESCUE,
+        )
+        severity_reduced = reduction_result.amount_reduced
+
+        # 13. Increment Sineater's lifetime_helped by severity actually reduced.
+        #     No refresh_from_db needed — reduce_corruption only mutates the Sinner's
+        #     CharacterResonance row; sineater_resonance's balance deduction (step 11)
+        #     is still valid. Just add lifetime_helped on top of the already-mutated row.
+        sineater_resonance.lifetime_helped += severity_reduced
+        sineater_resonance.save(update_fields=["lifetime_helped"])
+
+        # 14. Determine end stage + whether protagonism lock was lifted.
+        sinner_stage_at_end = reduction_result.stage_after
+        protagonism_lock_lifted = (
+            sinner_stage_at_start == _RESCUE_TERMINAL_STAGE
+            and sinner_stage_at_end < _RESCUE_TERMINAL_STAGE
+        )
+
+        # 15. Write audit row.
+        rescue_row = SoulTetherRescue.objects.create(
+            sinner_sheet=sinner_sheet,
+            sineater_sheet=sineater_sheet,
+            relationship=relationship,
+            scene=scene,
+            resonance=resonance,
+            sinner_stage_at_start=sinner_stage_at_start,
+            sinner_stage_at_end=sinner_stage_at_end,
+            severity_reduced=severity_reduced,
+            sineater_strain_taken=sineater_strain_taken,
+            check_outcome=check_outcome,
+        )
+
+    # 16. Fire stat increments (outside transaction — graceful no-op if rows absent).
+    _increment_stat_safe(sineater_sheet, "rescue.performed", 1)
+    if sinner_stage_at_start == _RESCUE_TERMINAL_STAGE:
+        _increment_stat_safe(sineater_sheet, "rescue.stage5_save", 1)
+    _increment_stat_safe(sineater_sheet, "rescue.severity_reduced", severity_reduced)
+
+    return RescueOutcome(
+        audit_row=rescue_row,
+        severity_reduced=severity_reduced,
+        sinner_stage_at_start=sinner_stage_at_start,
+        sinner_stage_at_end=sinner_stage_at_end,
+        sineater_strain_taken=sineater_strain_taken,
+        protagonism_lock_lifted=protagonism_lock_lifted,
+    )
+
+
+# =============================================================================
+# Rescue ritual internal helpers
+# =============================================================================
+
+#: Minimum Sinner corruption stage eligible for the rescue ritual (Spec B §9.2).
+_RESCUE_MIN_STAGE: int = 3
+
+#: Terminal corruption stage at which protagonism is locked (mirrors corruption.py).
+_RESCUE_TERMINAL_STAGE: int = 5
+
+#: Strain severity cost per sinner stage (tunable — TODO Phase 14 SoulTetherConfig).
+#: Stage 3 = moderate, Stage 4 = heavy, Stage 5 = severe.
+_RESCUE_STRAIN_COST: dict[int, int] = {3: 5, 4: 10, 5: 18}
+
+#: Resonance balance cost per sinner stage (tunable — TODO Phase 14 SoulTetherConfig).
+_RESCUE_RESONANCE_COST: dict[int, int] = {3: 10, 4: 20, 5: 35}
+
+#: Corruption severity budget base per stage (tunable — TODO Phase 14).
+_RESCUE_BUDGET_BASE: dict[int, int] = {3: 60, 4: 120, 5: 250}
+
+#: Success level constants mirroring anima.py pattern.
+_RESCUE_CRIT_SUCCESS_LEVEL = 2
+_RESCUE_SUCCESS_LEVEL = 1
+_RESCUE_PARTIAL_LEVEL = 0
+
+
+def _compute_strain_cost(sinner_stage: int) -> int:
+    """Return Strain severity the Sineater takes for a rescue at *sinner_stage*.
+
+    Tuning placeholder values (TODO Phase 14):
+        stage 3 = 5, stage 4 = 10, stage 5 = 18
+
+    Args:
+        sinner_stage: Corruption stage (3-5) the Sinner is at.
+
+    Returns:
+        Strain severity amount to apply to the Sineater.
+    """
+    return _RESCUE_STRAIN_COST.get(sinner_stage, _RESCUE_STRAIN_COST[5])
+
+
+def _compute_resonance_cost(sinner_stage: int) -> int:
+    """Return Resonance balance cost the Sineater pays for a rescue at *sinner_stage*.
+
+    Tuning placeholder values (TODO Phase 14):
+        stage 3 = 10, stage 4 = 20, stage 5 = 35
+
+    Args:
+        sinner_stage: Corruption stage (3-5) the Sinner is at.
+
+    Returns:
+        Resonance balance amount to deduct from the Sineater.
+    """
+    return _RESCUE_RESONANCE_COST.get(sinner_stage, _RESCUE_RESONANCE_COST[5])
+
+
+def _compute_rescue_budget(
+    success_level: int,
+    sinner_stage: int,
+    thread_level: int,
+) -> int:
+    """Compute severity-reduction budget for the rescue ritual outcome.
+
+    Tuning placeholder formula (TODO Phase 14 — surface via SoulTetherConfig):
+        base = _RESCUE_BUDGET_BASE[stage]  (60 / 120 / 250)
+        multiplier = 1.0 + success_level * 0.5 + thread_level * 0.05
+        budget = max(1, int(base * multiplier))
+
+    The formula ensures:
+    - Critical success significantly boosts budget.
+    - Higher thread level gives a small but meaningful bonus.
+    - Failure still provides some minimum recovery (budget >= 1).
+
+    Args:
+        success_level: Integer success level from CheckResult (0=partial, 1=success, 2=crit).
+        sinner_stage: Corruption stage (3-5) the Sinner is at.
+        thread_level: The Sineater's RELATIONSHIP_CAPSTONE Thread level for this bond,
+            or 0 if no Sineater Thread exists.
+
+    Returns:
+        Integer severity budget to pass to reduce_corruption.
+    """
+    base = _RESCUE_BUDGET_BASE.get(sinner_stage, _RESCUE_BUDGET_BASE[5])
+    multiplier = 1.0 + success_level * 0.5 + thread_level * 0.05
+    return max(1, int(base * multiplier))
+
+
+def _get_sineater_thread_level(
+    sineater_sheet: CharacterSheet,
+    relationship: CharacterRelationship,
+    resonance: Resonance,
+) -> int:
+    """Return the Sineater's RELATIONSHIP_CAPSTONE Thread level for this bond + resonance.
+
+    The Sineater's Thread (if they bought one) is optional per §1.3.2 XP-anti-pattern.
+    Returns 0 if no Sineater-side Thread exists.
+
+    Args:
+        sineater_sheet: The Sineater's CharacterSheet.
+        relationship: The Sineater→Sinner CharacterRelationship row.
+        resonance: The Resonance to filter on.
+
+    Returns:
+        Thread.level (int) or 0 if no matching Thread exists.
+    """
+    from world.magic.models import Thread  # noqa: PLC0415 — avoid circular at module level
+
+    # The Sineater's capstone is on the Sineater→Sinner relationship direction.
+    # We look for a RELATIONSHIP_CAPSTONE Thread owned by the Sineater pointing
+    # to a capstone whose relationship == the Sineater→Sinner relationship row.
+    thread = Thread.objects.filter(
+        owner=sineater_sheet,
+        target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+        resonance=resonance,
+        retired_at__isnull=True,
+        target_capstone__relationship=relationship,
+    ).first()
+    return thread.level if thread is not None else 0
+
+
+def _perform_rescue_check(sineater_sheet: CharacterSheet) -> Any:
+    """Roll a Magical Endurance check for the rescue ritual.
+
+    Uses the canonical 'Magical Endurance' CheckType authored by
+    ``_make_magical_endurance_check_type`` / ``seed_magic_config``.
+    Difficulty is 0 (the stage itself is the gate; difficulty is implicit
+    in the high Strain + Resonance cost).
+
+    Args:
+        sineater_sheet: The Sineater's CharacterSheet.
+
+    Returns:
+        CheckResult dataclass from perform_check.
+    """
+    from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
+    from world.checks.services import perform_check  # noqa: PLC0415
+
+    magic_cat, _ = CheckCategory.objects.get_or_create(name="Magic")
+    check_type, _ = CheckType.objects.get_or_create(
+        name="Magical Endurance",
+        defaults={"category": magic_cat},
+    )
+    return perform_check(
+        sineater_sheet.character,
+        check_type=check_type,
+        target_difficulty=0,
+    )
 
 
 # =============================================================================

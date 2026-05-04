@@ -1,4 +1,4 @@
-"""Service tests for Soul Tether services (Spec B §12, §7, Phase 4 + Phase 5).
+"""Service tests for Soul Tether services (Spec B §12, §7, Phase 4 + Phase 5 + Phase 8).
 
 Tests cover:
     4.1  AffinityGateError on Abyssal-primary Sineater or Celestial-primary Sinner
@@ -11,6 +11,10 @@ Tests cover:
     5.2  resolve_sineating happy path (units > 0 deducts costs, increments state, audit row)
     5.3  resolve_sineating decline path (units == 0 writes audit row, no state changes)
     5.4  Per-scene cap clamping (max_units_offered capped to per-scene formula)
+
+    8.1  Stage-3 rescue happy path (costs paid, severity reduced, audit row, lifetime_helped)
+    8.2  Stage-5 rescue lifts protagonism lock when crossing below stage 5
+    8.3  Gate failures raise RescueValidationError
 """
 
 from __future__ import annotations
@@ -968,3 +972,484 @@ class PerSceneCapTests(TestCase):
 
         cap = _compute_per_scene_sineating_cap(sinner_thread=thread, relationship=rel)
         self.assertEqual(cap, min(20, 5 * 2 + 5))  # min(20, 15) = 15
+
+
+# =============================================================================
+# Phase 8: perform_soul_tether_rescue tests
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Shared helpers for Phase 8 tests
+# ---------------------------------------------------------------------------
+
+#: Patch target for perform_check (lazy-imported in soul_tether service).
+_PERFORM_CHECK_PATH = "world.checks.services.perform_check"
+
+
+def _make_mock_check_result(success_level: int = 1) -> object:
+    """Return a MagicMock that quacks like a CheckResult with a real CheckOutcome FK row.
+
+    Uses CheckOutcomeFactory to create a real DB row so it can be stored as a FK
+    on SoulTetherRescue.check_outcome. The mock's ``outcome`` attribute points to
+    this real CheckOutcome, and ``success_level`` returns the configured integer.
+    """
+    from unittest.mock import MagicMock
+
+    from world.traits.factories import CheckOutcomeFactory
+
+    outcome = CheckOutcomeFactory(
+        name=f"RescueOutcome_sl_{success_level}_{id(object())}",
+        success_level=success_level,
+    )
+    result = MagicMock()
+    result.outcome = outcome
+    result.success_level = success_level
+    return result
+
+
+def _make_tethered_pair_with_corruption(
+    stage: int,
+    track: object | None = None,
+) -> tuple:
+    """Return (sinner_sheet, sineater_sheet, resonance, relationship) with Sinner at *stage*.
+
+    - Sinner: Abyssal-primary + RELATIONSHIP_TRACK unlock, Corruption at *stage*.
+    - Sineater: Primal-primary + seed CharacterResonance with ample balance.
+    - Active tether formed (both directions + capstone + thread).
+    - Returns Sineater→Sinner CharacterRelationship (Sineater is source, Sinner is target).
+    """
+    from world.magic.factories import (
+        with_corruption_at_stage,
+    )
+    from world.magic.models.aura import CharacterResonance
+
+    wire_soul_tether_content()
+    if track is None:
+        track = RelationshipTrackFactory()
+    abyssal_affinity = AffinityFactory(name="Abyssal")
+    resonance = ResonanceFactory(affinity=abyssal_affinity)
+    sinner, sineater = _make_eligible_pair(track=track)
+    _make_active_relationship(sinner, sineater)
+
+    accept_soul_tether(
+        initiator_sheet=sinner,
+        partner_sheet=sineater,
+        sinner_role=SoulTetherRoleEnum.ABYSSAL,
+        resonance=resonance,
+        writeup="Bond forged for rescue tests.",
+        ritual_components=[],
+    )
+
+    # Set up Sinner corruption at the target stage.
+    with_corruption_at_stage(sinner, resonance, stage=stage)
+
+    # Seed Sineater CharacterResonance with generous balance so resonance gate passes.
+    sineater_cr, _ = CharacterResonance.objects.get_or_create(
+        character_sheet=sineater,
+        resonance=resonance,
+    )
+    sineater_cr.balance = 500  # plenty for any stage cost
+    sineater_cr.save(update_fields=["balance"])
+
+    # The Sineater→Sinner relationship (soul_tether_role=SINEATER).
+    sineater_to_sinner_rel = CharacterRelationship.objects.get(source=sineater, target=sinner)
+    return sinner, sineater, resonance, sineater_to_sinner_rel
+
+
+# ---------------------------------------------------------------------------
+# 8.1  Stage-3 rescue happy path
+# ---------------------------------------------------------------------------
+
+
+class PerformSoulTetherRescueStage3Tests(TestCase):
+    """Phase 8 §9.4 — stage-3 rescue happy path."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sinner, cls.sineater, cls.resonance, cls.relationship = (
+            _make_tethered_pair_with_corruption(stage=3)
+        )
+
+    def _run_rescue(self) -> object:
+        from world.magic.services.soul_tether import perform_soul_tether_rescue
+
+        mock_check = _make_mock_check_result(success_level=1)
+        with (
+            patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
+            patch(_PERFORM_CHECK_PATH, return_value=mock_check),
+        ):
+            return perform_soul_tether_rescue(
+                sineater_sheet=self.sineater,
+                sinner_sheet=self.sinner,
+                resonance=self.resonance,
+                components=[],
+                scene=None,  # Null-scene; scene participation check patched above
+            )
+
+    def test_outcome_sinner_stage_at_start_is_3(self) -> None:
+        outcome = self._run_rescue()
+        self.assertEqual(outcome.sinner_stage_at_start, 3)
+
+    def test_outcome_severity_reduced_is_positive(self) -> None:
+        outcome = self._run_rescue()
+        self.assertGreater(outcome.severity_reduced, 0)
+
+    def test_sineater_took_strain(self) -> None:
+        self._run_rescue()
+        from world.conditions.models import ConditionInstance
+
+        strain_instance = ConditionInstance.objects.filter(
+            target=self.sineater.character,
+            condition__name="Tether Strain",
+            resolved_at__isnull=True,
+        ).first()
+        self.assertIsNotNone(strain_instance)
+        self.assertGreater(strain_instance.severity, 0)
+
+    def test_sineater_resonance_balance_reduced(self) -> None:
+        from world.magic.models.aura import CharacterResonance
+
+        balance_before = CharacterResonance.objects.get(
+            character_sheet=self.sineater, resonance=self.resonance
+        ).balance
+
+        self._run_rescue()
+
+        balance_after = CharacterResonance.objects.get(
+            character_sheet=self.sineater, resonance=self.resonance
+        ).balance
+        self.assertLess(balance_after, balance_before)
+
+    def test_sineater_lifetime_helped_incremented(self) -> None:
+        from world.magic.models.aura import CharacterResonance
+
+        self._run_rescue()
+
+        cr = CharacterResonance.objects.get(character_sheet=self.sineater, resonance=self.resonance)
+        self.assertGreater(cr.lifetime_helped, 0)
+
+    def test_audit_row_written(self) -> None:
+        from world.magic.models.soul_tether import SoulTetherRescue
+
+        self._run_rescue()
+        self.assertEqual(SoulTetherRescue.objects.count(), 1)
+
+    def test_audit_row_sinner_stage_at_start_correct(self) -> None:
+        from world.magic.models.soul_tether import SoulTetherRescue
+
+        self._run_rescue()
+        row = SoulTetherRescue.objects.get()
+        self.assertEqual(row.sinner_stage_at_start, 3)
+
+    def test_audit_row_sineater_strain_taken_matches_outcome(self) -> None:
+        from world.magic.models.soul_tether import SoulTetherRescue
+
+        outcome = self._run_rescue()
+        row = SoulTetherRescue.objects.get()
+        self.assertEqual(row.sineater_strain_taken, outcome.sineater_strain_taken)
+
+    def test_outcome_protagonism_lock_lifted_false_at_stage_3(self) -> None:
+        """Stage 3 → no protagonism lock change."""
+        outcome = self._run_rescue()
+        self.assertFalse(outcome.protagonism_lock_lifted)
+
+
+# ---------------------------------------------------------------------------
+# 8.2  Stage-5 rescue lifts protagonism lock
+# ---------------------------------------------------------------------------
+
+
+class PerformSoulTetherRescueStage5Tests(TestCase):
+    """Phase 8 §9.4 — stage-5 rescue lifts protagonism_lock when dropping below stage 5."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sinner, cls.sineater, cls.resonance, cls.relationship = (
+            _make_tethered_pair_with_corruption(stage=5)
+        )
+
+    def _run_rescue(self, success_level: int = 2) -> object:
+        from world.magic.services.soul_tether import perform_soul_tether_rescue
+
+        mock_check = _make_mock_check_result(success_level=success_level)
+        with (
+            patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
+            patch(_PERFORM_CHECK_PATH, return_value=mock_check),
+        ):
+            return perform_soul_tether_rescue(
+                sineater_sheet=self.sineater,
+                sinner_sheet=self.sinner,
+                resonance=self.resonance,
+                components=[],
+                scene=None,  # Null-scene; scene participation check patched above
+            )
+
+    def test_stage_5_rescue_reduces_severity(self) -> None:
+        outcome = self._run_rescue()
+        self.assertGreater(outcome.severity_reduced, 0)
+
+    def test_stage_5_rescue_protagonism_lock_lifted_when_drop_below_5(self) -> None:
+        """When severity reduction drops Sinner below stage 5, protagonism_lock_lifted=True.
+
+        This works via Scope 7's reduce_corruption cleanup logic — when
+        corruption_current crosses below the stage-5 threshold, the is_protagonism_locked
+        aggregator flips automatically. Phase 8 observes this in the audit row.
+
+        With budget=int(250 * 1.0) = 250 and stage-5 threshold=1500, severity=1500,
+        a full success (success_level>=1) budget = int(250 * 1.5) = 375, reducing to 1125.
+        Stage 5 threshold is 1500, stage 4 threshold is 1000 — so 1125 is still in stage
+        4 territory (1000 < 1125 < 1500). With partial success the budget may not cross.
+        The test only asserts that the lock IS lifted when stage actually drops below 5.
+        """
+        outcome = self._run_rescue()
+        # Whether protagonism_lock_lifted depends on whether we actually cross the stage-5
+        # threshold. Assert consistency: if stage dropped below 5, lock must be lifted.
+        if outcome.sinner_stage_at_end < 5:
+            self.assertTrue(outcome.protagonism_lock_lifted)
+        else:
+            self.assertFalse(outcome.protagonism_lock_lifted)
+
+    def test_stage_5_sineater_takes_higher_strain(self) -> None:
+        """Stage-5 strain cost (18) is higher than stage-3 (5)."""
+        outcome = self._run_rescue()
+        # Stage-5 strain cost is 18 (placeholder tuning value).
+        self.assertEqual(outcome.sineater_strain_taken, 18)
+
+
+# ---------------------------------------------------------------------------
+# 8.3  Gate failures raise RescueValidationError
+# ---------------------------------------------------------------------------
+
+
+class PerformSoulTetherRescueGateTests(TestCase):
+    """Phase 8 §9.2 — gate failures raise RescueValidationError."""
+
+    def setUp(self) -> None:
+        wire_soul_tether_content()
+        self.track = RelationshipTrackFactory()
+        abyssal_affinity = AffinityFactory(name="Abyssal")
+        self.resonance = ResonanceFactory(affinity=abyssal_affinity)
+
+    def test_stage_below_3_raises(self) -> None:
+        """Sinner at stage 2 (Atonement territory) raises RescueValidationError."""
+        from world.magic.exceptions import RescueValidationError
+        from world.magic.factories import with_corruption_at_stage
+        from world.magic.services.soul_tether import perform_soul_tether_rescue
+
+        sinner, sineater = _make_eligible_pair(track=self.track)
+        _make_active_relationship(sinner, sineater)
+        accept_soul_tether(
+            initiator_sheet=sinner,
+            partner_sheet=sineater,
+            sinner_role=SoulTetherRoleEnum.ABYSSAL,
+            resonance=self.resonance,
+            writeup="Bond.",
+            ritual_components=[],
+        )
+        with_corruption_at_stage(sinner, self.resonance, stage=2)
+
+        with (
+            patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
+            self.assertRaises(RescueValidationError) as ctx,
+        ):
+            perform_soul_tether_rescue(
+                sineater_sheet=sineater,
+                sinner_sheet=sinner,
+                resonance=self.resonance,
+                components=[],
+                scene=object(),
+            )
+        self.assertIn("stage 3 or higher", ctx.exception.user_message)
+
+    def test_no_active_tether_raises(self) -> None:
+        """No soul tether between characters raises RescueValidationError."""
+        from world.magic.exceptions import RescueValidationError
+        from world.magic.factories import with_corruption_at_stage
+        from world.magic.models.aura import CharacterResonance
+        from world.magic.services.soul_tether import perform_soul_tether_rescue
+
+        sinner = CharacterSheetFactory()
+        sineater = CharacterSheetFactory()
+        _set_primary_affinity_abyssal(sinner)
+        _set_primary_affinity_primal(sineater)
+
+        # No tether formed — just seed corruption on Sinner.
+        with_corruption_at_stage(sinner, self.resonance, stage=3)
+        CharacterResonance.objects.get_or_create(
+            character_sheet=sineater, resonance=self.resonance, defaults={"balance": 500}
+        )
+
+        with (
+            patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
+            self.assertRaises(RescueValidationError),
+        ):
+            perform_soul_tether_rescue(
+                sineater_sheet=sineater,
+                sinner_sheet=sinner,
+                resonance=self.resonance,
+                components=[],
+                scene=None,  # No active scene — only needed if tether gate doesn't fire first
+            )
+
+    def test_not_in_scene_raises(self) -> None:
+        """When _both_in_scene returns False, raises RescueValidationError."""
+        from world.magic.exceptions import RescueValidationError
+        from world.magic.factories import with_corruption_at_stage
+        from world.magic.services.soul_tether import perform_soul_tether_rescue
+
+        sinner, sineater = _make_eligible_pair(track=self.track)
+        _make_active_relationship(sinner, sineater)
+        accept_soul_tether(
+            initiator_sheet=sinner,
+            partner_sheet=sineater,
+            sinner_role=SoulTetherRoleEnum.ABYSSAL,
+            resonance=self.resonance,
+            writeup="Bond.",
+            ritual_components=[],
+        )
+        with_corruption_at_stage(sinner, self.resonance, stage=3)
+
+        # Patch _both_in_scene to return False (characters not in same scene).
+        with (
+            patch("world.magic.services.soul_tether._both_in_scene", return_value=False),
+            self.assertRaises(RescueValidationError) as ctx,
+        ):
+            perform_soul_tether_rescue(
+                sineater_sheet=sineater,
+                sinner_sheet=sinner,
+                resonance=self.resonance,
+                components=[],
+                scene=None,
+            )
+        self.assertIn("same scene", ctx.exception.user_message)
+
+    def test_sineater_in_engagement_raises(self) -> None:
+        """Sineater in active CharacterEngagement raises RescueValidationError."""
+        from world.magic.exceptions import RescueValidationError
+        from world.magic.factories import with_corruption_at_stage
+        from world.magic.services.soul_tether import perform_soul_tether_rescue
+        from world.mechanics.factories import CharacterEngagementFactory
+
+        sinner, sineater = _make_eligible_pair(track=self.track)
+        _make_active_relationship(sinner, sineater)
+        accept_soul_tether(
+            initiator_sheet=sinner,
+            partner_sheet=sineater,
+            sinner_role=SoulTetherRoleEnum.ABYSSAL,
+            resonance=self.resonance,
+            writeup="Bond.",
+            ritual_components=[],
+        )
+        with_corruption_at_stage(sinner, self.resonance, stage=3)
+
+        # Put Sineater in engagement.
+        CharacterEngagementFactory(character=sineater.character)
+
+        with (
+            patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
+            self.assertRaises(RescueValidationError),
+        ):
+            perform_soul_tether_rescue(
+                sineater_sheet=sineater,
+                sinner_sheet=sinner,
+                resonance=self.resonance,
+                components=[],
+                scene=None,  # Null-scene; participation check patched above
+            )
+
+    def test_insufficient_resonance_raises(self) -> None:
+        """Sineater with balance 0 raises RescueValidationError."""
+        from world.magic.exceptions import RescueValidationError
+        from world.magic.factories import with_corruption_at_stage
+        from world.magic.models.aura import CharacterResonance
+        from world.magic.services.soul_tether import perform_soul_tether_rescue
+
+        sinner, sineater = _make_eligible_pair(track=self.track)
+        _make_active_relationship(sinner, sineater)
+        accept_soul_tether(
+            initiator_sheet=sinner,
+            partner_sheet=sineater,
+            sinner_role=SoulTetherRoleEnum.ABYSSAL,
+            resonance=self.resonance,
+            writeup="Bond.",
+            ritual_components=[],
+        )
+        with_corruption_at_stage(sinner, self.resonance, stage=3)
+
+        # Sineater has balance=0 — insufficient.
+        cr, _ = CharacterResonance.objects.get_or_create(
+            character_sheet=sineater, resonance=self.resonance
+        )
+        cr.balance = 0
+        cr.save(update_fields=["balance"])
+
+        with (
+            patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
+            self.assertRaises(RescueValidationError) as ctx,
+        ):
+            perform_soul_tether_rescue(
+                sineater_sheet=sineater,
+                sinner_sheet=sinner,
+                resonance=self.resonance,
+                components=[],
+                scene=None,  # Null-scene; participation check patched above
+            )
+        self.assertIn("insufficient resonance", ctx.exception.user_message)
+
+    def test_repeat_in_scene_raises(self) -> None:
+        """Second rescue attempt for same (sineater, sinner, scene) raises RescueValidationError."""
+        from world.magic.exceptions import RescueValidationError
+        from world.magic.factories import with_corruption_at_stage
+        from world.magic.models.aura import CharacterResonance
+        from world.magic.services.soul_tether import perform_soul_tether_rescue
+
+        sinner, sineater = _make_eligible_pair(track=self.track)
+        _make_active_relationship(sinner, sineater)
+        accept_soul_tether(
+            initiator_sheet=sinner,
+            partner_sheet=sineater,
+            sinner_role=SoulTetherRoleEnum.ABYSSAL,
+            resonance=self.resonance,
+            writeup="Bond.",
+            ritual_components=[],
+        )
+        # Use stage 5 with success_level=0 (failure) so budget=250, reducing from
+        # severity=1500 to 1250 → drops to stage 4 (threshold=1000) — still ≥ 3,
+        # so the second call passes the stage gate and hits the repeat-in-scene gate.
+        with_corruption_at_stage(sinner, self.resonance, stage=5)
+
+        # Ample balance for two attempts (stage 5 cost = 35 per attempt).
+        cr, _ = CharacterResonance.objects.get_or_create(
+            character_sheet=sineater, resonance=self.resonance
+        )
+        cr.balance = 500
+        cr.save(update_fields=["balance"])
+
+        # Use scene=None for both rescues. The repeat gate queries
+        # filter(sineater_sheet=..., sinner_sheet=..., scene=None) which matches
+        # any scene-null rescue between this pair — sufficient for this test.
+        # success_level=0: budget = int(250 * 1.0) = 250; sinner drops to stage 4.
+        mock_check = _make_mock_check_result(success_level=0)
+        with (
+            patch("world.magic.services.soul_tether._both_in_scene", return_value=True),
+            patch(_PERFORM_CHECK_PATH, return_value=mock_check),
+        ):
+            # First rescue — should succeed.
+            perform_soul_tether_rescue(
+                sineater_sheet=sineater,
+                sinner_sheet=sinner,
+                resonance=self.resonance,
+                components=[],
+                scene=None,
+            )
+
+            # Second rescue "same scene" (both None) — should raise.
+            with self.assertRaises(RescueValidationError) as ctx:
+                perform_soul_tether_rescue(
+                    sineater_sheet=sineater,
+                    sinner_sheet=sinner,
+                    resonance=self.resonance,
+                    components=[],
+                    scene=None,
+                )
+        self.assertIn("already performed", ctx.exception.user_message)
