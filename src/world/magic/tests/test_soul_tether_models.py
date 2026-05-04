@@ -80,6 +80,44 @@ class SoulTetherExceptionTests(TestCase):
             )
 
 
+class TypesImportTests(TestCase):
+    def test_types_module_imports(self) -> None:
+        from world.magic.types.soul_tether import (
+            SoulTetherRole,
+        )
+
+        self.assertEqual(SoulTetherRole.ABYSSAL.value, "ABYSSAL")
+        self.assertEqual(SoulTetherRole.SINEATER.value, "SINEATER")
+
+    def test_sineating_offer_frozen(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.factories import ResonanceFactory
+        from world.magic.types.soul_tether import SineatingOffer
+        from world.relationships.factories import CharacterRelationshipFactory
+
+        sinner = CharacterSheetFactory()
+        sineater = CharacterSheetFactory()
+        relationship = CharacterRelationshipFactory(source=sinner, target=sineater)
+        resonance = ResonanceFactory()
+
+        offer = SineatingOffer(
+            sinner_sheet=sinner,
+            sineater_sheet=sineater,
+            relationship=relationship,
+            resonance=resonance,
+            max_units_offered=10,
+            anima_cost_per_unit=2,
+            fatigue_cost_per_unit=1,
+            current_hollow=5,
+            hollow_max=20,
+            sineater_current_strain_stage=0,
+        )
+        self.assertEqual(offer.max_units_offered, 10)
+        # Verify it's frozen (immutable)
+        with self.assertRaises(AttributeError):
+            offer.max_units_offered = 5  # type: ignore[misc]
+
+
 class SineatingModelTests(TestCase):
     def test_sineating_can_be_created_with_required_fields(self) -> None:
         from world.character_sheets.factories import CharacterSheetFactory
