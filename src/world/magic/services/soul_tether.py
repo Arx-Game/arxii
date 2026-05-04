@@ -764,13 +764,13 @@ def soul_tether_redirect_handler(*, payload: Any) -> None:
     resonance: Resonance = payload.resonance
     accruing_amount: int = payload.amount
 
-    sinner_threads = _get_sinner_tether_threads_for_resonance(sinner_sheet, resonance)
-    if not sinner_threads:
-        return  # No active tether for this resonance — pass through normally.
-
     # Drain across threads in priority order (highest level first).
     remaining = accruing_amount
     with transaction.atomic():
+        sinner_threads = _get_sinner_tether_threads_for_resonance(sinner_sheet, resonance)
+        if not sinner_threads:
+            return  # No active tether for this resonance — pass through normally.
+
         for thread in sorted(sinner_threads, key=lambda t: -t.level):
             if remaining <= 0:
                 break
