@@ -692,9 +692,100 @@ def perform_soul_tether_rescue(
     raise NotImplementedError
 
 
-def soul_tether_redirect_handler(payload: Any) -> None:
-    """Subscriber for CORRUPTION_ACCRUING — drains Hollow, cancels event (Spec B §5.2)."""
-    raise NotImplementedError
+# =============================================================================
+# Redirect handler helper
+# =============================================================================
+
+
+def _get_sinner_tether_threads_for_resonance(
+    sheet: CharacterSheet,
+    resonance: Resonance,
+) -> list[Any]:
+    """Return all active Sinner-side RELATIONSHIP_CAPSTONE Threads matching resonance.
+
+    "Sinner-side" means the Thread's target_capstone belongs to a
+    CharacterRelationship where sheet is the source AND soul_tether_role is
+    ABYSSAL.  Only non-retired Threads are returned.
+
+    Args:
+        sheet: The character sheet whose Threads to search.
+        resonance: The resonance to match.
+
+    Returns:
+        List of Thread instances (may be empty).
+    """
+    from world.magic.models import Thread  # noqa: PLC0415 — avoid circular at module level
+
+    return list(
+        Thread.objects.filter(
+            owner=sheet,
+            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+            resonance=resonance,
+            retired_at__isnull=True,
+            # Capstone must belong to a soul-tether relationship where sheet is the Sinner.
+            target_capstone__relationship__source=sheet,
+            target_capstone__relationship__is_soul_tether=True,
+            target_capstone__relationship__soul_tether_role=SoulTetherRole.ABYSSAL,
+        ).select_related("target_capstone__relationship")
+    )
+
+
+# =============================================================================
+# Reactive subscriber: soul_tether_redirect_handler
+# =============================================================================
+
+
+def soul_tether_redirect_handler(*, payload: Any) -> None:
+    """Subscriber for CORRUPTION_ACCRUING — drains Hollow, absorbs what it can (Spec B §5.2).
+
+    Called by the flows trigger pipeline when CORRUPTION_ACCRUING fires for any
+    character.  Exits immediately if the character has no active Sinner-side
+    Threads matching the resonance.
+
+    Absorption mechanic:
+    - Iterates active Sinner Threads for the resonance in descending Thread.level
+      order (highest-level Thread absorbs first).
+    - Drains hollow_current from each Thread up to the remaining amount.
+    - Mutates payload.amount to the unabsorbed remainder.  When payload.amount
+      reaches 0 (fully absorbed), accrue_corruption short-circuits after dispatch.
+    - Recursion guard: if payload.redirect_origin is set, this is an overflow
+      re-call; skip without touching the Hollow.
+
+    Args:
+        payload: CorruptionAccruingPayload (mutable dataclass).
+    """
+    from world.magic.models import Thread  # noqa: PLC0415 — avoid circular at module level
+
+    # Recursion guard: overflow accrual from this handler must not re-enter.
+    if payload.redirect_origin is not None:
+        return
+
+    sinner_sheet: CharacterSheet = payload.character_sheet
+    resonance: Resonance = payload.resonance
+    accruing_amount: int = payload.amount
+
+    sinner_threads = _get_sinner_tether_threads_for_resonance(sinner_sheet, resonance)
+    if not sinner_threads:
+        return  # No active tether for this resonance — pass through normally.
+
+    # Drain across threads in priority order (highest level first).
+    remaining = accruing_amount
+    with transaction.atomic():
+        for thread in sorted(sinner_threads, key=lambda t: -t.level):
+            if remaining <= 0:
+                break
+            # Re-fetch with lock to prevent race conditions from concurrent casts.
+            locked_thread = Thread.objects.select_for_update().get(pk=thread.pk)
+            absorbed = min(locked_thread.hollow_current, remaining)
+            if absorbed <= 0:
+                continue
+            locked_thread.hollow_current -= absorbed
+            locked_thread.save(update_fields=["hollow_current"])
+            remaining -= absorbed
+
+    # Mutate the payload amount to the unabsorbed remainder.
+    # accrue_corruption checks payload.amount after dispatch; 0 → full no-op.
+    payload.amount = remaining
 
 
 def soul_tether_stage_advance_prompt(payload: Any) -> None:

@@ -253,7 +253,7 @@ def _emit_risk_transparency_events(
 
 
 @transaction.atomic
-def accrue_corruption(  # noqa: PLR0913
+def accrue_corruption(  # noqa: PLR0913, PLR0912, PLR0915, C901
     *,
     character_sheet: CharacterSheet,
     resonance: Resonance,
@@ -282,7 +282,10 @@ def accrue_corruption(  # noqa: PLR0913
         msg = f"amount must be > 0, got {amount}"
         raise ValueError(msg)
 
-    # Pre-mutation event for future Spec B interception
+    # Pre-mutation event for Spec B interception (Spec B §5.2).
+    # The handler may mutate pre_payload.amount to reduce (or zero out) what
+    # actually accrues — e.g., Soul Tether Hollow absorption.  When the amount
+    # is reduced to zero after dispatch, the whole accrual is short-circuited.
     pre_payload = CorruptionAccruingPayload(
         character_sheet=character_sheet,
         resonance=resonance,
@@ -293,6 +296,31 @@ def accrue_corruption(  # noqa: PLR0913
     location = _resolve_location(character_sheet)
     if location is not None:
         emit_event(EventName.CORRUPTION_ACCRUING, pre_payload, location=location)
+
+    # Short-circuit: a reactive subscriber (e.g. Soul Tether redirect) may have
+    # zeroed pre_payload.amount to signal full absorption.  Read the current
+    # CharacterResonance state for an accurate no-op result.
+    if pre_payload.amount <= 0:
+        try:
+            _cr = CharacterResonance.objects.get(
+                character_sheet=character_sheet, resonance=resonance
+            )
+            _current = _cr.corruption_current
+            _lifetime = _cr.corruption_lifetime
+        except CharacterResonance.DoesNotExist:
+            _current = 0
+            _lifetime = 0
+        return _make_no_op_result(
+            resonance=resonance,
+            amount=0,
+            current_before=_current,
+            current_after=_current,
+            lifetime_before=_lifetime,
+            lifetime_after=_lifetime,
+        )
+
+    # Re-read amount in case a subscriber reduced it (partial absorption).
+    amount = pre_payload.amount
 
     # Increment fields
     char_resonance, _ = CharacterResonance.objects.select_for_update().get_or_create(

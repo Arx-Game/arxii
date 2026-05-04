@@ -1545,7 +1545,7 @@ def _build_soul_tether_redirect_flow() -> object:
             flow=flow,
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="world.magic.services.soul_tether.soul_tether_redirect_handler",
-            parameters={},
+            parameters={"payload": "@payload"},
         )
     return flow
 
