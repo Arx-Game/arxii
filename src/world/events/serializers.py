@@ -5,7 +5,6 @@ from rest_framework import serializers
 
 from world.events.constants import InvitationTargetType
 from world.events.models import Event, EventHost, EventInvitation, EventModification
-from world.scenes.models import Scene
 
 
 class EventHostSerializer(serializers.ModelSerializer):
@@ -110,12 +109,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             return False
-        return Scene.objects.filter(
-            event=obj,
-            is_active=True,
-            participations__account=request.user,
-            participations__is_gm=True,
-        ).exists()
+        return obj.id in self.context.get("viewer_gm_event_ids", set())
 
     def get_is_host(self, obj: Event) -> bool:
         request = self.context.get("request")
