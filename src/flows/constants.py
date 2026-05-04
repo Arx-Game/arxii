@@ -39,6 +39,9 @@ class EventName(models.TextChoices):
         "condition_stage_advance_check_about_to_fire",
         "Condition stage advance resist check about to fire",
     )
+    # Soul Tether (Resonance Pivot Spec B)
+    SOUL_TETHER_FORMED = "soul_tether_formed", "Soul Tether formed"
+    SOUL_TETHER_DISSOLVED = "soul_tether_dissolved", "Soul Tether dissolved"
     # Outfit actions (Items / Outfits Phase A)
     BEFORE_APPLY_OUTFIT = "before_apply_outfit", "Before Apply Outfit"
     APPLY_OUTFIT = "apply_outfit", "Apply Outfit"
