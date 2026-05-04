@@ -298,3 +298,60 @@ class PersonaViewSetTestCase(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert response.data["id"] == persona.id
         assert response.data["name"] == persona.name
+
+
+class SceneListQueryCountTests(APITestCase):
+    """Lock the query count on the scene list endpoint.
+
+    Regression guard for the previous N+1 in
+    ``SceneListSerializer.get_participants`` — a
+    ``Persona.objects.filter(interactions_written__scene=obj, ...)`` per
+    scene. With the upstream ``Prefetch`` on ``SceneViewSet.get_queryset``,
+    the participants are derived from the prefetched interaction list and
+    the query count grows O(1) in the number of scenes (not O(N)).
+    """
+
+    def setUp(self):
+        Scene.objects.all().delete()
+        Persona.objects.all().delete()
+        self.account = AccountFactory()
+        self.client.force_authenticate(user=self.account)
+
+        # Five scenes, each with two interactions written by two different
+        # personas. Without the prefetch, the list endpoint fires one
+        # Persona query per scene (5 extra queries). With the prefetch the
+        # personas are reachable from the interactions list directly.
+        for _ in range(5):
+            scene = SceneFactory(participants=[self.account])
+            persona_a = PersonaFactory()
+            persona_b = PersonaFactory()
+            InteractionFactory(scene=scene, persona=persona_a)
+            InteractionFactory(scene=scene, persona=persona_b)
+
+    def test_list_endpoint_query_count_constant_with_scenes(self):
+        """Scene list query count is constant in scene count (no per-scene
+        Persona query inside the participants serializer)."""
+        url = reverse("scene-list")
+
+        # Warm up: prime auth + ContentType caches so the assertNumQueries
+        # block sees only the steady-state queries for the list endpoint.
+        warmup = self.client.get(url)
+        assert warmup.status_code == status.HTTP_200_OK
+        assert len(warmup.data["results"]) == 5
+
+        # Steady-state queries for the authenticated, non-staff list path:
+        #   1. SELECT user.is_staff (auth/permission check)
+        #   2. SELECT COUNT(*) for the paginator
+        #   3. SELECT scenes (page) with privacy/participant filter
+        #   4. Prefetch interactions + persona/character_sheet/character/
+        #      roster_entry (single query per page via __in)
+        # The prior N+1 added one Persona query per scene (5 here).
+        with self.assertNumQueries(4):
+            response = self.client.get(url)
+        assert response.status_code == status.HTTP_200_OK
+
+        # Sanity check: each scene reports two participants, derived from
+        # the prefetched interactions list rather than a fresh query.
+        assert len(response.data["results"]) == 5
+        for scene_data in response.data["results"]:
+            assert len(scene_data["participants"]) == 2

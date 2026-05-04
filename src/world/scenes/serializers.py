@@ -89,15 +89,34 @@ class SceneListSerializer(serializers.ModelSerializer):
         return None
 
     def get_participants(self, obj: Scene) -> list[dict]:
-        personas = (
-            Persona.objects.filter(
-                interactions_written__scene=obj,
-                is_fake_name=False,
-            )
-            .distinct()
-            .select_related("character_sheet__roster_entry")
-        )
+        personas = self._collect_personas(obj, only_real_names=True)
         return SceneParticipantSerializer(personas, many=True).data
+
+    @staticmethod
+    def _collect_personas(obj: Scene, *, only_real_names: bool) -> list[Persona]:
+        """Dedup personas reachable via the scene's interactions.
+
+        Reads from the ``cached_interactions`` attribute populated by
+        SceneViewSet's prefetch. Falls back to a fresh query if the serializer
+        is used outside the viewset (e.g., direct instantiation in tests).
+        """
+        cached = getattr(obj, "cached_interactions", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
+        if cached is None:
+            cached = list(
+                obj.interactions.select_related(
+                    "persona__character_sheet__character",
+                    "persona__character_sheet__roster_entry",
+                )
+            )
+        seen: dict[int, Persona] = {}
+        for interaction in cached:
+            persona = interaction.persona
+            if persona is None or persona.pk in seen:
+                continue
+            if only_real_names and persona.is_fake_name:
+                continue
+            seen[persona.pk] = persona
+        return list(seen.values())
 
     def get_is_owner(self, obj):
         request = self.context.get("request")
@@ -123,16 +142,7 @@ class SceneDetailSerializer(SceneListSerializer):
         extra_kwargs = {"name": {"required": False}}
 
     def get_personas(self, obj: Scene) -> list[dict]:
-        personas = (
-            Persona.objects.filter(
-                interactions_written__scene=obj,
-            )
-            .distinct()
-            .select_related(
-                "character_sheet",
-                "character_sheet__roster_entry",
-            )
-        )
+        personas = self._collect_personas(obj, only_real_names=False)
         return PersonaSerializer(personas, many=True).data
 
     def get_participants(self, obj):

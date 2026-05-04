@@ -1,7 +1,7 @@
 from datetime import timedelta
 from http import HTTPMethod
 
-from django.db.models import Q, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import permissions, serializers, status, viewsets
@@ -21,6 +21,7 @@ from world.scenes.filters import (
     SceneSummaryRevisionFilter,
 )
 from world.scenes.models import (
+    Interaction,
     Persona,
     Scene,
     SceneParticipation,
@@ -58,7 +59,25 @@ class SceneViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def get_queryset(self) -> QuerySet[Scene]:
-        queryset = super().get_queryset().order_by("-date_started")
+        # Prefetch interactions and their personas so list/detail serializers
+        # can derive participants/personas from the cached list rather than
+        # firing a fresh per-scene Persona query inside SerializerMethodField.
+        # The persona/participant serializers walk
+        # persona.character_sheet.roster_entry, then read
+        # entry.character_sheet.character.db_key — the second character_sheet
+        # hop hits the SharedMemoryModel identity map for free, so we only
+        # need to chain as far as roster_entry plus the character ObjectDB.
+        interactions_prefetch = Prefetch(
+            "interactions",
+            queryset=Interaction.objects.select_related(
+                "persona__character_sheet__character",
+                "persona__character_sheet__roster_entry",
+            ),
+            to_attr="cached_interactions",
+        )
+        queryset = (
+            super().get_queryset().order_by("-date_started").prefetch_related(interactions_prefetch)
+        )
         if self.action == "list":
             user = self.request.user
             if user.is_authenticated:
