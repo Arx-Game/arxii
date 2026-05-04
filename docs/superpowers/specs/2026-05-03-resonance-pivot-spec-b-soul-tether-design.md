@@ -214,9 +214,19 @@ def on_corruption_accruing(payload):
     if not tethers:
         return
 
-    # Drain Hollow capacity across all tethers, priority order (strongest Thread first)
+    # Collect the Sinner-side Threads anchored to active tether bonds.
+    # Per Spec A's RELATIONSHIP_CAPSTONE unique constraint, the Sinner has at
+    # most one Thread per (resonance, capstone) combination. Different bonds
+    # (different capstones) can each have their own Thread in the same
+    # resonance — multiple Threads in the cast's resonance is normal for a
+    # Sinner with multiple tethers. We further filter to Threads whose
+    # resonance matches the corruption being accrued, since only matching-
+    # resonance Threads are eligible to absorb.
+    sinner_threads = sinner_threads_for_tethers(tethers, resonance=resonance)
+
+    # Drain across them in priority order (highest Thread.level first)
     remaining = accruing_amount
-    for thread in tethers_threads_priority_order(tethers):  # Sinner-side Threads
+    for thread in sorted(sinner_threads, key=lambda t: -t.level):
         if remaining <= 0:
             break
         absorbed = min(thread.hollow_current, remaining)
@@ -506,8 +516,9 @@ Per principle §1.3.2, the resistance benefit is *only* manifest when the Sineat
 Implemented as a tier-0 passive `ThreadPullEffect` on Sineater-side `RELATIONSHIP_CAPSTONE` Threads:
 - New `effect_kind` enum value: `CORRUPTION_RESISTANCE`.
 - Effect's runtime value derives from `lifetime_helped[Thread.resonance]` of the Sineater. Not a stored amount.
-- Multiplicative reduction applied to the Sineater's own non-Celestial corruption accrual: `effective_amount = base_amount * max(0.1, 1 - lifetime_helped[X] / threshold)` for tunable threshold. Caps at 90% reduction (floor multiplier 0.1).
-- Per Spec A's `Thread.resonance` schema (one resonance per Thread), a Sineater wanting resistance to multiple resonances weaves multiple Threads. Each Thread manifests resistance for its own resonance independently.
+- **Application point and scope:** the resistance applies to the **Sineater's own corruption accrual when *they themselves* cast non-Celestial techniques** — i.e., it reduces what *their own* casting writes to *their own* `CharacterResonance.corruption_current`. It is *not* applied to the Hollow's draining behavior on a Sinner partner's casts (the Hollow drains uniformly per absorbed amount; the Sineater is not "casting" during a redirect). Concretely: when `accrue_corruption` is called for a Sineater character whose source is their own non-Celestial cast, `accrue_corruption` looks up matching active Sineater-side `RELATIONSHIP_CAPSTONE` Threads and applies the strongest matching `CORRUPTION_RESISTANCE` multiplier to the accrual amount before storing.
+- Multiplicative reduction: `effective_amount = base_amount * max(0.1, 1 - lifetime_helped[X] / threshold)` for tunable threshold. Caps at 90% reduction (floor multiplier 0.1).
+- Per Spec A's `Thread.resonance` schema (one resonance per Thread, plus the unique constraint on `(owner, resonance, target_capstone)`), a Sineater wanting resistance to multiple resonances weaves multiple Threads — either across different bonds (different capstones) or, on a single bond, by weaving one Thread per resonance. Each Thread manifests resistance for its own resonance independently.
 
 ### 10.3 Implementation note
 
@@ -558,50 +569,65 @@ The ritual has low-DC performance check; failure means the bond doesn't form (no
 ### 12.4 Service flow
 
 ```python
-def accept_soul_tether(initiator_sheet, partner_sheet, sinner_role):
-    # validates ...
-    relationship = get_or_create_relationship(initiator_sheet, partner_sheet)
-    require(relationship.is_active)
-    require(both_consent_recorded(relationship))
+def accept_soul_tether(initiator_sheet, partner_sheet, sinner_role, resonance):
+    # `CharacterRelationship` has `source` and `target` fields (Spec A schema):
+    # the bond is represented as TWO rows — initiator→partner AND partner→initiator.
+    # Each row carries its own `soul_tether_role` independently. We set both rows
+    # in the same atomic block so the bond is symmetric in directionality.
+
+    rel_outgoing = get_or_create_relationship(source=initiator_sheet, target=partner_sheet)
+    rel_incoming = get_or_create_relationship(source=partner_sheet, target=initiator_sheet)
+    require(rel_outgoing.is_active and rel_incoming.is_active)
+    require(both_consent_recorded(rel_outgoing, rel_incoming))
     require(affinity_gates_met(initiator_sheet, partner_sheet, sinner_role))
 
     # Determine which side is Sinner
-    sinner_sheet = initiator_sheet if sinner_role == ABYSSAL else partner_sheet
-    sineater_sheet = partner_sheet if sinner_role == ABYSSAL else initiator_sheet
+    sinner_sheet = initiator_sheet if sinner_role == "ABYSSAL" else partner_sheet
+    sineater_sheet = partner_sheet if sinner_role == "ABYSSAL" else initiator_sheet
 
     require(sinner_sheet.threads.has_unlock(RELATIONSHIP_CAPSTONE))
 
     with atomic():
-        # Create the capstone event
+        # Create the formation capstone event. RelationshipCapstone FKs to one
+        # CharacterRelationship row (per Spec A's Thread schema, which expects a
+        # single capstone target FK to `target_capstone`). Convention: anchor on
+        # the Sinner→Sineater direction so the Sinner's Thread can FK to it
+        # cleanly via target_capstone.
+        anchor_relationship = (
+            rel_outgoing if rel_outgoing.source_id == sinner_sheet.id else rel_incoming
+        )
         capstone = RelationshipCapstone.objects.create(
-            relationship=relationship,
+            relationship=anchor_relationship,
             is_ritual_capstone=True,
             ritual=Ritual.objects.get(name="accept_soul_tether"),
             writeup=...,  # from form
             ...
         )
 
-        # Flip the bond flags
-        relationship.is_soul_tether = True
-        relationship.save()
+        # Flip is_soul_tether and set role on BOTH directional rows so the bond
+        # is detectable from either direction.
+        for rel in (rel_outgoing, rel_incoming):
+            rel.is_soul_tether = True
+            rel.soul_tether_role = (
+                "ABYSSAL" if rel.source_id == sinner_sheet.id else "SINEATER"
+            )
+            rel.save(update_fields=["is_soul_tether", "soul_tether_role"])
 
-        # Set roles asymmetrically — relationship is between two sheets,
-        # so we need the role to be tied to which sheet is which
-        relationship.character_a_role = "ABYSSAL" if relationship.character_a == sinner_sheet else "SINEATER"
-        relationship.character_b_role = "SINEATER" if relationship.character_a == sinner_sheet else "ABYSSAL"
-        relationship.save()
-
-        # Weave Sinner's Thread
+        # Weave Sinner's Thread, anchored to the formation capstone.
+        # Per Spec A's RELATIONSHIP_CAPSTONE constraint, exactly one Thread per
+        # (owner, resonance, target_capstone) — so the Sinner gets one Thread per
+        # resonance they want to invest the bond in, all anchored to this capstone.
         sinner_thread = weave_thread(
-            sheet=sinner_sheet,
+            owner=sinner_sheet,
             target_kind=RELATIONSHIP_CAPSTONE,
-            target_relationship=relationship,
-            resonance=...,  # specified in form
+            target_capstone=capstone,
+            resonance=resonance,
         )
+        # sinner_thread.hollow_current starts at 0 — Sineater must Sineat to fill it.
 
-        # Initial hollow_current = 0 — Sineater must Sineat to fill it
+    # Sineater's optional Thread is woven separately (anchors to the same capstone
+    # via target_capstone with the Sineater as `owner`). Not part of formation.
 
-    # Audit
     write_capstone_audit_row(...)
     fire_event(SOUL_TETHER_FORMED, ...)
 ```
@@ -675,12 +701,14 @@ Written every time a rescue ritual resolves. Fields:
 | `check_outcome` | FK CheckOutcome | |
 | `created_at` | DateTimeField | |
 
-### 14.2 Aggregate counters (denormalized fast-path)
+### 14.2 Persistent state fields (sources of truth)
 
-- `Thread.hollow_current` (Sinner-side `RELATIONSHIP_CAPSTONE` Threads only — see §4.1).
-- `CharacterResonance.lifetime_helped` (Sineater-side, monotonic — see §10.1).
+Two new persistent fields, each the **single source of truth** for the value it represents (not denormalizations of other state):
 
-That's all. Per-relationship and per-Thread aggregates (e.g., "total units this Sineater has accepted on bond X") are computed by aggregation over audit rows on demand. No additional denormalized counters in MVP — audit rows are sufficient for any achievement query, and the join to `CharacterRelationship` enables compound queries by track type.
+- `Thread.hollow_current` — the current Hollow capacity on a Sinner-side `RELATIONSHIP_CAPSTONE` Thread (§4.1, §5). Mutated only by the `CORRUPTION_ACCRUING` redirect handler (drain) and `resolve_sineating` (refill). Not derived from anything.
+- `CharacterResonance.lifetime_helped` — the per-resonance monotonic counter on the Sineater (§10.1). Incremented only by `resolve_sineating` and `perform_soul_tether_rescue`. Permanent.
+
+Per-relationship and per-Thread aggregates (e.g., "total units this Sineater has accepted on bond X") are *not* stored — they are computed by aggregation over audit rows on demand. No additional fast-path counters in MVP. Audit rows plus the join to `CharacterRelationship` are sufficient for any achievement query, including compound queries by track type.
 
 ### 14.3 Stat integration
 
