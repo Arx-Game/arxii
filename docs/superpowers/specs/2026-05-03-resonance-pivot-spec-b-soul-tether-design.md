@@ -256,9 +256,15 @@ Key properties:
 
 ### 5.3 Spec 7 contract divergence
 
-Scope 7 §3.2 anticipated that the redirect would issue a "small trace amount of `accrue_corruption` to the Sineater" — i.e., the Sineater would accumulate actual Corruption from absorption. **Spec B deliberately diverges here.** Routine Sineating produces no Sineater-side Corruption and no Tether Strain. Strain only accrues at *dramatic* moments — opt-in stage-advance bonuses and rescue rituals. The Sineater's "loss of identity" cost is reserved for dramatic moments where the player has explicit agency, not as a constant background tax.
+Scope 7 §3.2 anticipated that the redirect would issue a "small trace amount of `accrue_corruption` to the Sineater" — i.e., the Sineater would accumulate actual Corruption from absorption directly during routine redirects. **Spec B deliberately diverges here.** Routine Sineating produces no Sineater-side Corruption and no Tether Strain. Strain only accrues at *dramatic* moments — opt-in stage-advance bonuses and rescue rituals. The Sineater's "loss of identity" cost is reserved for dramatic moments where the player has explicit agency, not as a constant background tax.
 
-The `redirect_origin` parameter on `accrue_corruption` (which Scope 7 added for this purpose) is unused by Spec B's overflow path (the overflow is straight Sinner accrual, not a Sineater leg). It remains available for future authored content (e.g., the Strain-stage-4 corruption-accrual aftermath in §6.3).
+**Why this divergence is the better design:**
+
+- **Sineater-corruption stories still happen** — they emerge from Strain stage 4-5 stage-entry effects (§6.4), which themselves only accrue when the Sineater took Strain at a *dramatic* moment (stage-advance bonus or rescue ritual). The "I started to taste the darkness" arc is therefore always tied to a specific scene of high stakes, not to a quiet aggregate drift. Better narrative payoff per unit of corruption accrued.
+- **Tension in non-dramatic moments comes from negotiation, not from mechanical drift.** The pressure between Sinner and Sineater in routine play is the Sinner asking to be Sineated and the Sineater choosing how much to eat — that *is* the routine dramatic beat, played out at the bond's normal cadence. There's no need for a hidden background tax to make routine play feel weighty; the Sineating negotiation itself is the weight.
+- **Compatible with §1.3 invariants.** Anti-resentment (§1.3.1) is preserved because the Sineater never accrues corruption from a partner who's just casting a lot off-screen — corruption only reaches the Sineater when both characters are in scene together AND the Sineater opts into a dramatic moment. The XP-anti-pattern (§1.3.2) is preserved because the Sineater's only corruption risk comes from their own explicit choices.
+
+The `redirect_origin` parameter on `accrue_corruption` (which Scope 7 added for the original redirect-to-Sineater idea) is therefore unused by Spec B's redirect overflow path (overflow is straight Sinner accrual, not a Sineater leg). It remains available for the Strain-stage-4-5 corruption-accrual aftermath in §6.4 — that authored content sets `redirect_origin=sinner_sheet` for audit lineage, since the Sineater's corruption there is genealogically traceable to a specific Sinner's bond and a specific dramatic scene.
 
 ---
 
