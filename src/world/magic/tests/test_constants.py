@@ -26,10 +26,17 @@ class TargetKindTests(SimpleTestCase):
 
 
 class EffectKindTests(SimpleTestCase):
-    def test_five_effect_kinds(self):
+    def test_effect_kinds(self) -> None:
         self.assertEqual(
             set(EffectKind.values),
-            {"FLAT_BONUS", "INTENSITY_BUMP", "VITAL_BONUS", "CAPABILITY_GRANT", "NARRATIVE_ONLY"},
+            {
+                "FLAT_BONUS",
+                "INTENSITY_BUMP",
+                "VITAL_BONUS",
+                "CAPABILITY_GRANT",
+                "NARRATIVE_ONLY",
+                "CORRUPTION_RESISTANCE",
+            },
         )
 
 
