@@ -441,3 +441,72 @@ class GMTableMembershipPlayerVisibilityTest(TestCase):
         ids = self._membership_ids(self.outsider_account)
         assert self.membership_a.pk not in ids
         assert self.membership_b.pk not in ids
+
+
+# ────────────────────────────────────────────────────────────────────────────────
+# Query-count regression: GMTable list endpoint
+# ────────────────────────────────────────────────────────────────────────────────
+
+
+class GMTableListQueryCountTest(TestCase):
+    """Lock the query count on the GM table list endpoint.
+
+    Regression guard for three N+1 patterns previously in
+    ``GMTableSerializer``:
+
+    * ``get_member_count`` — ``filter(left_at__isnull=True).count()`` per row
+    * ``get_story_count`` — ``primary_stories.count()`` per row
+    * ``get_viewer_role`` — up to two ``.exists()`` queries per row
+
+    After the fix, ``GMTableViewSet`` annotates the counts on the queryset
+    and pre-computes the viewer-membership / viewer-story-participation sets
+    in ``get_serializer_context``. The list endpoint should now grow O(1)
+    in queries — not O(N) in table count.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.staff = AccountFactory(is_superuser=True)
+
+        # Build several tables with members and stories so the annotations
+        # have non-zero values to report.
+        cls.tables = []
+        for _ in range(4):
+            table = GMTableFactory()
+            for _ in range(2):
+                member_persona, _ = _linked_persona(AccountFactory())
+                GMTableMembershipFactory(table=table, persona=member_persona)
+            StoryFactory(primary_table=table)
+            StoryFactory(primary_table=table)
+            cls.tables.append(table)
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+
+    def test_list_query_count_constant_with_table_count(self) -> None:
+        """Staff list endpoint uses a fixed number of queries per request."""
+        self.client.force_authenticate(user=self.staff)
+        url = reverse("gm:gm-table-list")
+        warmup = self.client.get(url)
+        assert warmup.status_code == 200
+
+        # Lock the count. The constant value is documentary — the regression
+        # guard is that it does NOT scale with len(self.tables): doubling the
+        # number of tables in setUpTestData should leave this number unchanged.
+        # Steady-state queries:
+        #   1. session lookup
+        #   2. COUNT(*) for pagination
+        #   3. SELECT tables with annotated member_count + story_count
+        #   4. ``_get_viewer_member_table_ids`` — one query
+        #   5. ``_get_viewer_story_participant_table_ids`` — one query
+        with self.assertNumQueries(5):
+            response = self.client.get(url)
+        assert response.status_code == 200
+
+        # Sanity-check that the counts come from the annotation, not a per-row
+        # query: every table reports its true member_count and story_count.
+        results = {row["id"]: row for row in response.data["results"]}
+        for table in self.tables:
+            assert results[table.pk]["member_count"] == 2
+            assert results[table.pk]["story_count"] == 2
+            assert results[table.pk]["viewer_role"] == "staff"

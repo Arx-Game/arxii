@@ -331,3 +331,56 @@ class EventInvitationViewSetTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         inv = EventInvitation.objects.get(event=self.event, target_persona=target)
         self.assertEqual(inv.invited_by_id, self.host_persona.id)
+
+
+class EventDetailQueryCountTestCase(APITestCase):
+    """Regression guard for the per-event N+1 in ``get_is_gm``.
+
+    Prior implementation fired one ``Scene.objects.filter(...).exists()`` per
+    detail view. After the refactor, ``EventViewSet.get_serializer_context``
+    pre-computes ``viewer_gm_event_ids`` once per request, so ``get_is_gm`` is
+    a set-membership check (zero queries) regardless of how many events the
+    user is GM for.
+    """
+
+    def setUp(self) -> None:
+        self.account = AccountFactory()
+        self.client.force_authenticate(user=self.account)
+
+        # Make the requesting user a scene GM for several events so the
+        # viewer-GM set has multiple rows. The new implementation should
+        # remain O(1) in queries even as this set grows.
+        self.target_event = EventFactory(status=EventStatus.SCHEDULED)
+        EventHostFactory(event=self.target_event)
+        start_event(self.target_event)
+        target_scene = Scene.objects.get(event=self.target_event)
+        SceneParticipationFactory(scene=target_scene, account=self.account, is_gm=True)
+
+        for _ in range(3):
+            other = EventFactory(status=EventStatus.SCHEDULED)
+            EventHostFactory(event=other)
+            start_event(other)
+            other_scene = Scene.objects.get(event=other)
+            SceneParticipationFactory(scene=other_scene, account=self.account, is_gm=True)
+
+    def test_event_retrieve_query_count_with_gm_check(self) -> None:
+        """Detail endpoint query count is independent of viewer-GM set size."""
+        url = f"/api/events/{self.target_event.id}/"
+        # Warmup pass: prime any per-process / per-request caches that aren't
+        # part of the steady-state query count (auth-backend lookups, etc.).
+        warmup = self.client.get(url)
+        self.assertEqual(warmup.status_code, status.HTTP_200_OK)
+        self.assertTrue(warmup.data["is_gm"])
+
+        # Lock the steady-state count. The exact number is documentary —
+        # the regression invariant is that it does NOT grow with the size of
+        # the viewer-GM set: increasing the loop above to 30 events should
+        # leave this number unchanged. Steady-state queries:
+        #   1. session lookup
+        #   2-3. ``_get_active_persona_ids`` for visibility filter + context
+        #   4. event detail (with select_related / prefetch)
+        #   5. ``_get_viewer_gm_event_ids`` — single query for the GM-event set
+        with self.assertNumQueries(5):
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["is_gm"])
