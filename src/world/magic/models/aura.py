@@ -125,6 +125,15 @@ class CharacterResonance(SharedMemoryModel):
         blank=True,
         help_text="Optional player-defined description of how this resonance manifests.",
     )
+    lifetime_helped = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Sineater per-resonance counter (Spec B §10.1). Increments on "
+            "every accepted Sineating unit and rescue ritual for this resonance. "
+            "Monotonic — never decreases. Drives the Sineater's CORRUPTION_RESISTANCE "
+            "magnitude when they have a Sineater Thread in this resonance."
+        ),
+    )
     corruption_current = models.PositiveIntegerField(
         default=0,
         help_text=(
