@@ -51,6 +51,34 @@ class SoulTetherExceptionTests(TestCase):
             raise AffinityGateError(expected_msg)
         self.assertEqual(ctx.exception.user_message, expected_msg)
 
+    def test_default_user_message_when_no_args(self) -> None:
+        from world.magic.exceptions import (
+            AffinityGateError,
+            NoSoulTetherUnlockError,
+            RescueValidationError,
+            SineatingValidationError,
+            SoulTetherFormationError,
+        )
+
+        for cls in [
+            AffinityGateError,
+            NoSoulTetherUnlockError,
+            SoulTetherFormationError,
+            SineatingValidationError,
+            RescueValidationError,
+        ]:
+            err = cls()
+            self.assertNotEqual(
+                err.user_message,
+                "",
+                f"{cls.__name__} should have a non-empty default",
+            )
+            self.assertIn(
+                err.user_message,
+                cls.SAFE_MESSAGES,
+                f"{cls.__name__} default should be in SAFE_MESSAGES",
+            )
+
 
 class SineatingModelTests(TestCase):
     def test_sineating_can_be_created_with_required_fields(self) -> None:
