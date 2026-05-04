@@ -163,15 +163,21 @@ def accept_soul_tether(  # noqa: PLR0913
     # 3. Validate Sinner has a RELATIONSHIP_TRACK ThreadWeavingUnlock (§12.4).
     _validate_unlock(sinner_sheet)
 
-    # 4. Get-or-create both directional CharacterRelationship rows.
-    rel_outgoing = _get_or_create_relationship(source=sinner_sheet, target=sineater_sheet)
-    rel_incoming = _get_or_create_relationship(source=sineater_sheet, target=sinner_sheet)
-
-    # 5. Idempotency check — raise if either direction is already a Soul Tether.
-    if rel_outgoing.is_soul_tether or rel_incoming.is_soul_tether:
-        raise SoulTetherFormationError(_MSG_DUPLICATE_TETHER)
-
     with transaction.atomic():
+        # 4. Get-or-create both directional CharacterRelationship rows.
+        rel_outgoing = _get_or_create_relationship(source=sinner_sheet, target=sineater_sheet)
+        rel_incoming = _get_or_create_relationship(source=sineater_sheet, target=sinner_sheet)
+
+        # Lock both rows to prevent concurrent formation requests from duplicating state.
+        # Two concurrent transactions could both pass the idempotency check if it runs
+        # outside the atomic block; select_for_update() ensures only one can proceed.
+        rel_outgoing = CharacterRelationship.objects.select_for_update().get(pk=rel_outgoing.pk)
+        rel_incoming = CharacterRelationship.objects.select_for_update().get(pk=rel_incoming.pk)
+
+        # 5. Idempotency check — raise if either direction is already a Soul Tether.
+        if rel_outgoing.is_soul_tether or rel_incoming.is_soul_tether:
+            raise SoulTetherFormationError(_MSG_DUPLICATE_TETHER)
+
         # 6. Locate the accept_soul_tether Ritual row (seeded by wire_soul_tether_content).
         ritual = Ritual.objects.get(name="accept_soul_tether")
 
