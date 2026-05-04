@@ -54,19 +54,17 @@ class CodexSubjectTreeSerializer(serializers.ModelSerializer):
 
     Returns has_children flag instead of nested children array.
     Children are loaded on demand via SubjectViewSet with ?parent= filter.
+
+    `entry_count` is read from a queryset annotation applied upstream by the
+    view (filtered Count of visible entries). Avoids per-row N+1 queries.
     """
 
     has_children = serializers.BooleanField(read_only=True)
-    entry_count = serializers.SerializerMethodField()
+    entry_count = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = CodexSubject
         fields = ["id", "name", "has_children", "entry_count"]
-
-    def get_entry_count(self, obj: CodexSubject) -> int:
-        """Count visible entries for this subject."""
-        visible_ids = self.context.get("visible_entry_ids", set())
-        return obj.entries.filter(id__in=visible_ids).count()
 
 
 class CodexCategoryTreeSerializer(serializers.ModelSerializer):
@@ -82,14 +80,15 @@ class CodexCategoryTreeSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "description", "subjects"]
 
     def get_subjects(self, obj: CodexCategory) -> list[dict]:
-        """Get top-level subjects using prefetched data."""
-        # Access prefetched subjects from view's Prefetch with to_attr
-        if hasattr(obj, "cached_top_subjects"):
-            top_subjects = obj.cached_top_subjects
-        else:
-            # Fallback if not prefetched (shouldn't happen in normal use)
-            top_subjects = list(obj.subjects.filter(parent=None))
-            top_subjects.sort(key=lambda x: (x.display_order, x.name))
+        """Get top-level subjects via the view's request-scoped grouping.
+
+        The view fetches subjects (with annotations) in a flat query and
+        groups them by category_id into ``subjects_by_category``. We can't
+        attach prefetched data to the CodexCategory instance because it's a
+        SharedMemoryModel and the attribute would leak across requests.
+        """
+        subjects_by_category = self.context.get("subjects_by_category", {})
+        top_subjects = subjects_by_category.get(obj.id, [])
         return CodexSubjectTreeSerializer(top_subjects, many=True, context=self.context).data
 
 
