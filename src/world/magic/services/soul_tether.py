@@ -306,12 +306,137 @@ def _install_soul_tether_triggers(
 # =============================================================================
 
 
+def _sinner_has_other_active_tethers(
+    sinner_sheet: CharacterSheet,
+    exclude_outgoing_id: int,
+) -> bool:
+    """Return True if the Sinner has active tethers besides the one being dissolved.
+
+    Args:
+        sinner_sheet: The Sinner's CharacterSheet.
+        exclude_outgoing_id: Primary key of the Sinner→Sineater relationship row
+            that is being dissolved, so it is excluded from the check.
+
+    Returns:
+        True when at least one other active tether remains.
+    """
+    return (
+        CharacterRelationship.objects.filter(
+            source=sinner_sheet,
+            is_soul_tether=True,
+            soul_tether_role=SoulTetherRole.ABYSSAL,
+        )
+        .exclude(pk=exclude_outgoing_id)
+        .exists()
+    )
+
+
 def dissolve_soul_tether(
     relationship_id: int,
-    initiator_sheet: CharacterSheet,
+    initiator_sheet: CharacterSheet,  # noqa: ARG001 — reserved for initiator-validation in future
 ) -> None:
-    """Dissolve a Soul Tether — MVP stub (Spec B §13)."""
-    raise NotImplementedError
+    """Dissolve a Soul Tether — MVP stub (Spec B §13).
+
+    Flips ``is_soul_tether=False`` and clears roles on both directional
+    CharacterRelationship rows, soft-retires all RELATIONSHIP_CAPSTONE Threads
+    anchored to ritual capstones on this relationship, and removes the
+    SoulTetherActive ConditionInstance from the Sinner only when no other
+    active tethers remain (Trigger rows cascade-delete via the FK).
+
+    Args:
+        relationship_id: Primary key of *either* directional relationship row.
+            The function finds the outgoing (Sinner→Sineater, role=ABYSSAL)
+            direction automatically.
+        initiator_sheet: The CharacterSheet initiating dissolution. Reserved
+            for future permission/validation logic; not currently validated
+            against allowed initiators.
+
+    Notes:
+        - Idempotent: if the tether is already dissolved, returns immediately.
+        - ``lifetime_helped`` on the Sineater's CharacterResonance is NOT
+          cleared — it persists as a permanent record of the bond per §13.
+        - Strain ConditionInstance on the Sineater is NOT cleared — it decays
+          naturally via ``passive_decay_per_day`` (§6, §11).
+        - Sineating and SoulTetherRescue audit rows are NOT deleted — they are
+          permanent historical records.
+        - Trigger rows for the two reactive subscribers cascade-delete with the
+          SoulTetherActive ConditionInstance (``source_condition`` FK has
+          ``on_delete=CASCADE``); no manual Trigger cleanup is needed.
+    """
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.magic.models import Thread  # noqa: PLC0415
+
+    # Resolve the outgoing (Sinner→Sineater, ABYSSAL) row.  The caller may pass
+    # either direction's ID; we determine which is which from soul_tether_role.
+    raw = CharacterRelationship.objects.get(pk=relationship_id)
+
+    if raw.soul_tether_role == SoulTetherRole.ABYSSAL:
+        # Passed the outgoing (Sinner→Sineater) row.
+        outgoing = raw
+        incoming = CharacterRelationship.objects.get(
+            source=raw.target,
+            target=raw.source,
+        )
+    else:
+        # Passed the incoming (Sineater→Sinner, SINEATER) row.
+        incoming = raw
+        outgoing = CharacterRelationship.objects.get(
+            source=raw.target,
+            target=raw.source,
+        )
+
+    with transaction.atomic():
+        # Re-fetch with locks to prevent races.
+        outgoing = CharacterRelationship.objects.select_for_update().get(pk=outgoing.pk)
+        incoming = CharacterRelationship.objects.select_for_update().get(pk=incoming.pk)
+
+        # Idempotent: already dissolved.
+        if not outgoing.is_soul_tether:
+            return
+
+        # The Sinner is the source of the outgoing (ABYSSAL) row.
+        sinner_sheet: CharacterSheet = outgoing.source
+
+        # 1. Flip flags on both directional rows.
+        for rel in (outgoing, incoming):
+            rel.is_soul_tether = False
+            rel.soul_tether_role = ""
+            rel.save(update_fields=["is_soul_tether", "soul_tether_role"])
+
+        # 2. Soft-retire all RELATIONSHIP_CAPSTONE Threads anchored to ritual
+        #    capstones on either directional row.
+        #    Materialize capstone IDs to avoid nested-subquery issues with some
+        #    PostgreSQL query planners when __in receives a lazy queryset.
+        ritual_capstone_ids = list(
+            RelationshipCapstone.objects.filter(
+                relationship_id__in=[outgoing.pk, incoming.pk],
+                is_ritual_capstone=True,
+            ).values_list("pk", flat=True)
+        )
+        if ritual_capstone_ids:
+            Thread.objects.filter(
+                target_capstone_id__in=ritual_capstone_ids,
+                retired_at__isnull=True,
+            ).update(retired_at=timezone.now())
+
+        # 3. Remove the SoulTetherActive ConditionInstance from the Sinner only
+        #    if no other tethers remain.  Trigger rows cascade-delete automatically
+        #    because Trigger.source_condition has on_delete=CASCADE.
+        if not _sinner_has_other_active_tethers(sinner_sheet, exclude_outgoing_id=outgoing.pk):
+            from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+            ConditionInstance.objects.filter(
+                target=sinner_sheet.character,
+                condition__name="Soul Tether Active",
+            ).delete()
+
+    # NOTE: lifetime_helped on CharacterResonance persists (§13 — permanent record).
+    # NOTE: TetherStrain ConditionInstance on the Sineater persists (decays naturally).
+    # NOTE: Sineating and SoulTetherRescue audit rows persist (immutable history).
+    # NOTE: Trigger rows are cascade-deleted with ConditionInstance; no manual cleanup needed.
+    # TODO: Phase 15 — emit SOUL_TETHER_DISSOLVED reactive event when event infrastructure
+    #   supports cross-character location resolution.
 
 
 # =============================================================================

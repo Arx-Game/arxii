@@ -1,4 +1,4 @@
-"""Service tests for Soul Tether services (Spec B §12, §7, Phase 4 + Phase 5 + Phase 8).
+"""Service tests for Soul Tether services (Spec B §12, §7, Phase 4 + Phase 5 + Phase 8 + Phase 10).
 
 Tests cover:
     4.1  AffinityGateError on Abyssal-primary Sineater or Celestial-primary Sinner
@@ -15,6 +15,10 @@ Tests cover:
     8.1  Stage-3 rescue happy path (costs paid, severity reduced, audit row, lifetime_helped)
     8.2  Stage-5 rescue lifts protagonism lock when crossing below stage 5
     8.3  Gate failures raise RescueValidationError
+
+    10.1  dissolve_soul_tether flips flags + soft-retires Threads + removes marker
+    10.1b Multi-tether dissolution — marker preserved until last tether dissolves
+    10.2  Corruption passive decay tuning (Primal: 2/day to zero; Abyssal: 1/day floor 10)
 """
 
 from __future__ import annotations
@@ -1453,3 +1457,430 @@ class PerformSoulTetherRescueGateTests(TestCase):
                     scene=None,
                 )
         self.assertIn("already performed", ctx.exception.user_message)
+
+
+# =============================================================================
+# Phase 10: dissolve_soul_tether tests
+# =============================================================================
+
+
+def _form_tether_and_resolve(
+    sinner: object,
+    sineater: object,
+    resonance: object,
+    relationship: object,
+    units: int = 3,
+) -> None:
+    """Accept a tether and resolve a Sineating to make hollow_current > 0."""
+    offer = _make_sineating_offer(sinner, sineater, resonance, relationship, max_units=units)
+    resolve_sineating(offer, units_accepted=units)
+
+
+# ---------------------------------------------------------------------------
+# 10.1  Single-tether dissolution
+# ---------------------------------------------------------------------------
+
+
+class DissolveSoulTetherSingleTests(TestCase):
+    """Phase 10 §13 — dissolve_soul_tether flips flags + soft-retires Threads.
+
+    Uses setUp (not setUpTestData) because each test calls _dissolve() which
+    mutates DB state; shared data would corrupt subsequent tests in the class.
+    """
+
+    def setUp(self) -> None:
+        wire_soul_tether_content()
+        self.track = RelationshipTrackFactory()
+        abyssal_affinity = AffinityFactory(name="Abyssal")
+        self.resonance = ResonanceFactory(affinity=abyssal_affinity)
+        self.sinner, self.sineater = _make_eligible_pair(track=self.track)
+        CharacterRelationshipFactory(source=self.sinner, target=self.sineater, is_pending=False)
+        CharacterRelationshipFactory(source=self.sineater, target=self.sinner, is_pending=False)
+
+        # Seed Sineater anima for resolve_sineating.
+        CharacterAnimaFactory(character=self.sineater.character, current=20, maximum=20)
+        CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
+
+        self.capstone = accept_soul_tether(
+            initiator_sheet=self.sinner,
+            partner_sheet=self.sineater,
+            sinner_role=SoulTetherRoleEnum.ABYSSAL,
+            resonance=self.resonance,
+            writeup="A bond is formed.",
+            ritual_components=[],
+        )
+        self.relationship = CharacterRelationship.objects.get(
+            source=self.sinner, target=self.sineater
+        )
+
+        # Seed some sineating so hollow_current > 0 (optional — dissolution retires
+        # threads regardless, but this validates hollow doesn't interfere).
+        offer = _make_sineating_offer(
+            self.sinner, self.sineater, self.resonance, self.relationship, max_units=3
+        )
+        resolve_sineating(offer, units_accepted=3)
+
+    def _dissolve(self) -> None:
+        from world.magic.services.soul_tether import dissolve_soul_tether
+
+        dissolve_soul_tether(
+            relationship_id=self.relationship.pk,
+            initiator_sheet=self.sinner,
+        )
+
+    def test_outgoing_rel_is_soul_tether_false_after_dissolution(self) -> None:
+        self._dissolve()
+        self.relationship.refresh_from_db()
+        self.assertFalse(self.relationship.is_soul_tether)
+
+    def test_incoming_rel_is_soul_tether_false_after_dissolution(self) -> None:
+        self._dissolve()
+        rel_in = CharacterRelationship.objects.get(source=self.sineater, target=self.sinner)
+        self.assertFalse(rel_in.is_soul_tether)
+
+    def test_outgoing_rel_role_cleared_after_dissolution(self) -> None:
+        self._dissolve()
+        self.relationship.refresh_from_db()
+        self.assertEqual(self.relationship.soul_tether_role, "")
+
+    def test_incoming_rel_role_cleared_after_dissolution(self) -> None:
+        self._dissolve()
+        rel_in = CharacterRelationship.objects.get(source=self.sineater, target=self.sinner)
+        self.assertEqual(rel_in.soul_tether_role, "")
+
+    def test_sinner_thread_retired_at_set(self) -> None:
+        # Capture thread PK before dissolution so we can re-query by PK afterward.
+        # Use .values() to avoid SharedMemoryModel identity-map returning a cached
+        # instance with retired_at=None even after the .update() sets it.
+        thread_pk_qs = Thread.objects.filter(
+            owner=self.sinner,
+            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+            target_capstone=self.capstone,
+        ).values_list("pk", flat=True)
+        thread_pks = list(thread_pk_qs)
+        self.assertTrue(thread_pks, "Expected at least one sinner thread before dissolution")
+
+        self._dissolve()
+
+        # Re-query by PK as a dict to bypass SharedMemoryModel identity-map cache.
+        thread_data = Thread.objects.filter(pk__in=thread_pks).values("pk", "retired_at")
+        self.assertTrue(thread_data.exists())
+        for row in thread_data:
+            self.assertIsNotNone(
+                row["retired_at"], f"Thread {row['pk']} should have retired_at set"
+            )
+
+    def test_soul_tether_active_condition_deleted_from_sinner(self) -> None:
+        self._dissolve()
+        count = ConditionInstance.objects.filter(
+            target=self.sinner.character,
+            condition__name="Soul Tether Active",
+        ).count()
+        self.assertEqual(count, 0)
+
+    def test_triggers_cascade_deleted_with_condition(self) -> None:
+        self._dissolve()
+        remaining_triggers = Trigger.objects.filter(obj=self.sinner.character)
+        self.assertEqual(remaining_triggers.count(), 0)
+
+    def test_lifetime_helped_persists_after_dissolution(self) -> None:
+        """lifetime_helped on Sineater's CharacterResonance must survive dissolution (§13)."""
+        from world.magic.models.aura import CharacterResonance
+
+        cr = CharacterResonance.objects.get(character_sheet=self.sineater, resonance=self.resonance)
+        lifetime_before = cr.lifetime_helped
+        self.assertGreater(lifetime_before, 0)  # Sineating happened in setUpTestData
+
+        self._dissolve()
+
+        cr.refresh_from_db()
+        self.assertEqual(cr.lifetime_helped, lifetime_before)
+
+    def test_sineating_audit_rows_persist(self) -> None:
+        """Sineating audit rows must NOT be deleted on dissolution."""
+        from world.magic.models.soul_tether import Sineating
+
+        self._dissolve()
+        self.assertGreater(Sineating.objects.filter(sinner_sheet=self.sinner).count(), 0)
+
+    def test_idempotent_second_dissolution_does_not_raise(self) -> None:
+        """Calling dissolve again on an already-dissolved tether is a no-op."""
+        from world.magic.services.soul_tether import dissolve_soul_tether
+
+        dissolve_soul_tether(
+            relationship_id=self.relationship.pk,
+            initiator_sheet=self.sinner,
+        )
+        # Should not raise on second call.
+        dissolve_soul_tether(
+            relationship_id=self.relationship.pk,
+            initiator_sheet=self.sinner,
+        )
+
+
+# ---------------------------------------------------------------------------
+# 10.1b  Multi-tether dissolution — marker preserved until last tether dissolves
+# ---------------------------------------------------------------------------
+
+
+class DissolveSoulTetherMultiTetherTests(TestCase):
+    """Phase 10 §13 — marker ConditionInstance retained until last tether dissolves."""
+
+    def setUp(self) -> None:
+        wire_soul_tether_content()
+        track1 = RelationshipTrackFactory()
+        track2 = RelationshipTrackFactory()
+        abyssal_affinity = AffinityFactory(name="Abyssal")
+        resonance1 = ResonanceFactory(affinity=abyssal_affinity)
+        resonance2 = ResonanceFactory(affinity=abyssal_affinity)
+
+        # Build Sinner + two separate Sineaters, both forming a tether with the Sinner.
+        self.sinner, self.sineater1 = _make_eligible_pair(track=track1)
+        _make_active_relationship(self.sinner, self.sineater1)
+
+        self.capstone1 = accept_soul_tether(
+            initiator_sheet=self.sinner,
+            partner_sheet=self.sineater1,
+            sinner_role=SoulTetherRoleEnum.ABYSSAL,
+            resonance=resonance1,
+            writeup="First bond.",
+            ritual_components=[],
+        )
+
+        # Second Sineater — needs a separate track unlock.
+        self.sineater2 = CharacterSheetFactory()
+        _set_primary_affinity_primal(self.sineater2)
+        _grant_relationship_track_unlock(self.sinner, track2)
+        CharacterRelationshipFactory(source=self.sinner, target=self.sineater2, is_pending=False)
+        CharacterRelationshipFactory(source=self.sineater2, target=self.sinner, is_pending=False)
+
+        self.capstone2 = accept_soul_tether(
+            initiator_sheet=self.sinner,
+            partner_sheet=self.sineater2,
+            sinner_role=SoulTetherRoleEnum.ABYSSAL,
+            resonance=resonance2,
+            writeup="Second bond.",
+            ritual_components=[],
+        )
+
+        self.rel1 = CharacterRelationship.objects.get(source=self.sinner, target=self.sineater1)
+        self.rel2 = CharacterRelationship.objects.get(source=self.sinner, target=self.sineater2)
+
+    def test_marker_condition_present_before_dissolution(self) -> None:
+        count = ConditionInstance.objects.filter(
+            target=self.sinner.character,
+            condition__name="Soul Tether Active",
+        ).count()
+        self.assertEqual(count, 1)
+
+    def test_dissolving_first_tether_preserves_marker(self) -> None:
+        """After dissolving one of two tethers, the ConditionInstance must remain."""
+        from world.magic.services.soul_tether import dissolve_soul_tether
+
+        dissolve_soul_tether(
+            relationship_id=self.rel1.pk,
+            initiator_sheet=self.sinner,
+        )
+        count = ConditionInstance.objects.filter(
+            target=self.sinner.character,
+            condition__name="Soul Tether Active",
+        ).count()
+        self.assertEqual(count, 1)
+
+    def test_dissolving_first_tether_preserves_triggers(self) -> None:
+        """Triggers must remain after dissolving only the first of two tethers."""
+        from world.magic.services.soul_tether import dissolve_soul_tether
+
+        dissolve_soul_tether(
+            relationship_id=self.rel1.pk,
+            initiator_sheet=self.sinner,
+        )
+        remaining = Trigger.objects.filter(obj=self.sinner.character).count()
+        self.assertEqual(remaining, 2)
+
+    def test_dissolving_second_tether_removes_marker(self) -> None:
+        """After dissolving both tethers, the ConditionInstance must be gone."""
+        from world.magic.services.soul_tether import dissolve_soul_tether
+
+        dissolve_soul_tether(
+            relationship_id=self.rel1.pk,
+            initiator_sheet=self.sinner,
+        )
+        dissolve_soul_tether(
+            relationship_id=self.rel2.pk,
+            initiator_sheet=self.sinner,
+        )
+        count = ConditionInstance.objects.filter(
+            target=self.sinner.character,
+            condition__name="Soul Tether Active",
+        ).count()
+        self.assertEqual(count, 0)
+
+    def test_dissolving_second_tether_removes_triggers(self) -> None:
+        """After both tethers dissolved, Trigger rows must be cascade-deleted."""
+        from world.magic.services.soul_tether import dissolve_soul_tether
+
+        dissolve_soul_tether(
+            relationship_id=self.rel1.pk,
+            initiator_sheet=self.sinner,
+        )
+        dissolve_soul_tether(
+            relationship_id=self.rel2.pk,
+            initiator_sheet=self.sinner,
+        )
+        remaining = Trigger.objects.filter(obj=self.sinner.character).count()
+        self.assertEqual(remaining, 0)
+
+    def test_first_tether_thread_retired_second_still_active(self) -> None:
+        """First bond's Thread is retired; second bond's Thread remains active."""
+        from world.magic.services.soul_tether import dissolve_soul_tether
+
+        # Capture PKs before dissolution to bypass SharedMemoryModel identity-map cache.
+        thread1_pks = list(
+            Thread.objects.filter(owner=self.sinner, target_capstone=self.capstone1).values_list(
+                "pk", flat=True
+            )
+        )
+        thread2_pks = list(
+            Thread.objects.filter(owner=self.sinner, target_capstone=self.capstone2).values_list(
+                "pk", flat=True
+            )
+        )
+        self.assertTrue(thread1_pks, "Expected thread for capstone1")
+        self.assertTrue(thread2_pks, "Expected thread for capstone2")
+
+        dissolve_soul_tether(
+            relationship_id=self.rel1.pk,
+            initiator_sheet=self.sinner,
+        )
+
+        # First capstone's Thread should be retired (use .values() to bypass cache).
+        for row in Thread.objects.filter(pk__in=thread1_pks).values("pk", "retired_at"):
+            self.assertIsNotNone(row["retired_at"], f"Thread {row['pk']} should be retired")
+
+        # Second capstone's Thread must still be active.
+        for row in Thread.objects.filter(pk__in=thread2_pks).values("pk", "retired_at"):
+            self.assertIsNone(row["retired_at"], f"Thread {row['pk']} should still be active")
+
+
+# =============================================================================
+# Phase 10.2: Passive decay tuning on Corruption ConditionTemplates
+# =============================================================================
+
+
+class CorruptionPassiveDecayTuningTests(TestCase):
+    """Spec B §11 — affinity-aware passive decay values on Corruption templates.
+
+    These values are TUNING PLACEHOLDERS for Phase 14.  This test locks in the
+    authored values so regressions are caught if the factory is modified.
+    """
+
+    def test_primal_corruption_decay_rate_is_2(self) -> None:
+        """Wild Hunt (Primal) template has passive_decay_per_day=2."""
+        from world.magic.factories import CorruptionConditionTemplateFactory
+
+        primal_affinity = AffinityFactory(name="Primal")
+        resonance = ResonanceFactory(affinity=primal_affinity)
+        template = CorruptionConditionTemplateFactory(corruption_resonance=resonance)
+
+        template.refresh_from_db()
+        self.assertEqual(template.passive_decay_per_day, 2)
+
+    def test_primal_corruption_max_severity_is_none(self) -> None:
+        """Wild Hunt (Primal) template decays all the way to zero (max_severity=None)."""
+        from world.magic.factories import CorruptionConditionTemplateFactory
+
+        primal_affinity = AffinityFactory(name="Primal")
+        resonance = ResonanceFactory(affinity=primal_affinity)
+        template = CorruptionConditionTemplateFactory(corruption_resonance=resonance)
+
+        template.refresh_from_db()
+        self.assertIsNone(template.passive_decay_max_severity)
+
+    def test_primal_corruption_not_blocked_in_engagement(self) -> None:
+        """Corruption decays during normal life — not blocked by engagement."""
+        from world.magic.factories import CorruptionConditionTemplateFactory
+
+        primal_affinity = AffinityFactory(name="Primal")
+        resonance = ResonanceFactory(affinity=primal_affinity)
+        template = CorruptionConditionTemplateFactory(corruption_resonance=resonance)
+
+        template.refresh_from_db()
+        self.assertFalse(template.passive_decay_blocked_in_engagement)
+
+    def test_abyssal_corruption_decay_rate_is_1(self) -> None:
+        """Web of Spiders (Abyssal) template has passive_decay_per_day=1."""
+        from world.magic.factories import CorruptionConditionTemplateFactory
+
+        abyssal_affinity = AffinityFactory(name="Abyssal")
+        resonance = ResonanceFactory(affinity=abyssal_affinity)
+        template = CorruptionConditionTemplateFactory(corruption_resonance=resonance)
+
+        template.refresh_from_db()
+        self.assertEqual(template.passive_decay_per_day, 1)
+
+    def test_abyssal_corruption_max_severity_is_10(self) -> None:
+        """Web of Spiders (Abyssal) template decays only below severity 10 (§11)."""
+        from world.magic.factories import CorruptionConditionTemplateFactory
+
+        abyssal_affinity = AffinityFactory(name="Abyssal")
+        resonance = ResonanceFactory(affinity=abyssal_affinity)
+        template = CorruptionConditionTemplateFactory(corruption_resonance=resonance)
+
+        template.refresh_from_db()
+        self.assertEqual(template.passive_decay_max_severity, 10)
+
+    def test_abyssal_corruption_not_blocked_in_engagement(self) -> None:
+        """Corruption decays during normal life — not blocked by engagement."""
+        from world.magic.factories import CorruptionConditionTemplateFactory
+
+        abyssal_affinity = AffinityFactory(name="Abyssal")
+        resonance = ResonanceFactory(affinity=abyssal_affinity)
+        template = CorruptionConditionTemplateFactory(corruption_resonance=resonance)
+
+        template.refresh_from_db()
+        self.assertFalse(template.passive_decay_blocked_in_engagement)
+
+    def test_primal_corruption_decays_via_tick(self) -> None:
+        """Running decay_all_conditions_tick() reduces a Primal Corruption ConditionInstance.
+
+        Uses CorruptionConditionTemplateFactory (Primal) + a ConditionInstance at
+        severity=50 (stage 1) to verify the daily tick reduces severity.
+
+        CharacterResonance must be seeded for the character because decay calls
+        reduce_corruption which reads/mutates that row.
+        """
+        from world.conditions.models import ConditionInstance
+        from world.conditions.services import decay_all_conditions_tick
+        from world.magic.factories import CorruptionConditionTemplateFactory
+        from world.magic.models.aura import CharacterResonance
+
+        primal_affinity = AffinityFactory(name="Primal")
+        resonance = ResonanceFactory(affinity=primal_affinity)
+        template = CorruptionConditionTemplateFactory(corruption_resonance=resonance)
+
+        # Create a character and seed the CharacterResonance row that reduce_corruption
+        # expects to find when processing the decay tick.
+        sinner = CharacterSheetFactory()
+        CharacterResonance.objects.create(
+            character_sheet=sinner,
+            resonance=resonance,
+            balance=0,
+            lifetime_earned=50,  # matches seeded severity
+        )
+
+        # Create a ConditionInstance at severity=50 (stage 1 for Primal, threshold=50).
+        instance = ConditionInstance.objects.create(
+            target=sinner.character,
+            condition=template,
+            severity=50,
+            stacks=1,
+            source_description="Test Primal Corruption",
+        )
+
+        # Run one tick.
+        decay_all_conditions_tick()
+
+        instance.refresh_from_db()
+        # decay_per_day=2; severity should drop by 2 (from 50 to 48).
+        self.assertEqual(instance.severity, 48)

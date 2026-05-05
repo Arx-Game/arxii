@@ -95,13 +95,14 @@ class TestCorruptionConditionTemplateFactory(TestCase):
             self.assertIsNotNone(stage.resist_check_type, f"Stage {stage.stage_order} missing")
             self.assertEqual(stage.resist_check_type.name, "Magical Endurance")
 
-    def test_passive_decay_max_severity_set_to_stage_2_threshold(self) -> None:
+    def test_passive_decay_max_severity_is_none_for_primal(self) -> None:
+        """Primal Corruption decays all the way to zero per Spec B §11 (tuning placeholder)."""
         affinity = AffinityFactory(name="Primal")
         resonance = ResonanceFactory(affinity=affinity)
         template = CorruptionConditionTemplateFactory(corruption_resonance=resonance)
 
-        # Stage 2 threshold = 200; decay max should match
-        self.assertEqual(template.passive_decay_max_severity, 200)
+        # Spec B §11: Primal corruption fully auto-clears — max_severity=None.
+        self.assertIsNone(template.passive_decay_max_severity)
 
     def test_has_progression_flag_set(self) -> None:
         affinity = AffinityFactory(name="Primal")

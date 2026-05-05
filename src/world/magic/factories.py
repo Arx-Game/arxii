@@ -1246,12 +1246,23 @@ def _make_magical_endurance_check_type():
 class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
     """Factory for a per-resonance Corruption ConditionTemplate with 5 stages.
 
-    Authors the full 5-stage shape per spec §6.2 / §6.3:
+    Authors the full 5-stage shape per spec §6.2 / §6.3 / §11:
     - HOLD_OVERFLOW on all stages (resist check gates each advancement)
     - Primal DCs: 8, 12, 18, 22, 28
     - Abyssal DCs: 12, 18, 25, 30, 35  (harder to resist)
-    - passive_decay_max_severity set to stage-2 threshold so decay only runs
-      at stages 1-2
+    - passive_decay_per_day: 2 (Primal) / 1 (Abyssal) — TUNING PLACEHOLDER
+    - passive_decay_max_severity: None/0 (Primal, decays to zero) / 10 (Abyssal,
+      only lowest stages decay) — TUNING PLACEHOLDER per §11
+    - passive_decay_blocked_in_engagement: False — corruption decays during normal
+      life per §11 ("not blocked by engagement")
+
+    Tuning rationale (Spec B §11):
+    - Primal: Low-tier Primal users should be able to clear corruption without a
+      Sineater; rate 2/day fully clears faster. max_severity=None → decays to zero.
+    - Abyssal: Abyssal users past tier 1 cannot rely on decay alone; rate 1/day
+      with max_severity=10 means only the very lowest stages ever auto-decay.
+
+    These values are PLACEHOLDERS for Phase 14 tuning via SoulTetherConfig.
 
     The affinity is inferred from corruption_resonance.affinity.name.lower().
     """
@@ -1266,13 +1277,17 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
         lambda o: f"Corruption from the {o.corruption_resonance.name} resonance."
     )
     has_progression = True
-    passive_decay_per_day = 1
-    passive_decay_blocked_in_engagement = True
+    # passive_decay_per_day and passive_decay_blocked_in_engagement are set in
+    # post_generation once we know whether the resonance is Primal or Abyssal.
+    passive_decay_per_day = 0  # overwritten in post_generation
+    passive_decay_blocked_in_engagement = False
     corruption_resonance = factory.SubFactory(ResonanceFactory)
 
     @factory.post_generation  # type: ignore[misc]
     def stages(self, create: bool, extracted: object, **kwargs: object) -> None:
         """Author 5 ConditionStage rows with HOLD_OVERFLOW + resist params.
+
+        Also sets affinity-aware passive decay tuning (Spec B §11).
 
         Idempotent: skips stage creation if stages already exist (handles
         the django_get_or_create case where the template row is reused).
@@ -1300,10 +1315,22 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
                 advancement_resist_failure_kind=AdvancementResistFailureKind.HOLD_OVERFLOW,
             )
 
-        # passive_decay only at stages 1-2: set max_severity = stage-2 threshold
-        stage_2_threshold = thresholds[1]  # 200
-        self.passive_decay_max_severity = stage_2_threshold
-        self.save(update_fields=["passive_decay_max_severity"])
+        # Spec B §11 passive decay tuning — TUNING PLACEHOLDERS for Phase 14.
+        #
+        # Primal (e.g. Wild Hunt):
+        #   decay_per_day=2, max_severity=None (decays all the way to zero).
+        #   Low-tier Primal characters can clear corruption without a Sineater.
+        #
+        # Abyssal (e.g. Web of Spiders):
+        #   decay_per_day=1, max_severity=10 (only the very lowest stages auto-decay).
+        #   Abyssal-primary characters past tier 1 must rely on Sineating or Atonement.
+        if is_abyssal:
+            self.passive_decay_per_day = 1
+            self.passive_decay_max_severity = 10  # decays only below this severity
+        else:
+            self.passive_decay_per_day = 2
+            self.passive_decay_max_severity = None  # decays to zero
+        self.save(update_fields=["passive_decay_per_day", "passive_decay_max_severity"])
 
 
 class CorruptionTwistTemplateFactory(factory.django.DjangoModelFactory):

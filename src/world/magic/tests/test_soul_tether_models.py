@@ -131,15 +131,16 @@ class ServiceSkeletonImportsTests(TestCase):
         self.assertTrue(callable(soul_tether.soul_tether_stage_advance_prompt))
         self.assertTrue(callable(soul_tether.resolve_stage_advance_prompt))
 
-    def test_other_stubs_raise_not_implemented(self) -> None:
-        """Phase 5 implemented request_sineating/resolve_sineating.
-        Phase 8 implemented perform_soul_tether_rescue.
+    def test_dissolve_soul_tether_is_now_implemented(self) -> None:
+        """Phase 10 implemented dissolve_soul_tether (no longer a stub).
 
-        dissolve_soul_tether remains a stub.
+        Calling with a non-existent relationship_id should raise DoesNotExist,
+        not NotImplementedError.
         """
         from world.magic.services import soul_tether
+        from world.relationships.models import CharacterRelationship
 
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(CharacterRelationship.DoesNotExist):
             soul_tether.dissolve_soul_tether(
                 relationship_id=0,
                 initiator_sheet=None,  # type: ignore[arg-type]
