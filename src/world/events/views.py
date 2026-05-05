@@ -3,6 +3,7 @@ from collections.abc import Callable
 from django.db import IntegrityError
 from django.db.models import Prefetch, Q, QuerySet
 from django.shortcuts import get_object_or_404
+from django.utils.functional import cached_property
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.decorators import action
@@ -115,8 +116,15 @@ class EventViewSet(ModelViewSet):
     def get_queryset(self) -> QuerySet[Event]:
         return self._apply_visibility_filter(self._base_queryset().order_by("scheduled_real_time"))
 
-    def _get_active_persona_ids(self) -> list[int]:
-        """Get persona IDs for the requesting user's active characters."""
+    @cached_property
+    def _active_persona_ids(self) -> list[int]:
+        """Persona IDs for the requesting user's active characters.
+
+        Cached on the viewset instance (which is fresh per request) so the
+        visibility filter, lifecycle actions, and ``get_serializer_context``
+        share one resolution instead of each firing the same RosterEntry +
+        Persona query pair.
+        """
         if not self.request.user.is_authenticated:
             return []
         character_ids = RosterEntry.objects.for_account(self.request.user).values_list(
@@ -140,7 +148,7 @@ class EventViewSet(ModelViewSet):
         if not self.request.user.is_authenticated:
             return qs.filter(is_public=True)
 
-        persona_ids = self._get_active_persona_ids()
+        persona_ids = self._active_persona_ids
 
         if not persona_ids:
             return qs.filter(is_public=True)
@@ -166,7 +174,7 @@ class EventViewSet(ModelViewSet):
 
     def perform_create(self, serializer: EventCreateSerializer) -> None:
         """Create event via service function, deriving host from request user."""
-        persona_ids = self._get_active_persona_ids()
+        persona_ids = self._active_persona_ids
         if not persona_ids:
             raise DRFValidationError(EventError.NO_PERSONA)
         active_persona = Persona.objects.get(id=persona_ids[0])
@@ -228,7 +236,7 @@ class EventViewSet(ModelViewSet):
 
     def get_serializer_context(self) -> dict:
         context = super().get_serializer_context()
-        context["persona_ids"] = set(self._get_active_persona_ids())
+        context["persona_ids"] = set(self._active_persona_ids)
         context["viewer_gm_event_ids"] = self._get_viewer_gm_event_ids()
         return context
 
@@ -239,14 +247,12 @@ class EventViewSet(ModelViewSet):
             service_fn(event)
         except EventError as e:
             return Response({"detail": e.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        context = {
-            "request": request,
-            "persona_ids": set(self._get_active_persona_ids()),
-            "viewer_gm_event_ids": self._get_viewer_gm_event_ids(),
-        }
         event.flush_from_cache(force=True)
         return Response(
-            EventDetailSerializer(self._base_queryset().get(pk=event.pk), context=context).data
+            EventDetailSerializer(
+                self._base_queryset().get(pk=event.pk),
+                context=self.get_serializer_context(),
+            ).data
         )
 
     @action(detail=True, methods=["post"])
