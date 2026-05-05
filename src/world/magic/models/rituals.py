@@ -63,7 +63,7 @@ class Ritual(SharedMemoryModel):
         blank=True,
         help_text=(
             "UI-rendering metadata: what kwargs the perform endpoint expects. "
-            "Shape: {'fields': [{'name', 'label', 'type', 'required', ...}, ...]}. "
+            "Shape: {'fields': [{'name': str, 'label': str, 'type': str, 'required': bool, ...}]}. "
             "When None, the ritual takes no player-supplied kwargs."
         ),
     )
