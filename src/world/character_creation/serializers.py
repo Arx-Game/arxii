@@ -305,8 +305,12 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    # Tradition selection
-    selected_tradition = TraditionSerializer(read_only=True)
+    # Tradition selection — SerializerMethodField (not a nested declaration) so
+    # we can inject ``beginning_id`` into the TraditionSerializer's context per
+    # draft. The nested serializer's ``required_distinction_id`` resolves a
+    # BeginningTradition row keyed on (beginning_id, tradition_id); without
+    # the per-draft beginning_id it always returned None.
+    selected_tradition = serializers.SerializerMethodField()
     selected_tradition_id = serializers.PrimaryKeyRelatedField(
         queryset=Tradition.objects.filter(is_active=True),
         source="selected_tradition",
@@ -377,6 +381,20 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         from world.roster.models import RosterEntry  # noqa: PLC0415
 
         return RosterEntry.objects.for_account(obj.account).exists()
+
+    def get_selected_tradition(self, obj: CharacterDraft) -> dict | None:
+        """Render the selected tradition with this draft's beginning_id in context.
+
+        TraditionSerializer.required_distinction_id resolves a BeginningTradition
+        row keyed on (beginning_id, tradition_id). Drafts carry both pieces of
+        state directly, so we inject ``beginning_id`` into a per-draft context
+        rather than relying on the list endpoint's pre-built map.
+        """
+        if obj.selected_tradition is None:
+            return None
+        nested_context = dict(self.context)
+        nested_context["beginning_id"] = obj.selected_beginnings_id
+        return TraditionSerializer(obj.selected_tradition, context=nested_context).data
 
     def get_stage_completion(self, obj: CharacterDraft) -> dict[int, bool]:
         """Get completion status for each stage."""

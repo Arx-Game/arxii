@@ -161,7 +161,20 @@ class TraditionListLeakTests(TestCase):
 
     def test_required_distinction_is_per_beginning_not_per_process(self):
         """Sequential requests with different beginning_id see their own data."""
+        from world.magic.models import Tradition
+
         url = "/api/character-creation/traditions/"
+
+        # Confirm the bug's precondition: SharedMemoryModel returns the
+        # *same Python object* for repeated lookups of the same pk. Without
+        # this property the leak shape doesn't apply, and the regression
+        # this test guards against would be untestable in isolation.
+        instance_one = Tradition.objects.get(pk=self.tradition.pk)
+        instance_two = Tradition.objects.get(pk=self.tradition.pk)
+        assert instance_one is instance_two, (
+            "Tradition is no longer SharedMemoryModel-shared; this test no "
+            "longer guards the original leak shape and should be revisited."
+        )
 
         # First request — beginning A.
         resp_a = self.client.get(url, {"beginning_id": self.beginning_a.id})
@@ -179,6 +192,26 @@ class TraditionListLeakTests(TestCase):
         resp_a2 = self.client.get(url, {"beginning_id": self.beginning_a.id})
         assert resp_a2.status_code == status.HTTP_200_OK
         assert self._required_distinction(resp_a2, self.tradition.id) == self.distinction_a.id
+
+    def test_nested_tradition_in_draft_resolves_required_distinction(self):
+        """CharacterDraftSerializer.selected_tradition resolves required_distinction_id.
+
+        The nested TraditionSerializer needs the draft's beginning_id to look
+        up the right BeginningTradition row. Prior to the SerializerMethodField
+        wiring, nested usage always returned ``required_distinction_id=None``
+        because ``beginning_id`` wasn't in the draft serializer's context.
+        """
+        draft = CharacterDraftFactory(
+            account=self.account,
+            selected_beginnings=self.beginning_a,
+            selected_tradition=self.tradition,
+        )
+        resp = self.client.get(f"/api/character-creation/drafts/{draft.id}/")
+        assert resp.status_code == status.HTTP_200_OK
+        nested = resp.data["selected_tradition"]
+        assert nested is not None
+        assert nested["id"] == self.tradition.id
+        assert nested["required_distinction_id"] == self.distinction_a.id
 
 
 class SelectTraditionTests(TestCase):

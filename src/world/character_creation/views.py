@@ -254,7 +254,14 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
         """
         if hasattr(self, "_beginning_traditions_cache"):
             return self._beginning_traditions_cache
-        beginning_id = self.request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
+        # Defensive: drf-spectacular schema generation may invoke
+        # ``get_serializer_context`` without binding a real request.
+        request = getattr(self, "request", None)  # noqa: GETATTR_LITERAL — defensive against unbound viewset (schema generation)
+        beginning_id = (
+            request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
+            if request is not None
+            else None
+        )
         if not beginning_id:
             self._beginning_traditions_cache: list[BeginningTradition] = []
             return self._beginning_traditions_cache
@@ -282,6 +289,11 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
         # Preserve BeginningTradition.sort_order on the Tradition queryset
         # without re-using a Prefetch(to_attr=) that would leak per-request
         # filtering onto SharedMemoryModel-cached Tradition instances.
+        # The annotation lands on the shared instance via setattr during
+        # iteration, but annotations are recomputed on every queryset
+        # evaluation (no ``is_to_attr_fetched`` elision), so ``_bt_order``
+        # is always fresh for the current request and is only consumed by
+        # SQL ORDER BY — never read from Python.
         order_case = Case(
             *[When(id=tid, then=Value(idx)) for idx, tid in enumerate(ordered_ids)],
             default=Value(len(ordered_ids)),
