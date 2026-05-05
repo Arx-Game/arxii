@@ -175,6 +175,21 @@ class ThreadPullEffect(SharedMemoryModel):
                 ),
                 name="threadpulleffect_narrative_only_payload",
             ),
+            # CORRUPTION_RESISTANCE: no payload column — runtime value derives from
+            # CharacterResonance.lifetime_helped (Spec B §15.3). All payload columns null.
+            models.CheckConstraint(
+                check=(
+                    ~models.Q(effect_kind="CORRUPTION_RESISTANCE")
+                    | (
+                        models.Q(flat_bonus_amount__isnull=True)
+                        & models.Q(intensity_bump_amount__isnull=True)
+                        & models.Q(vital_bonus_amount__isnull=True)
+                        & models.Q(vital_target__isnull=True)
+                        & models.Q(capability_grant__isnull=True)
+                    )
+                ),
+                name="threadpulleffect_corruption_resistance_payload",
+            ),
         ]
 
     def __str__(self) -> str:
@@ -196,6 +211,9 @@ class ThreadPullEffect(SharedMemoryModel):
             EffectKind.VITAL_BONUS: self._clean_vital_bonus,
             EffectKind.CAPABILITY_GRANT: self._clean_capability_grant,
             EffectKind.NARRATIVE_ONLY: self._clean_narrative_only,
+            # CORRUPTION_RESISTANCE: no payload validator needed — runtime value
+            # derives from CharacterResonance.lifetime_helped (Spec B §15.3).
+            # The DB CheckConstraint enforces all payload columns are null.
         }
         validator = validators.get(self.effect_kind)
         if validator is not None:
@@ -288,6 +306,14 @@ class Thread(SharedMemoryModel):
     level = models.PositiveSmallIntegerField(
         default=0,
         help_text="Current level on the internal scale (multiples of 10).",
+    )
+    hollow_current = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Soul Tether Hollow capacity (Spec B §5). Only meaningful for "
+            "RELATIONSHIP_CAPSTONE Sinner-side Threads. Drains on corruption "
+            "redirect; refills via Sineating. Other Threads ignore this field."
+        ),
     )
 
     created_at = models.DateTimeField(auto_now_add=True)

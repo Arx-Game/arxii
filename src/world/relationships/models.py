@@ -717,6 +717,18 @@ class RelationshipCapstone(SharedMemoryModel):
         blank=True,
         help_text="Optional scene this capstone is based on",
     )
+    is_ritual_capstone = models.BooleanField(
+        default=False,
+        help_text="Whether this capstone was created via a Ritual Capstone (Spec B §12.1).",
+    )
+    ritual = models.ForeignKey(
+        "magic.Ritual",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="capstone_events",
+        help_text="Set when is_ritual_capstone=True; references the Ritual that was performed.",
+    )
     created_at = models.DateTimeField(
         auto_now_add=True,
         help_text="When this capstone was recorded",

@@ -199,6 +199,107 @@ optional OneToOne FK back to ModifierTarget for modifier system integration.
 - `Interaction.pose_kind` CharField - STANDARD / ENTRY / DEPARTURE
 - `GainSource` TextChoice - POSE_ENDORSEMENT / SCENE_ENTRY / ROOM_RESIDENCE / OUTFIT_ITEM / STAFF_GRANT
 
+### Soul Tether (Resonance Pivot Spec B)
+
+**Spec:** `docs/superpowers/specs/2026-05-03-resonance-pivot-spec-b-soul-tether-design.md`
+
+Bond mechanic between two PCs (Sinner + Sineater) that mediates Corruption accrual from
+non-Celestial casting. The Sinner's `RELATIONSHIP_CAPSTONE` Thread carries **the Hollow**
+(a buffer that absorbs incoming corruption). The Sineater eats sins out of the Hollow
+during Sineating actions, which refills the Hollow's capacity.
+
+**New fields on existing models:**
+- `Thread.hollow_current` — PositiveIntegerField; the Hollow's current refilled capacity.
+  Drained by the redirect handler on Sinner casts; refilled by `resolve_sineating`.
+- `CharacterResonance.lifetime_helped` — PositiveIntegerField (monotonic); increments on
+  every accepted Sineating unit and every rescue ritual. Drives `CORRUPTION_RESISTANCE`
+  passive benefit on the Sineater's Thread.
+
+**New audit models (`models/soul_tether.py`):**
+- `Sineating` — Audit row for each Sineating offer/accept/decline cycle. FKs to
+  `sinner_sheet`, `sineater_sheet`, `relationship`, `scene` (nullable), `resonance`.
+  Fields: `units_offered`, `units_accepted` (0 = declined), `anima_cost`, `fatigue_cost`.
+- `SoulTetherRescue` — Audit row for stage-3+ rescue ritual. FKs to `sinner_sheet`,
+  `sineater_sheet`, `relationship`, `scene` (nullable), `resonance`, `check_outcome`.
+  Fields: `sinner_stage_at_start`, `sinner_stage_at_end`, `severity_reduced`,
+  `sineater_strain_taken`.
+
+**New constant / exception surface:**
+- `ThreadPullEffect.EffectKind.CORRUPTION_RESISTANCE` — tier-0 passive effect kind for
+  Sineater Thread; value derived from `lifetime_helped` at resolution time.
+- `SoulTetherRole` TextChoices in `constants.py` (SINNER / SINEATER).
+- Exception hierarchy in `exceptions.py`: `SoulTetherError` (base), `AffinityGateError`,
+  `NoSoulTetherUnlockError`, `SoulTetherFormationError`, `SineatingValidationError`,
+  `RescueValidationError`, `StageAdvanceBonusError`.
+- `SOUL_TETHER_FORMED` / `SOUL_TETHER_DISSOLVED` event names in `flows/constants.py`.
+
+**Authored content (factories, not migrations):**
+- `TetherStrainTemplate` — ConditionTemplate applied to the Sineater at dramatic moments
+  (opt-in stage-advance bonus, overflow commits). Only accrued via explicit opt-in.
+- `SoulTetherActiveTemplate` — ConditionTemplate installed on the Sinner at formation.
+  Carries two reactive trigger M2Ms (soul_tether_redirect, soul_tether_stage_advance_prompt).
+- `accept_soul_tether` Ritual — SERVICE-dispatched formation capstone.
+- `soul_tether_rescue` Ritual — SERVICE-dispatched stage-3+ rescue ritual.
+- `soul_tether_redirect` TriggerDefinition — subscribes to `CORRUPTION_ACCRUING`.
+- `soul_tether_stage_advance_prompt` TriggerDefinition — subscribes to
+  `CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE`.
+
+All wired via `wire_soul_tether_content()` in `factories.py`.
+
+**Relationship side changes (`world/relationships/models.py`):**
+- `RelationshipCapstone.is_ritual_capstone` — BooleanField (default False); marks capstones
+  that gate a Ritual.
+- `RelationshipCapstone.ritual` — nullable FK to `magic.Ritual`.
+
+**Services (`services/soul_tether.py`):**
+- `accept_soul_tether(sinner_sheet, sineater_sheet, scene, resonance, capstone)` — Formation
+  ritual: affinity gate (Sineater must be non-Abyssal; Sinner must be non-Celestial), unlock
+  gate (Sinner must have RELATIONSHIP_TRACK ThreadWeavingUnlock), idempotency check, Sinner
+  Thread auto-weave (RELATIONSHIP_CAPSTONE), installs `SoulTetherActive` ConditionInstance
+  and trigger rows on the Sinner.
+- `dissolve_soul_tether(sinner_sheet, sineater_sheet)` — Tears bond: retires tether Threads,
+  removes ConditionInstance + triggers, emits `SOUL_TETHER_DISSOLVED`.
+- `request_sineating(sinner_sheet, scene, resonance, units_offered)` — Sinner-initiated offer;
+  enforces per-scene cap and hollow-max; fires `PROMPT_PLAYER` to Sineater with
+  `SineatingOffer` payload.
+- `resolve_sineating(sinner_sheet, sineater_sheet, units_accepted, resonance, scene)` —
+  Sineater `@reply` handler: atomically deducts Sineater anima/fatigue, increments
+  `hollow_current` + `lifetime_helped`, writes `Sineating` audit row, fires achievement
+  stats. Returns `SineatingResult` frozen dataclass.
+- `perform_soul_tether_rescue(sineater_sheet, sinner_sheet, resonance, scene)` — Stage-3+
+  rescue ritual: performs check roll, applies Strain cost, deducts resonance cost,
+  calls `reduce_corruption` to pull severity back, writes `SoulTetherRescue` audit, fires
+  achievement stats. Returns `RescueOutcome` frozen dataclass.
+- `soul_tether_redirect_handler(*, payload)` — Reactive subscriber on `CORRUPTION_ACCRUING`.
+  Drains `hollow_current` to absorb corruption; emits replacement events for overflow;
+  cancels original event when fully absorbed.
+- `soul_tether_stage_advance_prompt(*, payload)` — Reactive subscriber on
+  `CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE`. Fires `PROMPT_PLAYER` to Sineater with
+  `StageAdvanceBonusOffer` so they can opt-in to reservoir/Strain bonus.
+- `resolve_stage_advance_prompt(sineater_sheet, sinner_sheet, resonance, commit_units, take_strain)` —
+  Sineater `@reply` resolution for stage-advance prompt.
+
+**`CORRUPTION_RESISTANCE` effect resolution** (in `services/corruption.py`):
+Passive tier-0 `ThreadPullEffect` rows on Sineater's `RELATIONSHIP_CAPSTONE` Thread are
+evaluated in `accrue_corruption` on the Sineater's own casting path. Value derived from
+`lifetime_helped` for that resonance; reduces effective accrual before it writes.
+
+**API endpoints (`views.py` + `urls.py`):**
+- `POST /api/magic/soul-tether/accept/` — `SoulTetherAcceptView`
+- `POST /api/magic/soul-tether/<id>/dissolve/` — `SoulTetherDissolveView`
+- `POST /api/magic/soul-tether/<id>/sineat/request/` — `SineatingRequestView`
+- `POST /api/magic/soul-tether/<id>/sineat/respond/` — `SineatingRespondView`
+- `POST /api/magic/soul-tether/<id>/rescue/` — `SoulTetherRescueView`
+- `GET /api/magic/soul-tether/<id>/detail/` — `SoulTetherDetailView`
+
+**Types (`types/soul_tether.py`):**
+- `SineatingOffer` — frozen dataclass with `units_offered`, `hollow_current`,
+  `hollow_max`, per-unit `anima_cost`, `fatigue_cost`.
+- `SineatingResult` — frozen dataclass with accepted units, costs, new `hollow_current`.
+- `StageAdvanceBonusOffer` — frozen dataclass; `PROMPT_PLAYER` payload for stage-advance prompt.
+- `StageAdvanceBonusResult` — outcome of the Sineater's stage-advance response.
+- `RescueOutcome` — frozen dataclass; severity_reduced, stage_before/after, strain_taken.
+
 ## Removed Models (deprecated)
 
 The following models have been removed and replaced:
@@ -224,6 +325,7 @@ The following models have been removed and replaced:
 - `docs/superpowers/specs/2026-04-18-resonance-pivot-spec-a-threads-and-currency-design.md` - Resonance Pivot Spec A (Threads + Currency + Rituals + Mage Scars rename)
 - `docs/superpowers/plans/2026-04-19-resonance-pivot-spec-a-threads-and-currency.md` - 19-phase implementation plan for Spec A
 - `docs/superpowers/specs/2026-04-22-resonance-pivot-spec-c-gain-surfaces-design.md` - Resonance Pivot Spec C (Endorsements + Room Aura + Residence Trickle)
+- `docs/superpowers/specs/2026-05-03-resonance-pivot-spec-b-soul-tether-design.md` - Resonance Pivot Spec B (Soul Tether bond mechanic)
 
 ## Key Rules
 

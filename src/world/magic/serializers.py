@@ -1137,3 +1137,510 @@ class ResonanceGrantSerializer(serializers.ModelSerializer):
             "source_scene_entry_endorsement",
         ]
         read_only_fields = fields
+
+
+# =============================================================================
+# Resonance Pivot Spec B — Soul Tether API serializers (Phase 11)
+# =============================================================================
+
+# Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
+_ERR_SOUL_TETHER_NOT_FOUND = "Soul Tether relationship not found."
+_ERR_RESONANCE_NOT_FOUND = "Resonance not found."
+_ERR_SELF_TETHER = "Cannot form a Soul Tether with yourself."
+_ERR_WRITEUP_TOO_SHORT = "Writeup must be at least 20 characters."
+_ERR_MAX_UNITS_POSITIVE = "max_units must be a positive integer."
+_ERR_UNITS_ACCEPTED_NON_NEGATIVE = "units_accepted must be zero or greater."
+_ERR_SCENE_NOT_FOUND = "Scene not found."
+
+
+class AcceptSoulTetherSerializer(serializers.Serializer):
+    """Write serializer for forming a Soul Tether (Spec B §12).
+
+    ``actor_sheet_id`` identifies the character sheet of the requesting account.
+    ``partner_sheet_id`` identifies the partner's character sheet.
+    ``sinner_role`` determines which side (ABYSSAL or SINEATER) the initiator holds.
+    ``resonance_id`` selects the resonance for the Sinner's Thread.
+    ``writeup`` is the narrative description of the bond (20+ chars).
+    """
+
+    actor_sheet_id = serializers.IntegerField()
+    partner_sheet_id = serializers.IntegerField()
+    sinner_role = serializers.ChoiceField(choices=["ABYSSAL", "SINEATER"])
+    resonance_id = serializers.IntegerField()
+    writeup = serializers.CharField(min_length=20, max_length=4000)
+
+    def validate_actor_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve actor sheet with ownership check."""
+        request = self.context.get("request")
+        return _resolve_account_sheet(value, request)
+
+    def validate_partner_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve partner sheet (ownership NOT required — it's the other party)."""
+        try:
+            return CharacterSheet.objects.get(pk=value)
+        except CharacterSheet.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+
+    def validate_resonance_id(self, value: int) -> "Resonance":
+        """Resolve resonance by PK."""
+        try:
+            return Resonance.objects.get(pk=value)
+        except Resonance.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
+
+    def validate(self, attrs: dict) -> dict:
+        """Cross-field: actor cannot tether with themselves."""
+        actor = attrs.get("actor_sheet_id")
+        partner = attrs.get("partner_sheet_id")
+        if actor is not None and partner is not None and actor.pk == partner.pk:
+            raise serializers.ValidationError(_ERR_SELF_TETHER)
+        return attrs
+
+    def create(self, validated_data: dict) -> object:
+        """Delegate to accept_soul_tether; surface typed errors as 400."""
+        from world.magic.exceptions import SoulTetherError  # noqa: PLC0415
+        from world.magic.services.soul_tether import accept_soul_tether  # noqa: PLC0415
+        from world.magic.types.soul_tether import SoulTetherRole  # noqa: PLC0415
+
+        actor_sheet: CharacterSheet = validated_data["actor_sheet_id"]
+        partner_sheet: CharacterSheet = validated_data["partner_sheet_id"]
+        sinner_role = SoulTetherRole(validated_data["sinner_role"])
+        resonance: Resonance = validated_data["resonance_id"]
+        writeup: str = validated_data["writeup"]
+        try:
+            return accept_soul_tether(
+                initiator_sheet=actor_sheet,
+                partner_sheet=partner_sheet,
+                sinner_role=sinner_role,
+                resonance=resonance,
+                writeup=writeup,
+                ritual_components=[],
+            )
+        except SoulTetherError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+
+class SoulTetherDetailSerializer(serializers.Serializer):
+    """Read serializer for GET /api/magic/soul-tether/{relationship_id}/.
+
+    Returns tether state: Hollow current/max, Thread levels, Sineater stats,
+    and role information. Accepts a CharacterRelationship (either direction).
+    """
+
+    relationship_id = serializers.IntegerField(read_only=True, source="pk")
+    is_soul_tether = serializers.BooleanField(read_only=True)
+    soul_tether_role = serializers.CharField(read_only=True)
+
+    # Derived state via SerializerMethodField
+    sinner_sheet_id = serializers.SerializerMethodField()
+    sineater_sheet_id = serializers.SerializerMethodField()
+    hollow_current = serializers.SerializerMethodField()
+    hollow_max = serializers.SerializerMethodField()
+    sineater_lifetime_helped = serializers.SerializerMethodField()
+    sinner_corruption_stage = serializers.SerializerMethodField()
+    sineater_strain_stage = serializers.SerializerMethodField()
+
+    def _resolve_directions(self, obj: object) -> tuple[object, object]:
+        """Return (sinner_relationship, sineater_relationship) for this tether.
+
+        Handles either direction being passed as ``obj``.
+        """
+        from world.magic.constants import SoulTetherRole  # noqa: PLC0415
+        from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+
+        if obj.soul_tether_role == SoulTetherRole.ABYSSAL:  # type: ignore[union-attr]
+            outgoing = obj
+            incoming = CharacterRelationship.objects.filter(
+                source=obj.target,  # type: ignore[union-attr]
+                target=obj.source,  # type: ignore[union-attr]
+                is_soul_tether=True,
+            ).first()
+        else:
+            incoming = obj
+            outgoing = CharacterRelationship.objects.filter(
+                source=obj.target,  # type: ignore[union-attr]
+                target=obj.source,  # type: ignore[union-attr]
+                is_soul_tether=True,
+            ).first()
+        return outgoing, incoming
+
+    def get_sinner_sheet_id(self, obj: object) -> int | None:
+        """Return the Sinner's CharacterSheet PK."""
+        outgoing, _ = self._resolve_directions(obj)
+        if outgoing is None:
+            return None
+        return outgoing.source_id  # type: ignore[union-attr]
+
+    def get_sineater_sheet_id(self, obj: object) -> int | None:
+        """Return the Sineater's CharacterSheet PK."""
+        outgoing, _ = self._resolve_directions(obj)
+        if outgoing is None:
+            return None
+        return outgoing.target_id  # type: ignore[union-attr]
+
+    def get_hollow_current(self, obj: object) -> int:
+        """Return the Sinner's current Hollow capacity (from the capstone Thread)."""
+        from world.magic.constants import TargetKind  # noqa: PLC0415
+        from world.magic.models import Thread  # noqa: PLC0415
+
+        outgoing, _ = self._resolve_directions(obj)
+        if outgoing is None:
+            return 0
+        sinner_sheet = outgoing.source  # type: ignore[union-attr]
+        capstone = outgoing.capstones.filter(is_ritual_capstone=True).first()  # type: ignore[union-attr]
+        if capstone is None:
+            return 0
+        thread = Thread.objects.filter(
+            owner=sinner_sheet,
+            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+            target_capstone=capstone,
+            retired_at__isnull=True,
+        ).first()
+        return thread.hollow_current if thread is not None else 0
+
+    def get_hollow_max(self, obj: object) -> int:
+        """Return the Sinner's Hollow maximum (thread.level * 10)."""
+        from world.magic.constants import TargetKind  # noqa: PLC0415
+        from world.magic.models import Thread  # noqa: PLC0415
+
+        outgoing, _ = self._resolve_directions(obj)
+        if outgoing is None:
+            return 0
+        sinner_sheet = outgoing.source  # type: ignore[union-attr]
+        capstone = outgoing.capstones.filter(is_ritual_capstone=True).first()  # type: ignore[union-attr]
+        if capstone is None:
+            return 0
+        thread = Thread.objects.filter(
+            owner=sinner_sheet,
+            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+            target_capstone=capstone,
+            retired_at__isnull=True,
+        ).first()
+        return thread.level * 10 if thread is not None else 0
+
+    def get_sineater_lifetime_helped(self, obj: object) -> int:
+        """Return the Sineater's total lifetime_helped across all resonances for this bond."""
+        from world.magic.models import CharacterResonance  # noqa: PLC0415
+
+        outgoing, _ = self._resolve_directions(obj)
+        if outgoing is None:
+            return 0
+        sineater_sheet = outgoing.target  # type: ignore[union-attr]
+        result = CharacterResonance.objects.filter(
+            character_sheet=sineater_sheet,
+        ).values_list("lifetime_helped", flat=True)
+        return sum(result)
+
+    def get_sinner_corruption_stage(self, obj: object) -> int:
+        """Return the Sinner's highest corruption stage across all resonances."""
+        from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+        outgoing, _ = self._resolve_directions(obj)
+        if outgoing is None:
+            return 0
+        sinner_sheet = outgoing.source  # type: ignore[union-attr]
+        # Find highest stage_order among all active Corruption ConditionInstances
+        instances = ConditionInstance.objects.filter(
+            target=sinner_sheet.character,
+            condition__corruption_resonance__isnull=False,
+        ).select_related("current_stage")
+        stages = [
+            inst.current_stage.stage_order for inst in instances if inst.current_stage is not None
+        ]
+        return max(stages) if stages else 0
+
+    def get_sineater_strain_stage(self, obj: object) -> int:
+        """Return the Sineater's current Tether Strain severity (or 0 if none)."""
+        from world.conditions.models import ConditionInstance  # noqa: PLC0415
+
+        _, incoming = self._resolve_directions(obj)
+        if incoming is None:
+            return 0
+        sineater_sheet = incoming.source  # type: ignore[union-attr]
+        strain = ConditionInstance.objects.filter(
+            target=sineater_sheet.character,
+            condition__name="Tether Strain",
+        ).first()
+        return strain.severity if strain is not None else 0
+
+
+class SineatingRequestSerializer(serializers.Serializer):
+    """Write serializer for Sinner-initiated Sineating request (Spec B §7).
+
+    Returns a ``SineatingOffer`` that the Sineater can accept or decline via
+    the respond endpoint.
+    """
+
+    actor_sheet_id = serializers.IntegerField()
+    sineater_sheet_id = serializers.IntegerField()
+    resonance_id = serializers.IntegerField()
+    max_units = serializers.IntegerField(min_value=1)
+    scene_id = serializers.IntegerField()
+
+    def validate_actor_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve Sinner sheet with ownership check."""
+        request = self.context.get("request")
+        return _resolve_account_sheet(value, request)
+
+    def validate_sineater_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve Sineater sheet."""
+        try:
+            return CharacterSheet.objects.get(pk=value)
+        except CharacterSheet.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+
+    def validate_resonance_id(self, value: int) -> "Resonance":
+        """Resolve resonance by PK."""
+        try:
+            return Resonance.objects.get(pk=value)
+        except Resonance.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
+
+    def validate_scene_id(self, value: int) -> object:
+        """Resolve scene by PK."""
+        from world.scenes.models import Scene  # noqa: PLC0415
+
+        try:
+            return Scene.objects.get(pk=value)
+        except Scene.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_SCENE_NOT_FOUND) from exc
+
+    def create(self, validated_data: dict) -> object:
+        """Delegate to request_sineating; surface typed errors as 400."""
+        from world.magic.exceptions import SoulTetherError  # noqa: PLC0415
+        from world.magic.services.soul_tether import request_sineating  # noqa: PLC0415
+
+        try:
+            return request_sineating(
+                sinner_sheet=validated_data["actor_sheet_id"],
+                sineater_sheet=validated_data["sineater_sheet_id"],
+                resonance=validated_data["resonance_id"],
+                max_units=validated_data["max_units"],
+                scene=validated_data["scene_id"],
+            )
+        except SoulTetherError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+
+class SineatingOfferSerializer(serializers.Serializer):
+    """Read serializer for SineatingOffer payloads returned by the request endpoint."""
+
+    sinner_sheet_id = serializers.SerializerMethodField()
+    sineater_sheet_id = serializers.SerializerMethodField()
+    resonance_id = serializers.SerializerMethodField()
+    max_units_offered = serializers.IntegerField()
+    anima_cost_per_unit = serializers.IntegerField()
+    fatigue_cost_per_unit = serializers.IntegerField()
+    current_hollow = serializers.IntegerField()
+    hollow_max = serializers.IntegerField()
+    sineater_current_strain_stage = serializers.IntegerField()
+
+    def get_sinner_sheet_id(self, obj: object) -> int:
+        """Return sinner_sheet PK."""
+        return obj.sinner_sheet.pk  # type: ignore[union-attr]
+
+    def get_sineater_sheet_id(self, obj: object) -> int:
+        """Return sineater_sheet PK."""
+        return obj.sineater_sheet.pk  # type: ignore[union-attr]
+
+    def get_resonance_id(self, obj: object) -> int:
+        """Return resonance PK."""
+        return obj.resonance.pk  # type: ignore[union-attr]
+
+
+class SineatingRespondSerializer(serializers.Serializer):
+    """Write serializer for the Sineater's response to a Sineating request (Spec B §7).
+
+    The Sineater supplies the SineatingOffer fields inline (Option B synchronous path).
+    ``units_accepted=0`` means decline.
+    """
+
+    # Offer fields — re-validated server-side to prevent tampering.
+    sinner_sheet_id = serializers.IntegerField()
+    sineater_sheet_id = serializers.IntegerField()
+    resonance_id = serializers.IntegerField()
+    max_units = serializers.IntegerField(min_value=1)
+    scene_id = serializers.IntegerField()
+    # Response
+    units_accepted = serializers.IntegerField(min_value=0)
+
+    def validate_sineater_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve + ownership-check: caller must be the Sineater."""
+        request = self.context.get("request")
+        return _resolve_account_sheet(value, request)
+
+    def validate_sinner_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve sinner sheet."""
+        try:
+            return CharacterSheet.objects.get(pk=value)
+        except CharacterSheet.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+
+    def validate_resonance_id(self, value: int) -> "Resonance":
+        """Resolve resonance by PK."""
+        try:
+            return Resonance.objects.get(pk=value)
+        except Resonance.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
+
+    def validate_scene_id(self, value: int) -> object:
+        """Resolve scene by PK."""
+        from world.scenes.models import Scene  # noqa: PLC0415
+
+        try:
+            return Scene.objects.get(pk=value)
+        except Scene.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_SCENE_NOT_FOUND) from exc
+
+    def create(self, validated_data: dict) -> object:
+        """Re-validate offer then call resolve_sineating; surface typed errors as 400."""
+        from world.magic.exceptions import SoulTetherError  # noqa: PLC0415
+        from world.magic.services.soul_tether import (  # noqa: PLC0415
+            request_sineating,
+            resolve_sineating,
+        )
+
+        try:
+            offer = request_sineating(
+                sinner_sheet=validated_data["sinner_sheet_id"],
+                sineater_sheet=validated_data["sineater_sheet_id"],
+                resonance=validated_data["resonance_id"],
+                max_units=validated_data["max_units"],
+                scene=validated_data["scene_id"],
+            )
+            return resolve_sineating(offer, validated_data["units_accepted"])
+        except SoulTetherError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+
+class SineatingResultSerializer(serializers.Serializer):
+    """Read serializer for SineatingResult payloads."""
+
+    units_accepted = serializers.IntegerField()
+    declined = serializers.BooleanField()
+    new_hollow_current = serializers.IntegerField()
+    new_lifetime_helped = serializers.IntegerField()
+    audit_row_id = serializers.SerializerMethodField()
+
+    def get_audit_row_id(self, obj: object) -> int:
+        """Return the audit Sineating row PK."""
+        return obj.audit_row.pk  # type: ignore[union-attr]
+
+
+class SoulTetherRescueSerializer(serializers.Serializer):
+    """Write serializer for the rescue ritual (Spec B §9).
+
+    The Sineater performs the ritual on the Sinner. Both must be in the same scene.
+    """
+
+    actor_sheet_id = serializers.IntegerField()
+    sinner_sheet_id = serializers.IntegerField()
+    resonance_id = serializers.IntegerField()
+    scene_id = serializers.IntegerField()
+
+    def validate_actor_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve Sineater sheet with ownership check."""
+        request = self.context.get("request")
+        return _resolve_account_sheet(value, request)
+
+    def validate_sinner_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve Sinner sheet."""
+        try:
+            return CharacterSheet.objects.get(pk=value)
+        except CharacterSheet.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+
+    def validate_resonance_id(self, value: int) -> "Resonance":
+        """Resolve resonance by PK."""
+        try:
+            return Resonance.objects.get(pk=value)
+        except Resonance.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
+
+    def validate_scene_id(self, value: int) -> object:
+        """Resolve scene by PK."""
+        from world.scenes.models import Scene  # noqa: PLC0415
+
+        try:
+            return Scene.objects.get(pk=value)
+        except Scene.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_SCENE_NOT_FOUND) from exc
+
+    def create(self, validated_data: dict) -> object:
+        """Delegate to perform_soul_tether_rescue; surface typed errors as 400."""
+        from world.magic.exceptions import SoulTetherError  # noqa: PLC0415
+        from world.magic.services.soul_tether import perform_soul_tether_rescue  # noqa: PLC0415
+
+        try:
+            return perform_soul_tether_rescue(
+                sineater_sheet=validated_data["actor_sheet_id"],
+                sinner_sheet=validated_data["sinner_sheet_id"],
+                resonance=validated_data["resonance_id"],
+                components=[],
+                scene=validated_data["scene_id"],
+            )
+        except SoulTetherError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+
+class RescueOutcomeSerializer(serializers.Serializer):
+    """Read serializer for RescueOutcome payloads."""
+
+    severity_reduced = serializers.IntegerField()
+    sinner_stage_at_start = serializers.IntegerField()
+    sinner_stage_at_end = serializers.IntegerField()
+    sineater_strain_taken = serializers.IntegerField()
+    protagonism_lock_lifted = serializers.BooleanField()
+    audit_row_id = serializers.SerializerMethodField()
+
+    def get_audit_row_id(self, obj: object) -> int:
+        """Return the SoulTetherRescue audit row PK."""
+        return obj.audit_row.pk  # type: ignore[union-attr]
+
+
+class DissolveSerializer(serializers.Serializer):
+    """Write serializer for dissolving a Soul Tether (Spec B §13).
+
+    Either party may dissolve; ``actor_sheet_id`` is validated for ownership.
+    ``relationship_id`` is the PK of *either* directional CharacterRelationship row.
+    """
+
+    actor_sheet_id = serializers.IntegerField()
+    relationship_id = serializers.IntegerField()
+
+    def validate_actor_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve actor sheet with ownership check."""
+        request = self.context.get("request")
+        return _resolve_account_sheet(value, request)
+
+    def validate_relationship_id(self, value: int) -> object:
+        """Resolve the CharacterRelationship, verifying it is an active Soul Tether."""
+        from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+
+        try:
+            rel = CharacterRelationship.objects.get(pk=value)
+        except CharacterRelationship.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_SOUL_TETHER_NOT_FOUND) from exc
+        if not rel.is_soul_tether:
+            raise serializers.ValidationError(_ERR_SOUL_TETHER_NOT_FOUND)
+        return rel
+
+    def create(self, validated_data: dict) -> object:
+        """Delegate to dissolve_soul_tether; surface typed errors as 400.
+
+        Returns the relationship object post-dissolution as the DRF ``create()``
+        contract requires a non-None return value from non-ModelSerializer.create().
+        """
+        from world.magic.exceptions import SoulTetherError  # noqa: PLC0415
+        from world.magic.services.soul_tether import dissolve_soul_tether  # noqa: PLC0415
+
+        relationship = validated_data["relationship_id"]
+        actor_sheet: CharacterSheet = validated_data["actor_sheet_id"]
+        try:
+            dissolve_soul_tether(
+                relationship_id=relationship.pk,
+                initiator_sheet=actor_sheet,
+            )
+        except SoulTetherError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        return relationship

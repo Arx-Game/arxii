@@ -82,9 +82,9 @@ class CorruptionError(Exception):
     """Base for corruption-related typed exceptions."""
 
     user_message: str = "Corruption operation failed."
-    SAFE_MESSAGES: ClassVar[set[str]] = {
-        "Corruption operation failed.",
-    }
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"Corruption operation failed."},
+    )
 
     def __init__(self, user_message: str | None = None) -> None:
         if user_message is not None:
@@ -96,6 +96,105 @@ class ProtagonismLockedError(CorruptionError):
     """Raised when a service is invoked on a sheet that is mechanically locked from protagonism."""
 
     user_message = "Character is currently locked from protagonism and cannot perform this action."
-    SAFE_MESSAGES: ClassVar[set[str]] = {
-        "Character is currently locked from protagonism and cannot perform this action.",
-    }
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"Character is currently locked from protagonism and cannot perform this action."},
+    )
+
+
+# =============================================================================
+# Soul Tether exceptions (Spec B)
+# =============================================================================
+
+
+class SoulTetherError(Exception):
+    """Base exception for Soul Tether errors.
+
+    Carries user_message + SAFE_MESSAGES allowlist per project rule
+    (CLAUDE.md: never use str(exc) in API responses).
+    """
+
+    user_message: str = "Soul Tether operation failed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset()
+
+    def __init__(self, user_message: str | None = None) -> None:
+        if user_message is not None:
+            self.user_message = user_message
+        super().__init__(self.user_message)
+
+
+class AffinityGateError(SoulTetherError):
+    """Raised when the proposed pairing fails the §3 affinity gates."""
+
+    user_message: str = "Affinity gate failed for Soul Tether formation."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Affinity gate failed for Soul Tether formation.",
+            "Sineater must be Celestial- or Primal-affinity primary.",
+            "Sinner cannot be Celestial-affinity primary.",
+        },
+    )
+
+
+class NoSoulTetherUnlockError(SoulTetherError):
+    """Raised when the Sinner has not purchased the RELATIONSHIP_CAPSTONE ThreadWeavingUnlock."""
+
+    user_message: str = "Sinner has not unlocked Relationship Capstone thread weaving yet."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"Sinner has not unlocked Relationship Capstone thread weaving yet."},
+    )
+
+
+class SoulTetherFormationError(SoulTetherError):
+    """Raised when formation prerequisites fail (consent, role, etc.)."""
+
+    user_message: str = "Soul Tether formation failed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Soul Tether formation failed.",
+            "Both characters must consent to forming a Soul Tether.",
+            "An active Soul Tether already exists between these characters.",
+        },
+    )
+
+
+class SineatingValidationError(SoulTetherError):
+    """Raised when a Sineating request fails validation."""
+
+    user_message: str = "Sineating request failed validation."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Sineating request failed validation.",
+            "No active Soul Tether exists between these characters.",
+            "Both characters must be in the same scene to perform Sineating.",
+            "Resonance specified is not one the Sinner accrues.",
+            "Per-scene Sineating cap reached for this bond.",
+        },
+    )
+
+
+class RescueValidationError(SoulTetherError):
+    """Raised when rescue ritual gates fail."""
+
+    user_message: str = "Soul Tether rescue ritual failed validation."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Soul Tether rescue ritual failed validation.",
+            "Sinner must be at corruption stage 3 or higher to be rescued.",
+            "Both characters must be in the same scene for the rescue ritual.",
+            "Rescue ritual already performed for this Sinner this scene.",
+            "Sineater has insufficient resonance for the ritual cost.",
+        },
+    )
+
+
+class StageAdvanceBonusError(SoulTetherError):
+    """Raised when a stage-advance bonus offer resolution fails (Spec B §8.1)."""
+
+    user_message: str = "Stage-advance bonus resolution failed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Stage-advance bonus resolution failed.",
+            "No pending stage-advance offer found with that ID.",
+            "Units committed exceeds the maximum available Hollow.",
+        },
+    )

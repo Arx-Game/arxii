@@ -913,3 +913,171 @@ class ResonanceGrantViewSet(
             character_sheet__roster_entry__tenures__player_data__account=user,
             character_sheet__roster_entry__tenures__end_date__isnull=True,
         ).distinct()
+
+
+# =============================================================================
+# Resonance Pivot Spec B — Soul Tether API views (Phase 11)
+# =============================================================================
+
+
+class SoulTetherAcceptView(APIView):
+    """Form a Soul Tether bond (Spec B §12).
+
+    POST /api/magic/soul-tether/accept/
+
+    Accepts ``{actor_sheet_id, partner_sheet_id, sinner_role, resonance_id, writeup}``.
+    Calls ``accept_soul_tether``; returns the RelationshipCapstone PK on success.
+    Service-level typed exceptions carry ``user_message`` and are mapped to HTTP 400
+    inside the serializer.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """Validate and dispatch accept_soul_tether; return capstone PK."""
+        from world.magic.serializers import AcceptSoulTetherSerializer  # noqa: PLC0415
+
+        serializer = AcceptSoulTetherSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        capstone = serializer.save()
+        return Response({"capstone_id": capstone.pk}, status=status.HTTP_201_CREATED)
+
+
+class SoulTetherDetailView(APIView):
+    """View tether state (Spec B §18).
+
+    GET /api/magic/soul-tether/{relationship_id}/
+
+    Returns Hollow current/max, Thread levels, Sineater stats, and roles.
+    Either party may retrieve; relationship_id may be either directional row.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, relationship_id: int) -> Response:
+        """Fetch and serialise the tether state for the given relationship."""
+        from world.magic.serializers import SoulTetherDetailSerializer  # noqa: PLC0415
+        from world.relationships.models import CharacterRelationship  # noqa: PLC0415
+
+        rel = get_object_or_404(CharacterRelationship, pk=relationship_id, is_soul_tether=True)
+        serializer = SoulTetherDetailSerializer(rel, context={"request": request})
+        return Response(serializer.data)
+
+
+class SineatingRequestView(APIView):
+    """Sinner-initiated Sineating request (Spec B §7).
+
+    POST /api/magic/soul-tether/sineating/request/
+
+    Accepts ``{actor_sheet_id, sineater_sheet_id, resonance_id, max_units, scene_id}``.
+    Returns a ``SineatingOffer`` payload for the Sineater to accept or decline via
+    the respond endpoint.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """Validate and dispatch request_sineating; return offer payload."""
+        from world.magic.serializers import (  # noqa: PLC0415
+            SineatingOfferSerializer,
+            SineatingRequestSerializer,
+        )
+
+        serializer = SineatingRequestSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        offer = serializer.save()
+        return Response(
+            SineatingOfferSerializer(offer).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class SineatingRespondView(APIView):
+    """Sineater accepts or declines a Sineating offer (Spec B §7).
+
+    POST /api/magic/soul-tether/sineating/respond/
+
+    Accepts ``{sinner_sheet_id, sineater_sheet_id, resonance_id, max_units,
+    scene_id, units_accepted}``. Re-validates the offer server-side (Option B
+    synchronous path) then calls ``resolve_sineating``. Returns the result.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """Re-validate offer + dispatch resolve_sineating; return result payload."""
+        from world.magic.serializers import (  # noqa: PLC0415
+            SineatingRespondSerializer,
+            SineatingResultSerializer,
+        )
+
+        serializer = SineatingRespondSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+        return Response(
+            SineatingResultSerializer(result).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class SoulTetherRescueView(APIView):
+    """Sineater performs stage-3+ rescue ritual (Spec B §9).
+
+    POST /api/magic/soul-tether/rescue/
+
+    Accepts ``{actor_sheet_id, sinner_sheet_id, resonance_id, scene_id}``.
+    Calls ``perform_soul_tether_rescue``; returns the RescueOutcome payload.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """Validate and dispatch perform_soul_tether_rescue; return outcome payload."""
+        from world.magic.serializers import (  # noqa: PLC0415
+            RescueOutcomeSerializer,
+            SoulTetherRescueSerializer,
+        )
+
+        serializer = SoulTetherRescueSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        outcome = serializer.save()
+        return Response(
+            RescueOutcomeSerializer(outcome).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class SoulTetherDissolveView(APIView):
+    """Dissolve a Soul Tether bond (Spec B §13).
+
+    POST /api/magic/soul-tether/dissolve/
+
+    Accepts ``{actor_sheet_id, relationship_id}``. Either party may dissolve.
+    Calls ``dissolve_soul_tether``; returns HTTP 204 on success.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """Validate and dispatch dissolve_soul_tether; return 204 on success."""
+        from world.magic.serializers import DissolveSerializer  # noqa: PLC0415
+
+        serializer = DissolveSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)

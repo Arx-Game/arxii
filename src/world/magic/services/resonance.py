@@ -323,11 +323,15 @@ def resolve_pull_effects(
                 authored = (
                     row.flat_bonus_amount or row.intensity_bump_amount or row.vital_bonus_amount
                 )
-                # CAPABILITY_GRANT and NARRATIVE_ONLY have no numeric payload;
-                # their scaled_value must be None (DB CheckConstraint forbids 0).
+                # CAPABILITY_GRANT, NARRATIVE_ONLY, and CORRUPTION_RESISTANCE have
+                # no numeric payload; their scaled_value must be None.
+                # CORRUPTION_RESISTANCE derives its runtime value from
+                # CharacterResonance.lifetime_helped (Spec B §10.2) — it is applied
+                # directly in accrue_corruption, not via a scaled_value here.
                 has_numeric_payload = row.effect_kind not in (
                     EffectKind.CAPABILITY_GRANT,
                     EffectKind.NARRATIVE_ONLY,
+                    EffectKind.CORRUPTION_RESISTANCE,
                 )
 
                 if t.target_kind == TargetKind.FACET:

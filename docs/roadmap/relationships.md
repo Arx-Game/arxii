@@ -42,10 +42,14 @@ Relationships are the heart of the game. A track-based system lets characters de
   `CharacterRelationship.is_soul_tether=True`. Authoring paths, UI for creating/levelling
   these threads, and service wiring for scaling thread power off relationship absolute
   value are still pending.
-- **Soul tethers (capstone threads)** — XP-gated power amplifiers built around capstone
-  events, authored as `RELATIONSHIP_CAPSTONE` threads. The real source of significant
-  mechanical power from relationships. Future PR but core to the relationship power
-  fantasy. See `docs/superpowers/specs/2026-04-18-resonance-pivot-spec-a-threads-and-currency-design.md`.
+- **Soul tethers (capstone threads)** — DONE in Spec B (branch `spec-b-soul-tether-design`).
+  `CharacterRelationship.is_soul_tether`, `soul_tether_role` (Sinner/Sineater), and the
+  `RELATIONSHIP_CAPSTONE` Thread anchor kind all shipped in Spec A. Spec B activated the
+  mechanic: formation ritual (`accept_soul_tether`), the Hollow buffer (`Thread.hollow_current`),
+  the Sineating loop, the `CORRUPTION_ACCRUING` redirect handler, stage-advance dramatic prompts,
+  and the stage-3+ rescue ritual. `RelationshipCapstone.is_ritual_capstone` +
+  `RelationshipCapstone.ritual` FK also added for capstone-gated ritual dispatch.
+  See `docs/superpowers/specs/2026-05-03-resonance-pivot-spec-b-soul-tether-design.md`.
 - **Pull integration** — Players should be able to spend Resonance on pulls against
   relationship threads during actions where the other party is engaged (§5 of Spec A).
   The underlying pull machinery (`ThreadPullCost`, `ThreadPullEffect`, `CombatPull`)

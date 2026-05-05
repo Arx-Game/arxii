@@ -12,6 +12,7 @@ from world.character_sheets.models import CharacterSheet
 from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.conditions.services import advance_condition_severity, decay_condition_severity
 from world.conditions.types import AdvancementOutcome
+from world.magic.constants import SoulTetherRole, TargetKind
 from world.magic.models.affinity import Resonance
 from world.magic.models.aura import CharacterResonance
 from world.magic.models.corruption_config import CorruptionConfig
@@ -34,6 +35,12 @@ from world.magic.types.techniques import TechniqueUseResult
 # Stage constants — spec §2.1 terminal stage
 _TERMINAL_STAGE = 5
 _WARNING_STAGES = (3, 4)
+
+# Spec B §10: Sineater CORRUPTION_RESISTANCE tuning threshold.
+# The multiplier formula is: max(0.1, 1 - lifetime_helped / threshold).
+# At threshold units of lifetime_helped, resistance reaches 90% (the cap).
+# Staff can surface this via a config model in a future phase; hardcoded for now.
+_CORRUPTION_RESISTANCE_THRESHOLD = 1000
 
 # Affinity name strings — used for coefficient lookup (case-insensitive)
 _AFFINITY_CELESTIAL = "celestial"
@@ -252,8 +259,105 @@ def _emit_risk_transparency_events(
             emit_event(EventName.PROTAGONISM_LOCKED, lock_payload, location=location)
 
 
+def _get_sineater_threads_for(
+    sheet: CharacterSheet,
+    resonance: Resonance,
+) -> list[object]:
+    """Return active Sineater-side RELATIONSHIP_CAPSTONE Threads owned by *sheet* for *resonance*.
+
+    "Sineater-side" means the Thread's target_capstone belongs to a
+    CharacterRelationship where ``sheet`` is the source AND
+    ``soul_tether_role == SINEATER``.
+
+    Used by ``_apply_sineater_corruption_resistance`` to determine whether a
+    CORRUPTION_RESISTANCE multiplier applies.  Returns the matching Thread
+    instances (may be empty — caller treats an empty list as "no resistance").
+
+    Args:
+        sheet: The CharacterSheet whose Threads to search.
+        resonance: The resonance to filter on.
+
+    Returns:
+        List of Thread instances (may be empty).
+    """
+    from world.magic.models import Thread  # noqa: PLC0415 — avoid circular at module level
+
+    return list(
+        Thread.objects.filter(
+            owner=sheet,
+            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+            resonance=resonance,
+            retired_at__isnull=True,
+            # Sineater relationship: sheet is the SOURCE and role is SINEATER.
+            target_capstone__relationship__source=sheet,
+            target_capstone__relationship__is_soul_tether=True,
+            target_capstone__relationship__soul_tether_role=SoulTetherRole.SINEATER,
+        )
+    )
+
+
+def _apply_sineater_corruption_resistance(
+    sheet: CharacterSheet,
+    resonance: Resonance,
+    amount: int,
+    redirect_origin: CharacterSheet | None,
+) -> int:
+    """Reduce *amount* by the Sineater CORRUPTION_RESISTANCE multiplier if applicable.
+
+    Spec B §10.2.  Only reduces when all of the following hold:
+    - ``redirect_origin`` is None (this is NOT overflow from a redirect call).
+    - The character owns an active Sineater-side RELATIONSHIP_CAPSTONE Thread
+      in this resonance.
+    - CharacterResonance.lifetime_helped > 0 for this sheet+resonance.
+
+    Multiplier formula (§10.2):
+        multiplier = max(0.1, 1.0 - lifetime_helped / _CORRUPTION_RESISTANCE_THRESHOLD)
+        effective_amount = ceil(amount * multiplier)
+
+    Floor of 0.1 caps resistance at 90%.  The threshold is tunable via
+    _CORRUPTION_RESISTANCE_THRESHOLD (a future staff-editable config surface).
+
+    Recursion guard: ``redirect_origin is not None`` means this accrual is an
+    overflow re-call from the Soul Tether redirect handler (Phase 6).  The
+    Sinner receiving overflow is NOT casting; applying resistance here would
+    incorrectly reduce corruption that was redirected from someone else's cast.
+
+    Args:
+        sheet: The accruing character's CharacterSheet.
+        resonance: The resonance being accrued.
+        amount: The raw corruption amount before resistance.
+        redirect_origin: Non-None if this is overflow from a redirect; None for
+            a direct cast.
+
+    Returns:
+        The (possibly reduced) effective amount.  Always >= 1 when resistance
+        applies (math.ceil ensures a positive integer).
+    """
+    # Recursion guard: overflow accrual from the redirect handler is not the
+    # character's own cast — do not apply resistance.
+    if redirect_origin is not None:
+        return amount
+
+    sineater_threads = _get_sineater_threads_for(sheet, resonance)
+    if not sineater_threads:
+        return amount
+
+    # Fetch the per-resonance lifetime_helped counter.
+    try:
+        cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
+    except CharacterResonance.DoesNotExist:
+        return amount
+
+    lifetime_helped = cr.lifetime_helped
+    if lifetime_helped == 0:
+        return amount
+
+    multiplier = max(0.1, 1.0 - lifetime_helped / _CORRUPTION_RESISTANCE_THRESHOLD)
+    return math.ceil(amount * multiplier)
+
+
 @transaction.atomic
-def accrue_corruption(  # noqa: PLR0913
+def accrue_corruption(  # noqa: PLR0913, PLR0912, PLR0915, C901
     *,
     character_sheet: CharacterSheet,
     resonance: Resonance,
@@ -282,7 +386,10 @@ def accrue_corruption(  # noqa: PLR0913
         msg = f"amount must be > 0, got {amount}"
         raise ValueError(msg)
 
-    # Pre-mutation event for future Spec B interception
+    # Pre-mutation event for Spec B interception (Spec B §5.2).
+    # The handler may mutate pre_payload.amount to reduce (or zero out) what
+    # actually accrues — e.g., Soul Tether Hollow absorption.  When the amount
+    # is reduced to zero after dispatch, the whole accrual is short-circuited.
     pre_payload = CorruptionAccruingPayload(
         character_sheet=character_sheet,
         resonance=resonance,
@@ -293,6 +400,39 @@ def accrue_corruption(  # noqa: PLR0913
     location = _resolve_location(character_sheet)
     if location is not None:
         emit_event(EventName.CORRUPTION_ACCRUING, pre_payload, location=location)
+
+    # Short-circuit: a reactive subscriber (e.g. Soul Tether redirect) may have
+    # zeroed pre_payload.amount to signal full absorption.  Read the current
+    # CharacterResonance state for an accurate no-op result.
+    if pre_payload.amount <= 0:
+        try:
+            _cr = CharacterResonance.objects.get(
+                character_sheet=character_sheet, resonance=resonance
+            )
+            _current = _cr.corruption_current
+            _lifetime = _cr.corruption_lifetime
+        except CharacterResonance.DoesNotExist:
+            _current = 0
+            _lifetime = 0
+        return _make_no_op_result(
+            resonance=resonance,
+            amount=0,
+            current_before=_current,
+            current_after=_current,
+            lifetime_before=_lifetime,
+            lifetime_after=_lifetime,
+        )
+
+    # Re-read amount in case a subscriber reduced it (partial absorption).
+    amount = pre_payload.amount
+
+    # Spec B §10.2: apply Sineater CORRUPTION_RESISTANCE multiplier.
+    # Only effective when the character owns an active Sineater-side Thread in
+    # this resonance AND has non-zero lifetime_helped.  Skipped when
+    # redirect_origin is set (overflow accrual is NOT the character's own cast).
+    amount = _apply_sineater_corruption_resistance(
+        character_sheet, resonance, amount, redirect_origin
+    )
 
     # Increment fields
     char_resonance, _ = CharacterResonance.objects.select_for_update().get_or_create(

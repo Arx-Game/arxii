@@ -1246,12 +1246,23 @@ def _make_magical_endurance_check_type():
 class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
     """Factory for a per-resonance Corruption ConditionTemplate with 5 stages.
 
-    Authors the full 5-stage shape per spec §6.2 / §6.3:
+    Authors the full 5-stage shape per spec §6.2 / §6.3 / §11:
     - HOLD_OVERFLOW on all stages (resist check gates each advancement)
     - Primal DCs: 8, 12, 18, 22, 28
     - Abyssal DCs: 12, 18, 25, 30, 35  (harder to resist)
-    - passive_decay_max_severity set to stage-2 threshold so decay only runs
-      at stages 1-2
+    - passive_decay_per_day: 2 (Primal) / 1 (Abyssal) — TUNING PLACEHOLDER
+    - passive_decay_max_severity: None/0 (Primal, decays to zero) / 10 (Abyssal,
+      only lowest stages decay) — TUNING PLACEHOLDER per §11
+    - passive_decay_blocked_in_engagement: False — corruption decays during normal
+      life per §11 ("not blocked by engagement")
+
+    Tuning rationale (Spec B §11):
+    - Primal: Low-tier Primal users should be able to clear corruption without a
+      Sineater; rate 2/day fully clears faster. max_severity=None → decays to zero.
+    - Abyssal: Abyssal users past tier 1 cannot rely on decay alone; rate 1/day
+      with max_severity=10 means only the very lowest stages ever auto-decay.
+
+    These values are PLACEHOLDERS for Phase 14 tuning via SoulTetherConfig.
 
     The affinity is inferred from corruption_resonance.affinity.name.lower().
     """
@@ -1266,13 +1277,17 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
         lambda o: f"Corruption from the {o.corruption_resonance.name} resonance."
     )
     has_progression = True
-    passive_decay_per_day = 1
-    passive_decay_blocked_in_engagement = True
+    # passive_decay_per_day and passive_decay_blocked_in_engagement are set in
+    # post_generation once we know whether the resonance is Primal or Abyssal.
+    passive_decay_per_day = 0  # overwritten in post_generation
+    passive_decay_blocked_in_engagement = False
     corruption_resonance = factory.SubFactory(ResonanceFactory)
 
     @factory.post_generation  # type: ignore[misc]
     def stages(self, create: bool, extracted: object, **kwargs: object) -> None:
         """Author 5 ConditionStage rows with HOLD_OVERFLOW + resist params.
+
+        Also sets affinity-aware passive decay tuning (Spec B §11).
 
         Idempotent: skips stage creation if stages already exist (handles
         the django_get_or_create case where the template row is reused).
@@ -1300,10 +1315,22 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
                 advancement_resist_failure_kind=AdvancementResistFailureKind.HOLD_OVERFLOW,
             )
 
-        # passive_decay only at stages 1-2: set max_severity = stage-2 threshold
-        stage_2_threshold = thresholds[1]  # 200
-        self.passive_decay_max_severity = stage_2_threshold
-        self.save(update_fields=["passive_decay_max_severity"])
+        # Spec B §11 passive decay tuning — TUNING PLACEHOLDERS for Phase 14.
+        #
+        # Primal (e.g. Wild Hunt):
+        #   decay_per_day=2, max_severity=None (decays all the way to zero).
+        #   Low-tier Primal characters can clear corruption without a Sineater.
+        #
+        # Abyssal (e.g. Web of Spiders):
+        #   decay_per_day=1, max_severity=10 (only the very lowest stages auto-decay).
+        #   Abyssal-primary characters past tier 1 must rely on Sineating or Atonement.
+        if is_abyssal:
+            self.passive_decay_per_day = 1
+            self.passive_decay_max_severity = 10  # decays only below this severity
+        else:
+            self.passive_decay_per_day = 2
+            self.passive_decay_max_severity = None  # decays to zero
+        self.save(update_fields=["passive_decay_per_day", "passive_decay_max_severity"])
 
 
 class CorruptionTwistTemplateFactory(factory.django.DjangoModelFactory):
@@ -1338,6 +1365,401 @@ class CorruptionTwistTemplateFactory(factory.django.DjangoModelFactory):
             resonance=factory.SelfAttribute("origin_resonance"),
             origin_affinity=factory.LazyAttribute(lambda o: o.origin_resonance.affinity),
         )
+
+
+# =============================================================================
+# Resonance Pivot Spec B — Soul Tether factories (Phase 3)
+# =============================================================================
+
+
+class SineatingFactory(factory.django.DjangoModelFactory):
+    """Audit-row factory for a Sineating action (Spec B §7).
+
+    ``units_accepted == 0`` means the Sineater declined. Default is a
+    successful 5-unit Sineating.
+    """
+
+    class Meta:
+        model = "magic.Sineating"
+
+    sinner_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    sineater_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    relationship = factory.SubFactory("world.relationships.factories.CharacterRelationshipFactory")
+    scene = None
+    resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
+    units_offered = 5
+    units_accepted = 5
+    anima_cost = 10
+    fatigue_cost = 5
+
+
+class SoulTetherRescueFactory(factory.django.DjangoModelFactory):
+    """Audit-row factory for a stage-3+ rescue ritual (Spec B §9)."""
+
+    class Meta:
+        model = "magic.SoulTetherRescue"
+
+    sinner_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    sineater_sheet = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    relationship = factory.SubFactory("world.relationships.factories.CharacterRelationshipFactory")
+    scene = None
+    resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
+    sinner_stage_at_start = 4
+    sinner_stage_at_end = 3
+    severity_reduced = 5
+    sineater_strain_taken = 3
+    check_outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+
+
+class TetherStrainTemplateFactory(factory.django.DjangoModelFactory):
+    """ConditionTemplate factory for Tether Strain (Spec B §6).
+
+    Single template; ConditionInstances are lazily created per (sineater, resonance).
+    Uses django_get_or_create so repeated calls in tests return the same row.
+    """
+
+    class Meta:
+        model = "conditions.ConditionTemplate"
+        django_get_or_create = ("name",)
+
+    name = "Tether Strain"
+    category = factory.SubFactory("world.conditions.factories.ConditionCategoryFactory")
+    description = "The wear of carrying another soul's sins. Decays with rest."
+    has_progression = True
+    passive_decay_per_day = 1
+    passive_decay_max_severity = None  # decays all the way to zero
+    passive_decay_blocked_in_engagement = False
+
+    @factory.post_generation  # type: ignore[misc]
+    def stages(self, create: bool, extracted: object, **kwargs: object) -> None:
+        """Wire 5 Tether Strain stages per Spec B §6.3 (idempotent)."""
+        if not create:
+            return
+        if self.stages.exists():
+            return
+        wire_tether_strain_stages(self)
+
+
+def wire_tether_strain_stages(template: object) -> list:
+    """Author the 5 stages of Tether Strain per Spec B §6.3.
+
+    Stage 1 - Bone-Tired (severity 5)
+    Stage 2 - Soul-Worn (severity 10)
+    Stage 3 - Heart-Cracked (severity 18)
+    Stage 4 - Shadow-Touched (severity 28)
+    Stage 5 - Half-Lost (severity 40)
+
+    Specific stage effects (mishap chance, AP reduction, etc.) are authored in
+    later tasks. Returns the list of created ConditionStage rows.
+    Idempotent: skips stages that already exist.
+    """
+    from world.conditions.factories import ConditionStageFactory
+
+    stage_spec = [
+        ("Bone-Tired", 5),
+        ("Soul-Worn", 10),
+        ("Heart-Cracked", 18),
+        ("Shadow-Touched", 28),
+        ("Half-Lost", 40),
+    ]
+    stages = []
+    for i, (stage_name, threshold) in enumerate(stage_spec, start=1):
+        stage_obj = ConditionStageFactory(
+            condition=template,
+            stage_order=i,
+            name=stage_name,
+            severity_threshold=threshold,
+        )
+        stages.append(stage_obj)
+    return stages
+
+
+class SoulTetherActiveTemplateFactory(factory.django.DjangoModelFactory):
+    """Marker ConditionTemplate installed on Sinners when their first tether forms.
+
+    No stages — pure marker. The two reactive subscribers (redirect handler
+    and stage-advance prompt) are wired as TriggerDefinition rows and
+    referenced by name in service code when installing Trigger instances.
+
+    Uses django_get_or_create so repeated calls return the same row.
+    """
+
+    class Meta:
+        model = "conditions.ConditionTemplate"
+        django_get_or_create = ("name",)
+
+    name = "Soul Tether Active"
+    category = factory.SubFactory("world.conditions.factories.ConditionCategoryFactory")
+    description = (
+        "Marker condition installed on Sinners with an active Soul Tether. "
+        "Carries the reactive subscriber triggers."
+    )
+    has_progression = False
+    passive_decay_per_day = 0
+    passive_decay_blocked_in_engagement = False
+
+
+class AcceptSoulTetherRitualFactory(factory.django.DjangoModelFactory):
+    """SERVICE-dispatched Ritual for Soul Tether formation (Spec B §12).
+
+    Uses django_get_or_create so repeated calls return the same row.
+    """
+
+    class Meta:
+        model = "magic.Ritual"
+        django_get_or_create = ("name",)
+
+    name = "accept_soul_tether"
+    description = (
+        "A ritual that forms a Soul Tether bond between two willing souls — "
+        "a Sinner (Abyssal-aligned) and a Sineater (Celestial- or Primal-aligned)."
+    )
+    narrative_prose = (
+        "Two souls stand at the boundary between light and dark, each choosing to "
+        "carry a part of the other. The Sineater opens themselves to carry the weight "
+        "of the Sinner's corruption, and the bond is sealed."
+    )
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.magic.services.soul_tether.accept_soul_tether"
+    flow = None
+    hedge_accessible = False
+    glimpse_eligible = False
+
+
+class SoulTetherRescueRitualFactory(factory.django.DjangoModelFactory):
+    """SERVICE-dispatched Ritual for Soul Tether rescue (Spec B §9).
+
+    Used when a Sinner reaches corruption stage 3+ and the Sineater
+    performs the ritual to pull them back from the brink.
+
+    Uses django_get_or_create so repeated calls return the same row.
+    """
+
+    class Meta:
+        model = "magic.Ritual"
+        django_get_or_create = ("name",)
+
+    name = "soul_tether_rescue"
+    description = (
+        "A Sineater pulls their Sinner back from the brink of Subsumption. "
+        "Requires the Sinner to be at corruption stage 3 or higher."
+    )
+    narrative_prose = (
+        "The Sineater reaches through the bond between them, anchoring the Sinner's "
+        "soul and drawing the worst of the corruption into themselves. It is costly, "
+        "painful work — but it keeps the Sinner from being lost entirely."
+    )
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.magic.services.soul_tether.perform_soul_tether_rescue"
+    flow = None
+    hedge_accessible = False
+    glimpse_eligible = False
+
+
+def _build_soul_tether_redirect_flow() -> object:
+    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the redirect handler.
+
+    The step calls ``soul_tether_redirect_handler`` with the event payload.
+    Uses the flows system's ``CALL_SERVICE_FUNCTION`` action (FlowActionChoices).
+    """
+    from flows.consts import FlowActionChoices
+    from flows.factories import FlowStepDefinitionFactory
+    from flows.models import FlowDefinition
+
+    flow, _ = FlowDefinition.objects.get_or_create(name="soul_tether_redirect")
+    if not flow.steps.exists():
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="world.magic.services.soul_tether.soul_tether_redirect_handler",
+            parameters={"payload": "@payload"},
+        )
+    return flow
+
+
+def _build_soul_tether_stage_advance_prompt_flow() -> object:
+    """Build a FlowDefinition with one CALL_SERVICE_FUNCTION step for the stage-advance prompt.
+
+    The step calls ``soul_tether_stage_advance_prompt`` with the event payload.
+    """
+    from flows.consts import FlowActionChoices
+    from flows.factories import FlowStepDefinitionFactory
+    from flows.models import FlowDefinition
+
+    flow, _ = FlowDefinition.objects.get_or_create(name="soul_tether_stage_advance_prompt")
+    if not flow.steps.exists():
+        FlowStepDefinitionFactory(
+            flow=flow,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name=("world.magic.services.soul_tether.soul_tether_stage_advance_prompt"),
+            parameters={"payload": "@payload"},
+        )
+    return flow
+
+
+class SoulTetherRedirectTriggerDefinitionFactory(factory.django.DjangoModelFactory):
+    """TriggerDefinition for the CORRUPTION_ACCRUING redirect handler (Spec B §5).
+
+    Listens for ``corruption_accruing`` events and calls the redirect service
+    to drain the Hollow before corruption mutation fires.
+    Priority 100 — fires before default handlers.
+    """
+
+    class Meta:
+        model = "flows.TriggerDefinition"
+        django_get_or_create = ("name",)
+
+    name = "soul_tether_redirect"
+    event_name = "corruption_accruing"
+    flow_definition = factory.LazyFunction(_build_soul_tether_redirect_flow)
+    priority = 100
+    base_filter_condition = None  # all filtering happens in the service function
+
+
+class SoulTetherStageAdvancePromptTriggerDefinitionFactory(factory.django.DjangoModelFactory):
+    """TriggerDefinition for the stage-advance prompt handler (Spec B §8).
+
+    Listens for ``condition_stage_advance_check_about_to_fire`` events and
+    fires a PROMPT_PLAYER to the Sineater before the resist check resolves.
+    Priority 100 — fires before default handlers.
+    """
+
+    class Meta:
+        model = "flows.TriggerDefinition"
+        django_get_or_create = ("name",)
+
+    name = "soul_tether_stage_advance_prompt"
+    event_name = "condition_stage_advance_check_about_to_fire"
+    flow_definition = factory.LazyFunction(_build_soul_tether_stage_advance_prompt_flow)
+    priority = 100
+    base_filter_condition = None
+
+
+def wire_soul_tether_active_template(_template: object) -> tuple:
+    """Create the two TriggerDefinition rows for Soul Tether subscribers.
+
+    Note: In this system, TriggerDefinitions are not M2M-linked to
+    ConditionTemplate. They are installed as Trigger instances on characters
+    when a ConditionInstance of SoulTetherActiveTemplate is applied (by
+    ``accept_soul_tether`` service). This function creates the canonical
+    TriggerDefinition rows so the service can reference them by name.
+
+    Returns (redirect_trigger_def, stage_advance_trigger_def).
+    """
+    redirect_def = SoulTetherRedirectTriggerDefinitionFactory()
+    stage_advance_def = SoulTetherStageAdvancePromptTriggerDefinitionFactory()
+    return redirect_def, stage_advance_def
+
+
+def wire_soul_tether_stat_definitions() -> None:
+    """Idempotent seed for Soul Tether achievement stat definitions (Spec B §14.3).
+
+    Creates StatDefinition rows for all 7 stats fired by Soul Tether services:
+    - sineating.units_accepted: Units accepted in a Sineating (fired by resolve_sineating)
+    - sineating.units_declined: Sineating requests declined (fired by resolve_sineating)
+    - sineating.requests_made: Sineating requests initiated (fired by request_sineating)
+    - rescue.performed: Soul Tether rescues performed (fired by perform_soul_tether_rescue)
+    - rescue.stage5_save: Rescues from stage 5 Subsumption (fired by perform_soul_tether_rescue)
+    - rescue.severity_reduced: Corruption severity reduced (fired by perform_soul_tether_rescue)
+    - tether.formed: Soul Tethers formed (fired by accept_soul_tether)
+
+    Safe to call multiple times — uses get_or_create on the stat key.
+    """
+    from world.achievements.factories import StatDefinitionFactory
+
+    stat_configs = [
+        {
+            "key": "sineating.units_accepted",
+            "name": "Sins Eaten",
+            "description": "Total units of corruption consumed by Sineating",
+        },
+        {
+            "key": "sineating.units_declined",
+            "name": "Sineating Requests Declined",
+            "description": "Times a Sineating request was declined",
+        },
+        {
+            "key": "sineating.requests_made",
+            "name": "Sineating Requests Made",
+            "description": "Times the Sinner requested to be Hollowed",
+        },
+        {
+            "key": "rescue.performed",
+            "name": "Soul Tether Rescues Performed",
+            "description": "Times the Sineater rescued the Sinner from Corruption",
+        },
+        {
+            "key": "rescue.stage5_save",
+            "name": "Subsumption Saves",
+            "description": "Times the Sineater rescued the Sinner from stage 5 Subsumption",
+        },
+        {
+            "key": "rescue.severity_reduced",
+            "name": "Corruption Severity Reduced",
+            "description": "Total Corruption severity reduced through Soul Tether rescues",
+        },
+        {
+            "key": "tether.formed",
+            "name": "Soul Tethers Formed",
+            "description": "Soul Tether bonds formed with other players",
+        },
+    ]
+
+    for config in stat_configs:
+        StatDefinitionFactory(
+            key=config["key"],
+            name=config["name"],
+            description=config["description"],
+        )
+
+
+def wire_soul_tether_content() -> object:
+    """Idempotent seed for all Spec B authored content.
+
+    Creates (get_or_create):
+    - StatDefinition rows for all Soul Tether stats (Phase 12)
+    - TetherStrainTemplate + 5 stages
+    - SoulTetherActiveTemplate (marker condition)
+    - SoulTetherRedirectTriggerDefinition + backing FlowDefinition
+    - SoulTetherStageAdvancePromptTriggerDefinition + backing FlowDefinition
+    - accept_soul_tether Ritual (SERVICE-dispatched)
+    - soul_tether_rescue Ritual (SERVICE-dispatched)
+
+    Returns a ``SoulTetherContent`` dataclass with references to all created rows.
+    Safe to call multiple times — does not create duplicates.
+    """
+    from dataclasses import dataclass
+
+    @dataclass(frozen=True)
+    class SoulTetherContent:
+        strain_template: object
+        active_template: object
+        redirect_trigger_def: object
+        stage_advance_trigger_def: object
+        accept_ritual: object
+        rescue_ritual: object
+
+    # Phase 12: Wire achievement stat definitions
+    wire_soul_tether_stat_definitions()
+
+    strain_template = TetherStrainTemplateFactory()
+    active_template = SoulTetherActiveTemplateFactory()
+
+    redirect_trigger_def, stage_advance_trigger_def = wire_soul_tether_active_template(
+        active_template
+    )
+
+    accept_ritual = AcceptSoulTetherRitualFactory()
+    rescue_ritual = SoulTetherRescueRitualFactory()
+
+    return SoulTetherContent(
+        strain_template=strain_template,
+        active_template=active_template,
+        redirect_trigger_def=redirect_trigger_def,
+        stage_advance_trigger_def=stage_advance_trigger_def,
+        accept_ritual=accept_ritual,
+        rescue_ritual=rescue_ritual,
+    )
 
 
 def author_reference_corruption_content() -> None:
