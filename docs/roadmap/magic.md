@@ -735,9 +735,83 @@ Per-cast hook follow-up (DONE):
   `test_corruption_flow.py:FullCastPipelineCorruptionTests` (5 scenarios,
   see test suite count above).
 
-Still deferred (gated on Spec B):
-- **Soul Tether (Spec B)** — the redirect mechanic, Sineater asymmetry,
-  rescue rituals.
+**Resonance Pivot — Spec B (Soul Tether) — DONE:**
+
+**Spec:** `docs/superpowers/specs/2026-05-03-resonance-pivot-spec-b-soul-tether-design.md`
+**Branch:** `spec-b-soul-tether-design`
+
+Soul Tether is a bond mechanic between two PCs that mediates the Corruption risk a Sinner
+accrues from non-Celestial casting. The Sinner's `RELATIONSHIP_CAPSTONE` Thread carries
+**the Hollow** — a draining capacity buffer that absorbs incoming corruption; the Sineater
+eats sins out of the Hollow via a Sinner-initiated, Sineater-accepted Sineating action.
+
+What was built:
+
+- **Schema:** `Thread.hollow_current` (Hollow capacity buffer), `CharacterResonance.lifetime_helped`
+  (monotonic Sineater counter). Two audit models: `Sineating` (records every
+  offer/accept/decline cycle with units, anima/fatigue cost, and resonance) and
+  `SoulTetherRescue` (records stage-3+ rescue ritual outcomes with before/after stage and
+  severity reduced). Migration 0040 / 0041 / 0042.
+- **Constants:** `CORRUPTION_RESISTANCE` added to `ThreadPullEffect.EffectKind`. `SoulTetherRole`
+  TextChoices in `constants.py`. `SOUL_TETHER_FORMED` / `SOUL_TETHER_DISSOLVED` event names in
+  `flows/constants.py`.
+- **Services (`world/magic/services/soul_tether.py`):**
+  - `accept_soul_tether` — formation Ritual Capstone (affinity gate, unlock gate, idempotency
+    check, Sinner Thread auto-weave, `SoulTetherActive` ConditionInstance install,
+    trigger installation).
+  - `dissolve_soul_tether` — stub dissolution (tears the bond, retires tether Threads, removes
+    ConditionInstance + triggers, emits `SOUL_TETHER_DISSOLVED`).
+  - `request_sineating` — Sinner-initiated offer (per-scene cap, hollow-max enforcement,
+    fires `PROMPT_PLAYER` to Sineater with `SineatingOffer` payload).
+  - `resolve_sineating` — Sineater `@reply` resolution (atomic: deducts anima/fatigue,
+    increments `hollow_current` and `lifetime_helped`, writes `Sineating` audit row, fires
+    achievement stats).
+  - `perform_soul_tether_rescue` — stage-3+ rescue ritual (check roll, Strain cost,
+    resonance cost, `reduce_corruption` calls, `SoulTetherRescue` audit, achievement stats).
+  - `soul_tether_redirect_handler` — reactive subscriber on `CORRUPTION_ACCRUING`; drains
+    `hollow_current` to absorb incoming corruption before it accrues to the Sinner; emits
+    replacement CORRUPTION_ACCRUING events for overflow; cancels the original event when
+    fully absorbed.
+  - `soul_tether_stage_advance_prompt` — reactive subscriber on
+    `CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE`; fires `PROMPT_PLAYER` to Sineater with
+    `StageAdvanceBonusOffer` payload letting them commit reservoir capacity or take Strain
+    to bonus the Sinner's resist check.
+  - `resolve_stage_advance_prompt` — Sineater `@reply` resolution for stage-advance prompt.
+- **`CORRUPTION_RESISTANCE` effect resolution** — passive tier-0 `ThreadPullEffect` rows on
+  Sineater's `RELATIONSHIP_CAPSTONE` Thread; value derived from `lifetime_helped` for that
+  resonance. Applied in `accrue_corruption` on the Sineater's own casting path only.
+- **Authored content (factories):** `TetherStrainTemplate` (ConditionTemplate for Sineater
+  Strain), `SoulTetherActiveTemplate` (ConditionTemplate installed on Sinner at formation;
+  carries reactive trigger M2M), `accept_soul_tether` Ritual, `soul_tether_rescue` Ritual,
+  `soul_tether_redirect` TriggerDefinition, `soul_tether_stage_advance_prompt`
+  TriggerDefinition. All wired via `wire_soul_tether_content()` factory orchestrator.
+- **Relationship side:** `RelationshipCapstone.is_ritual_capstone` BooleanField +
+  `RelationshipCapstone.ritual` FK (nullable) added to support capstone-gated ritual dispatch.
+- **API endpoints:** `POST /api/magic/soul-tether/accept/`,
+  `POST /api/magic/soul-tether/<id>/dissolve/`,
+  `POST /api/magic/soul-tether/<id>/sineat/request/`,
+  `POST /api/magic/soul-tether/<id>/sineat/respond/`,
+  `POST /api/magic/soul-tether/<id>/rescue/`,
+  `GET /api/magic/soul-tether/<id>/detail/`.
+- **Tests:** 207 tests across 7 test files: model integrity (34), service logic (82),
+  reactive subscriber behaviour (27), API endpoints (25), corruption resistance (14),
+  achievement stats (11), and 14 end-to-end integration tests covering the full loop
+  (formation → Sineating → redirect → rescue → dissolution).
+
+Key architectural decisions:
+- Passive corruption decay companion shipped in same phase (Scope 7 `decay_all_conditions_tick`
+  now also calls `reduce_corruption` when decaying Corruption-kind conditions), completing
+  the decay loop that Scope 7 deferred.
+- Sineater's `RELATIONSHIP_CAPSTONE` Thread remains optional: `lifetime_helped` accumulates
+  regardless; resistance benefit gates on Thread presence. XP-anti-pattern: every spend
+  benefits the spender.
+- Redirect handler uses `cancel_event` + replacement events for overflow rather than partial
+  accrual, keeping the CORRUPTION_ACCRUING pipeline clean and consistent.
+- Stage-advance bonus is opt-in (`PROMPT_PLAYER`) — Sineater chooses whether to commit
+  reservoir capacity or take Strain at dramatic moments.
+
+Not in this spec (deferred to follow-up):
+- Relational Resilience, Ritual of Devotion, Ritual of Betrayal.
 
 Not in this scope (deferred): non-Corruption stage 3+ recovery rituals
 (Spec B authors via the same `reduce_corruption` primitive), public
