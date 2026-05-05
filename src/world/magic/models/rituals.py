@@ -58,6 +58,15 @@ class Ritual(SharedMemoryModel):
     hedge_accessible = models.BooleanField(default=False)
     glimpse_eligible = models.BooleanField(default=False)
     narrative_prose = models.TextField()
+    input_schema = models.JSONField(
+        null=True,
+        blank=True,
+        help_text=(
+            "UI-rendering metadata: what kwargs the perform endpoint expects. "
+            "Shape: {'fields': [{'name', 'label', 'type', 'required', ...}, ...]}. "
+            "When None, the ritual takes no player-supplied kwargs."
+        ),
+    )
 
     execution_kind = models.CharField(
         max_length=16,
