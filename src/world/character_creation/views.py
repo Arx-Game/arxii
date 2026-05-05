@@ -6,7 +6,7 @@ from http import HTTPMethod
 import logging
 from typing import Any
 
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Case, IntegerField, Prefetch, QuerySet, Value, When
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -243,41 +243,72 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = TraditionFilter
 
+    def _get_beginning_traditions(self) -> list[BeginningTradition]:
+        """Fetch BeginningTradition rows for this request's beginning_id.
+
+        Cached on the viewset (request-scoped) so ``get_queryset`` and
+        ``get_serializer_context`` share one lookup. The result must NOT
+        be attached to ``Tradition`` instances via Prefetch(to_attr=) —
+        ``Tradition`` is a SharedMemoryModel and per-request annotation
+        values would leak across requests with different beginning_ids.
+        """
+        if hasattr(self, "_beginning_traditions_cache"):
+            return self._beginning_traditions_cache
+        beginning_id = self.request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
+        if not beginning_id:
+            self._beginning_traditions_cache: list[BeginningTradition] = []
+            return self._beginning_traditions_cache
+        self._beginning_traditions_cache = list(
+            BeginningTradition.objects.filter(beginning_id=beginning_id)
+            .select_related("required_distinction")
+            .order_by("sort_order", "id")
+        )
+        return self._beginning_traditions_cache
+
     def get_queryset(self) -> QuerySet[Tradition]:
-        # Read beginning_id for Prefetch sub-queryset and empty guard; filtering is via FilterSet
-        # Needed for Prefetch sub-queryset, not for filtering (handled by TraditionFilter)
+        # Empty guard. Filtering by beginning_id is handled below via the
+        # BeginningTradition lookup; the FilterSet does not gate on it.
         beginning_id = self.request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
         if not beginning_id:
             return Tradition.objects.none()
 
         from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
 
+        bts = self._get_beginning_traditions()
+        ordered_ids = [bt.tradition_id for bt in bts]
+        if not ordered_ids:
+            return Tradition.objects.none()
+
+        # Preserve BeginningTradition.sort_order on the Tradition queryset
+        # without re-using a Prefetch(to_attr=) that would leak per-request
+        # filtering onto SharedMemoryModel-cached Tradition instances.
+        order_case = Case(
+            *[When(id=tid, then=Value(idx)) for idx, tid in enumerate(ordered_ids)],
+            default=Value(len(ordered_ids)),
+            output_field=IntegerField(),
+        )
         return (
-            Tradition.objects.filter(
-                is_active=True,
-            )
+            Tradition.objects.filter(id__in=ordered_ids, is_active=True)
             .prefetch_related(
                 Prefetch(
                     "codex_grants",
                     queryset=TraditionCodexGrant.objects.only("tradition_id", "entry_id"),
                     to_attr="prefetched_codex_grants",
                 ),
-                Prefetch(
-                    "beginning_traditions",
-                    queryset=BeginningTradition.objects.filter(
-                        beginning_id=beginning_id
-                    ).select_related("required_distinction"),
-                    to_attr="prefetched_beginning_traditions",
-                ),
             )
-            .order_by("beginning_traditions__sort_order", "name")
+            .annotate(_bt_order=order_case)
+            .order_by("_bt_order", "name")
         )
 
     def get_serializer_context(self) -> dict[str, Any]:
         context = super().get_serializer_context()
-        # Pass to serializer for BeginningTradition lookup; not used for queryset filtering
-        # Serializer context for BeginningTradition lookup, not queryset filtering
-        context["beginning_id"] = self.request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
+        beginning_id = self.request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
+        context["beginning_id"] = beginning_id
+        # Pass per-request BeginningTradition lookup via context (request-scoped).
+        # Never via Prefetch(to_attr=) on Tradition — that leaks across users.
+        context["beginning_traditions_by_tradition"] = {
+            bt.tradition_id: bt for bt in self._get_beginning_traditions()
+        }
         return context
 
 

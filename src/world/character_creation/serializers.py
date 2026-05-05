@@ -206,14 +206,19 @@ class TraditionSerializer(serializers.ModelSerializer):
     def get_required_distinction_id(self, obj) -> int | None:
         """Get the required distinction ID from the BeginningTradition context.
 
-        The beginning_id is passed via context from the ViewSet.
+        The view computes a ``{tradition_id: BeginningTradition}`` dict per
+        request and passes it via context. We do NOT attach the BT row to
+        ``obj`` (a SharedMemoryModel ``Tradition``) via ``Prefetch(to_attr=)``
+        because that attribute would persist across requests with different
+        ``beginning_id`` values and leak filtered data between users.
         """
-        if hasattr(obj, "prefetched_beginning_traditions"):
-            bts = obj.prefetched_beginning_traditions
-            if bts and bts[0].required_distinction_id:
-                return bts[0].required_distinction_id
-            return None
+        bt_map = self.context.get("beginning_traditions_by_tradition")
+        if bt_map is not None:
+            bt = bt_map.get(obj.id)
+            return bt.required_distinction_id if bt and bt.required_distinction_id else None
 
+        # Fallback for callers that didn't pre-compute the map (e.g. nested
+        # use in CharacterDraftSerializer where context is set up differently).
         beginning_id = self.context.get("beginning_id")
         if not beginning_id:
             return None
