@@ -4577,6 +4577,9 @@ export interface paths {
      *     The wardrobe page uses this to render carried-but-not-worn items. The
      *     ``character`` query parameter filters to items whose ``game_object.location``
      *     is the requested character (i.e., currently held by them).
+     *
+     *     Permission scoping (non-staff): only items located on a character the
+     *     request user currently plays are returned. Staff see everything.
      */
     get: operations['items_inventory_list'];
     put?: never;
@@ -4600,6 +4603,9 @@ export interface paths {
      *     The wardrobe page uses this to render carried-but-not-worn items. The
      *     ``character`` query parameter filters to items whose ``game_object.location``
      *     is the requested character (i.e., currently held by them).
+     *
+     *     Permission scoping (non-staff): only items located on a character the
+     *     request user currently plays are returned. Staff see everything.
      */
     get: operations['items_inventory_retrieve'];
     put?: never;
@@ -4842,6 +4848,40 @@ export interface paths {
     };
     /** @description Read-only ViewSet for item templates. */
     get: operations['items_templates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/visible-item-detail/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the ItemInstance for ``pk`` if the requester may view it. */
+    get: operations['items_visible_item_detail_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/visible-worn/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the slim visible-worn list for ``?character=<pk>``. */
+    get: operations['items_visible_worn_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -5708,6 +5748,108 @@ export interface paths {
     get: operations['magic_scene_entry_endorsements_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/{relationship_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Fetch and serialise the tether state for the given relationship. */
+    get: operations['magic_soul_tether_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/accept/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate and dispatch accept_soul_tether; return capstone PK. */
+    post: operations['magic_soul_tether_accept_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/dissolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate and dispatch dissolve_soul_tether; return 204 on success. */
+    post: operations['magic_soul_tether_dissolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/rescue/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate and dispatch perform_soul_tether_rescue; return outcome payload. */
+    post: operations['magic_soul_tether_rescue_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/sineating/request/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate and dispatch request_sineating; return offer payload. */
+    post: operations['magic_soul_tether_sineating_request_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/sineating/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Re-validate offer + dispatch resolve_sineating; return result payload. */
+    post: operations['magic_soul_tether_sineating_respond_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -11291,6 +11433,12 @@ export interface components {
        *     Priority: gm > staff > member > guest > none.
        *     "guest" means the user participates in a story at this table via
        *     StoryParticipation but has no active GMTableMembership.
+       *
+       *     Membership and story-participation lookups read from sets pre-computed
+       *     once per request in ``GMTableViewSet.get_serializer_context``. When
+       *     the serializer is invoked outside a viewset (e.g. directly in tests)
+       *     the sets fall back to lazy ``.exists()`` queries — keeps the test
+       *     ergonomics while letting the viewset path stay query-free per-row.
        */
       readonly viewer_role: string;
     };
@@ -17814,7 +17962,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Starting Area. */
+        id: number;
       };
       cookie?: never;
     };
@@ -22624,6 +22773,44 @@ export interface operations {
       };
     };
   };
+  items_visible_item_detail_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_visible_worn_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   journals_entries_retrieve: {
     parameters: {
       query?: never;
@@ -23949,6 +24136,116 @@ export interface operations {
         content: {
           'application/json': components['schemas']['SceneEntryEndorsement'];
         };
+      };
+    };
+  };
+  magic_soul_tether_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        relationship_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_soul_tether_accept_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_soul_tether_dissolve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_soul_tether_rescue_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_soul_tether_sineating_request_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_soul_tether_sineating_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
