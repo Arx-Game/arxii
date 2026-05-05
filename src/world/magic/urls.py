@@ -25,6 +25,12 @@ from world.magic.views import (
     RestrictionViewSet,
     RitualPerformView,
     SceneEntryEndorsementViewSet,
+    SineatingRequestView,
+    SineatingRespondView,
+    SoulTetherAcceptView,
+    SoulTetherDetailView,
+    SoulTetherDissolveView,
+    SoulTetherRescueView,
     TechniqueStyleViewSet,
     TechniqueViewSet,
     ThreadPullPreviewView,
@@ -98,5 +104,36 @@ urlpatterns = [
         "rituals/perform/",
         RitualPerformView.as_view(),
         name="ritual-perform",
+    ),
+    # Spec B — Soul Tether endpoints (Phase 11)
+    path(
+        "soul-tether/accept/",
+        SoulTetherAcceptView.as_view(),
+        name="soul-tether-accept",
+    ),
+    path(
+        "soul-tether/dissolve/",
+        SoulTetherDissolveView.as_view(),
+        name="soul-tether-dissolve",
+    ),
+    path(
+        "soul-tether/sineating/request/",
+        SineatingRequestView.as_view(),
+        name="soul-tether-sineating-request",
+    ),
+    path(
+        "soul-tether/sineating/respond/",
+        SineatingRespondView.as_view(),
+        name="soul-tether-sineating-respond",
+    ),
+    path(
+        "soul-tether/rescue/",
+        SoulTetherRescueView.as_view(),
+        name="soul-tether-rescue",
+    ),
+    path(
+        "soul-tether/<int:relationship_id>/",
+        SoulTetherDetailView.as_view(),
+        name="soul-tether-detail",
     ),
 ]
