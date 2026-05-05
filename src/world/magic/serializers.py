@@ -817,7 +817,11 @@ class ThreadSerializer(serializers.ModelSerializer):
 
 
 class RitualSerializer(serializers.ModelSerializer):
-    """Serializer for Ritual records (Spec A §4.5)."""
+    """Serializer for Ritual (read-only list/detail).
+
+    Exposes name, description, narrative_prose, dispatch metadata, and the
+    `input_schema` blob the frontend uses to render its perform form.
+    """
 
     class Meta:
         model = Ritual
@@ -825,11 +829,11 @@ class RitualSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "description",
+            "narrative_prose",
             "hedge_accessible",
             "glimpse_eligible",
-            "narrative_prose",
             "execution_kind",
-            "site_property",
+            "input_schema",
         ]
         read_only_fields = fields
 

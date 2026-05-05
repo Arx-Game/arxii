@@ -806,3 +806,32 @@ class PermissionTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.thread.refresh_from_db()
         self.assertIsNone(self.thread.retired_at)
+
+
+class RitualSerializerTests(APITestCase):
+    """Tests for RitualSerializer."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.ritual = ImbuingRitualFactory(
+            name="test_ritual",
+            description="A ritual for testing.",
+            input_schema={"fields": [{"name": "x", "type": "int", "label": "X"}]},
+        )
+
+    def test_serializer_includes_input_schema(self) -> None:
+        from world.magic.serializers import RitualSerializer
+
+        data = RitualSerializer(self.ritual).data
+        self.assertIn("input_schema", data)
+        self.assertEqual(data["input_schema"]["fields"][0]["name"], "x")
+
+    def test_serializer_includes_dispatch_metadata(self) -> None:
+        from world.magic.serializers import RitualSerializer
+
+        data = RitualSerializer(self.ritual).data
+        self.assertIn("execution_kind", data)
+        self.assertIn("name", data)
+        self.assertIn("description", data)
+        self.assertIn("narrative_prose", data)
+        self.assertIn("hedge_accessible", data)
