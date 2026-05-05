@@ -1651,10 +1651,73 @@ def wire_soul_tether_active_template(_template: object) -> tuple:
     return redirect_def, stage_advance_def
 
 
+def wire_soul_tether_stat_definitions() -> None:
+    """Idempotent seed for Soul Tether achievement stat definitions (Spec B §14.3).
+
+    Creates StatDefinition rows for all 7 stats fired by Soul Tether services:
+    - sineating.units_accepted: Units accepted in a Sineating (fired by resolve_sineating)
+    - sineating.units_declined: Sineating requests declined (fired by resolve_sineating)
+    - sineating.requests_made: Sineating requests initiated (fired by request_sineating)
+    - rescue.performed: Soul Tether rescues performed (fired by perform_soul_tether_rescue)
+    - rescue.stage5_save: Rescues from stage 5 Subsumption (fired by perform_soul_tether_rescue)
+    - rescue.severity_reduced: Corruption severity reduced (fired by perform_soul_tether_rescue)
+    - tether.formed: Soul Tethers formed (fired by accept_soul_tether)
+
+    Safe to call multiple times — uses get_or_create on the stat key.
+    """
+    from world.achievements.factories import StatDefinitionFactory
+
+    stat_configs = [
+        {
+            "key": "sineating.units_accepted",
+            "name": "Sins Eaten",
+            "description": "Total units of corruption consumed by Sineating",
+        },
+        {
+            "key": "sineating.units_declined",
+            "name": "Sineating Requests Declined",
+            "description": "Times a Sineating request was declined",
+        },
+        {
+            "key": "sineating.requests_made",
+            "name": "Sineating Requests Made",
+            "description": "Times the Sinner requested to be Hollowed",
+        },
+        {
+            "key": "rescue.performed",
+            "name": "Soul Tether Rescues Performed",
+            "description": "Times the Sineater rescued the Sinner from Corruption",
+        },
+        {
+            "key": "rescue.stage5_save",
+            "name": "Subsumption Saves",
+            "description": "Times the Sineater rescued the Sinner from stage 5 Subsumption",
+        },
+        {
+            "key": "rescue.severity_reduced",
+            "name": "Corruption Severity Reduced",
+            "description": "Total Corruption severity reduced through Soul Tether rescues",
+        },
+        {
+            "key": "tether.formed",
+            "name": "Soul Tethers Formed",
+            "description": "Soul Tether bonds formed with other players",
+        },
+    ]
+
+    for config in stat_configs:
+        StatDefinitionFactory(
+            key=config["key"],
+            name=config["name"],
+            description=config["description"],
+        )
+
+
 def wire_soul_tether_content() -> object:
     """Idempotent seed for all Spec B authored content.
 
     Creates (get_or_create):
+    - StatDefinition rows for all Soul Tether stats (Phase 12)
     - TetherStrainTemplate + 5 stages
     - SoulTetherActiveTemplate (marker condition)
     - SoulTetherRedirectTriggerDefinition + backing FlowDefinition
@@ -1675,6 +1738,9 @@ def wire_soul_tether_content() -> object:
         stage_advance_trigger_def: object
         accept_ritual: object
         rescue_ritual: object
+
+    # Phase 12: Wire achievement stat definitions
+    wire_soul_tether_stat_definitions()
 
     strain_template = TetherStrainTemplateFactory()
     active_template = SoulTetherActiveTemplateFactory()

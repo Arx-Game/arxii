@@ -264,6 +264,9 @@ def accept_soul_tether(  # noqa: PLR0913
             # 12. Install the 2 Trigger rows (only on first tether; later tethers reuse them).
             _install_soul_tether_triggers(sinner_sheet, active_condition)
 
+        # 13. Fire achievement stat increment for tether.formed (Spec B §14.3).
+        _increment_stat_safe(sinner_sheet, "tether.formed", 1)
+
     return capstone
 
 
