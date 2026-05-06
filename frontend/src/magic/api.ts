@@ -26,6 +26,7 @@ import type {
   SoulTetherDetail,
   StageAdvanceBonusResult,
   StageAdvanceRespondRequest,
+  TetherBond,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -56,6 +57,7 @@ async function parseErrorDetail(res: Response, fallback: string): Promise<never>
 const SOUL_TETHER_URL = '/api/magic/soul-tether';
 const THREADS_URL = '/api/magic/threads';
 const CHAR_RESONANCES_URL = '/api/magic/character-resonances';
+const RELATIONSHIPS_URL = '/api/relationships/relationships';
 
 // ---------------------------------------------------------------------------
 // Soul Tether reads
@@ -251,4 +253,72 @@ export async function getPendingStageAdvanceOffer(id: number): Promise<PendingSt
   const res = await apiFetch(`${SOUL_TETHER_URL}/stage-advance/pending/${id}/`);
   if (!res.ok) throw new Error(`Failed to load stage-advance offer ${id}`);
   return res.json() as Promise<PendingStageAdvanceOffer>;
+}
+
+// ---------------------------------------------------------------------------
+// Tether bond enumeration
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch tether bonds where myCharacterSheetId appears on either side.
+ *
+ * The relationships endpoint filters by a single source OR target, not both
+ * at once, so we issue two requests and merge. Deduplication by `id` guards
+ * against any edge cases.
+ *
+ * Returns an array of TetherBond — one entry per CharacterRelationship row
+ * where is_soul_tether=true and the caller's sheet is source or target.
+ */
+export async function getMyTetherBonds(myCharacterSheetId: number): Promise<TetherBond[]> {
+  const base = `${RELATIONSHIPS_URL}/?is_soul_tether=true&page_size=100`;
+
+  const [asSourceRes, asTargetRes] = await Promise.all([
+    apiFetch(`${base}&source=${myCharacterSheetId}`),
+    apiFetch(`${base}&target=${myCharacterSheetId}`),
+  ]);
+
+  if (!asSourceRes.ok) throw new Error('Failed to load tether bonds (source query)');
+  if (!asTargetRes.ok) throw new Error('Failed to load tether bonds (target query)');
+
+  type RelRow = {
+    id: number;
+    source: number;
+    source_name: string;
+    target: number;
+    target_name: string;
+    soul_tether_role: string;
+  };
+
+  type PaginatedResult = { results?: RelRow[] } | RelRow[];
+
+  const [sourceData, targetData] = (await Promise.all([
+    asSourceRes.json(),
+    asTargetRes.json(),
+  ])) as [PaginatedResult, PaginatedResult];
+
+  function extractRows(data: PaginatedResult): RelRow[] {
+    if (Array.isArray(data)) return data;
+    return data.results ?? [];
+  }
+
+  const allRows = [...extractRows(sourceData), ...extractRows(targetData)];
+
+  // Deduplicate by relationship id
+  const seen = new Set<number>();
+  const bonds: TetherBond[] = [];
+
+  for (const row of allRows) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+
+    const bondedOnTarget = row.source === myCharacterSheetId;
+    bonds.push({
+      relationship_id: row.id,
+      bonded_character_sheet_id: bondedOnTarget ? row.target : row.source,
+      bonded_character_name: bondedOnTarget ? row.target_name : row.source_name,
+      soul_tether_role: row.soul_tether_role,
+    });
+  }
+
+  return bonds;
 }

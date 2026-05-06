@@ -4,37 +4,30 @@
  * Composed panel for character relationships. Two sub-sections:
  * 1. Soul Tethers — SoulTetherStatusPanel displaying active tether bonds.
  * 2. Notes — free-text relationship entries from CharacterData.relationships.
- *
- * Soul Tether bond discovery: there is currently no endpoint that lists a
- * character's tether bonds by ID. Phase 4 passes `relationshipIds={[]}`,
- * which renders the "No active soul tethers." empty state. A follow-up task
- * should add a `GET /api/magic/soul-tether/?character_sheet_id=<id>` list
- * endpoint and wire it here.
- * TODO(soul-tether-phase5): enumerate tether bond IDs from backend and pass to panel.
  */
 
 import type { CharacterData } from '@/roster/types';
 import { SoulTetherStatusPanel } from '@/magic/components/SoulTetherStatusPanel';
+import { useMyTetherBonds } from '@/magic/queries';
 
 interface RelationshipsSectionProps {
   relationships?: CharacterData['relationships'];
   /** The CharacterSheet PK for the viewed character. Passed to SoulTetherStatusPanel. */
   characterSheetId?: number;
-  /**
-   * Optional map of relationship ID → bonded character name.
-   * If absent, SoulTetherStatusPanel falls back to "#<sheet_id>".
-   */
-  bondedCharacterNames?: Record<number, string>;
 }
 
 export function RelationshipsSection({
   relationships,
   characterSheetId,
-  bondedCharacterNames,
 }: RelationshipsSectionProps) {
-  // No tether-bond enumeration endpoint exists yet. Pass empty list so the panel
-  // renders its graceful empty state. See module-level TODO above.
-  const relationshipIds: number[] = [];
+  const { data: bonds = [] } = useMyTetherBonds(characterSheetId ?? null);
+
+  const relationshipIds = bonds.map((b) => b.relationship_id);
+
+  const bondedCharacterNames: Record<number, string> = {};
+  for (const bond of bonds) {
+    bondedCharacterNames[bond.relationship_id] = bond.bonded_character_name;
+  }
 
   return (
     <section>

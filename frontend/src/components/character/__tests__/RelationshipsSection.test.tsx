@@ -5,8 +5,9 @@
  * 1. Renders the "Relationships" heading and both sub-sections.
  * 2. Free-text relationships render as list items in the Notes sub-section.
  * 3. When no free-text relationships exist, "TBD" placeholder renders.
- * 4. SoulTetherStatusPanel is rendered (even with empty bond list → shows empty state).
+ * 4. SoulTetherStatusPanel is rendered with bond data from useMyTetherBonds.
  * 5. characterSheetId is forwarded to SoulTetherStatusPanel (via callerSheetId).
+ * 6. Bond relationship IDs and bonded names are passed to SoulTetherStatusPanel.
  */
 
 import { render, screen } from '@testing-library/react';
@@ -32,12 +33,24 @@ vi.mock('@/magic/components/SoulTetherStatusPanel', () => ({
     <div
       data-testid="soul-tether-status-panel"
       data-relationship-count={relationshipIds.length}
+      data-relationship-ids={relationshipIds.join(',')}
       data-caller-sheet-id={callerSheetId ?? ''}
     >
       {relationshipIds.length === 0 ? 'No active soul tethers.' : 'Soul Tethers loaded'}
     </div>
   ),
 }));
+
+// ---------------------------------------------------------------------------
+// Mock useMyTetherBonds so tests control what bonds are returned.
+// Default: no bonds. Individual tests override with vi.mocked().mockReturnValue.
+// ---------------------------------------------------------------------------
+
+vi.mock('@/magic/queries', () => ({
+  useMyTetherBonds: vi.fn(() => ({ data: [] })),
+}));
+
+import { useMyTetherBonds } from '@/magic/queries';
 
 // ---------------------------------------------------------------------------
 // Wrapper
@@ -82,11 +95,35 @@ describe('RelationshipsSection', () => {
     expect(panel).toHaveAttribute('data-caller-sheet-id', '42');
   });
 
-  it('passes empty relationshipIds to SoulTetherStatusPanel (no enumeration endpoint yet)', () => {
+  it('passes bond relationship IDs to SoulTetherStatusPanel when bonds exist', () => {
+    vi.mocked(useMyTetherBonds).mockReturnValue({
+      data: [
+        {
+          relationship_id: 7,
+          bonded_character_sheet_id: 99,
+          bonded_character_name: 'Aelindra',
+          soul_tether_role: 'SINEATER',
+        },
+      ],
+    } as ReturnType<typeof useMyTetherBonds>);
+
+    render(<RelationshipsSection characterSheetId={42} />, { wrapper: createWrapper() });
+
+    const panel = screen.getByTestId('soul-tether-status-panel');
+    expect(panel).toHaveAttribute('data-relationship-count', '1');
+    expect(panel).toHaveAttribute('data-relationship-ids', '7');
+  });
+
+  it('shows empty state when no bonds are returned', () => {
+    vi.mocked(useMyTetherBonds).mockReturnValue({
+      data: [],
+    } as ReturnType<typeof useMyTetherBonds>);
+
     render(<RelationshipsSection />, { wrapper: createWrapper() });
 
     const panel = screen.getByTestId('soul-tether-status-panel');
     expect(panel).toHaveAttribute('data-relationship-count', '0');
+    expect(screen.getByText('No active soul tethers.')).toBeInTheDocument();
   });
 
   it('renders free-text relationships as list items', () => {

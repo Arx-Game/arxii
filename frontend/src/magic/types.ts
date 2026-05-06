@@ -146,3 +146,18 @@ export interface StageAdvanceBonusResult {
   strain_severity_added: number;
   declined: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Tether bond — returned by getMyTetherBonds / useMyTetherBonds
+//
+// Derived from CharacterRelationshipList rows where is_soul_tether=true.
+// One entry per relationship; source vs target is normalised so bonded_*
+// always refers to the other party.
+// ---------------------------------------------------------------------------
+
+export interface TetherBond {
+  relationship_id: number;
+  bonded_character_sheet_id: number;
+  bonded_character_name: string;
+  soul_tether_role: string; // 'ABYSSAL' | 'SINEATER'
+}

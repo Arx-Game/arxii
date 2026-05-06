@@ -35,6 +35,8 @@ export const magicKeys = {
   stageAdvancePending: () => [...magicKeys.soulTether(), 'stage-advance', 'pending'] as const,
   stageAdvancePendingDetail: (id: number) => [...magicKeys.stageAdvancePending(), id] as const,
 
+  tetherBonds: (sheetId: number) => [...magicKeys.soulTether(), 'bonds', sheetId] as const,
+
   threads: () => [...magicKeys.all, 'threads'] as const,
   threadList: () => [...magicKeys.threads(), 'list'] as const,
 
@@ -55,6 +57,25 @@ export function useSoulTetherDetail(relationshipId: number) {
     queryKey: magicKeys.soulTetherDetail(relationshipId),
     queryFn: () => api.getSoulTetherDetail(relationshipId),
     enabled: relationshipId > 0,
+    throwOnError: true,
+  });
+}
+
+/**
+ * Enumerate the calling character's soul-tether bonds.
+ *
+ * Issues two queries — source and target — and merges results so that bonds
+ * where the caller is on either side of the relationship are included.
+ *
+ * Returns an array of TetherBond objects with the bonded character's sheet id,
+ * name, and soul_tether_role. When myCharacterSheetId is null the hook is
+ * disabled and returns an empty array.
+ */
+export function useMyTetherBonds(myCharacterSheetId: number | null) {
+  return useQuery({
+    queryKey: magicKeys.tetherBonds(myCharacterSheetId ?? 0),
+    queryFn: () => api.getMyTetherBonds(myCharacterSheetId!),
+    enabled: myCharacterSheetId !== null && myCharacterSheetId > 0,
     throwOnError: true,
   });
 }
