@@ -13,6 +13,7 @@ from datetime import timedelta
 
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
+from django.db.models import Prefetch
 from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.accounts.models import AccountDB
@@ -337,6 +338,34 @@ class Beginnings(NaturalKeyMixin, SharedMemoryModel):
         To invalidate: del instance.cached_starting_languages
         """
         return list(self.starting_languages.all())
+
+    @cached_property
+    def cached_beginning_traditions(self) -> list[BeginningTradition]:
+        """All BeginningTradition rows for this Beginning, ordered for CG.
+
+        Returns BT rows with ``tradition`` and ``required_distinction``
+        select_related, sorted by ``(sort_order, id)``. The list is the same
+        for every caller asking about a given Beginning, so caching on the
+        SharedMemoryModel-instance is the correct location: populated once
+        per Beginning per process, reused across all subsequent requests.
+
+        Use this from views/serializers instead of viewset-scoped helpers.
+
+        To invalidate: ``del instance.cached_beginning_traditions``.
+        """
+        from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
+
+        return list(
+            self.beginning_traditions.select_related("tradition", "required_distinction")
+            .prefetch_related(
+                Prefetch(
+                    "tradition__codex_grants",
+                    queryset=TraditionCodexGrant.objects.only("tradition_id", "entry_id"),
+                    to_attr="cached_codex_grants",
+                ),
+            )
+            .order_by("sort_order", "id")
+        )
 
     def is_accessible_by(self, account: AccountDB) -> bool:
         """Check if an account can see/select this option."""

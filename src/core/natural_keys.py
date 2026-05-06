@@ -49,6 +49,7 @@ from typing import TYPE_CHECKING, Any
 
 from django.db import models
 from django.db.models.fields.related import ForeignKey
+from evennia.utils.idmapper.manager import SharedMemoryManager
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -58,8 +59,16 @@ class NaturalKeyConfigError(ValueError):
     """Raised when NaturalKeyConfig is missing or invalid."""
 
 
-class NaturalKeyManager(models.Manager["NaturalKeyMixin"]):
-    """Manager that supports get_by_natural_key lookups."""
+class NaturalKeyManager(SharedMemoryManager, models.Manager["NaturalKeyMixin"]):
+    """Manager that supports get_by_natural_key lookups.
+
+    Inherits from ``SharedMemoryManager`` so that ``.get(pk=N)`` hits the
+    Evennia identity-map cache before issuing SQL when the underlying model
+    is a ``SharedMemoryModel``. For non-SharedMemoryModel models with this
+    manager, the cache check is a no-op (the model has no
+    ``get_cached_instance`` classmethod, so the cache lookup raises and the
+    manager falls through to ``super().get()``).
+    """
 
     def get_by_natural_key(self, *args: Any) -> NaturalKeyMixin:
         """

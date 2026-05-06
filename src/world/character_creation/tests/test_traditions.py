@@ -112,6 +112,148 @@ class FinalizeMagicTraditionTests(TestCase):
         assert knowledge.first().status == CodexKnowledgeStatus.KNOWN
 
 
+class TraditionListLeakTests(TestCase):
+    """Regression guard for the SharedMemoryModel + Prefetch(to_attr=) leak.
+
+    ``Tradition`` is a SharedMemoryModel: instances persist across requests
+    in the same process. The previous implementation attached
+    ``prefetched_beginning_traditions`` (filtered by ``beginning_id`` from
+    the request) onto each Tradition via ``Prefetch(to_attr=...)``. Django's
+    ``prefetch_related`` saw the attribute already set on the next request
+    and SKIPPED the new prefetch, so requests with a different
+    ``beginning_id`` would inherit the previous request's filtered data.
+
+    The list response varies by ``beginning_id`` via the ``required_distinction_id``
+    field — different beginnings can require different distinctions for the
+    same tradition. We hit the endpoint with ``beginning_id=B1`` and then
+    ``beginning_id=B2`` against the same Tradition, and assert the second
+    response reflects B2's BeginningTradition, not B1's.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.tradition = TraditionFactory(name="LeakTestTradition")
+        cls.distinction_a = DistinctionFactory(name="DistinctionA")
+        cls.distinction_b = DistinctionFactory(name="DistinctionB")
+        cls.beginning_a = BeginningsFactory(name="LeakBeginningA")
+        cls.beginning_b = BeginningsFactory(name="LeakBeginningB")
+        BeginningTraditionFactory(
+            beginning=cls.beginning_a,
+            tradition=cls.tradition,
+            required_distinction=cls.distinction_a,
+        )
+        BeginningTraditionFactory(
+            beginning=cls.beginning_b,
+            tradition=cls.tradition,
+            required_distinction=cls.distinction_b,
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.account)
+
+    def _required_distinction(self, response, tradition_id):
+        for row in response.data:
+            if row["id"] == tradition_id:
+                return row["required_distinction_id"]
+        return None
+
+    def test_required_distinction_is_per_beginning_not_per_process(self):
+        """Sequential requests with different beginning_id see their own data."""
+        from world.magic.models import Tradition
+
+        url = "/api/character-creation/traditions/"
+
+        # Confirm the bug's precondition: SharedMemoryModel returns the
+        # *same Python object* for repeated lookups of the same pk. Without
+        # this property the leak shape doesn't apply, and the regression
+        # this test guards against would be untestable in isolation.
+        instance_one = Tradition.objects.get(pk=self.tradition.pk)
+        instance_two = Tradition.objects.get(pk=self.tradition.pk)
+        assert instance_one is instance_two, (
+            "Tradition is no longer SharedMemoryModel-shared; this test no "
+            "longer guards the original leak shape and should be revisited."
+        )
+
+        # First request — beginning A.
+        resp_a = self.client.get(url, {"beginning_id": self.beginning_a.id})
+        assert resp_a.status_code == status.HTTP_200_OK
+        assert self._required_distinction(resp_a, self.tradition.id) == self.distinction_a.id
+
+        # Second request — beginning B. Same Tradition instance is in
+        # SharedMemoryModel cache from request 1; this is where the prior
+        # implementation leaked beginning_a's distinction_id.
+        resp_b = self.client.get(url, {"beginning_id": self.beginning_b.id})
+        assert resp_b.status_code == status.HTTP_200_OK
+        assert self._required_distinction(resp_b, self.tradition.id) == self.distinction_b.id
+
+        # And going back to A still returns A's value (no flip-flop either).
+        resp_a2 = self.client.get(url, {"beginning_id": self.beginning_a.id})
+        assert resp_a2.status_code == status.HTTP_200_OK
+        assert self._required_distinction(resp_a2, self.tradition.id) == self.distinction_a.id
+
+    def test_repeat_request_with_same_beginning_hits_cache(self):
+        """Beginning + beginning_traditions are SharedMemoryModel-cached.
+
+        After the first request loads the Beginning and its
+        ``cached_beginning_traditions``, a second request with the same
+        ``beginning_id`` should not re-fetch BeginningTradition rows or
+        re-load the Beginning row — both live on the cached Beginning
+        instance for the lifetime of the process.
+
+        The Tradition list queryset still evaluates (with a JOIN through
+        BeginningTradition for FilterSet's ``beginning_id`` filter), but
+        no separate BT-fetch or Beginning-fetch query should fire.
+        """
+        import re
+
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        url = "/api/character-creation/traditions/"
+
+        # Warmup: populate Beginning instance + cached_beginning_traditions.
+        self.client.get(url, {"beginning_id": self.beginning_a.id})
+
+        with CaptureQueriesContext(connection) as ctx:
+            resp = self.client.get(url, {"beginning_id": self.beginning_a.id})
+        assert resp.status_code == status.HTTP_200_OK
+
+        def primary_table(sql: str) -> str:
+            m = re.search(r'FROM\s+"([^"]+)"', sql)
+            return m.group(1) if m else ""
+
+        primary_tables = [primary_table(q["sql"]) for q in ctx.captured_queries]
+        assert "character_creation_beginningtradition" not in primary_tables, (
+            f"Expected zero BT-as-primary-table queries on repeat request, got: {primary_tables}"
+        )
+        assert "character_creation_beginnings" not in primary_tables, (
+            f"Expected zero Beginnings-as-primary-table queries on repeat request "
+            f"(SharedMemoryModel cache hit), got: {primary_tables}"
+        )
+
+    def test_nested_tradition_in_draft_resolves_required_distinction(self):
+        """CharacterDraftSerializer.selected_tradition resolves required_distinction_id.
+
+        The nested TraditionSerializer needs the draft's beginning_id to look
+        up the right BeginningTradition row. Prior to the SerializerMethodField
+        wiring, nested usage always returned ``required_distinction_id=None``
+        because ``beginning_id`` wasn't in the draft serializer's context.
+        """
+        draft = CharacterDraftFactory(
+            account=self.account,
+            selected_beginnings=self.beginning_a,
+            selected_tradition=self.tradition,
+        )
+        resp = self.client.get(f"/api/character-creation/drafts/{draft.id}/")
+        assert resp.status_code == status.HTTP_200_OK
+        nested = resp.data["selected_tradition"]
+        assert nested is not None
+        assert nested["id"] == self.tradition.id
+        assert nested["required_distinction_id"] == self.distinction_a.id
+
+
 class SelectTraditionTests(TestCase):
     """Tests for the select-tradition API endpoint."""
 

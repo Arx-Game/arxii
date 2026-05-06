@@ -194,9 +194,16 @@ class TraditionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_codex_entry_ids(self, obj) -> list[int]:
-        """Get codex entry IDs granted by this tradition."""
-        if hasattr(obj, "prefetched_codex_grants"):
-            return [grant.entry_id for grant in obj.prefetched_codex_grants]
+        """Get codex entry IDs granted by this tradition.
+
+        Read from the ``cached_codex_grants`` attr populated by the
+        ``Beginnings.cached_beginning_traditions`` prefetch. Same data for
+        every caller (no per-request filter), so attaching to the shared
+        Tradition instance is safe.
+        """
+        cached = getattr(obj, "cached_codex_grants", None)  # noqa: GETATTR_LITERAL — Prefetch(to_attr=) populates this attr
+        if cached is not None:
+            return [grant.entry_id for grant in cached]
         from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
 
         return list(
@@ -206,14 +213,19 @@ class TraditionSerializer(serializers.ModelSerializer):
     def get_required_distinction_id(self, obj) -> int | None:
         """Get the required distinction ID from the BeginningTradition context.
 
-        The beginning_id is passed via context from the ViewSet.
+        The view computes a ``{tradition_id: BeginningTradition}`` dict per
+        request and passes it via context. We do NOT attach the BT row to
+        ``obj`` (a SharedMemoryModel ``Tradition``) via ``Prefetch(to_attr=)``
+        because that attribute would persist across requests with different
+        ``beginning_id`` values and leak filtered data between users.
         """
-        if hasattr(obj, "prefetched_beginning_traditions"):
-            bts = obj.prefetched_beginning_traditions
-            if bts and bts[0].required_distinction_id:
-                return bts[0].required_distinction_id
-            return None
+        bt_map = self.context.get("beginning_traditions_by_tradition")
+        if bt_map is not None:
+            bt = bt_map.get(obj.id)
+            return bt.required_distinction_id if bt and bt.required_distinction_id else None
 
+        # Fallback for callers that didn't pre-compute the map (e.g. nested
+        # use in CharacterDraftSerializer where context is set up differently).
         beginning_id = self.context.get("beginning_id")
         if not beginning_id:
             return None
@@ -300,8 +312,12 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
-    # Tradition selection
-    selected_tradition = TraditionSerializer(read_only=True)
+    # Tradition selection — SerializerMethodField (not a nested declaration) so
+    # we can inject ``beginning_id`` into the TraditionSerializer's context per
+    # draft. The nested serializer's ``required_distinction_id`` resolves a
+    # BeginningTradition row keyed on (beginning_id, tradition_id); without
+    # the per-draft beginning_id it always returned None.
+    selected_tradition = serializers.SerializerMethodField()
     selected_tradition_id = serializers.PrimaryKeyRelatedField(
         queryset=Tradition.objects.filter(is_active=True),
         source="selected_tradition",
@@ -372,6 +388,20 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         from world.roster.models import RosterEntry  # noqa: PLC0415
 
         return RosterEntry.objects.for_account(obj.account).exists()
+
+    def get_selected_tradition(self, obj: CharacterDraft) -> dict | None:
+        """Render the selected tradition with this draft's beginning_id in context.
+
+        TraditionSerializer.required_distinction_id resolves a BeginningTradition
+        row keyed on (beginning_id, tradition_id). Drafts carry both pieces of
+        state directly, so we inject ``beginning_id`` into a per-draft context
+        rather than relying on the list endpoint's pre-built map.
+        """
+        if obj.selected_tradition is None:
+            return None
+        nested_context = dict(self.context)
+        nested_context["beginning_id"] = obj.selected_beginnings_id
+        return TraditionSerializer(obj.selected_tradition, context=nested_context).data
 
     def get_stage_completion(self, obj: CharacterDraft) -> dict[int, bool]:
         """Get completion status for each stage."""

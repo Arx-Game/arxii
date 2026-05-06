@@ -6,7 +6,7 @@ from http import HTTPMethod
 import logging
 from typing import Any
 
-from django.db.models import Prefetch, QuerySet
+from django.db.models import Case, IntegerField, Prefetch, QuerySet, Value, When
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
@@ -243,41 +243,76 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = TraditionFilter
 
+    def _get_beginning(self) -> Beginnings | None:
+        """Resolve the request's Beginnings via SharedMemoryModel identity map.
+
+        After first load per process, ``Beginnings.objects.get(pk=N)`` is a
+        cache hit (zero queries). The Beginning then owns all per-Beginning
+        cached state we care about — most importantly
+        ``cached_beginning_traditions`` — which means there's no need (and
+        no place) to cache anything on the viewset itself.
+
+        ``query_params`` returns the id as a string, but Evennia's identity
+        map keys instances by int pk; cast explicitly so the cache hits.
+        """
+        request = getattr(self, "request", None)  # noqa: GETATTR_LITERAL — schema generation may have no bound request
+        raw = (
+            request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
+            if request is not None
+            else None
+        )
+        if not raw:
+            return None
+        try:
+            beginning_id = int(raw)
+        except (TypeError, ValueError):
+            return None
+        try:
+            return Beginnings.objects.get(pk=beginning_id)
+        except Beginnings.DoesNotExist:
+            return None
+
     def get_queryset(self) -> QuerySet[Tradition]:
-        # Read beginning_id for Prefetch sub-queryset and empty guard; filtering is via FilterSet
-        # Needed for Prefetch sub-queryset, not for filtering (handled by TraditionFilter)
-        beginning_id = self.request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
-        if not beginning_id:
+        beginning = self._get_beginning()
+        if beginning is None:
             return Tradition.objects.none()
 
-        from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
+        # ``cached_beginning_traditions`` lives on the SharedMemoryModel-cached
+        # Beginning instance. The same data is returned to every caller asking
+        # about this Beginning, so the SharedMemoryModel cache is the right
+        # location: populated once per Beginning per process, then free.
+        bts = beginning.cached_beginning_traditions
+        ordered_ids = [bt.tradition_id for bt in bts]
+        if not ordered_ids:
+            return Tradition.objects.none()
 
+        # Tradition rows are already loaded as ``bt.tradition`` via
+        # select_related on the cached BT list. We return a real queryset
+        # (so DRF pagination/filtering keeps working), but identity map
+        # makes the underlying instances free — only the row enumeration
+        # touches the DB.
+        order_case = Case(
+            *[When(id=tid, then=Value(idx)) for idx, tid in enumerate(ordered_ids)],
+            default=Value(len(ordered_ids)),
+            output_field=IntegerField(),
+        )
         return (
-            Tradition.objects.filter(
-                is_active=True,
-            )
-            .prefetch_related(
-                Prefetch(
-                    "codex_grants",
-                    queryset=TraditionCodexGrant.objects.only("tradition_id", "entry_id"),
-                    to_attr="prefetched_codex_grants",
-                ),
-                Prefetch(
-                    "beginning_traditions",
-                    queryset=BeginningTradition.objects.filter(
-                        beginning_id=beginning_id
-                    ).select_related("required_distinction"),
-                    to_attr="prefetched_beginning_traditions",
-                ),
-            )
-            .order_by("beginning_traditions__sort_order", "name")
+            Tradition.objects.filter(id__in=ordered_ids, is_active=True)
+            .annotate(_bt_order=order_case)
+            .order_by("_bt_order", "name")
         )
 
     def get_serializer_context(self) -> dict[str, Any]:
         context = super().get_serializer_context()
-        # Pass to serializer for BeginningTradition lookup; not used for queryset filtering
-        # Serializer context for BeginningTradition lookup, not queryset filtering
-        context["beginning_id"] = self.request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
+        beginning = self._get_beginning()
+        context["beginning_id"] = beginning.pk if beginning is not None else None
+        # Build the per-Tradition BT lookup from the Beginning's cached list.
+        # No new queries — the BT rows are already in memory via the cached_property.
+        context["beginning_traditions_by_tradition"] = (
+            {bt.tradition_id: bt for bt in beginning.cached_beginning_traditions}
+            if beginning is not None
+            else {}
+        )
         return context
 
 
