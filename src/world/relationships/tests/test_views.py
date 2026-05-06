@@ -179,6 +179,36 @@ class CharacterRelationshipViewSetTests(TestCase):
             status.HTTP_403_FORBIDDEN,
         )
 
+    def test_filter_by_is_soul_tether(self) -> None:
+        """Can filter relationships by is_soul_tether."""
+        # Create one tether and one non-tether relationship between new sheets
+        sheet_a = CharacterSheetFactory()
+        sheet_b = CharacterSheetFactory()
+        sheet_c = CharacterSheetFactory()
+        tether_rel = CharacterRelationshipFactory(
+            source=sheet_a, target=sheet_b, is_soul_tether=True
+        )
+        non_tether_rel = CharacterRelationshipFactory(
+            source=sheet_a, target=sheet_c, is_soul_tether=False
+        )
+
+        response = self.client.get("/api/relationships/relationships/?is_soul_tether=true")
+        assert response.status_code == status.HTTP_200_OK
+        data = self._get_results(response.data)
+        ids = [r["id"] for r in data]
+        assert tether_rel.pk in ids
+        assert non_tether_rel.pk not in ids
+
+    def test_list_serializer_exposes_soul_tether_fields(self) -> None:
+        """List serializer includes is_soul_tether and soul_tether_role fields."""
+        response = self.client.get("/api/relationships/relationships/")
+        assert response.status_code == status.HTTP_200_OK
+        data = self._get_results(response.data)
+        assert len(data) > 0
+        first = data[0]
+        assert "is_soul_tether" in first
+        assert "soul_tether_role" in first
+
     def test_relationships_read_only(self) -> None:
         """Viewset is read-only; POST should fail."""
         response = self.client.post(

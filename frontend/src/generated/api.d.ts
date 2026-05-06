@@ -10328,6 +10328,15 @@ export interface components {
       readonly is_active: boolean;
       /** @description Whether this relationship is awaiting mutual consent */
       readonly is_pending: boolean;
+      /** @description Whether this relationship is a soul-tether bond (Spec B mechanics). */
+      readonly is_soul_tether: boolean;
+      /**
+       * @description Soul-tether role (ABYSSAL or SINEATER); empty when not a tether.
+       *
+       *     * `ABYSSAL` - Abyssal Side
+       *     * `SINEATER` - Sineater Side
+       */
+      readonly soul_tether_role: components['schemas']['SoulTetherRoleEnum'];
       readonly absolute_value: number;
       readonly developed_absolute_value: number;
       readonly affection: number;
@@ -15391,6 +15400,12 @@ export interface components {
       id: number;
       name: string;
     };
+    /**
+     * @description * `ABYSSAL` - Abyssal Side
+     *     * `SINEATER` - Sineater Side
+     * @enum {string}
+     */
+    SoulTetherRoleEnum: 'ABYSSAL' | 'SINEATER';
     /**
      * @description * `POSE_ENDORSEMENT` - Pose endorsement
      *     * `SCENE_ENTRY` - Scene entry endorsement
@@ -26857,6 +26872,7 @@ export interface operations {
       query?: {
         is_active?: boolean;
         is_pending?: boolean;
+        is_soul_tether?: boolean;
         /** @description A page number within the paginated result set. */
         page?: number;
         source?: number;

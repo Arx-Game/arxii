@@ -80,7 +80,7 @@ class CharacterRelationshipViewSet(ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["source", "target", "is_active", "is_pending"]
+    filterset_fields = ["source", "target", "is_active", "is_pending", "is_soul_tether"]
 
     def get_queryset(self):  # type: ignore[override]
         """Return relationships with related data prefetched."""
