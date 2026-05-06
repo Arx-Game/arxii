@@ -53,6 +53,7 @@ export function ThreadList({ targetKind }: ThreadListProps) {
                     <span className="inline-block rounded bg-muted px-2 py-1 text-xs font-medium">
                       {thread.target_kind}
                     </span>
+                    {/* Backend stores level in multiples of 10 (see world.magic.models.threads.Thread); divide to display */}
                     <span className="text-muted-foreground">Level {thread.level / 10}</span>
                   </div>
                 </div>

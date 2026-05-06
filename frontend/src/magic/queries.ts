@@ -61,22 +61,26 @@ export function useSoulTetherDetail(relationshipId: number) {
 
 /**
  * Sineater inbox: paginated list of pending Sineating offers.
+ * Polls every 5 seconds for new offers so the Sineater sees them without refreshing.
  */
 export function usePendingSineatingOffers() {
   return useQuery({
     queryKey: magicKeys.sineatingPending(),
     queryFn: () => api.getPendingSineatingOffers(),
+    refetchInterval: 5_000,
     throwOnError: true,
   });
 }
 
 /**
  * Sineater inbox: paginated list of pending stage-advance bonus offers.
+ * Polls every 5 seconds for new offers so the Sineater sees them without refreshing.
  */
 export function usePendingStageAdvanceOffers() {
   return useQuery({
     queryKey: magicKeys.stageAdvancePending(),
     queryFn: () => api.getPendingStageAdvanceOffers(),
+    refetchInterval: 5_000,
     throwOnError: true,
   });
 }

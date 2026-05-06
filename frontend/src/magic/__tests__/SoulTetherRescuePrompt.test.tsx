@@ -31,14 +31,6 @@ vi.mock('../queries', () => ({
   },
 }));
 
-// Mock the API layer so useQuery doesn't make real network calls.
-// The component calls getPendingStageAdvanceOffers() inside useQuery directly.
-vi.mock('../api', () => ({
-  getPendingStageAdvanceOffers: vi.fn(),
-}));
-
-import * as magicApi from '../api';
-
 // ---------------------------------------------------------------------------
 // Shared auth state — defined before vi.mock factories run
 // ---------------------------------------------------------------------------
@@ -68,6 +60,9 @@ vi.mock('react-redux', async (importOriginal) => {
 });
 
 import * as magicQueries from '../queries';
+
+// Helper type to check return types
+import type { useRespondToStageAdvance } from '../queries';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -108,13 +103,18 @@ function setupMocks(options?: { offers?: PendingStageAdvanceOffer[]; isPending?:
   const offers = options?.offers ?? [];
   const isPending = options?.isPending ?? false;
 
-  // The component calls useQuery directly with getPendingStageAdvanceOffers as queryFn.
-  vi.mocked(magicApi.getPendingStageAdvanceOffers).mockResolvedValue({
-    count: offers.length,
-    next: null,
-    previous: null,
-    results: offers,
-  });
+  // The component now uses usePendingStageAdvanceOffers hook.
+  vi.mocked(magicQueries.usePendingStageAdvanceOffers).mockReturnValue({
+    data: {
+      count: offers.length,
+      next: null,
+      previous: null,
+      results: offers,
+    },
+    isLoading: false,
+    isError: false,
+    isPending: false,
+  } as unknown as ReturnType<typeof magicQueries.usePendingStageAdvanceOffers>);
 
   // useRespondToStageAdvance is called from the queries module (mocked).
   vi.mocked(magicQueries.useRespondToStageAdvance).mockReturnValue({
@@ -135,7 +135,7 @@ describe('SoulTetherRescuePrompt', () => {
   });
 
   // 1. Renders nothing when there are no pending offers.
-  it('renders nothing when there are no pending stage-advance offers', async () => {
+  it('renders nothing when there are no pending stage-advance offers', () => {
     setupMocks({ offers: [] });
 
     const { container } = render(<SoulTetherRescuePrompt />, {
@@ -143,9 +143,6 @@ describe('SoulTetherRescuePrompt', () => {
     });
 
     // After data loads, still nothing (no offers).
-    await waitFor(() => {
-      expect(magicApi.getPendingStageAdvanceOffers).toHaveBeenCalled();
-    });
     expect(container.firstChild).toBeNull();
   });
 
@@ -217,7 +214,7 @@ describe('SoulTetherRescuePrompt', () => {
   });
 
   // 6. Expired offers are filtered client-side and don't render.
-  it('filters out expired offers (expires_at < now) and renders nothing', async () => {
+  it('filters out expired offers (expires_at < now) and renders nothing', () => {
     const expiredOffer = makeOffer({ expires_at: PAST_ISO });
     setupMocks({ offers: [expiredOffer] });
 
@@ -225,10 +222,6 @@ describe('SoulTetherRescuePrompt', () => {
       wrapper: createWrapper(),
     });
 
-    // Wait for the query to complete.
-    await waitFor(() => {
-      expect(magicApi.getPendingStageAdvanceOffers).toHaveBeenCalled();
-    });
     // Expired offer is filtered; nothing renders.
     expect(container.firstChild).toBeNull();
   });

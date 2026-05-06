@@ -13,13 +13,11 @@
  * Pattern: polled banner, cloned from SineatingInbox.tsx.
  */
 
-import { useQuery } from '@tanstack/react-query';
 import { useSelector } from 'react-redux';
 import { AlertTriangle, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { RootState } from '@/store/store';
-import { magicKeys, useRespondToStageAdvance } from '@/magic/queries';
-import { getPendingStageAdvanceOffers } from '@/magic/api';
+import { usePendingStageAdvanceOffers, useRespondToStageAdvance } from '@/magic/queries';
 import type { PendingStageAdvanceOffer } from '@/magic/types';
 
 // ---------------------------------------------------------------------------
@@ -86,12 +84,8 @@ export function SoulTetherRescuePrompt() {
     account?.available_characters?.find((c) => c.currently_puppeted_in_session) ?? null;
   const sineaterSheetId = activeCharacter?.id ?? null;
 
-  const { data } = useQuery({
-    queryKey: magicKeys.stageAdvancePending(),
-    queryFn: () => getPendingStageAdvanceOffers(),
-    refetchInterval: 5_000,
-  });
-
+  // Poll every 5 seconds via the hook.
+  const { data } = usePendingStageAdvanceOffers();
   const respond = useRespondToStageAdvance();
 
   const now = Date.now();
@@ -102,6 +96,9 @@ export function SoulTetherRescuePrompt() {
   if (!sineaterSheetId || offers.length === 0) return null;
 
   function handleConfirm(offer: PendingStageAdvanceOffer, sheetId: number) {
+    // TODO(soul-tether-ui-v2): UI says "up to X units" but Confirm always commits the
+    // max. A slider (1..commit_units_max) would honor the implication. v1 ships always-max
+    // per the plan's minimum scope.
     respond.mutate({
       sinner_sheet_id: offer.sinner_sheet_id,
       sineater_sheet_id: sheetId,
