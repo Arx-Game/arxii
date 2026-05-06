@@ -52,6 +52,10 @@ export async function getRitual(id: number): Promise<Ritual> {
 /**
  * POST /api/magic/rituals/perform/
  * Dispatches a ritual with the supplied character sheet and kwargs.
+ *
+ * On error, parses the response body for a typed `detail` message from the backend
+ * and attaches it to the thrown error as both `.message` and `.detail` properties.
+ * Falls back to a generic message if the response is not JSON or has no detail field.
  */
 export async function performRitual(body: PerformRitualRequest): Promise<PerformRitualResponse> {
   const res = await apiFetch(`${RITUALS_URL}/perform/`, {
@@ -59,6 +63,21 @@ export async function performRitual(body: PerformRitualRequest): Promise<Perform
     headers: jsonHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to perform ritual');
+
+  if (!res.ok) {
+    let detail = 'Failed to perform ritual';
+    try {
+      const data = (await res.json()) as { detail?: string };
+      if (typeof data.detail === 'string' && data.detail.trim()) {
+        detail = data.detail;
+      }
+    } catch {
+      // body wasn't JSON; keep generic
+    }
+    const error = new Error(detail) as Error & { detail?: string };
+    error.detail = detail;
+    throw error;
+  }
+
   return res.json() as Promise<PerformRitualResponse>;
 }
