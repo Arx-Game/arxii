@@ -14307,9 +14307,8 @@ export interface components {
       readonly sinner_sheet_id: number;
       /** @description Return the Sinner's IC display name via their primary persona. */
       readonly sinner_persona_name: string;
-      readonly scene_id: number | null;
-      /** @description Return the scene name, or None if no scene was recorded. */
-      readonly scene_name: string | null;
+      readonly scene_id: number;
+      readonly scene_name: string;
       readonly resonance_id: number;
       /** @description The stage the Sinner is currently at when the prompt fires. */
       readonly sinner_corruption_stage: number;
