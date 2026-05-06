@@ -1675,8 +1675,8 @@ class PendingStageAdvanceOfferSerializer(serializers.ModelSerializer):
 
     sinner_persona_name = serializers.SerializerMethodField()
     sinner_sheet_id = serializers.IntegerField(read_only=True)
-    scene_id = serializers.IntegerField(read_only=True, allow_null=True)
-    scene_name = serializers.SerializerMethodField()
+    scene_id = serializers.IntegerField(read_only=True)
+    scene_name = serializers.CharField(source="scene.name", read_only=True)
     resonance_id = serializers.IntegerField(read_only=True)
 
     class Meta:
@@ -1703,11 +1703,6 @@ class PendingStageAdvanceOfferSerializer(serializers.ModelSerializer):
     def get_sinner_persona_name(self, obj: object) -> str:
         """Return the Sinner's IC display name via their primary persona."""
         return obj.sinner_sheet.display_ic()  # type: ignore[union-attr]
-
-    def get_scene_name(self, obj: object) -> str | None:
-        """Return the scene name, or None if no scene was recorded."""
-        scene = obj.scene  # type: ignore[union-attr]
-        return scene.name if scene is not None else None
 
 
 class StageAdvanceRespondSerializer(serializers.Serializer):

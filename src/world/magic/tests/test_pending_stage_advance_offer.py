@@ -153,11 +153,13 @@ def _get_sinner_tether_thread(sinner_sheet: object, resonance: object) -> Thread
     )
 
 
-def _seed_pending_offer(sinner_sheet, sineater_sheet, resonance, scene=None):
+def _seed_pending_offer(sinner_sheet, sineater_sheet, resonance, scene):
     """Directly create a PendingStageAdvanceOffer row for testing.
 
-    Uses update_or_create so repeated calls within a test safely replace the row.
-    Expires 120 seconds in the future (well within TTL).
+    ``scene`` is required — the field is NOT NULL and the co-location check at
+    resolve time relies on it.  Uses update_or_create so repeated calls within
+    a test safely replace the row.  Expires 120 seconds in the future (well
+    within TTL).
     """
     rel = CharacterRelationship.objects.get(source=sinner_sheet, target=sineater_sheet)
     thread = _get_sinner_tether_thread(sinner_sheet, resonance)
@@ -266,11 +268,13 @@ class PendingStageAdvanceOfferUniquenessTests(TestCase):
         )
 
         rel = CharacterRelationship.objects.get(source=sinner_sheet, target=sineater_sheet)
+        scene = SceneFactory()
 
         PendingStageAdvanceOffer.objects.create(
             sinner_sheet=sinner_sheet,
             sineater_sheet=sineater_sheet,
             relationship=rel,
+            scene=scene,
             resonance=resonance,
             sinner_corruption_stage=1,
             commit_units_max=5,
@@ -283,6 +287,7 @@ class PendingStageAdvanceOfferUniquenessTests(TestCase):
                 sinner_sheet=sinner_sheet,
                 sineater_sheet=sineater_sheet,
                 relationship=rel,
+                scene=scene,
                 resonance=resonance,
                 sinner_corruption_stage=1,
                 commit_units_max=3,
@@ -317,6 +322,8 @@ class SoulTetherStageAdvancePromptWritesPendingRowTests(TestCase):
         sineater_tenure = RosterTenureFactory()
         self.sinner_sheet = sinner_tenure.roster_entry.character_sheet
         self.sineater_sheet = sineater_tenure.roster_entry.character_sheet
+        self.sinner_account = sinner_tenure.player_data.account
+        self.sineater_account = sineater_tenure.player_data.account
 
         _set_primary_affinity_abyssal(self.sinner_sheet)
         _set_primary_affinity_primal(self.sineater_sheet)
@@ -342,13 +349,19 @@ class SoulTetherStageAdvancePromptWritesPendingRowTests(TestCase):
         self.thread.hollow_current = 5
         self.thread.save()
 
-        # Place both in the same room so the subscriber fires.
+        # Place both in the same room so the subscriber fires (room-proximity check).
         sinner_char = self.sinner_sheet.character
         sineater_char = self.sineater_sheet.character
         sinner_char.location = self.room
         sinner_char.save()
         sineater_char.location = self.room
         sineater_char.save()
+
+        # Also create SceneParticipation so _find_shared_active_scene returns a scene
+        # and the DB row is persisted (scene FK is NOT NULL).
+        self.scene = SceneFactory()
+        SceneParticipationFactory(scene=self.scene, account=self.sinner_account)
+        SceneParticipationFactory(scene=self.scene, account=self.sineater_account)
 
         # Make a Corruption condition instance at stage 1, severity 7 (will cross 10 on +5).
         from world.conditions.factories import ConditionInstanceFactory
@@ -435,6 +448,115 @@ class SoulTetherStageAdvancePromptWritesPendingRowTests(TestCase):
             sinner_sheet=self.sinner_sheet, sineater_sheet=self.sineater_sheet
         )
         self.assertEqual(row.resonance_id, self.resonance.pk)
+
+
+# =============================================================================
+# 2b. No shared scene → no DB row written, in-memory offer still fires
+# =============================================================================
+
+
+class SoulTetherStageAdvancePromptNoSharedSceneTests(TestCase):
+    """When no shared active scene exists, soul_tether_stage_advance_prompt must not
+    write a PendingStageAdvanceOffer row (scene FK is NOT NULL; co-location check
+    would be impossible without it).  The in-memory PROMPT_PLAYER offer is still
+    recorded so the Sineater can respond via the @reply path if they wish."""
+
+    def setUp(self) -> None:
+        from evennia.objects.models import ObjectDB
+
+        wire_soul_tether_content()
+
+        self.room = ObjectDB.objects.create(
+            db_key="Room_SAPromptNoScene",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.track = RelationshipTrackFactory()
+        abyssal_affinity = AffinityFactory(name="Abyssal")
+        self.resonance = ResonanceFactory(affinity=abyssal_affinity)
+        CorruptionConditionTemplateFactory(corruption_resonance=self.resonance)
+
+        sinner_tenure = RosterTenureFactory()
+        sineater_tenure = RosterTenureFactory()
+        self.sinner_sheet = sinner_tenure.roster_entry.character_sheet
+        self.sineater_sheet = sineater_tenure.roster_entry.character_sheet
+
+        _set_primary_affinity_abyssal(self.sinner_sheet)
+        _set_primary_affinity_primal(self.sineater_sheet)
+        _grant_relationship_track_unlock(self.sinner_sheet, self.track)
+        CharacterRelationshipFactory(
+            source=self.sinner_sheet, target=self.sineater_sheet, is_pending=False
+        )
+        CharacterRelationshipFactory(
+            source=self.sineater_sheet, target=self.sinner_sheet, is_pending=False
+        )
+        accept_soul_tether(
+            initiator_sheet=self.sinner_sheet,
+            partner_sheet=self.sineater_sheet,
+            sinner_role=SoulTetherRoleEnum.ABYSSAL,
+            resonance=self.resonance,
+            writeup="Bond for no-scene DB skip test, at least twenty chars.",
+            ritual_components=[],
+        )
+        CharacterResonanceFactory(character_sheet=self.sinner_sheet, resonance=self.resonance)
+
+        # Pre-charge the Sinner's Thread Hollow.
+        thread = _get_sinner_tether_thread(self.sinner_sheet, self.resonance)
+        thread.hollow_current = 5
+        thread.save()
+
+        # Place both in the same room (triggers the subscriber) but do NOT create
+        # SceneParticipation rows — _find_shared_active_scene returns None.
+        sinner_char = self.sinner_sheet.character
+        sineater_char = self.sineater_sheet.character
+        sinner_char.location = self.room
+        sinner_char.save()
+        sineater_char.location = self.room
+        sineater_char.save()
+
+        template, _stage2, _check_type = _make_corruption_condition_with_resist(self.resonance)
+        from world.conditions.factories import ConditionInstanceFactory
+
+        self.condition_instance = ConditionInstanceFactory(
+            condition=template,
+            target=self.sinner_sheet.character,
+            current_stage=template.stages.get(stage_order=1),
+            severity=7,
+        )
+        _pending_stage_advance_offers.clear()
+
+    def tearDown(self) -> None:
+        _pending_stage_advance_offers.clear()
+
+    @patch("world.conditions.services.perform_check")
+    def test_no_pending_row_when_no_shared_scene(self, mock_check: object) -> None:
+        """When no shared SceneParticipation exists, no PendingStageAdvanceOffer is written."""
+        from world.conditions.services import advance_condition_severity
+
+        mock_check.return_value = _make_check_result(success_level=-1)
+
+        advance_condition_severity(self.condition_instance, 5)  # 7+5=12, crosses threshold 10
+
+        self.assertFalse(
+            PendingStageAdvanceOffer.objects.filter(
+                sinner_sheet=self.sinner_sheet,
+                sineater_sheet=self.sineater_sheet,
+            ).exists(),
+            "A PendingStageAdvanceOffer row must NOT be written when there is no shared scene.",
+        )
+
+    @patch("world.conditions.services.perform_check")
+    def test_in_memory_offer_still_recorded_when_no_shared_scene(self, mock_check: object) -> None:
+        """Even without a shared scene, the in-memory offer is recorded."""
+        from world.conditions.services import advance_condition_severity
+
+        mock_check.return_value = _make_check_result(success_level=-1)
+
+        advance_condition_severity(self.condition_instance, 5)
+
+        self.assertTrue(
+            len(_pending_stage_advance_offers) > 0,
+            "In-memory offer should still be recorded even when no DB row is written.",
+        )
 
 
 # =============================================================================
@@ -779,11 +901,19 @@ class PendingStageAdvanceOfferViewSetTests(APITestCase):
         thread_b.hollow_current = 5
         thread_b.save()
 
+        # Create shared scenes so _seed_pending_offer has a non-null scene.
+        cls.scene_a = SceneFactory()
+        cls.scene_b = SceneFactory()
+
     def _seed_offer_a(self) -> None:
-        _seed_pending_offer(self.sinner_sheet_a, self.sineater_sheet_a, self.resonance_a)
+        _seed_pending_offer(
+            self.sinner_sheet_a, self.sineater_sheet_a, self.resonance_a, self.scene_a
+        )
 
     def _seed_offer_b(self) -> None:
-        _seed_pending_offer(self.sinner_sheet_b, self.sineater_sheet_b, self.resonance_b)
+        _seed_pending_offer(
+            self.sinner_sheet_b, self.sineater_sheet_b, self.resonance_b, self.scene_b
+        )
 
     def test_sineater_sees_only_their_pending_offers(self) -> None:
         """Authenticated as sineater_a, only offer A appears in the list."""

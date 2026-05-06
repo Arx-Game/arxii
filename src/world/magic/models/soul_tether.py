@@ -76,6 +76,10 @@ class PendingStageAdvanceOffer(SharedMemoryModel):
     poll a real endpoint. Created by ``soul_tether_stage_advance_prompt`` and
     consumed (then deleted) by ``resolve_stage_advance_prompt_from_db``.
 
+    The row is only written when ``_find_shared_active_scene`` finds a shared
+    active scene for the pair — guaranteeing ``scene`` is always non-null and
+    that the co-location check at resolve time has a real scene to validate.
+
     Two staleness conditions:
     - **TTL**: ``expires_at < now()`` — the stage-advance moment is transient;
       stale prompts are silently expired.
@@ -106,9 +110,7 @@ class PendingStageAdvanceOffer(SharedMemoryModel):
         "scenes.Scene",
         on_delete=models.CASCADE,
         related_name="pending_stage_advance_offers",
-        null=True,
-        blank=True,
-        help_text="Active scene at prompt time; null if no tracked scene was found.",
+        help_text="Active scene at prompt time. Row is only written when a shared scene is found.",
     )
     resonance = models.ForeignKey(
         "magic.Resonance",

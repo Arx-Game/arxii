@@ -1655,28 +1655,30 @@ def soul_tether_stage_advance_prompt(*, payload: Any) -> None:
     _pending_stage_advance_offers[offer.offer_id] = offer
 
     # 7a. Persist the pending offer to DB so the UI can poll it (Task 1.7).
-    #     update_or_create replaces any stale row for the same (sinner, sineater) pair.
-    #     The relationship is derived from the first active tether (same as step 3).
-    #     Scene is resolved from shared SceneParticipation rows; nullable if not found.
+    #     Only write a row when a shared active scene can be verified — the scene FK is
+    #     NOT NULL, and the resolve path requires it for the co-location check.
+    #     If no shared scene is found the PROMPT_PLAYER msg above still fires, but the
+    #     in-memory offer is the only state left (ephemeral; no inbox entry for the UI).
     from world.magic.models.soul_tether import PendingStageAdvanceOffer  # noqa: PLC0415
 
     relationship = tethers[0]  # First active tether (matches _find_sineater_in_location logic).
     shared_scene = _find_shared_active_scene(sinner_sheet, sineater_sheet)
-    current_stage_obj = instance.current_stage
-    current_stage_number = current_stage_obj.stage_order if current_stage_obj is not None else 0
-    PendingStageAdvanceOffer.objects.update_or_create(
-        sinner_sheet=sinner_sheet,
-        sineater_sheet=sineater_sheet,
-        defaults={
-            "relationship": relationship,
-            "scene": shared_scene,
-            "resonance": resonance,
-            "sinner_corruption_stage": current_stage_number,
-            "commit_units_max": max_hollow,
-            "strain_cost_per_unit": _STRAIN_SEVERITY_PER_UNIT,
-            "expires_at": timezone.now() + STAGE_ADVANCE_OFFER_TTL,
-        },
-    )
+    if shared_scene is not None:
+        current_stage_obj = instance.current_stage
+        current_stage_number = current_stage_obj.stage_order if current_stage_obj is not None else 0
+        PendingStageAdvanceOffer.objects.update_or_create(
+            sinner_sheet=sinner_sheet,
+            sineater_sheet=sineater_sheet,
+            defaults={
+                "relationship": relationship,
+                "scene": shared_scene,
+                "resonance": resonance,
+                "sinner_corruption_stage": current_stage_number,
+                "commit_units_max": max_hollow,
+                "strain_cost_per_unit": _STRAIN_SEVERITY_PER_UNIT,
+                "expires_at": timezone.now() + STAGE_ADVANCE_OFFER_TTL,
+            },
+        )
 
     # 8. Notify the Sineater.  Evennia msg is fire-and-forget.
     current_stage = instance.current_stage
@@ -1840,12 +1842,10 @@ def resolve_stage_advance_prompt_from_db(
         PendingStageAdvanceOffer.objects.filter(pk=pending.pk).delete()
         raise StageAdvanceBonusError(_MSG_STAGE_ADVANCE_OFFER_EXPIRED)
 
-    # Step 3: Co-location check (autocommit). Only checked when a scene is recorded.
-    # If scene is None (no tracked scene at prompt time), skip co-location — the
-    # TTL is the only staleness gate in that case.
-    if pending.scene is not None and not _both_in_scene(
-        pending.sinner_sheet, pending.sineater_sheet, pending.scene
-    ):
+    # Step 3: Co-location check (autocommit). Scene is guaranteed non-null on persisted rows
+    # (soul_tether_stage_advance_prompt only writes a row when _find_shared_active_scene
+    # returned a valid scene), so no null-check is needed here.
+    if not _both_in_scene(pending.sinner_sheet, pending.sineater_sheet, pending.scene):
         PendingStageAdvanceOffer.objects.filter(pk=pending.pk).delete()
         raise StageAdvanceBonusError(_MSG_STAGE_ADVANCE_OFFER_STALE)
 
