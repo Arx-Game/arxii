@@ -1455,17 +1455,13 @@ class SineatingOfferSerializer(serializers.Serializer):
 class SineatingRespondSerializer(serializers.Serializer):
     """Write serializer for the Sineater's response to a Sineating request (Spec B §7).
 
-    The Sineater supplies the SineatingOffer fields inline (Option B synchronous path).
+    The pending offer row is the canonical source of truth for scene, resonance,
+    and units cap — the caller only needs to identify the pair and supply their choice.
     ``units_accepted=0`` means decline.
     """
 
-    # Offer fields — re-validated server-side to prevent tampering.
     sinner_sheet_id = serializers.IntegerField()
     sineater_sheet_id = serializers.IntegerField()
-    resonance_id = serializers.IntegerField()
-    max_units = serializers.IntegerField(min_value=1)
-    scene_id = serializers.IntegerField()
-    # Response
     units_accepted = serializers.IntegerField(min_value=0)
 
     def validate_sineater_sheet_id(self, value: int) -> CharacterSheet:
@@ -1479,22 +1475,6 @@ class SineatingRespondSerializer(serializers.Serializer):
             return CharacterSheet.objects.get(pk=value)
         except CharacterSheet.DoesNotExist as exc:
             raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
-
-    def validate_resonance_id(self, value: int) -> "Resonance":
-        """Resolve resonance by PK."""
-        try:
-            return Resonance.objects.get(pk=value)
-        except Resonance.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
-
-    def validate_scene_id(self, value: int) -> object:
-        """Resolve scene by PK."""
-        from world.scenes.models import Scene  # noqa: PLC0415
-
-        try:
-            return Scene.objects.get(pk=value)
-        except Scene.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_SCENE_NOT_FOUND) from exc
 
     def create(self, validated_data: dict) -> object:
         """Resolve Sineating from the persisted pending offer; surface typed errors as 400.

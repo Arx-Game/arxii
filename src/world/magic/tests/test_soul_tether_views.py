@@ -554,9 +554,6 @@ class SineatingRespondViewTests(APITestCase):
         return {
             "sinner_sheet_id": self.sinner_sheet.pk,
             "sineater_sheet_id": self.sineater_sheet.pk,
-            "resonance_id": self.resonance.pk,
-            "max_units": 5,
-            "scene_id": self.scene.pk,
             "units_accepted": units_accepted,
         }
 

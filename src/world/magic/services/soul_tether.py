@@ -870,23 +870,27 @@ def resolve_sineating_from_db(
     """
     from world.magic.models.soul_tether import SineatingPendingOffer  # noqa: PLC0415
 
-    # Step 1: Lock the pending row. Any failure before the happy-path commit
-    # must also clean up the row. We separate staleness rejection (delete-then-
-    # raise outside atomic) from successful resolution (delete inside atomic).
+    # Step 1: Plain lookup in autocommit mode. select_for_update() is illegal
+    # outside a transaction block (Django raises TransactionManagementError in
+    # non-ATOMIC_REQUESTS mode); locking comes in Step 4 once we are inside
+    # transaction.atomic().
     try:
-        pending = SineatingPendingOffer.objects.select_for_update().get(
+        pending = SineatingPendingOffer.objects.select_related(
+            "sinner_sheet", "sineater_sheet", "relationship", "resonance", "scene"
+        ).get(
             sinner_sheet=sinner_sheet,
             sineater_sheet=sineater_sheet,
         )
     except SineatingPendingOffer.DoesNotExist as exc:
         raise SineatingValidationError(_MSG_NO_PENDING_OFFER) from exc
 
-    # Step 2: Co-location staleness check. If stale, delete the row FIRST (a
-    # simple DELETE that auto-commits outside the main atomic block), then raise.
-    # We cannot do delete-inside-atomic-then-raise because the exception causes a
-    # rollback that would un-delete the row, leaving a ghost in the inbox.
+    # Step 2: Co-location staleness check. If stale, delete the row in
+    # autocommit mode (filter().delete() issues an immediate DELETE that
+    # commits without needing a wrapping transaction), then raise.
+    # We must NOT do this inside transaction.atomic() because the exception
+    # would roll back the DELETE, leaving a ghost row in the inbox.
     if not _both_in_scene(pending.sinner_sheet, pending.sineater_sheet, pending.scene):
-        pending.delete()
+        SineatingPendingOffer.objects.filter(pk=pending.pk).delete()
         raise SineatingValidationError(_MSG_OFFER_STALE)
 
     # Step 3: Reconstruct a SineatingOffer from the persisted fields.
@@ -911,10 +915,18 @@ def resolve_sineating_from_db(
         sineater_current_strain_stage=0,  # TODO: Phase 6 — look up real Strain stage
     )
 
-    # Step 4: Execute the resolution and delete the pending row atomically.
+    # Step 4: Re-fetch with lock inside transaction.atomic(), then resolve.
+    # The re-fetch guards against a concurrent caller who raced between our
+    # plain get() above and this point.
     with transaction.atomic():
+        try:
+            locked_pending = SineatingPendingOffer.objects.select_for_update().get(pk=pending.pk)
+        except SineatingPendingOffer.DoesNotExist as exc:
+            # Another caller resolved (and deleted) the offer between our check and lock.
+            raise SineatingValidationError(_MSG_NO_PENDING_OFFER) from exc
+
         result = resolve_sineating(offer, units_accepted)
-        pending.delete()
+        locked_pending.delete()
 
     return result
 
