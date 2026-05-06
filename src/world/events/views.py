@@ -3,7 +3,6 @@ from collections.abc import Callable
 from django.db import IntegrityError
 from django.db.models import Prefetch, Q, QuerySet
 from django.shortcuts import get_object_or_404
-from django.utils.functional import cached_property
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import status
 from rest_framework.decorators import action
@@ -51,8 +50,6 @@ from world.events.services import (
 )
 from world.events.types import EventError
 from world.game_clock.constants import TimePhase
-from world.roster.models import RosterEntry
-from world.scenes.constants import PersonaType
 from world.scenes.models import Persona, Scene
 from world.societies.models import Organization, Society
 from world.stories.pagination import StandardResultsSetPagination
@@ -116,26 +113,18 @@ class EventViewSet(ModelViewSet):
     def get_queryset(self) -> QuerySet[Event]:
         return self._apply_visibility_filter(self._base_queryset().order_by("scheduled_real_time"))
 
-    @cached_property
     def _active_persona_ids(self) -> list[int]:
-        """Persona IDs for the requesting user's active characters.
+        """PRIMARY persona IDs for the requesting user's active characters.
 
-        Cached on the viewset instance (which is fresh per request) so the
-        visibility filter, lifecycle actions, and ``get_serializer_context``
-        share one resolution instead of each firing the same RosterEntry +
-        Persona query pair.
+        Reads ``user.cached_active_persona_ids`` — a cached_property on the
+        Account typeclass. Evennia's identity map keeps the same Account
+        instance in memory across requests, so this list is computed once
+        per account per process and reused across requests.
         """
-        if not self.request.user.is_authenticated:
+        user = self.request.user
+        if not user.is_authenticated:
             return []
-        character_ids = RosterEntry.objects.for_account(self.request.user).values_list(
-            "character_sheet_id", flat=True
-        )
-        return list(
-            Persona.objects.filter(
-                character_sheet_id__in=character_ids,
-                persona_type=PersonaType.PRIMARY,
-            ).values_list("id", flat=True)
-        )
+        return user.cached_active_persona_ids
 
     def _apply_visibility_filter(self, qs: QuerySet[Event]) -> QuerySet[Event]:
         """Filter queryset to only events visible to the requesting user."""
@@ -148,7 +137,7 @@ class EventViewSet(ModelViewSet):
         if not self.request.user.is_authenticated:
             return qs.filter(is_public=True)
 
-        persona_ids = self._active_persona_ids
+        persona_ids = self._active_persona_ids()
 
         if not persona_ids:
             return qs.filter(is_public=True)
@@ -174,7 +163,7 @@ class EventViewSet(ModelViewSet):
 
     def perform_create(self, serializer: EventCreateSerializer) -> None:
         """Create event via service function, deriving host from request user."""
-        persona_ids = self._active_persona_ids
+        persona_ids = self._active_persona_ids()
         if not persona_ids:
             raise DRFValidationError(EventError.NO_PERSONA)
         active_persona = Persona.objects.get(id=persona_ids[0])
@@ -236,7 +225,7 @@ class EventViewSet(ModelViewSet):
 
     def get_serializer_context(self) -> dict:
         context = super().get_serializer_context()
-        context["persona_ids"] = set(self._active_persona_ids)
+        context["persona_ids"] = set(self._active_persona_ids())
         context["viewer_gm_event_ids"] = self._get_viewer_gm_event_ids()
         return context
 

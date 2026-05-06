@@ -115,6 +115,30 @@ class Account(DefaultAccount):
         """Return characters actively played by this account."""
         return CharacterList(self)
 
+    @cached_property
+    def cached_active_persona_ids(self) -> list[int]:
+        """PRIMARY persona IDs for this account's currently-played characters.
+
+        Cached on the AccountDB instance — Evennia's identity map shares
+        the same Account object across requests in a process, so this list
+        survives the request boundary. Used by visibility filters and
+        serializer contexts that need the caller's persona set.
+
+        Stale only if the player adds/removes a PRIMARY persona; resets on
+        process restart. To invalidate explicitly:
+        ``del account.cached_active_persona_ids``.
+        """
+        from world.scenes.constants import PersonaType
+        from world.scenes.models import Persona
+
+        return list(
+            Persona.objects.filter(
+                character_sheet__roster_entry__tenures__player_data__account=self,
+                character_sheet__roster_entry__tenures__end_date__isnull=True,
+                persona_type=PersonaType.PRIMARY,
+            ).values_list("id", flat=True)
+        )
+
     def get_available_characters(self):
         """Returns characters this player can currently control."""
         return self.player_data.get_available_characters()
