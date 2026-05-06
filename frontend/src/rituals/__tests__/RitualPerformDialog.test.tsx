@@ -10,7 +10,6 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { UseMutationResult } from '@tanstack/react-query';
 
 import { RitualPerformDialog } from '../components/RitualPerformDialog';
 import type { RitualWithSchema, PerformRitualResponse } from '../types';
@@ -21,7 +20,11 @@ import type { RitualWithSchema, PerformRitualResponse } from '../types';
 
 const mockMutate = vi.fn();
 const mockReset = vi.fn();
-const mockMutation: Partial<UseMutationResult<PerformRitualResponse, unknown>> = {
+// Use a loose type so individual tests can freely set isError/error without TS
+// discriminated-union conflicts (isError: true is incompatible with error: null
+// in the strict UseMutationResult union).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mockMutation: Record<string, any> = {
   mutate: mockMutate,
   reset: mockReset,
   isPending: false,

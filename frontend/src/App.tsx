@@ -99,6 +99,14 @@ const MuteSettingsPage = lazy(() =>
 );
 
 // ---------------------------------------------------------------------------
+// Lazy-loaded rituals page
+// ---------------------------------------------------------------------------
+
+const RitualsListPage = lazy(() =>
+  import('@/rituals/pages/RitualsListPage').then((m) => ({ default: m.RitualsListPage }))
+);
+
+// ---------------------------------------------------------------------------
 // Suspense fallback — shown while lazy stories chunks load
 // ---------------------------------------------------------------------------
 
@@ -457,6 +465,20 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <MuteSettingsPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Rituals                                                              */}
+        {/* ------------------------------------------------------------------ */}
+        <Route
+          path="/rituals"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <RitualsListPage />
               </ProtectedRoute>
             </Suspense>
           }
