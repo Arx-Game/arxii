@@ -25,6 +25,12 @@ if (!window.HTMLElement.prototype.releasePointerCapture) {
   window.HTMLElement.prototype.releasePointerCapture = () => {};
 }
 
+// Polyfill scrollIntoView — not available in jsdom but called by Radix UI Select
+// when it tries to scroll the selected item into view (select.tsx:590).
+if (!window.Element.prototype.scrollIntoView) {
+  window.Element.prototype.scrollIntoView = () => {};
+}
+
 // Mock framer-motion to disable animations in tests
 vi.mock('framer-motion', async () => {
   const actual = await vi.importActual('framer-motion');
