@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { RitualPerformDialog } from '../components/RitualPerformDialog';
 import type { RitualWithSchema, PerformRitualResponse } from '../types';
+import * as queries from '@/rituals/queries';
 
 // ---------------------------------------------------------------------------
 // Mock usePerformRitual
@@ -20,22 +21,37 @@ import type { RitualWithSchema, PerformRitualResponse } from '../types';
 
 const mockMutate = vi.fn();
 const mockReset = vi.fn();
-// Use a loose type so individual tests can freely set isError/error without TS
-// discriminated-union conflicts (isError: true is incompatible with error: null
-// in the strict UseMutationResult union).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mockMutation: Record<string, any> = {
-  mutate: mockMutate,
-  reset: mockReset,
-  isPending: false,
-  isError: false,
-  error: null,
-  isSuccess: false,
-};
 
-vi.mock('@/rituals/queries', () => ({
-  usePerformRitual: () => mockMutation,
-}));
+function makeMutationIdle() {
+  return {
+    mutate: mockMutate,
+    reset: mockReset,
+    isPending: false,
+    isSuccess: false,
+    isIdle: true,
+    isError: false,
+    error: null,
+    data: undefined,
+    status: 'idle' as const,
+  } as unknown as ReturnType<typeof queries.usePerformRitual>;
+}
+
+function makeMutationError(error: Error) {
+  return {
+    mutate: mockMutate,
+    reset: mockReset,
+    isPending: false,
+    isSuccess: false,
+    isIdle: false,
+    isError: true,
+    error,
+    data: undefined,
+    status: 'error' as const,
+  } as unknown as ReturnType<typeof queries.usePerformRitual>;
+}
+
+vi.mock('@/rituals/queries');
+vi.mocked(queries.usePerformRitual).mockReturnValue(makeMutationIdle());
 
 // Mock domain field backing APIs (required by field components rendered via RitualForm)
 vi.mock('@/events/queries', () => ({ searchPersonas: vi.fn() }));
@@ -89,12 +105,7 @@ const defaultProps = {
 describe('RitualPerformDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockMutation.mutate = mockMutate;
-    mockMutation.reset = mockReset;
-    mockMutation.isPending = false;
-    mockMutation.isError = false;
-    mockMutation.error = null;
-    mockMutation.isSuccess = false;
+    vi.mocked(queries.usePerformRitual).mockReturnValue(makeMutationIdle());
   });
 
   // 1. Renders ritual name + description
@@ -249,8 +260,8 @@ describe('RitualPerformDialog', () => {
 
   // 9. Typed error shows in dialog
   it('displays error message from thrown exception', () => {
-    mockMutation.isError = true;
-    mockMutation.error = new Error('Test error message from server');
+    const error = new Error('Test error message from server');
+    vi.mocked(queries.usePerformRitual).mockReturnValue(makeMutationError(error));
 
     const Wrapper = createWrapper();
     render(
@@ -264,9 +275,8 @@ describe('RitualPerformDialog', () => {
 
   // 9b. Falls back to generic message when error has no detail field and no message
   it('displays a generic error message when error has no detail or message', () => {
-    mockMutation.isError = true;
-    // Plain object with no detail and not an Error instance
-    mockMutation.error = {};
+    const error = new Error();
+    vi.mocked(queries.usePerformRitual).mockReturnValue(makeMutationError(error));
 
     const Wrapper = createWrapper();
     render(
@@ -280,8 +290,8 @@ describe('RitualPerformDialog', () => {
 
   // 9c. Shows the Error.message when there is no detail field but there is a message
   it('displays error.message when error is a plain Error with no detail', () => {
-    mockMutation.isError = true;
-    mockMutation.error = new Error('network error');
+    const error = new Error('network error');
+    vi.mocked(queries.usePerformRitual).mockReturnValue(makeMutationError(error));
 
     const Wrapper = createWrapper();
     render(
@@ -295,8 +305,8 @@ describe('RitualPerformDialog', () => {
 
   // 10. Mutation error state resets on dialog close
   it('calls mutation.reset() when dialog closes', async () => {
-    mockMutation.isError = true;
-    mockMutation.error = new Error('Previous error');
+    const error = new Error('Previous error');
+    vi.mocked(queries.usePerformRitual).mockReturnValue(makeMutationError(error));
 
     const onOpenChange = vi.fn();
     const Wrapper = createWrapper();

@@ -11,7 +11,6 @@
  * character is selected). The Perform button is hidden in that case.
  */
 
-import { useState } from 'react';
 import { useSelector } from 'react-redux';
 import type { RootState } from '@/store/store';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -58,12 +57,10 @@ function RitualsListInner() {
 
   const { data, isLoading } = useRituals();
 
-  // Track a "success toast" key — increment to re-trigger if needed in future.
-  const [_successCount, setSuccessCount] = useState(0);
-
-  // The first available character is the active/puppeted character.
+  // The currently puppeted character (has currently_puppeted_in_session: true).
   // Its id == CharacterSheet pk (OneToOne primary_key=True on ObjectDB).
-  const activeCharacter = account?.available_characters?.[0] ?? null;
+  const activeCharacter =
+    account?.available_characters?.find((c) => c.currently_puppeted_in_session) ?? null;
   const characterSheetId = activeCharacter?.id ?? null;
 
   if (isLoading) return <LoadingSkeletons />;
@@ -94,7 +91,6 @@ function RitualsListInner() {
           key={ritual.id}
           ritual={ritual as RitualWithSchema}
           characterSheetId={characterSheetId}
-          onSuccess={() => setSuccessCount((n) => n + 1)}
         />
       ))}
     </div>

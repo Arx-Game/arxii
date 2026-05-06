@@ -68,7 +68,7 @@ const defaultAuthState = {
           personas: [],
           last_location: null,
           portrait_url: null,
-          currently_puppeted_in_session: false,
+          currently_puppeted_in_session: true,
         },
       ],
       pending_applications: [],
@@ -241,14 +241,25 @@ describe('RitualsListPage', () => {
   });
 
   // 6. No character: renders no-character empty state
-  it('renders a no-character message when available_characters is empty', () => {
-    // Override auth state to remove the active character for this test.
+  it('renders a no-character message when no character is puppeted', () => {
+    // Override auth state: character exists but is not puppeted.
     currentAuthState = {
       auth: {
         account: {
           id: 1,
           username: 'testuser',
-          available_characters: [],
+          available_characters: [
+            {
+              id: 99,
+              name: 'Test Character',
+              character_type: 'PC',
+              roster_status: 'active',
+              personas: [],
+              last_location: null,
+              portrait_url: null,
+              currently_puppeted_in_session: false,
+            },
+          ],
           pending_applications: [],
         },
       },
