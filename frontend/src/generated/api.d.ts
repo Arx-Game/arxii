@@ -5683,6 +5683,52 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/rituals/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet exposing authored Rituals.
+     *
+     *     Used by the frontend to discover available rituals and their `input_schema`
+     *     for rendering the perform form. The actual dispatch happens through
+     *     `RitualPerformView` at `POST /api/magic/rituals/perform/`.
+     */
+    get: operations['magic_rituals_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/rituals/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet exposing authored Rituals.
+     *
+     *     Used by the frontend to discover available rituals and their `input_schema`
+     *     for rendering the perform form. The actual dispatch happens through
+     *     `RitualPerformView` at `POST /api/magic/rituals/perform/`.
+     */
+    get: operations['magic_rituals_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/rituals/perform/': {
     parameters: {
       query?: never;
@@ -11151,6 +11197,12 @@ export interface components {
        */
       time_phase?: components['schemas']['TimePhaseEnum'];
     };
+    /**
+     * @description * `SERVICE` - Service
+     *     * `FLOW` - Flow
+     * @enum {string}
+     */
+    ExecutionKindEnum: 'SERVICE' | 'FLOW';
     /** @description Serializer for Facet model with hierarchy info. */
     Facet: {
       readonly id: number;
@@ -12925,6 +12977,21 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['PlayerTrust'][];
     };
+    PaginatedRitualList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['Ritual'][];
+    };
     PaginatedRosterEntryList: {
       /** @example 123 */
       count?: number;
@@ -14603,6 +14670,23 @@ export interface components {
      * @enum {string}
      */
     RiskLevelEnum: 'low' | 'moderate' | 'high' | 'extreme' | 'lethal';
+    /**
+     * @description Serializer for Ritual (read-only list/detail).
+     *
+     *     Exposes name, description, narrative_prose, dispatch metadata, and the
+     *     `input_schema` blob the frontend uses to render its perform form.
+     */
+    Ritual: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      readonly narrative_prose: string;
+      readonly hedge_accessible: boolean;
+      readonly glimpse_eligible: boolean;
+      readonly execution_kind: components['schemas']['ExecutionKindEnum'];
+      /** @description UI-rendering metadata: what kwargs the perform endpoint expects. Shape: {'fields': [{'name': str, 'label': str, 'type': str, 'required': bool, ...}]}. When None, the ritual takes no player-supplied kwargs. */
+      readonly input_schema: unknown;
+    };
     /** @description Validate a roster application message. */
     RosterApplication: {
       message: string;
@@ -24072,6 +24156,52 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Restriction'];
+        };
+      };
+    };
+  };
+  magic_rituals_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRitualList'];
+        };
+      };
+    };
+  };
+  magic_rituals_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this ritual. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Ritual'];
         };
       };
     };

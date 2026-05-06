@@ -61,6 +61,7 @@ from world.magic.models import (
     Resonance,
     ResonanceGrant,
     Restriction,
+    Ritual,
     SceneEntryEndorsement,
     Technique,
     TechniqueStyle,
@@ -88,6 +89,7 @@ from world.magic.serializers import (
     ResonanceGrantSerializer,
     RestrictionSerializer,
     RitualPerformRequestSerializer,
+    RitualSerializer,
     SceneEntryEndorsementSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
@@ -655,6 +657,20 @@ class ThreadPullPreviewView(APIView):
 
         response_serializer = ThreadPullPreviewResponseSerializer(result)
         return Response(response_serializer.data)
+
+
+class RitualViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only ViewSet exposing authored Rituals.
+
+    Used by the frontend to discover available rituals and their `input_schema`
+    for rendering the perform form. The actual dispatch happens through
+    `RitualPerformView` at `POST /api/magic/rituals/perform/`.
+    """
+
+    queryset = Ritual.objects.all().order_by("name")
+    serializer_class = RitualSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
 
 
 class RitualPerformView(APIView):

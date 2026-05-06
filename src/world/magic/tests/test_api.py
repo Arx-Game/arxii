@@ -24,6 +24,7 @@ from world.magic.factories import (
     ImbuingRitualFactory,
     IntensityTierFactory,
     ResonanceFactory,
+    RitualFactory,
     ThreadFactory,
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
@@ -835,3 +836,44 @@ class RitualSerializerTests(APITestCase):
         self.assertIn("description", data)
         self.assertIn("narrative_prose", data)
         self.assertIn("hedge_accessible", data)
+
+
+class RitualViewSetTests(APITestCase):
+    """Tests for RitualViewSet (read-only)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = AccountFactory(username="ritual_vs_user")
+        cls.ritual = RitualFactory(
+            name="example_ritual",
+            input_schema={"fields": [{"name": "x", "type": "int", "label": "X"}]},
+        )
+
+    def setUp(self):
+        self.client.force_authenticate(self.user)
+
+    def test_list_returns_rituals_with_input_schema(self):
+        url = reverse("magic:ritual-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get("results", response.data)
+        names = [r["name"] for r in results]
+        self.assertIn("example_ritual", names)
+        # Find our specific ritual in the results
+        target = next(r for r in results if r["name"] == "example_ritual")
+        self.assertEqual(target["input_schema"]["fields"][0]["name"], "x")
+
+    def test_detail_returns_one_ritual(self):
+        url = reverse("magic:ritual-detail", args=[self.ritual.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["name"], "example_ritual")
+
+    def test_unauthenticated_request_rejected(self):
+        self.client.force_authenticate(None)
+        response = self.client.get(reverse("magic:ritual-list"))
+        # Most DRF setups return 401 for unauthenticated; some configs return 403
+        self.assertIn(
+            response.status_code,
+            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
+        )

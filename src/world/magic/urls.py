@@ -24,6 +24,7 @@ from world.magic.views import (
     ResonanceGrantViewSet,
     RestrictionViewSet,
     RitualPerformView,
+    RitualViewSet,
     SceneEntryEndorsementViewSet,
     SineatingRequestView,
     SineatingRespondView,
@@ -70,6 +71,7 @@ router.register(
 
 # Resonance Pivot Spec A §4.5 — Thread / Ritual / Teaching offer surface
 router.register("threads", ThreadViewSet, basename="thread")
+router.register("rituals", RitualViewSet, basename="ritual")
 router.register(
     "teaching-offers",
     ThreadWeavingTeachingOfferViewSet,
@@ -94,7 +96,8 @@ router.register(
 )
 
 urlpatterns = [
-    *router.urls,
+    # Literal paths MUST come before *router.urls so that "rituals/perform/" is
+    # matched before the router's "rituals/<pk>/" pattern treats "perform" as a pk.
     path(
         "thread-pull-preview/",
         ThreadPullPreviewView.as_view(),
@@ -136,4 +139,5 @@ urlpatterns = [
         SoulTetherDetailView.as_view(),
         name="soul-tether-detail",
     ),
+    *router.urls,
 ]
