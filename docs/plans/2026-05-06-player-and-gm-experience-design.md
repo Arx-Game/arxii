@@ -63,11 +63,11 @@ constraints that any future spec must respect. The remaining six are
    flagged before entry.
 
 8. **Constrained bystander reactions.** When a player is mid-action,
-   witnesses get pop-up choice menus with pre-authored options
-   (CK2 event-tree model), filtered by character traits. Conflict-flavored
-   options fire AFTER the active player's moment resolves. Pro-active-
-   player options ("cover for the thief") are first-class. "Do nothing"
-   is always available; pop-ups auto-dismiss.
+   witnesses get pop-up choice menus with pre-authored options filtered
+   by character traits. Conflict-flavored options fire AFTER the active
+   player's moment resolves. Pro-active-player options ("cover for the
+   thief") are first-class. "Do nothing" is always available; pop-ups
+   auto-dismiss.
 
 9. **GM authority is constrained — authors not arbiters.** GMs author
    story trees with pre-defined rolls and routing. Outcomes are determined
@@ -300,7 +300,7 @@ not-started" line is doing. A mission has:
   flirt-as-distraction, grab-and-run) — likely uses existing
   Capability / Property / Application matching from `world.mechanics`
 - **Bystander reaction trees** authored per mission (witness pop-ups
-  with CK2-style filtered options)
+  with trait-filtered authored options)
 - **Pre / post / aftermath state** — sub-mission spawning (the fence /
   ransom path), world-state mutation (crime ↑ in district)
 
@@ -308,7 +308,7 @@ The mission system is the load-bearing connective tissue between
 PC daily play, society/organization gameplay, GM authoring, and
 world-state evolution. **It deserves its own roadmap stub.**
 
-### CK2-style authored choice menus
+### Authored choice-tree menus
 
 Pop-up choice menus with pre-authored options, filtered by character
 traits (Path, covenant role, species, background, skill thresholds).
@@ -438,10 +438,10 @@ These were flagged during the brainstorm and remain unresolved:
   flow back to GMs? Tied to kudos system?
 - **GM trust progression UX** — how does a GM know they leveled up?
   what does that look like?
-- **CK2-style choice menu authoring** — how does a GM (or staff) build
-  the authored option trees into their encounters / scenes / missions /
-  story beats / event triggers? Same authoring tool across applications,
-  or per-application surfaces?
+- **Authored choice-tree menu authoring** — how does a GM (or staff)
+  build the authored option trees into their encounters / scenes /
+  missions / story beats / event triggers? Same authoring tool across
+  applications, or per-application surfaces?
 - **NPC pickpocket spawning** (reactive emergent content) — does this
   use Scope 5.5 reactive layer? authored by who?
 - **Room state full taxonomy** — what dimensions does a room track,
@@ -497,11 +497,12 @@ In rough priority order:
 2. **Spec the missions system.** Currently `not-started`. Highest
    leverage because it's connective tissue across many other
    systems and the brainstorm exposed how much hidden work it does.
-3. **Spec the CK2-style choice menu pattern.** Reusable across
+3. **Spec the authored choice-tree menu pattern.** Reusable across
    missions, scenes, public technique casts, story events, and
-   occupation tasks (primary actors AND bystanders). The CK2
-   event-tree model is well-understood and can become a single
-   authoring surface that all consumer systems hook into.
+   occupation tasks (primary actors AND bystanders). The pattern —
+   pre-authored options filtered by character traits, with each
+   option carrying check rules and branch consequences — can become
+   a single authoring surface that all consumer systems hook into.
 4. **Spec the rooms-as-system layer.** Room state tracking, player-
    investable features, defense/offense loops.
 5. **Spec the player stories panel.** Three interaction modes, IC-
