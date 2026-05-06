@@ -75,6 +75,12 @@ repos:
         entry: uv run python tools/check_type_annotations.py
         language: system
         pass_filenames: false
+      - id: mock-cast
+        name: Reject Record<string, any> for hook mocks in test files
+        entry: uv run python tools/check_mock_cast.py
+        language: system
+        pass_filenames: true
+        files: ^frontend/.*\.test\.(ts|tsx)$
   - repo: local
     hooks:
       - id: eslint
