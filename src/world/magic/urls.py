@@ -20,6 +20,7 @@ from world.magic.views import (
     FacetViewSet,
     GiftViewSet,
     PendingAlterationViewSet,
+    PendingStageAdvanceOfferViewSet,
     PoseEndorsementViewSet,
     ResonanceGrantViewSet,
     RestrictionViewSet,
@@ -33,6 +34,7 @@ from world.magic.views import (
     SoulTetherDetailView,
     SoulTetherDissolveView,
     SoulTetherRescueView,
+    StageAdvanceRespondView,
     TechniqueStyleViewSet,
     TechniqueViewSet,
     ThreadPullPreviewView,
@@ -150,6 +152,22 @@ urlpatterns = [
         "soul-tether/sineating/pending/<int:pk>/",
         SineatingPendingOfferViewSet.as_view({"get": "retrieve"}),
         name="soul-tether-sineating-pending-detail",
+    ),
+    # Task 1.7 — Sineater inbox: pending stage-advance bonus offers
+    path(
+        "soul-tether/stage-advance/pending/",
+        PendingStageAdvanceOfferViewSet.as_view({"get": "list"}),
+        name="soul-tether-stage-advance-pending-list",
+    ),
+    path(
+        "soul-tether/stage-advance/pending/<int:pk>/",
+        PendingStageAdvanceOfferViewSet.as_view({"get": "retrieve"}),
+        name="soul-tether-stage-advance-pending-detail",
+    ),
+    path(
+        "soul-tether/stage-advance/respond/",
+        StageAdvanceRespondView.as_view(),
+        name="soul-tether-stage-advance-respond",
     ),
     *router.urls,
 ]

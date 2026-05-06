@@ -5952,6 +5952,77 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/soul-tether/stage-advance/pending/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only Sineater-facing inbox of pending stage-advance bonus offers (Task 1.7).
+     *
+     *     GET /api/magic/soul-tether/stage-advance/pending/
+     *     GET /api/magic/soul-tether/stage-advance/pending/{id}/
+     *
+     *     Scoped to the authenticated user as the Sineater — returns only offers where
+     *     the caller's character sheets appear as the Sineater. The UI should also
+     *     filter client-side by ``expires_at`` to hide already-expired rows (the server
+     *     does not proactively prune; rows are deleted on the next respond attempt).
+     */
+    get: operations['magic_soul_tether_stage_advance_pending_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/stage-advance/pending/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only Sineater-facing inbox of pending stage-advance bonus offers (Task 1.7).
+     *
+     *     GET /api/magic/soul-tether/stage-advance/pending/
+     *     GET /api/magic/soul-tether/stage-advance/pending/{id}/
+     *
+     *     Scoped to the authenticated user as the Sineater — returns only offers where
+     *     the caller's character sheets appear as the Sineater. The UI should also
+     *     filter client-side by ``expires_at`` to hide already-expired rows (the server
+     *     does not proactively prune; rows are deleted on the next respond attempt).
+     */
+    get: operations['magic_soul_tether_stage_advance_pending_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/stage-advance/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate offer + dispatch resolve; return result payload. */
+    post: operations['magic_soul_tether_stage_advance_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/styles/': {
     parameters: {
       query?: never;
@@ -12983,6 +13054,21 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['PendingAlteration'][];
     };
+    PaginatedPendingStageAdvanceOfferList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['PendingStageAdvanceOffer'][];
+    };
     PaginatedPersonaList: {
       /** @example 123 */
       count?: number;
@@ -14210,6 +14296,35 @@ export interface components {
      * @enum {integer}
      */
     PendingAlterationTierEnum: 1 | 2 | 3 | 4 | 5;
+    /**
+     * @description Sineater-facing view of a pending stage-advance bonus offer (Task 1.7).
+     *
+     *     Read-only. Scoped to the authenticated user's character sheets as Sineater.
+     *     The ``expires_at`` field lets the UI show a countdown before the offer lapses.
+     */
+    PendingStageAdvanceOffer: {
+      readonly id: number;
+      readonly sinner_sheet_id: number;
+      /** @description Return the Sinner's IC display name via their primary persona. */
+      readonly sinner_persona_name: string;
+      readonly scene_id: number | null;
+      /** @description Return the scene name, or None if no scene was recorded. */
+      readonly scene_name: string | null;
+      readonly resonance_id: number;
+      /** @description The stage the Sinner is currently at when the prompt fires. */
+      readonly sinner_corruption_stage: number;
+      /** @description Maximum Hollow units the Sineater may commit. */
+      readonly commit_units_max: number;
+      /** @description Strain severity added to the Sineater per committed unit. */
+      readonly strain_cost_per_unit: number;
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * Format: date-time
+       * @description Prompt expires after this time. Stale rows are deleted on next access.
+       */
+      readonly expires_at: string;
+    };
     Persona: {
       readonly id: number;
       /** @description The character sheet this persona belongs to. */
@@ -24592,6 +24707,69 @@ export interface operations {
     };
   };
   magic_soul_tether_sineating_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_soul_tether_stage_advance_pending_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPendingStageAdvanceOfferList'];
+        };
+      };
+    };
+  };
+  magic_soul_tether_stage_advance_pending_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingStageAdvanceOffer'];
+        };
+      };
+    };
+  };
+  magic_soul_tether_stage_advance_respond_create: {
     parameters: {
       query?: never;
       header?: never;

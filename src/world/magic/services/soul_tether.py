@@ -18,9 +18,11 @@ FlowDefinition + SERVICE step):
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
+from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
 from world.conditions.models import ConditionInstance, ConditionTemplate
@@ -704,6 +706,66 @@ def _both_in_scene(
     )
 
 
+def _find_shared_active_scene(
+    sinner_sheet: CharacterSheet,
+    sineater_sheet: CharacterSheet,
+) -> Any | None:
+    """Return the active Scene both characters currently participate in, or None.
+
+    Used by ``soul_tether_stage_advance_prompt`` to record a Scene FK on the
+    pending offer row without requiring the subscriber to receive a scene arg.
+    Returns None when either character has no active tenure or when there is no
+    shared active scene.
+
+    Args:
+        sinner_sheet: The Sinner's CharacterSheet.
+        sineater_sheet: The Sineater's CharacterSheet.
+
+    Returns:
+        A Scene instance or None.
+    """
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.scenes.models import SceneParticipation  # noqa: PLC0415
+
+    def _account_id(sheet: CharacterSheet) -> int | None:
+        try:
+            entry = RosterEntry.objects.get(character_sheet_id=sheet.pk)
+        except RosterEntry.DoesNotExist:
+            return None
+        tenure = entry.tenures.filter(end_date__isnull=True).first()
+        if tenure is None:
+            return None
+        return tenure.player_data.account_id
+
+    sinner_account_id = _account_id(sinner_sheet)
+    sineater_account_id = _account_id(sineater_sheet)
+    if sinner_account_id is None or sineater_account_id is None:
+        return None
+
+    # Find scene IDs where the sinner has active participation.
+    sinner_scene_ids = set(
+        SceneParticipation.objects.filter(account_id=sinner_account_id).values_list(
+            "scene_id", flat=True
+        )
+    )
+    if not sinner_scene_ids:
+        return None
+
+    # Find a scene where the sineater also participates, that is active.
+    shared = (
+        SceneParticipation.objects.filter(
+            account_id=sineater_account_id,
+            scene_id__in=sinner_scene_ids,
+            scene__is_active=True,
+        )
+        .select_related("scene")
+        .first()
+    )
+    if shared is None:
+        return None
+    return shared.scene
+
+
 # =============================================================================
 # Public service: resolve_sineating
 # =============================================================================
@@ -1376,6 +1438,18 @@ _pending_stage_advance_offers: dict[str, StageAdvanceBonusOffer] = {}
 #: Strain severity added to the Sineater per unit committed (tunable).
 _STRAIN_SEVERITY_PER_UNIT: int = 1
 
+#: How long a PendingStageAdvanceOffer row remains valid after the prompt fires (Task 1.7).
+#: Stage-advance prompts are time-sensitive; a 60-second window is generous enough for
+#: a human to click Accept but short enough to avoid accumulating ghost rows.
+STAGE_ADVANCE_OFFER_TTL: timedelta = timedelta(seconds=60)
+
+#: Safe error message constants for StageAdvanceBonusError (Task 1.7).
+_MSG_NO_PENDING_STAGE_ADVANCE_OFFER = "No pending stage-advance offer found."
+_MSG_STAGE_ADVANCE_OFFER_EXPIRED = "This stage-advance prompt expired before you could respond."
+_MSG_STAGE_ADVANCE_OFFER_STALE = (
+    "This stage-advance prompt expired; you are no longer in the same scene."
+)
+
 
 def _active_soul_tethers_for_sinner(
     sinner_sheet: CharacterSheet,
@@ -1580,6 +1654,30 @@ def soul_tether_stage_advance_prompt(*, payload: Any) -> None:
     )
     _pending_stage_advance_offers[offer.offer_id] = offer
 
+    # 7a. Persist the pending offer to DB so the UI can poll it (Task 1.7).
+    #     update_or_create replaces any stale row for the same (sinner, sineater) pair.
+    #     The relationship is derived from the first active tether (same as step 3).
+    #     Scene is resolved from shared SceneParticipation rows; nullable if not found.
+    from world.magic.models.soul_tether import PendingStageAdvanceOffer  # noqa: PLC0415
+
+    relationship = tethers[0]  # First active tether (matches _find_sineater_in_location logic).
+    shared_scene = _find_shared_active_scene(sinner_sheet, sineater_sheet)
+    current_stage_obj = instance.current_stage
+    current_stage_number = current_stage_obj.stage_order if current_stage_obj is not None else 0
+    PendingStageAdvanceOffer.objects.update_or_create(
+        sinner_sheet=sinner_sheet,
+        sineater_sheet=sineater_sheet,
+        defaults={
+            "relationship": relationship,
+            "scene": shared_scene,
+            "resonance": resonance,
+            "sinner_corruption_stage": current_stage_number,
+            "commit_units_max": max_hollow,
+            "strain_cost_per_unit": _STRAIN_SEVERITY_PER_UNIT,
+            "expires_at": timezone.now() + STAGE_ADVANCE_OFFER_TTL,
+        },
+    )
+
     # 8. Notify the Sineater.  Evennia msg is fire-and-forget.
     current_stage = instance.current_stage
     current_stage_name = current_stage.name if current_stage is not None else "stage 0"
@@ -1684,3 +1782,107 @@ def resolve_stage_advance_prompt(
         strain_severity_added=strain_severity_added,
         declined=False,
     )
+
+
+# =============================================================================
+# Public service: resolve_stage_advance_prompt_from_db (Task 1.7)
+# =============================================================================
+
+
+def resolve_stage_advance_prompt_from_db(
+    sinner_sheet: CharacterSheet,
+    sineater_sheet: CharacterSheet,
+    units_committed: int,
+) -> StageAdvanceBonusResult:
+    """Resolve a stage-advance bonus offer fetched from the database (Task 1.7).
+
+    Parallel to ``resolve_sineating_from_db``. Looks up the ``PendingStageAdvanceOffer``
+    row, validates TTL and co-location, then delegates to ``resolve_stage_advance_prompt``.
+
+    TTL check: If ``expires_at < now()``, the offer is stale — delete the row and raise.
+    Co-location check: If either PC is no longer a participant of the offer's scene,
+    the offer is stale — delete the row and raise.
+
+    Transaction pattern (matches Task 1.6 fix-up):
+      Step 1: Plain lookup in autocommit mode — ``select_for_update`` illegal outside a
+              transaction.
+      Step 2: TTL check (autocommit) — delete + raise if expired.
+      Step 3: Co-location check (autocommit) — delete + raise if stale.
+      Step 4: Re-fetch with SELECT FOR UPDATE inside ``transaction.atomic()``, then
+              resolve and delete.
+
+    Args:
+        sinner_sheet: The Sinner's CharacterSheet.
+        sineater_sheet: The Sineater's CharacterSheet (must be the caller).
+        units_committed: How many Hollow units to commit (0 = decline, positive = commit).
+
+    Returns:
+        A frozen ``StageAdvanceBonusResult`` dataclass.
+
+    Raises:
+        StageAdvanceBonusError: If the offer is missing, expired, or stale.
+    """
+    from world.magic.models.soul_tether import PendingStageAdvanceOffer  # noqa: PLC0415
+
+    # Step 1: Plain lookup in autocommit mode.
+    try:
+        pending = PendingStageAdvanceOffer.objects.select_related(
+            "scene", "resonance", "relationship"
+        ).get(sinner_sheet=sinner_sheet, sineater_sheet=sineater_sheet)
+    except PendingStageAdvanceOffer.DoesNotExist as exc:
+        raise StageAdvanceBonusError(_MSG_NO_PENDING_STAGE_ADVANCE_OFFER) from exc
+
+    # Step 2: TTL check (autocommit). Delete the row first, then raise.
+    # filter().delete() issues an immediate DELETE that commits without needing
+    # a wrapping transaction; if we did this inside atomic(), the rollback would
+    # un-delete the row and leave a ghost in the inbox.
+    if pending.expires_at < timezone.now():
+        PendingStageAdvanceOffer.objects.filter(pk=pending.pk).delete()
+        raise StageAdvanceBonusError(_MSG_STAGE_ADVANCE_OFFER_EXPIRED)
+
+    # Step 3: Co-location check (autocommit). Only checked when a scene is recorded.
+    # If scene is None (no tracked scene at prompt time), skip co-location — the
+    # TTL is the only staleness gate in that case.
+    if pending.scene is not None and not _both_in_scene(
+        pending.sinner_sheet, pending.sineater_sheet, pending.scene
+    ):
+        PendingStageAdvanceOffer.objects.filter(pk=pending.pk).delete()
+        raise StageAdvanceBonusError(_MSG_STAGE_ADVANCE_OFFER_STALE)
+
+    # Step 4: Re-fetch with lock inside transaction.atomic(), then resolve.
+    # The re-fetch guards against a concurrent caller who raced between our
+    # plain get() above and this point.
+    with transaction.atomic():
+        try:
+            locked_pending = PendingStageAdvanceOffer.objects.select_for_update().get(pk=pending.pk)
+        except PendingStageAdvanceOffer.DoesNotExist as exc:
+            # Another caller resolved (and deleted) the offer between our check and lock.
+            raise StageAdvanceBonusError(_MSG_NO_PENDING_STAGE_ADVANCE_OFFER) from exc
+
+        # Reconstruct the in-memory offer and seed the module-level registry so
+        # ``resolve_stage_advance_prompt`` can look it up. The registry entry is
+        # created here and consumed (deleted) by the call below.
+        import uuid  # noqa: PLC0415
+
+        synthetic_offer_id = str(uuid.uuid4())
+        offer = StageAdvanceBonusOffer(
+            offer_id=synthetic_offer_id,
+            sinner_sheet=locked_pending.sinner_sheet,
+            sineater_sheet=locked_pending.sineater_sheet,
+            resonance=locked_pending.resonance,
+            max_hollow_to_spend=locked_pending.commit_units_max,
+        )
+        _pending_stage_advance_offers[synthetic_offer_id] = offer
+
+        try:
+            result = resolve_stage_advance_prompt(
+                offer_id=synthetic_offer_id,
+                units_committed=units_committed,
+            )
+        finally:
+            # Clean up if resolve_stage_advance_prompt raised before removing the entry.
+            _pending_stage_advance_offers.pop(synthetic_offer_id, None)
+
+        locked_pending.delete()
+
+    return result

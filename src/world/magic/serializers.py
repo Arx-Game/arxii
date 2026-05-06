@@ -1664,3 +1664,102 @@ class SineatingPendingOfferSerializer(serializers.ModelSerializer):
     def get_sinner_persona_name(self, obj: object) -> str:
         """Return the Sinner's IC display name via their primary persona."""
         return obj.sinner_sheet.display_ic()  # type: ignore[union-attr]
+
+
+class PendingStageAdvanceOfferSerializer(serializers.ModelSerializer):
+    """Sineater-facing view of a pending stage-advance bonus offer (Task 1.7).
+
+    Read-only. Scoped to the authenticated user's character sheets as Sineater.
+    The ``expires_at`` field lets the UI show a countdown before the offer lapses.
+    """
+
+    sinner_persona_name = serializers.SerializerMethodField()
+    sinner_sheet_id = serializers.IntegerField(read_only=True)
+    scene_id = serializers.IntegerField(read_only=True, allow_null=True)
+    scene_name = serializers.SerializerMethodField()
+    resonance_id = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        from world.magic.models.soul_tether import (  # noqa: PLC0415 — must live in Meta body
+            PendingStageAdvanceOffer,
+        )
+
+        model = PendingStageAdvanceOffer
+        fields = [
+            "id",
+            "sinner_sheet_id",
+            "sinner_persona_name",
+            "scene_id",
+            "scene_name",
+            "resonance_id",
+            "sinner_corruption_stage",
+            "commit_units_max",
+            "strain_cost_per_unit",
+            "created_at",
+            "expires_at",
+        ]
+        read_only_fields = fields
+
+    def get_sinner_persona_name(self, obj: object) -> str:
+        """Return the Sinner's IC display name via their primary persona."""
+        return obj.sinner_sheet.display_ic()  # type: ignore[union-attr]
+
+    def get_scene_name(self, obj: object) -> str | None:
+        """Return the scene name, or None if no scene was recorded."""
+        scene = obj.scene  # type: ignore[union-attr]
+        return scene.name if scene is not None else None
+
+
+class StageAdvanceRespondSerializer(serializers.Serializer):
+    """Write serializer for the Sineater's response to a stage-advance prompt (Spec B §8.1).
+
+    The pending offer row is the canonical source of truth for resonance, max units,
+    and expiry — the caller only needs to identify the pair and supply their choice.
+    ``units_committed=0`` means decline.
+    """
+
+    sinner_sheet_id = serializers.IntegerField()
+    sineater_sheet_id = serializers.IntegerField()
+    units_committed = serializers.IntegerField(min_value=0)
+
+    def validate_sineater_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve + ownership-check: caller must be the Sineater."""
+        request = self.context.get("request")
+        return _resolve_account_sheet(value, request)
+
+    def validate_sinner_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve sinner sheet."""
+        try:
+            return CharacterSheet.objects.get(pk=value)
+        except CharacterSheet.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+
+    def create(self, validated_data: dict) -> object:
+        """Resolve from the persisted pending offer; surface typed errors as 400.
+
+        Delegates to ``resolve_stage_advance_prompt_from_db`` which looks up the pending
+        offer row, validates TTL + co-location, executes resolution, and deletes the row.
+        """
+        from world.magic.exceptions import SoulTetherError  # noqa: PLC0415
+        from world.magic.services.soul_tether import (  # noqa: PLC0415
+            resolve_stage_advance_prompt_from_db,
+        )
+
+        try:
+            return resolve_stage_advance_prompt_from_db(
+                sinner_sheet=validated_data["sinner_sheet_id"],
+                sineater_sheet=validated_data["sineater_sheet_id"],
+                units_committed=validated_data["units_committed"],
+            )
+        except SoulTetherError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+
+class StageAdvanceBonusResultSerializer(serializers.Serializer):
+    """Read serializer for StageAdvanceBonusResult payloads (Task 1.7)."""
+
+    offer_id = serializers.CharField()
+    units_committed = serializers.IntegerField()
+    hollow_drained = serializers.IntegerField()
+    strain_severity_added = serializers.IntegerField()
+    declined = serializers.BooleanField()

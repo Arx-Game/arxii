@@ -198,5 +198,8 @@ class StageAdvanceBonusError(SoulTetherError):
             "Stage-advance bonus resolution failed.",
             "No pending stage-advance offer found with that ID.",
             "Units committed exceeds the maximum available Hollow.",
+            "No pending stage-advance offer found.",
+            "This stage-advance prompt expired before you could respond.",
+            "This stage-advance prompt expired; you are no longer in the same scene.",
         },
     )
