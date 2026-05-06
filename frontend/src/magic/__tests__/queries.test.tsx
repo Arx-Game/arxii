@@ -103,12 +103,14 @@ const mockThread = {
   owner: 10,
   resonance: 3,
   resonance_name: 'Starfire',
-  target_kind: 'RELATIONSHIP_CAPSTONE',
+  target_kind: 'RELATIONSHIP_CAPSTONE' as const,
   name: 'Bond of Stars',
   description: '',
   level: 10,
   developed_points: 100,
-  hollow_current: 30,
+  retired_at: null,
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
 };
 
 const mockResonance = {
@@ -116,7 +118,14 @@ const mockResonance = {
   character_sheet: 10,
   resonance: 3,
   resonance_name: 'Starfire',
-  resonance_detail: { id: 3, name: 'Starfire' },
+  resonance_detail: {
+    id: 3,
+    name: 'Starfire',
+    affinity: 1,
+    affinity_name: 'Solar',
+    description: 'A bright resonance',
+    codex_entry_id: null,
+  },
   balance: 50,
   lifetime_earned: 200,
   claimed_at: '2026-01-01T00:00:00Z',

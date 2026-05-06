@@ -117,7 +117,7 @@ describe('RelationshipsSection', () => {
   it('shows empty state when no bonds are returned', () => {
     vi.mocked(useMyTetherBonds).mockReturnValue({
       data: [],
-    } as ReturnType<typeof useMyTetherBonds>);
+    } as unknown as ReturnType<typeof useMyTetherBonds>);
 
     render(<RelationshipsSection />, { wrapper: createWrapper() });
 

@@ -16,7 +16,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 import { SoulTetherRescuePrompt } from '../components/SoulTetherRescuePrompt';
-import type { useRespondToStageAdvance } from '../queries';
 import type { PendingStageAdvanceOffer } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -60,8 +59,6 @@ vi.mock('react-redux', async (importOriginal) => {
 });
 
 import * as magicQueries from '../queries';
-
-// Helper type to check return types
 import type { useRespondToStageAdvance } from '../queries';
 
 // ---------------------------------------------------------------------------
