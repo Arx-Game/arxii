@@ -67,7 +67,7 @@ describe('RitualForm', () => {
     expect(screen.getByText('Select Option')).toBeInTheDocument();
   });
 
-  it('updates values dict when user changes a field', async () => {
+  it('calls onChange with full updated values dict on user input', async () => {
     const schema: RitualInputSchema = {
       fields: [{ name: 'name', label: 'Name', type: 'text' }],
     };
@@ -83,8 +83,10 @@ describe('RitualForm', () => {
     const input = screen.getByRole('textbox');
     await userEvent.type(input, 'Alice');
 
-    // onChange should be called multiple times during typing
-    expect(onChange).toHaveBeenCalled();
+    // onChange should be called with the full updated values dict
+    // Verify first keystroke and last keystroke match the expected pattern
+    expect(onChange).toHaveBeenCalledWith({ name: 'A' });
+    expect(onChange).toHaveBeenCalledWith({ name: 'e' });
 
     // Re-render with a value that reflects the final typed state
     onChange.mockClear();
