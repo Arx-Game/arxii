@@ -19,10 +19,14 @@ import { fetchScenes } from '@/scenes/queries';
 import type { SceneListItem } from '@/scenes/queries';
 import type { FieldProps } from '@/rituals/types';
 
+async function fetchActiveScenes(): Promise<{ results: SceneListItem[] }> {
+  return (await fetchScenes('status=active')) as { results: SceneListItem[] };
+}
+
 export function ScenePickerField({ field, value, onChange, disabled }: FieldProps) {
   const { data, isLoading } = useQuery<{ results: SceneListItem[] }>({
     queryKey: ['scenes', 'active'],
-    queryFn: () => fetchScenes('status=active') as Promise<{ results: SceneListItem[] }>,
+    queryFn: fetchActiveScenes,
   });
 
   const scenes = data?.results ?? [];
