@@ -30,6 +30,19 @@ export interface RitualField {
   choices?: Array<{ value: string | number; label: string }>;
 }
 
+export interface FieldProps {
+  field: RitualField;
+  value: string | number | null;
+  onChange: (value: string | number | null) => void;
+  disabled?: boolean;
+  /**
+   * Other form field values — used by fields with cross-field dependencies.
+   * For example, RelationshipCapstonePickerField reads `formValues.sineater_sheet_id`
+   * to filter capstones by the selected sineater's character sheet.
+   */
+  formValues?: Record<string, string | number | null>;
+}
+
 export interface RitualInputSchema {
   fields: RitualField[];
 }
