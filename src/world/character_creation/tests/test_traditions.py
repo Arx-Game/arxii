@@ -193,6 +193,46 @@ class TraditionListLeakTests(TestCase):
         assert resp_a2.status_code == status.HTTP_200_OK
         assert self._required_distinction(resp_a2, self.tradition.id) == self.distinction_a.id
 
+    def test_repeat_request_with_same_beginning_hits_cache(self):
+        """Beginning + beginning_traditions are SharedMemoryModel-cached.
+
+        After the first request loads the Beginning and its
+        ``cached_beginning_traditions``, a second request with the same
+        ``beginning_id`` should not re-fetch BeginningTradition rows or
+        re-load the Beginning row — both live on the cached Beginning
+        instance for the lifetime of the process.
+
+        The Tradition list queryset still evaluates (with a JOIN through
+        BeginningTradition for FilterSet's ``beginning_id`` filter), but
+        no separate BT-fetch or Beginning-fetch query should fire.
+        """
+        import re
+
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        url = "/api/character-creation/traditions/"
+
+        # Warmup: populate Beginning instance + cached_beginning_traditions.
+        self.client.get(url, {"beginning_id": self.beginning_a.id})
+
+        with CaptureQueriesContext(connection) as ctx:
+            resp = self.client.get(url, {"beginning_id": self.beginning_a.id})
+        assert resp.status_code == status.HTTP_200_OK
+
+        def primary_table(sql: str) -> str:
+            m = re.search(r'FROM\s+"([^"]+)"', sql)
+            return m.group(1) if m else ""
+
+        primary_tables = [primary_table(q["sql"]) for q in ctx.captured_queries]
+        assert "character_creation_beginningtradition" not in primary_tables, (
+            f"Expected zero BT-as-primary-table queries on repeat request, got: {primary_tables}"
+        )
+        assert "character_creation_beginnings" not in primary_tables, (
+            f"Expected zero Beginnings-as-primary-table queries on repeat request "
+            f"(SharedMemoryModel cache hit), got: {primary_tables}"
+        )
+
     def test_nested_tradition_in_draft_resolves_required_distinction(self):
         """CharacterDraftSerializer.selected_tradition resolves required_distinction_id.
 

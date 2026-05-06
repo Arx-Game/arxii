@@ -194,9 +194,16 @@ class TraditionSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_codex_entry_ids(self, obj) -> list[int]:
-        """Get codex entry IDs granted by this tradition."""
-        if hasattr(obj, "prefetched_codex_grants"):
-            return [grant.entry_id for grant in obj.prefetched_codex_grants]
+        """Get codex entry IDs granted by this tradition.
+
+        Read from the ``cached_codex_grants`` attr populated by the
+        ``Beginnings.cached_beginning_traditions`` prefetch. Same data for
+        every caller (no per-request filter), so attaching to the shared
+        Tradition instance is safe.
+        """
+        cached = getattr(obj, "cached_codex_grants", None)  # noqa: GETATTR_LITERAL — Prefetch(to_attr=) populates this attr
+        if cached is not None:
+            return [grant.entry_id for grant in cached]
         from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
 
         return list(
