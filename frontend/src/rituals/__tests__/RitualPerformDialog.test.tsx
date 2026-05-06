@@ -20,8 +20,10 @@ import type { RitualWithSchema, PerformRitualResponse } from '../types';
 // ---------------------------------------------------------------------------
 
 const mockMutate = vi.fn();
+const mockReset = vi.fn();
 const mockMutation: Partial<UseMutationResult<PerformRitualResponse, unknown>> = {
   mutate: mockMutate,
+  reset: mockReset,
   isPending: false,
   isError: false,
   error: null,
@@ -85,6 +87,7 @@ describe('RitualPerformDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockMutation.mutate = mockMutate;
+    mockMutation.reset = mockReset;
     mockMutation.isPending = false;
     mockMutation.isError = false;
     mockMutation.error = null;
@@ -242,9 +245,9 @@ describe('RitualPerformDialog', () => {
   });
 
   // 9. Typed error shows in dialog
-  it('displays detail error message from typed exception response', () => {
+  it('displays error message from thrown exception', () => {
     mockMutation.isError = true;
-    mockMutation.error = { detail: 'Test error message from server' } as unknown;
+    mockMutation.error = new Error('Test error message from server');
 
     const Wrapper = createWrapper();
     render(
@@ -285,5 +288,30 @@ describe('RitualPerformDialog', () => {
     );
 
     expect(screen.getByText('network error')).toBeInTheDocument();
+  });
+
+  // 10. Mutation error state resets on dialog close
+  it('calls mutation.reset() when dialog closes', async () => {
+    mockMutation.isError = true;
+    mockMutation.error = new Error('Previous error');
+
+    const onOpenChange = vi.fn();
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <RitualPerformDialog {...defaultProps} onOpenChange={onOpenChange} ritual={baseRitual} />
+      </Wrapper>
+    );
+
+    // Verify error is displayed
+    expect(screen.getByText('Previous error')).toBeInTheDocument();
+
+    // Close the dialog
+    const cancelBtn = screen.getByRole('button', { name: /cancel/i });
+    await userEvent.click(cancelBtn);
+
+    // Verify reset was called
+    expect(mockReset).toHaveBeenCalled();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

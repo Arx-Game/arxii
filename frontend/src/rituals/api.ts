@@ -54,8 +54,8 @@ export async function getRitual(id: number): Promise<Ritual> {
  * Dispatches a ritual with the supplied character sheet and kwargs.
  *
  * On error, parses the response body for a typed `detail` message from the backend
- * and attaches it to the thrown error as both `.message` and `.detail` properties.
- * Falls back to a generic message if the response is not JSON or has no detail field.
+ * and throws it as an Error.message. Falls back to a generic message if the response
+ * is not JSON or has no detail field.
  */
 export async function performRitual(body: PerformRitualRequest): Promise<PerformRitualResponse> {
   const res = await apiFetch(`${RITUALS_URL}/perform/`, {
@@ -74,9 +74,7 @@ export async function performRitual(body: PerformRitualRequest): Promise<Perform
     } catch {
       // body wasn't JSON; keep generic
     }
-    const error = new Error(detail) as Error & { detail?: string };
-    error.detail = detail;
-    throw error;
+    throw new Error(detail);
   }
 
   return res.json() as Promise<PerformRitualResponse>;

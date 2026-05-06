@@ -35,20 +35,8 @@ export interface RitualPerformDialogProps {
 // Error shape helpers
 // ---------------------------------------------------------------------------
 
-interface DRFDetailError {
-  detail?: string;
-}
-
 function extractErrorMessage(error: unknown): string {
-  if (error !== null && typeof error === 'object') {
-    const maybeDetail = (error as DRFDetailError).detail;
-    if (typeof maybeDetail === 'string' && maybeDetail.length > 0) {
-      return maybeDetail;
-    }
-    if (error instanceof Error && error.message) {
-      return error.message;
-    }
-  }
+  if (error instanceof Error && error.message) return error.message;
   return 'Failed to perform ritual';
 }
 
@@ -95,6 +83,7 @@ export function RitualPerformDialog({
 
   function resetForm() {
     setValues(initialValues());
+    performMutation.reset();
   }
 
   function handleOpenChange(next: boolean) {

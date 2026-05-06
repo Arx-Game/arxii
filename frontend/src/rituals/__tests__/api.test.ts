@@ -41,9 +41,7 @@ describe('Rituals API', () => {
         expect.fail('Should have thrown error');
       } catch (err) {
         expect(err).toBeInstanceOf(Error);
-        const error = err as Error & { detail?: string };
-        expect(error.message).toBe(detailMessage);
-        expect(error.detail).toBe(detailMessage);
+        expect((err as Error).message).toBe(detailMessage);
       }
     });
 
@@ -65,9 +63,7 @@ describe('Rituals API', () => {
       try {
         await performRitual(mockRequest);
       } catch (err) {
-        const error = err as Error & { detail?: string };
-        expect(error.message).toBe(detailMessage);
-        expect(error.detail).toBe(detailMessage);
+        expect((err as Error).message).toBe(detailMessage);
       }
     });
 
@@ -89,9 +85,7 @@ describe('Rituals API', () => {
       try {
         await performRitual(mockRequest);
       } catch (err) {
-        const error = err as Error & { detail?: string };
-        expect(error.message).toBe('Failed to perform ritual');
-        expect(error.detail).toBe('Failed to perform ritual');
+        expect((err as Error).message).toBe('Failed to perform ritual');
       }
     });
 
@@ -112,9 +106,7 @@ describe('Rituals API', () => {
       try {
         await performRitual(mockRequest);
       } catch (err) {
-        const error = err as Error & { detail?: string };
-        expect(error.message).toBe('Failed to perform ritual');
-        expect(error.detail).toBe('Failed to perform ritual');
+        expect((err as Error).message).toBe('Failed to perform ritual');
       }
     });
 
@@ -135,9 +127,7 @@ describe('Rituals API', () => {
       try {
         await performRitual(mockRequest);
       } catch (err) {
-        const error = err as Error & { detail?: string };
-        expect(error.message).toBe('Failed to perform ritual');
-        expect(error.detail).toBe('Failed to perform ritual');
+        expect((err as Error).message).toBe('Failed to perform ritual');
       }
     });
 
