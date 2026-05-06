@@ -1497,22 +1497,22 @@ class SineatingRespondSerializer(serializers.Serializer):
             raise serializers.ValidationError(_ERR_SCENE_NOT_FOUND) from exc
 
     def create(self, validated_data: dict) -> object:
-        """Re-validate offer then call resolve_sineating; surface typed errors as 400."""
+        """Resolve Sineating from the persisted pending offer; surface typed errors as 400.
+
+        Delegates to ``resolve_sineating_from_db`` which looks up the pending
+        offer row, validates co-location, executes resolution, and deletes the row.
+        The serializer no longer re-runs ``request_sineating`` — the pending row
+        is the canonical offer state.
+        """
         from world.magic.exceptions import SoulTetherError  # noqa: PLC0415
-        from world.magic.services.soul_tether import (  # noqa: PLC0415
-            request_sineating,
-            resolve_sineating,
-        )
+        from world.magic.services.soul_tether import resolve_sineating_from_db  # noqa: PLC0415
 
         try:
-            offer = request_sineating(
+            return resolve_sineating_from_db(
                 sinner_sheet=validated_data["sinner_sheet_id"],
                 sineater_sheet=validated_data["sineater_sheet_id"],
-                resonance=validated_data["resonance_id"],
-                max_units=validated_data["max_units"],
-                scene=validated_data["scene_id"],
+                units_accepted=validated_data["units_accepted"],
             )
-            return resolve_sineating(offer, validated_data["units_accepted"])
         except SoulTetherError as exc:
             raise serializers.ValidationError(exc.user_message) from exc
 
@@ -1648,3 +1648,39 @@ class DissolveSerializer(serializers.Serializer):
         except SoulTetherError as exc:
             raise serializers.ValidationError(exc.user_message) from exc
         return relationship
+
+
+class SineatingPendingOfferSerializer(serializers.ModelSerializer):
+    """Sineater-facing view of a pending Sineating offer (inbox UI).
+
+    Read-only. Scoped to the authenticated user's character sheets as Sineater.
+    """
+
+    sinner_persona_name = serializers.SerializerMethodField()
+    sinner_sheet_id = serializers.IntegerField(read_only=True)
+    scene_name = serializers.CharField(source="scene.name", read_only=True)
+    resonance_id = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        from world.magic.models.soul_tether import (  # noqa: PLC0415 — must live in Meta body
+            SineatingPendingOffer,
+        )
+
+        model = SineatingPendingOffer
+        fields = [
+            "id",
+            "sinner_sheet_id",
+            "sinner_persona_name",
+            "scene_id",
+            "scene_name",
+            "resonance_id",
+            "units_offered",
+            "anima_cost_per_unit",
+            "fatigue_cost_per_unit",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_sinner_persona_name(self, obj: object) -> str:
+        """Return the Sinner's IC display name via their primary persona."""
+        return obj.sinner_sheet.display_ic()  # type: ignore[union-attr]

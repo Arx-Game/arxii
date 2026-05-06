@@ -1097,3 +1097,42 @@ class SoulTetherDissolveView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SineatingPendingOfferViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only Sineater-facing inbox of pending Sineating offers (Task 1.6).
+
+    GET /api/magic/soul-tether/sineating/pending/
+    GET /api/magic/soul-tether/sineating/pending/{id}/
+
+    Scoped to the authenticated user as the Sineater — returns only offers where
+    the caller's character sheets appear as the Sineater.
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_serializer_class(self) -> type:
+        from world.magic.serializers import SineatingPendingOfferSerializer  # noqa: PLC0415
+
+        return SineatingPendingOfferSerializer
+
+    def get_queryset(self):
+        from world.magic.models.soul_tether import SineatingPendingOffer  # noqa: PLC0415
+
+        user = self.request.user
+        # Resolve the authenticated user to their character sheets via the
+        # Roster tenure chain (CharacterSheet → RosterEntry → RosterTenure
+        # → PlayerData → AccountDB). Filter to active tenures only
+        # (end_date__isnull=True) to avoid surfacing stale character
+        # associations, and use distinct() to prevent duplicates when a sheet
+        # has multiple past tenures for the same account.
+        return (
+            SineatingPendingOffer.objects.filter(
+                sineater_sheet__roster_entry__tenures__player_data__account=user,
+                sineater_sheet__roster_entry__tenures__end_date__isnull=True,
+            )
+            .select_related("sinner_sheet", "scene", "resonance")
+            .order_by("-created_at")
+            .distinct()
+        )

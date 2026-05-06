@@ -631,7 +631,25 @@ def request_sineating(
     current_hollow = sinner_thread.hollow_current if sinner_thread is not None else 0
     hollow_max = _compute_hollow_max(sinner_thread) if sinner_thread is not None else 0
 
-    # 8. Fire stat increment for "requests made" (no-op if StatDefinition not seeded).
+    # 8. Persist the pending offer so the Sineater inbox UI can poll it (Task 1.6).
+    #    update_or_create replaces any stale row for this (sinner, sineater) pair
+    #    rather than raising an integrity error on repeat requests.
+    from world.magic.models.soul_tether import SineatingPendingOffer  # noqa: PLC0415
+
+    SineatingPendingOffer.objects.update_or_create(
+        sinner_sheet=sinner_sheet,
+        sineater_sheet=sineater_sheet,
+        defaults={
+            "relationship": relationship,
+            "scene": scene,
+            "resonance": resonance,
+            "units_offered": max_units_offered,
+            "anima_cost_per_unit": _ANIMA_COST_PER_UNIT,
+            "fatigue_cost_per_unit": _FATIGUE_COST_PER_UNIT,
+        },
+    )
+
+    # 9. Fire stat increment for "requests made" (no-op if StatDefinition not seeded).
     _increment_stat_safe(sinner_sheet, "sineating.requests_made", 1)
 
     return SineatingOffer(
@@ -812,6 +830,93 @@ def resolve_sineating(
         new_hollow_current=new_hollow_current,
         new_lifetime_helped=new_lifetime_helped,
     )
+
+
+# =============================================================================
+# Public service: resolve_sineating_from_db (Task 1.6)
+# =============================================================================
+
+_MSG_NO_PENDING_OFFER = "No pending Sineating offer found."
+_MSG_OFFER_STALE = "This offer expired because you are no longer in the same scene."
+
+
+def resolve_sineating_from_db(
+    sinner_sheet: CharacterSheet,
+    sineater_sheet: CharacterSheet,
+    units_accepted: int,
+) -> SineatingResult:
+    """Resolve a Sineating offer fetched from the database (Task 1.6).
+
+    Wraps ``resolve_sineating`` with persistent-offer lookup, row locking, and
+    co-location staleness validation. The caller supplies only the pair identity
+    and the Sineater's chosen units; the rest of the offer state is loaded from
+    the ``SineatingPendingOffer`` row written by ``request_sineating``.
+
+    Co-location check: if either character is no longer a SceneParticipation
+    member of the offer's scene, the pending row is deleted (cleanup) and
+    ``SineatingValidationError`` is raised so the inbox UI surfaces the staleness.
+
+    Args:
+        sinner_sheet: The Sinner's CharacterSheet.
+        sineater_sheet: The Sineater's CharacterSheet (the caller / responder).
+        units_accepted: How many units the Sineater accepts (0 = decline).
+
+    Returns:
+        A frozen ``SineatingResult`` dataclass (delegated from ``resolve_sineating``).
+
+    Raises:
+        SineatingValidationError: If no pending offer exists, or the offer is
+            stale (either character has left the scene).
+    """
+    from world.magic.models.soul_tether import SineatingPendingOffer  # noqa: PLC0415
+
+    # Step 1: Lock the pending row. Any failure before the happy-path commit
+    # must also clean up the row. We separate staleness rejection (delete-then-
+    # raise outside atomic) from successful resolution (delete inside atomic).
+    try:
+        pending = SineatingPendingOffer.objects.select_for_update().get(
+            sinner_sheet=sinner_sheet,
+            sineater_sheet=sineater_sheet,
+        )
+    except SineatingPendingOffer.DoesNotExist as exc:
+        raise SineatingValidationError(_MSG_NO_PENDING_OFFER) from exc
+
+    # Step 2: Co-location staleness check. If stale, delete the row FIRST (a
+    # simple DELETE that auto-commits outside the main atomic block), then raise.
+    # We cannot do delete-inside-atomic-then-raise because the exception causes a
+    # rollback that would un-delete the row, leaving a ghost in the inbox.
+    if not _both_in_scene(pending.sinner_sheet, pending.sineater_sheet, pending.scene):
+        pending.delete()
+        raise SineatingValidationError(_MSG_OFFER_STALE)
+
+    # Step 3: Reconstruct a SineatingOffer from the persisted fields.
+    #    We compute hollow state from the current Thread rather than storing it
+    #    in the pending row (Thread.hollow_current may have changed since request).
+    sinner_thread = _get_sinner_tether_thread(
+        pending.sinner_sheet, pending.relationship, pending.resonance
+    )
+    current_hollow = sinner_thread.hollow_current if sinner_thread is not None else 0
+    hollow_max = _compute_hollow_max(sinner_thread) if sinner_thread is not None else 0
+
+    offer = SineatingOffer(
+        sinner_sheet=pending.sinner_sheet,
+        sineater_sheet=pending.sineater_sheet,
+        relationship=pending.relationship,
+        resonance=pending.resonance,
+        max_units_offered=pending.units_offered,
+        anima_cost_per_unit=pending.anima_cost_per_unit,
+        fatigue_cost_per_unit=pending.fatigue_cost_per_unit,
+        current_hollow=current_hollow,
+        hollow_max=hollow_max,
+        sineater_current_strain_stage=0,  # TODO: Phase 6 — look up real Strain stage
+    )
+
+    # Step 4: Execute the resolution and delete the pending row atomically.
+    with transaction.atomic():
+        result = resolve_sineating(offer, units_accepted)
+        pending.delete()
+
+    return result
 
 
 def perform_soul_tether_rescue(

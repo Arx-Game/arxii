@@ -26,6 +26,7 @@ from world.magic.views import (
     RitualPerformView,
     RitualViewSet,
     SceneEntryEndorsementViewSet,
+    SineatingPendingOfferViewSet,
     SineatingRequestView,
     SineatingRespondView,
     SoulTetherAcceptView,
@@ -138,6 +139,17 @@ urlpatterns = [
         "soul-tether/<int:relationship_id>/",
         SoulTetherDetailView.as_view(),
         name="soul-tether-detail",
+    ),
+    # Task 1.6 — Sineater inbox: pending Sineating offers
+    path(
+        "soul-tether/sineating/pending/",
+        SineatingPendingOfferViewSet.as_view({"get": "list"}),
+        name="soul-tether-sineating-pending-list",
+    ),
+    path(
+        "soul-tether/sineating/pending/<int:pk>/",
+        SineatingPendingOfferViewSet.as_view({"get": "retrieve"}),
+        name="soul-tether-sineating-pending-detail",
     ),
     *router.urls,
 ]

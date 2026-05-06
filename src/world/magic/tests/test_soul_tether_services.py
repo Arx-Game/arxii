@@ -921,6 +921,8 @@ class PerSceneCapTests(TestCase):
 
     def test_request_sineating_clamps_max_units_to_cap(self) -> None:
         """Offering more units than the cap returns offer with max_units_offered == cap."""
+        from world.scenes.factories import SceneFactory
+
         sinner, sineater = _make_eligible_pair(track=self.track)
         _make_active_relationship(sinner, sineater)
         accept_soul_tether(
@@ -934,7 +936,9 @@ class PerSceneCapTests(TestCase):
         # Seed CharacterResonance for the Sinner so the resonance gate passes.
         CharacterResonanceFactory(character_sheet=sinner, resonance=self.resonance)
 
-        # Patch scene check so the test focuses on cap clamping.
+        # Use a real Scene so the pending offer FK can be saved (Task 1.6).
+        # Patch _both_in_scene so the test focuses on cap clamping, not co-location.
+        scene = SceneFactory()
         with patch(
             "world.magic.services.soul_tether._both_in_scene",
             return_value=True,
@@ -944,7 +948,7 @@ class PerSceneCapTests(TestCase):
                 sineater_sheet=sineater,
                 resonance=self.resonance,
                 max_units=9999,  # far above any cap
-                scene=object(),
+                scene=scene,
             )
 
         # Level-0 thread → cap = 5; max_units_offered should be clamped.

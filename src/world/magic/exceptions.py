@@ -168,6 +168,8 @@ class SineatingValidationError(SoulTetherError):
             "Both characters must be in the same scene to perform Sineating.",
             "Resonance specified is not one the Sinner accrues.",
             "Per-scene Sineating cap reached for this bond.",
+            "No pending Sineating offer found.",
+            "This offer expired because you are no longer in the same scene.",
         },
     )
 
