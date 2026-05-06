@@ -407,4 +407,344 @@ describe('Field Components', () => {
       expect(screen.getByRole('textbox')).toBeDisabled();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Domain field components
+  // ---------------------------------------------------------------------------
+
+  describe('CharacterSearchField', () => {
+    const field: RitualField = {
+      name: 'target',
+      label: 'Target Character',
+      type: 'character_search',
+    };
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('renders label and search input', () => {
+      const Wrapper = createWrapper();
+      render(
+        <Wrapper>
+          <CharacterSearchField field={field} value={null} onChange={vi.fn()} />
+        </Wrapper>
+      );
+      expect(screen.getByText('Target Character')).toBeInTheDocument();
+      expect(screen.getByRole('textbox')).toBeInTheDocument();
+    });
+
+    it('renders help text if provided', () => {
+      const fieldWithHelp: RitualField = { ...field, help: 'Pick a character' };
+      const Wrapper = createWrapper();
+      render(
+        <Wrapper>
+          <CharacterSearchField field={fieldWithHelp} value={null} onChange={vi.fn()} />
+        </Wrapper>
+      );
+      expect(screen.getByText('Pick a character')).toBeInTheDocument();
+    });
+
+    it('shows search results after typing and calls onChange with persona id', async () => {
+      vi.mocked(searchPersonas).mockResolvedValue([
+        { id: 10, name: 'Aria Voss' },
+        { id: 11, name: 'Kael Dorne' },
+      ]);
+      const onChange = vi.fn();
+      const Wrapper = createWrapper();
+
+      render(
+        <Wrapper>
+          <CharacterSearchField field={field} value={null} onChange={onChange} />
+        </Wrapper>
+      );
+
+      const input = screen.getByRole('textbox');
+      await userEvent.type(input, 'Aria');
+
+      await waitFor(() => {
+        expect(screen.getByText('Aria Voss')).toBeInTheDocument();
+      });
+
+      await userEvent.click(screen.getByText('Aria Voss'));
+      expect(onChange).toHaveBeenCalledWith(10);
+    });
+
+    it('disables input when disabled prop is true', () => {
+      const Wrapper = createWrapper();
+      render(
+        <Wrapper>
+          <CharacterSearchField field={field} value={null} onChange={vi.fn()} disabled />
+        </Wrapper>
+      );
+      expect(screen.getByRole('textbox')).toBeDisabled();
+    });
+  });
+
+  describe('ScenePickerField', () => {
+    const field: RitualField = { name: 'scene', label: 'Active Scene', type: 'scene_picker' };
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('renders label', () => {
+      vi.mocked(fetchScenes).mockResolvedValue({ results: [] });
+      const Wrapper = createWrapper();
+      render(
+        <Wrapper>
+          <ScenePickerField field={field} value={null} onChange={vi.fn()} />
+        </Wrapper>
+      );
+      expect(screen.getByText('Active Scene')).toBeInTheDocument();
+    });
+
+    it('renders help text if provided', () => {
+      vi.mocked(fetchScenes).mockResolvedValue({ results: [] });
+      const fieldWithHelp: RitualField = { ...field, help: 'Choose your scene' };
+      const Wrapper = createWrapper();
+      render(
+        <Wrapper>
+          <ScenePickerField field={fieldWithHelp} value={null} onChange={vi.fn()} />
+        </Wrapper>
+      );
+      expect(screen.getByText('Choose your scene')).toBeInTheDocument();
+    });
+
+    it('fetches active scenes from API and shows selected scene label', async () => {
+      vi.mocked(fetchScenes).mockResolvedValue({
+        results: [
+          { id: 5, name: 'The Market', description: '', date_started: '', participants: [] },
+          { id: 6, name: 'The Docks', description: '', date_started: '', participants: [] },
+        ],
+      });
+      const onChange = vi.fn();
+      const Wrapper = createWrapper();
+
+      render(
+        <Wrapper>
+          {/* value=5 pre-selects "The Market" — label should appear in trigger */}
+          <ScenePickerField field={field} value={5} onChange={onChange} />
+        </Wrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('combobox')).toBeInTheDocument();
+      });
+
+      // Verify the API was called with the active status filter
+      expect(fetchScenes).toHaveBeenCalledWith('status=active');
+
+      // The selected scene name should appear in the trigger
+      await waitFor(() => {
+        expect(screen.getByText('The Market')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('ResonancePickerField', () => {
+    const field: RitualField = { name: 'resonance', label: 'Resonance', type: 'resonance_picker' };
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('renders label', () => {
+      vi.mocked(apiFetch).mockResolvedValue({
+        ok: true,
+        json: async () => [],
+      } as Response);
+      const Wrapper = createWrapper();
+      render(
+        <Wrapper>
+          <ResonancePickerField field={field} value={null} onChange={vi.fn()} />
+        </Wrapper>
+      );
+      expect(screen.getByText('Resonance')).toBeInTheDocument();
+    });
+
+    it('renders help text if provided', () => {
+      vi.mocked(apiFetch).mockResolvedValue({
+        ok: true,
+        json: async () => [],
+      } as Response);
+      const fieldWithHelp: RitualField = { ...field, help: 'Select your resonance' };
+      const Wrapper = createWrapper();
+      render(
+        <Wrapper>
+          <ResonancePickerField field={fieldWithHelp} value={null} onChange={vi.fn()} />
+        </Wrapper>
+      );
+      expect(screen.getByText('Select your resonance')).toBeInTheDocument();
+    });
+
+    it('fetches resonances from API and shows selected resonance label', async () => {
+      vi.mocked(apiFetch).mockResolvedValue({
+        ok: true,
+        json: async () => [
+          {
+            id: 20,
+            character_sheet: 1,
+            resonance: 3,
+            resonance_name: 'Fire',
+            resonance_detail: {},
+            claimed_at: '',
+          },
+          {
+            id: 21,
+            character_sheet: 1,
+            resonance: 4,
+            resonance_name: 'Shadow',
+            resonance_detail: {},
+            claimed_at: '',
+          },
+        ],
+      } as Response);
+      const onChange = vi.fn();
+      const Wrapper = createWrapper();
+
+      render(
+        <Wrapper>
+          {/* value=20 pre-selects "Fire" — label should appear in trigger */}
+          <ResonancePickerField field={field} value={20} onChange={onChange} />
+        </Wrapper>
+      );
+
+      // Verify the API was called with the correct endpoint
+      await waitFor(() => {
+        expect(apiFetch).toHaveBeenCalledWith('/api/magic/character-resonances/');
+      });
+
+      // The selected resonance name should appear in the trigger
+      await waitFor(() => {
+        expect(screen.getByText('Fire')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('RelationshipCapstonePickerField', () => {
+    const field: RitualField = {
+      name: 'capstone_id',
+      label: 'Relationship Capstone',
+      type: 'relationship_capstone_picker',
+    };
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it('renders label', () => {
+      const Wrapper = createWrapper();
+      render(
+        <Wrapper>
+          <RelationshipCapstonePickerField field={field} value={null} onChange={vi.fn()} />
+        </Wrapper>
+      );
+      expect(screen.getByText('Relationship Capstone')).toBeInTheDocument();
+    });
+
+    it('renders help text if provided', () => {
+      const fieldWithHelp: RitualField = { ...field, help: 'Pick a capstone' };
+      const Wrapper = createWrapper();
+      render(
+        <Wrapper>
+          <RelationshipCapstonePickerField field={fieldWithHelp} value={null} onChange={vi.fn()} />
+        </Wrapper>
+      );
+      expect(screen.getByText('Pick a capstone')).toBeInTheDocument();
+    });
+
+    it('shows placeholder when sineater_sheet_id is not set', () => {
+      const Wrapper = createWrapper();
+      render(
+        <Wrapper>
+          <RelationshipCapstonePickerField field={field} value={null} onChange={vi.fn()} />
+        </Wrapper>
+      );
+      expect(screen.getByText('Select a Sineater first')).toBeInTheDocument();
+    });
+
+    it('disables dropdown when sineater_sheet_id is not set', () => {
+      const Wrapper = createWrapper();
+      render(
+        <Wrapper>
+          <RelationshipCapstonePickerField field={field} value={null} onChange={vi.fn()} />
+        </Wrapper>
+      );
+      expect(screen.getByRole('combobox')).toBeDisabled();
+    });
+
+    it('fetches capstones when sineater_sheet_id is provided and shows selected label', async () => {
+      vi.mocked(apiFetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              id: 30,
+              author: 1,
+              author_name: 'Aria',
+              title: 'The Binding Oath',
+              writeup: '...',
+              track: 5,
+              track_name: 'Bond',
+              points: 3,
+              visibility: 'private',
+              linked_scene: null,
+              created_at: '',
+            },
+          ],
+        }),
+      } as Response);
+
+      const onChange = vi.fn();
+      const Wrapper = createWrapper();
+
+      render(
+        <Wrapper>
+          {/* value=30 pre-selects "The Binding Oath" — label appears in trigger after load */}
+          <RelationshipCapstonePickerField
+            field={field}
+            value={30}
+            onChange={onChange}
+            formValues={{ sineater_sheet_id: 42 }}
+          />
+        </Wrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('combobox')).not.toBeDisabled();
+      });
+
+      // The selected capstone title should appear in the trigger
+      await waitFor(() => {
+        expect(screen.getByText('The Binding Oath')).toBeInTheDocument();
+      });
+    });
+
+    it('passes other_character_sheet_id as query param when sineater_sheet_id is set', async () => {
+      vi.mocked(apiFetch).mockResolvedValue({
+        ok: true,
+        json: async () => ({ results: [] }),
+      } as Response);
+
+      const Wrapper = createWrapper();
+
+      render(
+        <Wrapper>
+          <RelationshipCapstonePickerField
+            field={field}
+            value={null}
+            onChange={vi.fn()}
+            formValues={{ sineater_sheet_id: 99 }}
+          />
+        </Wrapper>
+      );
+
+      await waitFor(() => {
+        expect(apiFetch).toHaveBeenCalledWith(
+          '/api/relationships/relationship-capstones/?other_character_sheet_id=99'
+        );
+      });
+    });
+  });
 });

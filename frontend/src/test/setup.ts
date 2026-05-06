@@ -12,6 +12,19 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   };
 }
 
+// Polyfill hasPointerCapture / setPointerCapture / releasePointerCapture — not available
+// in jsdom but required by Radix UI Select pointer-event handling (select.tsx:323).
+// Without this, userEvent.click on a Radix Select trigger throws in tests.
+if (!window.HTMLElement.prototype.hasPointerCapture) {
+  window.HTMLElement.prototype.hasPointerCapture = () => false;
+}
+if (!window.HTMLElement.prototype.setPointerCapture) {
+  window.HTMLElement.prototype.setPointerCapture = () => {};
+}
+if (!window.HTMLElement.prototype.releasePointerCapture) {
+  window.HTMLElement.prototype.releasePointerCapture = () => {};
+}
+
 // Mock framer-motion to disable animations in tests
 vi.mock('framer-motion', async () => {
   const actual = await vi.importActual('framer-motion');
