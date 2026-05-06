@@ -116,15 +116,16 @@ class EventViewSet(ModelViewSet):
     def _active_persona_ids(self) -> list[int]:
         """PRIMARY persona IDs for the requesting user's active characters.
 
-        Reads ``user.cached_active_persona_ids`` — a cached_property on the
-        Account typeclass. Evennia's identity map keeps the same Account
-        instance in memory across requests, so this list is computed once
-        per account per process and reused across requests.
+        Reads ``user.cached_primary_persona_ids`` — a cached_property on
+        the Account typeclass. Evennia's identity map keeps the same
+        Account instance in memory across requests, so this list is
+        computed once per account per process and reused across requests.
+        Invalidation is wired via ``RosterTenure.related_cache_fields``.
         """
         user = self.request.user
         if not user.is_authenticated:
             return []
-        return user.cached_active_persona_ids
+        return user.cached_primary_persona_ids
 
     def _apply_visibility_filter(self, qs: QuerySet[Event]) -> QuerySet[Event]:
         """Filter queryset to only events visible to the requesting user."""

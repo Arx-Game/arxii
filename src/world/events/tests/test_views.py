@@ -386,3 +386,56 @@ class EventDetailQueryCountTestCase(APITestCase):
             response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["is_gm"])
+
+
+class AccountPersonaCacheInvalidationTestCase(APITestCase):
+    """Account.cached_primary_persona_ids invalidates on RosterTenure save.
+
+    The cached_property lives on the SharedMemoryModel-cached Account
+    instance, which persists across requests in the same process. Without
+    invalidation, a new tenure approval (or an end-date mutation) would
+    leave the cache stale and the player wouldn't see their new character
+    in event visibility filters until the process restarts.
+
+    ``RosterTenure.related_cache_fields`` chains to ``"player_data.account"``
+    so any tenure save fires ``Account.clear_cached_properties()``.
+    """
+
+    def test_new_tenure_invalidates_persona_cache(self) -> None:
+        account = AccountFactory()
+        # First read: empty (no tenures yet). This populates the cache.
+        self.assertEqual(account.cached_primary_persona_ids, [])
+
+        # CharacterSheetFactory auto-creates a PRIMARY persona via post_generation.
+        sheet = CharacterSheetFactory()
+        RosterTenureFactory(
+            player_data__account=account,
+            roster_entry__character_sheet=sheet,
+        )
+
+        # Cache should have been invalidated by the tenure save; second read
+        # reflects the new persona without an explicit refresh.
+        self.assertEqual(
+            account.cached_primary_persona_ids,
+            [sheet.primary_persona.id],
+        )
+
+    def test_tenure_end_date_set_invalidates_persona_cache(self) -> None:
+        """Setting end_date on a tenure clears the cache (player loses access)."""
+        from django.utils import timezone
+
+        account = AccountFactory()
+        sheet = CharacterSheetFactory()
+        tenure = RosterTenureFactory(
+            player_data__account=account,
+            roster_entry__character_sheet=sheet,
+        )
+        # Cache populates with the persona id while the tenure is active.
+        self.assertEqual(len(account.cached_primary_persona_ids), 1)
+
+        # End the tenure; saving fires the related-cache cascade.
+        tenure.end_date = timezone.now()
+        tenure.save()
+
+        # Cache invalidated; recompute reflects the now-ended tenure.
+        self.assertEqual(account.cached_primary_persona_ids, [])

@@ -116,19 +116,25 @@ class Account(DefaultAccount):
         return CharacterList(self)
 
     @cached_property
-    def cached_active_persona_ids(self) -> list[int]:
-        """PRIMARY persona IDs for this account's currently-played characters.
+    def cached_primary_persona_ids(self) -> list[int]:
+        """IDs of PRIMARY personas this account is currently playing.
 
         Cached on the AccountDB instance — Evennia's identity map shares
         the same Account object across requests in a process, so this list
         survives the request boundary. Used by visibility filters and
         serializer contexts that need the caller's persona set.
 
-        Stale only if the player adds/removes a PRIMARY persona; resets on
-        process restart. To invalidate explicitly:
-        ``del account.cached_active_persona_ids``.
+        Invalidation: any RosterTenure save (create, ``end_date`` mutation,
+        any other change) clears this cache automatically via
+        ``RosterTenure.related_cache_fields``. The PRIMARY-persona invariant
+        is one-per-sheet for life, so persona-type changes are not a normal
+        churn surface; if a future code path mutates ``persona_type`` on a
+        sheet that already has an active tenure, that path needs to clear
+        this cache explicitly via ``account.clear_cached_properties()``.
         """
-        from world.scenes.constants import PersonaType
+        from world.scenes.constants import (
+            PersonaType,
+        )
         from world.scenes.models import Persona
 
         return list(
@@ -136,8 +142,23 @@ class Account(DefaultAccount):
                 character_sheet__roster_entry__tenures__player_data__account=self,
                 character_sheet__roster_entry__tenures__end_date__isnull=True,
                 persona_type=PersonaType.PRIMARY,
-            ).values_list("id", flat=True)
+            )
+            .values_list("id", flat=True)
+            .distinct()
         )
+
+    def clear_cached_properties(self) -> None:
+        """Drop our ``@cached_property`` entries from the instance ``__dict__``.
+
+        Called by ``RelatedCacheClearingMixin.clear_related_caches`` on
+        related models (e.g. ``RosterTenure``) so account-level caches stay
+        in sync with persona/tenure mutations. The mixin's default fallback
+        only handles ``functools.cached_property`` — these properties use
+        Django's ``cached_property``, so we override to clear them
+        explicitly.
+        """
+        for prop in ("cached_primary_persona_ids", "characters"):
+            self.__dict__.pop(prop, None)
 
     def get_available_characters(self):
         """Returns characters this player can currently control."""
