@@ -7124,6 +7124,52 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/relationships/relationship-capstones/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet exposing the caller's RelationshipCapstone rows.
+     *
+     *     Used by the frontend to populate the Soul Tether ritual perform form's
+     *     capstone picker. The ``?other_character_sheet_id=`` filter narrows to
+     *     capstones whose parent relationship involves a specific target character.
+     */
+    get: operations['relationships_relationship_capstones_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationship-capstones/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet exposing the caller's RelationshipCapstone rows.
+     *
+     *     Used by the frontend to populate the Soul Tether ritual perform form's
+     *     capstone picker. The ``?other_character_sheet_id=`` filter narrows to
+     *     capstones whose parent relationship involves a specific target character.
+     */
+    get: operations['relationships_relationship_capstones_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/relationships/relationships/': {
     parameters: {
       query?: never;
@@ -12977,6 +13023,21 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['PlayerTrust'][];
     };
+    PaginatedRelationshipCapstoneList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['RelationshipCapstone'][];
+    };
     PaginatedRitualList: {
       /** @example 123 */
       count?: number;
@@ -14541,6 +14602,46 @@ export interface components {
      * @enum {string}
      */
     ReferencedMilestoneTypeEnum: 'story_resolved' | 'chapter_reached' | 'episode_reached';
+    /** @description Serializer for relationship capstone events. */
+    RelationshipCapstone: {
+      readonly id: number;
+      /** @description The character who recorded this capstone */
+      readonly author: number;
+      readonly author_name: string;
+      /** @description Title of the monumental moment */
+      readonly title: string;
+      /** @description Narrative description of the capstone event */
+      readonly writeup: string;
+      /** @description The track that gains points and capacity */
+      readonly track: number;
+      readonly track_name: string;
+      /** @description Points added to both capacity and developed_points */
+      readonly points: number;
+      /**
+       * @description Who can see this capstone
+       *
+       *     * `private` - Private
+       *     * `shared` - Shared
+       *     * `gossip` - Gossip
+       *     * `public` - Public
+       */
+      readonly visibility: components['schemas']['RelationshipCapstoneVisibilityEnum'];
+      /** @description Optional scene this capstone is based on */
+      readonly linked_scene: number | null;
+      /**
+       * Format: date-time
+       * @description When this capstone was recorded
+       */
+      readonly created_at: string;
+    };
+    /**
+     * @description * `private` - Private
+     *     * `shared` - Shared
+     *     * `gossip` - Gossip
+     *     * `public` - Public
+     * @enum {string}
+     */
+    RelationshipCapstoneVisibilityEnum: 'private' | 'shared' | 'gossip' | 'public';
     /** @description Serializer for RelationshipCondition lookup table. */
     RelationshipCondition: {
       readonly id: number;
@@ -26398,6 +26499,49 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['HybridRelationshipType'];
+        };
+      };
+    };
+  };
+  relationships_relationship_capstones_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRelationshipCapstoneList'];
+        };
+      };
+    };
+  };
+  relationships_relationship_capstones_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RelationshipCapstone'];
         };
       };
     };
