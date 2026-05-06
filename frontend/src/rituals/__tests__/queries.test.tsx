@@ -5,7 +5,7 @@
  */
 
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { useRituals, useRitual, usePerformRitual, ritualKeys } from '../queries';
@@ -81,17 +81,24 @@ describe('Rituals Query Hooks', () => {
 
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      const { result } = renderHook(() => useRituals(), {
-        wrapper: createWrapper(),
-      });
-
-      await waitFor(
-        () => {
-          return !result.current.isLoading || result.current.error !== null;
-        },
-        { timeout: 2000 }
+      // Use a custom hook that disables throwOnError to test the error state
+      const { result } = renderHook(
+        () =>
+          useQuery({
+            queryKey: ritualKeys.list(),
+            queryFn: () => api.getRituals(),
+            retry: false,
+          }),
+        {
+          wrapper: createWrapper(),
+        }
       );
 
+      await waitFor(() => {
+        expect(result.current.isError).toBe(true);
+      });
+
+      expect(result.current.error).not.toBeNull();
       expect(api.getRituals).toHaveBeenCalledTimes(1);
 
       consoleSpy.mockRestore();
