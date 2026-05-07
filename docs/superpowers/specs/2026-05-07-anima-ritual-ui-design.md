@@ -122,7 +122,7 @@ snapshot_stat: FK Trait, nullable
 snapshot_skill: FK Trait, nullable
 snapshot_specialization: FK Specialization, nullable
 snapshot_resonance: FK Resonance, nullable
-snapshot_check_type: CharField (matches CheckType choices), blank
+snapshot_check_type: CharField with choices=CheckType.choices, blank
 snapshot_target_difficulty: PositiveSmallIntegerField, nullable
 ```
 
