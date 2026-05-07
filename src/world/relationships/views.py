@@ -7,10 +7,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from world.mechanics.models import ModifierTarget
+from world.relationships.filters import RelationshipCapstoneFilter
 from world.relationships.models import (
     CharacterRelationship,
     HybridRelationshipType,
     HybridRequirement,
+    RelationshipCapstone,
     RelationshipCondition,
     RelationshipTier,
     RelationshipTrack,
@@ -21,6 +23,7 @@ from world.relationships.serializers import (
     CharacterRelationshipListSerializer,
     CharacterRelationshipSerializer,
     HybridRelationshipTypeSerializer,
+    RelationshipCapstoneSerializer,
     RelationshipConditionSerializer,
     RelationshipTrackSerializer,
 )
@@ -77,7 +80,7 @@ class CharacterRelationshipViewSet(ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["source", "target", "is_active", "is_pending"]
+    filterset_fields = ["source", "target", "is_active", "is_pending", "is_soul_tether"]
 
     def get_queryset(self):  # type: ignore[override]
         """Return relationships with related data prefetched."""
@@ -109,3 +112,32 @@ class CharacterRelationshipViewSet(ReadOnlyModelViewSet):
         if self.action == "list":
             return CharacterRelationshipListSerializer
         return CharacterRelationshipSerializer
+
+
+class RelationshipCapstoneViewSet(ReadOnlyModelViewSet):
+    """Read-only ViewSet exposing the caller's RelationshipCapstone rows.
+
+    Used by the frontend to populate the Soul Tether ritual perform form's
+    capstone picker. The ``?other_character_sheet_id=`` filter narrows to
+    capstones whose parent relationship involves a specific target character.
+    """
+
+    serializer_class = RelationshipCapstoneSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = PageNumberPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = RelationshipCapstoneFilter
+
+    def get_queryset(self) -> RelationshipCapstone.objects.__class__:  # type: ignore[override]
+        """Return capstones authored by the caller's character sheets, newest first."""
+        user = self.request.user
+        return (
+            RelationshipCapstone.objects.filter(author__character__db_account=user)
+            .select_related(
+                "author",
+                "author__character",
+                "track",
+                "relationship",
+            )
+            .order_by("-created_at")
+        )

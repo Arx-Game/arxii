@@ -817,7 +817,11 @@ class ThreadSerializer(serializers.ModelSerializer):
 
 
 class RitualSerializer(serializers.ModelSerializer):
-    """Serializer for Ritual records (Spec A §4.5)."""
+    """Serializer for Ritual (read-only list/detail).
+
+    Exposes name, description, narrative_prose, dispatch metadata, and the
+    `input_schema` blob the frontend uses to render its perform form.
+    """
 
     class Meta:
         model = Ritual
@@ -825,11 +829,11 @@ class RitualSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "description",
+            "narrative_prose",
             "hedge_accessible",
             "glimpse_eligible",
-            "narrative_prose",
             "execution_kind",
-            "site_property",
+            "input_schema",
         ]
         read_only_fields = fields
 
@@ -1451,17 +1455,13 @@ class SineatingOfferSerializer(serializers.Serializer):
 class SineatingRespondSerializer(serializers.Serializer):
     """Write serializer for the Sineater's response to a Sineating request (Spec B §7).
 
-    The Sineater supplies the SineatingOffer fields inline (Option B synchronous path).
+    The pending offer row is the canonical source of truth for scene, resonance,
+    and units cap — the caller only needs to identify the pair and supply their choice.
     ``units_accepted=0`` means decline.
     """
 
-    # Offer fields — re-validated server-side to prevent tampering.
     sinner_sheet_id = serializers.IntegerField()
     sineater_sheet_id = serializers.IntegerField()
-    resonance_id = serializers.IntegerField()
-    max_units = serializers.IntegerField(min_value=1)
-    scene_id = serializers.IntegerField()
-    # Response
     units_accepted = serializers.IntegerField(min_value=0)
 
     def validate_sineater_sheet_id(self, value: int) -> CharacterSheet:
@@ -1476,39 +1476,23 @@ class SineatingRespondSerializer(serializers.Serializer):
         except CharacterSheet.DoesNotExist as exc:
             raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
 
-    def validate_resonance_id(self, value: int) -> "Resonance":
-        """Resolve resonance by PK."""
-        try:
-            return Resonance.objects.get(pk=value)
-        except Resonance.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
-
-    def validate_scene_id(self, value: int) -> object:
-        """Resolve scene by PK."""
-        from world.scenes.models import Scene  # noqa: PLC0415
-
-        try:
-            return Scene.objects.get(pk=value)
-        except Scene.DoesNotExist as exc:
-            raise serializers.ValidationError(_ERR_SCENE_NOT_FOUND) from exc
-
     def create(self, validated_data: dict) -> object:
-        """Re-validate offer then call resolve_sineating; surface typed errors as 400."""
+        """Resolve Sineating from the persisted pending offer; surface typed errors as 400.
+
+        Delegates to ``resolve_sineating_from_db`` which looks up the pending
+        offer row, validates co-location, executes resolution, and deletes the row.
+        The serializer no longer re-runs ``request_sineating`` — the pending row
+        is the canonical offer state.
+        """
         from world.magic.exceptions import SoulTetherError  # noqa: PLC0415
-        from world.magic.services.soul_tether import (  # noqa: PLC0415
-            request_sineating,
-            resolve_sineating,
-        )
+        from world.magic.services.soul_tether import resolve_sineating_from_db  # noqa: PLC0415
 
         try:
-            offer = request_sineating(
+            return resolve_sineating_from_db(
                 sinner_sheet=validated_data["sinner_sheet_id"],
                 sineater_sheet=validated_data["sineater_sheet_id"],
-                resonance=validated_data["resonance_id"],
-                max_units=validated_data["max_units"],
-                scene=validated_data["scene_id"],
+                units_accepted=validated_data["units_accepted"],
             )
-            return resolve_sineating(offer, validated_data["units_accepted"])
         except SoulTetherError as exc:
             raise serializers.ValidationError(exc.user_message) from exc
 
@@ -1644,3 +1628,133 @@ class DissolveSerializer(serializers.Serializer):
         except SoulTetherError as exc:
             raise serializers.ValidationError(exc.user_message) from exc
         return relationship
+
+
+class SineatingPendingOfferSerializer(serializers.ModelSerializer):
+    """Sineater-facing view of a pending Sineating offer (inbox UI).
+
+    Read-only. Scoped to the authenticated user's character sheets as Sineater.
+    """
+
+    sinner_persona_name = serializers.SerializerMethodField()
+    sinner_sheet_id = serializers.IntegerField(read_only=True)
+    scene_name = serializers.CharField(source="scene.name", read_only=True)
+    resonance_id = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        from world.magic.models.soul_tether import (  # noqa: PLC0415 — must live in Meta body
+            SineatingPendingOffer,
+        )
+
+        model = SineatingPendingOffer
+        fields = [
+            "id",
+            "sinner_sheet_id",
+            "sinner_persona_name",
+            "scene_id",
+            "scene_name",
+            "resonance_id",
+            "units_offered",
+            "anima_cost_per_unit",
+            "fatigue_cost_per_unit",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_sinner_persona_name(self, obj: object) -> str:
+        """Return the Sinner's IC display name via their primary persona."""
+        return obj.sinner_sheet.display_ic()  # type: ignore[union-attr]
+
+
+class PendingStageAdvanceOfferSerializer(serializers.ModelSerializer):
+    """Sineater-facing view of a pending stage-advance bonus offer (Task 1.7).
+
+    Read-only. Scoped to the authenticated user's character sheets as Sineater.
+    The ``expires_at`` field lets the UI show a countdown before the offer lapses.
+    """
+
+    sinner_persona_name = serializers.SerializerMethodField()
+    sinner_sheet_id = serializers.IntegerField(read_only=True)
+    scene_id = serializers.IntegerField(read_only=True)
+    scene_name = serializers.CharField(source="scene.name", read_only=True)
+    resonance_id = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        from world.magic.models.soul_tether import (  # noqa: PLC0415 — must live in Meta body
+            PendingStageAdvanceOffer,
+        )
+
+        model = PendingStageAdvanceOffer
+        fields = [
+            "id",
+            "sinner_sheet_id",
+            "sinner_persona_name",
+            "scene_id",
+            "scene_name",
+            "resonance_id",
+            "sinner_corruption_stage",
+            "commit_units_max",
+            "strain_cost_per_unit",
+            "created_at",
+            "expires_at",
+        ]
+        read_only_fields = fields
+
+    def get_sinner_persona_name(self, obj: object) -> str:
+        """Return the Sinner's IC display name via their primary persona."""
+        return obj.sinner_sheet.display_ic()  # type: ignore[union-attr]
+
+
+class StageAdvanceRespondSerializer(serializers.Serializer):
+    """Write serializer for the Sineater's response to a stage-advance prompt (Spec B §8.1).
+
+    The pending offer row is the canonical source of truth for resonance, max units,
+    and expiry — the caller only needs to identify the pair and supply their choice.
+    ``units_committed=0`` means decline.
+    """
+
+    sinner_sheet_id = serializers.IntegerField()
+    sineater_sheet_id = serializers.IntegerField()
+    units_committed = serializers.IntegerField(min_value=0)
+
+    def validate_sineater_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve + ownership-check: caller must be the Sineater."""
+        request = self.context.get("request")
+        return _resolve_account_sheet(value, request)
+
+    def validate_sinner_sheet_id(self, value: int) -> CharacterSheet:
+        """Resolve sinner sheet."""
+        try:
+            return CharacterSheet.objects.get(pk=value)
+        except CharacterSheet.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_CHARACTER_SHEET_NOT_FOUND) from exc
+
+    def create(self, validated_data: dict) -> object:
+        """Resolve from the persisted pending offer; surface typed errors as 400.
+
+        Delegates to ``resolve_stage_advance_prompt_from_db`` which looks up the pending
+        offer row, validates TTL + co-location, executes resolution, and deletes the row.
+        """
+        from world.magic.exceptions import SoulTetherError  # noqa: PLC0415
+        from world.magic.services.soul_tether import (  # noqa: PLC0415
+            resolve_stage_advance_prompt_from_db,
+        )
+
+        try:
+            return resolve_stage_advance_prompt_from_db(
+                sinner_sheet=validated_data["sinner_sheet_id"],
+                sineater_sheet=validated_data["sineater_sheet_id"],
+                units_committed=validated_data["units_committed"],
+            )
+        except SoulTetherError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+
+class StageAdvanceBonusResultSerializer(serializers.Serializer):
+    """Read serializer for StageAdvanceBonusResult payloads (Task 1.7)."""
+
+    offer_id = serializers.CharField()
+    units_committed = serializers.IntegerField()
+    hollow_drained = serializers.IntegerField()
+    strain_severity_added = serializers.IntegerField()
+    declined = serializers.BooleanField()

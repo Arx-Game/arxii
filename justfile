@@ -95,6 +95,12 @@ fe-typecheck:
 fe-lint *args:
     cd frontend && pnpm lint {{args}}
 
+# Run Vitest unit tests. Pass a file/glob to run a subset.
+#   just fe-test
+#   just fe-test src/rituals/__tests__/fields.test.tsx
+fe-test *args:
+    cd frontend && pnpm test --run {{args}}
+
 # --- Cache / scratch ---------------------------------------------------------
 
 # Delete all Python bytecode caches under src/.

@@ -254,6 +254,8 @@ class CharacterRelationshipListSerializer(serializers.ModelSerializer):
             "target_name",
             "is_active",
             "is_pending",
+            "is_soul_tether",
+            "soul_tether_role",
             "absolute_value",
             "developed_absolute_value",
             "affection",

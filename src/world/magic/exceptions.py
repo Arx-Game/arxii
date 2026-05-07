@@ -168,6 +168,8 @@ class SineatingValidationError(SoulTetherError):
             "Both characters must be in the same scene to perform Sineating.",
             "Resonance specified is not one the Sinner accrues.",
             "Per-scene Sineating cap reached for this bond.",
+            "No pending Sineating offer found.",
+            "This offer expired because you are no longer in the same scene.",
         },
     )
 
@@ -196,5 +198,8 @@ class StageAdvanceBonusError(SoulTetherError):
             "Stage-advance bonus resolution failed.",
             "No pending stage-advance offer found with that ID.",
             "Units committed exceeds the maximum available Hollow.",
+            "No pending stage-advance offer found.",
+            "This stage-advance prompt expired before you could respond.",
+            "This stage-advance prompt expired; you are no longer in the same scene.",
         },
     )

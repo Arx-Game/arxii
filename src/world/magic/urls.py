@@ -20,17 +20,21 @@ from world.magic.views import (
     FacetViewSet,
     GiftViewSet,
     PendingAlterationViewSet,
+    PendingStageAdvanceOfferViewSet,
     PoseEndorsementViewSet,
     ResonanceGrantViewSet,
     RestrictionViewSet,
     RitualPerformView,
+    RitualViewSet,
     SceneEntryEndorsementViewSet,
+    SineatingPendingOfferViewSet,
     SineatingRequestView,
     SineatingRespondView,
     SoulTetherAcceptView,
     SoulTetherDetailView,
     SoulTetherDissolveView,
     SoulTetherRescueView,
+    StageAdvanceRespondView,
     TechniqueStyleViewSet,
     TechniqueViewSet,
     ThreadPullPreviewView,
@@ -70,6 +74,7 @@ router.register(
 
 # Resonance Pivot Spec A §4.5 — Thread / Ritual / Teaching offer surface
 router.register("threads", ThreadViewSet, basename="thread")
+router.register("rituals", RitualViewSet, basename="ritual")
 router.register(
     "teaching-offers",
     ThreadWeavingTeachingOfferViewSet,
@@ -94,7 +99,8 @@ router.register(
 )
 
 urlpatterns = [
-    *router.urls,
+    # Literal paths MUST come before *router.urls so that "rituals/perform/" is
+    # matched before the router's "rituals/<pk>/" pattern treats "perform" as a pk.
     path(
         "thread-pull-preview/",
         ThreadPullPreviewView.as_view(),
@@ -136,4 +142,32 @@ urlpatterns = [
         SoulTetherDetailView.as_view(),
         name="soul-tether-detail",
     ),
+    # Task 1.6 — Sineater inbox: pending Sineating offers
+    path(
+        "soul-tether/sineating/pending/",
+        SineatingPendingOfferViewSet.as_view({"get": "list"}),
+        name="soul-tether-sineating-pending-list",
+    ),
+    path(
+        "soul-tether/sineating/pending/<int:pk>/",
+        SineatingPendingOfferViewSet.as_view({"get": "retrieve"}),
+        name="soul-tether-sineating-pending-detail",
+    ),
+    # Task 1.7 — Sineater inbox: pending stage-advance bonus offers
+    path(
+        "soul-tether/stage-advance/pending/",
+        PendingStageAdvanceOfferViewSet.as_view({"get": "list"}),
+        name="soul-tether-stage-advance-pending-list",
+    ),
+    path(
+        "soul-tether/stage-advance/pending/<int:pk>/",
+        PendingStageAdvanceOfferViewSet.as_view({"get": "retrieve"}),
+        name="soul-tether-stage-advance-pending-detail",
+    ),
+    path(
+        "soul-tether/stage-advance/respond/",
+        StageAdvanceRespondView.as_view(),
+        name="soul-tether-stage-advance-respond",
+    ),
+    *router.urls,
 ]

@@ -61,6 +61,7 @@ from world.magic.models import (
     Resonance,
     ResonanceGrant,
     Restriction,
+    Ritual,
     SceneEntryEndorsement,
     Technique,
     TechniqueStyle,
@@ -88,6 +89,7 @@ from world.magic.serializers import (
     ResonanceGrantSerializer,
     RestrictionSerializer,
     RitualPerformRequestSerializer,
+    RitualSerializer,
     SceneEntryEndorsementSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
@@ -657,6 +659,20 @@ class ThreadPullPreviewView(APIView):
         return Response(response_serializer.data)
 
 
+class RitualViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only ViewSet exposing authored Rituals.
+
+    Used by the frontend to discover available rituals and their `input_schema`
+    for rendering the perform form. The actual dispatch happens through
+    `RitualPerformView` at `POST /api/magic/rituals/perform/`.
+    """
+
+    queryset = Ritual.objects.all().order_by("name")
+    serializer_class = RitualSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+
 class RitualPerformView(APIView):
     """Dispatch a Ritual via PerformRitualAction (Spec A §4.5).
 
@@ -1081,3 +1097,106 @@ class SoulTetherDissolveView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class SineatingPendingOfferViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only Sineater-facing inbox of pending Sineating offers (Task 1.6).
+
+    GET /api/magic/soul-tether/sineating/pending/
+    GET /api/magic/soul-tether/sineating/pending/{id}/
+
+    Scoped to the authenticated user as the Sineater — returns only offers where
+    the caller's character sheets appear as the Sineater.
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_serializer_class(self) -> type:
+        from world.magic.serializers import SineatingPendingOfferSerializer  # noqa: PLC0415
+
+        return SineatingPendingOfferSerializer
+
+    def get_queryset(self):
+        from world.magic.models.soul_tether import SineatingPendingOffer  # noqa: PLC0415
+
+        user = self.request.user
+        # Resolve the authenticated user to their character sheets via the
+        # Roster tenure chain (CharacterSheet → RosterEntry → RosterTenure
+        # → PlayerData → AccountDB). Filter to active tenures only
+        # (end_date__isnull=True) to avoid surfacing stale character
+        # associations, and use distinct() to prevent duplicates when a sheet
+        # has multiple past tenures for the same account.
+        return (
+            SineatingPendingOffer.objects.filter(
+                sineater_sheet__roster_entry__tenures__player_data__account=user,
+                sineater_sheet__roster_entry__tenures__end_date__isnull=True,
+            )
+            .select_related("sinner_sheet", "scene", "resonance")
+            .order_by("-created_at")
+            .distinct()
+        )
+
+
+class PendingStageAdvanceOfferViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only Sineater-facing inbox of pending stage-advance bonus offers (Task 1.7).
+
+    GET /api/magic/soul-tether/stage-advance/pending/
+    GET /api/magic/soul-tether/stage-advance/pending/{id}/
+
+    Scoped to the authenticated user as the Sineater — returns only offers where
+    the caller's character sheets appear as the Sineater. The UI should also
+    filter client-side by ``expires_at`` to hide already-expired rows (the server
+    does not proactively prune; rows are deleted on the next respond attempt).
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_serializer_class(self) -> type:
+        from world.magic.serializers import PendingStageAdvanceOfferSerializer  # noqa: PLC0415
+
+        return PendingStageAdvanceOfferSerializer
+
+    def get_queryset(self):
+        from world.magic.models.soul_tether import PendingStageAdvanceOffer  # noqa: PLC0415
+
+        user = self.request.user
+        return (
+            PendingStageAdvanceOffer.objects.filter(
+                sineater_sheet__roster_entry__tenures__player_data__account=user,
+                sineater_sheet__roster_entry__tenures__end_date__isnull=True,
+            )
+            .select_related("sinner_sheet", "scene", "resonance")
+            .order_by("-created_at")
+            .distinct()
+        )
+
+
+class StageAdvanceRespondView(APIView):
+    """Sineater accepts or declines a stage-advance bonus offer (Spec B §8.1).
+
+    POST /api/magic/soul-tether/stage-advance/respond/
+
+    Looks up the persisted ``PendingStageAdvanceOffer`` row, validates TTL and
+    co-location, then delegates to ``resolve_stage_advance_prompt_from_db``.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """Validate offer + dispatch resolve; return result payload."""
+        from world.magic.serializers import (  # noqa: PLC0415
+            StageAdvanceBonusResultSerializer,
+            StageAdvanceRespondSerializer,
+        )
+
+        serializer = StageAdvanceRespondSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+
+        out = StageAdvanceBonusResultSerializer(result)
+        return Response(out.data, status=status.HTTP_200_OK)

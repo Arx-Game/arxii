@@ -8,6 +8,8 @@ import { SceneInteractionPanel } from '../components/SceneInteractionPanel';
 import { ActionPanel } from '../components/ActionPanel';
 import { PlaceBar } from '../components/PlaceBar';
 import { ConsentPrompt } from '../components/ConsentPrompt';
+import { SineatingInbox } from '@/magic/components/SineatingInbox';
+import { SoulTetherRescuePrompt } from '@/magic/components/SoulTetherRescuePrompt';
 import { CommandInput } from '@/game/components/CommandInput';
 import type { ComposerMode } from '@/game/components/CommandInput';
 import type { ActionAttachmentInfo } from '../actionTypes';
@@ -81,6 +83,8 @@ export function SceneDetailPage() {
       <div className="shrink-0 px-4 pt-4">
         <SceneHeader scene={scene} onRefresh={() => refetch()} />
         {isActive && <ConsentPrompt sceneId={id} />}
+        {isActive && <SineatingInbox />}
+        {isActive && <SoulTetherRescuePrompt />}
         <PlaceBar sceneId={id} />
       </div>
 

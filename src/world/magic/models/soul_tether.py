@@ -6,6 +6,146 @@ from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 
+class SineatingPendingOffer(SharedMemoryModel):
+    """Pending Sineating offer awaiting Sineater response (Task 1.6).
+
+    Persisted so the frontend inbox UI can poll a real endpoint. The row is
+    created by ``request_sineating`` and consumed (then deleted) by
+    ``resolve_sineating_from_db``.
+
+    Co-location is re-validated at accept time — either character may have left
+    the scene since the offer was created. ``resolve_sineating_from_db`` raises
+    ``SineatingValidationError`` and deletes the row when either character is no
+    longer a participant of ``scene``.
+
+    The unique constraint on ``(sinner_sheet, sineater_sheet)`` ensures at most
+    one pending offer per pair. ``request_sineating`` uses ``update_or_create``
+    so a repeat request replaces the stale row rather than raising an integrity
+    error.
+    """
+
+    sinner_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="sineating_offers_sent",
+    )
+    sineater_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="sineating_offers_received",
+    )
+    relationship = models.ForeignKey(
+        "relationships.CharacterRelationship",
+        on_delete=models.CASCADE,
+        related_name="sineating_pending_offers",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.CASCADE,
+        related_name="sineating_pending_offers",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        related_name="sineating_pending_offers",
+    )
+    units_offered = models.PositiveSmallIntegerField()
+    anima_cost_per_unit = models.PositiveSmallIntegerField()
+    fatigue_cost_per_unit = models.PositiveSmallIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sinner_sheet", "sineater_sheet"],
+                name="one_pending_sineating_per_pair",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"SineatingPendingOffer({self.sinner_sheet} → {self.sineater_sheet}, "
+            f"{self.units_offered} units)"
+        )
+
+
+class PendingStageAdvanceOffer(SharedMemoryModel):
+    """Pending stage-advance bonus offer awaiting Sineater response (Task 1.7).
+
+    Persisted alongside the PROMPT_PLAYER dispatch so the rescue-prompt UI can
+    poll a real endpoint. Created by ``soul_tether_stage_advance_prompt`` and
+    consumed (then deleted) by ``resolve_stage_advance_prompt_from_db``.
+
+    The row is only written when ``_find_shared_active_scene`` finds a shared
+    active scene for the pair — guaranteeing ``scene`` is always non-null and
+    that the co-location check at resolve time has a real scene to validate.
+
+    Two staleness conditions:
+    - **TTL**: ``expires_at < now()`` — the stage-advance moment is transient;
+      stale prompts are silently expired.
+    - **Co-location**: If either PC has left the scene between prompt and
+      response, the offer is considered stale.
+
+    The unique constraint on ``(sinner_sheet, sineater_sheet)`` ensures at most
+    one pending offer per pair. ``soul_tether_stage_advance_prompt`` uses
+    ``update_or_create`` so a repeat prompt replaces a stale row.
+    """
+
+    sinner_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="stage_advance_offers_sent",
+    )
+    sineater_sheet = models.ForeignKey(
+        "character_sheets.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="stage_advance_offers_received",
+    )
+    relationship = models.ForeignKey(
+        "relationships.CharacterRelationship",
+        on_delete=models.CASCADE,
+        related_name="pending_stage_advance_offers",
+    )
+    scene = models.ForeignKey(
+        "scenes.Scene",
+        on_delete=models.CASCADE,
+        related_name="pending_stage_advance_offers",
+        help_text="Active scene at prompt time. Row is only written when a shared scene is found.",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        related_name="pending_stage_advance_offers",
+    )
+    sinner_corruption_stage = models.PositiveSmallIntegerField(
+        help_text="The stage the Sinner is currently at when the prompt fires.",
+    )
+    commit_units_max = models.PositiveSmallIntegerField(
+        help_text="Maximum Hollow units the Sineater may commit.",
+    )
+    strain_cost_per_unit = models.PositiveSmallIntegerField(
+        help_text="Strain severity added to the Sineater per committed unit.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(
+        help_text="Prompt expires after this time. Stale rows are deleted on next access.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sinner_sheet", "sineater_sheet"],
+                name="one_pending_stage_advance_per_pair",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"PendingStageAdvanceOffer({self.sinner_sheet} → {self.sineater_sheet}, "
+            f"max={self.commit_units_max} units, expires={self.expires_at})"
+        )
+
+
 class Sineating(SharedMemoryModel):
     """Audit row for a Sineating action (Spec B §7).
 
