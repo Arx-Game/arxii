@@ -83,7 +83,12 @@ from world.magic.models.rituals import (
     RitualComponentRequirement,
 )
 from world.magic.models.room_aura import RoomAuraProfile, RoomResonance
-from world.magic.models.soul_tether import Sineating, SoulTetherRescue
+from world.magic.models.soul_tether import (
+    PendingStageAdvanceOffer,
+    Sineating,
+    SineatingPendingOffer,
+    SoulTetherRescue,
+)
 from world.magic.models.soulfray import MishapPoolTier, SoulfrayConfig
 from world.magic.models.techniques import (
     CharacterTechnique,
@@ -157,6 +162,8 @@ __all__ = [
     "MotifResonance",
     "MotifResonanceAssociation",
     "PendingAlteration",
+    # soul tether (Spec B §14.1, §15.1 — Task 1.7)
+    "PendingStageAdvanceOffer",
     # endorsement (Spec C §2.2)
     "PoseEndorsement",
     # reincarnation
@@ -178,6 +185,7 @@ __all__ = [
     "SceneEntryEndorsement",
     # soul tether (Spec B §14.1, §15.1)
     "Sineating",
+    "SineatingPendingOffer",
     "SoulTetherRescue",
     "SoulfrayConfig",
     "Technique",

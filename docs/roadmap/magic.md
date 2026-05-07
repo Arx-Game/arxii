@@ -820,6 +820,75 @@ no API ships now), Mission-driven cleansing quests, and other
 autonomy-loss systems (berserker, possession, mind-control) which
 share the protagonism-lock aggregator but design independently.
 
+**Soul Tether UI (DONE — branch `soul-tether-ui`):**
+
+**Plan:** `docs/superpowers/plans/2026-05-04-soul-tether-ui-plan.md`
+
+Web-first frontend for the Soul Tether backend (Spec B). Makes the full Sineating loop,
+stage-advance rescue, and bond visibility playable without the `@reply` telnet path.
+
+What was built:
+
+**Generic ritual infrastructure (frontend `src/rituals/`):**
+- `RitualViewSet` (`GET /api/magic/rituals/`) — read-only list of rituals filtered by
+  `ritual_key`. Adds `input_schema` JSONField to `Ritual` model (nullable; holds JSON
+  Schema for structured ritual parameters) with migration 0043.
+- `src/rituals/` module skeleton: `api.ts`, `types.ts`, `queries.ts` (`useRituals`,
+  `usePerformRitual`), field components (`ResonancePickerField`, `PersonaPickerField`,
+  `ScenePickerField`, `TargetCharacterField`, `NumberField`, `BooleanField`,
+  `SelectField`), `RitualForm` orchestrator, `RitualPerformDialog`, `RitualCard`,
+  `RitualsListPage`, and `/rituals` route. First consumer: `accept_soul_tether` (RELATIONSHIP_CAPSTONE
+  capstone action). The infrastructure is generic — future rituals wire in via the
+  same `input_schema` + `RitualForm` pipeline.
+
+**Soul Tether–specific surfaces (frontend `src/magic/`):**
+- `HollowBar` — visual capacity bar showing `hollow_current / hollow_max` for a
+  Sinner's Thread with tooltip breakdown.
+- `SineatingInbox` — Sineater's inbox polling `usePendingSineatingOffers()` with
+  an Accept/Decline action row per offer.
+- `SineatingRequestDialog` — Sinner-side dialog for submitting a Sineating request;
+  calls `useRequestSineating()`.
+- `SoulTetherRescuePrompt` — Sineater prompt for stage-advance offers; polls
+  `usePendingStageAdvanceOffers()`, filters client-side by `expires_at`, renders
+  Confirm/Decline buttons that call `useRespondToStageAdvance()`.
+- `SoulTetherStatusPanel` — read-only bond summary panel (role badge, corruption
+  stage, strain stage, hollow bar) driven by `useSoulTetherDetail()`.
+- `ThreadList` — minimal read-only thread inventory pulled from `useThreads()`.
+- `queries.ts` / `api.ts` / `types.ts` — typed wrappers for all soul-tether REST
+  endpoints (`getSoulTetherDetail`, `getPendingSineatingOffers`,
+  `getPendingStageAdvanceOffers`, mutations for sineating/request, sineating/respond,
+  rescue, stage-advance/respond, dissolve).
+
+**Backend additions (Spec B follow-up, same branch):**
+- `Ritual.input_schema` — JSONField on `Ritual` model; used by the frontend to
+  render ritual-specific parameter forms generically.
+- `RitualViewSet` — `GET /api/magic/rituals/` with `ritual_key` filter.
+- `RelationshipCapstone` list endpoint with `is_ritual_capstone` filter, enabling
+  the rituals page to surface capstone-gated rituals for the character.
+- `SineatingPendingOffer` and `PendingStageAdvanceOffer` — persistence models
+  (SharedMemoryModel) that store server-side prompts so the Sineater's browser can
+  poll and act without needing a live WebSocket connection. Includes TTL staleness
+  checks and co-location (shared scene) guards. Migrations 0044–0047.
+- `is_soul_tether` filter on `CharacterRelationshipViewSet` — lets the
+  Relationships page load only tether bonds for the status panel.
+
+**Integration (Phase 4 mounts):**
+- `RelationshipsSection` (character sheet) embeds `SoulTetherStatusPanel`; calls
+  `useMyTetherBonds()` (filtered `CharacterRelationship` query) to find the
+  caller's soul tether bonds and passes relationship IDs to the panel.
+- `SceneDetailPage` mounts `SineatingInbox` and `SoulTetherRescuePrompt` side-by-side
+  in the scene sidebar, polling on a 30-second interval so offers surface without a
+  page refresh.
+
+**Explicit non-goals (deferred):**
+- Per-resonance Strain UI (SineatingInbox shows anima/fatigue cost; resonance
+  context omitted for now).
+- Full Anima ritual UI (service-layer only; a future ritual card will wire in via
+  the same generic infrastructure).
+- Dissolve UX beyond a minimal action button (no confirmation modal; treat as tertiary).
+- Audit/history display for past Sineating cycles.
+- Thread weaving and Thread pull UI (ThreadList is read-only).
+
 **Key design principles (apply across all scopes):**
 - Anima is a safety margin, not a gate. Magic always works. Deficit costs life force.
 - Risk is always explicit. Character death warnings use those exact words.

@@ -49,7 +49,10 @@ export function CharacterSheetPage() {
         vocation={entry.character.vocation}
         socialRank={entry.character.social_rank}
       />
-      <RelationshipsSection relationships={entry.character.relationships} />
+      <RelationshipsSection
+        relationships={entry.character.relationships}
+        characterSheetId={entry.character.id}
+      />
       <GalleriesSection galleries={entry.character.galleries} />
       {entry.can_apply && <CharacterApplicationForm entryId={entry.id} />}
       {isMyCharacter && (

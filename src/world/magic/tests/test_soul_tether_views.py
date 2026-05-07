@@ -484,7 +484,12 @@ class SineatingRequestViewTests(APITestCase):
 
 
 class SineatingRespondViewTests(APITestCase):
-    """Tests for POST /api/magic/soul-tether/sineating/respond/."""
+    """Tests for POST /api/magic/soul-tether/sineating/respond/.
+
+    Each test that triggers the respond path seeds a fresh SineatingPendingOffer
+    via request_sineating, because resolve_sineating_from_db consumes and
+    deletes the pending row on every call (Task 1.6).
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -519,6 +524,29 @@ class SineatingRespondViewTests(APITestCase):
         SceneParticipationFactory(scene=cls.scene, account=cls.sinner_account)
         SceneParticipationFactory(scene=cls.scene, account=cls.sineater_account)
 
+    def _seed_pending_offer(self) -> None:
+        """Create a SineatingPendingOffer row for the test pair via request_sineating.
+
+        Task 1.6: the respond endpoint now calls resolve_sineating_from_db which
+        requires a pending row in the database. Each test that exercises the
+        respond path must seed this row first.
+        """
+        from unittest.mock import patch
+
+        from world.magic.services.soul_tether import request_sineating
+
+        with patch(
+            "world.magic.services.soul_tether._both_in_scene",
+            return_value=True,
+        ):
+            request_sineating(
+                sinner_sheet=self.sinner_sheet,
+                sineater_sheet=self.sineater_sheet,
+                resonance=self.resonance,
+                max_units=5,
+                scene=self.scene,
+            )
+
     def _post(self, data):
         return self.client.post("/api/magic/soul-tether/sineating/respond/", data, format="json")
 
@@ -526,14 +554,12 @@ class SineatingRespondViewTests(APITestCase):
         return {
             "sinner_sheet_id": self.sinner_sheet.pk,
             "sineater_sheet_id": self.sineater_sheet.pk,
-            "resonance_id": self.resonance.pk,
-            "max_units": 5,
-            "scene_id": self.scene.pk,
             "units_accepted": units_accepted,
         }
 
     def test_accept_returns_200_with_result(self) -> None:
         """POST with units_accepted > 0 returns 200 with result payload."""
+        self._seed_pending_offer()
         self.client.force_authenticate(user=self.sineater_account)
         response = self._post(self._valid_payload(units_accepted=3))
         self.assertEqual(response.status_code, 200, response.content)
@@ -544,18 +570,23 @@ class SineatingRespondViewTests(APITestCase):
 
     def test_decline_units_zero_returns_200_declined(self) -> None:
         """POST with units_accepted == 0 returns 200 with declined=True."""
+        self._seed_pending_offer()
         self.client.force_authenticate(user=self.sineater_account)
         response = self._post(self._valid_payload(units_accepted=0))
         self.assertEqual(response.status_code, 200, response.content)
         self.assertTrue(response.data["declined"])
 
     def test_unauthenticated_returns_403(self) -> None:
-        """Unauthenticated requests are rejected."""
+        """Unauthenticated requests are rejected — no pending row needed."""
         response = self._post(self._valid_payload())
         self.assertIn(response.status_code, (401, 403))
 
     def test_wrong_owner_sineater_returns_400(self) -> None:
-        """sineater_sheet_id not owned by the requesting account returns 400."""
+        """sineater_sheet_id not owned by the requesting account returns 400.
+
+        Auth rejection happens in the serializer validate_sineater_sheet_id step
+        before the DB lookup, so no pending row is needed.
+        """
         self.client.force_authenticate(user=self.sinner_account)
         response = self._post(self._valid_payload())
         self.assertEqual(response.status_code, 400, response.content)

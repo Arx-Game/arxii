@@ -4577,6 +4577,9 @@ export interface paths {
      *     The wardrobe page uses this to render carried-but-not-worn items. The
      *     ``character`` query parameter filters to items whose ``game_object.location``
      *     is the requested character (i.e., currently held by them).
+     *
+     *     Permission scoping (non-staff): only items located on a character the
+     *     request user currently plays are returned. Staff see everything.
      */
     get: operations['items_inventory_list'];
     put?: never;
@@ -4600,6 +4603,9 @@ export interface paths {
      *     The wardrobe page uses this to render carried-but-not-worn items. The
      *     ``character`` query parameter filters to items whose ``game_object.location``
      *     is the requested character (i.e., currently held by them).
+     *
+     *     Permission scoping (non-staff): only items located on a character the
+     *     request user currently plays are returned. Staff see everything.
      */
     get: operations['items_inventory_retrieve'];
     put?: never;
@@ -4842,6 +4848,40 @@ export interface paths {
     };
     /** @description Read-only ViewSet for item templates. */
     get: operations['items_templates_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/visible-item-detail/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the ItemInstance for ``pk`` if the requester may view it. */
+    get: operations['items_visible_item_detail_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/items/visible-worn/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the slim visible-worn list for ``?character=<pk>``. */
+    get: operations['items_visible_worn_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -5643,6 +5683,52 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/rituals/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet exposing authored Rituals.
+     *
+     *     Used by the frontend to discover available rituals and their `input_schema`
+     *     for rendering the perform form. The actual dispatch happens through
+     *     `RitualPerformView` at `POST /api/magic/rituals/perform/`.
+     */
+    get: operations['magic_rituals_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/rituals/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet exposing authored Rituals.
+     *
+     *     Used by the frontend to discover available rituals and their `input_schema`
+     *     for rendering the perform form. The actual dispatch happens through
+     *     `RitualPerformView` at `POST /api/magic/rituals/perform/`.
+     */
+    get: operations['magic_rituals_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/rituals/perform/': {
     parameters: {
       query?: never;
@@ -5708,6 +5794,229 @@ export interface paths {
     get: operations['magic_scene_entry_endorsements_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/{relationship_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Fetch and serialise the tether state for the given relationship. */
+    get: operations['magic_soul_tether_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/accept/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate and dispatch accept_soul_tether; return capstone PK. */
+    post: operations['magic_soul_tether_accept_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/dissolve/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate and dispatch dissolve_soul_tether; return 204 on success. */
+    post: operations['magic_soul_tether_dissolve_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/rescue/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate and dispatch perform_soul_tether_rescue; return outcome payload. */
+    post: operations['magic_soul_tether_rescue_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/sineating/pending/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only Sineater-facing inbox of pending Sineating offers (Task 1.6).
+     *
+     *     GET /api/magic/soul-tether/sineating/pending/
+     *     GET /api/magic/soul-tether/sineating/pending/{id}/
+     *
+     *     Scoped to the authenticated user as the Sineater — returns only offers where
+     *     the caller's character sheets appear as the Sineater.
+     */
+    get: operations['magic_soul_tether_sineating_pending_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/sineating/pending/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only Sineater-facing inbox of pending Sineating offers (Task 1.6).
+     *
+     *     GET /api/magic/soul-tether/sineating/pending/
+     *     GET /api/magic/soul-tether/sineating/pending/{id}/
+     *
+     *     Scoped to the authenticated user as the Sineater — returns only offers where
+     *     the caller's character sheets appear as the Sineater.
+     */
+    get: operations['magic_soul_tether_sineating_pending_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/sineating/request/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate and dispatch request_sineating; return offer payload. */
+    post: operations['magic_soul_tether_sineating_request_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/sineating/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Re-validate offer + dispatch resolve_sineating; return result payload. */
+    post: operations['magic_soul_tether_sineating_respond_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/stage-advance/pending/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only Sineater-facing inbox of pending stage-advance bonus offers (Task 1.7).
+     *
+     *     GET /api/magic/soul-tether/stage-advance/pending/
+     *     GET /api/magic/soul-tether/stage-advance/pending/{id}/
+     *
+     *     Scoped to the authenticated user as the Sineater — returns only offers where
+     *     the caller's character sheets appear as the Sineater. The UI should also
+     *     filter client-side by ``expires_at`` to hide already-expired rows (the server
+     *     does not proactively prune; rows are deleted on the next respond attempt).
+     */
+    get: operations['magic_soul_tether_stage_advance_pending_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/stage-advance/pending/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only Sineater-facing inbox of pending stage-advance bonus offers (Task 1.7).
+     *
+     *     GET /api/magic/soul-tether/stage-advance/pending/
+     *     GET /api/magic/soul-tether/stage-advance/pending/{id}/
+     *
+     *     Scoped to the authenticated user as the Sineater — returns only offers where
+     *     the caller's character sheets appear as the Sineater. The UI should also
+     *     filter client-side by ``expires_at`` to hide already-expired rows (the server
+     *     does not proactively prune; rows are deleted on the next respond attempt).
+     */
+    get: operations['magic_soul_tether_stage_advance_pending_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/soul-tether/stage-advance/respond/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Validate offer + dispatch resolve; return result payload. */
+    post: operations['magic_soul_tether_stage_advance_respond_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -6928,6 +7237,52 @@ export interface paths {
     };
     /** @description List and retrieve hybrid relationship types with nested requirements. */
     get: operations['relationships_hybrid_types_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationship-capstones/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet exposing the caller's RelationshipCapstone rows.
+     *
+     *     Used by the frontend to populate the Soul Tether ritual perform form's
+     *     capstone picker. The ``?other_character_sheet_id=`` filter narrows to
+     *     capstones whose parent relationship involves a specific target character.
+     */
+    get: operations['relationships_relationship_capstones_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/relationships/relationship-capstones/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet exposing the caller's RelationshipCapstone rows.
+     *
+     *     Used by the frontend to populate the Soul Tether ritual perform form's
+     *     capstone picker. The ``?other_character_sheet_id=`` filter narrows to
+     *     capstones whose parent relationship involves a specific target character.
+     */
+    get: operations['relationships_relationship_capstones_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -9973,6 +10328,15 @@ export interface components {
       readonly is_active: boolean;
       /** @description Whether this relationship is awaiting mutual consent */
       readonly is_pending: boolean;
+      /** @description Whether this relationship is a soul-tether bond (Spec B mechanics). */
+      readonly is_soul_tether: boolean;
+      /**
+       * @description Soul-tether role (ABYSSAL or SINEATER); empty when not a tether.
+       *
+       *     * `ABYSSAL` - Abyssal Side
+       *     * `SINEATER` - Sineater Side
+       */
+      readonly soul_tether_role: components['schemas']['SoulTetherRoleEnum'];
       readonly absolute_value: number;
       readonly developed_absolute_value: number;
       readonly affection: number;
@@ -11009,6 +11373,12 @@ export interface components {
        */
       time_phase?: components['schemas']['TimePhaseEnum'];
     };
+    /**
+     * @description * `SERVICE` - Service
+     *     * `FLOW` - Flow
+     * @enum {string}
+     */
+    ExecutionKindEnum: 'SERVICE' | 'FLOW';
     /** @description Serializer for Facet model with hierarchy info. */
     Facet: {
       readonly id: number;
@@ -11291,6 +11661,12 @@ export interface components {
        *     Priority: gm > staff > member > guest > none.
        *     "guest" means the user participates in a story at this table via
        *     StoryParticipation but has no active GMTableMembership.
+       *
+       *     Membership and story-participation lookups read from sets pre-computed
+       *     once per request in ``GMTableViewSet.get_serializer_context``. When
+       *     the serializer is invoked outside a viewset (e.g. directly in tests)
+       *     the sets fall back to lazy ``.exists()`` queries — keeps the test
+       *     ergonomics while letting the viewset path stay query-free per-row.
        */
       readonly viewer_role: string;
     };
@@ -12687,6 +13063,21 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['PendingAlteration'][];
     };
+    PaginatedPendingStageAdvanceOfferList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['PendingStageAdvanceOffer'][];
+    };
     PaginatedPersonaList: {
       /** @example 123 */
       count?: number;
@@ -12777,6 +13168,36 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['PlayerTrust'][];
     };
+    PaginatedRelationshipCapstoneList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['RelationshipCapstone'][];
+    };
+    PaginatedRitualList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['Ritual'][];
+    };
     PaginatedRosterEntryList: {
       /** @example 123 */
       count?: number;
@@ -12866,6 +13287,21 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['SessionRequest'][];
+    };
+    PaginatedSineatingPendingOfferList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['SineatingPendingOffer'][];
     };
     PaginatedSituationInstanceList: {
       /** @example 123 */
@@ -13869,6 +14305,34 @@ export interface components {
      * @enum {integer}
      */
     PendingAlterationTierEnum: 1 | 2 | 3 | 4 | 5;
+    /**
+     * @description Sineater-facing view of a pending stage-advance bonus offer (Task 1.7).
+     *
+     *     Read-only. Scoped to the authenticated user's character sheets as Sineater.
+     *     The ``expires_at`` field lets the UI show a countdown before the offer lapses.
+     */
+    PendingStageAdvanceOffer: {
+      readonly id: number;
+      readonly sinner_sheet_id: number;
+      /** @description Return the Sinner's IC display name via their primary persona. */
+      readonly sinner_persona_name: string;
+      readonly scene_id: number;
+      readonly scene_name: string;
+      readonly resonance_id: number;
+      /** @description The stage the Sinner is currently at when the prompt fires. */
+      readonly sinner_corruption_stage: number;
+      /** @description Maximum Hollow units the Sineater may commit. */
+      readonly commit_units_max: number;
+      /** @description Strain severity added to the Sineater per committed unit. */
+      readonly strain_cost_per_unit: number;
+      /** Format: date-time */
+      readonly created_at: string;
+      /**
+       * Format: date-time
+       * @description Prompt expires after this time. Stale rows are deleted on next access.
+       */
+      readonly expires_at: string;
+    };
     Persona: {
       readonly id: number;
       /** @description The character sheet this persona belongs to. */
@@ -14326,6 +14790,46 @@ export interface components {
      * @enum {string}
      */
     ReferencedMilestoneTypeEnum: 'story_resolved' | 'chapter_reached' | 'episode_reached';
+    /** @description Serializer for relationship capstone events. */
+    RelationshipCapstone: {
+      readonly id: number;
+      /** @description The character who recorded this capstone */
+      readonly author: number;
+      readonly author_name: string;
+      /** @description Title of the monumental moment */
+      readonly title: string;
+      /** @description Narrative description of the capstone event */
+      readonly writeup: string;
+      /** @description The track that gains points and capacity */
+      readonly track: number;
+      readonly track_name: string;
+      /** @description Points added to both capacity and developed_points */
+      readonly points: number;
+      /**
+       * @description Who can see this capstone
+       *
+       *     * `private` - Private
+       *     * `shared` - Shared
+       *     * `gossip` - Gossip
+       *     * `public` - Public
+       */
+      readonly visibility: components['schemas']['RelationshipCapstoneVisibilityEnum'];
+      /** @description Optional scene this capstone is based on */
+      readonly linked_scene: number | null;
+      /**
+       * Format: date-time
+       * @description When this capstone was recorded
+       */
+      readonly created_at: string;
+    };
+    /**
+     * @description * `private` - Private
+     *     * `shared` - Shared
+     *     * `gossip` - Gossip
+     *     * `public` - Public
+     * @enum {string}
+     */
+    RelationshipCapstoneVisibilityEnum: 'private' | 'shared' | 'gossip' | 'public';
     /** @description Serializer for RelationshipCondition lookup table. */
     RelationshipCondition: {
       readonly id: number;
@@ -14455,6 +14959,23 @@ export interface components {
      * @enum {string}
      */
     RiskLevelEnum: 'low' | 'moderate' | 'high' | 'extreme' | 'lethal';
+    /**
+     * @description Serializer for Ritual (read-only list/detail).
+     *
+     *     Exposes name, description, narrative_prose, dispatch metadata, and the
+     *     `input_schema` blob the frontend uses to render its perform form.
+     */
+    Ritual: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      readonly narrative_prose: string;
+      readonly hedge_accessible: boolean;
+      readonly glimpse_eligible: boolean;
+      readonly execution_kind: components['schemas']['ExecutionKindEnum'];
+      /** @description UI-rendering metadata: what kwargs the perform endpoint expects. Shape: {'fields': [{'name': str, 'label': str, 'type': str, 'required': bool, ...}]}. When None, the ritual takes no player-supplied kwargs. */
+      readonly input_schema: unknown;
+    };
     /** @description Validate a roster application message. */
     RosterApplication: {
       message: string;
@@ -14769,6 +15290,25 @@ export interface components {
      * @enum {string}
      */
     SignEnum: 'positive' | 'negative';
+    /**
+     * @description Sineater-facing view of a pending Sineating offer (inbox UI).
+     *
+     *     Read-only. Scoped to the authenticated user's character sheets as Sineater.
+     */
+    SineatingPendingOffer: {
+      readonly id: number;
+      readonly sinner_sheet_id: number;
+      /** @description Return the Sinner's IC display name via their primary persona. */
+      readonly sinner_persona_name: string;
+      readonly scene_id: number;
+      readonly scene_name: string;
+      readonly resonance_id: number;
+      readonly units_offered: number;
+      readonly anima_cost_per_unit: number;
+      readonly fatigue_cost_per_unit: number;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
     /** @description Nested serializer for situation challenge links. */
     SituationChallengeLink: {
       challenge_template: number;
@@ -14860,6 +15400,12 @@ export interface components {
       id: number;
       name: string;
     };
+    /**
+     * @description * `ABYSSAL` - Abyssal Side
+     *     * `SINEATER` - Sineater Side
+     * @enum {string}
+     */
+    SoulTetherRoleEnum: 'ABYSSAL' | 'SINEATER';
     /**
      * @description * `POSE_ENDORSEMENT` - Pose endorsement
      *     * `SCENE_ENTRY` - Scene entry endorsement
@@ -17814,7 +18360,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Starting Area. */
+        id: number;
       };
       cookie?: never;
     };
@@ -22624,6 +23171,44 @@ export interface operations {
       };
     };
   };
+  items_visible_item_detail_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  items_visible_worn_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   journals_entries_retrieve: {
     parameters: {
       query?: never;
@@ -23889,6 +24474,52 @@ export interface operations {
       };
     };
   };
+  magic_rituals_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRitualList'];
+        };
+      };
+    };
+  };
+  magic_rituals_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this ritual. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Ritual'];
+        };
+      };
+    };
+  };
   magic_rituals_perform_create: {
     parameters: {
       query?: never;
@@ -23949,6 +24580,224 @@ export interface operations {
         content: {
           'application/json': components['schemas']['SceneEntryEndorsement'];
         };
+      };
+    };
+  };
+  magic_soul_tether_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        relationship_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_soul_tether_accept_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_soul_tether_dissolve_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_soul_tether_rescue_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_soul_tether_sineating_pending_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSineatingPendingOfferList'];
+        };
+      };
+    };
+  };
+  magic_soul_tether_sineating_pending_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SineatingPendingOffer'];
+        };
+      };
+    };
+  };
+  magic_soul_tether_sineating_request_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_soul_tether_sineating_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_soul_tether_stage_advance_pending_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPendingStageAdvanceOfferList'];
+        };
+      };
+    };
+  };
+  magic_soul_tether_stage_advance_pending_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PendingStageAdvanceOffer'];
+        };
+      };
+    };
+  };
+  magic_soul_tether_stage_advance_respond_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
@@ -25975,11 +26824,55 @@ export interface operations {
       };
     };
   };
+  relationships_relationship_capstones_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRelationshipCapstoneList'];
+        };
+      };
+    };
+  };
+  relationships_relationship_capstones_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RelationshipCapstone'];
+        };
+      };
+    };
+  };
   relationships_relationships_list: {
     parameters: {
       query?: {
         is_active?: boolean;
         is_pending?: boolean;
+        is_soul_tether?: boolean;
         /** @description A page number within the paginated result set. */
         page?: number;
         source?: number;

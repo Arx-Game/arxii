@@ -1524,6 +1524,43 @@ class AcceptSoulTetherRitualFactory(factory.django.DjangoModelFactory):
     flow = None
     hedge_accessible = False
     glimpse_eligible = False
+    input_schema = {
+        "fields": [
+            {
+                "name": "sineater_sheet_id",
+                "label": "Sineater (the other PC)",
+                "type": "character_search",
+                "required": True,
+                "help": (
+                    "The character who will share this bond with you. "
+                    "Must not have a Celestial-dominant aura."
+                ),
+            },
+            {
+                "name": "scene_id",
+                "label": "Scene",
+                "type": "scene_picker",
+                "required": True,
+                "scope": "active_for_caller",
+            },
+            {
+                "name": "resonance_id",
+                "label": "Resonance",
+                "type": "resonance_picker",
+                "required": True,
+                "scope": "owned_by_caller",
+                "help": "The resonance that will channel the bond.",
+            },
+            {
+                "name": "capstone_id",
+                "label": "Relationship Capstone",
+                "type": "relationship_capstone_picker",
+                "required": True,
+                "scope": "with_target_character",
+                "help": "The relationship capstone that will hold the Hollow.",
+            },
+        ],
+    }
 
 
 class SoulTetherRescueRitualFactory(factory.django.DjangoModelFactory):
