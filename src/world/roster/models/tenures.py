@@ -33,8 +33,10 @@ class RosterTenure(RelatedCacheClearingMixin, SharedMemoryModel):
         related_name="tenures",
     )
 
-    # Automatically clear player_data caches when tenure changes
-    related_cache_fields: ClassVar[list[str]] = ["player_data"]
+    # Automatically clear player_data and account caches when tenure changes.
+    # Account.cached_primary_persona_ids depends on (player_data, end_date)
+    # — any tenure save (create, end-date set, etc.) needs to invalidate it.
+    related_cache_fields: ClassVar[list[str]] = ["player_data", "player_data.account"]
 
     # Anonymity system
     player_number = models.PositiveIntegerField(
