@@ -69,6 +69,14 @@ from world.magic.models.gifts import (
     TraditionManager,
 )
 from world.magic.models.grant import ResonanceGrant
+from world.magic.models.grants import (
+    BeginningsRitualGrant,
+    CodexEntryRitualGrant,
+    DistinctionRitualGrant,
+    PathRitualGrant,
+    TraditionRitualGrant,
+)
+from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.models.motifs import (
     Facet,
     FacetManager,
@@ -127,6 +135,8 @@ __all__ = [
     "AnimaRitualPerformance",
     # audere (re-exported from world.magic.audere)
     "AudereThreshold",
+    # knowledge layer grants (Anima Ritual UI spec §Decision 6)
+    "BeginningsRitualGrant",
     # cantrips
     "Cantrip",
     # aura
@@ -137,13 +147,17 @@ __all__ = [
     # gifts
     "CharacterGift",
     "CharacterResonance",
+    # knowledge layer (Anima Ritual UI spec §Decision 6)
+    "CharacterRitualKnowledge",
     # techniques
     "CharacterTechnique",
     # weaving
     "CharacterThreadWeavingUnlock",
     "CharacterTradition",
+    "CodexEntryRitualGrant",
     # corruption config (Scope 7 §2.3)
     "CorruptionConfig",
+    "DistinctionRitualGrant",
     "EffectType",
     "EffectTypeManager",
     "Facet",
@@ -161,6 +175,7 @@ __all__ = [
     "Motif",
     "MotifResonance",
     "MotifResonanceAssociation",
+    "PathRitualGrant",
     "PendingAlteration",
     # soul tether (Spec B §14.1, §15.1 — Task 1.7)
     "PendingStageAdvanceOffer",
@@ -205,4 +220,5 @@ __all__ = [
     "ThreadXPLockedLevel",
     "Tradition",
     "TraditionManager",
+    "TraditionRitualGrant",
 ]

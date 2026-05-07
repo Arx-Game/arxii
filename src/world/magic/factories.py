@@ -59,7 +59,9 @@ from world.magic.models import (
     Tradition,
 )
 from world.magic.models.anima import AnimaConfig
+from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.types.ritual import SoulfrayContent
+from world.roster.factories import RosterEntryFactory
 from world.traits.factories import TraitFactory
 
 
@@ -1839,3 +1841,15 @@ def author_reference_corruption_content() -> None:
                     stage_threshold=stage,
                     kind=AlterationKind.CORRUPTION_TWIST,
                 )
+
+
+class CharacterRitualKnowledgeFactory(factory.django.DjangoModelFactory):
+    """Factory for CharacterRitualKnowledge."""
+
+    class Meta:
+        model = CharacterRitualKnowledge
+        django_get_or_create = ("roster_entry", "ritual")
+
+    roster_entry = factory.SubFactory(RosterEntryFactory)
+    ritual = factory.SubFactory(RitualFactory)
+    learned_from = None
