@@ -114,7 +114,7 @@ There is **no `requires_knowledge` flag**. Per user direction: rituals "definite
 
 When a player fires an anima ritual, the SceneActionRequest stores a snapshot of the resolved check spec at creation time. The resolver reads from the snapshot, not live from the ritual.
 
-**Storage shape — structured fields, not JSON.** Per CLAUDE.md "No JSON Fields" rule, snapshot fields are added directly to `SceneActionRequest`:
+**Storage shape — structured fields, not JSON.** Per CLAUDE.md "No JSON Fields" rule, snapshot fields are added directly to `SceneActionRequest`. **All fields are FKs (since `CheckType` is a SharedMemoryModel in `world.checks.models`, not a TextChoices enum):**
 
 ```
 snapshot_ritual: FK Ritual, nullable                # which ritual fired (audit)
@@ -122,7 +122,7 @@ snapshot_stat: FK Trait, nullable
 snapshot_skill: FK Trait, nullable
 snapshot_specialization: FK Specialization, nullable
 snapshot_resonance: FK Resonance, nullable
-snapshot_check_type: CharField with choices=CheckType.choices, blank
+snapshot_check_type: FK CheckType, nullable
 snapshot_target_difficulty: PositiveSmallIntegerField, nullable
 ```
 
