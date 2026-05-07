@@ -75,6 +75,8 @@ This is deliberately a generic seam — future scene actions (Soul Tether ritual
 
 `respond_to_action_request()` awards a small Kudos token (default 1) to the target on accept, regardless of action_key. New `KudosSourceCategory` row (`name="social_engagement"`, default_amount=1, created via data migration).
 
+**Call signature:** `award_kudos(account=target.account, amount=category.default_amount, source_category=category, description=f"Engaged with action request from {initiator_persona.name}", awarded_by=initiator_persona.character.db_account)`. The `source_category` argument is a `KudosSourceCategory` model instance, not a string — the caller must look it up first (`KudosSourceCategory.objects.get(name="social_engagement")`). Cache the lookup at module level if it becomes a per-request cost.
+
 Anima ritual benefits from this; future scene actions also benefit retroactively. Anima-specific Kudos awards (e.g., bonus Kudos for an Anima ritual specifically) are out of scope for v1.
 
 ### 6. Knowledge layer mirrors codex pattern
@@ -104,13 +106,31 @@ A reconciliation service walks the grant tables for a roster entry and creates `
 
 **Authorship and teaching bypass grants.** When a player authors their anima ritual at CG, a knowledge row is created directly. Future teaching mechanic creates knowledge rows directly with `learned_from=teacher`.
 
-There is **no `requires_knowledge` flag**. Per user direction: rituals "definitely shouldn't just be global." Universal rituals don't exist; broadly-known rituals live on broadly-applicable grants. (Implication: `accept_soul_tether` needs to be wired into appropriate grants — flagged as content/lore follow-up.)
+There is **no `requires_knowledge` flag**. Per user direction: rituals "definitely shouldn't just be global." Universal rituals don't exist; broadly-known rituals live on broadly-applicable grants.
+
+**Interim handling for `accept_soul_tether`:** the existing `accept_soul_tether` Ritual (shipped with the Soul Tether work) currently has no grant rows. When the knowledge layer ships, that Ritual would silently disappear from `/rituals` for every character — a regression. To prevent this, this work also includes a **placeholder grant** in the same migration batch: `accept_soul_tether` is granted via every existing `Path` (i.e., we create a `PathRitualGrant` row for each Path × the soul-tether Ritual). This preserves visibility without making a content judgment about which paths "should" know it; replacing the placeholder with intentional cultural grants is content/lore follow-up and explicitly out of scope for this work.
 
 ### 7. Snapshot ritual config on SceneActionRequest creation
 
-When a player fires an anima ritual, the SceneActionRequest stores a snapshot of the resolved check spec (stat_id, skill_id, specialization_id, target_difficulty, etc.) at creation time. The resolver reads from the snapshot, not live from the ritual.
+When a player fires an anima ritual, the SceneActionRequest stores a snapshot of the resolved check spec at creation time. The resolver reads from the snapshot, not live from the ritual.
 
-Rationale: decouples in-flight requests from ritual edits. If the player edits their ritual mid-scene, in-flight requests resolve with the original config. If the ritual is deleted while a request is pending, the resolver still works.
+**Storage shape — structured fields, not JSON.** Per CLAUDE.md "No JSON Fields" rule, snapshot fields are added directly to `SceneActionRequest`:
+
+```
+snapshot_ritual: FK Ritual, nullable                # which ritual fired (audit)
+snapshot_stat: FK Trait, nullable
+snapshot_skill: FK Trait, nullable
+snapshot_specialization: FK Specialization, nullable
+snapshot_resonance: FK Resonance, nullable
+snapshot_check_type: CharField (matches CheckType choices), blank
+snapshot_target_difficulty: PositiveSmallIntegerField, nullable
+```
+
+All snapshot fields are nullable (only populated when `action_key` is a ritual-driven key). The resolver consumes them via the existing `perform_check()` pipeline using these snapshot values rather than re-reading the ritual.
+
+Rationale: decouples in-flight requests from ritual edits (player edits their ritual mid-scene → in-flight requests resolve with original config); ritual deletion doesn't crash the resolver; structured FKs satisfy the "no JSON" rule and remain queryable for audit.
+
+**Interaction with existing `Ritual.clean()` `CheckConstraint`:** `Ritual` already has a `CheckConstraint` enforcing payload shape per `execution_kind`. This work extends both the constraint and `Ritual.clean()` to require a `RitualSceneActionConfig` sidecar present when `execution_kind=SCENE_ACTION`, and to require it absent when `execution_kind` is `SERVICE` or `FLOW`. Validation enforces this in both Python (`clean()`) and the database (constraint).
 
 ### 8. Once-per-scene cap consumed only on accept
 
@@ -181,28 +201,79 @@ The risk of spam (initiator fires repeatedly until someone accepts) is acknowled
 
 | File | Status | Description |
 |---|---|---|
+**Substrate (scenes):**
+
+| File | Status | Description |
+|---|---|---|
 | `src/world/scenes/action_resolvers.py` | NEW | Registry: `register_resolver(action_key, fn)`, `get_resolver(action_key)`. |
-| `src/world/scenes/action_services.py` | MODIFIED | `respond_to_action_request()` calls registered resolver post-check; awards generic Kudos on accept. `_build_available_actions()` (or equivalent) asks each resolver for menu entries. |
-| `src/world/scenes/action_models.py` | MODIFIED | Add `check_spec_snapshot` JSON field (or structured fields) to `SceneActionRequest` for snapshotting ritual config. |
-| `src/world/magic/models/rituals.py` | MODIFIED | Add `SCENE_ACTION` value to `execution_kind` enum. Add `author_account` nullable FK. |
+| `src/world/scenes/action_services.py` | MODIFIED | `respond_to_action_request()` calls registered resolver post-check; awards generic Kudos on accept. `create_action_request()` populates the snapshot fields. `_build_available_actions()` (or equivalent) asks each resolver for menu entries. |
+| `src/world/scenes/action_models.py` | MODIFIED | Add structured snapshot fields (`snapshot_ritual`, `snapshot_stat`, `snapshot_skill`, `snapshot_specialization`, `snapshot_resonance`, `snapshot_check_type`, `snapshot_target_difficulty`) to `SceneActionRequest`. All nullable. |
+| `src/world/scenes/tests/test_action_resolvers.py` | NEW | Resolver registry behavior (register/lookup/no-op-on-miss). |
+| `src/world/scenes/tests/test_action_services.py` | MODIFIED | Add tests for: generic Kudos-on-accept (any action_key), snapshot population at fire time, resolver invocation on accept, no resolver call on deny. |
+
+**Ritual model unification:**
+
+| File | Status | Description |
+|---|---|---|
+| `src/world/magic/models/rituals.py` | MODIFIED | Add `SCENE_ACTION` value to `execution_kind` TextChoices. Add `author_account` nullable FK to Account. Extend `clean()` and the existing `ritual_execution_payload` `CheckConstraint` to require `RitualSceneActionConfig` sidecar present when `execution_kind=SCENE_ACTION` and absent when SERVICE/FLOW. |
 | `src/world/magic/models/ritual_scene_action.py` | NEW | `RitualSceneActionConfig` sidecar (OneToOne Ritual). Holds `stat`, `skill`, `specialization`, `resonance`, `check_type`, `target_difficulty`. |
-| `src/world/magic/models/anima.py` | DELETED | `CharacterAnimaRitual` removed. `CharacterAnima` and `AnimaRitualPerformance` retained; `AnimaRitualPerformance.ritual` FK retargets `Ritual`. |
+| `src/world/magic/admin.py` | MODIFIED | Replace `CharacterAnimaRitualAdmin`/inline with `RitualSceneActionConfig` inline on Ritual; expose `author_account` filter on Ritual admin. |
+| `src/world/magic/factories.py` | MODIFIED | Replace `CharacterAnimaRitualFactory` with `RitualFactory` variants for SCENE_ACTION (and a `RitualSceneActionConfigFactory`). Update existing tests' factory usage. |
+
+**`CharacterAnimaRitual` removal — call sites:**
+
+| File | Status | Description |
+|---|---|---|
+| `src/world/magic/models/anima.py` | MODIFIED | Remove `CharacterAnimaRitual`. Retain `CharacterAnima`. Remove inverse FK from anima models. |
+| `src/world/magic/models/anima.py` (`AnimaRitualPerformance`) | MODIFIED | Retarget `ritual` FK from `CharacterAnimaRitual` to `Ritual`. (DB is dev-empty; drop-and-recreate via migration.) |
+| `src/world/magic/views.py` | MODIFIED | Remove `CharacterAnimaRitualViewSet` (functionality folded into `RitualViewSet` with author-filtered creation/edit). `RitualViewSet.get_queryset()` filters by `known_by_records__roster_entry=current`. New action (or extended create) for player-authored rituals. |
+| `src/world/magic/urls.py` | MODIFIED | Remove `character-anima-rituals` router registration. |
+| `src/world/magic/serializers.py` | MODIFIED | Remove `CharacterAnimaRitualSerializer`. Update `RitualSerializer` to include sidecar config when `execution_kind=SCENE_ACTION`. New `RitualSceneActionConfigSerializer`. |
+| `src/world/character_sheets/serializers.py` | MODIFIED | `_build_magic_anima_ritual()` (or equivalent) now reads from the player's authored Ritual + sidecar instead of `CharacterAnimaRitual`. |
+| `src/world/character_sheets/types.py` | MODIFIED | `AnimaRitualSection` dataclass updated to reflect new field source (still presents same shape to consumers). |
+| `src/world/character_sheets/tests/test_viewset.py` | MODIFIED | Update test fixtures + assertions to use Ritual + sidecar. |
+| `src/world/magic/tests/test_anima_ritual.py` | MODIFIED | Update factory + setup to use Ritual + sidecar. Service-level behavior tests preserved. |
+| `src/world/magic/tests/test_anima_ritual_service.py` | MODIFIED | Same — service tests preserved, fixtures updated. |
+| `src/world/magic/tests/test_models.py` | MODIFIED | Remove `CharacterAnimaRitual` model tests; add `Ritual` SCENE_ACTION + sidecar invariant tests. |
+| `src/world/magic/tests/integration/test_soulfray_recovery_flow.py` | MODIFIED | Fixture rework. |
+
+**Anima ritual behavior:**
+
+| File | Status | Description |
+|---|---|---|
 | `src/world/magic/services/anima.py` | MODIFIED | Refactor `perform_anima_ritual()` to split: keep entry point that rolls its own check (for backward compat / non-scene-action use), extract outcome-applier as `apply_anima_ritual_outcome(ritual, outcome, scene)`. |
 | `src/world/magic/services/anima_ritual_action.py` | NEW | Defines + registers the `"anima_ritual"` resolver. Provides `contribute_menu_entries(roster_entry, scene)`. |
+| `src/world/magic/apps.py` | MODIFIED | `ready()` imports `anima_ritual_action` to trigger resolver registration. |
+| `src/world/magic/tests/test_anima_ritual_action.py` | NEW | End-to-end via SceneActionRequest. |
+
+**Knowledge layer:**
+
+| File | Status | Description |
+|---|---|---|
 | `src/world/magic/models/knowledge.py` | NEW | `CharacterRitualKnowledge` model (mirrors `CharacterCodexKnowledge`). |
 | `src/world/magic/models/grants.py` | NEW | `BeginningsRitualGrant`, `PathRitualGrant`, `DistinctionRitualGrant`, `TraditionRitualGrant`, `CodexEntryRitualGrant`. |
-| `src/world/magic/services/ritual_knowledge.py` | NEW | Reconciliation service: walks grant tables for a roster entry and creates knowledge rows. |
-| `src/world/magic/views.py` | MODIFIED | `RitualViewSet.get_queryset()` filters by `known_by_records__roster_entry=current`. New `personal/` action (or extend create) for player-authored rituals. |
-| `src/world/magic/serializers.py` | MODIFIED | `RitualSerializer` includes sidecar config for `execution_kind=SCENE_ACTION`. New `RitualSceneActionConfigSerializer`. |
-| `src/world/magic/apps.py` | MODIFIED | `ready()` imports `anima_ritual_action` to trigger resolver registration. |
-| `src/world/progression/migrations/00XX_engagement_kudos_category.py` | NEW | Data migration creating `KudosSourceCategory(name="social_engagement", default_amount=1)`. |
-| `src/world/magic/migrations/00XX_*.py` | NEW (multiple) | Migrations for the new models, FK retargeting, enum extension, `author_account` field. |
-| `src/world/character_creation/...` | MODIFIED | CG step that previously created `CharacterAnimaRitual` now creates `Ritual` + `RitualSceneActionConfig` + `CharacterRitualKnowledge`. |
-| `src/world/scenes/tests/test_action_resolvers.py` | NEW | Resolver registry behavior. |
-| `src/world/scenes/tests/test_action_services.py` | MODIFIED | Add tests for generic Kudos-on-accept, snapshot at fire time. |
-| `src/world/magic/tests/test_anima_ritual_action.py` | NEW | End-to-end via SceneActionRequest. |
+| `src/world/magic/services/ritual_knowledge.py` | NEW | Reconciliation service: walks grant tables for a roster entry and creates knowledge rows. Idempotent. |
 | `src/world/magic/tests/test_ritual_knowledge.py` | NEW | Reconciliation, grant table behavior, knowledge uniqueness. |
-| `src/world/magic/tests/test_models/test_ritual_scene_action_config.py` | NEW | Sidecar model. |
+| `src/world/magic/tests/test_models/test_ritual_scene_action_config.py` | NEW | Sidecar model invariants (paired with parent execution_kind). |
+
+**Character creation:**
+
+| File | Status | Description |
+|---|---|---|
+| `src/world/character_creation/...` | MODIFIED | The "Anima Ritual" CG step (and any backing service) now creates `Ritual` + `RitualSceneActionConfig` + `CharacterRitualKnowledge`. (Implementation note: there is no current direct reference to `CharacterAnimaRitual` in `character_creation/` — but the CG step wires the ritual via the magic viewset/serializer; those callsites are listed above. Verify the actual integration point at planning time.) |
+
+**Kudos:**
+
+| File | Status | Description |
+|---|---|---|
+| `src/world/progression/migrations/00XX_social_engagement_category.py` | NEW | Data migration creating `KudosSourceCategory(name="social_engagement", default_amount=1, display_name="Social Engagement", description="Awarded for accepting another character's action request.")`. |
+
+**Migrations:**
+
+| File | Status | Description |
+|---|---|---|
+| `src/world/magic/migrations/00XX_*.py` | NEW (multiple) | Schema migrations for: new models (`RitualSceneActionConfig`, `CharacterRitualKnowledge`, all five grant tables), `Ritual.execution_kind` enum extension, `Ritual.author_account` field, `Ritual.clean()` constraint update, `AnimaRitualPerformance.ritual` FK retarget, `CharacterAnimaRitual` removal. |
+| `src/world/scenes/migrations/00XX_*.py` | NEW | Schema migrations for the new SceneActionRequest snapshot fields. |
 
 ### Frontend
 
@@ -304,7 +375,7 @@ The risk of spam (initiator fires repeatedly until someone accepts) is acknowled
 3. **Reconciliation triggers on data changes** — beyond character creation, when does reconciliation refire? On path change? On codex unlock? Defer until first concrete use case.
 4. **"Modify" state on SceneActionRequest** — target negotiates difficulty. Universal substrate improvement.
 5. **Inline pose / required RP content on SceneActionRequest fire** — universal improvement that solves "did any RP actually happen." Helps with the spam concern in (1).
-6. **Wiring `accept_soul_tether` into appropriate Path/Beginning/Distinction grants** — content/lore call. Until done, decision is whether to keep it visible (transitional) or hidden.
+6. **Replacing the placeholder `accept_soul_tether` grant with intentional cultural grants** — see Decision 6. The placeholder ships in the same migration batch (every Path grants it, preventing regression); replacing it with curated grants per actual lore is content/lore follow-up.
 7. **Display of past `AnimaRitualPerformance` rows** — audit/history surface for the player.
 8. **Per-resonance Strain UI** — already deferred from soul-tether-ui.
 9. **Anima-ritual-specific Kudos awards** — bonus Kudos for an Anima ritual specifically, beyond the generic engagement award.
