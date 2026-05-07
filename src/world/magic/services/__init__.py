@@ -39,6 +39,7 @@ from world.magic.services.resonance import (
     spend_resonance_for_imbuing,
     spend_resonance_for_pull,
 )
+from world.magic.services.ritual_knowledge import reconcile_ritual_knowledge
 from world.magic.services.soulfray import (
     calculate_soulfray_severity,
     get_soulfray_warning,
@@ -99,6 +100,7 @@ __all__ = [
     "near_xp_lock_threads",
     "preview_resonance_pull",
     "recompute_max_health_with_threads",
+    "reconcile_ritual_knowledge",
     "resolve_pending_alteration",
     "resolve_pull_effects",
     "select_mishap_pool",
