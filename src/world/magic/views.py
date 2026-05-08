@@ -13,12 +13,13 @@ import dataclasses
 from dataclasses import asdict
 from typing import cast
 
-from django.db.models import Count, Prefetch
+from django.db.models import Count, F, Prefetch
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
+from evennia.objects.models import ObjectDB
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -1310,8 +1311,6 @@ class RoomsByPropertyView(APIView):
 
     def get(self, request: Request) -> Response:
         """Return rooms that have at least one matching ObjectProperty."""
-        from evennia.objects.models import ObjectDB  # noqa: PLC0415
-
         from world.magic.serializers import RoomsByPropertyQuerySerializer  # noqa: PLC0415
 
         serializer = RoomsByPropertyQuerySerializer(
@@ -1321,7 +1320,8 @@ class RoomsByPropertyView(APIView):
         ids = serializer.validated_data["property_ids"]
         rooms = (
             ObjectDB.objects.filter(object_properties__property__in=ids)
+            .annotate(name=F("db_key"))
             .distinct()
-            .values("id", "db_key")
+            .values("id", "name")
         )
         return Response(list(rooms))
