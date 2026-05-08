@@ -20,6 +20,8 @@ ALLOWED_MIGRATIONS: set[str] = {
     "world/scenes/migrations/0014_populate_persona_character_sheet.py",
     # Data migration: backfills RosterEntry.character_sheet FK from character chain
     "world/roster/migrations/0003_populate_roster_entry_character_sheet.py",
+    # System configuration: KudosSourceCategory lookup table for social_engagement
+    "world/progression/migrations/0002_social_engagement_kudos_category.py",
 }
 
 # Patterns that suggest seed data in migrations
