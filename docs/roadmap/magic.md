@@ -61,7 +61,8 @@ Some abilities cross categories (poison touch = attack + subtle assassination to
 - **Models:** CharacterAura, CharacterResonance (reshaped per Spec A §2.2 —
   balance + lifetime_earned), Gift, CharacterGift, Technique,
   CharacterTechnique, TechniqueStyle, EffectType, Restriction, IntensityTier,
-  CharacterAnima, CharacterAnimaRitual, AnimaRitualPerformance, Motif,
+  CharacterAnima, AnimaRitualPerformance (ritual FK now points to magic.Ritual
+  with execution_kind=SCENE_ACTION; CharacterAnimaRitual removed), Motif,
   MotifResonance, MotifResonanceAssociation, Facet, CharacterFacet,
   **Thread** (new discriminator + typed-FK design, Spec A §2.1),
   **ThreadPullCost**, **ThreadXPLockedLevel**, **ThreadLevelUnlock**,
@@ -883,11 +884,81 @@ What was built:
 **Explicit non-goals (deferred):**
 - Per-resonance Strain UI (SineatingInbox shows anima/fatigue cost; resonance
   context omitted for now).
-- Full Anima ritual UI (service-layer only; a future ritual card will wire in via
-  the same generic infrastructure).
 - Dissolve UX beyond a minimal action button (no confirmation modal; treat as tertiary).
 - Audit/history display for past Sineating cycles.
 - Thread weaving and Thread pull UI (ThreadList is read-only).
+
+**Anima Ritual UI (DONE — branch `anima-ritual-design`):**
+
+**Plan:** `docs/superpowers/plans/2026-05-XX-anima-ritual-ui-plan.md`
+
+Closes the loop on the anima ritual mechanic built in Scope 6, making it playable entirely
+from the web interface. Delivers the social-hook mechanic (the ritual can only be performed
+with another PC present), unifies the model surface, adds a knowledge-layer gating model, and
+wires the full frontend surface via the existing generic ritual infrastructure from the Soul
+Tether UI branch.
+
+What was built:
+
+- **Knowledge layer — `AnimaRitualKnowledge` model** (`world/magic/models/anima.py`):
+  SharedMemoryModel linking `CharacterSheet` to `AnimaRitual` with a `source` TextChoices
+  field (PERSONAL / TAUGHT / STAFF_GRANTED). Gating model — `perform_anima_ritual()` refuses
+  to proceed without a `AnimaRitualKnowledge` row for the requesting character. `provision_player_anima_ritual()`
+  extended to write the knowledge row at the same time it creates the ritual; all existing
+  characters who already have a ritual record get a backfill via data migration.
+
+- **`AnimaRitual` model unification** — prior to this branch, `perform_anima_ritual()` in
+  `world/magic/services/anima.py` looked up the ritual via a legacy `CharacterAnimaRitual`
+  join model. That model has been removed; the service now queries `AnimaRitual` directly
+  via `AnimaRitualKnowledge`. Migration removes the old table.
+
+- **`SceneActionRequest` snapshot fields** — `action_key` and `action_label` snapshot columns
+  added to the `SceneActionRequest` model. The resolver registry decodes `action_key` on
+  the accepting side without requiring the original action to still be in the scene's
+  available-action list.
+
+- **Action-key resolver registry** (`world/magic/resolvers.py`) — `@register_resolver(key)`
+  decorator pattern; `resolve_action_request(request)` dispatches to the matching handler.
+  Anima ritual is the first registered resolver: `"anima_ritual"` → `resolve_anima_ritual()`.
+
+- **Generic Kudos award** (`world/kudos/services.py` → `award_kudos_for_action_request()`) —
+  one Kudos point to the accepting character whenever a `SceneActionRequest` is accepted.
+  Scoped to action-request acceptances only; not a general-purpose kudos surface.
+
+- **Anima ritual resolver + service refactor** — `resolve_anima_ritual()` loads both
+  characters, validates co-location, calls `perform_anima_ritual()`, awards one Kudos to
+  the target, and returns a typed `AnimaRitualResolveResult`. The service function is
+  unchanged; the resolver layer handles the social-hook semantics.
+
+- **CG integration + placeholder grants** — `finalize_character()` in
+  `world/character_creation/services/finalization.py` now calls
+  `provision_player_anima_ritual()` for newly finalized characters (Path → Skill → Ritual
+  lookup chain). Beginnings are handled with a manual walk (Option A) rather than a separate
+  reconciliation pass. Placeholder grants: `accept_soul_tether` still awards a flat Kudos
+  grant (stub) — this is a content/lore decision deferred to staff, not a technical gap.
+
+- **Frontend** (`frontend/src/rituals/AnimaRitualCard.tsx` and scene integration):
+  - `AnimaRitualCard` — renders the anima ritual action in the scene's available-actions
+    list: ritual name, brief description, anima cost, a target-character picker (scoped
+    to scene participants), and a "Perform Ritual" button that calls `usePerformAnimaRitual()`.
+    Only visible to the character who owns the ritual (not to other participants).
+  - `AnimaRecoveryPanel` — shown to the ritual performer after acceptance: displays
+    `RitualOutcome` (Soulfray reduction, anima refilled, roll tier). Slides in via
+    `ActionResult` extension on the `SceneDetailPage`.
+  - Target character receives a generic `SceneActionRequest` consent prompt via the
+    existing `ActionRequestInbox` component. The prompt carries NO anima-specific
+    labeling — it appears as a generic social action request.
+  - `usePerformAnimaRitual()` / `useAcceptAnimaRitual()` typed React Query mutations
+    wired to the backend endpoints.
+
+Interim status notes:
+- **`accept_soul_tether` placeholder grants**: the `accept_soul_tether` service currently
+  awards a flat stub Kudos grant rather than content-curated ritual grants. This is a
+  lore/content call for staff; the grant mechanism is in place.
+- **Beginnings in finalize (Option A)**: `finalize_character()` walks Beginnings using a
+  manual skill lookup rather than a `reconcile_beginnings()` reconciliation pass.
+  Option B (reconciliation) remains a possible follow-up if Beginnings logic grows more
+  complex.
 
 **Key design principles (apply across all scopes):**
 - Anima is a safety margin, not a gate. Magic always works. Deficit costs life force.

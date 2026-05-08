@@ -16,7 +16,6 @@ from world.magic.constants import ALTERATION_TIER_CAPS, TargetKind
 from world.magic.models import (
     Cantrip,
     CharacterAnima,
-    CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
     CharacterResonance,
@@ -417,40 +416,6 @@ class CharacterAnimaSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "last_recovery"]
 
 
-class CharacterAnimaRitualSerializer(serializers.ModelSerializer):
-    """Serializer for CharacterAnimaRitual records."""
-
-    stat_name = serializers.CharField(source="stat.name", read_only=True)
-    skill_name = serializers.CharField(source="skill.name", read_only=True)
-    specialization_name = serializers.SerializerMethodField()
-    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
-    resonance_detail = ResonanceSerializer(source="resonance", read_only=True)
-
-    class Meta:
-        model = CharacterAnimaRitual
-        fields = [
-            "id",
-            "character",
-            "stat",
-            "stat_name",
-            "skill",
-            "skill_name",
-            "specialization",
-            "specialization_name",
-            "resonance",
-            "resonance_name",
-            "resonance_detail",
-            "description",
-        ]
-        read_only_fields = ["id"]
-
-    def get_specialization_name(self, obj: CharacterAnimaRitual) -> str | None:
-        """Get the specialization name if present."""
-        if obj.specialization:
-            return obj.specialization.name
-        return None
-
-
 # =============================================================================
 # Facet Serializers
 # =============================================================================
@@ -816,12 +781,60 @@ class ThreadSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"detail": exc.user_message}) from exc
 
 
+class RitualSceneActionConfigSerializer(serializers.ModelSerializer):
+    """Nested read-only serializer for RitualSceneActionConfig sidecars.
+
+    Exposes the check specification for SCENE_ACTION rituals so the frontend
+    detail panel can display stat/skill/check_type information.
+    """
+
+    stat_name = serializers.CharField(source="stat.name", read_only=True)
+    skill_name = serializers.CharField(source="skill.name", read_only=True)
+    specialization_id = serializers.PrimaryKeyRelatedField(source="specialization", read_only=True)
+    resonance_id = serializers.PrimaryKeyRelatedField(source="resonance", read_only=True)
+    check_type_id = serializers.PrimaryKeyRelatedField(source="check_type", read_only=True)
+    check_type_name = serializers.SerializerMethodField()
+
+    class Meta:
+        from world.magic.models.ritual_scene_action import (  # noqa: PLC0415 — must live in Meta body
+            RitualSceneActionConfig,
+        )
+
+        model = RitualSceneActionConfig
+        fields = [
+            "id",
+            "stat",
+            "stat_name",
+            "skill",
+            "skill_name",
+            "specialization_id",
+            "resonance_id",
+            "check_type_id",
+            "check_type_name",
+            "target_difficulty",
+        ]
+        read_only_fields = fields
+
+    def get_check_type_name(self, obj) -> str | None:
+        """Return the name of the check type, or None if not set."""
+        if obj.check_type_id is None:
+            return None
+        return obj.check_type.name
+
+
 class RitualSerializer(serializers.ModelSerializer):
     """Serializer for Ritual (read-only list/detail).
 
-    Exposes name, description, narrative_prose, dispatch metadata, and the
-    `input_schema` blob the frontend uses to render its perform form.
+    Exposes name, description, narrative_prose, dispatch metadata, the
+    `input_schema` blob the frontend uses to render its perform form,
+    `author_account_id` for client-side "authored by you" filtering,
+    and the nested `scene_action_config` for SCENE_ACTION rituals.
     """
+
+    author_account_id = serializers.PrimaryKeyRelatedField(
+        source="author_account", read_only=True, allow_null=True
+    )
+    scene_action_config = serializers.SerializerMethodField()
 
     class Meta:
         model = Ritual
@@ -834,8 +847,124 @@ class RitualSerializer(serializers.ModelSerializer):
             "glimpse_eligible",
             "execution_kind",
             "input_schema",
+            "author_account_id",
+            "scene_action_config",
         ]
         read_only_fields = fields
+
+    def get_scene_action_config(self, obj: Ritual) -> dict | None:
+        """Return nested scene_action_config for SCENE_ACTION rituals, else None."""
+        from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
+
+        if obj.execution_kind != RitualExecutionKind.SCENE_ACTION:
+            return None
+        try:
+            config = obj.scene_action_config
+        except Exception:  # noqa: BLE001
+            return None
+        return RitualSceneActionConfigSerializer(config).data
+
+
+class RitualSceneActionConfigPatchSerializer(serializers.Serializer):
+    """Write serializer for the nested scene_action_config on a PATCH.
+
+    Only fields that players can meaningfully update are included.
+    All are optional (partial update semantics). FK fields accept integer PKs
+    and are resolved to model instances in validate().
+    """
+
+    stat_id = serializers.IntegerField(required=False)
+    skill_id = serializers.IntegerField(required=False)
+    specialization_id = serializers.IntegerField(required=False, allow_null=True)
+    resonance_id = serializers.IntegerField(required=False, allow_null=True)
+    check_type_id = serializers.IntegerField(required=False, allow_null=True)
+    target_difficulty = serializers.IntegerField(min_value=1, required=False)
+
+    @staticmethod
+    def _resolve_nullable_fk(
+        attrs: dict,
+        key: str,
+        model: type,
+        field_name: str,
+        resolved: dict,
+    ) -> None:
+        """Resolve an optional nullable FK id to its model instance.
+
+        Writes the resolved instance (or None) into *resolved[field_name]*.
+        Raises ``ValidationError`` when the PK is non-null but not found.
+        """
+        if key not in attrs:
+            return
+        pk = attrs[key]
+        if pk is None:
+            resolved[field_name] = None
+            return
+        try:
+            resolved[field_name] = model.objects.get(pk=pk)
+        except model.DoesNotExist as exc:
+            raise serializers.ValidationError({key: f"{model.__name__} not found."}) from exc
+
+    def validate(self, attrs: dict) -> dict:
+        """Resolve integer PK fields to model instances."""
+        from world.checks.models import CheckType  # noqa: PLC0415
+        from world.skills.models import Skill, Specialization  # noqa: PLC0415
+        from world.traits.models import Trait, TraitType  # noqa: PLC0415
+
+        resolved: dict = {}
+
+        # Required (non-nullable) FK fields — only resolve if provided.
+        if (val := attrs.get("stat_id")) is not None:
+            try:
+                resolved["stat"] = Trait.objects.get(pk=val, trait_type=TraitType.STAT)
+            except Trait.DoesNotExist as exc:
+                raise serializers.ValidationError({"stat_id": "Stat trait not found."}) from exc
+        if (val := attrs.get("skill_id")) is not None:
+            try:
+                resolved["skill"] = Skill.objects.get(pk=val)
+            except Skill.DoesNotExist as exc:
+                raise serializers.ValidationError({"skill_id": "Skill not found."}) from exc
+
+        # Nullable FK fields — resolve via helper.
+        self._resolve_nullable_fk(
+            attrs, "specialization_id", Specialization, "specialization", resolved
+        )
+        self._resolve_nullable_fk(attrs, "resonance_id", Resonance, "resonance", resolved)
+        self._resolve_nullable_fk(attrs, "check_type_id", CheckType, "check_type", resolved)
+
+        if "target_difficulty" in attrs:  # noqa: STRING_LITERAL — dict key lookup, not an identifier
+            resolved["target_difficulty"] = attrs["target_difficulty"]
+        return resolved
+
+
+class RitualPatchSerializer(serializers.ModelSerializer):
+    """Write serializer for partial PATCH of player-authored Rituals.
+
+    Handles top-level Ritual fields (name, description, narrative_prose) and
+    optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
+    rituals silently ignore scene_action_config if supplied.
+    """
+
+    scene_action_config = RitualSceneActionConfigPatchSerializer(required=False)
+
+    class Meta:
+        model = Ritual
+        fields = ["name", "description", "narrative_prose", "scene_action_config"]
+
+    def update(self, instance: Ritual, validated_data: dict) -> Ritual:
+        """Update top-level fields then optionally update the sidecar."""
+        from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
+
+        config_data = validated_data.pop("scene_action_config", None)
+        ritual = super().update(instance, validated_data)
+        if config_data and instance.execution_kind == RitualExecutionKind.SCENE_ACTION:
+            try:
+                config = instance.scene_action_config
+            except Exception:  # noqa: BLE001
+                return ritual
+            for field, value in config_data.items():
+                setattr(config, field, value)
+            config.save()
+        return ritual
 
 
 class ThreadWeavingTeachingOfferSerializer(serializers.ModelSerializer):

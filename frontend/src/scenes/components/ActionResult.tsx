@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Swords, ChevronDown, ChevronUp } from 'lucide-react';
-import type { ActionResultData } from '../actionTypes';
+import { Swords, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import type { ActionResultData, AnimaRecoveryData } from '../actionTypes';
 
 interface Props {
   content: string;
@@ -63,6 +63,32 @@ function getOutcomeTextColor(outcome: string | null | undefined): string {
   return '';
 }
 
+// ---------------------------------------------------------------------------
+// Anima Recovery Panel
+// ---------------------------------------------------------------------------
+
+function AnimaRecoveryPanel({ data }: { data: AnimaRecoveryData }) {
+  return (
+    <div
+      className="mt-2 flex items-center gap-2 rounded-md bg-indigo-950/40 px-3 py-2 text-sm"
+      data-testid="anima-recovery-panel"
+    >
+      <Sparkles className="h-4 w-4 shrink-0 text-indigo-400" />
+      <span className="text-indigo-300">
+        Recovered {data.recovered} anima
+        {data.soulfray_reduced > 0 && (
+          <span className="ml-2 text-emerald-400">· {data.soulfray_reduced} soulfray reduced</span>
+        )}
+        <span className="ml-2 text-muted-foreground">· Pool now {data.new_pool}</span>
+      </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
 export function ActionResult({ content, actionKey, techniqueName, outcome, result }: Props) {
   const [expanded, setExpanded] = useState(false);
 
@@ -103,6 +129,8 @@ export function ActionResult({ content, actionKey, techniqueName, outcome, resul
                 )}
               </div>
             )}
+
+            {result.anima_recovery && <AnimaRecoveryPanel data={result.anima_recovery} />}
 
             <button
               className="mt-1 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"

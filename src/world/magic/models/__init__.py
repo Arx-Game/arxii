@@ -7,7 +7,7 @@ Public names are re-exported here so external callers continue to use
 Submodules (see Scope 6 §4.4):
 - affinity: Affinity, Resonance
 - aura: CharacterAura, CharacterResonance, CharacterAffinityTotal
-- anima: CharacterAnima, CharacterAnimaRitual, AnimaRitualPerformance
+- anima: CharacterAnima, AnimaRitualPerformance
 - gifts: Gift, CharacterGift, Tradition, CharacterTradition
 - techniques: EffectType, TechniqueStyle, Restriction, IntensityTier, Technique,
   TechniqueAppliedCondition, TechniqueCapabilityGrant, TechniqueDamageProfile,
@@ -21,6 +21,7 @@ Submodules (see Scope 6 §4.4):
 - weaving: ThreadWeavingUnlock, CharacterThreadWeavingUnlock,
   ThreadWeavingTeachingOffer
 - rituals: Ritual, RitualComponentRequirement, ImbuingProseTemplate
+- ritual_scene_action: RitualSceneActionConfig
 - reincarnation: Reincarnation
 - grant: ResonanceGrant
 
@@ -49,7 +50,6 @@ from world.magic.models.anima import (
     AnimaConfig,
     AnimaRitualPerformance,
     CharacterAnima,
-    CharacterAnimaRitual,
 )
 from world.magic.models.aura import (
     CharacterAffinityTotal,
@@ -69,6 +69,14 @@ from world.magic.models.gifts import (
     TraditionManager,
 )
 from world.magic.models.grant import ResonanceGrant
+from world.magic.models.grants import (
+    BeginningsRitualGrant,
+    CodexEntryRitualGrant,
+    DistinctionRitualGrant,
+    PathRitualGrant,
+    TraditionRitualGrant,
+)
+from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.models.motifs import (
     Facet,
     FacetManager,
@@ -77,6 +85,7 @@ from world.magic.models.motifs import (
     MotifResonanceAssociation,
 )
 from world.magic.models.reincarnation import Reincarnation
+from world.magic.models.ritual_scene_action import RitualSceneActionConfig
 from world.magic.models.rituals import (
     ImbuingProseTemplate,
     Ritual,
@@ -127,23 +136,28 @@ __all__ = [
     "AnimaRitualPerformance",
     # audere (re-exported from world.magic.audere)
     "AudereThreshold",
+    # knowledge layer grants (Anima Ritual UI spec §Decision 6)
+    "BeginningsRitualGrant",
     # cantrips
     "Cantrip",
     # aura
     "CharacterAffinityTotal",
     "CharacterAnima",
-    "CharacterAnimaRitual",
     "CharacterAura",
     # gifts
     "CharacterGift",
     "CharacterResonance",
+    # knowledge layer (Anima Ritual UI spec §Decision 6)
+    "CharacterRitualKnowledge",
     # techniques
     "CharacterTechnique",
     # weaving
     "CharacterThreadWeavingUnlock",
     "CharacterTradition",
+    "CodexEntryRitualGrant",
     # corruption config (Scope 7 §2.3)
     "CorruptionConfig",
+    "DistinctionRitualGrant",
     "EffectType",
     "EffectTypeManager",
     "Facet",
@@ -161,6 +175,7 @@ __all__ = [
     "Motif",
     "MotifResonance",
     "MotifResonanceAssociation",
+    "PathRitualGrant",
     "PendingAlteration",
     # soul tether (Spec B §14.1, §15.1 — Task 1.7)
     "PendingStageAdvanceOffer",
@@ -178,6 +193,7 @@ __all__ = [
     "RestrictionManager",
     "Ritual",
     "RitualComponentRequirement",
+    "RitualSceneActionConfig",
     # room aura (Spec C §2.5, §2.6)
     "RoomAuraProfile",
     "RoomResonance",
@@ -205,4 +221,5 @@ __all__ = [
     "ThreadXPLockedLevel",
     "Tradition",
     "TraditionManager",
+    "TraditionRitualGrant",
 ]

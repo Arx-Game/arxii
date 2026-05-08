@@ -43,8 +43,8 @@ from world.forms.factories import (
 )
 from world.forms.models import FormType
 from world.goals.factories import CharacterGoalFactory, GoalDomainFactory
+from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
-    CharacterAnimaRitualFactory,
     CharacterAuraFactory,
     CharacterGiftFactory,
     CharacterTechniqueFactory,
@@ -54,6 +54,8 @@ from world.magic.factories import (
     MotifResonanceAssociationFactory,
     MotifResonanceFactory,
     ResonanceFactory,
+    RitualFactory,
+    RitualSceneActionConfigFactory,
     TechniqueFactory,
     TechniqueStyleFactory,
 )
@@ -983,14 +985,24 @@ class TestMagicSectionFull(TestCase):
         )
 
         # --- Anima Ritual ---
+        # Link character to its player account so author_account lookup works.
+        cls.character.db_account = cls.player.account
+        cls.character.save(update_fields=["db_account"])
+
         cls.stat_willpower = StatTraitFactory(name="Willpower")
         cls.melee_skill = SkillFactory(trait__name="Melee", trait__category=TraitCategory.COMBAT)
-        cls.ritual = CharacterAnimaRitualFactory(
-            character=cls.sheet,
+        cls.ritual = RitualFactory(
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+            author_account=cls.player.account,
+            description="Meditate with a blade in hand.",
+        )
+        RitualSceneActionConfigFactory(
+            ritual=cls.ritual,
             stat=cls.stat_willpower,
             skill=cls.melee_skill,
             resonance=cls.resonance_resolve,
-            description="Meditate with a blade in hand.",
         )
 
         # --- Aura (FK to ObjectDB) ---
@@ -1783,8 +1795,17 @@ class TestCharacterSheetQueryCount(TestCase):
         ritual_skill = SkillFactory(
             trait__name="QCRitualSkill", trait__category=TraitCategory.COMBAT
         )
-        CharacterAnimaRitualFactory(
-            character=cls.sheet,
+        # Link character to account for author_account lookup.
+        cls.character.db_account = cls.player.account
+        cls.character.save(update_fields=["db_account"])
+        qc_ritual = RitualFactory(
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+            author_account=cls.player.account,
+        )
+        RitualSceneActionConfigFactory(
+            ritual=qc_ritual,
             stat=stat_will,
             skill=ritual_skill,
             resonance=resonance,
@@ -1828,11 +1849,10 @@ class TestCharacterSheetQueryCount(TestCase):
         This test locks in the prefetch strategy. If a new N+1 regression
         is introduced, the query count will increase and this test will fail.
 
-        23 queries breakdown (SharedMemoryModel caching reduces some lookups):
+        24 queries breakdown (SharedMemoryModel caching reduces some lookups):
          1-4.  Session management (check, savepoint, insert, release)
          5.    CharacterSheet + select_related (character, identity FKs,
-               build, aura, anima_ritual FKs, roster_entry,
-               profile_picture__media)
+               build, aura, roster_entry, profile_picture__media)
          6.    tenures + player_data + account (via Prefetch select_related)
          7.    path_history
          8.    character forms (TRUE filter)
@@ -1841,17 +1861,18 @@ class TestCharacterSheetQueryCount(TestCase):
         11.    character skill_values
         12.    character specialization_values
         13.    character distinctions
-        14.    character_gifts (via CharacterSheet)
-        15.    gift resonances (nested Prefetch)
-        16.    character_techniques (via CharacterSheet)
-        17.    motif resonances (nested Prefetch via CharacterSheet)
-        18.    motif resonance facet_assignments (nested Prefetch)
-        19.    goals
-        20.    personas + thumbnails (via Prefetch select_related)
-        21-23. Session management (savepoint, update, release)
+        14.    authored_rituals (SCENE_ACTION kind, prefetched via db_account)
+        15.    character_gifts (via CharacterSheet)
+        16.    gift resonances (nested Prefetch)
+        17.    character_techniques (via CharacterSheet)
+        18.    motif resonances (nested Prefetch via CharacterSheet)
+        19.    motif resonance facet_assignments (nested Prefetch)
+        20.    goals
+        21.    personas + thumbnails (via Prefetch select_related)
+        22-24. Session management (savepoint, update, release)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(23):
+        with self.assertNumQueries(24):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
@@ -1969,8 +1990,17 @@ class TestPrefetchCompleteness(TestCase):
 
         stat_will = StatTraitFactory(name="PFWill")
         ritual_skill = SkillFactory(trait__name="PFRitSkill", trait__category=TraitCategory.COMBAT)
-        CharacterAnimaRitualFactory(
-            character=cls.sheet,
+        # Link character to account for author_account lookup.
+        cls.character.db_account = cls.player.account
+        cls.character.save(update_fields=["db_account"])
+        pf_ritual = RitualFactory(
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+            author_account=cls.player.account,
+        )
+        RitualSceneActionConfigFactory(
+            ritual=pf_ritual,
             stat=stat_will,
             skill=ritual_skill,
             resonance=resonance,

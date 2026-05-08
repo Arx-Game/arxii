@@ -26,7 +26,7 @@ from world.magic.services.alterations import (
     staff_clear_alteration,
     validate_alteration_resolution,
 )
-from world.magic.services.anima import deduct_anima
+from world.magic.services.anima import deduct_anima, provision_player_anima_ritual
 from world.magic.services.aura import (
     calculate_affinity_breakdown,
     get_aura_percentages,
@@ -39,6 +39,7 @@ from world.magic.services.resonance import (
     spend_resonance_for_imbuing,
     spend_resonance_for_pull,
 )
+from world.magic.services.ritual_knowledge import reconcile_ritual_knowledge
 from world.magic.services.soulfray import (
     calculate_soulfray_severity,
     get_soulfray_warning,
@@ -98,7 +99,9 @@ __all__ = [
     "imbue_ready_threads",
     "near_xp_lock_threads",
     "preview_resonance_pull",
+    "provision_player_anima_ritual",
     "recompute_max_health_with_threads",
+    "reconcile_ritual_knowledge",
     "resolve_pending_alteration",
     "resolve_pull_effects",
     "select_mishap_pool",

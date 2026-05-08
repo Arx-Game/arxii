@@ -19,7 +19,6 @@ from world.magic.models import (
     Affinity,
     AnimaRitualPerformance,
     CharacterAnima,
-    CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
     CharacterResonance,
@@ -42,6 +41,7 @@ from world.magic.models import (
     Restriction,
     Ritual,
     RitualComponentRequirement,
+    RitualSceneActionConfig,
     SoulfrayConfig,
     Technique,
     TechniqueAppliedCondition,
@@ -59,7 +59,9 @@ from world.magic.models import (
     Tradition,
 )
 from world.magic.models.anima import AnimaConfig
+from world.magic.models.knowledge import CharacterRitualKnowledge
 from world.magic.types.ritual import SoulfrayContent
+from world.roster.factories import RosterEntryFactory
 from world.traits.factories import TraitFactory
 
 
@@ -352,33 +354,6 @@ class CharacterAnimaFactory(factory.django.DjangoModelFactory):
     character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
     current = 10
     maximum = 10
-
-
-class CharacterAnimaRitualFactory(factory.django.DjangoModelFactory):
-    """Factory for CharacterAnimaRitual with stat + skill + resonance."""
-
-    class Meta:
-        model = CharacterAnimaRitual
-
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    stat = factory.SubFactory("world.traits.factories.TraitFactory", trait_type="stat")
-    skill = factory.SubFactory("world.skills.factories.SkillFactory")
-    specialization = None
-    resonance = factory.SubFactory(ResonanceFactory)
-    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    description = factory.Faker("paragraph")
-
-
-class AnimaRitualPerformanceFactory(factory.django.DjangoModelFactory):
-    """Factory for AnimaRitualPerformance records."""
-
-    class Meta:
-        model = AnimaRitualPerformance
-
-    ritual = factory.SubFactory(CharacterAnimaRitualFactory)
-    target_character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    was_successful = True
-    anima_recovered = factory.LazyAttribute(lambda o: 5 if o.was_successful else None)
 
 
 # =============================================================================
@@ -731,6 +706,51 @@ class RitualComponentRequirementFactory(factory.django.DjangoModelFactory):
     item_template = factory.SubFactory("world.items.factories.ItemTemplateFactory")
     quantity = 1
     min_quality_tier = None
+
+
+class RitualSceneActionConfigFactory(factory.django.DjangoModelFactory):
+    """Factory for RitualSceneActionConfig sidecar.
+
+    Requires a SCENE_ACTION ritual. The stat/skill/check_type mirrors the
+    CharacterAnimaRitual factory pattern.
+    """
+
+    class Meta:
+        model = RitualSceneActionConfig
+
+    ritual = factory.SubFactory(
+        RitualFactory,
+        execution_kind=RitualExecutionKind.SCENE_ACTION,
+        service_function_path="",
+        flow=None,
+    )
+    stat = factory.SubFactory(TraitFactory)
+    skill = factory.SubFactory("world.skills.factories.SkillFactory")
+    specialization = None
+    resonance = None
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    target_difficulty = 3
+
+
+class AnimaRitualPerformanceFactory(factory.django.DjangoModelFactory):
+    """Factory for AnimaRitualPerformance records.
+
+    The ritual FK points to Ritual (execution_kind=SCENE_ACTION).
+    Use RitualSceneActionConfigFactory(ritual=...) to build the full pair.
+    """
+
+    class Meta:
+        model = AnimaRitualPerformance
+
+    ritual = factory.SubFactory(
+        RitualFactory,
+        execution_kind=RitualExecutionKind.SCENE_ACTION,
+        service_function_path="",
+        flow=None,
+    )
+    target_character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    was_successful = True
+    anima_recovered = factory.LazyAttribute(lambda o: 5 if o.was_successful else None)
 
 
 # =============================================================================
@@ -1839,3 +1859,15 @@ def author_reference_corruption_content() -> None:
                     stage_threshold=stage,
                     kind=AlterationKind.CORRUPTION_TWIST,
                 )
+
+
+class CharacterRitualKnowledgeFactory(factory.django.DjangoModelFactory):
+    """Factory for CharacterRitualKnowledge."""
+
+    class Meta:
+        model = CharacterRitualKnowledge
+        django_get_or_create = ("roster_entry", "ritual")
+
+    roster_entry = factory.SubFactory(RosterEntryFactory)
+    ritual = factory.SubFactory(RitualFactory)
+    learned_from = None

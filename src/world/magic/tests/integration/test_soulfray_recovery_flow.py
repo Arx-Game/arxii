@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import (
     ArcaneTremorTemplateFactory,
@@ -32,10 +33,12 @@ from world.conditions.services import (
     decay_condition_severity,
     perform_treatment,
 )
+from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
     AnimaConfigFactory,
     CharacterAnimaFactory,
-    CharacterAnimaRitualFactory,
+    RitualFactory,
+    RitualSceneActionConfigFactory,
     SoulfrayConfigFactory,
     SoulfrayContentFactory,
     wire_soulfray_aftermath,
@@ -99,7 +102,17 @@ class SoulfrayRecoveryFlowIntegrationTests(TestCase):
     ) -> None:
         # --- 1) Target character accumulates Soulfray to stage 3 (Ripping) ---
         target_sheet = CharacterSheetFactory()
-        CharacterAnimaRitualFactory(character=target_sheet)
+        # Create SCENE_ACTION Ritual for the character via author_account
+        _account = AccountFactory()
+        target_sheet.character.db_account = _account
+        target_sheet.character.save(update_fields=["db_account"])
+        _ritual = RitualFactory(
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+            author_account=_account,
+        )
+        RitualSceneActionConfigFactory(ritual=_ritual)
         target_anima = CharacterAnimaFactory(
             character=target_sheet.character,
             current=0,

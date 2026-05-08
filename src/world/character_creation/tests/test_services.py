@@ -1371,3 +1371,119 @@ class FinalizeGMCharacterTests(TestCase):
         assert progress_qs.count() == 1, "Exactly one StoryProgress should be created"
         progress = progress_qs.get()
         assert progress.current_episode is None, "current_episode should be None at CG time"
+
+
+class FinalizeRitualKnowledgeTests(FinalizationTestMixin, TestCase):
+    """Tests for ritual knowledge reconciliation during character finalization (Phase 8)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.skills.factories import SkillFactory
+
+        cls._setup_finalization_base(
+            cls, prefix="Ritual Knowledge Test", height_min=3100, height_max=3200
+        )
+        # Skill needed so provision_player_anima_ritual doesn't log + skip.
+        cls.combat_skill = SkillFactory(trait__name="RKTMelee")
+
+    def setUp(self):
+        self._flush_common_caches()
+        self.account = AccountDB.objects.create(username=f"ritualktest_{id(self)}")
+
+    def _create_complete_draft(self) -> CharacterDraft:
+        return self._create_base_draft(
+            first_name="RitualKTest",
+            skills={str(self.combat_skill.pk): 20},
+        )
+
+    def test_finalize_creates_player_anima_ritual(self) -> None:
+        """finalize_character creates a SCENE_ACTION Ritual authored by the player account."""
+        from world.magic.constants import RitualExecutionKind
+        from world.magic.models.rituals import Ritual
+
+        draft = self._create_complete_draft()
+        finalize_character(draft, add_to_roster=True)
+
+        ritual = Ritual.objects.filter(
+            author_account=self.account,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+        ).first()
+        assert ritual is not None, "Expected a SCENE_ACTION Ritual authored by the player account"
+        assert "RitualKTest" in ritual.name
+
+    def test_finalize_creates_ritual_sidecar(self) -> None:
+        """finalize_character creates RitualSceneActionConfig for the player anima ritual."""
+        from world.magic.constants import RitualExecutionKind
+        from world.magic.models.ritual_scene_action import RitualSceneActionConfig
+        from world.magic.models.rituals import Ritual
+
+        draft = self._create_complete_draft()
+        finalize_character(draft, add_to_roster=True)
+
+        ritual = Ritual.objects.filter(
+            author_account=self.account,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+        ).first()
+        assert ritual is not None
+        assert RitualSceneActionConfig.objects.filter(ritual=ritual).exists(), (
+            "Expected a RitualSceneActionConfig sidecar for the player anima ritual"
+        )
+
+    def test_finalize_creates_ritual_knowledge_row(self) -> None:
+        """finalize_character creates CharacterRitualKnowledge for the player anima ritual."""
+        from world.magic.constants import RitualExecutionKind
+        from world.magic.models import CharacterRitualKnowledge
+        from world.magic.models.rituals import Ritual
+
+        draft = self._create_complete_draft()
+        character = finalize_character(draft, add_to_roster=True)
+
+        ritual = Ritual.objects.filter(
+            author_account=self.account,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+        ).first()
+        assert ritual is not None
+        roster_entry = character.sheet_data.roster_entry
+        assert CharacterRitualKnowledge.objects.filter(
+            roster_entry=roster_entry,
+            ritual=ritual,
+        ).exists(), "Expected CharacterRitualKnowledge for the player anima ritual"
+
+    def test_finalize_grants_path_rituals(self) -> None:
+        """finalize_character reconciles PathRitualGrant → CharacterRitualKnowledge rows."""
+        from world.magic.factories import RitualFactory
+        from world.magic.models import CharacterRitualKnowledge
+        from world.magic.models.grants import PathRitualGrant
+
+        granted_ritual = RitualFactory()
+        PathRitualGrant.objects.create(path=self.path, ritual=granted_ritual)
+
+        draft = self._create_complete_draft()
+        character = finalize_character(draft, add_to_roster=True)
+
+        roster_entry = character.sheet_data.roster_entry
+        assert CharacterRitualKnowledge.objects.filter(
+            roster_entry=roster_entry,
+            ritual=granted_ritual,
+        ).exists(), "Expected CharacterRitualKnowledge for the path-granted ritual"
+
+    def test_finalize_grants_beginnings_rituals(self) -> None:
+        """finalize_character grants BeginningsRitualGrant rituals directly (Option A)."""
+        from world.magic.factories import RitualFactory
+        from world.magic.models import CharacterRitualKnowledge
+        from world.magic.models.grants import BeginningsRitualGrant
+
+        granted_ritual = RitualFactory()
+        BeginningsRitualGrant.objects.create(
+            beginnings=self.beginnings,
+            ritual=granted_ritual,
+        )
+
+        draft = self._create_complete_draft()
+        character = finalize_character(draft, add_to_roster=True)
+
+        roster_entry = character.sheet_data.roster_entry
+        assert CharacterRitualKnowledge.objects.filter(
+            roster_entry=roster_entry,
+            ritual=granted_ritual,
+        ).exists(), "Expected CharacterRitualKnowledge for the beginnings-granted ritual"

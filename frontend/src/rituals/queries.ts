@@ -7,7 +7,8 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
-import type { PerformRitualRequest } from './types';
+import type { AnimaRitualPatchBody } from './api';
+import type { PerformRitualRequest, Ritual } from './types';
 
 // ---------------------------------------------------------------------------
 // Query key factory
@@ -53,6 +54,18 @@ export function usePerformRitual() {
       // and the broad 'all' key so any downstream ritual-affected data refreshes.
       void qc.invalidateQueries({ queryKey: ritualKeys.list() });
       void qc.invalidateQueries({ queryKey: ritualKeys.all });
+    },
+  });
+}
+
+export function usePatchRitual() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: number; body: AnimaRitualPatchBody }) =>
+      api.patchRitual(id, body),
+    onSuccess: (data: Ritual) => {
+      void qc.invalidateQueries({ queryKey: ritualKeys.detail(data.id) });
+      void qc.invalidateQueries({ queryKey: ritualKeys.list() });
     },
   });
 }

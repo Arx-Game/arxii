@@ -52,6 +52,8 @@ const mockRitual = {
       },
     ],
   },
+  author_account_id: null,
+  scene_action_config: null,
 };
 
 describe('Rituals Query Hooks', () => {

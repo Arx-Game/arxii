@@ -13,8 +13,9 @@ from world.scenes.action_constants import (
     ConsentDecision,
     DifficultyChoice,
 )
+from world.scenes.action_resolvers import _RESOLVER_REGISTRY, register_resolver
 from world.scenes.action_services import create_action_request, respond_to_action_request
-from world.scenes.factories import PersonaFactory, SceneFactory
+from world.scenes.factories import PersonaFactory, SceneActionRequestFactory, SceneFactory
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.types import EnhancedSceneActionResult
 
@@ -75,6 +76,15 @@ class TestRespondToActionRequest(TestCase):
         cls.scene = SceneFactory()
         cls.initiator = PersonaFactory()
         cls.target = PersonaFactory()
+
+    def setUp(self) -> None:
+        """Mock award_kudos for all tests in this class."""
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.mock_award_kudos = self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        """Stop mocking award_kudos."""
+        self.award_kudos_patcher.stop()
 
     def test_deny_sets_status(self) -> None:
         request = create_action_request(
@@ -179,3 +189,239 @@ class TestRespondToActionRequest(TestCase):
                 action_request=request,
                 decision=ConsentDecision.ACCEPT,
             )
+
+
+class TestResolverIntegration(TestCase):
+    """Tests that the action_resolvers registry is invoked by respond_to_action_request."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+        cls.action_template = ActionTemplateFactory()
+
+    def setUp(self) -> None:
+        """Mock award_kudos for all tests in this class."""
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.mock_award_kudos = self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        """Stop mocking award_kudos."""
+        self.award_kudos_patcher.stop()
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_resolver_called_on_accept(self, mock_resolve: MagicMock) -> None:
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        captured: list[tuple[int, object]] = []
+
+        def fake_resolver(request, outcome):
+            captured.append((request.pk, outcome))
+
+        register_resolver("test_action", fake_resolver)
+        self.addCleanup(lambda: _RESOLVER_REGISTRY.pop("test_action", None))
+
+        action_request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="test_action",
+        )
+        action_request.action_template = self.action_template
+        action_request.save(update_fields=["action_template"])
+
+        respond_to_action_request(action_request=action_request, decision=ConsentDecision.ACCEPT)
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0][0], action_request.pk)
+
+    def test_resolver_not_called_on_deny(self) -> None:
+        captured: list[int] = []
+
+        def _deny_resolver(_request, _outcome):
+            captured.append(1)
+
+        register_resolver("test_action_deny", _deny_resolver)
+        self.addCleanup(lambda: _RESOLVER_REGISTRY.pop("test_action_deny", None))
+
+        action_request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="test_action_deny",
+        )
+        respond_to_action_request(action_request=action_request, decision=ConsentDecision.DENY)
+        self.assertEqual(captured, [])
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_no_resolver_registered_no_op(self, mock_resolve: MagicMock) -> None:
+        """Accepting with no resolver registered should not raise."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        action_request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="unknown_action_xyz",
+        )
+        action_request.action_template = self.action_template
+        action_request.save(update_fields=["action_template"])
+
+        # Should not raise
+        result = respond_to_action_request(
+            action_request=action_request, decision=ConsentDecision.ACCEPT
+        )
+        self.assertIsNotNone(result)
+
+
+class GenericKudosOnAcceptTests(TestCase):
+    """Tests that accepting an action request awards Kudos to the target."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+        cls.action_template = ActionTemplateFactory()
+
+    @patch("world.scenes.action_services.award_kudos")
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_kudos_awarded_to_target_on_accept(
+        self, mock_resolve: MagicMock, mock_award_kudos: MagicMock
+    ) -> None:
+        """Accepting an action request calls award_kudos with target account."""
+        from evennia.accounts.models import AccountDB
+
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        # Attach an account to the target's character so the kudos path runs.
+        # (The default PersonaFactory wires a CharacterSheet with no db_account.)
+        target_account = AccountDB.objects.create(username="kudos_target_acct")
+        self.target.character_sheet.character.db_account = target_account
+        self.target.character_sheet.character.save(update_fields=["db_account"])
+
+        action_request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="generic",
+            status=ActionRequestStatus.PENDING,
+        )
+        action_request.action_template = self.action_template
+        action_request.save(update_fields=["action_template"])
+
+        respond_to_action_request(action_request=action_request, decision=ConsentDecision.ACCEPT)
+
+        # Verify award_kudos was called with the target account
+        mock_award_kudos.assert_called_once()
+        call_args = mock_award_kudos.call_args
+        self.assertIsNotNone(call_args)
+        # Check that source_category name is 'social_engagement'
+        self.assertEqual(
+            call_args.kwargs.get("source_category").name,
+            "social_engagement",
+        )
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_no_kudos_award_call_on_deny(self, mock_resolve: MagicMock) -> None:
+        """Denying an action request does not call award_kudos."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        action_request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="generic",
+            status=ActionRequestStatus.PENDING,
+        )
+        action_request.action_template = self.action_template
+        action_request.save(update_fields=["action_template"])
+
+        with patch("world.scenes.action_services.award_kudos") as mock_award:
+            respond_to_action_request(action_request=action_request, decision=ConsentDecision.DENY)
+            # Verify award_kudos was NOT called
+            mock_award.assert_not_called()
+
+    @patch("world.scenes.action_services.award_kudos")
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_no_kudos_when_target_has_no_account(
+        self, mock_resolve: MagicMock, mock_award_kudos: MagicMock
+    ) -> None:
+        """Skip kudos award when target's character has no linked account.
+
+        Personas backed by characters without db_account (NPCs, test fixtures)
+        are valid action_request targets; the kudos award is a no-op for them
+        rather than crashing on a NOT NULL constraint violation.
+        """
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        # Detach the target character's account, simulating an NPC persona.
+        self.target.character_sheet.character.db_account = None
+        self.target.character_sheet.character.save(update_fields=["db_account"])
+
+        action_request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="generic",
+            status=ActionRequestStatus.PENDING,
+        )
+        action_request.action_template = self.action_template
+        action_request.save(update_fields=["action_template"])
+
+        # Should not raise — and should not call award_kudos.
+        respond_to_action_request(action_request=action_request, decision=ConsentDecision.ACCEPT)
+        mock_award_kudos.assert_not_called()
+
+
+class TestCreateActionRequestSnapshotFields(TestCase):
+    """Snapshot fields are populated when ritual_id is provided."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.magic.constants import RitualExecutionKind
+        from world.magic.factories import RitualFactory, RitualSceneActionConfigFactory
+
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+        cls.ritual = RitualFactory(
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+        )
+        cls.config = RitualSceneActionConfigFactory(ritual=cls.ritual)
+
+    def test_create_action_request_with_ritual_id_populates_snapshot(self) -> None:
+        """When ritual_id is provided, all snapshot fields are populated from the ritual."""
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="anima_ritual",
+            ritual_id=self.ritual.pk,
+        )
+
+        assert request.snapshot_ritual == self.ritual
+        assert request.snapshot_stat == self.config.stat
+        assert request.snapshot_skill == self.config.skill
+        assert request.snapshot_specialization == self.config.specialization
+        assert request.snapshot_resonance == self.config.resonance
+        assert request.snapshot_check_type == self.config.check_type
+        assert request.snapshot_target_difficulty == self.config.target_difficulty
+
+    def test_create_action_request_without_ritual_id_leaves_snapshot_null(self) -> None:
+        """Without ritual_id, all snapshot fields remain None."""
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="intimidate",
+        )
+
+        assert request.snapshot_stat is None
+        assert request.snapshot_skill is None
+        assert request.snapshot_specialization is None
+        assert request.snapshot_resonance is None
+        assert request.snapshot_check_type is None
+        assert request.snapshot_target_difficulty is None

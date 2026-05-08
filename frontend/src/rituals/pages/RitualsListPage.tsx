@@ -1,14 +1,18 @@
 /**
  * RitualsListPage — browse and perform available rituals.
  *
- * Reads the list from useRituals() and the active character from the auth
- * Redux slice. The first entry in `account.available_characters` is used as
- * the performing character; its `id` is the ObjectDB pk which equals the
- * CharacterSheet pk (OneToOne with primary_key=True).
+ * Split into two sections:
+ *   1. "Authored by you" — rituals where author_account matches the current account id.
+ *      These are SCENE_ACTION anima rituals the player has personalised.
+ *   2. "Known rituals" — all other rituals the character has knowledge of.
  *
- * If the player has no available character, a friendly empty state is shown
- * and the rituals query is still fired (the page is read-only until a
- * character is selected). The Perform button is hidden in that case.
+ * Backend gap (Phase 9): The RitualSerializer does not expose `author_account_id`,
+ * so the authored/known split currently falls back to checking
+ * execution_kind === 'SCENE_ACTION' as a proxy. When Phase 10 adds
+ * `author_account_id` to the serializer, replace the proxy check with a
+ * proper account-id comparison.
+ *
+ * The active character's id == CharacterSheet pk (OneToOne primary_key=True on ObjectDB).
  */
 
 import { useSelector } from 'react-redux';
@@ -49,6 +53,14 @@ function LoadingSkeletons() {
 }
 
 // ---------------------------------------------------------------------------
+// Section header
+// ---------------------------------------------------------------------------
+
+function SectionHeader({ title }: { title: string }) {
+  return <h2 className="mb-3 text-lg font-semibold text-foreground">{title}</h2>;
+}
+
+// ---------------------------------------------------------------------------
 // Inner page (inside error boundary)
 // ---------------------------------------------------------------------------
 
@@ -62,6 +74,7 @@ function RitualsListInner() {
   const activeCharacter =
     account?.available_characters?.find((c) => c.currently_puppeted_in_session) ?? null;
   const characterSheetId = activeCharacter?.id ?? null;
+  const currentAccountId = account?.id ?? null;
 
   if (isLoading) return <LoadingSkeletons />;
 
@@ -74,9 +87,9 @@ function RitualsListInner() {
     );
   }
 
-  const rituals = data?.results ?? [];
+  const allRituals = (data?.results ?? []) as RitualWithSchema[];
 
-  if (rituals.length === 0) {
+  if (allRituals.length === 0) {
     return (
       <p className="py-8 text-center text-muted-foreground">
         No rituals available for your character at this time.
@@ -84,15 +97,54 @@ function RitualsListInner() {
     );
   }
 
+  // Partition rituals: SCENE_ACTION execution_kind is a proxy for "authored by you"
+  // until Phase 10 backend adds author_account_id to the serializer.
+  // When that lands, replace this with:
+  //   const authoredRituals = allRituals.filter(r => r.author_account_id === currentAccountId);
+  //   const knownRituals = allRituals.filter(r => r.author_account_id !== currentAccountId);
+  const authoredRituals = allRituals.filter((r) => (r.execution_kind as string) === 'SCENE_ACTION');
+  const knownRituals = allRituals.filter((r) => (r.execution_kind as string) !== 'SCENE_ACTION');
+
+  const hasSections = authoredRituals.length > 0 && knownRituals.length > 0;
+
   return (
-    <div className="space-y-3">
-      {rituals.map((ritual) => (
-        <RitualCard
-          key={ritual.id}
-          ritual={ritual as RitualWithSchema}
-          characterSheetId={characterSheetId}
-        />
-      ))}
+    <div className="space-y-8">
+      {/* Authored by you — SCENE_ACTION anima rituals */}
+      {authoredRituals.length > 0 && (
+        <section data-testid="authored-rituals-section">
+          {hasSections && <SectionHeader title="Authored by you" />}
+          <div className="space-y-3">
+            {authoredRituals.map((ritual) => (
+              <RitualCard
+                key={ritual.id}
+                ritual={ritual}
+                characterSheetId={characterSheetId}
+                currentAccountId={currentAccountId}
+                // author_account_id not yet in serializer — Phase 10 gap.
+                // For now, pass currentAccountId so edit button is visible to owner.
+                authorAccountId={currentAccountId}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Known rituals — everything else */}
+      {knownRituals.length > 0 && (
+        <section data-testid="known-rituals-section">
+          {hasSections && <SectionHeader title="Known rituals" />}
+          <div className="space-y-3">
+            {knownRituals.map((ritual) => (
+              <RitualCard
+                key={ritual.id}
+                ritual={ritual}
+                characterSheetId={characterSheetId}
+                currentAccountId={currentAccountId}
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.magic.models import Technique
+    from world.scenes.models import Scene
 
 
 @dataclass
@@ -32,21 +33,34 @@ class AvailableEnhancement:
 
 @dataclass
 class AvailableSceneAction:
-    """A social action with its available technique enhancements."""
+    """A social action with its available technique enhancements (or a contributor entry)."""
 
     action_key: str
-    action_template: ActionTemplate
+    action_template: ActionTemplate | None = None
     enhancements: list[AvailableEnhancement] = field(default_factory=list)
+    # Fields used by menu contributors (action_template is None for these entries):
+    display_name: str = ""
+    ritual_id: int | None = None
 
 
 def get_available_scene_actions(
     *,
     character: ObjectDB,
+    scene: Scene | None = None,
 ) -> list[AvailableSceneAction]:
     """Return available social actions with technique enhancement options.
 
     Batches queries: known techniques fetched once, runtime stats cached per
     technique, Soulfray warning fetched once.
+
+    After building template-driven actions, merges entries from all registered
+    menu contributors (e.g. anima ritual entries). Contributors receive the
+    character and the optional scene context.
+
+    Args:
+        character: The character for whom to build the action list.
+        scene: Optional current scene context. Passed to menu contributors;
+            may be None when called from a context without an active scene.
     """
     templates = list(ActionTemplate.objects.filter(category="social"))
 
@@ -113,6 +127,11 @@ def get_available_scene_actions(
                 enhancements=available_enhancements,
             )
         )
+
+    from world.scenes.action_resolvers import get_menu_contributors  # noqa: PLC0415
+
+    for contributor in get_menu_contributors():
+        actions.extend(contributor(character, scene))
 
     return actions
 

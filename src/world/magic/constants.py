@@ -101,6 +101,7 @@ class VitalBonusTarget(models.TextChoices):
 class RitualExecutionKind(models.TextChoices):
     SERVICE = "SERVICE", "Service"
     FLOW = "FLOW", "Flow"
+    SCENE_ACTION = "SCENE_ACTION", "Scene Action"
 
 
 class SoulTetherRole(models.TextChoices):

@@ -3,6 +3,8 @@
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
+from world.magic.constants import RitualExecutionKind
+from world.magic.factories import RitualFactory, RitualSceneActionConfigFactory
 from world.scenes.action_constants import ActionRequestStatus, DifficultyChoice
 from world.scenes.factories import (
     PersonaFactory,
@@ -86,3 +88,46 @@ class TestSceneActionRequest(TestCase):
         )
         assert request.resolved_difficulty == 60
         assert request.difficulty_choice == DifficultyChoice.HARD
+
+    def test_snapshot_fields_default_null(self) -> None:
+        """Snapshot fields should default to NULL."""
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+        )
+        self.assertIsNone(request.snapshot_ritual)
+        self.assertIsNone(request.snapshot_stat)
+        self.assertIsNone(request.snapshot_skill)
+        self.assertIsNone(request.snapshot_specialization)
+        self.assertIsNone(request.snapshot_resonance)
+        self.assertIsNone(request.snapshot_check_type)
+        self.assertIsNone(request.snapshot_target_difficulty)
+
+    def test_snapshot_fields_can_be_set(self) -> None:
+        """Snapshot fields can be set from a ritual config."""
+        ritual = RitualFactory(
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+        )
+        config = RitualSceneActionConfigFactory(ritual=ritual)
+        request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            snapshot_ritual=ritual,
+            snapshot_stat=config.stat,
+            snapshot_skill=config.skill,
+            snapshot_specialization=config.specialization,
+            snapshot_resonance=config.resonance,
+            snapshot_check_type=config.check_type,
+            snapshot_target_difficulty=config.target_difficulty,
+        )
+        self.assertEqual(request.snapshot_ritual, ritual)
+        self.assertEqual(request.snapshot_stat, config.stat)
+        self.assertEqual(request.snapshot_skill, config.skill)
+        self.assertEqual(request.snapshot_specialization, config.specialization)
+        self.assertEqual(request.snapshot_resonance, config.resonance)
+        self.assertEqual(request.snapshot_check_type, config.check_type)
+        self.assertEqual(request.snapshot_target_difficulty, config.target_difficulty)

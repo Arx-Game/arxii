@@ -9,6 +9,8 @@ from django.utils import timezone
 
 from actions.services import start_action_resolution
 from world.checks.types import ResolutionContext
+from world.progression.models import KudosSourceCategory
+from world.progression.services.kudos import award_kudos
 from world.scenes.action_constants import (
     DIFFICULTY_VALUES,
     ActionRequestStatus,
@@ -16,6 +18,7 @@ from world.scenes.action_constants import (
     DifficultyChoice,
 )
 from world.scenes.action_models import SceneActionRequest
+from world.scenes.action_resolvers import get_resolver
 from world.scenes.interaction_services import create_interaction
 from world.scenes.models import Interaction, Persona, Scene
 from world.scenes.types import EnhancedSceneActionResult
@@ -26,6 +29,20 @@ if TYPE_CHECKING:
     from actions.models.action_templates import ActionTemplate
     from actions.types import PendingActionResolution
     from world.magic.models import Technique
+
+# Cache for social_engagement category - initialized on first access.
+_SOCIAL_ENGAGEMENT_CATEGORY: KudosSourceCategory | None = None
+
+
+def _get_social_engagement_category() -> KudosSourceCategory:
+    """Lazy-load the social_engagement KudosSourceCategory from DB.
+
+    Uses module-level caching to avoid repeated DB lookups.
+    """
+    global _SOCIAL_ENGAGEMENT_CATEGORY  # noqa: PLW0603
+    if _SOCIAL_ENGAGEMENT_CATEGORY is None:
+        _SOCIAL_ENGAGEMENT_CATEGORY = KudosSourceCategory.objects.get(name="social_engagement")
+    return _SOCIAL_ENGAGEMENT_CATEGORY
 
 
 def _validate_technique_enhancement(
@@ -65,7 +82,7 @@ def _validate_technique_enhancement(
         raise ValidationError(msg)
 
 
-def create_action_request(  # noqa: PLR0913 — keyword-only API, technique is optional
+def create_action_request(  # noqa: PLR0913 — keyword-only API, several optional params
     *,
     scene: Scene,
     initiator_persona: Persona,
@@ -73,11 +90,17 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, technique is o
     action_key: str,
     difficulty_choice: str = DifficultyChoice.NORMAL,
     technique: Technique | None = None,
+    ritual_id: int | None = None,
 ) -> SceneActionRequest:
     """Create a pending action request for consent.
 
     The request starts in PENDING status. The target must accept or deny
     before resolution can proceed.
+
+    When ritual_id is provided (a Ritual.id with execution_kind=SCENE_ACTION),
+    the snapshot fields are populated from the ritual's check specification so
+    the accepted request carries a full audit trail of the ritual config at
+    fire time.
 
     Args:
         scene: The scene where this action takes place.
@@ -88,6 +111,9 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, technique is o
         technique: Optional technique to enhance this action. Must have an
             ActionEnhancement record for the given action_key and the
             initiator's character must know it.
+        ritual_id: Optional Ritual PK (execution_kind=SCENE_ACTION). When provided,
+            snapshot fields (stat, skill, specialization, resonance, check_type,
+            target_difficulty) are populated from the ritual's sidecar config.
 
     Returns:
         The created SceneActionRequest in PENDING status.
@@ -102,6 +128,10 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, technique is o
             character_id=initiator_persona.character_sheet_id,
         )
 
+    snapshot_kwargs: dict[str, object] = {}
+    if ritual_id is not None:
+        snapshot_kwargs = _snapshot_kwargs_from_ritual(ritual_id)
+
     return SceneActionRequest.objects.create(
         scene=scene,
         initiator_persona=initiator_persona,
@@ -110,7 +140,43 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, technique is o
         difficulty_choice=difficulty_choice,
         status=ActionRequestStatus.PENDING,
         technique=technique,
+        **snapshot_kwargs,
     )
+
+
+def _snapshot_kwargs_from_ritual(ritual_id: int) -> dict[str, object]:
+    """Build snapshot field kwargs from a Ritual + RitualSceneActionConfig row.
+
+    Args:
+        ritual_id: PK of the Ritual (execution_kind=SCENE_ACTION) to snapshot.
+
+    Returns:
+        Dict of snapshot_* kwargs ready to spread into SceneActionRequest.objects.create().
+
+    Raises:
+        Ritual.DoesNotExist: If no matching row is found.
+    """
+    from world.magic.models.rituals import Ritual  # noqa: PLC0415
+
+    ritual = Ritual.objects.select_related(
+        "scene_action_config__stat",
+        "scene_action_config__skill",
+        "scene_action_config__specialization",
+        "scene_action_config__resonance",
+        "scene_action_config__check_type",
+    ).get(id=ritual_id)
+
+    config = ritual.scene_action_config
+
+    return {
+        "snapshot_ritual": ritual,
+        "snapshot_stat": config.stat,
+        "snapshot_skill": config.skill,
+        "snapshot_specialization": config.specialization,
+        "snapshot_resonance": config.resonance,
+        "snapshot_check_type": config.check_type,
+        "snapshot_target_difficulty": config.target_difficulty,
+    }
 
 
 def respond_to_action_request(
@@ -190,6 +256,29 @@ def respond_to_action_request(
             if result_interaction is not None:
                 action_request.result_interaction = result_interaction
                 action_request.save(update_fields=["result_interaction"])
+
+            # Award kudos to target for accepting the action request.
+            # Skip when the target has no linked account — NPC personas and
+            # established/temporary personas without an account are valid; the
+            # kudos award only applies to real player accounts.
+            target_character = action_request.target_persona.character_sheet.character
+            target_account = target_character.db_account
+            if target_account is not None:
+                category = _get_social_engagement_category()
+                initiator_character = action_request.initiator_persona.character_sheet.character
+                initiator_account = initiator_character.db_account
+                initiator_name = action_request.initiator_persona.name
+                award_kudos(
+                    account=target_account,
+                    amount=category.default_amount,
+                    source_category=category,
+                    description=f"Engaged with action request from {initiator_name}",
+                    awarded_by=initiator_account,
+                )
+
+            resolver = get_resolver(action_request.action_key)
+            if resolver is not None:
+                resolver(action_request, result)
 
         return result
 

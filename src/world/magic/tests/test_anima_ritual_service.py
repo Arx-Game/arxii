@@ -1,9 +1,13 @@
-"""Service tests for perform_anima_ritual (Scope 6 Phase 8).
+"""Service tests for perform_anima_ritual (Scope 6 Phase 8, updated Phase 7).
 
 Tests are grouped by scenario. The _scene_participant gate is patched to
 return True unless a test specifically exercises the gate. SoulfrayConfig
 and ConditionTemplate rows are created in setUp because they are singletons
 queried with .first() / .get(name=...).
+
+The per-character ritual is now a Ritual(execution_kind=SCENE_ACTION) +
+RitualSceneActionConfig. Tests create the full pair via factories and attach
+the Ritual to the character's account via author_account.
 """
 
 from __future__ import annotations
@@ -12,9 +16,11 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.magic.audere import SOULFRAY_CONDITION_NAME
+from world.magic.constants import RitualExecutionKind
 from world.magic.exceptions import (
     CharacterEngagedForRitual,
     NoRitualConfigured,
@@ -23,7 +29,8 @@ from world.magic.exceptions import (
 )
 from world.magic.factories import (
     CharacterAnimaFactory,
-    CharacterAnimaRitualFactory,
+    RitualFactory,
+    RitualSceneActionConfigFactory,
     SoulfrayConfigFactory,
 )
 from world.magic.models.anima import AnimaRitualPerformance
@@ -43,6 +50,27 @@ def _make_check_result(success_level: int) -> MagicMock:
     result.outcome = outcome
     result.success_level = success_level
     return result
+
+
+def _make_ritual_for_sheet(sheet):
+    """Create a SCENE_ACTION Ritual + sidecar for the given character sheet.
+
+    Sets character.db_account if not already set, then creates the ritual
+    with author_account pointing to that account.
+    """
+    character = sheet.character
+    if character.db_account is None:
+        account = AccountFactory()
+        character.db_account = account
+        character.save(update_fields=["db_account"])
+    ritual = RitualFactory(
+        execution_kind=RitualExecutionKind.SCENE_ACTION,
+        service_function_path="",
+        flow=None,
+        author_account=character.db_account,
+    )
+    RitualSceneActionConfigFactory(ritual=ritual)
+    return ritual
 
 
 # Patch target: source module where perform_check is defined
@@ -66,7 +94,7 @@ class CritNoSoulfrayTests(TestCase):
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
-        self.ritual = CharacterAnimaRitualFactory(character=self.sheet)
+        self.ritual = _make_ritual_for_sheet(self.sheet)
         self.anima = CharacterAnimaFactory(
             character=self.sheet.character,
             current=3,
@@ -105,7 +133,7 @@ class CritWithSoulfrayTests(TestCase):
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
-        self.ritual = CharacterAnimaRitualFactory(character=self.sheet)
+        self.ritual = _make_ritual_for_sheet(self.sheet)
         self.anima = CharacterAnimaFactory(
             character=self.sheet.character,
             current=5,
@@ -150,7 +178,7 @@ class SuccessWithSoulfrayTests(TestCase):
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
-        self.ritual = CharacterAnimaRitualFactory(character=self.sheet)
+        self.ritual = _make_ritual_for_sheet(self.sheet)
         self.anima = CharacterAnimaFactory(
             character=self.sheet.character,
             current=2,
@@ -196,7 +224,7 @@ class PartialWithHighSoulfrayTests(TestCase):
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
-        self.ritual = CharacterAnimaRitualFactory(character=self.sheet)
+        self.ritual = _make_ritual_for_sheet(self.sheet)
         self.anima = CharacterAnimaFactory(
             character=self.sheet.character,
             current=1,
@@ -245,7 +273,7 @@ class FailureNoSoulfrayTests(TestCase):
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
-        self.ritual = CharacterAnimaRitualFactory(character=self.sheet)
+        self.ritual = _make_ritual_for_sheet(self.sheet)
         self.anima = CharacterAnimaFactory(
             character=self.sheet.character,
             current=0,
@@ -282,7 +310,7 @@ class GateTests(TestCase):
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
-        self.ritual = CharacterAnimaRitualFactory(character=self.sheet)
+        self.ritual = _make_ritual_for_sheet(self.sheet)
         self.anima = CharacterAnimaFactory(
             character=self.sheet.character,
             current=5,
@@ -337,7 +365,7 @@ class PerformanceRowTests(TestCase):
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
-        self.ritual = CharacterAnimaRitualFactory(character=self.sheet)
+        self.ritual = _make_ritual_for_sheet(self.sheet)
         self.anima = CharacterAnimaFactory(
             character=self.sheet.character,
             current=3,

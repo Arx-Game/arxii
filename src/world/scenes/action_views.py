@@ -188,6 +188,9 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
         action_request.refresh_from_db()
         response_data = SceneActionRequestSerializer(action_request).data
         if result is not None:
-            response_data["result"] = EnhancedSceneActionResultSerializer(result).data
+            response_data["result"] = EnhancedSceneActionResultSerializer(
+                result,
+                context={"request": request, "action_request": action_request},
+            ).data
 
         return Response(response_data)

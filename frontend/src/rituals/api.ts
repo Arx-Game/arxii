@@ -33,6 +33,63 @@ const RITUALS_URL = '/api/magic/rituals';
 // Ritual reads
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Anima ritual edit (PATCH)
+// ---------------------------------------------------------------------------
+
+export interface AnimaRitualPatchBody {
+  name?: string;
+  description?: string;
+  narrative_prose?: string;
+  /** FK pk for traits.Trait (stat) */
+  stat_id?: number | null;
+  /** FK pk for skills.Skill */
+  skill_id?: number | null;
+  /** FK pk for skills.Specialization */
+  specialization_id?: number | null;
+  /** FK pk for magic.Resonance */
+  resonance_id?: number | null;
+  /** FK pk for checks.CheckType */
+  check_type_id?: number | null;
+  target_difficulty?: number;
+}
+
+/**
+ * PATCH /api/magic/rituals/{id}/
+ *
+ * Partially updates a player-authored anima ritual and its sidecar config.
+ *
+ * NOTE (Phase 9 gap): The backend RitualViewSet is currently ReadOnlyModelViewSet
+ * and does not accept PATCH. This function will return a 405 until the backend
+ * is upgraded to support partial updates. Flag for Phase 10.
+ */
+export async function patchRitual(id: number, body: AnimaRitualPatchBody): Promise<Ritual> {
+  const res = await apiFetch(`${RITUALS_URL}/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    let detail = 'Failed to update ritual';
+    try {
+      const data = (await res.json()) as { detail?: string };
+      if (typeof data.detail === 'string' && data.detail.trim()) {
+        detail = data.detail;
+      }
+    } catch {
+      // body wasn't JSON; keep generic
+    }
+    throw new Error(detail);
+  }
+
+  return res.json() as Promise<Ritual>;
+}
+
+// ---------------------------------------------------------------------------
+// Ritual reads
+// ---------------------------------------------------------------------------
+
 export async function getRituals(): Promise<PaginatedRitualList> {
   const res = await apiFetch(`${RITUALS_URL}/`);
   if (!res.ok) throw new Error('Failed to load rituals');

@@ -1,16 +1,15 @@
 """Character anima resource and recovery rituals.
 
 CharacterAnima tracks a character's magical energy resource.
-CharacterAnimaRitual defines personalized recovery ritual (stat + skill + resonance).
 AnimaRitualPerformance is the historical record of ritual performances.
+The personalized recovery ritual is now modelled as a Ritual row with
+execution_kind=SCENE_ACTION and a RitualSceneActionConfig sidecar.
 """
 
 from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.objects.models import ObjectDB
 from evennia.utils.idmapper.models import SharedMemoryModel
-
-from world.magic.models.affinity import Resonance
 
 
 class CharacterAnima(SharedMemoryModel):
@@ -64,66 +63,6 @@ class CharacterAnima(SharedMemoryModel):
         super().save(*args, **kwargs)
 
 
-class CharacterAnimaRitual(SharedMemoryModel):
-    """
-    A character's personalized anima recovery ritual.
-
-    Defines the stat + skill + optional specialization + resonance
-    combination used for social recovery activities.
-    """
-
-    character = models.OneToOneField(
-        "character_sheets.CharacterSheet",
-        on_delete=models.CASCADE,
-        related_name="anima_ritual",
-        help_text="The character this ritual belongs to.",
-    )
-    stat = models.ForeignKey(
-        "traits.Trait",
-        on_delete=models.PROTECT,
-        limit_choices_to={"trait_type": "stat"},
-        related_name="anima_rituals",
-        help_text="The primary stat used in this ritual.",
-    )
-    skill = models.ForeignKey(
-        "skills.Skill",
-        on_delete=models.PROTECT,
-        related_name="anima_rituals",
-        help_text="The skill used in this ritual.",
-    )
-    specialization = models.ForeignKey(
-        "skills.Specialization",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="anima_rituals",
-        help_text="Optional specialization for this ritual.",
-    )
-    resonance = models.ForeignKey(
-        Resonance,
-        on_delete=models.PROTECT,
-        related_name="anima_rituals",
-        help_text="The resonance that powers this ritual.",
-    )
-    check_type = models.ForeignKey(
-        "checks.CheckType",
-        on_delete=models.PROTECT,
-        related_name="anima_rituals",
-        help_text="CheckType used when rolling this ritual.",
-    )
-    description = models.TextField(
-        help_text="Social activity that restores anima.",
-    )
-    target_difficulty = models.PositiveIntegerField(default=0)
-
-    class Meta:
-        verbose_name = "Character Anima Ritual"
-        verbose_name_plural = "Character Anima Rituals"
-
-    def __str__(self) -> str:
-        return f"Anima Ritual of {self.character}"
-
-
 class AnimaRitualPerformance(SharedMemoryModel):
     """
     Historical record of an anima ritual performance.
@@ -132,10 +71,10 @@ class AnimaRitualPerformance(SharedMemoryModel):
     """
 
     ritual = models.ForeignKey(
-        CharacterAnimaRitual,
+        "magic.Ritual",
         on_delete=models.CASCADE,
         related_name="performances",
-        help_text="The ritual that was performed.",
+        help_text="The Ritual (SCENE_ACTION kind) that was performed.",
     )
     performed_at = models.DateTimeField(
         auto_now_add=True,

@@ -4,6 +4,8 @@ Exercises the complete pipeline: create request → consent → check resolution
 interaction creation, using real factories (no mocks) for the check system.
 """
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from actions.models import ActionEnhancement
@@ -18,6 +20,7 @@ from world.scenes.action_constants import (
     ConsentDecision,
     DifficultyChoice,
 )
+from world.scenes.action_resolvers import _MENU_CONTRIBUTORS, register_menu_contributor
 from world.scenes.action_services import create_action_request, respond_to_action_request
 from world.scenes.factories import PersonaFactory, SceneFactory
 from world.scenes.place_models import InteractionReceiver
@@ -25,7 +28,20 @@ from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import CharacterTraitValue, Trait
 
 
-class TestSceneActionIntegration(TestCase):
+class _BaseActionIntegrationTest(TestCase):
+    """Base class that mocks award_kudos for all action integration tests."""
+
+    def setUp(self) -> None:
+        """Mock award_kudos for all tests in this class."""
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.mock_award_kudos = self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        """Stop mocking award_kudos."""
+        self.award_kudos_patcher.stop()
+
+
+class TestSceneActionIntegration(_BaseActionIntegrationTest):
     """Full pipeline: request → consent → real check → interaction."""
 
     @classmethod
@@ -143,7 +159,7 @@ class TestSceneActionIntegration(TestCase):
             )
 
 
-class TestTechniqueEnhancementValidation(TestCase):
+class TestTechniqueEnhancementValidation(_BaseActionIntegrationTest):
     """Validate technique attachment to action requests."""
 
     @classmethod
@@ -226,7 +242,7 @@ class TestTechniqueEnhancementValidation(TestCase):
             )
 
 
-class TestMundaneActionConsequences(TestCase):
+class TestMundaneActionConsequences(_BaseActionIntegrationTest):
     """Mundane social actions now apply consequences via full pipeline."""
 
     @classmethod
@@ -267,7 +283,7 @@ class TestMundaneActionConsequences(TestCase):
         assert result.technique_result is None  # no technique
 
 
-class TestEnhancedActionResolution(TestCase):
+class TestEnhancedActionResolution(_BaseActionIntegrationTest):
     """Technique-enhanced social actions run use_technique wrapping full pipeline."""
 
     @classmethod
@@ -395,7 +411,7 @@ class TestEnhancedActionResolution(TestCase):
         assert self.technique.name in request.result_interaction.content
 
 
-class TestAvailableActionsService(TestCase):
+class TestAvailableActionsService(_BaseActionIntegrationTest):
     """Unit tests for get_available_scene_actions service function."""
 
     @classmethod
@@ -485,3 +501,74 @@ class TestAvailableActionsService(TestCase):
         # Cost is an integer (non-negative)
         assert isinstance(enhancement.effective_cost, int)
         assert enhancement.effective_cost >= 0
+
+
+class TestMenuContributorMerge(_BaseActionIntegrationTest):
+    """Tests that registered menu contributors are merged into get_available_scene_actions."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.persona = PersonaFactory()
+        cls.character = cls.persona.character_sheet.character
+
+    def setUp(self) -> None:
+        self._original_contributors = list(_MENU_CONTRIBUTORS)
+
+    def tearDown(self) -> None:
+        _MENU_CONTRIBUTORS.clear()
+        _MENU_CONTRIBUTORS.extend(self._original_contributors)
+
+    def test_contributor_entries_merged_into_result(self) -> None:
+        from world.scenes.action_availability import (
+            AvailableSceneAction,
+            get_available_scene_actions,
+        )
+
+        def fake_contributor(character, scene):
+            return [
+                AvailableSceneAction(
+                    action_key="anima_ritual",
+                    display_name="Anima Ritual",
+                    ritual_id=99,
+                )
+            ]
+
+        register_menu_contributor(fake_contributor)
+
+        actions = get_available_scene_actions(character=self.character)
+        ritual_entries = [a for a in actions if a.action_key == "anima_ritual"]
+        self.assertEqual(len(ritual_entries), 1)
+        self.assertEqual(ritual_entries[0].display_name, "Anima Ritual")
+        self.assertEqual(ritual_entries[0].ritual_id, 99)
+        self.assertIsNone(ritual_entries[0].action_template)
+
+    def test_contributor_receives_scene_arg(self) -> None:
+        """Contributor callable receives the scene passed to get_available_scene_actions."""
+        from world.scenes.action_availability import get_available_scene_actions
+
+        received: list[object] = []
+
+        def capturing_contributor(character, scene):
+            received.append(scene)
+            return []
+
+        register_menu_contributor(capturing_contributor)
+
+        scene = SceneFactory()
+        get_available_scene_actions(character=self.character, scene=scene)
+        self.assertEqual(len(received), 1)
+        self.assertIs(received[0], scene)
+
+    def test_contributor_receives_none_when_no_scene(self) -> None:
+        from world.scenes.action_availability import get_available_scene_actions
+
+        received: list[object] = []
+
+        def capturing_contributor(character, scene):
+            received.append(scene)
+            return []
+
+        register_menu_contributor(capturing_contributor)
+
+        get_available_scene_actions(character=self.character)
+        self.assertIsNone(received[0])

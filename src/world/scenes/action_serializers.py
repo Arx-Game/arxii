@@ -105,10 +105,46 @@ class TechniqueResultSerializer(serializers.Serializer):
         return None
 
 
+class AnimaRecoverySerializer(serializers.Serializer):
+    """Recovery values from an accepted anima_ritual action, visible to initiator only."""
+
+    recovered = serializers.IntegerField()
+    soulfray_reduced = serializers.IntegerField()
+    new_pool = serializers.IntegerField()
+
+
 class EnhancedSceneActionResultSerializer(serializers.Serializer):
     action_key = serializers.CharField()
     action_resolution = ActionResolutionSerializer()
     technique_result = TechniqueResultSerializer(allow_null=True)
+    anima_recovery = serializers.SerializerMethodField()
+
+    def get_anima_recovery(self, obj: object) -> dict | None:
+        """Return anima recovery payload for the initiator of an anima_ritual action.
+
+        Populated only when:
+        - action_key is "anima_ritual"
+        - the request was accepted (resolver attached payload to action_request)
+        - the requesting user is the initiator (disguise: target sees nothing)
+
+        The payload is attached to action_request as a transient attribute by
+        ``_resolve_anima_ritual`` to avoid a second DB query.
+        """
+        from world.scenes.types import EnhancedSceneActionResult  # noqa: PLC0415
+
+        if not isinstance(obj, EnhancedSceneActionResult):
+            return None
+        if obj.action_key != "anima_ritual":  # noqa: STRING_LITERAL
+            return None
+        action_request = self.context.get("action_request")
+        request = self.context.get("request")
+        if action_request is None or request is None:
+            return None
+        initiator_account = action_request.initiator_persona.character_sheet.character.db_account
+        if initiator_account is None or request.user != initiator_account:
+            return None
+        payload = getattr(action_request, "_anima_recovery_payload", None)  # noqa: GETATTR_LITERAL — transient attr set by resolver
+        return AnimaRecoverySerializer(payload).data if payload is not None else None
 
 
 class SoulfrayWarningSerializer(serializers.Serializer):
@@ -151,11 +187,15 @@ class AvailableSceneActionSerializer(serializers.Serializer):
     action_template_name = serializers.SerializerMethodField()
     icon = serializers.SerializerMethodField()
     enhancements = AvailableEnhancementSerializer(many=True)
+    display_name = serializers.CharField(default="")
+    ritual_id = serializers.IntegerField(allow_null=True, default=None)
 
     def get_action_template_name(self, obj: object) -> str | None:
         from world.scenes.action_availability import AvailableSceneAction  # noqa: PLC0415
 
         if not isinstance(obj, AvailableSceneAction):
+            return None
+        if obj.action_template is None:
             return None
         return obj.action_template.name
 
@@ -163,5 +203,7 @@ class AvailableSceneActionSerializer(serializers.Serializer):
         from world.scenes.action_availability import AvailableSceneAction  # noqa: PLC0415
 
         if not isinstance(obj, AvailableSceneAction):
+            return None
+        if obj.action_template is None:
             return None
         return obj.action_template.icon
