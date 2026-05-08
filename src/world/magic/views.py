@@ -1293,3 +1293,35 @@ class ThreadHubSummaryView(APIView):
             "weaving_eligibility": eligibility,
         }
         return Response(ThreadHubSummarySerializer(payload).data)
+
+
+# =============================================================================
+# Rooms-by-property (GET /api/magic/rooms-by-property/)
+# =============================================================================
+
+
+class RoomsByPropertyView(APIView):
+    """List rooms (ObjectDB) bearing any of the requested Property ids.
+
+    Used by the Weave Thread wizard to populate the ROOM-anchor picker.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        """Return rooms that have at least one matching ObjectProperty."""
+        from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+        from world.magic.serializers import RoomsByPropertyQuerySerializer  # noqa: PLC0415
+
+        serializer = RoomsByPropertyQuerySerializer(
+            data={"property_ids": request.query_params.getlist("property_id")},
+        )
+        serializer.is_valid(raise_exception=True)
+        ids = serializer.validated_data["property_ids"]
+        rooms = (
+            ObjectDB.objects.filter(object_properties__property__in=ids)
+            .distinct()
+            .values("id", "db_key")
+        )
+        return Response(list(rooms))

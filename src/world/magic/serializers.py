@@ -2241,3 +2241,21 @@ class ThreadHubSummarySerializer(serializers.Serializer):
     near_xp_lock_thread_ids = _NearXPLockProspectSerializer(many=True)
     blocked_thread_ids = serializers.ListField(child=serializers.IntegerField())
     weaving_eligibility = serializers.DictField(child=serializers.BooleanField())
+
+
+# =============================================================================
+# Rooms-by-property (GET /api/magic/rooms-by-property/)
+# =============================================================================
+
+
+class RoomsByPropertyQuerySerializer(serializers.Serializer):
+    """Validates query params for RoomsByPropertyView.
+
+    Repeated ``?property_id=N`` params are gathered by the view and fed
+    into this serializer as a list, keeping validation declarative.
+    """
+
+    property_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+    )

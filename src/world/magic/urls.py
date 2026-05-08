@@ -25,6 +25,7 @@ from world.magic.views import (
     RestrictionViewSet,
     RitualPerformView,
     RitualViewSet,
+    RoomsByPropertyView,
     SceneEntryEndorsementViewSet,
     SineatingPendingOfferViewSet,
     SineatingRequestView,
@@ -99,6 +100,11 @@ router.register(
 urlpatterns = [
     # Literal paths MUST come before *router.urls so that "rituals/perform/" is
     # matched before the router's "rituals/<pk>/" pattern treats "perform" as a pk.
+    path(
+        "rooms-by-property/",
+        RoomsByPropertyView.as_view(),
+        name="rooms-by-property",
+    ),
     path(
         "thread-hub-summary/",
         ThreadHubSummaryView.as_view(),
