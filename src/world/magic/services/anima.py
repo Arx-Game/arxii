@@ -180,6 +180,21 @@ def apply_anima_ritual_outcome(
     )
 
 
+def has_performed_anima_ritual_in_scene(
+    *,
+    ritual: CharacterAnimaRitual,
+    scene: Scene,
+) -> bool:
+    """Return True when the given ritual has already been performed in this scene.
+
+    Used by the menu contributor to enforce the once-per-scene cap without
+    re-running the full gate logic in perform_anima_ritual().
+    """
+    from world.magic.models.anima import AnimaRitualPerformance  # noqa: PLC0415
+
+    return AnimaRitualPerformance.objects.filter(ritual=ritual, scene=scene).exists()
+
+
 def _budget_for_outcome(outcome: object, config: object) -> int:
     """Return the anima/severity budget for an outcome row."""
     level = int(outcome.success_level)  # type: ignore[union-attr]
