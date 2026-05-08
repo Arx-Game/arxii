@@ -877,3 +877,39 @@ class RitualViewSetTests(APITestCase):
             response.status_code,
             (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
         )
+
+
+class TestRitualClientHosted(APITestCase):
+    """Verify that Ritual.client_hosted is exposed by the list endpoint with correct values.
+
+    Creates one generic ritual (client_hosted=False) and one Imbuing ritual
+    (client_hosted=True), authenticates a player, and asserts both values are
+    present and correct in the /api/magic/rituals/ response.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.user = AccountFactory(username="client_hosted_test_user")
+        cls.generic_ritual = RitualFactory(name="generic_hosted_test_ritual")
+        cls.imbuing_ritual = ImbuingRitualFactory()
+
+    def setUp(self) -> None:
+        self.client.force_authenticate(self.user)
+
+    def test_client_hosted_false_on_generic_ritual(self) -> None:
+        url = reverse("magic:ritual-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get("results", response.data)
+        target = next(r for r in results if r["name"] == "generic_hosted_test_ritual")
+        self.assertIn("client_hosted", target)
+        self.assertFalse(target["client_hosted"])
+
+    def test_client_hosted_true_on_imbuing_ritual(self) -> None:
+        url = reverse("magic:ritual-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get("results", response.data)
+        target = next(r for r in results if r["name"] == "Rite of Imbuing")
+        self.assertIn("client_hosted", target)
+        self.assertTrue(target["client_hosted"])

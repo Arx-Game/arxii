@@ -849,6 +849,7 @@ class RitualSerializer(serializers.ModelSerializer):
             "input_schema",
             "author_account_id",
             "scene_action_config",
+            "client_hosted",
         ]
         read_only_fields = fields
 

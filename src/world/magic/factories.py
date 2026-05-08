@@ -664,6 +664,7 @@ class ImbuingRitualFactory(RitualFactory):
     execution_kind = RitualExecutionKind.SERVICE
     service_function_path = "world.magic.services.spend_resonance_for_imbuing"
     flow = None
+    client_hosted = True
 
 
 class AtonementRitualFactory(RitualFactory):
