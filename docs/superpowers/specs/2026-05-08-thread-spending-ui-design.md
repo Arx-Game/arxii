@@ -262,7 +262,7 @@ To drive this, the wizard reads a new `eligibility` payload from the hub-data en
 
 - `TRAIT` → list traits the character has (from `CharacterTraitValue.value > 0`); display as searchable select; show only traits matched by the character's `unlock_trait` rows.
 - `TECHNIQUE` → list techniques the character knows (via `CharacterTechnique`); show only those whose gift is in the unlock's `unlock_gift` set.
-- `ROOM` → list rooms in the character's current scene (or character's current location) that have at least one Property in the character's unlock's `unlock_room_property` set. (Uses an existing room-listing endpoint or a small new room-search-by-property endpoint.)
+- `ROOM` → list rooms that have at least one Property in the character's unlock's `unlock_room_property` set. **No room-search-by-property endpoint exists today** — this work adds `GET /api/magic/rooms-by-property/?property_id=<int>[&property_id=<int>...]` returning rooms (`ObjectDB`) bearing any of the specified properties. View: `RoomsByPropertyView(APIView)`. The frontend resolves the unlock's `unlock_room_property` set client-side from the unlock data, then issues a single query with all property IDs.
 - `RELATIONSHIP_TRACK` → list `RelationshipTrackProgress` for the character whose `track` is in the unlock's `unlock_track` set.
 - `RELATIONSHIP_CAPSTONE` → list `RelationshipCapstone` rows for the character on tracks the character has unlocks for.
 - `FACET` → list facets that match any of the character's worn-item facets (or, more permissively, all facets the player can browse).
@@ -347,17 +347,25 @@ Commit posts to the new `POST /api/magic/thread-pull-commit/` endpoint (§10).
 └─────────────────────────────────────────────────────────────┘
 ```
 
-XP cost is computed client-side using the same logic as `compute_thread_weaving_xp_cost` would — but to avoid drift, we expose the cost via a new field on `ThreadWeavingTeachingOfferSerializer` that calls `compute_thread_weaving_xp_cost(unlock, learner)` per request. Add `effective_xp_cost_for_viewer` (read-only computed) to the offer serializer; learner pk is the requesting user's primary character (matches the alt-resolver pattern).
+XP cost is computed server-side via a new `effective_xp_cost_for_viewer` SerializerMethodField on `ThreadWeavingTeachingOfferSerializer`. The field resolves the learner using the existing `_resolve_actor_sheet`-style alt guard:
+
+- Single active tenure → use that sheet, return `compute_thread_weaving_xp_cost(unlock, learner)`.
+- Multiple active tenures **without** an explicit `learner_sheet_id` query param → return `null` (the UI shows a "select character" prompt and re-fetches with the chosen pk).
+- No active tenures (e.g., staff browsing without an active character) → return `null`.
+
+Returning `null` (rather than raising) keeps the list endpoint usable for browsing; the accept endpoint enforces the alt guard at write time.
 
 `[Accept Offer]` opens `AcceptOfferDialog` — a confirm with a final cost summary. On confirm, posts to the new `POST /api/magic/teaching-offers/{id}/accept/` (§10). On success, invalidates `useTeachingOffers()` and `useCharacterUnlocks()` query caches.
 
-### 8. Hide Imbuing rituals from `/rituals`
+### 8. Hide Imbuing rituals from `/rituals`; specialized host posts kwargs directly
 
 Imbuing is a SERVICE-dispatched Ritual, but it has a specialized host (Thread Detail page). Listing it on `/rituals` would be misleading — players would click "Perform" and find the form has no `ThreadPickerField` available.
 
 **Approach:** Add `Ritual.client_hosted: BooleanField(default=False)`. Set `True` on the Imbuing factory. The `RitualsListPage` filters out client-hosted rituals.
 
 This is more durable than a service-path string match because future SERVICE rituals (the eventual Pulling-as-ritual, divinations, bindings) can opt into the same behavior with a single flag flip.
+
+**Imbuing dispatch path — does not use `input_schema`.** The existing `ImbuingRitualFactory` does not author an `input_schema`, and this work does not add one. The Thread Detail page's `ImbuePanel` posts to `POST /api/magic/rituals/perform/` directly with hand-built kwargs (`{ ritual_id, character_sheet_id, kwargs: { thread_id, amount } }`); it does not introspect any schema. The schema-driven `RitualPerformDialog` renderer in `frontend/src/rituals/` is bypassed entirely for this path. (`RitualPerformView` already supports this — it accepts kwargs as primitives and resolves `thread_id` → Thread server-side.) When the time comes to surface a generic Imbuing form on `/rituals`, an `input_schema` can be added then; not needed for v1 because `client_hosted=True` keeps it off that page.
 
 ### 9. Manage operations: rename, retire
 
@@ -389,11 +397,13 @@ Single aggregate endpoint to back the Thread Hub. Returns:
 
 Drives prospect dots, "Weave New" enable state, and the resonance balance row in one round-trip. View: `ThreadHubSummaryView(APIView)` posted at `path("thread-hub-summary/", ...)`. Reuses the existing `imbue_ready_threads`, `near_xp_lock_threads`, `threads_blocked_by_cap` services and a small new `_weaving_eligibility(character_sheet) -> dict[str, bool]` helper.
 
+The `near_xp_lock_thread_ids` payload mirrors the existing `ThreadXPLockProspect` dataclass field-for-field (`thread_id`, `boundary_level`, `xp_cost`, `dev_points_to_boundary`); the service already computes the delta to the next boundary so the view does no arithmetic.
+
 The thread *list itself* is fetched separately via the existing `GET /api/magic/threads/` ViewSet (paginated). The summary endpoint only returns small ID-and-prospect data for state derivation.
 
 #### 10.2 `POST /api/magic/threads/{id}/cross-xp-lock/`
 
-`ThreadCrossXPLockView` exposed as a custom action on `ThreadViewSet`:
+Implemented as a `@action(detail=True, methods=["post"])` named `cross_xp_lock` on `ThreadViewSet` (not a separate APIView). Single implementation path, no ambiguity:
 
 ```python
 @action(detail=True, methods=["post"])
@@ -461,6 +471,17 @@ Migration adds `client_hosted = models.BooleanField(default=False, help_text="Wh
 ### 12. Error handling
 
 All four new endpoints (and the extended Ritual perform path for Imbuing) follow the project pattern: typed exceptions raised in services carry `user_message`; views catch and map to HTTP 400 with `{"detail": exc.user_message}`. No raw `str(exc)` leakage.
+
+Each endpoint's exception map:
+
+| Endpoint | Exceptions |
+|----------|------------|
+| `POST /threads/{id}/cross-xp-lock/` | `XPInsufficient`, `InvalidImbueAmount`, `AnchorCapExceeded` |
+| `POST /teaching-offers/{id}/accept/` | `XPInsufficient` |
+| `POST /thread-pull-commit/` | `ProtagonismLockedError`, `ResonanceInsufficient`, `InvalidImbueAmount`, **`NoMatchingWornFacetItemsError`** |
+| `POST /rituals/perform/` (Imbuing) | `ResonanceInsufficient`, `AnchorCapExceeded`, `InvalidImbueAmount` (already mapped in `RitualPerformView`) |
+
+`NoMatchingWornFacetItemsError` is in the pull-commit map specifically: a FACET thread can pass ephemeral-mode "always-in-action" gating but still fail at commit if the character has no worn item bearing the matching facet. The dialog must distinguish this (player needs to equip something) from generic resonance/anima shortfall, so the error banner displays the typed `user_message` verbatim — no remapping.
 
 Frontend dialogs surface errors inline (a red banner in the dialog body) rather than toasting, so the player doesn't miss them in the middle of a multi-step action.
 
@@ -541,7 +562,8 @@ Frontend dialogs surface errors inline (a red banner in the dialog body) rather 
 
 - `ThreadHubSummaryView` — GET, returns the summary payload.
 - `ThreadPullCommitView` — POST, commits pulls.
-- `ThreadCrossXPLockView` — alternative to a viewset action; if implemented as `@action(detail=True)` on `ThreadViewSet`, no separate view needed.
+- `RoomsByPropertyView` — GET, search rooms (ObjectDB) by `RoomProperty` ids; backs the ROOM-anchor wizard step.
+- `cross_xp_lock` action on `ThreadViewSet` — pays XP for a level boundary (decided as `@action`, not a separate APIView; see §10.2).
 - `accept` action on `ThreadWeavingTeachingOfferViewSet` — accepts an offer.
 
 #### New serializers (`src/world/magic/serializers.py`)
@@ -559,9 +581,10 @@ Frontend dialogs surface errors inline (a red banner in the dialog body) rather 
 ```python
 path("thread-hub-summary/", ThreadHubSummaryView.as_view(), name="thread-hub-summary"),
 path("thread-pull-commit/", ThreadPullCommitView.as_view(), name="thread-pull-commit"),
+path("rooms-by-property/", RoomsByPropertyView.as_view(), name="rooms-by-property"),
 ```
 
-The viewset actions register automatically via the router.
+The viewset actions (`cross_xp_lock` on threads, `accept` on teaching-offers) register automatically via the router.
 
 #### Model migration
 
