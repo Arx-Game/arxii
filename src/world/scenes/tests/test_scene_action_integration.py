@@ -18,6 +18,7 @@ from world.scenes.action_constants import (
     ConsentDecision,
     DifficultyChoice,
 )
+from world.scenes.action_resolvers import _MENU_CONTRIBUTORS, register_menu_contributor
 from world.scenes.action_services import create_action_request, respond_to_action_request
 from world.scenes.factories import PersonaFactory, SceneFactory
 from world.scenes.place_models import InteractionReceiver
@@ -485,3 +486,74 @@ class TestAvailableActionsService(TestCase):
         # Cost is an integer (non-negative)
         assert isinstance(enhancement.effective_cost, int)
         assert enhancement.effective_cost >= 0
+
+
+class TestMenuContributorMerge(TestCase):
+    """Tests that registered menu contributors are merged into get_available_scene_actions."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.persona = PersonaFactory()
+        cls.character = cls.persona.character_sheet.character
+
+    def setUp(self) -> None:
+        self._original_contributors = list(_MENU_CONTRIBUTORS)
+
+    def tearDown(self) -> None:
+        _MENU_CONTRIBUTORS.clear()
+        _MENU_CONTRIBUTORS.extend(self._original_contributors)
+
+    def test_contributor_entries_merged_into_result(self) -> None:
+        from world.scenes.action_availability import (
+            AvailableSceneAction,
+            get_available_scene_actions,
+        )
+
+        def fake_contributor(character, scene):
+            return [
+                AvailableSceneAction(
+                    action_key="anima_ritual",
+                    display_name="Anima Ritual",
+                    ritual_id=99,
+                )
+            ]
+
+        register_menu_contributor(fake_contributor)
+
+        actions = get_available_scene_actions(character=self.character)
+        ritual_entries = [a for a in actions if a.action_key == "anima_ritual"]
+        self.assertEqual(len(ritual_entries), 1)
+        self.assertEqual(ritual_entries[0].display_name, "Anima Ritual")
+        self.assertEqual(ritual_entries[0].ritual_id, 99)
+        self.assertIsNone(ritual_entries[0].action_template)
+
+    def test_contributor_receives_scene_arg(self) -> None:
+        """Contributor callable receives the scene passed to get_available_scene_actions."""
+        from world.scenes.action_availability import get_available_scene_actions
+
+        received: list[object] = []
+
+        def capturing_contributor(character, scene):
+            received.append(scene)
+            return []
+
+        register_menu_contributor(capturing_contributor)
+
+        scene = SceneFactory()
+        get_available_scene_actions(character=self.character, scene=scene)
+        self.assertEqual(len(received), 1)
+        self.assertIs(received[0], scene)
+
+    def test_contributor_receives_none_when_no_scene(self) -> None:
+        from world.scenes.action_availability import get_available_scene_actions
+
+        received: list[object] = []
+
+        def capturing_contributor(character, scene):
+            received.append(scene)
+            return []
+
+        register_menu_contributor(capturing_contributor)
+
+        get_available_scene_actions(character=self.character)
+        self.assertIsNone(received[0])

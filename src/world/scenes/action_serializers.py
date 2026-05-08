@@ -151,11 +151,15 @@ class AvailableSceneActionSerializer(serializers.Serializer):
     action_template_name = serializers.SerializerMethodField()
     icon = serializers.SerializerMethodField()
     enhancements = AvailableEnhancementSerializer(many=True)
+    display_name = serializers.CharField(default="")
+    ritual_id = serializers.IntegerField(allow_null=True, default=None)
 
     def get_action_template_name(self, obj: object) -> str | None:
         from world.scenes.action_availability import AvailableSceneAction  # noqa: PLC0415
 
         if not isinstance(obj, AvailableSceneAction):
+            return None
+        if obj.action_template is None:
             return None
         return obj.action_template.name
 
@@ -163,5 +167,7 @@ class AvailableSceneActionSerializer(serializers.Serializer):
         from world.scenes.action_availability import AvailableSceneAction  # noqa: PLC0415
 
         if not isinstance(obj, AvailableSceneAction):
+            return None
+        if obj.action_template is None:
             return None
         return obj.action_template.icon
