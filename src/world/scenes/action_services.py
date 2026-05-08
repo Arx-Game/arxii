@@ -16,6 +16,7 @@ from world.scenes.action_constants import (
     DifficultyChoice,
 )
 from world.scenes.action_models import SceneActionRequest
+from world.scenes.action_resolvers import get_resolver
 from world.scenes.interaction_services import create_interaction
 from world.scenes.models import Interaction, Persona, Scene
 from world.scenes.types import EnhancedSceneActionResult
@@ -190,6 +191,10 @@ def respond_to_action_request(
             if result_interaction is not None:
                 action_request.result_interaction = result_interaction
                 action_request.save(update_fields=["result_interaction"])
+
+            resolver = get_resolver(action_request.action_key)
+            if resolver is not None:
+                resolver(action_request, result)
 
         return result
 

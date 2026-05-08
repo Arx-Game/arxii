@@ -13,8 +13,9 @@ from world.scenes.action_constants import (
     ConsentDecision,
     DifficultyChoice,
 )
+from world.scenes.action_resolvers import _RESOLVER_REGISTRY, register_resolver
 from world.scenes.action_services import create_action_request, respond_to_action_request
-from world.scenes.factories import PersonaFactory, SceneFactory
+from world.scenes.factories import PersonaFactory, SceneActionRequestFactory, SceneFactory
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.types import EnhancedSceneActionResult
 
@@ -179,3 +180,77 @@ class TestRespondToActionRequest(TestCase):
                 action_request=request,
                 decision=ConsentDecision.ACCEPT,
             )
+
+
+class TestResolverIntegration(TestCase):
+    """Tests that the action_resolvers registry is invoked by respond_to_action_request."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+        cls.action_template = ActionTemplateFactory()
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_resolver_called_on_accept(self, mock_resolve: MagicMock) -> None:
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        captured: list[tuple[int, object]] = []
+
+        def fake_resolver(request, outcome):
+            captured.append((request.pk, outcome))
+
+        register_resolver("test_action", fake_resolver)
+        self.addCleanup(lambda: _RESOLVER_REGISTRY.pop("test_action", None))
+
+        action_request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="test_action",
+        )
+        action_request.action_template = self.action_template
+        action_request.save(update_fields=["action_template"])
+
+        respond_to_action_request(action_request=action_request, decision=ConsentDecision.ACCEPT)
+        self.assertEqual(len(captured), 1)
+        self.assertEqual(captured[0][0], action_request.pk)
+
+    def test_resolver_not_called_on_deny(self) -> None:
+        captured: list[int] = []
+
+        def _deny_resolver(_request, _outcome):
+            captured.append(1)
+
+        register_resolver("test_action_deny", _deny_resolver)
+        self.addCleanup(lambda: _RESOLVER_REGISTRY.pop("test_action_deny", None))
+
+        action_request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="test_action_deny",
+        )
+        respond_to_action_request(action_request=action_request, decision=ConsentDecision.DENY)
+        self.assertEqual(captured, [])
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_no_resolver_registered_no_op(self, mock_resolve: MagicMock) -> None:
+        """Accepting with no resolver registered should not raise."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        action_request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="unknown_action_xyz",
+        )
+        action_request.action_template = self.action_template
+        action_request.save(update_fields=["action_template"])
+
+        # Should not raise
+        result = respond_to_action_request(
+            action_request=action_request, decision=ConsentDecision.ACCEPT
+        )
+        self.assertIsNotNone(result)
