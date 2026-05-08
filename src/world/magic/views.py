@@ -106,7 +106,7 @@ from world.magic.services import (
     preview_resonance_pull,
     resolve_pending_alteration,
 )
-from world.magic.services.auth import _resolve_endorser_sheet
+from world.magic.services.auth import _resolve_actor_sheet, _resolve_endorser_sheet
 from world.magic.services.gain import account_for_sheet
 from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
@@ -1237,3 +1237,61 @@ class StageAdvanceRespondView(APIView):
 
         out = StageAdvanceBonusResultSerializer(result)
         return Response(out.data, status=status.HTTP_200_OK)
+
+
+# =============================================================================
+# Thread Hub Summary (GET /api/magic/thread-hub-summary/)
+# =============================================================================
+
+
+class ThreadHubSummaryView(APIView):
+    """Aggregate dashboard payload for the Thread Hub page.
+
+    Returns resonance balances, prospect ID lists (ready/near-xp-lock/blocked),
+    and per-TargetKind weaving eligibility flags in one round-trip.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        """Return the Thread Hub summary for the acting character."""
+        from world.magic.serializers import ThreadHubSummarySerializer  # noqa: PLC0415
+        from world.magic.services.threads import (  # noqa: PLC0415
+            _weaving_eligibility_for,
+            imbue_ready_threads,
+            near_xp_lock_threads,
+            threads_blocked_by_cap,
+        )
+
+        sheet = _resolve_actor_sheet(request, body_key="character_sheet_id", from_query=True)
+        balances = [
+            {
+                "resonance_id": cr.resonance_id,
+                "balance": cr.balance,
+                "lifetime_earned": cr.lifetime_earned,
+                "flavor_text": cr.flavor_text,
+            }
+            for cr in CharacterResonance.objects.filter(character_sheet=sheet).select_related(
+                "resonance"
+            )
+        ]
+        ready = [t.pk for t in imbue_ready_threads(sheet)]
+        near = [
+            {
+                "thread_id": p.thread.pk,
+                "boundary_level": p.boundary_level,
+                "xp_cost": p.xp_cost,
+                "dev_points_to_boundary": p.dev_points_to_boundary,
+            }
+            for p in near_xp_lock_threads(sheet)
+        ]
+        blocked = [t.pk for t in threads_blocked_by_cap(sheet)]
+        eligibility = _weaving_eligibility_for(sheet)
+        payload = {
+            "balances": balances,
+            "ready_thread_ids": ready,
+            "near_xp_lock_thread_ids": near,
+            "blocked_thread_ids": blocked,
+            "weaving_eligibility": eligibility,
+        }
+        return Response(ThreadHubSummarySerializer(payload).data)

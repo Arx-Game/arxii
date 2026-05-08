@@ -447,6 +447,33 @@ def threads_blocked_by_cap(character_sheet: CharacterSheet) -> list[Thread]:
     return [t for t in threads if t.level >= min(path_cap, compute_anchor_cap(t))]
 
 
+def _weaving_eligibility_for(character_sheet: CharacterSheet) -> dict[str, bool]:
+    """Return whether the character has at least one weaving unlock per TargetKind.
+
+    Returns a dict keyed by TargetKind values (strings), all False for a character
+    with no unlocks. COVENANT_ROLE is special: it requires the character to have
+    ever held any covenant role (no authored ThreadWeavingUnlock for this kind).
+    """
+    unlocks = list(
+        CharacterThreadWeavingUnlock.objects.filter(
+            character=character_sheet,
+        ).select_related("unlock")
+    )
+    eligibility: dict[str, bool] = {kind.value: False for kind in TargetKind}
+    for cu in unlocks:
+        eligibility[cu.unlock.target_kind] = True
+
+    # COVENANT_ROLE eligibility: character has ever held any covenant role.
+    # The CharacterCovenantRoleHandler is accessed via character.covenant_roles.
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    eligibility[TargetKind.COVENANT_ROLE.value] = CharacterCovenantRole.objects.filter(
+        character_sheet=character_sheet
+    ).exists()
+
+    return eligibility
+
+
 # =============================================================================
 # ThreadWeaving teaching-offer acceptance (Spec A §6.1, §6.2)
 # =============================================================================

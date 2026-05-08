@@ -36,6 +36,7 @@ from world.magic.views import (
     StageAdvanceRespondView,
     TechniqueStyleViewSet,
     TechniqueViewSet,
+    ThreadHubSummaryView,
     ThreadPullCommitView,
     ThreadPullPreviewView,
     ThreadViewSet,
@@ -98,6 +99,11 @@ router.register(
 urlpatterns = [
     # Literal paths MUST come before *router.urls so that "rituals/perform/" is
     # matched before the router's "rituals/<pk>/" pattern treats "perform" as a pk.
+    path(
+        "thread-hub-summary/",
+        ThreadHubSummaryView.as_view(),
+        name="thread-hub-summary",
+    ),
     path(
         "thread-pull-commit/",
         ThreadPullCommitView.as_view(),

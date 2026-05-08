@@ -2208,3 +2208,36 @@ class ThreadPullCommitResponseSerializer(serializers.Serializer):
     resonance_spent = serializers.IntegerField()
     anima_spent = serializers.IntegerField()
     resolved_effects = ResolvedPullEffectCommitSerializer(many=True)
+
+
+# =============================================================================
+# Thread Hub Summary (GET /api/magic/thread-hub-summary/)
+# =============================================================================
+
+
+class _NearXPLockProspectSerializer(serializers.Serializer):
+    """One entry in the near-xp-lock list returned by ThreadHubSummaryView."""
+
+    thread_id = serializers.IntegerField()
+    boundary_level = serializers.IntegerField()
+    xp_cost = serializers.IntegerField()
+    dev_points_to_boundary = serializers.IntegerField()
+
+
+class _ResonanceBalanceSerializer(serializers.Serializer):
+    """One resonance balance entry returned by ThreadHubSummaryView."""
+
+    resonance_id = serializers.IntegerField()
+    balance = serializers.IntegerField()
+    lifetime_earned = serializers.IntegerField()
+    flavor_text = serializers.CharField(allow_blank=True)
+
+
+class ThreadHubSummarySerializer(serializers.Serializer):
+    """Response serializer for GET /api/magic/thread-hub-summary/."""
+
+    balances = _ResonanceBalanceSerializer(many=True)
+    ready_thread_ids = serializers.ListField(child=serializers.IntegerField())
+    near_xp_lock_thread_ids = _NearXPLockProspectSerializer(many=True)
+    blocked_thread_ids = serializers.ListField(child=serializers.IntegerField())
+    weaving_eligibility = serializers.DictField(child=serializers.BooleanField())
