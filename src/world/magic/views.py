@@ -1257,10 +1257,10 @@ class ThreadHubSummaryView(APIView):
         """Return the Thread Hub summary for the acting character."""
         from world.magic.serializers import ThreadHubSummarySerializer  # noqa: PLC0415
         from world.magic.services.threads import (  # noqa: PLC0415
-            _weaving_eligibility_for,
             imbue_ready_threads,
             near_xp_lock_threads,
             threads_blocked_by_cap,
+            weaving_eligibility_for,
         )
 
         sheet = _resolve_actor_sheet(request, body_key="character_sheet_id", from_query=True)
@@ -1271,9 +1271,7 @@ class ThreadHubSummaryView(APIView):
                 "lifetime_earned": cr.lifetime_earned,
                 "flavor_text": cr.flavor_text,
             }
-            for cr in CharacterResonance.objects.filter(character_sheet=sheet).select_related(
-                "resonance"
-            )
+            for cr in CharacterResonance.objects.filter(character_sheet=sheet)
         ]
         ready = [t.pk for t in imbue_ready_threads(sheet)]
         near = [
@@ -1286,7 +1284,7 @@ class ThreadHubSummaryView(APIView):
             for p in near_xp_lock_threads(sheet)
         ]
         blocked = [t.pk for t in threads_blocked_by_cap(sheet)]
-        eligibility = _weaving_eligibility_for(sheet)
+        eligibility = weaving_eligibility_for(sheet)
         payload = {
             "balances": balances,
             "ready_thread_ids": ready,

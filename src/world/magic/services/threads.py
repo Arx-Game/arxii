@@ -362,6 +362,12 @@ def update_thread_narrative(
 # Imbuing-ritual UI queries (Spec A §3.6)
 # =============================================================================
 
+# TODO(perf): The three prospect helpers below each fire a Thread.objects.filter(owner=...)
+# query; ThreadHubSummaryView calls all three, so a hub render is 3 thread queries plus
+# any per-kind anchor-cap queries (compute_anchor_cap hits CharacterTraitValue,
+# current_tier traversal, etc.). Acceptable at low thread counts but worth profiling
+# if a character grows past ~20 threads.
+
 
 def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
     """Return threads that have matching CharacterResonance balance > 0 and level < cap.
@@ -447,7 +453,7 @@ def threads_blocked_by_cap(character_sheet: CharacterSheet) -> list[Thread]:
     return [t for t in threads if t.level >= min(path_cap, compute_anchor_cap(t))]
 
 
-def _weaving_eligibility_for(character_sheet: CharacterSheet) -> dict[str, bool]:
+def weaving_eligibility_for(character_sheet: CharacterSheet) -> dict[str, bool]:
     """Return whether the character has at least one weaving unlock per TargetKind.
 
     Returns a dict keyed by TargetKind values (strings), all False for a character
