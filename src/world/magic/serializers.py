@@ -36,6 +36,7 @@ from world.magic.models import (
     Technique,
     TechniqueStyle,
     Thread,
+    ThreadLevelUnlock,
     ThreadWeavingTeachingOffer,
 )
 from world.roster.models import RosterEntry
@@ -1888,3 +1889,19 @@ class StageAdvanceBonusResultSerializer(serializers.Serializer):
     hollow_drained = serializers.IntegerField()
     strain_severity_added = serializers.IntegerField()
     declined = serializers.BooleanField()
+
+
+class CrossXPLockSerializer(serializers.Serializer):
+    """Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A §3.2)."""
+
+    boundary_level = serializers.IntegerField(min_value=1)
+
+    def create(self, validated_data: dict) -> ThreadLevelUnlock:
+        from world.magic.services import cross_thread_xp_lock  # noqa: PLC0415
+
+        thread = self.context["thread"]
+        return cross_thread_xp_lock(
+            character_sheet=thread.owner,
+            thread=thread,
+            boundary_level=validated_data["boundary_level"],
+        )

@@ -75,6 +75,7 @@ from world.magic.serializers import (
     CharacterAuraSerializer,
     CharacterGiftSerializer,
     CharacterResonanceSerializer,
+    CrossXPLockSerializer,
     EffectTypeSerializer,
     FacetSerializer,
     FacetTreeSerializer,
@@ -566,6 +567,39 @@ class ThreadViewSet(viewsets.ModelViewSet):
         thread.retired_at = timezone.now()
         thread.save(update_fields=["retired_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"])
+    def cross_xp_lock(self, request: Request, pk: int | None = None) -> Response:
+        """Pay XP to unlock the next level boundary on this thread (Spec A §3.2).
+
+        POST /api/magic/threads/{id}/cross-xp-lock/
+
+        Request body: ``{boundary_level}`` — the XP-locked boundary level to unlock.
+        Response: ``{thread_id, unlocked_level, xp_spent}``.
+        Idempotent: repeat calls with the same boundary_level return the existing
+        ThreadLevelUnlock without re-spending XP.
+        """
+        thread = self.get_object()
+        serializer = CrossXPLockSerializer(
+            data=request.data,
+            context={"request": request, "thread": thread},
+        )
+        serializer.is_valid(raise_exception=True)
+        try:
+            unlock = serializer.save()
+        except (XPInsufficient, AnchorCapExceeded, InvalidImbueAmount) as exc:
+            return Response(
+                {"detail": exc.user_message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {
+                "thread_id": thread.pk,
+                "unlocked_level": unlock.unlocked_level,
+                "xp_spent": unlock.xp_spent,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class ThreadPullPreviewView(APIView):
