@@ -2019,6 +2019,40 @@ _ERR_COMBAT_ENCOUNTER_NOT_FOUND = "Combat encounter not found."  # noqa: STRING_
 _ERR_COMBAT_PARTICIPANT_NOT_FOUND = "Combat participant not found."  # noqa: STRING_LITERAL — module constant
 
 
+class PullActionContextCommitSerializer(serializers.Serializer):
+    """Wire shape for the optional ``action_context`` block in a pull commit.
+
+    Extends ``PullActionContextSerializer`` (used by the preview endpoint) with
+    the additional fields the commit path consumes: ``combat_participant_id`` and
+    the anchor-ID lists.  All fields are optional because ephemeral (non-combat)
+    pulls omit them entirely.
+    """
+
+    action_kind = serializers.CharField(required=False, allow_blank=True)
+    anchors_in_play = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
+    combat_encounter_id = serializers.IntegerField(required=False, allow_null=True)
+    combat_participant_id = serializers.IntegerField(required=False, allow_null=True)
+    involved_trait_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
+    involved_technique_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
+    involved_object_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
+
+
 class ThreadPullCommitRequestSerializer(serializers.Serializer):
     """Request serializer for POST /api/magic/thread-pull-commit/.
 
@@ -2031,9 +2065,7 @@ class ThreadPullCommitRequestSerializer(serializers.Serializer):
     absent signals an ephemeral (RP) pull with no CombatPull row written.
     """
 
-    character_sheet_id = serializers.PrimaryKeyRelatedField(
-        queryset=CharacterSheet.objects.all(),
-    )
+    character_sheet_id = serializers.IntegerField()
     resonance_id = serializers.IntegerField()
     tier = serializers.IntegerField(min_value=1, max_value=3)
     thread_ids = serializers.ListField(
@@ -2041,16 +2073,12 @@ class ThreadPullCommitRequestSerializer(serializers.Serializer):
         allow_empty=False,
         max_length=20,
     )
-    action_context = serializers.DictField(required=False)
+    action_context = PullActionContextCommitSerializer(required=False)
 
-    def validate_character_sheet_id(self, value: "CharacterSheet") -> "CharacterSheet":
-        """Ownership-check the resolved CharacterSheet.
-
-        PrimaryKeyRelatedField already resolved the PK to an instance; we
-        only need to verify the requesting account owns that sheet.
-        """
+    def validate_character_sheet_id(self, value: int) -> "CharacterSheet":
+        """Resolve and ownership-check the caller-supplied character_sheet_id."""
         request = self.context.get("request")
-        return _resolve_account_sheet(value.pk, request)
+        return _resolve_account_sheet(value, request)
 
     def validate(self, attrs: dict) -> dict:
         """Cross-field: combat_encounter_id and combat_participant_id must be paired."""
@@ -2111,7 +2139,10 @@ class ThreadPullCommitRequestSerializer(serializers.Serializer):
             except CombatEncounter.DoesNotExist as exc:
                 raise serializers.ValidationError(_ERR_COMBAT_ENCOUNTER_NOT_FOUND) from exc
             try:
-                participant = CombatParticipant.objects.get(pk=ctx_dict["combat_participant_id"])
+                participant = CombatParticipant.objects.get(
+                    pk=ctx_dict["combat_participant_id"],
+                    encounter=combat_encounter,
+                )
             except CombatParticipant.DoesNotExist as exc:
                 raise serializers.ValidationError(_ERR_COMBAT_PARTICIPANT_NOT_FOUND) from exc
 

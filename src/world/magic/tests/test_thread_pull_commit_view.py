@@ -357,7 +357,12 @@ class ThreadPullCommitViewErrorTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_thread_not_owned_returns_400(self) -> None:
-        """Passing a thread belonging to another sheet → HTTP 400 (InvalidImbueAmount)."""
+        """Passing a thread belonging to another sheet → HTTP 400.
+
+        The queryset filter in create() filters threads by owner, so
+        len(threads) != len(thread_ids) fires _ERR_THREAD_NOT_FOUND_COMMIT
+        before the service is called.
+        """
         CharacterResonanceFactory(
             character_sheet=self.sheet,
             resonance=self.resonance,
@@ -395,6 +400,44 @@ class ThreadPullCommitViewErrorTests(APITestCase):
             }
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_participant_from_wrong_encounter_returns_400(self) -> None:
+        """Mismatched encounter+participant IDs → HTTP 400.
+
+        A participant that belongs to encounter B must not be accepted when
+        combat_encounter_id points to encounter A.  Without the cross-validation
+        fix, this would silently link the CombatPull to the wrong encounter.
+        """
+        encounter_a = CombatEncounterFactory(round_number=1)
+        encounter_b = CombatEncounterFactory(round_number=1)
+        participant_b = CombatParticipantFactory(
+            encounter=encounter_b,
+            character_sheet=self.sheet,
+        )
+        CharacterResonanceFactory(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+            balance=20,
+            lifetime_earned=20,
+        )
+        try:
+            resp = self._post(
+                {
+                    "character_sheet_id": self.sheet.pk,
+                    "resonance_id": self.resonance.pk,
+                    "tier": 1,
+                    "thread_ids": [self.thread.pk],
+                    "action_context": {
+                        "combat_encounter_id": encounter_a.pk,
+                        "combat_participant_id": participant_b.pk,
+                    },
+                }
+            )
+            self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        finally:
+            CharacterResonance.objects.filter(
+                character_sheet=self.sheet, resonance=self.resonance
+            ).delete()
 
 
 class ThreadPullCommitViewFacetErrorTests(APITestCase):
