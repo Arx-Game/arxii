@@ -11,11 +11,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import type {
+  AcceptTeachingOfferRequest,
+  CrossXPLockRequest,
   DissolveRequest,
+  PatchThreadRequest,
+  PullCommitRequest,
   RescueRequest,
   SineatingRequest,
   SineatingRespondRequest,
   StageAdvanceRespondRequest,
+  WeaveThreadRequest,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -39,9 +44,14 @@ export const magicKeys = {
 
   threads: () => [...magicKeys.all, 'threads'] as const,
   threadList: () => [...magicKeys.threads(), 'list'] as const,
+  thread: (id: number) => [...magicKeys.threads(), id] as const,
+
+  threadHubSummary: () => [...magicKeys.all, 'thread-hub-summary'] as const,
 
   characterResonances: () => [...magicKeys.all, 'character-resonances'] as const,
   characterResonanceList: () => [...magicKeys.characterResonances(), 'list'] as const,
+
+  teachingOffers: () => [...magicKeys.all, 'teaching-offers', 'list'] as const,
 };
 
 // ---------------------------------------------------------------------------
@@ -224,6 +234,182 @@ export function useRespondToStageAdvance() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: magicKeys.stageAdvancePending() });
       void qc.invalidateQueries({ queryKey: magicKeys.soulTether() });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Thread Hub Summary hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the Thread Hub summary for the acting character.
+ * Pass characterSheetId for alt-guard disambiguation.
+ */
+export function useThreadHubSummary(characterSheetId?: number) {
+  return useQuery({
+    queryKey: magicKeys.threadHubSummary(),
+    queryFn: () => api.getThreadHubSummary(characterSheetId),
+    throwOnError: true,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Thread detail hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch a single Thread by PK.
+ * Disabled when id ≤ 0.
+ */
+export function useThread(id: number) {
+  return useQuery({
+    queryKey: magicKeys.thread(id),
+    queryFn: () => api.getThread(id),
+    enabled: id > 0,
+    throwOnError: true,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Teaching Offers read hook
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch all ThreadWeavingTeachingOffer records visible to the caller.
+ */
+export function useTeachingOffers() {
+  return useQuery({
+    queryKey: magicKeys.teachingOffers(),
+    queryFn: () => api.getTeachingOffers(),
+    throwOnError: true,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Thread mutation hooks
+// ---------------------------------------------------------------------------
+
+/**
+ * Weave a new Thread.
+ * Invalidates threadList and threadHubSummary on success.
+ */
+export function useWeaveThread() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: WeaveThreadRequest) => api.weaveThread(body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: magicKeys.threadList() });
+      void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
+    },
+  });
+}
+
+/**
+ * Patch a Thread's narrative fields (name, description).
+ * Invalidates the thread detail and threadList on success.
+ */
+export function usePatchThreadNarrative(id: number) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PatchThreadRequest) => api.patchThreadNarrative(id, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: magicKeys.thread(id) });
+      void qc.invalidateQueries({ queryKey: magicKeys.threadList() });
+    },
+  });
+}
+
+/**
+ * Soft-retire a Thread.
+ * Invalidates threadList and threadHubSummary on success.
+ */
+export function useRetireThread() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (threadId: number) => api.retireThread(threadId),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: magicKeys.threadList() });
+      void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
+    },
+  });
+}
+
+/**
+ * Imbue a thread (spend resonance to advance it).
+ *
+ * Accepts { characterSheetId, threadId, amount } and delegates to
+ * api.imbueThreadAuto which resolves the ritual id internally.
+ *
+ * Invalidates thread(id), threadHubSummary, and characterResonanceList.
+ */
+export function useImbueThread() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      characterSheetId,
+      threadId,
+      amount,
+    }: {
+      characterSheetId: number;
+      threadId: number;
+      amount: number;
+    }) => api.imbueThreadAuto(characterSheetId, threadId, amount),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: magicKeys.thread(variables.threadId) });
+      void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
+      void qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() });
+    },
+  });
+}
+
+/**
+ * Cross an XP-lock boundary on a Thread.
+ * Invalidates thread(id) and threadHubSummary on success.
+ */
+export function useCrossXPLock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ threadId, body }: { threadId: number; body: CrossXPLockRequest }) =>
+      api.crossXPLock(threadId, body),
+    onSuccess: (_data, variables) => {
+      void qc.invalidateQueries({ queryKey: magicKeys.thread(variables.threadId) });
+      void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
+    },
+  });
+}
+
+/**
+ * Commit a thread pull: spends resonance and applies effects.
+ * Invalidates threadHubSummary and characterResonanceList on success.
+ *
+ * Note: previewPull is a plain async helper (api.previewPull), not a hook,
+ * because previews are user-driven and ephemeral. Components should debounce
+ * calls to api.previewPull manually.
+ */
+export function useCommitPull() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: PullCommitRequest) => api.commitPull(body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
+      void qc.invalidateQueries({ queryKey: magicKeys.characterResonanceList() });
+    },
+  });
+}
+
+/**
+ * Accept a ThreadWeavingTeachingOffer.
+ * Invalidates teachingOffers and threadHubSummary on success.
+ */
+export function useAcceptTeachingOffer() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ offerId, body }: { offerId: number; body?: AcceptTeachingOfferRequest }) =>
+      api.acceptTeachingOffer(offerId, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: magicKeys.teachingOffers() });
+      void qc.invalidateQueries({ queryKey: magicKeys.threadHubSummary() });
     },
   });
 }
