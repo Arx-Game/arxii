@@ -94,6 +94,12 @@ export interface ActionResolutionData {
   gate_results: ActionResolutionStepData[];
 }
 
+export interface AnimaRecoveryData {
+  recovered: number;
+  soulfray_reduced: number;
+  new_pool: number;
+}
+
 export interface ActionResultData {
   interaction_id: number;
   action_key: string | null;
@@ -105,6 +111,8 @@ export interface ActionResultData {
   /** @deprecated Use technique_name instead */
   selected_consequence: ConsequenceData | null;
   applied_effects: AppliedEffectData[];
+  /** Present when an anima ritual resolves; absent for all other action types. */
+  anima_recovery?: AnimaRecoveryData;
 }
 
 export interface ActionRequestResponse {

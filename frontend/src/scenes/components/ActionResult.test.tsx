@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ActionResult } from './ActionResult';
+import type { ActionResultData } from '../actionTypes';
 
 describe('ActionResult', () => {
   it('renders action name from parsed content', () => {
@@ -113,5 +114,63 @@ describe('ActionResult', () => {
     expect(screen.getByText('Action')).toBeInTheDocument();
     // Shows raw content since it could not be parsed
     expect(screen.getByText('some unparseable text')).toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // anima_recovery panel
+  // ---------------------------------------------------------------------------
+
+  const baseResult: ActionResultData = {
+    interaction_id: 1,
+    action_key: 'anima_ritual',
+    action_resolution: {
+      current_phase: 'resolved',
+      main_result: { step_label: 'Roll', check_outcome: 'Success', consequence_id: null },
+      gate_results: [],
+    },
+    technique_result: null,
+    technique_name: null,
+    check_result: null,
+    selected_consequence: null,
+    applied_effects: [],
+  };
+
+  it('renders anima_recovery panel when present', () => {
+    render(
+      <ActionResult
+        content="[anima_ritual] -- Success"
+        result={{
+          ...baseResult,
+          anima_recovery: { recovered: 3, soulfray_reduced: 2, new_pool: 8 },
+        }}
+      />
+    );
+
+    expect(screen.getByTestId('anima-recovery-panel')).toBeInTheDocument();
+    expect(screen.getByText(/recovered 3 anima/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 soulfray reduced/i)).toBeInTheDocument();
+    expect(screen.getByText(/pool now 8/i)).toBeInTheDocument();
+  });
+
+  it('does not render anima_recovery panel when absent', () => {
+    render(<ActionResult content="[anima_ritual] -- Success" result={baseResult} />);
+
+    expect(screen.queryByTestId('anima-recovery-panel')).not.toBeInTheDocument();
+  });
+
+  it('renders anima_recovery panel without soulfray text when soulfray_reduced is 0', () => {
+    render(
+      <ActionResult
+        content="[anima_ritual] -- Success"
+        result={{
+          ...baseResult,
+          anima_recovery: { recovered: 5, soulfray_reduced: 0, new_pool: 10 },
+        }}
+      />
+    );
+
+    expect(screen.getByTestId('anima-recovery-panel')).toBeInTheDocument();
+    expect(screen.getByText(/recovered 5 anima/i)).toBeInTheDocument();
+    expect(screen.queryByText(/soulfray reduced/i)).not.toBeInTheDocument();
   });
 });
