@@ -14,7 +14,10 @@ class Migration(migrations.Migration):
             name="client_hosted",
             field=models.BooleanField(
                 default=False,
-                help_text="When True, the generic Rituals listing page hides this ritual; it has a specialized host UI elsewhere (e.g., Thread Detail for Imbuing).",
+                help_text=(
+                    "When True, the generic Rituals listing page hides this ritual; "
+                    "it has a specialized host UI elsewhere (e.g., Thread Detail for Imbuing)."
+                ),
             ),
         ),
     ]

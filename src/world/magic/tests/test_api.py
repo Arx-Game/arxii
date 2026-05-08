@@ -860,7 +860,11 @@ class RitualViewSetTests(APITestCase):
         names = [r["name"] for r in results]
         self.assertIn("example_ritual", names)
         # Find our specific ritual in the results
-        target = next(r for r in results if r["name"] == "example_ritual")
+        target = next((r for r in results if r["name"] == "example_ritual"), None)
+        self.assertIsNotNone(
+            target,
+            f"'example_ritual' not found in results: {[r['name'] for r in results]}",
+        )
         self.assertEqual(target["input_schema"]["fields"][0]["name"], "x")
 
     def test_detail_returns_one_ritual(self):
@@ -901,7 +905,11 @@ class TestRitualClientHosted(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = response.data.get("results", response.data)
-        target = next(r for r in results if r["name"] == "generic_hosted_test_ritual")
+        target = next((r for r in results if r["name"] == "generic_hosted_test_ritual"), None)
+        self.assertIsNotNone(
+            target,
+            f"'generic_hosted_test_ritual' not found in results: {[r['name'] for r in results]}",
+        )
         self.assertIn("client_hosted", target)
         self.assertFalse(target["client_hosted"])
 
@@ -910,6 +918,9 @@ class TestRitualClientHosted(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         results = response.data.get("results", response.data)
-        target = next(r for r in results if r["name"] == "Rite of Imbuing")
+        target = next((r for r in results if r["name"] == "Rite of Imbuing"), None)
+        self.assertIsNotNone(
+            target, f"'Rite of Imbuing' not found in results: {[r['name'] for r in results]}"
+        )
         self.assertIn("client_hosted", target)
         self.assertTrue(target["client_hosted"])
