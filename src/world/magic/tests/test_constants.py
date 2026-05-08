@@ -49,8 +49,8 @@ class VitalBonusTargetTests(SimpleTestCase):
 
 
 class RitualExecutionKindTests(SimpleTestCase):
-    def test_two_execution_kinds(self):
-        self.assertEqual(set(RitualExecutionKind.values), {"SERVICE", "FLOW"})
+    def test_execution_kinds(self):
+        self.assertEqual(set(RitualExecutionKind.values), {"SERVICE", "FLOW", "SCENE_ACTION"})
 
 
 class SoulTetherRoleTests(SimpleTestCase):

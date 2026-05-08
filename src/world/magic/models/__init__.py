@@ -21,6 +21,7 @@ Submodules (see Scope 6 §4.4):
 - weaving: ThreadWeavingUnlock, CharacterThreadWeavingUnlock,
   ThreadWeavingTeachingOffer
 - rituals: Ritual, RitualComponentRequirement, ImbuingProseTemplate
+- ritual_scene_action: RitualSceneActionConfig
 - reincarnation: Reincarnation
 - grant: ResonanceGrant
 
@@ -85,6 +86,7 @@ from world.magic.models.motifs import (
     MotifResonanceAssociation,
 )
 from world.magic.models.reincarnation import Reincarnation
+from world.magic.models.ritual_scene_action import RitualSceneActionConfig
 from world.magic.models.rituals import (
     ImbuingProseTemplate,
     Ritual,
@@ -193,6 +195,7 @@ __all__ = [
     "RestrictionManager",
     "Ritual",
     "RitualComponentRequirement",
+    "RitualSceneActionConfig",
     # room aura (Spec C §2.5, §2.6)
     "RoomAuraProfile",
     "RoomResonance",

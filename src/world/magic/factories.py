@@ -42,6 +42,7 @@ from world.magic.models import (
     Restriction,
     Ritual,
     RitualComponentRequirement,
+    RitualSceneActionConfig,
     SoulfrayConfig,
     Technique,
     TechniqueAppliedCondition,
@@ -733,6 +734,30 @@ class RitualComponentRequirementFactory(factory.django.DjangoModelFactory):
     item_template = factory.SubFactory("world.items.factories.ItemTemplateFactory")
     quantity = 1
     min_quality_tier = None
+
+
+class RitualSceneActionConfigFactory(factory.django.DjangoModelFactory):
+    """Factory for RitualSceneActionConfig sidecar.
+
+    Requires a SCENE_ACTION ritual. The stat/skill/check_type mirrors the
+    CharacterAnimaRitual factory pattern.
+    """
+
+    class Meta:
+        model = RitualSceneActionConfig
+
+    ritual = factory.SubFactory(
+        RitualFactory,
+        execution_kind=RitualExecutionKind.SCENE_ACTION,
+        service_function_path="",
+        flow=None,
+    )
+    stat = factory.SubFactory(TraitFactory)
+    skill = factory.SubFactory("world.skills.factories.SkillFactory")
+    specialization = None
+    resonance = None
+    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
+    target_difficulty = 3
 
 
 # =============================================================================
