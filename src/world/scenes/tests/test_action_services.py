@@ -290,7 +290,15 @@ class GenericKudosOnAcceptTests(TestCase):
         self, mock_resolve: MagicMock, mock_award_kudos: MagicMock
     ) -> None:
         """Accepting an action request calls award_kudos with target account."""
+        from evennia.accounts.models import AccountDB
+
         mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        # Attach an account to the target's character so the kudos path runs.
+        # (The default PersonaFactory wires a CharacterSheet with no db_account.)
+        target_account = AccountDB.objects.create(username="kudos_target_acct")
+        self.target.character_sheet.character.db_account = target_account
+        self.target.character_sheet.character.save(update_fields=["db_account"])
 
         action_request = SceneActionRequestFactory(
             scene=self.scene,
@@ -333,6 +341,37 @@ class GenericKudosOnAcceptTests(TestCase):
             respond_to_action_request(action_request=action_request, decision=ConsentDecision.DENY)
             # Verify award_kudos was NOT called
             mock_award.assert_not_called()
+
+    @patch("world.scenes.action_services.award_kudos")
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_no_kudos_when_target_has_no_account(
+        self, mock_resolve: MagicMock, mock_award_kudos: MagicMock
+    ) -> None:
+        """Skip kudos award when target's character has no linked account.
+
+        Personas backed by characters without db_account (NPCs, test fixtures)
+        are valid action_request targets; the kudos award is a no-op for them
+        rather than crashing on a NOT NULL constraint violation.
+        """
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        # Detach the target character's account, simulating an NPC persona.
+        self.target.character_sheet.character.db_account = None
+        self.target.character_sheet.character.save(update_fields=["db_account"])
+
+        action_request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="generic",
+            status=ActionRequestStatus.PENDING,
+        )
+        action_request.action_template = self.action_template
+        action_request.save(update_fields=["action_template"])
+
+        # Should not raise — and should not call award_kudos.
+        respond_to_action_request(action_request=action_request, decision=ConsentDecision.ACCEPT)
+        mock_award_kudos.assert_not_called()
 
 
 class TestCreateActionRequestSnapshotFields(TestCase):

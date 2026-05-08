@@ -257,20 +257,24 @@ def respond_to_action_request(
                 action_request.result_interaction = result_interaction
                 action_request.save(update_fields=["result_interaction"])
 
-            # Award kudos to target for accepting the action request
-            category = _get_social_engagement_category()
+            # Award kudos to target for accepting the action request.
+            # Skip when the target has no linked account — NPC personas and
+            # established/temporary personas without an account are valid; the
+            # kudos award only applies to real player accounts.
             target_character = action_request.target_persona.character_sheet.character
-            initiator_character = action_request.initiator_persona.character_sheet.character
             target_account = target_character.db_account
-            initiator_account = initiator_character.db_account
-            initiator_name = action_request.initiator_persona.name
-            award_kudos(
-                account=target_account,
-                amount=category.default_amount,
-                source_category=category,
-                description=f"Engaged with action request from {initiator_name}",
-                awarded_by=initiator_account,
-            )
+            if target_account is not None:
+                category = _get_social_engagement_category()
+                initiator_character = action_request.initiator_persona.character_sheet.character
+                initiator_account = initiator_character.db_account
+                initiator_name = action_request.initiator_persona.name
+                award_kudos(
+                    account=target_account,
+                    amount=category.default_amount,
+                    source_category=category,
+                    description=f"Engaged with action request from {initiator_name}",
+                    awarded_by=initiator_account,
+                )
 
             resolver = get_resolver(action_request.action_key)
             if resolver is not None:
