@@ -56,6 +56,60 @@ class SceneActionRequest(SharedMemoryModel):
         related_name="scene_action_requests",
         help_text="Technique used for this action, if any",
     )
+    # Snapshot fields for ritual check specs (nullable, fired-action audit only)
+    snapshot_ritual = models.ForeignKey(
+        "magic.Ritual",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Ritual that fired this action (snapshot audit field)",
+    )
+    snapshot_stat = models.ForeignKey(
+        "traits.Trait",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Primary stat from ritual check spec at fire time",
+    )
+    snapshot_skill = models.ForeignKey(
+        "skills.Skill",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Skill from ritual check spec at fire time",
+    )
+    snapshot_specialization = models.ForeignKey(
+        "skills.Specialization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Optional specialization from ritual check spec at fire time",
+    )
+    snapshot_resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Optional resonance filter from ritual check spec at fire time",
+    )
+    snapshot_check_type = models.ForeignKey(
+        "checks.CheckType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="CheckType from ritual check spec at fire time",
+    )
+    snapshot_target_difficulty = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Target difficulty from ritual check spec at fire time",
+    )
     status = models.CharField(
         max_length=20,
         choices=ActionRequestStatus.choices,
