@@ -67,7 +67,7 @@ from world.magic.models import (
     Thread,
     ThreadWeavingTeachingOffer,
 )
-from world.magic.permissions import IsThreadOwner
+from world.magic.permissions import IsRitualAuthorOrStaff, IsThreadOwner
 from world.magic.serializers import (
     AlterationResolutionSerializer,
     CantripSerializer,
@@ -86,6 +86,7 @@ from world.magic.serializers import (
     PoseEndorsementSerializer,
     ResonanceGrantSerializer,
     RestrictionSerializer,
+    RitualPatchSerializer,
     RitualPerformRequestSerializer,
     RitualSerializer,
     SceneEntryEndorsementSerializer,
@@ -631,18 +632,27 @@ class ThreadPullPreviewView(APIView):
         return Response(response_serializer.data)
 
 
-class RitualViewSet(viewsets.ReadOnlyModelViewSet):
-    """Read-only ViewSet exposing authored Rituals.
+class RitualViewSet(viewsets.ModelViewSet):
+    """ViewSet exposing authored Rituals with author-restricted PATCH.
 
     Used by the frontend to discover available rituals and their `input_schema`
     for rendering the perform form. The actual dispatch happens through
     `RitualPerformView` at `POST /api/magic/rituals/perform/`.
+
+    PATCH is restricted to the Ritual's author or staff. DELETE is disabled
+    (rituals are not deleted via API — staff can remove from admin).
     """
 
-    queryset = Ritual.objects.all().order_by("name")
-    serializer_class = RitualSerializer
-    permission_classes = [IsAuthenticated]
+    queryset = Ritual.objects.select_related("scene_action_config").order_by("name")
+    permission_classes = [IsAuthenticated, IsRitualAuthorOrStaff]
     pagination_class = StandardResultsSetPagination
+    http_method_names = ["get", "patch", "head", "options"]
+
+    def get_serializer_class(self):
+        """Use write serializer for PATCH, read serializer otherwise."""
+        if self.action == "partial_update":
+            return RitualPatchSerializer
+        return RitualSerializer
 
 
 class RitualPerformView(APIView):
