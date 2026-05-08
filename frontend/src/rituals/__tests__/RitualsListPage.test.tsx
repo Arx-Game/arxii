@@ -1,8 +1,9 @@
 /**
  * RitualsListPage tests
  *
- * Covers: renders all rituals, loading state, empty state,
- * clicking Perform opens dialog, and dialog receives correct characterSheetId.
+ * Covers: renders all rituals, loading state, empty state, section split
+ * (authored vs known), clicking Perform/Manage opens the correct UI, and
+ * the dialog receives the correct characterSheetId.
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
@@ -49,11 +50,19 @@ vi.mock('../components/RitualPerformDialog', () => ({
   },
 }));
 
+// Mock RitualSceneActionDetailPanel to prevent rendering AnimaRitualEditDialog deps
+vi.mock('../components/RitualSceneActionDetailPanel', () => ({
+  RitualSceneActionDetailPanel: (props: { ritual: RitualWithSchema }) => (
+    <div data-testid="mock-scene-action-detail-panel">
+      <span data-testid="detail-panel-ritual-name">{props.ritual.name}</span>
+    </div>
+  ),
+}));
+
 // ---------------------------------------------------------------------------
 // Mock Redux auth — provide a character for characterSheetId
 // ---------------------------------------------------------------------------
 
-// Default state used by most tests (one available character with id 99).
 const defaultAuthState = {
   auth: {
     account: {
@@ -76,7 +85,6 @@ const defaultAuthState = {
   },
 };
 
-// Mutable auth state so individual tests can override it.
 let currentAuthState = defaultAuthState;
 
 vi.mock('react-redux', async (importOriginal) => {
@@ -91,20 +99,32 @@ vi.mock('react-redux', async (importOriginal) => {
 // Sample ritual data
 // ---------------------------------------------------------------------------
 
-const ritual1: RitualWithSchema = {
+const knownRitual: RitualWithSchema = {
   id: 1,
   name: 'Soul Tether',
   description: 'Binds a soul to this plane.',
   narrative_prose: 'The sineater reaches across the veil.',
+  execution_kind: 'SERVICE',
   input_schema: null,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any;
 
-const ritual2: RitualWithSchema = {
+const authoredRitual: RitualWithSchema = {
   id: 2,
+  name: 'My Anima Ritual',
+  description: 'A personal recovery rite.',
+  narrative_prose: 'Breath in, breath out.',
+  execution_kind: 'SCENE_ACTION',
+  input_schema: null,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+} as any;
+
+const knownRitual2: RitualWithSchema = {
+  id: 3,
   name: 'Blood Rite',
-  description: 'A dangerous ritual of binding.',
+  description: 'A dangerous ritual.',
   narrative_prose: null,
+  execution_kind: 'FLOW',
   input_schema: null,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any;
@@ -135,7 +155,6 @@ describe('RitualsListPage', () => {
     vi.clearAllMocks();
     mockDialogProps.ritual = undefined;
     mockDialogProps.characterSheetId = undefined;
-    // Reset auth state to the default (one character with id 99) before each test.
     currentAuthState = defaultAuthState;
   });
 
@@ -143,7 +162,7 @@ describe('RitualsListPage', () => {
   it('renders all rituals returned by useRituals()', () => {
     mockUseRituals.mockReturnValue({
       isLoading: false,
-      data: { results: [ritual1, ritual2] },
+      data: { results: [knownRitual, knownRitual2] },
     });
 
     const Wrapper = createWrapper();
@@ -191,11 +210,11 @@ describe('RitualsListPage', () => {
     expect(screen.getByText(/no rituals available/i)).toBeInTheDocument();
   });
 
-  // 4. Clicking Perform opens the dialog
-  it('clicking Perform button on a card opens the dialog', async () => {
+  // 4. Clicking Perform opens the dialog (non-SCENE_ACTION)
+  it('clicking Perform button on a known ritual card opens the dialog', async () => {
     mockUseRituals.mockReturnValue({
       isLoading: false,
-      data: { results: [ritual1] },
+      data: { results: [knownRitual] },
     });
 
     const Wrapper = createWrapper();
@@ -205,7 +224,6 @@ describe('RitualsListPage', () => {
       </Wrapper>
     );
 
-    // Dialog is not yet visible
     expect(screen.queryByTestId('mock-ritual-perform-dialog')).not.toBeInTheDocument();
 
     const performBtn = screen.getByRole('button', { name: /perform/i });
@@ -218,10 +236,10 @@ describe('RitualsListPage', () => {
   });
 
   // 5. Dialog receives the correct characterSheetId from auth context
-  it('passes characterSheetId from the first available character to the dialog', async () => {
+  it('passes characterSheetId from the puppeted character to the dialog', async () => {
     mockUseRituals.mockReturnValue({
       isLoading: false,
-      data: { results: [ritual1] },
+      data: { results: [knownRitual] },
     });
 
     const Wrapper = createWrapper();
@@ -242,7 +260,6 @@ describe('RitualsListPage', () => {
 
   // 6. No character: renders no-character empty state
   it('renders a no-character message when no character is puppeted', () => {
-    // Override auth state: character exists but is not puppeted.
     currentAuthState = {
       auth: {
         account: {
@@ -267,7 +284,7 @@ describe('RitualsListPage', () => {
 
     mockUseRituals.mockReturnValue({
       isLoading: false,
-      data: { results: [ritual1] },
+      data: { results: [knownRitual] },
     });
 
     const Wrapper = createWrapper();
@@ -278,5 +295,85 @@ describe('RitualsListPage', () => {
     );
 
     expect(screen.getByText(/active character/i)).toBeInTheDocument();
+  });
+
+  // 7. SCENE_ACTION ritual shows "Manage" button, not "Perform"
+  it('renders a Manage button for SCENE_ACTION rituals', () => {
+    mockUseRituals.mockReturnValue({
+      isLoading: false,
+      data: { results: [authoredRitual] },
+    });
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <RitualsListPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByRole('button', { name: /manage/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /perform/i })).not.toBeInTheDocument();
+  });
+
+  // 8. Mixed list: both sections render with headers
+  it('renders two sections with headers when both authored and known rituals exist', () => {
+    mockUseRituals.mockReturnValue({
+      isLoading: false,
+      data: { results: [authoredRitual, knownRitual] },
+    });
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <RitualsListPage />
+      </Wrapper>
+    );
+
+    expect(screen.getByTestId('authored-rituals-section')).toBeInTheDocument();
+    expect(screen.getByTestId('known-rituals-section')).toBeInTheDocument();
+    expect(screen.getByText('Authored by you')).toBeInTheDocument();
+    expect(screen.getByText('Known rituals')).toBeInTheDocument();
+  });
+
+  // 9. Only authored section: no section header rendered
+  it('renders no section headers when only authored rituals exist', () => {
+    mockUseRituals.mockReturnValue({
+      isLoading: false,
+      data: { results: [authoredRitual] },
+    });
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <RitualsListPage />
+      </Wrapper>
+    );
+
+    expect(screen.queryByText('Authored by you')).not.toBeInTheDocument();
+    expect(screen.queryByText('Known rituals')).not.toBeInTheDocument();
+  });
+
+  // 10. Clicking Manage on a SCENE_ACTION card expands the detail panel
+  it('clicking Manage expands the scene action detail panel', async () => {
+    mockUseRituals.mockReturnValue({
+      isLoading: false,
+      data: { results: [authoredRitual] },
+    });
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <RitualsListPage />
+      </Wrapper>
+    );
+
+    expect(screen.queryByTestId('mock-scene-action-detail-panel')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /manage/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-scene-action-detail-panel')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('detail-panel-ritual-name')).toHaveTextContent('My Anima Ritual');
   });
 });
