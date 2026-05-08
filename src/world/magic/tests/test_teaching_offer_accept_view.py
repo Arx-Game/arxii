@@ -286,3 +286,51 @@ class TeachingOfferAcceptViewTests(APITestCase):
         offer_data = next((r for r in results if r["id"] == self.offer.pk), None)
         self.assertIsNotNone(offer_data)
         self.assertIsNone(offer_data["effective_xp_cost_for_viewer"])
+
+    # ------------------------------------------------------------------
+    # N+1 regression — viewer sheet resolution fires once per list, not per row
+    # ------------------------------------------------------------------
+
+    def test_listing_viewer_sheet_resolution_does_not_grow_with_row_count(self) -> None:
+        """Viewer sheet query fires once per request regardless of how many offers are listed.
+
+        Creates 4 extra offers (all sharing the same unlock so paths M2M is the same
+        object) then asserts that the CharacterSheet tenant-resolution query appears
+        exactly once in the captured SQL — not once per row.
+        """
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        # Add 4 more offers all sharing the SAME unlock so the only variable
+        # per-row query would be the viewer-sheet resolution (not unlock.paths).
+        for _i in range(4):
+            ThreadWeavingTeachingOfferFactory(
+                teacher=self.teacher_tenure,
+                unlock=self.unlock,
+                banked_ap=0,
+            )
+
+        self.client.force_authenticate(user=self.learner_account)
+
+        # Warm session/auth caches with a throwaway call.
+        self.client.get(self._list_url())
+
+        with CaptureQueriesContext(connection) as ctx:
+            r = self.client.get(self._list_url())
+
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(len(r.data["results"]), 5)
+
+        # The viewer-sheet tenant-resolution query (CharacterSheet WHERE
+        # roster_entry__tenures__player_data__account = ...) must appear AT MOST ONCE.
+        viewer_sheet_queries = [
+            q["sql"]
+            for q in ctx.captured_queries
+            if "character_sheets" in q["sql"] and "tenures" in q["sql"]
+        ]
+        self.assertLessEqual(
+            len(viewer_sheet_queries),
+            1,
+            f"Viewer-sheet resolution query fired {len(viewer_sheet_queries)} times "
+            f"(expected ≤1). Per-row N+1 detected.\n" + "\n".join(viewer_sheet_queries),
+        )

@@ -993,26 +993,43 @@ class ThreadWeavingTeachingOfferSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    def _get_viewer_sheets(self, request) -> list:
+        """Return the viewer's active CharacterSheets, cached on the request object.
+
+        Called once per list response — caches the result on ``request`` so that
+        N rows do not trigger N tenant-resolution queries.
+        """
+        cache_attr = "_cached_viewer_sheets"  # noqa: STRING_LITERAL — private cache slot name
+        if not hasattr(request, cache_attr):
+            setattr(
+                request,
+                cache_attr,
+                list(
+                    CharacterSheet.objects.filter(
+                        roster_entry__tenures__player_data__account=request.user,
+                        roster_entry__tenures__end_date__isnull=True,
+                    )
+                ),
+            )
+        return getattr(request, cache_attr)
+
     def get_effective_xp_cost_for_viewer(self, obj: ThreadWeavingTeachingOffer) -> int | None:
         """Compute the Path-multiplied XP cost for the requesting learner.
 
         Returns the integer cost when the viewer has exactly one active tenure
         OR provides a ``learner_sheet_id`` query param to disambiguate.
         Returns ``None`` for ambiguous (multi-tenure, no key) or no-tenure cases.
+
+        Uses ``_get_viewer_sheets`` so the tenant-resolution query fires only once
+        per list response, not once per row.
         """
         from world.magic.services.threads import compute_thread_weaving_xp_cost  # noqa: PLC0415
 
         request = self.context.get("request")
         if request is None:
             return None
-        account = request.user
 
-        sheets = list(
-            CharacterSheet.objects.filter(
-                roster_entry__tenures__player_data__account=account,
-                roster_entry__tenures__end_date__isnull=True,
-            )
-        )
+        sheets = self._get_viewer_sheets(request)
         if not sheets:
             return None
         if len(sheets) == 1:
@@ -1044,7 +1061,7 @@ class AcceptTeachingOfferSerializer(serializers.Serializer):
 
     def validate(self, attrs: dict) -> dict:  # type: ignore[override]
         """Resolve the learner sheet using the alt-guard helper."""
-        from world.magic.views import _resolve_actor_sheet  # noqa: PLC0415
+        from world.magic.services.auth import _resolve_actor_sheet  # noqa: PLC0415
 
         request = self.context["request"]
         learner = _resolve_actor_sheet(request, body_key="learner_sheet_id")  # noqa: STRING_LITERAL — body key name
