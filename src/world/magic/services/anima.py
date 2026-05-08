@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -10,11 +11,15 @@ from world.magic.models import CharacterAnima
 from world.magic.types.ritual import AnimaRegenTickSummary, RitualOutcome
 
 if TYPE_CHECKING:
+    from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
     from world.magic.models.rituals import Ritual
+    from world.roster.models import RosterEntry
     from world.scenes.models import Scene
+
+logger = logging.getLogger(__name__)
 
 
 def deduct_anima(character: ObjectDB, effective_cost: int) -> int:
@@ -186,6 +191,97 @@ def apply_anima_ritual_outcome(
         soulfray_stage_after=stage_after,
         soulfray_resolved=soulfray_resolved,
     )
+
+
+@transaction.atomic
+def provision_player_anima_ritual(
+    account: AccountDB,
+    character_sheet: CharacterSheet,
+    roster_entry: RosterEntry,
+    *,
+    ritual_name: str,
+) -> Ritual | None:
+    """Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.
+
+    Called during character creation finalization (Phase 8 §8.1). Picks the
+    character's highest-valued skill for the sidecar and Willpower as the
+    default stat. Both can be changed post-CG via the ritual management UI.
+    Description and narrative prose are derived from ``ritual_name``.
+
+    Returns the created Ritual, or None when no suitable default skill can be
+    found (logged as a warning — finalization is not blocked).
+
+    Args:
+        account: The player account (author_account on the Ritual).
+        character_sheet: The character's CharacterSheet.
+        roster_entry: The character's RosterEntry (for CharacterRitualKnowledge).
+        ritual_name: Name for the Ritual row (also seeds description/narrative prose).
+    """
+    from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
+    from world.magic.models import CharacterRitualKnowledge  # noqa: PLC0415
+    from world.magic.models.ritual_scene_action import RitualSceneActionConfig  # noqa: PLC0415
+    from world.magic.models.rituals import Ritual  # noqa: PLC0415
+    from world.skills.models import CharacterSkillValue, Skill  # noqa: PLC0415
+    from world.traits.models import Trait, TraitType  # noqa: PLC0415
+
+    character = character_sheet.character
+
+    # 1. Resolve default stat (Willpower).
+    try:
+        stat_trait = Trait.objects.get(name="willpower", trait_type=TraitType.STAT)
+    except Trait.DoesNotExist:
+        logger.warning(
+            "provision_player_anima_ritual: Willpower stat not found; skipping ritual "
+            "creation for character %s",
+            character.pk,
+        )
+        return None
+
+    # 2. Resolve default skill — pick the character's highest CG skill value.
+    skill_value = CharacterSkillValue.objects.filter(character=character).order_by("-value").first()
+    if skill_value is not None:
+        skill = skill_value.skill
+    else:
+        # Fallback: first active skill in the database (edge case for test accounts).
+        skill = Skill.objects.filter(is_active=True).first()
+
+    if skill is None:
+        logger.warning(
+            "provision_player_anima_ritual: No skill available; skipping ritual "
+            "creation for character %s",
+            character.pk,
+        )
+        return None
+
+    # 3. Create the Ritual row (no service_function_path, no flow — SCENE_ACTION).
+    # Description and narrative prose are placeholder text editable post-CG.
+    ritual = Ritual.objects.create(
+        name=ritual_name,
+        description=(
+            "A personal ritual for restoring anima. "
+            "Edit this description to match your character's practice."
+        ),
+        narrative_prose=f"{ritual_name} is performed to restore anima.",
+        execution_kind=RitualExecutionKind.SCENE_ACTION,
+        service_function_path="",
+        author_account=account,
+    )
+
+    # 4. Create the sidecar (stat + skill; check_type/resonance left null for player to set).
+    RitualSceneActionConfig.objects.create(
+        ritual=ritual,
+        stat=stat_trait,
+        skill=skill,
+    )
+
+    # 5. Grant knowledge so the ritual appears in the scene action menu.
+    CharacterRitualKnowledge.objects.get_or_create(
+        roster_entry=roster_entry,
+        ritual=ritual,
+        defaults={"learned_from": None},
+    )
+
+    return ritual
 
 
 def has_performed_anima_ritual_in_scene(

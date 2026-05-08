@@ -26,7 +26,7 @@ from world.magic.services.alterations import (
     staff_clear_alteration,
     validate_alteration_resolution,
 )
-from world.magic.services.anima import deduct_anima
+from world.magic.services.anima import deduct_anima, provision_player_anima_ritual
 from world.magic.services.aura import (
     calculate_affinity_breakdown,
     get_aura_percentages,
@@ -99,6 +99,7 @@ __all__ = [
     "imbue_ready_threads",
     "near_xp_lock_threads",
     "preview_resonance_pull",
+    "provision_player_anima_ritual",
     "recompute_max_health_with_threads",
     "reconcile_ritual_knowledge",
     "resolve_pending_alteration",

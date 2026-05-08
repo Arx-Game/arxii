@@ -22,6 +22,9 @@ ALLOWED_MIGRATIONS: set[str] = {
     "world/roster/migrations/0003_populate_roster_entry_character_sheet.py",
     # System configuration: KudosSourceCategory lookup table for social_engagement
     "world/progression/migrations/0002_social_engagement_kudos_category.py",
+    # Data migration: placeholder PathRitualGrants for accept_soul_tether preserve visibility
+    # while CharacterRitualKnowledge gating is in effect (Phase 8).
+    "world/magic/migrations/0052_accept_soul_tether_placeholder_grants.py",
 }
 
 # Patterns that suggest seed data in migrations

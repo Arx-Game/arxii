@@ -146,6 +146,17 @@ def finalize_character(draft: CharacterDraft, *, add_to_roster: bool = False) ->
     # Finalize magic data before deleting draft
     finalize_magic_data(draft, sheet)
 
+    # Reconcile ritual knowledge from grant tables (path, tradition, distinction, codex).
+    # Must run AFTER _apply_character_mechanics (path history / distinctions exist)
+    # and AFTER finalize_magic_data (codex grants from tradition may have been created).
+    # Beginnings ritual grants are NOT walked by reconcile_ritual_knowledge because
+    # Beginnings is not stored post-finalization; we handle them here directly (Option A).
+    roster_entry = character.sheet_data.roster_entry
+    _grant_beginnings_ritual_knowledge(draft, roster_entry)
+    from world.magic.services.ritual_knowledge import reconcile_ritual_knowledge  # noqa: PLC0415
+
+    reconcile_ritual_knowledge(roster_entry)
+
     # Convert unspent CG points to locked XP (best-effort: don't block finalization)
     _convert_remaining_cg_points_to_xp(draft, character)
 
@@ -796,6 +807,62 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
     )
     aura.full_clean()
     aura.save()
+
+    # 5. Create player anima Ritual + sidecar + CharacterRitualKnowledge.
+    # The Ritual is authored by the player's account and uses their highest CG
+    # skill + Willpower as defaults (customisable post-CG). CharacterRitualKnowledge
+    # is created so the ritual gate in the scene action menu is satisfied.
+    # Guard: if the sheet has no RosterEntry yet (e.g. in isolated unit tests that
+    # call finalize_magic_data directly), skip — the CharacterRitualKnowledge cannot
+    # be created without a roster_entry FK. finalize_character always creates the
+    # RosterEntry before calling this, so this guard only fires in test-only paths.
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+
+    try:
+        _roster_entry_for_ritual = sheet.roster_entry
+    except RosterEntry.DoesNotExist:
+        _roster_entry_for_ritual = None
+
+    if _roster_entry_for_ritual is not None:
+        from world.magic.services.anima import provision_player_anima_ritual  # noqa: PLC0415
+
+        character_name = draft.draft_data.get("first_name", "Character")
+        provision_player_anima_ritual(
+            account=draft.account,
+            character_sheet=sheet,
+            roster_entry=_roster_entry_for_ritual,
+            ritual_name=f"{character_name}'s Anima Ritual",
+        )
+
+
+def _grant_beginnings_ritual_knowledge(draft: CharacterDraft, roster_entry: RosterEntry) -> None:
+    """Grant CharacterRitualKnowledge for BeginningsRitualGrant rows.
+
+    Beginnings is not stored on CharacterSheet post-finalization, so
+    reconcile_ritual_knowledge() cannot walk it. This function handles the
+    Beginnings grant source directly at finalization time (Option A from Phase 8
+    design notes), before the general reconciliation pass.
+
+    Idempotent via get_or_create — safe to call multiple times.
+    """
+    beginnings = draft.selected_beginnings
+    if beginnings is None:
+        return
+
+    from world.magic.models import CharacterRitualKnowledge  # noqa: PLC0415
+    from world.magic.models.grants import BeginningsRitualGrant  # noqa: PLC0415
+
+    ritual_ids = list(
+        BeginningsRitualGrant.objects.filter(beginnings=beginnings).values_list(
+            "ritual_id", flat=True
+        )
+    )
+    for ritual_id in ritual_ids:
+        CharacterRitualKnowledge.objects.get_or_create(
+            roster_entry=roster_entry,
+            ritual_id=ritual_id,
+            defaults={"learned_from": None},
+        )
 
 
 def submit_draft_for_review(
