@@ -5700,6 +5700,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/rooms-by-property/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return rooms that have at least one matching ObjectProperty. */
+    get: operations['magic_rooms_by_property_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/scene-entry-endorsements/': {
     parameters: {
       query?: never;
@@ -6053,6 +6070,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/teaching-offers/{id}/accept/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Accept a ThreadWeavingTeachingOffer on behalf of the requesting learner.
+     *
+     *     POST /api/magic/teaching-offers/{id}/accept/
+     *
+     *     The requesting account must have at least one active tenure.  If the
+     *     account has multiple active tenures the body must include
+     *     ``learner_sheet_id`` to identify which character is learning.
+     */
+    post: operations['magic_teaching_offers_accept_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/techniques/': {
     parameters: {
       query?: never;
@@ -6113,6 +6155,40 @@ export interface paths {
      *     Provides CRUD access to techniques for character creation.
      */
     patch: operations['magic_techniques_partial_update'];
+    trace?: never;
+  };
+  '/api/magic/thread-hub-summary/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the Thread Hub summary for the acting character. */
+    get: operations['magic_thread_hub_summary_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/thread-pull-commit/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Dispatch the pull and return the commit result. */
+    post: operations['magic_thread_pull_commit_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/magic/thread-pull-preview/': {
@@ -6224,6 +6300,32 @@ export interface paths {
      *     so historical references remain.
      */
     patch: operations['magic_threads_partial_update'];
+    trace?: never;
+  };
+  '/api/magic/threads/{id}/cross_xp_lock/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Pay XP to unlock the next level boundary on this thread (Spec A §3.2).
+     *
+     *     POST /api/magic/threads/{id}/cross-xp-lock/
+     *
+     *     Request body: ``{boundary_level}`` — the XP-locked boundary level to unlock.
+     *     Response: ``{thread_id, unlocked_level, xp_spent}``.
+     *     Idempotent: repeat calls with the same boundary_level return the existing
+     *     ThreadLevelUnlock without re-spending XP.
+     */
+    post: operations['magic_threads_cross_xp_lock_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/mechanics/categories/': {
@@ -14908,6 +15010,8 @@ export interface components {
       readonly scene_action_config: {
         [key: string]: unknown;
       } | null;
+      /** @description When True, the generic Rituals listing page hides this ritual; it has a specialized host UI elsewhere (e.g., Thread Detail for Imbuing). */
+      readonly client_hosted: boolean;
     };
     /**
      * @description Write serializer for partial PATCH of player-authored Rituals.
@@ -16029,6 +16133,17 @@ export interface components {
       readonly unlock_target_kind: string;
       readonly unlock_display_name: string;
       readonly unlock_xp_cost: number;
+      /**
+       * @description Compute the Path-multiplied XP cost for the requesting learner.
+       *
+       *     Returns the integer cost when the viewer has exactly one active tenure
+       *     OR provides a ``learner_sheet_id`` query param to disambiguate.
+       *     Returns ``None`` for ambiguous (multi-tenure, no key) or no-tenure cases.
+       *
+       *     Uses ``_get_viewer_sheets`` so the tenant-resolution query fires only once
+       *     per list response, not once per row.
+       */
+      readonly effective_xp_cost_for_viewer: number | null;
       /** @description Teacher's narrative pitch for this offer. */
       readonly pitch: string;
       /** @description Gold price the teacher charges (XP cost stays on the unlock). */
@@ -24418,6 +24533,24 @@ export interface operations {
       };
     };
   };
+  magic_rooms_by_property_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   magic_scene_entry_endorsements_create: {
     parameters: {
       query?: never;
@@ -24769,6 +24902,28 @@ export interface operations {
       };
     };
   };
+  magic_teaching_offers_accept_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this thread weaving teaching offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ThreadWeavingTeachingOffer'];
+        };
+      };
+    };
+  };
   magic_techniques_list: {
     parameters: {
       query?: {
@@ -24916,6 +25071,42 @@ export interface operations {
       };
     };
   };
+  magic_thread_hub_summary_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_thread_pull_commit_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   magic_thread_pull_preview_create: {
     parameters: {
       query?: never;
@@ -25059,6 +25250,31 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedThreadRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Thread'];
+        };
+      };
+    };
+  };
+  magic_threads_cross_xp_lock_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ThreadRequest'];
       };
     };
     responses: {
