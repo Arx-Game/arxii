@@ -107,6 +107,14 @@ const RitualsListPage = lazy(() =>
 );
 
 // ---------------------------------------------------------------------------
+// Lazy-loaded Thread Hub page
+// ---------------------------------------------------------------------------
+
+const ThreadHubPage = lazy(() =>
+  import('@/magic/pages/ThreadHubPage').then((m) => ({ default: m.ThreadHubPage }))
+);
+
+// ---------------------------------------------------------------------------
 // Suspense fallback — shown while lazy stories chunks load
 // ---------------------------------------------------------------------------
 
@@ -479,6 +487,20 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <RitualsListPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Thread Hub                                                           */}
+        {/* ------------------------------------------------------------------ */}
+        <Route
+          path="/threads"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <ThreadHubPage />
               </ProtectedRoute>
             </Suspense>
           }
