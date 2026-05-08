@@ -4997,68 +4997,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/magic/character-anima-rituals/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for CharacterAnimaRitual records.
-     *
-     *     Manages personalized anima recovery rituals for characters.
-     */
-    get: operations['magic_character_anima_rituals_list'];
-    put?: never;
-    /**
-     * @description ViewSet for CharacterAnimaRitual records.
-     *
-     *     Manages personalized anima recovery rituals for characters.
-     */
-    post: operations['magic_character_anima_rituals_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/magic/character-anima-rituals/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for CharacterAnimaRitual records.
-     *
-     *     Manages personalized anima recovery rituals for characters.
-     */
-    get: operations['magic_character_anima_rituals_retrieve'];
-    /**
-     * @description ViewSet for CharacterAnimaRitual records.
-     *
-     *     Manages personalized anima recovery rituals for characters.
-     */
-    put: operations['magic_character_anima_rituals_update'];
-    post?: never;
-    /**
-     * @description ViewSet for CharacterAnimaRitual records.
-     *
-     *     Manages personalized anima recovery rituals for characters.
-     */
-    delete: operations['magic_character_anima_rituals_destroy'];
-    options?: never;
-    head?: never;
-    /**
-     * @description ViewSet for CharacterAnimaRitual records.
-     *
-     *     Manages personalized anima recovery rituals for characters.
-     */
-    patch: operations['magic_character_anima_rituals_partial_update'];
-    trace?: never;
-  };
   '/api/magic/character-anima/{id}/': {
     parameters: {
       query?: never;
@@ -5691,11 +5629,14 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Read-only ViewSet exposing authored Rituals.
+     * @description ViewSet exposing authored Rituals with author-restricted PATCH.
      *
      *     Used by the frontend to discover available rituals and their `input_schema`
      *     for rendering the perform form. The actual dispatch happens through
      *     `RitualPerformView` at `POST /api/magic/rituals/perform/`.
+     *
+     *     PATCH is restricted to the Ritual's author or staff. DELETE is disabled
+     *     (rituals are not deleted via API — staff can remove from admin).
      */
     get: operations['magic_rituals_list'];
     put?: never;
@@ -5714,11 +5655,14 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Read-only ViewSet exposing authored Rituals.
+     * @description ViewSet exposing authored Rituals with author-restricted PATCH.
      *
      *     Used by the frontend to discover available rituals and their `input_schema`
      *     for rendering the perform form. The actual dispatch happens through
      *     `RitualPerformView` at `POST /api/magic/rituals/perform/`.
+     *
+     *     PATCH is restricted to the Ritual's author or staff. DELETE is disabled
+     *     (rituals are not deleted via API — staff can remove from admin).
      */
     get: operations['magic_rituals_retrieve'];
     put?: never;
@@ -5726,7 +5670,17 @@ export interface paths {
     delete?: never;
     options?: never;
     head?: never;
-    patch?: never;
+    /**
+     * @description ViewSet exposing authored Rituals with author-restricted PATCH.
+     *
+     *     Used by the frontend to discover available rituals and their `input_schema`
+     *     for rendering the perform form. The actual dispatch happens through
+     *     `RitualPerformView` at `POST /api/magic/rituals/perform/`.
+     *
+     *     PATCH is restricted to the Ritual's author or staff. DELETE is disabled
+     *     (rituals are not deleted via API — staff can remove from admin).
+     */
+    patch: operations['magic_rituals_partial_update'];
     trace?: never;
   };
   '/api/magic/rituals/perform/': {
@@ -10007,43 +9961,6 @@ export interface components {
       /** @description Maximum anima capacity. */
       maximum?: number;
     };
-    /** @description Serializer for CharacterAnimaRitual records. */
-    CharacterAnimaRitual: {
-      readonly id: number;
-      /** @description The character this ritual belongs to. */
-      character: number;
-      /** @description The primary stat used in this ritual. */
-      stat: number;
-      readonly stat_name: string;
-      /** @description The skill used in this ritual. */
-      skill: number;
-      readonly skill_name: string;
-      /** @description Optional specialization for this ritual. */
-      specialization?: number | null;
-      /** @description Get the specialization name if present. */
-      readonly specialization_name: string | null;
-      /** @description The resonance that powers this ritual. */
-      resonance: number;
-      readonly resonance_name: string;
-      readonly resonance_detail: components['schemas']['Resonance'];
-      /** @description Social activity that restores anima. */
-      description: string;
-    };
-    /** @description Serializer for CharacterAnimaRitual records. */
-    CharacterAnimaRitualRequest: {
-      /** @description The character this ritual belongs to. */
-      character: number;
-      /** @description The primary stat used in this ritual. */
-      stat: number;
-      /** @description The skill used in this ritual. */
-      skill: number;
-      /** @description Optional specialization for this ritual. */
-      specialization?: number | null;
-      /** @description The resonance that powers this ritual. */
-      resonance: number;
-      /** @description Social activity that restores anima. */
-      description: string;
-    };
     /** @description Serializer for CharacterAura records. */
     CharacterAura: {
       readonly id: number;
@@ -10153,7 +10070,17 @@ export interface components {
       height_inches?: number | null;
       readonly build: components['schemas']['Build'];
       readonly selected_path: components['schemas']['Path'];
-      readonly selected_tradition: components['schemas']['Tradition'];
+      /**
+       * @description Render the selected tradition with this draft's beginning_id in context.
+       *
+       *     TraditionSerializer.required_distinction_id resolves a BeginningTradition
+       *     row keyed on (beginning_id, tradition_id). Drafts carry both pieces of
+       *     state directly, so we inject ``beginning_id`` into a per-draft context
+       *     rather than relying on the list endpoint's pre-built map.
+       */
+      readonly selected_tradition: {
+        [key: string]: unknown;
+      } | null;
       /** @description Staged data: stats, skills, traits, identity, etc. */
       draft_data?: unknown;
       /** @description True if account has any active roster tenure (for advanced CG options). */
@@ -11376,9 +11303,10 @@ export interface components {
     /**
      * @description * `SERVICE` - Service
      *     * `FLOW` - Flow
+     *     * `SCENE_ACTION` - Scene Action
      * @enum {string}
      */
-    ExecutionKindEnum: 'SERVICE' | 'FLOW';
+    ExecutionKindEnum: 'SERVICE' | 'FLOW' | 'SCENE_ACTION';
     /** @description Serializer for Facet model with hierarchy info. */
     Facet: {
       readonly id: number;
@@ -13655,21 +13583,6 @@ export interface components {
       /** @description Maximum anima capacity. */
       maximum?: number;
     };
-    /** @description Serializer for CharacterAnimaRitual records. */
-    PatchedCharacterAnimaRitualRequest: {
-      /** @description The character this ritual belongs to. */
-      character?: number;
-      /** @description The primary stat used in this ritual. */
-      stat?: number;
-      /** @description The skill used in this ritual. */
-      skill?: number;
-      /** @description Optional specialization for this ritual. */
-      specialization?: number | null;
-      /** @description The resonance that powers this ritual. */
-      resonance?: number;
-      /** @description Social activity that restores anima. */
-      description?: string;
-    };
     /** @description Serializer for CharacterAura records. */
     PatchedCharacterAuraRequest: {
       /** @description The character this aura belongs to. */
@@ -13967,6 +13880,19 @@ export interface components {
        *     * `4` - Expert
        */
       gm_trust_level?: components['schemas']['GmTrustLevelEnum'];
+    };
+    /**
+     * @description Write serializer for partial PATCH of player-authored Rituals.
+     *
+     *     Handles top-level Ritual fields (name, description, narrative_prose) and
+     *     optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
+     *     rituals silently ignore scene_action_config if supplied.
+     */
+    PatchedRitualPatchRequest: {
+      name?: string;
+      description?: string;
+      narrative_prose?: string;
+      scene_action_config?: components['schemas']['RitualSceneActionConfigPatchRequest'];
     };
     /** @description Full scene representation with personas */
     PatchedSceneDetailRequest: {
@@ -14962,8 +14888,10 @@ export interface components {
     /**
      * @description Serializer for Ritual (read-only list/detail).
      *
-     *     Exposes name, description, narrative_prose, dispatch metadata, and the
-     *     `input_schema` blob the frontend uses to render its perform form.
+     *     Exposes name, description, narrative_prose, dispatch metadata, the
+     *     `input_schema` blob the frontend uses to render its perform form,
+     *     `author_account_id` for client-side "authored by you" filtering,
+     *     and the nested `scene_action_config` for SCENE_ACTION rituals.
      */
     Ritual: {
       readonly id: number;
@@ -14975,6 +14903,54 @@ export interface components {
       readonly execution_kind: components['schemas']['ExecutionKindEnum'];
       /** @description UI-rendering metadata: what kwargs the perform endpoint expects. Shape: {'fields': [{'name': str, 'label': str, 'type': str, 'required': bool, ...}]}. When None, the ritual takes no player-supplied kwargs. */
       readonly input_schema: unknown;
+      readonly author_account_id: number | null;
+      /** @description Return nested scene_action_config for SCENE_ACTION rituals, else None. */
+      readonly scene_action_config: {
+        [key: string]: unknown;
+      } | null;
+    };
+    /**
+     * @description Write serializer for partial PATCH of player-authored Rituals.
+     *
+     *     Handles top-level Ritual fields (name, description, narrative_prose) and
+     *     optional nested ``scene_action_config`` for SCENE_ACTION rituals. Non-SCENE_ACTION
+     *     rituals silently ignore scene_action_config if supplied.
+     */
+    RitualPatch: {
+      name: string;
+      description: string;
+      narrative_prose: string;
+      scene_action_config?: components['schemas']['RitualSceneActionConfigPatch'];
+    };
+    /**
+     * @description Write serializer for the nested scene_action_config on a PATCH.
+     *
+     *     Only fields that players can meaningfully update are included.
+     *     All are optional (partial update semantics). FK fields accept integer PKs
+     *     and are resolved to model instances in validate().
+     */
+    RitualSceneActionConfigPatch: {
+      stat_id?: number;
+      skill_id?: number;
+      specialization_id?: number | null;
+      resonance_id?: number | null;
+      check_type_id?: number | null;
+      target_difficulty?: number;
+    };
+    /**
+     * @description Write serializer for the nested scene_action_config on a PATCH.
+     *
+     *     Only fields that players can meaningfully update are included.
+     *     All are optional (partial update semantics). FK fields accept integer PKs
+     *     and are resolved to model instances in validate().
+     */
+    RitualSceneActionConfigPatchRequest: {
+      stat_id?: number;
+      skill_id?: number;
+      specialization_id?: number | null;
+      resonance_id?: number | null;
+      check_type_id?: number | null;
+      target_difficulty?: number;
     };
     /** @description Validate a roster application message. */
     RosterApplication: {
@@ -16077,12 +16053,23 @@ export interface components {
       readonly is_active: boolean;
       /** @description Display ordering within lists (lower numbers appear first). */
       readonly sort_order: number;
-      /** @description Get codex entry IDs granted by this tradition. */
+      /**
+       * @description Get codex entry IDs granted by this tradition.
+       *
+       *     Read from the ``cached_codex_grants`` attr populated by the
+       *     ``Beginnings.cached_beginning_traditions`` prefetch. Same data for
+       *     every caller (no per-request filter), so attaching to the shared
+       *     Tradition instance is safe.
+       */
       readonly codex_entry_ids: number[];
       /**
        * @description Get the required distinction ID from the BeginningTradition context.
        *
-       *     The beginning_id is passed via context from the ViewSet.
+       *     The view computes a ``{tradition_id: BeginningTradition}`` dict per
+       *     request and passes it via context. We do NOT attach the BT row to
+       *     ``obj`` (a SharedMemoryModel ``Tradition``) via ``Prefetch(to_attr=)``
+       *     because that attribute would persist across requests with different
+       *     ``beginning_id`` values and leak filtered data between users.
        */
       readonly required_distinction_id: number | null;
     };
@@ -23365,139 +23352,6 @@ export interface operations {
       };
     };
   };
-  magic_character_anima_rituals_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['CharacterAnimaRitual'][];
-        };
-      };
-    };
-  };
-  magic_character_anima_rituals_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['CharacterAnimaRitualRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['CharacterAnimaRitual'];
-        };
-      };
-    };
-  };
-  magic_character_anima_rituals_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['CharacterAnimaRitual'];
-        };
-      };
-    };
-  };
-  magic_character_anima_rituals_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['CharacterAnimaRitualRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['CharacterAnimaRitual'];
-        };
-      };
-    };
-  };
-  magic_character_anima_rituals_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  magic_character_anima_rituals_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['PatchedCharacterAnimaRitualRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['CharacterAnimaRitual'];
-        };
-      };
-    };
-  };
   magic_character_anima_retrieve: {
     parameters: {
       query?: never;
@@ -24516,6 +24370,32 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Ritual'];
+        };
+      };
+    };
+  };
+  magic_rituals_partial_update: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this ritual. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['PatchedRitualPatchRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RitualPatch'];
         };
       };
     };
