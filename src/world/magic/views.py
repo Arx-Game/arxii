@@ -69,6 +69,7 @@ from world.magic.models import (
 )
 from world.magic.permissions import IsRitualAuthorOrStaff, IsThreadOwner
 from world.magic.serializers import (
+    AcceptTeachingOfferSerializer,
     AlterationResolutionSerializer,
     CantripSerializer,
     CharacterAnimaSerializer,
@@ -781,6 +782,32 @@ class ThreadWeavingTeachingOfferViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = ThreadWeavingTeachingOfferFilter
 
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+    def accept(self, request: Request, pk: int | None = None) -> Response:
+        """Accept a ThreadWeavingTeachingOffer on behalf of the requesting learner.
+
+        POST /api/magic/teaching-offers/{id}/accept/
+
+        The requesting account must have at least one active tenure.  If the
+        account has multiple active tenures the body must include
+        ``learner_sheet_id`` to identify which character is learning.
+        """
+        offer = self.get_object()
+        serializer = AcceptTeachingOfferSerializer(
+            data=request.data,
+            context={"request": request, "offer": offer},
+        )
+        serializer.is_valid(raise_exception=True)
+        char_unlock = serializer.save()
+        return Response(
+            {
+                "id": char_unlock.pk,
+                "unlock_id": char_unlock.unlock_id,
+                "xp_spent": char_unlock.xp_spent,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
 
 # =============================================================================
 # Resonance Pivot Spec C — Pose + Scene Entry Endorsement surfaces (Tasks 23, 24)
@@ -793,6 +820,8 @@ _ERR_ENDORSER_SHEET_REQUIRED = (
 )
 _ERR_ENDORSER_SHEET_INVALID = "Requested endorser_sheet_id is not among your active tenures."
 _ERR_ENDORSEMENT_SETTLED = "Endorsement already settled."
+_ERR_ACTOR_SHEET_REQUIRED = "{key} is required when account has multiple active tenures."
+_ERR_ACTOR_SHEET_INVALID = "Requested {key} is not among your active tenures."
 
 
 def _resolve_endorser_sheet(request: Request) -> CharacterSheet:
@@ -825,6 +854,52 @@ def _resolve_endorser_sheet(request: Request) -> CharacterSheet:
         return next(s for s in sheets if s.pk == int(requested_pk))
     except (StopIteration, ValueError) as exc:
         raise PermissionDenied(_ERR_ENDORSER_SHEET_INVALID) from exc
+
+
+def _resolve_actor_sheet(
+    request: Request,
+    body_key: str,
+    *,
+    from_query: bool = False,
+) -> CharacterSheet:
+    """Return the CharacterSheet to use as the acting character for an incoming request.
+
+    Mirrors ``_resolve_endorser_sheet`` but accepts both POST body and GET query-param
+    sourcing via the ``from_query`` flag.  This is the shared alt-guard helper used by
+    any endpoint where the requesting account must pick a character to act as.
+
+    ``body_key`` names the request field that carries the explicit sheet PK:
+    - ``from_query=False`` (default) → reads from ``request.data`` (POST body)
+    - ``from_query=True`` → reads from ``request.query_params`` (GET endpoint)
+
+    Rules:
+    - No active tenures → raise ``PermissionDenied``.
+    - Single active tenure → return that sheet.
+    - Multiple tenures without explicit key → raise ``ValidationError``.
+    - Multiple tenures with valid key → return that sheet.
+    """
+    account = request.user
+    sheets = list(
+        CharacterSheet.objects.filter(
+            roster_entry__tenures__player_data__account=account,
+            roster_entry__tenures__end_date__isnull=True,
+        )
+    )
+    if not sheets:
+        raise PermissionDenied(_ERR_NO_ACTIVE_SHEET)
+    if len(sheets) == 1:
+        return sheets[0]
+    # Multiple active tenures — explicit sheet required.
+    source = request.query_params if from_query else request.data
+    requested_pk = source.get(body_key)  # noqa: STRING_LITERAL — parameterised body/query key
+    if requested_pk is None:
+        raise serializers.ValidationError(
+            {body_key: _ERR_ACTOR_SHEET_REQUIRED.format(key=body_key)}
+        )
+    try:
+        return next(s for s in sheets if s.pk == int(requested_pk))
+    except (StopIteration, ValueError) as exc:
+        raise PermissionDenied(_ERR_ACTOR_SHEET_INVALID.format(key=body_key)) from exc
 
 
 class PoseEndorsementViewSet(

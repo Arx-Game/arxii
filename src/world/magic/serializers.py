@@ -19,6 +19,7 @@ from world.magic.models import (
     CharacterAura,
     CharacterGift,
     CharacterResonance,
+    CharacterThreadWeavingUnlock,
     EffectType,
     Facet,
     Gift,
@@ -975,6 +976,7 @@ class ThreadWeavingTeachingOfferSerializer(serializers.ModelSerializer):
     unlock_target_kind = serializers.CharField(source="unlock.target_kind", read_only=True)
     unlock_display_name = serializers.CharField(source="unlock.display_name", read_only=True)
     unlock_xp_cost = serializers.IntegerField(source="unlock.xp_cost", read_only=True)
+    effective_xp_cost_for_viewer = serializers.SerializerMethodField()
 
     class Meta:
         model = ThreadWeavingTeachingOffer
@@ -985,10 +987,81 @@ class ThreadWeavingTeachingOfferSerializer(serializers.ModelSerializer):
             "unlock_target_kind",
             "unlock_display_name",
             "unlock_xp_cost",
+            "effective_xp_cost_for_viewer",
             "pitch",
             "gold_cost",
         ]
         read_only_fields = fields
+
+    def get_effective_xp_cost_for_viewer(self, obj: ThreadWeavingTeachingOffer) -> int | None:
+        """Compute the Path-multiplied XP cost for the requesting learner.
+
+        Returns the integer cost when the viewer has exactly one active tenure
+        OR provides a ``learner_sheet_id`` query param to disambiguate.
+        Returns ``None`` for ambiguous (multi-tenure, no key) or no-tenure cases.
+        """
+        from world.magic.services.threads import compute_thread_weaving_xp_cost  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is None:
+            return None
+        account = request.user
+
+        sheets = list(
+            CharacterSheet.objects.filter(
+                roster_entry__tenures__player_data__account=account,
+                roster_entry__tenures__end_date__isnull=True,
+            )
+        )
+        if not sheets:
+            return None
+        if len(sheets) == 1:
+            learner = sheets[0]
+        else:
+            # Multi-tenure: require explicit learner_sheet_id query param.
+            requested_pk = request.query_params.get(  # noqa: STRING_LITERAL — query param key
+                "learner_sheet_id"
+            )
+            if requested_pk is None:
+                return None
+            try:
+                learner = next(s for s in sheets if s.pk == int(requested_pk))
+            except (StopIteration, ValueError):
+                return None
+
+        return compute_thread_weaving_xp_cost(obj.unlock, learner)
+
+
+class AcceptTeachingOfferSerializer(serializers.Serializer):
+    """Serializer for accepting a ThreadWeavingTeachingOffer (Spec A §6.1).
+
+    Optional ``learner_sheet_id`` disambiguates the learner when the requesting
+    account has multiple active tenures (alt-guard).  The view provides the
+    offer instance via serializer context as ``"offer"``.
+    """
+
+    learner_sheet_id = serializers.IntegerField(required=False, allow_null=True)
+
+    def validate(self, attrs: dict) -> dict:  # type: ignore[override]
+        """Resolve the learner sheet using the alt-guard helper."""
+        from world.magic.views import _resolve_actor_sheet  # noqa: PLC0415
+
+        request = self.context["request"]
+        learner = _resolve_actor_sheet(request, body_key="learner_sheet_id")  # noqa: STRING_LITERAL — body key name
+        attrs["learner"] = learner
+        return attrs
+
+    def create(self, validated_data: dict) -> CharacterThreadWeavingUnlock:  # type: ignore[override]
+        """Call accept_thread_weaving_unlock; catch XPInsufficient → ValidationError."""
+        from world.magic.exceptions import XPInsufficient  # noqa: PLC0415
+        from world.magic.services.threads import accept_thread_weaving_unlock  # noqa: PLC0415
+
+        learner = validated_data["learner"]
+        offer = self.context["offer"]
+        try:
+            return accept_thread_weaving_unlock(learner, offer)
+        except XPInsufficient as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
 
 
 # ---------------------------------------------------------------------------
