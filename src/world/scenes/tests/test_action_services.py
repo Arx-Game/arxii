@@ -333,3 +333,49 @@ class GenericKudosOnAcceptTests(TestCase):
             respond_to_action_request(action_request=action_request, decision=ConsentDecision.DENY)
             # Verify award_kudos was NOT called
             mock_award.assert_not_called()
+
+
+class TestCreateActionRequestSnapshotFields(TestCase):
+    """Snapshot fields are populated when ritual_id is provided."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.magic.factories import CharacterAnimaRitualFactory
+
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+        cls.ritual = CharacterAnimaRitualFactory(character=cls.initiator.character_sheet)
+
+    def test_create_action_request_with_ritual_id_populates_snapshot(self) -> None:
+        """When ritual_id is provided, all snapshot fields are populated from the ritual."""
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="anima_ritual",
+            ritual_id=self.ritual.pk,
+        )
+
+        assert request.snapshot_stat == self.ritual.stat
+        assert request.snapshot_skill == self.ritual.skill
+        assert request.snapshot_specialization == self.ritual.specialization
+        assert request.snapshot_resonance == self.ritual.resonance
+        assert request.snapshot_check_type == self.ritual.check_type
+        assert request.snapshot_target_difficulty == self.ritual.target_difficulty
+
+    def test_create_action_request_without_ritual_id_leaves_snapshot_null(self) -> None:
+        """Without ritual_id, all snapshot fields remain None."""
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="intimidate",
+        )
+
+        assert request.snapshot_stat is None
+        assert request.snapshot_skill is None
+        assert request.snapshot_specialization is None
+        assert request.snapshot_resonance is None
+        assert request.snapshot_check_type is None
+        assert request.snapshot_target_difficulty is None

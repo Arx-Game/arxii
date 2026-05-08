@@ -82,7 +82,7 @@ def _validate_technique_enhancement(
         raise ValidationError(msg)
 
 
-def create_action_request(  # noqa: PLR0913 — keyword-only API, technique is optional
+def create_action_request(  # noqa: PLR0913 — keyword-only API, several optional params
     *,
     scene: Scene,
     initiator_persona: Persona,
@@ -90,11 +90,17 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, technique is o
     action_key: str,
     difficulty_choice: str = DifficultyChoice.NORMAL,
     technique: Technique | None = None,
+    ritual_id: int | None = None,
 ) -> SceneActionRequest:
     """Create a pending action request for consent.
 
     The request starts in PENDING status. The target must accept or deny
     before resolution can proceed.
+
+    When ritual_id is provided (a CharacterAnimaRitual.id), the snapshot
+    fields are populated from the ritual's check specification so the
+    accepted request carries a full audit trail of the ritual config at
+    fire time. Phase 7 will retarget ritual_id to Ritual.id.
 
     Args:
         scene: The scene where this action takes place.
@@ -105,6 +111,9 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, technique is o
         technique: Optional technique to enhance this action. Must have an
             ActionEnhancement record for the given action_key and the
             initiator's character must know it.
+        ritual_id: Optional CharacterAnimaRitual PK. When provided, snapshot
+            fields (stat, skill, specialization, resonance, check_type,
+            target_difficulty) are populated from the ritual.
 
     Returns:
         The created SceneActionRequest in PENDING status.
@@ -119,6 +128,10 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, technique is o
             character_id=initiator_persona.character_sheet_id,
         )
 
+    snapshot_kwargs: dict[str, object] = {}
+    if ritual_id is not None:
+        snapshot_kwargs = _snapshot_kwargs_from_ritual(ritual_id)
+
     return SceneActionRequest.objects.create(
         scene=scene,
         initiator_persona=initiator_persona,
@@ -127,7 +140,43 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, technique is o
         difficulty_choice=difficulty_choice,
         status=ActionRequestStatus.PENDING,
         technique=technique,
+        **snapshot_kwargs,
     )
+
+
+def _snapshot_kwargs_from_ritual(ritual_id: int) -> dict[str, object]:
+    """Build snapshot field kwargs from a CharacterAnimaRitual row.
+
+    Phase 6 reads from CharacterAnimaRitual. Phase 7 retargets to Ritual +
+    RitualSceneActionConfig.
+
+    Args:
+        ritual_id: PK of the CharacterAnimaRitual to snapshot.
+
+    Returns:
+        Dict of snapshot_* kwargs ready to spread into SceneActionRequest.objects.create().
+
+    Raises:
+        CharacterAnimaRitual.DoesNotExist: If no matching row is found.
+    """
+    from world.magic.models.anima import CharacterAnimaRitual  # noqa: PLC0415
+
+    ritual = CharacterAnimaRitual.objects.select_related(
+        "stat",
+        "skill",
+        "specialization",
+        "resonance",
+        "check_type",
+    ).get(id=ritual_id)
+
+    return {
+        "snapshot_stat": ritual.stat,
+        "snapshot_skill": ritual.skill,
+        "snapshot_specialization": ritual.specialization,
+        "snapshot_resonance": ritual.resonance,
+        "snapshot_check_type": ritual.check_type,
+        "snapshot_target_difficulty": ritual.target_difficulty,
+    }
 
 
 def respond_to_action_request(
