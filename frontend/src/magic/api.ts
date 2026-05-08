@@ -434,7 +434,7 @@ export async function retireThread(id: number): Promise<void> {
  * POST /api/magic/threads/{id}/cross_xp_lock/
  *
  * Spends XP to cross an XP-lock boundary on the thread.
- * Returns the updated Thread.
+ * Returns {thread_id, unlocked_level, xp_spent} on success.
  */
 export async function crossXPLock(
   threadId: number,
@@ -599,7 +599,7 @@ export async function getTeachingOffers(): Promise<PaginatedTeachingOfferList> {
  * POST /api/magic/teaching-offers/{id}/accept/
  *
  * Accepts a ThreadWeavingTeachingOffer on behalf of the requesting learner.
- * Returns the updated ThreadWeavingTeachingOffer.
+ * Returns {id, unlock_id, xp_spent} for the new CharacterThreadWeavingUnlock.
  */
 export async function acceptTeachingOffer(
   offerId: number,

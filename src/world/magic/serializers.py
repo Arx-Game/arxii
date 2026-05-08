@@ -2259,3 +2259,40 @@ class RoomsByPropertyQuerySerializer(serializers.Serializer):
         child=serializers.IntegerField(),
         allow_empty=False,
     )
+
+
+# =============================================================================
+# Response serializers for @extend_schema decorators
+# =============================================================================
+
+
+class CrossXPLockResponseSerializer(serializers.Serializer):
+    """Response shape for ThreadViewSet.cross_xp_lock (Spec A §3.2).
+
+    Returned by POST /api/magic/threads/{id}/cross-xp-lock/ on success.
+    """
+
+    thread_id = serializers.IntegerField()
+    unlocked_level = serializers.IntegerField()
+    xp_spent = serializers.IntegerField()
+
+
+class AcceptTeachingOfferResponseSerializer(serializers.Serializer):
+    """Response shape for ThreadWeavingTeachingOfferViewSet.accept (Spec A §6.1).
+
+    Returned by POST /api/magic/teaching-offers/{id}/accept/ on success.
+    """
+
+    id = serializers.IntegerField()
+    unlock_id = serializers.IntegerField()
+    xp_spent = serializers.IntegerField()
+
+
+class RoomBriefSerializer(serializers.Serializer):
+    """One room entry returned by RoomsByPropertyView.
+
+    Response shape: ``{id, name}``.
+    """
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()

@@ -789,7 +789,7 @@ describe('useCrossXPLock', () => {
       wrapper: createWrapper(),
     });
 
-    const vars = { threadId: 7, body: { character_sheet_id: 10, resonance: 3 } };
+    const vars = { threadId: 7, body: { boundary_level: 20 } };
 
     await act(async () => {
       await result.current.mutateAsync(vars);
@@ -854,7 +854,8 @@ describe('useAcceptTeachingOffer', () => {
   });
 
   it('accepts offer with offerId and optional body', async () => {
-    vi.mocked(api.acceptTeachingOffer).mockResolvedValue(mockTeachingOffer);
+    const mockAcceptResponse = { id: 99, unlock_id: 10, xp_spent: 4 };
+    vi.mocked(api.acceptTeachingOffer).mockResolvedValue(mockAcceptResponse);
 
     const { result } = renderHook(() => useAcceptTeachingOffer(), {
       wrapper: createWrapper(),
@@ -874,7 +875,8 @@ describe('useAcceptTeachingOffer', () => {
   });
 
   it('accepts offer without optional body', async () => {
-    vi.mocked(api.acceptTeachingOffer).mockResolvedValue(mockTeachingOffer);
+    const mockAcceptResponse = { id: 99, unlock_id: 10, xp_spent: 4 };
+    vi.mocked(api.acceptTeachingOffer).mockResolvedValue(mockAcceptResponse);
 
     const { result } = renderHook(() => useAcceptTeachingOffer(), {
       wrapper: createWrapper(),

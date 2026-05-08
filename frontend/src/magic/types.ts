@@ -173,31 +173,13 @@ export interface TetherBond {
 // ---------------------------------------------------------------------------
 // Thread Hub Summary
 //
-// GET /api/magic/thread-hub-summary/ returns this shape.
-// The generated schema has content?: never for this operation.
+// GET /api/magic/thread-hub-summary/ — schema now correct via @extend_schema.
+// Re-export generated shapes.
 // ---------------------------------------------------------------------------
 
-export interface ResonanceBalance {
-  resonance_id: number;
-  balance: number;
-  lifetime_earned: number;
-  flavor_text: string;
-}
-
-export interface NearXPLockProspect {
-  thread_id: number;
-  boundary_level: number;
-  xp_cost: number;
-  dev_points_to_boundary: number;
-}
-
-export interface ThreadHubSummary {
-  balances: ResonanceBalance[];
-  ready_thread_ids: number[];
-  near_xp_lock_thread_ids: NearXPLockProspect[];
-  blocked_thread_ids: number[];
-  weaving_eligibility: Record<TargetKind, boolean>;
-}
+export type ResonanceBalance = components['schemas']['_ResonanceBalance'];
+export type NearXPLockProspect = components['schemas']['_NearXPLockProspect'];
+export type ThreadHubSummary = components['schemas']['ThreadHubSummary'];
 
 // ---------------------------------------------------------------------------
 // Weave Thread (POST /api/magic/threads/)
@@ -223,17 +205,12 @@ export interface PatchThreadRequest {
 // ---------------------------------------------------------------------------
 // Cross XP-lock
 //
-// POST /api/magic/threads/{id}/cross_xp_lock/ — the generated schema uses
-// ThreadRequest as the request body and returns Thread. We model the
-// request body with just the fields the action needs.
+// POST /api/magic/threads/{id}/cross_xp_lock/ — schema now correct via
+// @extend_schema on the backend. Re-export generated shapes.
 // ---------------------------------------------------------------------------
 
-export interface CrossXPLockRequest {
-  character_sheet_id: number;
-  resonance: number;
-}
-
-export type CrossXPLockResponse = Thread;
+export type CrossXPLockRequest = components['schemas']['CrossXPLockRequest'];
+export type CrossXPLockResponse = components['schemas']['CrossXPLockResponse'];
 
 // ---------------------------------------------------------------------------
 // Imbue Thread
@@ -260,101 +237,46 @@ export interface ImbueResponse {
 // ---------------------------------------------------------------------------
 // Pull Preview
 //
-// POST /api/magic/thread-pull-preview/ — content?: never in generated schema.
+// POST /api/magic/thread-pull-preview/ — schema now correct via @extend_schema.
+// Re-export generated shapes.
 // ---------------------------------------------------------------------------
 
-export interface PullPreviewRequest {
-  character_sheet_id: number;
-  resonance_id: number;
-  tier: 1 | 2 | 3;
-  thread_ids: number[];
-}
+export type PullPreviewRequest = components['schemas']['ThreadPullPreviewRequestRequest'];
 
-export interface PreviewedEffect {
-  kind: string;
-  authored_value: number | null;
-  level_multiplier: number;
-  scaled_value: number | null;
-  vital_target: string | null;
-  source_thread_id: number;
-  source_thread_level: number;
-  source_tier: number;
-  granted_capability_id: number | null;
-  narrative_snippet: string;
-  inactive: boolean;
-  inactive_reason: string | null;
-}
+/** One previewed effect in the preview response. */
+export type PreviewedEffect = components['schemas']['ResolvedPullEffect'];
 
-export interface PullPreviewResponse {
-  resonance_cost: number;
-  anima_cost: number;
-  previewed_effects: PreviewedEffect[];
-}
+export type PullPreviewResponse = components['schemas']['ThreadPullPreviewResponse'];
 
 // ---------------------------------------------------------------------------
 // Pull Commit
 //
-// POST /api/magic/thread-pull-commit/ — content?: never in generated schema.
+// POST /api/magic/thread-pull-commit/ — schema now correct via @extend_schema.
+// Re-export generated shapes.
 // ---------------------------------------------------------------------------
 
-export interface ResolvedPullEffect {
-  kind: string;
-  authored_value: number | null;
-  level_multiplier: number;
-  scaled_value: number | null;
-  vital_target: string | null;
-  source_thread_id: number;
-  source_thread_level: number;
-  source_tier: number;
-  granted_capability_id: number | null;
-  narrative_snippet: string;
-  inactive: boolean;
-  inactive_reason: string | null;
-}
+/** One resolved effect in the commit response. */
+export type ResolvedPullEffect = components['schemas']['ResolvedPullEffectCommit'];
 
-export interface PullCommitRequest {
-  character_sheet_id: number;
-  resonance_id: number;
-  tier: 1 | 2 | 3;
-  thread_ids: number[];
-  action_context?: {
-    combat_encounter_id?: number | null;
-    combat_participant_id?: number | null;
-    involved_trait_ids?: number[];
-    involved_technique_ids?: number[];
-    involved_object_ids?: number[];
-  };
-}
+export type PullCommitRequest = components['schemas']['ThreadPullCommitRequestRequest'];
 
-export interface PullCommitResponse {
-  resonance_spent: number;
-  anima_spent: number;
-  resolved_effects: ResolvedPullEffect[];
-}
+export type PullCommitResponse = components['schemas']['ThreadPullCommitResponse'];
 
 // ---------------------------------------------------------------------------
 // Teaching Offer accept
 //
-// POST /api/magic/teaching-offers/{id}/accept/ — the generated schema
-// shows no request body; response is ThreadWeavingTeachingOffer.
+// POST /api/magic/teaching-offers/{id}/accept/ — schema now correct via
+// @extend_schema on the backend. Re-export generated shapes.
 // ---------------------------------------------------------------------------
 
-export interface AcceptTeachingOfferRequest {
-  learner_sheet_id?: number;
-}
-
-export type AcceptTeachingOfferResponse = ThreadWeavingTeachingOffer;
+export type AcceptTeachingOfferRequest = components['schemas']['AcceptTeachingOfferRequest'];
+export type AcceptTeachingOfferResponse = components['schemas']['AcceptTeachingOfferResponse'];
 
 // ---------------------------------------------------------------------------
 // Room Brief
 //
-// GET /api/magic/rooms-by-property/ — content?: never in generated schema.
-// A minimal room shape for the thread-weaving room picker.
+// GET /api/magic/rooms-by-property/ — schema now correct via @extend_schema.
+// Re-export the generated shape.
 // ---------------------------------------------------------------------------
 
-export interface RoomBrief {
-  id: number;
-  name: string;
-  location_name: string | null;
-  property_ids: number[];
-}
+export type RoomBrief = components['schemas']['RoomBrief'];

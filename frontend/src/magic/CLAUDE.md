@@ -24,6 +24,21 @@ TypeScript types for the magic module.
 - `PaginatedSineatingPendingOfferList`
 - `PendingStageAdvanceOffer` — `components['schemas']['PendingStageAdvanceOffer']` — stage-advance inbox row
 - `PaginatedPendingStageAdvanceOfferList`
+- `CrossXPLockRequest` — `{ boundary_level: number }` (generated via `@extend_schema`)
+- `CrossXPLockResponse` — `{ thread_id, unlocked_level, xp_spent }` (generated via `@extend_schema`)
+- `AcceptTeachingOfferRequest` — `{ learner_sheet_id? }` (generated via `@extend_schema`)
+- `AcceptTeachingOfferResponse` — `{ id, unlock_id, xp_spent }` (generated via `@extend_schema`)
+- `RoomBrief` — `{ id, name }` (generated via `@extend_schema`; no location_name or property_ids)
+- `ResonanceBalance` — `{ resonance_id, balance, lifetime_earned, flavor_text }` (generated)
+- `NearXPLockProspect` — `{ thread_id, boundary_level, xp_cost, dev_points_to_boundary }` (generated)
+- `ThreadHubSummary` — response for `GET /api/magic/thread-hub-summary/` (generated)
+- `PullPreviewRequest` — `components['schemas']['ThreadPullPreviewRequestRequest']` (generated)
+- `PreviewedEffect` — `components['schemas']['ResolvedPullEffect']` — preview effect shape
+- `PullPreviewResponse` — `components['schemas']['ThreadPullPreviewResponse']` (generated;
+  fields: resonance_cost, anima_cost, affordable, resolved_effects, capped_intensity)
+- `ResolvedPullEffect` — `components['schemas']['ResolvedPullEffectCommit']` — commit effect shape
+- `PullCommitRequest` — `components['schemas']['ThreadPullCommitRequestRequest']` (generated)
+- `PullCommitResponse` — `components['schemas']['ThreadPullCommitResponse']` (generated)
 
 **Local types** (the generated schema leaves these as `content?: never`):
 
@@ -40,24 +55,11 @@ TypeScript types for the magic module.
 - `RescueOutcome` — response from rescue/ (RescueOutcomeSerializer shape)
 - `StageAdvanceRespondRequest` — `{ sinner_sheet_id, sineater_sheet_id, units_committed }` (0=decline)
 - `StageAdvanceBonusResult` — response from stage-advance/respond/ (StageAdvanceBonusResultSerializer shape)
-- `ResonanceBalance` — `{ resonance_id, balance, lifetime_earned, flavor_text }`
-- `NearXPLockProspect` — `{ thread_id, boundary_level, xp_cost, dev_points_to_boundary }`
-- `ThreadHubSummary` — response for `GET /api/magic/thread-hub-summary/`
 - `WeaveThreadRequest` — body for POST /threads/ (weave new thread)
 - `PatchThreadRequest` — `{ name?, description? }` for PATCH /threads/{id}/
-- `CrossXPLockRequest` — `{ character_sheet_id, resonance }` for cross-xp-lock action
-- `CrossXPLockResponse` — alias of `Thread`
 - `ImbueRequest` — `{ ritual_id, character_sheet_id, kwargs: { thread_id, amount } }`
 - `ImbueResponse` — `{ success, message? }`
-- `PullPreviewRequest` — `{ character_sheet_id, resonance_id, tier, thread_ids }`
-- `PreviewedEffect` — effect shape in preview response
-- `PullPreviewResponse` — `{ resonance_cost, anima_cost, previewed_effects }`
-- `ResolvedPullEffect` — effect shape in commit response
-- `PullCommitRequest` — `{ character_sheet_id, resonance_id, tier, thread_ids, action_context? }`
-- `PullCommitResponse` — `{ resonance_spent, anima_spent, resolved_effects }`
-- `AcceptTeachingOfferRequest` — `{ learner_sheet_id? }`
-- `AcceptTeachingOfferResponse` — alias of `ThreadWeavingTeachingOffer`
-- `RoomBrief` — `{ id, name, location_name, property_ids }` for rooms-by-property
+- `TetherBond` — `{ relationship_id, bonded_character_sheet_id, bonded_character_name, soul_tether_role }`
 
 ### `api.ts`
 
@@ -82,7 +84,7 @@ REST API client for all soul-tether, thread, character-resonance, and thread-spe
 - `weaveThread(body)` — POST `/api/magic/threads/` → `Thread`
 - `patchThreadNarrative(id, body)` — PATCH `/api/magic/threads/{id}/` → `Thread`
 - `retireThread(id)` — DELETE `/api/magic/threads/{id}/` → `void`
-- `crossXPLock(threadId, body)` — POST `/api/magic/threads/{id}/cross_xp_lock/` → `Thread`
+- `crossXPLock(threadId, body)` — POST `/api/magic/threads/{id}/cross_xp_lock/` → `CrossXPLockResponse` (`{thread_id, unlocked_level, xp_spent}`)
 - `imbueThread(body)` — wraps `performRitual` with imbuing ritual id + kwargs
 - `imbueThreadAuto(characterSheetId, threadId, amount)` — resolves ritual id then imbues
 - `previewPull(body)` — POST `/api/magic/thread-pull-preview/` → `PullPreviewResponse`

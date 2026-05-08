@@ -18,6 +18,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from rest_framework import mixins, status, viewsets
@@ -70,6 +71,7 @@ from world.magic.models import (
 )
 from world.magic.permissions import IsRitualAuthorOrStaff, IsThreadOwner
 from world.magic.serializers import (
+    AcceptTeachingOfferResponseSerializer,
     AcceptTeachingOfferSerializer,
     AlterationResolutionSerializer,
     CantripSerializer,
@@ -77,6 +79,7 @@ from world.magic.serializers import (
     CharacterAuraSerializer,
     CharacterGiftSerializer,
     CharacterResonanceSerializer,
+    CrossXPLockResponseSerializer,
     CrossXPLockSerializer,
     EffectTypeSerializer,
     FacetSerializer,
@@ -92,9 +95,11 @@ from world.magic.serializers import (
     RitualPatchSerializer,
     RitualPerformRequestSerializer,
     RitualSerializer,
+    RoomBriefSerializer,
     SceneEntryEndorsementSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
+    ThreadHubSummarySerializer,
     ThreadPullCommitRequestSerializer,
     ThreadPullCommitResponseSerializer,
     ThreadPullPreviewRequestSerializer,
@@ -573,6 +578,10 @@ class ThreadViewSet(viewsets.ModelViewSet):
         thread.save(update_fields=["retired_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @extend_schema(
+        request=CrossXPLockSerializer,
+        responses={200: CrossXPLockResponseSerializer},
+    )
     @action(detail=True, methods=["post"])
     def cross_xp_lock(self, request: Request, pk: int | None = None) -> Response:
         """Pay XP to unlock the next level boundary on this thread (Spec A §3.2).
@@ -613,6 +622,10 @@ class ThreadPullPreviewView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=ThreadPullPreviewRequestSerializer,
+        responses={200: ThreadPullPreviewResponseSerializer},
+    )
     def post(self, request: Request) -> Response:
         """Run the preview and return its wire representation."""
         serializer = ThreadPullPreviewRequestSerializer(
@@ -682,6 +695,10 @@ class ThreadPullCommitView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=ThreadPullCommitRequestSerializer,
+        responses={200: ThreadPullCommitResponseSerializer},
+    )
     def post(self, request: Request) -> Response:
         """Dispatch the pull and return the commit result."""
         serializer = ThreadPullCommitRequestSerializer(
@@ -817,6 +834,10 @@ class ThreadWeavingTeachingOfferViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = ThreadWeavingTeachingOfferFilter
 
+    @extend_schema(
+        request=AcceptTeachingOfferSerializer,
+        responses={201: AcceptTeachingOfferResponseSerializer},
+    )
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
     def accept(self, request: Request, pk: int | None = None) -> Response:
         """Accept a ThreadWeavingTeachingOffer on behalf of the requesting learner.
@@ -1254,9 +1275,11 @@ class ThreadHubSummaryView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        responses={200: ThreadHubSummarySerializer},
+    )
     def get(self, request: Request) -> Response:
         """Return the Thread Hub summary for the acting character."""
-        from world.magic.serializers import ThreadHubSummarySerializer  # noqa: PLC0415
         from world.magic.services.threads import (  # noqa: PLC0415
             imbue_ready_threads,
             near_xp_lock_threads,
@@ -1309,6 +1332,9 @@ class RoomsByPropertyView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        responses={200: RoomBriefSerializer(many=True)},
+    )
     def get(self, request: Request) -> Response:
         """Return rooms that have at least one matching ObjectProperty."""
         from world.magic.serializers import RoomsByPropertyQuerySerializer  # noqa: PLC0415

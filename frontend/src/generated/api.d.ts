@@ -5708,7 +5708,7 @@ export interface paths {
       cookie?: never;
     };
     /** @description Return rooms that have at least one matching ObjectProperty. */
-    get: operations['magic_rooms_by_property_retrieve'];
+    get: operations['magic_rooms_by_property_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -9366,6 +9366,26 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /**
+     * @description Serializer for accepting a ThreadWeavingTeachingOffer (Spec A §6.1).
+     *
+     *     Optional ``learner_sheet_id`` disambiguates the learner when the requesting
+     *     account has multiple active tenures (alt-guard).  The view provides the
+     *     offer instance via serializer context as ``"offer"``.
+     */
+    AcceptTeachingOfferRequest: {
+      learner_sheet_id?: number | null;
+    };
+    /**
+     * @description Response shape for ThreadWeavingTeachingOfferViewSet.accept (Spec A §6.1).
+     *
+     *     Returned by POST /api/magic/teaching-offers/{id}/accept/ on success.
+     */
+    AcceptTeachingOfferResponse: {
+      id: number;
+      unlock_id: number;
+      xp_spent: number;
+    };
     /** @description Full serializer for achievement detail view. */
     Achievement: {
       readonly id: number;
@@ -10703,6 +10723,20 @@ export interface components {
       post: number;
       author_persona: number;
       body: string;
+    };
+    /** @description Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A §3.2). */
+    CrossXPLockRequest: {
+      boundary_level: number;
+    };
+    /**
+     * @description Response shape for ThreadViewSet.cross_xp_lock (Spec A §3.2).
+     *
+     *     Returned by POST /api/magic/threads/{id}/cross-xp-lock/ on success.
+     */
+    CrossXPLockResponse: {
+      thread_id: number;
+      unlocked_level: number;
+      xp_spent: number;
     };
     /**
      * @description * `1` - Origin
@@ -14758,6 +14792,36 @@ export interface components {
       /** @description Possessive pronoun (e.g., 'his') */
       possessive: string;
     };
+    /**
+     * @description Wire shape for the optional ``action_context`` block in a pull commit.
+     *
+     *     Extends ``PullActionContextSerializer`` (used by the preview endpoint) with
+     *     the additional fields the commit path consumes: ``combat_participant_id`` and
+     *     the anchor-ID lists.  All fields are optional because ephemeral (non-combat)
+     *     pulls omit them entirely.
+     */
+    PullActionContextCommitRequest: {
+      action_kind?: string;
+      anchors_in_play?: number[];
+      combat_encounter_id?: number | null;
+      combat_participant_id?: number | null;
+      involved_trait_ids?: number[];
+      involved_technique_ids?: number[];
+      involved_object_ids?: number[];
+    };
+    /**
+     * @description Wire shape for the optional ``action_context`` block in a pull preview.
+     *
+     *     Only ``combat_encounter_id`` is consumed by the preview path — the rest
+     *     of the fields are accepted for forward-compatibility with the eventual
+     *     authoring UI (the pre-commit preview doesn't care about action_kind
+     *     or anchors_in_play; the full commit path validates those).
+     */
+    PullActionContextRequest: {
+      action_kind?: string;
+      anchors_in_play?: number[];
+      combat_encounter_id?: number | null;
+    };
     /** @description Serializer for QualityTier lookup records. */
     QualityTier: {
       readonly id: number;
@@ -14929,6 +14993,43 @@ export interface components {
      * @enum {string}
      */
     ResolutionTypeEnum: 'destroy' | 'personal' | 'temporary';
+    /** @description Wire shape for a single ResolvedPullEffect row. */
+    ResolvedPullEffect: {
+      kind: string;
+      authored_value: number | null;
+      level_multiplier: number;
+      scaled_value: number;
+      vital_target: string | null;
+      /** @description Expose the source thread's PK (the dataclass carries the Thread instance). */
+      readonly source_thread_id: number;
+      source_thread_level: number;
+      source_tier: number;
+      narrative_snippet: string;
+      inactive: boolean;
+      inactive_reason: string | null;
+    };
+    /**
+     * @description Wire shape for a single ResolvedPullEffect in the commit response.
+     *
+     *     Mirrors ResolvedPullEffectSerializer (used for preview) but also exposes
+     *     ``granted_capability_id`` (which the commit path includes) and uses
+     *     source-accessor notation for ``source_thread_id``.
+     */
+    ResolvedPullEffectCommit: {
+      kind: string;
+      authored_value: number | null;
+      level_multiplier: number;
+      scaled_value: number | null;
+      vital_target: string | null;
+      source_thread_id: number;
+      source_thread_level: number;
+      source_tier: number;
+      /** @description Return the granted_capability PK, or None if absent. */
+      readonly granted_capability_id: number | null;
+      narrative_snippet: string;
+      inactive: boolean;
+      inactive_reason: string | null;
+    };
     /** @description Serializer for Resonance records. */
     Resonance: {
       readonly id: number;
@@ -15055,6 +15156,15 @@ export interface components {
       resonance_id?: number | null;
       check_type_id?: number | null;
       target_difficulty?: number;
+    };
+    /**
+     * @description One room entry returned by RoomsByPropertyView.
+     *
+     *     Response shape: ``{id, name}``.
+     */
+    RoomBrief: {
+      id: number;
+      name: string;
     };
     /** @description Validate a roster application message. */
     RosterApplication: {
@@ -16091,6 +16201,61 @@ export interface components {
       /** Format: date-time */
       readonly updated_at: string;
     };
+    /** @description Response serializer for GET /api/magic/thread-hub-summary/. */
+    ThreadHubSummary: {
+      balances: components['schemas']['_ResonanceBalance'][];
+      ready_thread_ids: number[];
+      near_xp_lock_thread_ids: components['schemas']['_NearXPLockProspect'][];
+      blocked_thread_ids: number[];
+      weaving_eligibility: {
+        [key: string]: boolean;
+      };
+    };
+    /**
+     * @description Request serializer for POST /api/magic/thread-pull-commit/.
+     *
+     *     ``character_sheet_id`` is required and must identify a CharacterSheet owned
+     *     by the requesting account (staff may pass any sheet).
+     *
+     *     ``action_context`` carries optional combat context.  If
+     *     ``combat_encounter_id`` is set, ``combat_participant_id`` must also be
+     *     set (and vice versa).  Omitting the whole dict or leaving both fields
+     *     absent signals an ephemeral (RP) pull with no CombatPull row written.
+     */
+    ThreadPullCommitRequestRequest: {
+      character_sheet_id: number;
+      resonance_id: number;
+      tier: number;
+      thread_ids: number[];
+      action_context?: components['schemas']['PullActionContextCommitRequest'];
+    };
+    /** @description Response serializer for POST /api/magic/thread-pull-commit/. */
+    ThreadPullCommitResponse: {
+      resonance_spent: number;
+      anima_spent: number;
+      resolved_effects: components['schemas']['ResolvedPullEffectCommit'][];
+    };
+    /**
+     * @description Request serializer for POST /api/magic/thread-pull-preview/.
+     *
+     *     ``character_sheet_id`` is required and must identify a CharacterSheet the
+     *     requesting account owns (staff may pass any sheet).
+     */
+    ThreadPullPreviewRequestRequest: {
+      character_sheet_id: number;
+      resonance_id: number;
+      tier: number;
+      thread_ids: number[];
+      action_context?: components['schemas']['PullActionContextRequest'];
+    };
+    /** @description Response serializer for POST /api/magic/thread-pull-preview/. */
+    ThreadPullPreviewResponse: {
+      resonance_cost: number;
+      anima_cost: number;
+      affordable: boolean;
+      resolved_effects: components['schemas']['ResolvedPullEffect'][];
+      capped_intensity: boolean;
+    };
     /**
      * @description Serializer for Thread records (Spec A §4.5).
      *
@@ -16521,6 +16686,20 @@ export interface components {
      * @enum {string}
      */
     WeeklyVoteTargetTypeEnum: 'interaction' | 'scene_participation' | 'journal';
+    /** @description One entry in the near-xp-lock list returned by ThreadHubSummaryView. */
+    _NearXPLockProspect: {
+      thread_id: number;
+      boundary_level: number;
+      xp_cost: number;
+      dev_points_to_boundary: number;
+    };
+    /** @description One resonance balance entry returned by ThreadHubSummaryView. */
+    _ResonanceBalance: {
+      resonance_id: number;
+      balance: number;
+      lifetime_earned: number;
+      flavor_text: string;
+    };
   };
   responses: never;
   parameters: never;
@@ -24533,7 +24712,7 @@ export interface operations {
       };
     };
   };
-  magic_rooms_by_property_retrieve: {
+  magic_rooms_by_property_list: {
     parameters: {
       query?: never;
       header?: never;
@@ -24542,12 +24721,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['RoomBrief'][];
+        };
       };
     };
   };
@@ -24912,14 +25092,18 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['AcceptTeachingOfferRequest'];
+      };
+    };
     responses: {
-      200: {
+      201: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ThreadWeavingTeachingOffer'];
+          'application/json': components['schemas']['AcceptTeachingOfferResponse'];
         };
       };
     };
@@ -25080,12 +25264,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ThreadHubSummary'];
+        };
       };
     };
   };
@@ -25096,14 +25281,19 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ThreadPullCommitRequestRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ThreadPullCommitResponse'];
+        };
       };
     };
   };
@@ -25114,14 +25304,19 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ThreadPullPreviewRequestRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ThreadPullPreviewResponse'];
+        };
       };
     };
   };
@@ -25274,7 +25469,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['ThreadRequest'];
+        'application/json': components['schemas']['CrossXPLockRequest'];
       };
     };
     responses: {
@@ -25283,7 +25478,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['Thread'];
+          'application/json': components['schemas']['CrossXPLockResponse'];
         };
       };
     };
