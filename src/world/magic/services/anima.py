@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.magic.models.anima import CharacterAnimaRitual
     from world.scenes.models import Scene
 
 
@@ -54,9 +55,6 @@ def perform_anima_ritual(
     with leftover budget. Crit always tops anima to max regardless.
     """
     from world.checks.services import perform_check  # noqa: PLC0415
-    from world.conditions.models import ConditionInstance, ConditionTemplate  # noqa: PLC0415
-    from world.conditions.services import decay_condition_severity  # noqa: PLC0415
-    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
     from world.magic.exceptions import (  # noqa: PLC0415
         CharacterEngagedForRitual,
         NoRitualConfigured,
@@ -64,7 +62,6 @@ def perform_anima_ritual(
         RitualScenePrerequisiteFailed,
     )
     from world.magic.models.anima import AnimaRitualPerformance  # noqa: PLC0415
-    from world.magic.models.soulfray import SoulfrayConfig  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 
     # OneToOne reverse accessor, not a simple attribute — getattr is correct here.
@@ -89,6 +86,44 @@ def perform_anima_ritual(
         target_difficulty=ritual.target_difficulty,
     )
     outcome = check_result.outcome
+
+    return apply_anima_ritual_outcome(
+        ritual=ritual,
+        outcome=outcome,
+        scene=scene,
+        character_sheet=character_sheet,
+    )
+
+
+def apply_anima_ritual_outcome(
+    *,
+    ritual: CharacterAnimaRitual,
+    outcome: object,
+    scene: Scene,
+    character_sheet: CharacterSheet,
+) -> RitualOutcome:
+    """Apply a pre-computed check outcome to anima/soulfray + create audit row.
+
+    Extracted from perform_anima_ritual() so SceneActionRequest can drive the
+    check and pass the outcome here.
+
+    Args:
+        ritual: The CharacterAnimaRitual being performed (Phase 7 will change
+            this to Ritual).
+        outcome: The check outcome / result object (must have success_level).
+        scene: The scene in which the ritual is performed.
+        character_sheet: The character performing the ritual.
+
+    Returns:
+        RitualOutcome describing what was recovered and reduced.
+    """
+    from world.conditions.models import ConditionInstance, ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import decay_condition_severity  # noqa: PLC0415
+    from world.magic.audere import SOULFRAY_CONDITION_NAME  # noqa: PLC0415
+    from world.magic.models.anima import AnimaRitualPerformance  # noqa: PLC0415
+    from world.magic.models.soulfray import SoulfrayConfig  # noqa: PLC0415
+
+    character = character_sheet.character
 
     config = SoulfrayConfig.objects.first()
     budget = _budget_for_outcome(outcome, config)
@@ -119,7 +154,7 @@ def perform_anima_ritual(
     anima_before = anima.current
     anima.current = min(anima.current + max(0, budget), anima.maximum)
 
-    if int(outcome.success_level) >= _CRIT_SUCCESS_LEVEL:
+    if int(outcome.success_level) >= _CRIT_SUCCESS_LEVEL:  # type: ignore[union-attr]
         anima.current = anima.maximum
 
     anima.save(update_fields=["current"])
@@ -128,7 +163,7 @@ def perform_anima_ritual(
     performance = AnimaRitualPerformance.objects.create(
         ritual=ritual,
         scene=scene,
-        was_successful=int(outcome.success_level) >= _SUCCESS_LEVEL,
+        was_successful=int(outcome.success_level) >= _SUCCESS_LEVEL,  # type: ignore[union-attr]
         anima_recovered=anima_recovered,
         outcome=outcome,
         severity_reduced=severity_reduced,
@@ -137,7 +172,7 @@ def perform_anima_ritual(
 
     return RitualOutcome(
         performance=performance,
-        outcome=outcome,
+        outcome=outcome,  # type: ignore[arg-type]
         severity_reduced=severity_reduced,
         anima_recovered=anima_recovered,
         soulfray_stage_after=stage_after,
