@@ -1897,11 +1897,19 @@ class CrossXPLockSerializer(serializers.Serializer):
     boundary_level = serializers.IntegerField(min_value=1)
 
     def create(self, validated_data: dict) -> ThreadLevelUnlock:
+        from world.magic.exceptions import (  # noqa: PLC0415
+            AnchorCapExceeded,
+            InvalidImbueAmount,
+            XPInsufficient,
+        )
         from world.magic.services import cross_thread_xp_lock  # noqa: PLC0415
 
         thread = self.context["thread"]
-        return cross_thread_xp_lock(
-            character_sheet=thread.owner,
-            thread=thread,
-            boundary_level=validated_data["boundary_level"],
-        )
+        try:
+            return cross_thread_xp_lock(
+                character_sheet=thread.owner,
+                thread=thread,
+                boundary_level=validated_data["boundary_level"],
+            )
+        except (XPInsufficient, AnchorCapExceeded, InvalidImbueAmount) as exc:
+            raise serializers.ValidationError(exc.user_message) from exc

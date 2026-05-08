@@ -37,7 +37,13 @@ from world.traits.factories import TraitFactory
 
 
 def _link_account_to_sheet(account, character, sheet):
-    """Tie an AccountDB to a CharacterSheet via an active RosterTenure."""
+    """Tie an AccountDB to a CharacterSheet via an active RosterTenure.
+
+    Also sets character.account so that service functions that navigate
+    character_sheet.character.account resolve correctly.
+    """
+    character.account = account
+    account.characters.add(character)
     return RosterTenureFactory(
         roster_entry__character_sheet=sheet,
         player_data__account=account,

@@ -585,13 +585,7 @@ class ThreadViewSet(viewsets.ModelViewSet):
             context={"request": request, "thread": thread},
         )
         serializer.is_valid(raise_exception=True)
-        try:
-            unlock = serializer.save()
-        except (XPInsufficient, AnchorCapExceeded, InvalidImbueAmount) as exc:
-            return Response(
-                {"detail": exc.user_message},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        unlock = serializer.save()
         return Response(
             {
                 "thread_id": thread.pk,

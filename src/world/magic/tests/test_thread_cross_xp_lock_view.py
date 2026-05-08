@@ -131,8 +131,8 @@ class CrossXPLockViewTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("detail", response.data)
-        self.assertEqual(response.data["detail"], "You do not have enough XP for this.")
+        # DRF raises ValidationError with a string → response.data is a list of ErrorDetails
+        self.assertIn("You do not have enough XP for this.", response.data)
 
     def test_anchor_cap_exceeded_returns_400(self) -> None:
         """Boundary above effective cap → 400 with user_message."""
@@ -154,11 +154,8 @@ class CrossXPLockViewTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("detail", response.data)
-        self.assertEqual(
-            response.data["detail"],
-            "This thread cannot grow beyond its anchor's strength.",
-        )
+        # DRF raises ValidationError with a string → response.data is a list of ErrorDetails
+        self.assertIn("This thread cannot grow beyond its anchor's strength.", response.data)
 
     def test_invalid_imbue_amount_returns_400_when_boundary_at_or_below_level(self) -> None:
         """Boundary at or below thread.level → 400."""
@@ -187,8 +184,8 @@ class CrossXPLockViewTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("detail", response.data)
-        self.assertEqual(response.data["detail"], "Invalid imbue amount.")
+        # DRF raises ValidationError with a string → response.data is a list of ErrorDetails
+        self.assertIn("Invalid imbue amount.", response.data)
 
     # ------------------------------------------------------------------
     # Permission
