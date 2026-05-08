@@ -783,7 +783,11 @@ describe('useCrossXPLock', () => {
   });
 
   it('calls crossXPLock with correct args', async () => {
-    vi.mocked(api.crossXPLock).mockResolvedValue(mockThread);
+    vi.mocked(api.crossXPLock).mockResolvedValue({
+      thread_id: 7,
+      unlocked_level: 20,
+      xp_spent: 150,
+    });
 
     const { result } = renderHook(() => useCrossXPLock(), {
       wrapper: createWrapper(),
