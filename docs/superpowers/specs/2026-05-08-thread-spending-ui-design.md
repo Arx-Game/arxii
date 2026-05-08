@@ -369,7 +369,7 @@ This is more durable than a service-path string match because future SERVICE rit
 
 ### 9. Manage operations: rename, retire
 
-**Rename** is inline-editable on the detail page title; calling `update_thread_narrative` via PATCH on `/api/magic/threads/{id}/` with `name`/`description` body. Existing `ThreadViewSet.update` / `partial_update` cover this — but verify the serializer permits these fields. (If not, extend `ThreadSerializer` to accept `name`/`description` writes from the owner.)
+**Rename** is inline-editable on the detail page title; calling `update_thread_narrative` via PATCH on `/api/magic/threads/{id}/` with `name`/`description` body. `ThreadSerializer` already declares both fields without `read_only=True`, so DRF's default `partial_update` flow accepts them; no serializer changes needed.
 
 **Retire** opens `ThreadRetireDialog` — a hard-confirm. "Retired threads stop pulling and never grant passive effects. They remain in your history. This cannot be undone." On confirm, posts `DELETE /api/magic/threads/{id}/`. Existing soft-retire path. After success, navigate back to `/threads`.
 
@@ -492,7 +492,7 @@ Frontend dialogs surface errors inline (a red banner in the dialog body) rather 
 - `tests/test_thread_hub_summary_view.py` — auth, prospect lists are accurate, eligibility flags match service.
 - `tests/test_thread_cross_xp_lock_view.py` — happy path, XPInsufficient, AnchorCapExceeded, InvalidImbueAmount.
 - `tests/test_teaching_offer_accept_view.py` — happy path (in-path + out-of-path), XPInsufficient, alt-guard.
-- `tests/test_thread_pull_commit_view.py` — ephemeral happy path, combat happy path, ProtagonismLocked, anchor-not-in-action, ResonanceInsufficient.
+- `tests/test_thread_pull_commit_view.py` — ephemeral happy path, combat happy path, ProtagonismLocked, anchor-not-in-action, ResonanceInsufficient, NoMatchingWornFacetItemsError (FACET thread eligible at validation but no matching worn item).
 - Existing `test_api.py` extended for the `client_hosted` filter on RitualSerializer.
 
 **Frontend:**
