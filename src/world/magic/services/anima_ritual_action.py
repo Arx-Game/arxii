@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.magic.models import CharacterAnima
 from world.scenes.action_resolvers import register_menu_contributor, register_resolver
 
 if TYPE_CHECKING:
@@ -63,12 +64,21 @@ def _resolve_anima_ritual(
 
     outcome = main_result.check_result.outcome
 
-    apply_anima_ritual_outcome(
+    ritual_outcome = apply_anima_ritual_outcome(
         ritual=ritual,
         outcome=outcome,
         scene=action_request.scene,
         character_sheet=initiator_sheet,
     )
+
+    # Attach a transient payload so the response serializer can include
+    # anima_recovery for the initiator without a second DB query.
+    anima = CharacterAnima.objects.get(character=initiator_sheet.character)
+    action_request._anima_recovery_payload = {  # noqa: SLF001 — transient attr on request, not a true private member
+        "recovered": ritual_outcome.anima_recovered,
+        "soulfray_reduced": ritual_outcome.severity_reduced,
+        "new_pool": anima.current,
+    }
 
 
 def _contribute_menu_entries(
