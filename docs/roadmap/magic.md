@@ -61,7 +61,8 @@ Some abilities cross categories (poison touch = attack + subtle assassination to
 - **Models:** CharacterAura, CharacterResonance (reshaped per Spec A §2.2 —
   balance + lifetime_earned), Gift, CharacterGift, Technique,
   CharacterTechnique, TechniqueStyle, EffectType, Restriction, IntensityTier,
-  CharacterAnima, CharacterAnimaRitual, AnimaRitualPerformance, Motif,
+  CharacterAnima, AnimaRitualPerformance (ritual FK now points to magic.Ritual
+  with execution_kind=SCENE_ACTION; CharacterAnimaRitual removed), Motif,
   MotifResonance, MotifResonanceAssociation, Facet, CharacterFacet,
   **Thread** (new discriminator + typed-FK design, Spec A §2.1),
   **ThreadPullCost**, **ThreadXPLockedLevel**, **ThreadLevelUnlock**,
