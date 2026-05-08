@@ -2003,3 +2003,177 @@ class CrossXPLockSerializer(serializers.Serializer):
             )
         except (XPInsufficient, AnchorCapExceeded, InvalidImbueAmount) as exc:
             raise serializers.ValidationError(exc.user_message) from exc
+
+
+# ---------------------------------------------------------------------------
+# Thread-pull commit (Spec A §5.4 + §7.4)
+# ---------------------------------------------------------------------------
+
+_ERR_COMBAT_CONTEXT_INCOMPLETE = (  # noqa: STRING_LITERAL — module constant
+    "combat_encounter_id and combat_participant_id must both be set or both absent."
+)
+_ERR_THREAD_NOT_FOUND_COMMIT = (  # noqa: STRING_LITERAL — module constant
+    "One or more thread_ids not found or not owned by the character."
+)
+_ERR_COMBAT_ENCOUNTER_NOT_FOUND = "Combat encounter not found."  # noqa: STRING_LITERAL — module constant
+_ERR_COMBAT_PARTICIPANT_NOT_FOUND = "Combat participant not found."  # noqa: STRING_LITERAL — module constant
+
+
+class ThreadPullCommitRequestSerializer(serializers.Serializer):
+    """Request serializer for POST /api/magic/thread-pull-commit/.
+
+    ``character_sheet_id`` is required and must identify a CharacterSheet owned
+    by the requesting account (staff may pass any sheet).
+
+    ``action_context`` carries optional combat context.  If
+    ``combat_encounter_id`` is set, ``combat_participant_id`` must also be
+    set (and vice versa).  Omitting the whole dict or leaving both fields
+    absent signals an ephemeral (RP) pull with no CombatPull row written.
+    """
+
+    character_sheet_id = serializers.PrimaryKeyRelatedField(
+        queryset=CharacterSheet.objects.all(),
+    )
+    resonance_id = serializers.IntegerField()
+    tier = serializers.IntegerField(min_value=1, max_value=3)
+    thread_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+        max_length=20,
+    )
+    action_context = serializers.DictField(required=False)
+
+    def validate_character_sheet_id(self, value: "CharacterSheet") -> "CharacterSheet":
+        """Ownership-check the resolved CharacterSheet.
+
+        PrimaryKeyRelatedField already resolved the PK to an instance; we
+        only need to verify the requesting account owns that sheet.
+        """
+        request = self.context.get("request")
+        return _resolve_account_sheet(value.pk, request)
+
+    def validate(self, attrs: dict) -> dict:
+        """Cross-field: combat_encounter_id and combat_participant_id must be paired."""
+        ctx = attrs.get("action_context") or {}
+        has_encounter = bool(ctx.get("combat_encounter_id"))
+        has_participant = bool(ctx.get("combat_participant_id"))
+        if has_encounter != has_participant:
+            raise serializers.ValidationError(_ERR_COMBAT_CONTEXT_INCOMPLETE)
+        return attrs
+
+    def create(self, validated_data: dict) -> object:
+        """Build PullActionContext, fetch threads, dispatch spend_resonance_for_pull.
+
+        Catches all expected service exceptions and re-raises as
+        ``serializers.ValidationError`` so the view stays thin.
+        """
+        from world.magic.exceptions import (  # noqa: PLC0415
+            InvalidImbueAmount,
+            NoMatchingWornFacetItemsError,
+            ProtagonismLockedError,
+            ResonanceInsufficient,
+        )
+        from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
+        from world.magic.types import PullActionContext  # noqa: PLC0415
+
+        sheet: CharacterSheet = validated_data["character_sheet_id"]
+        resonance_id: int = validated_data["resonance_id"]
+        tier: int = validated_data["tier"]
+        thread_ids: list[int] = validated_data["thread_ids"]
+        ctx_dict: dict = validated_data.get("action_context") or {}
+
+        # Resolve Resonance.
+        try:
+            resonance = Resonance.objects.get(pk=resonance_id)
+        except Resonance.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
+
+        # Resolve threads — filter by owner so non-owned threads surface as
+        # "not found" rather than leaking data about other characters.
+        threads = list(
+            Thread.objects.filter(
+                pk__in=thread_ids,
+                owner=sheet,
+                retired_at__isnull=True,
+            ).select_related("resonance", "owner", "target_facet")
+        )
+        if len(threads) != len(thread_ids):
+            raise serializers.ValidationError(_ERR_THREAD_NOT_FOUND_COMMIT)
+
+        # Build PullActionContext.
+        combat_encounter = None
+        participant = None
+        if ctx_dict.get("combat_encounter_id"):
+            from world.combat.models import CombatEncounter, CombatParticipant  # noqa: PLC0415
+
+            try:
+                combat_encounter = CombatEncounter.objects.get(pk=ctx_dict["combat_encounter_id"])
+            except CombatEncounter.DoesNotExist as exc:
+                raise serializers.ValidationError(_ERR_COMBAT_ENCOUNTER_NOT_FOUND) from exc
+            try:
+                participant = CombatParticipant.objects.get(pk=ctx_dict["combat_participant_id"])
+            except CombatParticipant.DoesNotExist as exc:
+                raise serializers.ValidationError(_ERR_COMBAT_PARTICIPANT_NOT_FOUND) from exc
+
+        action_context = PullActionContext(
+            combat_encounter=combat_encounter,
+            participant=participant,
+            involved_traits=tuple(ctx_dict.get("involved_trait_ids") or []),
+            involved_techniques=tuple(ctx_dict.get("involved_technique_ids") or []),
+            involved_objects=tuple(ctx_dict.get("involved_object_ids") or []),
+        )
+
+        try:
+            return spend_resonance_for_pull(
+                character_sheet=sheet,
+                resonance=resonance,
+                tier=tier,
+                threads=threads,
+                action_context=action_context,
+            )
+        except ProtagonismLockedError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        except ResonanceInsufficient as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        except InvalidImbueAmount as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        except NoMatchingWornFacetItemsError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+
+class ResolvedPullEffectCommitSerializer(serializers.Serializer):
+    """Wire shape for a single ResolvedPullEffect in the commit response.
+
+    Mirrors ResolvedPullEffectSerializer (used for preview) but also exposes
+    ``granted_capability_id`` (which the commit path includes) and uses
+    source-accessor notation for ``source_thread_id``.
+    """
+
+    kind = serializers.CharField()
+    authored_value = serializers.IntegerField(allow_null=True)
+    level_multiplier = serializers.IntegerField()
+    scaled_value = serializers.IntegerField(allow_null=True)
+    vital_target = serializers.CharField(allow_null=True)
+    source_thread_id = serializers.IntegerField(source="source_thread.pk")
+    source_thread_level = serializers.IntegerField()
+    source_tier = serializers.IntegerField()
+    granted_capability_id = serializers.SerializerMethodField()
+    narrative_snippet = serializers.CharField()
+    inactive = serializers.BooleanField()
+    inactive_reason = serializers.CharField(allow_null=True)
+
+    def get_granted_capability_id(self, obj: object) -> int | None:
+        """Return the granted_capability PK, or None if absent."""
+        from world.magic.types import ResolvedPullEffect  # noqa: PLC0415
+
+        if isinstance(obj, ResolvedPullEffect) and obj.granted_capability is not None:
+            return obj.granted_capability.pk
+        return None
+
+
+class ThreadPullCommitResponseSerializer(serializers.Serializer):
+    """Response serializer for POST /api/magic/thread-pull-commit/."""
+
+    resonance_spent = serializers.IntegerField()
+    anima_spent = serializers.IntegerField()
+    resolved_effects = ResolvedPullEffectCommitSerializer(many=True)

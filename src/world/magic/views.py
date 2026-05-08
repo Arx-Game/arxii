@@ -94,6 +94,8 @@ from world.magic.serializers import (
     SceneEntryEndorsementSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
+    ThreadPullCommitRequestSerializer,
+    ThreadPullCommitResponseSerializer,
     ThreadPullPreviewRequestSerializer,
     ThreadPullPreviewResponseSerializer,
     ThreadSerializer,
@@ -660,6 +662,37 @@ class ThreadPullPreviewView(APIView):
 
         response_serializer = ThreadPullPreviewResponseSerializer(result)
         return Response(response_serializer.data)
+
+
+class ThreadPullCommitView(APIView):
+    """Atomic commit of a resonance pull (Spec A §5.4 + §7.4).
+
+    POST /api/magic/thread-pull-commit/
+
+    Request body: ``{character_sheet_id, resonance_id, tier, thread_ids[],
+    action_context?}``.  The ``action_context`` dict may carry
+    ``combat_encounter_id`` + ``combat_participant_id`` (combat mode) or be
+    absent / empty (ephemeral mode).
+
+    Response: ``{resonance_spent, anima_spent, resolved_effects[]}``.
+    Mutates state: debits resonance + anima, and — in combat mode — persists a
+    ``CombatPull`` row with ``CombatPullResolvedEffect`` snapshots.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        """Dispatch the pull and return the commit result."""
+        serializer = ThreadPullCommitRequestSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+        return Response(
+            ThreadPullCommitResponseSerializer(result).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 class RitualViewSet(viewsets.ModelViewSet):
