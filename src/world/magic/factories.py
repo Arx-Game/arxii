@@ -19,7 +19,6 @@ from world.magic.models import (
     Affinity,
     AnimaRitualPerformance,
     CharacterAnima,
-    CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
     CharacterResonance,
@@ -355,33 +354,6 @@ class CharacterAnimaFactory(factory.django.DjangoModelFactory):
     character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
     current = 10
     maximum = 10
-
-
-class CharacterAnimaRitualFactory(factory.django.DjangoModelFactory):
-    """Factory for CharacterAnimaRitual with stat + skill + resonance."""
-
-    class Meta:
-        model = CharacterAnimaRitual
-
-    character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    stat = factory.SubFactory("world.traits.factories.TraitFactory", trait_type="stat")
-    skill = factory.SubFactory("world.skills.factories.SkillFactory")
-    specialization = None
-    resonance = factory.SubFactory(ResonanceFactory)
-    check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
-    description = factory.Faker("paragraph")
-
-
-class AnimaRitualPerformanceFactory(factory.django.DjangoModelFactory):
-    """Factory for AnimaRitualPerformance records."""
-
-    class Meta:
-        model = AnimaRitualPerformance
-
-    ritual = factory.SubFactory(CharacterAnimaRitualFactory)
-    target_character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
-    was_successful = True
-    anima_recovered = factory.LazyAttribute(lambda o: 5 if o.was_successful else None)
 
 
 # =============================================================================
@@ -758,6 +730,27 @@ class RitualSceneActionConfigFactory(factory.django.DjangoModelFactory):
     resonance = None
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
     target_difficulty = 3
+
+
+class AnimaRitualPerformanceFactory(factory.django.DjangoModelFactory):
+    """Factory for AnimaRitualPerformance records.
+
+    The ritual FK points to Ritual (execution_kind=SCENE_ACTION).
+    Use RitualSceneActionConfigFactory(ritual=...) to build the full pair.
+    """
+
+    class Meta:
+        model = AnimaRitualPerformance
+
+    ritual = factory.SubFactory(
+        RitualFactory,
+        execution_kind=RitualExecutionKind.SCENE_ACTION,
+        service_function_path="",
+        flow=None,
+    )
+    target_character = factory.SubFactory("world.character_sheets.factories.CharacterSheetFactory")
+    was_successful = True
+    anima_recovered = factory.LazyAttribute(lambda o: 5 if o.was_successful else None)
 
 
 # =============================================================================

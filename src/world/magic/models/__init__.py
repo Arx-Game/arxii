@@ -7,7 +7,7 @@ Public names are re-exported here so external callers continue to use
 Submodules (see Scope 6 §4.4):
 - affinity: Affinity, Resonance
 - aura: CharacterAura, CharacterResonance, CharacterAffinityTotal
-- anima: CharacterAnima, CharacterAnimaRitual, AnimaRitualPerformance
+- anima: CharacterAnima, AnimaRitualPerformance
 - gifts: Gift, CharacterGift, Tradition, CharacterTradition
 - techniques: EffectType, TechniqueStyle, Restriction, IntensityTier, Technique,
   TechniqueAppliedCondition, TechniqueCapabilityGrant, TechniqueDamageProfile,
@@ -50,7 +50,6 @@ from world.magic.models.anima import (
     AnimaConfig,
     AnimaRitualPerformance,
     CharacterAnima,
-    CharacterAnimaRitual,
 )
 from world.magic.models.aura import (
     CharacterAffinityTotal,
@@ -144,7 +143,6 @@ __all__ = [
     # aura
     "CharacterAffinityTotal",
     "CharacterAnima",
-    "CharacterAnimaRitual",
     "CharacterAura",
     # gifts
     "CharacterGift",

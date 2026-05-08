@@ -8,7 +8,6 @@ from world.magic.models import (
     AnimaRitualPerformance,
     Cantrip,
     CharacterAnima,
-    CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
     CharacterResonance,
@@ -31,6 +30,7 @@ from world.magic.models import (
     Restriction,
     Ritual,
     RitualComponentRequirement,
+    RitualSceneActionConfig,
     RoomAuraProfile,
     RoomResonance,
     SceneEntryEndorsement,
@@ -266,14 +266,6 @@ class AnimaRitualPerformanceInline(admin.TabularInline):
     readonly_fields = ["performed_at"]
 
 
-@admin.register(CharacterAnimaRitual)
-class CharacterAnimaRitualAdmin(admin.ModelAdmin):
-    list_display = ["character", "stat", "skill", "specialization", "resonance"]
-    list_filter = ["stat", "skill", "resonance"]
-    search_fields = ["character__character__db_key", "description"]
-    inlines = [AnimaRitualPerformanceInline]
-
-
 @admin.register(AnimaRitualPerformance)
 class AnimaRitualPerformanceAdmin(admin.ModelAdmin):
     list_display = [
@@ -444,6 +436,13 @@ class RitualComponentRequirementInline(admin.TabularInline):
     raw_id_fields = ["min_quality_tier"]
 
 
+class RitualSceneActionConfigInline(admin.StackedInline):
+    model = RitualSceneActionConfig
+    extra = 0
+    can_delete = True
+    autocomplete_fields = ["stat", "skill", "specialization", "resonance", "check_type"]
+
+
 @admin.register(Ritual)
 class RitualAdmin(admin.ModelAdmin):
     list_display = [
@@ -455,7 +454,7 @@ class RitualAdmin(admin.ModelAdmin):
     list_filter = ["execution_kind", "hedge_accessible", "glimpse_eligible"]
     search_fields = ["name", "description"]
     autocomplete_fields = ["flow", "site_property"]
-    inlines = [RitualComponentRequirementInline]
+    inlines = [RitualComponentRequirementInline, RitualSceneActionConfigInline]
 
 
 @admin.register(RitualComponentRequirement)

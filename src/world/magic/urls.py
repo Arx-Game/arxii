@@ -11,7 +11,6 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from world.magic.views import (
-    CharacterAnimaRitualViewSet,
     CharacterAnimaViewSet,
     CharacterAuraViewSet,
     CharacterGiftViewSet,
@@ -62,9 +61,6 @@ router.register("character-auras", CharacterAuraViewSet, basename="character-aur
 router.register("character-resonances", CharacterResonanceViewSet, basename="character-resonance")
 router.register("character-gifts", CharacterGiftViewSet, basename="character-gift")
 router.register("character-anima", CharacterAnimaViewSet, basename="character-anima")
-router.register(
-    "character-anima-rituals", CharacterAnimaRitualViewSet, basename="character-anima-ritual"
-)
 # Alterations
 router.register(
     "pending-alterations",

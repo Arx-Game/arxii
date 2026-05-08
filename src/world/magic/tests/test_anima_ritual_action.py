@@ -2,9 +2,9 @@
 
 Tests verify:
 - The resolver fires apply_anima_ritual_outcome when an anima_ritual action is accepted.
-- The menu contributor returns an entry when a character has a CharacterAnimaRitual and
-  has not yet spent the once-per-scene cap.
-- The menu contributor returns [] when scene=None, cap is spent, or no ritual configured.
+- The menu contributor returns an entry when a character has a known SCENE_ACTION Ritual
+  and has not yet spent the once-per-scene cap.
+- The menu contributor returns [] when scene=None, cap is spent, or no ritual known.
 """
 
 from __future__ import annotations
@@ -21,12 +21,16 @@ from world.checks.factories import CheckTypeFactory
 from world.checks.types import CheckResult
 from world.conditions.factories import ConditionTemplateFactory
 from world.magic.audere import SOULFRAY_CONDITION_NAME
+from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
     CharacterAnimaFactory,
-    CharacterAnimaRitualFactory,
+    RitualFactory,
+    RitualSceneActionConfigFactory,
     SoulfrayConfigFactory,
 )
 from world.magic.models.anima import AnimaRitualPerformance
+from world.magic.models.knowledge import CharacterRitualKnowledge
+from world.roster.factories import RosterEntryFactory
 from world.scenes.action_availability import get_available_scene_actions
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_resolvers import _MENU_CONTRIBUTORS, _RESOLVER_REGISTRY
@@ -71,6 +75,17 @@ def _make_pending_resolution(outcome_row: object) -> PendingActionResolution:
     )
 
 
+def _make_scene_action_ritual():
+    """Create a SCENE_ACTION Ritual + RitualSceneActionConfig sidecar."""
+    ritual = RitualFactory(
+        execution_kind=RitualExecutionKind.SCENE_ACTION,
+        service_function_path="",
+        flow=None,
+    )
+    RitualSceneActionConfigFactory(ritual=ritual)
+    return ritual
+
+
 class AnimaRitualResolverTests(TestCase):
     """The anima_ritual resolver is registered and applies outcome on accept."""
 
@@ -86,12 +101,16 @@ class AnimaRitualResolverTests(TestCase):
         self.award_kudos_patcher.stop()
 
     def _setup_ritual_scene(self, success_level: int = 1) -> tuple:
-        """Create a full ritual+scene setup and a real CheckOutcome row."""
+        """Create a full ritual+scene setup and a real CheckOutcome row.
+
+        The ritual is attached to the action request via snapshot_ritual so the
+        resolver can read it without needing author_account on the character.
+        """
         persona = PersonaFactory()
         sheet = persona.character_sheet
         target_persona = PersonaFactory()
 
-        ritual = CharacterAnimaRitualFactory(character=sheet)
+        ritual = _make_scene_action_ritual()
         anima = CharacterAnimaFactory(
             character=sheet.character,
             current=2,
@@ -119,8 +138,10 @@ class AnimaRitualResolverTests(TestCase):
             action_key="anima_ritual",
             status=ActionRequestStatus.PENDING,
         )
+        # Set snapshot_ritual so the resolver reads the correct Ritual row.
         action_request.action_template = action_template
-        action_request.save(update_fields=["action_template"])
+        action_request.snapshot_ritual = ritual
+        action_request.save(update_fields=["action_template", "snapshot_ritual"])
 
         return action_request, ritual, anima, outcome
 
@@ -175,10 +196,11 @@ class AnimaRitualResolverTests(TestCase):
         self.assertEqual(anima.current, 10)  # maximum
 
     def test_no_ritual_configured_resolver_no_ops(self) -> None:
-        """When initiator has no CharacterAnimaRitual the resolver exits silently."""
+        """When the request has no snapshot_ritual and initiator has no authored ritual,
+        the resolver exits silently."""
         persona = PersonaFactory()
         target_persona = PersonaFactory()
-        # No CharacterAnimaRitual created
+        # No ritual created, no snapshot_ritual on request
         ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
         SoulfrayConfigFactory()
         scene = SceneFactory(is_active=True)
@@ -206,7 +228,7 @@ class AnimaRitualResolverTests(TestCase):
 
 
 class AnimaRitualMenuContributorTests(TestCase):
-    """Menu contributor contributes entries based on CharacterAnimaRitual and scene cap."""
+    """Menu contributor contributes entries based on CharacterRitualKnowledge and scene cap."""
 
     def setUp(self) -> None:
         # Ensure the contributor module is imported.
@@ -220,24 +242,28 @@ class AnimaRitualMenuContributorTests(TestCase):
         _MENU_CONTRIBUTORS.extend(self._original_contributors)
 
     def _setup(self) -> tuple:
-        """Create persona + ritual + anima + soulfray config."""
+        """Create persona + roster_entry + ritual + knowledge + anima + soulfray config."""
         persona = PersonaFactory()
         sheet = persona.character_sheet
-        ritual = CharacterAnimaRitualFactory(character=sheet)
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+
+        ritual = _make_scene_action_ritual()
+        CharacterRitualKnowledge.objects.create(roster_entry=roster_entry, ritual=ritual)
+
         CharacterAnimaFactory(character=sheet.character, current=5, maximum=10)
         ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
         SoulfrayConfigFactory()
         scene = SceneFactory(is_active=True)
         return sheet, ritual, scene
 
-    def test_menu_contribution_when_ritual_configured_and_cap_unspent(self) -> None:
-        """Character with a ritual and no prior performance in scene gets an entry."""
+    def test_menu_contribution_when_ritual_known_and_cap_unspent(self) -> None:
+        """Character with a known ritual and no prior performance gets an entry."""
         sheet, ritual, scene = self._setup()
 
         actions = get_available_scene_actions(character=sheet.character, scene=scene)
         ritual_entries = [a for a in actions if a.action_key == "anima_ritual"]
         self.assertEqual(len(ritual_entries), 1)
-        self.assertEqual(ritual_entries[0].display_name, "Anima Ritual")
+        self.assertIn("Anima Ritual", ritual_entries[0].display_name)
         self.assertEqual(ritual_entries[0].ritual_id, ritual.id)
         self.assertIsNone(ritual_entries[0].action_template)
 
@@ -268,9 +294,25 @@ class AnimaRitualMenuContributorTests(TestCase):
         ritual_entries = [a for a in actions if a.action_key == "anima_ritual"]
         self.assertEqual(len(ritual_entries), 0)
 
-    def test_menu_contribution_empty_when_no_ritual(self) -> None:
-        """Character without a CharacterAnimaRitual gets no anima_ritual entry."""
+    def test_menu_contribution_empty_when_no_ritual_knowledge(self) -> None:
+        """Character without a known ritual gets no anima_ritual entry."""
         persona = PersonaFactory()
+        # Create roster entry but no CharacterRitualKnowledge
+        RosterEntryFactory(character_sheet=persona.character_sheet)
+        ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
+        SoulfrayConfigFactory()
+        scene = SceneFactory(is_active=True)
+
+        actions = get_available_scene_actions(
+            character=persona.character_sheet.character, scene=scene
+        )
+        ritual_entries = [a for a in actions if a.action_key == "anima_ritual"]
+        self.assertEqual(len(ritual_entries), 0)
+
+    def test_menu_contribution_empty_when_no_roster_entry(self) -> None:
+        """Character without a RosterEntry gets no anima_ritual entry."""
+        persona = PersonaFactory()
+        # No RosterEntry created
         ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
         SoulfrayConfigFactory()
         scene = SceneFactory(is_active=True)
@@ -283,8 +325,8 @@ class AnimaRitualMenuContributorTests(TestCase):
 
     def test_social_action_count_unaffected_for_character_without_ritual(self) -> None:
         """Characters without rituals see only social action templates, not ritual entries."""
-        # No ritual setup — plain persona
         persona = PersonaFactory()
+        # No ritual setup — plain persona, no roster entry
         ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
         SoulfrayConfigFactory()
         scene = SceneFactory(is_active=True)

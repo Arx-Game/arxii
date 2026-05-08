@@ -16,7 +16,6 @@ from world.magic.constants import ALTERATION_TIER_CAPS, TargetKind
 from world.magic.models import (
     Cantrip,
     CharacterAnima,
-    CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
     CharacterResonance,
@@ -415,40 +414,6 @@ class CharacterAnimaSerializer(serializers.ModelSerializer):
             "last_recovery",
         ]
         read_only_fields = ["id", "last_recovery"]
-
-
-class CharacterAnimaRitualSerializer(serializers.ModelSerializer):
-    """Serializer for CharacterAnimaRitual records."""
-
-    stat_name = serializers.CharField(source="stat.name", read_only=True)
-    skill_name = serializers.CharField(source="skill.name", read_only=True)
-    specialization_name = serializers.SerializerMethodField()
-    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
-    resonance_detail = ResonanceSerializer(source="resonance", read_only=True)
-
-    class Meta:
-        model = CharacterAnimaRitual
-        fields = [
-            "id",
-            "character",
-            "stat",
-            "stat_name",
-            "skill",
-            "skill_name",
-            "specialization",
-            "specialization_name",
-            "resonance",
-            "resonance_name",
-            "resonance_detail",
-            "description",
-        ]
-        read_only_fields = ["id"]
-
-    def get_specialization_name(self, obj: CharacterAnimaRitual) -> str | None:
-        """Get the specialization name if present."""
-        if obj.specialization:
-            return obj.specialization.name
-        return None
 
 
 # =============================================================================

@@ -48,14 +48,15 @@ from world.classes.models import PathStage
 from world.distinctions.models import CharacterDistinction
 from world.forms.models import CharacterForm, CharacterFormValue, FormType
 from world.goals.models import CharacterGoal
+from world.magic.constants import RitualExecutionKind
 from world.magic.models import (
-    CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
     CharacterTechnique,
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
+    Ritual,
 )
 from world.progression.models import CharacterPathHistory
 from world.roster.models import RosterTenure
@@ -318,13 +319,19 @@ def _build_distinctions(sheet: CharacterSheet) -> list[DistinctionEntry]:
     ]
 
 
-_MAGIC_SELECT_RELATED: tuple[str, ...] = (
-    "character__aura",
-    "anima_ritual__stat",
-    "anima_ritual__skill__trait",
-    "anima_ritual__resonance",
-)
+_MAGIC_SELECT_RELATED: tuple[str, ...] = ("character__aura",)
 _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
+    Prefetch(
+        "character__db_account__authored_rituals",
+        queryset=Ritual.objects.filter(
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+        ).select_related(
+            "scene_action_config__stat",
+            "scene_action_config__skill",
+            "scene_action_config__resonance",
+        ),
+        to_attr="cached_scene_action_rituals",
+    ),
     Prefetch(
         "character_gifts",
         queryset=CharacterGift.objects.select_related("gift").prefetch_related(
@@ -403,19 +410,35 @@ def _build_magic_motif(sheet: CharacterSheet) -> MotifSection | None:
 
 
 def _build_magic_anima_ritual(sheet: CharacterSheet) -> AnimaRitualSection | None:
-    """Build the anima ritual sub-section (OneToOne to CharacterSheet).
+    """Build the anima ritual sub-section from the player's authored SCENE_ACTION Ritual.
 
-    Returns ``None`` when the character has no anima ritual.
+    Reads from the prefetched ``cached_scene_action_rituals`` attribute on the
+    account object, populated by the ``character__db_account__authored_rituals``
+    Prefetch in ``_MAGIC_PREFETCH_RELATED``. Returns ``None`` when the character
+    has no authored anima ritual or no account attached.
     """
+    account = sheet.character.db_account
+    if account is None:
+        return None
+
+    rituals: list[Ritual] = getattr(
+        account,
+        "cached_scene_action_rituals",  # noqa: GETATTR_LITERAL — to_attr prefetch target; attribute access is not possible here
+        None,
+    )
+    if not rituals:
+        return None
+
+    ritual = rituals[0]
     try:
-        ritual = sheet.anima_ritual
-    except CharacterAnimaRitual.DoesNotExist:
+        config = ritual.scene_action_config
+    except Exception:  # noqa: BLE001
         return None
 
     return AnimaRitualSection(
-        stat=ritual.stat.name,
-        skill=ritual.skill.name,
-        resonance=ritual.resonance.name,
+        stat=config.stat.name,
+        skill=config.skill.name,
+        resonance=config.resonance.name if config.resonance else "",
         description=ritual.description,
     )
 

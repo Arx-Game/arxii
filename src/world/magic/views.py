@@ -48,7 +48,6 @@ from world.magic.filters import (
 from world.magic.models import (
     Cantrip,
     CharacterAnima,
-    CharacterAnimaRitual,
     CharacterAura,
     CharacterGift,
     CharacterResonance,
@@ -72,7 +71,6 @@ from world.magic.permissions import IsThreadOwner
 from world.magic.serializers import (
     AlterationResolutionSerializer,
     CantripSerializer,
-    CharacterAnimaRitualSerializer,
     CharacterAnimaSerializer,
     CharacterAuraSerializer,
     CharacterGiftSerializer,
@@ -389,32 +387,6 @@ class CharacterAnimaViewSet(viewsets.ModelViewSet):
         if user.is_staff:
             return CharacterAnima.objects.all()
         return CharacterAnima.objects.filter(character__db_account=user)
-
-
-class CharacterAnimaRitualViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for CharacterAnimaRitual records.
-
-    Manages personalized anima recovery rituals for characters.
-    """
-
-    serializer_class = CharacterAnimaRitualSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        """Filter to characters owned by the current user."""
-        user = self.request.user
-        queryset = CharacterAnimaRitual.objects.select_related(
-            "stat",
-            "skill",
-            "specialization",
-            "resonance",
-            "resonance__affinity",
-            "resonance__modifier_target__codex_entry",
-        )
-        if user.is_staff:
-            return queryset
-        return queryset.filter(character__character__db_account=user)
 
 
 # =============================================================================

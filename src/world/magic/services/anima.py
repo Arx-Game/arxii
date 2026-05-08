@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models.anima import CharacterAnimaRitual
+    from world.magic.models.rituals import Ritual
     from world.scenes.models import Scene
 
 
@@ -55,6 +55,7 @@ def perform_anima_ritual(
     with leftover budget. Crit always tops anima to max regardless.
     """
     from world.checks.services import perform_check  # noqa: PLC0415
+    from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
     from world.magic.exceptions import (  # noqa: PLC0415
         CharacterEngagedForRitual,
         NoRitualConfigured,
@@ -62,13 +63,21 @@ def perform_anima_ritual(
         RitualScenePrerequisiteFailed,
     )
     from world.magic.models.anima import AnimaRitualPerformance  # noqa: PLC0415
+    from world.magic.models.rituals import Ritual  # noqa: PLC0415
     from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
 
-    # OneToOne reverse accessor, not a simple attribute — getattr is correct here.
-    ritual = getattr(character_sheet, "anima_ritual", None)  # noqa: GETATTR_LITERAL
-    if ritual is None:
+    ritual = (
+        Ritual.objects.filter(
+            author_account=character_sheet.character.db_account,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+        )
+        .select_related("scene_action_config")
+        .first()
+    )
+    if ritual is None or not hasattr(ritual, "scene_action_config"):
         raise NoRitualConfigured
 
+    config = ritual.scene_action_config
     character = character_sheet.character
 
     if CharacterEngagement.objects.filter(character=character).exists():
@@ -82,8 +91,8 @@ def perform_anima_ritual(
 
     check_result = perform_check(
         character,
-        check_type=ritual.check_type,
-        target_difficulty=ritual.target_difficulty,
+        check_type=config.check_type,
+        target_difficulty=config.target_difficulty,
     )
     outcome = check_result.outcome
 
@@ -97,7 +106,7 @@ def perform_anima_ritual(
 
 def apply_anima_ritual_outcome(
     *,
-    ritual: CharacterAnimaRitual,
+    ritual: Ritual,
     outcome: object,
     scene: Scene,
     character_sheet: CharacterSheet,
@@ -108,8 +117,7 @@ def apply_anima_ritual_outcome(
     check and pass the outcome here.
 
     Args:
-        ritual: The CharacterAnimaRitual being performed (Phase 7 will change
-            this to Ritual).
+        ritual: The Ritual (SCENE_ACTION kind) being performed.
         outcome: The check outcome / result object (must have success_level).
         scene: The scene in which the ritual is performed.
         character_sheet: The character performing the ritual.
@@ -182,7 +190,7 @@ def apply_anima_ritual_outcome(
 
 def has_performed_anima_ritual_in_scene(
     *,
-    ritual: CharacterAnimaRitual,
+    ritual: Ritual,
     scene: Scene,
 ) -> bool:
     """Return True when the given ritual has already been performed in this scene.

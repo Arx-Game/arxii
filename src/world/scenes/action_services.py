@@ -97,10 +97,10 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, several option
     The request starts in PENDING status. The target must accept or deny
     before resolution can proceed.
 
-    When ritual_id is provided (a CharacterAnimaRitual.id), the snapshot
-    fields are populated from the ritual's check specification so the
-    accepted request carries a full audit trail of the ritual config at
-    fire time. Phase 7 will retarget ritual_id to Ritual.id.
+    When ritual_id is provided (a Ritual.id with execution_kind=SCENE_ACTION),
+    the snapshot fields are populated from the ritual's check specification so
+    the accepted request carries a full audit trail of the ritual config at
+    fire time.
 
     Args:
         scene: The scene where this action takes place.
@@ -111,9 +111,9 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, several option
         technique: Optional technique to enhance this action. Must have an
             ActionEnhancement record for the given action_key and the
             initiator's character must know it.
-        ritual_id: Optional CharacterAnimaRitual PK. When provided, snapshot
-            fields (stat, skill, specialization, resonance, check_type,
-            target_difficulty) are populated from the ritual.
+        ritual_id: Optional Ritual PK (execution_kind=SCENE_ACTION). When provided,
+            snapshot fields (stat, skill, specialization, resonance, check_type,
+            target_difficulty) are populated from the ritual's sidecar config.
 
     Returns:
         The created SceneActionRequest in PENDING status.
@@ -145,37 +145,37 @@ def create_action_request(  # noqa: PLR0913 — keyword-only API, several option
 
 
 def _snapshot_kwargs_from_ritual(ritual_id: int) -> dict[str, object]:
-    """Build snapshot field kwargs from a CharacterAnimaRitual row.
-
-    Phase 6 reads from CharacterAnimaRitual. Phase 7 retargets to Ritual +
-    RitualSceneActionConfig.
+    """Build snapshot field kwargs from a Ritual + RitualSceneActionConfig row.
 
     Args:
-        ritual_id: PK of the CharacterAnimaRitual to snapshot.
+        ritual_id: PK of the Ritual (execution_kind=SCENE_ACTION) to snapshot.
 
     Returns:
         Dict of snapshot_* kwargs ready to spread into SceneActionRequest.objects.create().
 
     Raises:
-        CharacterAnimaRitual.DoesNotExist: If no matching row is found.
+        Ritual.DoesNotExist: If no matching row is found.
     """
-    from world.magic.models.anima import CharacterAnimaRitual  # noqa: PLC0415
+    from world.magic.models.rituals import Ritual  # noqa: PLC0415
 
-    ritual = CharacterAnimaRitual.objects.select_related(
-        "stat",
-        "skill",
-        "specialization",
-        "resonance",
-        "check_type",
+    ritual = Ritual.objects.select_related(
+        "scene_action_config__stat",
+        "scene_action_config__skill",
+        "scene_action_config__specialization",
+        "scene_action_config__resonance",
+        "scene_action_config__check_type",
     ).get(id=ritual_id)
 
+    config = ritual.scene_action_config
+
     return {
-        "snapshot_stat": ritual.stat,
-        "snapshot_skill": ritual.skill,
-        "snapshot_specialization": ritual.specialization,
-        "snapshot_resonance": ritual.resonance,
-        "snapshot_check_type": ritual.check_type,
-        "snapshot_target_difficulty": ritual.target_difficulty,
+        "snapshot_ritual": ritual,
+        "snapshot_stat": config.stat,
+        "snapshot_skill": config.skill,
+        "snapshot_specialization": config.specialization,
+        "snapshot_resonance": config.resonance,
+        "snapshot_check_type": config.check_type,
+        "snapshot_target_difficulty": config.target_difficulty,
     }
 
 

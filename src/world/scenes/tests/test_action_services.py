@@ -340,12 +340,18 @@ class TestCreateActionRequestSnapshotFields(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
-        from world.magic.factories import CharacterAnimaRitualFactory
+        from world.magic.constants import RitualExecutionKind
+        from world.magic.factories import RitualFactory, RitualSceneActionConfigFactory
 
         cls.scene = SceneFactory()
         cls.initiator = PersonaFactory()
         cls.target = PersonaFactory()
-        cls.ritual = CharacterAnimaRitualFactory(character=cls.initiator.character_sheet)
+        cls.ritual = RitualFactory(
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+        )
+        cls.config = RitualSceneActionConfigFactory(ritual=cls.ritual)
 
     def test_create_action_request_with_ritual_id_populates_snapshot(self) -> None:
         """When ritual_id is provided, all snapshot fields are populated from the ritual."""
@@ -357,12 +363,13 @@ class TestCreateActionRequestSnapshotFields(TestCase):
             ritual_id=self.ritual.pk,
         )
 
-        assert request.snapshot_stat == self.ritual.stat
-        assert request.snapshot_skill == self.ritual.skill
-        assert request.snapshot_specialization == self.ritual.specialization
-        assert request.snapshot_resonance == self.ritual.resonance
-        assert request.snapshot_check_type == self.ritual.check_type
-        assert request.snapshot_target_difficulty == self.ritual.target_difficulty
+        assert request.snapshot_ritual == self.ritual
+        assert request.snapshot_stat == self.config.stat
+        assert request.snapshot_skill == self.config.skill
+        assert request.snapshot_specialization == self.config.specialization
+        assert request.snapshot_resonance == self.config.resonance
+        assert request.snapshot_check_type == self.config.check_type
+        assert request.snapshot_target_difficulty == self.config.target_difficulty
 
     def test_create_action_request_without_ritual_id_leaves_snapshot_null(self) -> None:
         """Without ritual_id, all snapshot fields remain None."""

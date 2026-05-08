@@ -1,75 +1,78 @@
-"""Tests for CharacterAnimaRitual and AnimaRitualPerformance models."""
+"""Tests for AnimaRitualPerformance model and related factories.
+
+The per-character anima ritual is now modelled as a Ritual row with
+execution_kind=SCENE_ACTION and a RitualSceneActionConfig sidecar.
+CharacterAnimaRitual has been deleted.
+"""
 
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
+from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
     AnimaRitualPerformanceFactory,
-    CharacterAnimaRitualFactory,
     ResonanceFactory,
+    RitualFactory,
+    RitualSceneActionConfigFactory,
 )
-from world.magic.models import AnimaRitualPerformance, CharacterAnimaRitual
+from world.magic.models import AnimaRitualPerformance, Ritual, RitualSceneActionConfig
 from world.skills.factories import SkillFactory, SpecializationFactory
 from world.traits.factories import TraitFactory
 from world.traits.models import TraitType
 
 
-class CharacterAnimaRitualModelTests(TestCase):
-    """Tests for the CharacterAnimaRitual model."""
+class RitualSceneActionConfigModelTests(TestCase):
+    """Tests for the RitualSceneActionConfig model (replaces CharacterAnimaRitual tests)."""
 
     @classmethod
     def setUpTestData(cls):
-        """Set up test data for all test methods."""
-        cls.sheet = CharacterSheetFactory()
         cls.stat = TraitFactory(name="Composure", trait_type=TraitType.STAT)
         cls.skill = SkillFactory()
         cls.resonance = ResonanceFactory()
         cls.check_type = CheckTypeFactory()
+        cls.ritual = RitualFactory(
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+        )
 
-    def test_anima_ritual_creation(self):
-        """Test creation of a character anima ritual with all fields."""
-        ritual = CharacterAnimaRitual.objects.create(
-            character=self.sheet,
+    def test_scene_action_config_creation(self):
+        """Test creation of a RitualSceneActionConfig with all fields."""
+        config = RitualSceneActionConfig.objects.create(
+            ritual=self.ritual,
             stat=self.stat,
             skill=self.skill,
             resonance=self.resonance,
             check_type=self.check_type,
-            description="Sitting quietly, communing with nature.",
         )
-        self.assertEqual(ritual.character, self.sheet)
-        self.assertEqual(ritual.stat, self.stat)
-        self.assertEqual(ritual.skill, self.skill)
-        self.assertEqual(ritual.resonance, self.resonance)
-        self.assertEqual(ritual.check_type, self.check_type)
-        self.assertEqual(ritual.description, "Sitting quietly, communing with nature.")
-        self.assertIsNone(ritual.specialization)
+        self.assertEqual(config.ritual, self.ritual)
+        self.assertEqual(config.stat, self.stat)
+        self.assertEqual(config.skill, self.skill)
+        self.assertEqual(config.resonance, self.resonance)
+        self.assertEqual(config.check_type, self.check_type)
+        self.assertIsNone(config.specialization)
 
-    def test_anima_ritual_specialization_is_optional(self):
-        """Test that specialization is optional on anima rituals."""
+    def test_scene_action_config_specialization_optional(self):
+        """Test that specialization is optional on RitualSceneActionConfig."""
         specialization = SpecializationFactory(parent_skill=self.skill)
-        ritual = CharacterAnimaRitual.objects.create(
-            character=self.sheet,
+        config = RitualSceneActionConfig.objects.create(
+            ritual=RitualFactory(
+                execution_kind=RitualExecutionKind.SCENE_ACTION,
+                service_function_path="",
+                flow=None,
+            ),
             stat=self.stat,
             skill=self.skill,
             specialization=specialization,
             resonance=self.resonance,
             check_type=self.check_type,
-            description="A specialized recovery ritual.",
         )
-        self.assertEqual(ritual.specialization, specialization)
+        self.assertEqual(config.specialization, specialization)
 
-    def test_anima_ritual_str(self):
-        """Test string representation of anima ritual."""
-        ritual = CharacterAnimaRitual.objects.create(
-            character=self.sheet,
-            stat=self.stat,
-            skill=self.skill,
-            resonance=self.resonance,
-            check_type=self.check_type,
-            description="Test ritual.",
-        )
-        self.assertEqual(str(ritual), f"Anima Ritual of {self.sheet}")
+    def test_ritual_str(self):
+        """Ritual str() returns the ritual name."""
+        self.assertEqual(str(self.ritual), self.ritual.name)
 
 
 class AnimaRitualPerformanceModelTests(TestCase):
@@ -77,21 +80,14 @@ class AnimaRitualPerformanceModelTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """Set up test data for all test methods."""
         cls.sheet = CharacterSheetFactory()
         cls.target_sheet = CharacterSheetFactory()
-        cls.stat = TraitFactory(name="Performance Stat", trait_type=TraitType.STAT)
-        cls.skill = SkillFactory()
-        cls.resonance = ResonanceFactory()
-        cls.check_type = CheckTypeFactory()
-        cls.ritual = CharacterAnimaRitual.objects.create(
-            character=cls.sheet,
-            stat=cls.stat,
-            skill=cls.skill,
-            resonance=cls.resonance,
-            check_type=cls.check_type,
-            description="A test ritual.",
+        cls.ritual = RitualFactory(
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
         )
+        RitualSceneActionConfigFactory(ritual=cls.ritual)
 
     def test_performance_creation(self):
         """Test creation of a ritual performance with all fields."""
@@ -158,25 +154,6 @@ class AnimaRitualPerformanceModelTests(TestCase):
         self.assertEqual(performances[1], performance1)
 
 
-class CharacterAnimaRitualFactoryTests(TestCase):
-    """Tests for the CharacterAnimaRitualFactory."""
-
-    def test_factory_creates_ritual(self):
-        """Test that factory creates a valid CharacterAnimaRitual."""
-        ritual = CharacterAnimaRitualFactory()
-        self.assertIsInstance(ritual, CharacterAnimaRitual)
-        self.assertIsNotNone(ritual.character)
-        self.assertIsNotNone(ritual.stat)
-        self.assertIsNotNone(ritual.skill)
-        self.assertIsNotNone(ritual.resonance)
-        self.assertTrue(ritual.description)
-
-    def test_factory_without_specialization(self):
-        """Test that factory creates ritual without specialization by default."""
-        ritual = CharacterAnimaRitualFactory()
-        self.assertIsNone(ritual.specialization)
-
-
 class AnimaRitualPerformanceFactoryTests(TestCase):
     """Tests for the AnimaRitualPerformanceFactory."""
 
@@ -185,6 +162,8 @@ class AnimaRitualPerformanceFactoryTests(TestCase):
         performance = AnimaRitualPerformanceFactory()
         self.assertIsInstance(performance, AnimaRitualPerformance)
         self.assertIsNotNone(performance.ritual)
+        self.assertIsInstance(performance.ritual, Ritual)
+        self.assertEqual(performance.ritual.execution_kind, RitualExecutionKind.SCENE_ACTION)
         self.assertIsNotNone(performance.target_character)
         self.assertTrue(performance.was_successful)
         self.assertEqual(performance.anima_recovered, 5)
