@@ -6,6 +6,7 @@ interaction recording.
 """
 
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -37,6 +38,15 @@ from world.traits.models import CharacterTraitValue, Trait
 
 class SceneMagicTestMixin:
     """Shared setup for scene magic integration tests."""
+
+    def setUp(self) -> None:
+        """Mock award_kudos for all tests in this class."""
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.mock_award_kudos = self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        """Stop mocking award_kudos."""
+        self.award_kudos_patcher.stop()
 
     @classmethod
     def setUpTestData(cls) -> None:

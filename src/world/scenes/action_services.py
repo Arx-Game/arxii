@@ -9,6 +9,8 @@ from django.utils import timezone
 
 from actions.services import start_action_resolution
 from world.checks.types import ResolutionContext
+from world.progression.models import KudosSourceCategory
+from world.progression.services.kudos import award_kudos
 from world.scenes.action_constants import (
     DIFFICULTY_VALUES,
     ActionRequestStatus,
@@ -27,6 +29,20 @@ if TYPE_CHECKING:
     from actions.models.action_templates import ActionTemplate
     from actions.types import PendingActionResolution
     from world.magic.models import Technique
+
+# Cache for social_engagement category - initialized on first access.
+_SOCIAL_ENGAGEMENT_CATEGORY: KudosSourceCategory | None = None
+
+
+def _get_social_engagement_category() -> KudosSourceCategory:
+    """Lazy-load the social_engagement KudosSourceCategory from DB.
+
+    Uses module-level caching to avoid repeated DB lookups.
+    """
+    global _SOCIAL_ENGAGEMENT_CATEGORY  # noqa: PLW0603
+    if _SOCIAL_ENGAGEMENT_CATEGORY is None:
+        _SOCIAL_ENGAGEMENT_CATEGORY = KudosSourceCategory.objects.get(name="social_engagement")
+    return _SOCIAL_ENGAGEMENT_CATEGORY
 
 
 def _validate_technique_enhancement(
@@ -191,6 +207,21 @@ def respond_to_action_request(
             if result_interaction is not None:
                 action_request.result_interaction = result_interaction
                 action_request.save(update_fields=["result_interaction"])
+
+            # Award kudos to target for accepting the action request
+            category = _get_social_engagement_category()
+            target_character = action_request.target_persona.character_sheet.character
+            initiator_character = action_request.initiator_persona.character_sheet.character
+            target_account = target_character.db_account
+            initiator_account = initiator_character.db_account
+            initiator_name = action_request.initiator_persona.name
+            award_kudos(
+                account=target_account,
+                amount=category.default_amount,
+                source_category=category,
+                description=f"Engaged with action request from {initiator_name}",
+                awarded_by=initiator_account,
+            )
 
             resolver = get_resolver(action_request.action_key)
             if resolver is not None:

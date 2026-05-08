@@ -4,6 +4,8 @@ Exercises the complete pipeline: create request → consent → check resolution
 interaction creation, using real factories (no mocks) for the check system.
 """
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from actions.models import ActionEnhancement
@@ -26,7 +28,20 @@ from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import CharacterTraitValue, Trait
 
 
-class TestSceneActionIntegration(TestCase):
+class _BaseActionIntegrationTest(TestCase):
+    """Base class that mocks award_kudos for all action integration tests."""
+
+    def setUp(self) -> None:
+        """Mock award_kudos for all tests in this class."""
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.mock_award_kudos = self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        """Stop mocking award_kudos."""
+        self.award_kudos_patcher.stop()
+
+
+class TestSceneActionIntegration(_BaseActionIntegrationTest):
     """Full pipeline: request → consent → real check → interaction."""
 
     @classmethod
@@ -144,7 +159,7 @@ class TestSceneActionIntegration(TestCase):
             )
 
 
-class TestTechniqueEnhancementValidation(TestCase):
+class TestTechniqueEnhancementValidation(_BaseActionIntegrationTest):
     """Validate technique attachment to action requests."""
 
     @classmethod
@@ -227,7 +242,7 @@ class TestTechniqueEnhancementValidation(TestCase):
             )
 
 
-class TestMundaneActionConsequences(TestCase):
+class TestMundaneActionConsequences(_BaseActionIntegrationTest):
     """Mundane social actions now apply consequences via full pipeline."""
 
     @classmethod
@@ -268,7 +283,7 @@ class TestMundaneActionConsequences(TestCase):
         assert result.technique_result is None  # no technique
 
 
-class TestEnhancedActionResolution(TestCase):
+class TestEnhancedActionResolution(_BaseActionIntegrationTest):
     """Technique-enhanced social actions run use_technique wrapping full pipeline."""
 
     @classmethod
@@ -396,7 +411,7 @@ class TestEnhancedActionResolution(TestCase):
         assert self.technique.name in request.result_interaction.content
 
 
-class TestAvailableActionsService(TestCase):
+class TestAvailableActionsService(_BaseActionIntegrationTest):
     """Unit tests for get_available_scene_actions service function."""
 
     @classmethod
@@ -488,7 +503,7 @@ class TestAvailableActionsService(TestCase):
         assert enhancement.effective_cost >= 0
 
 
-class TestMenuContributorMerge(TestCase):
+class TestMenuContributorMerge(_BaseActionIntegrationTest):
     """Tests that registered menu contributors are merged into get_available_scene_actions."""
 
     @classmethod

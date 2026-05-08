@@ -77,6 +77,15 @@ class TestRespondToActionRequest(TestCase):
         cls.initiator = PersonaFactory()
         cls.target = PersonaFactory()
 
+    def setUp(self) -> None:
+        """Mock award_kudos for all tests in this class."""
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.mock_award_kudos = self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        """Stop mocking award_kudos."""
+        self.award_kudos_patcher.stop()
+
     def test_deny_sets_status(self) -> None:
         request = create_action_request(
             scene=self.scene,
@@ -192,6 +201,15 @@ class TestResolverIntegration(TestCase):
         cls.target = PersonaFactory()
         cls.action_template = ActionTemplateFactory()
 
+    def setUp(self) -> None:
+        """Mock award_kudos for all tests in this class."""
+        self.award_kudos_patcher = patch("world.scenes.action_services.award_kudos")
+        self.mock_award_kudos = self.award_kudos_patcher.start()
+
+    def tearDown(self) -> None:
+        """Stop mocking award_kudos."""
+        self.award_kudos_patcher.stop()
+
     @patch("world.scenes.action_services.start_action_resolution")
     def test_resolver_called_on_accept(self, mock_resolve: MagicMock) -> None:
         mock_resolve.return_value = _make_pending_resolution(success=True)
@@ -254,3 +272,64 @@ class TestResolverIntegration(TestCase):
             action_request=action_request, decision=ConsentDecision.ACCEPT
         )
         self.assertIsNotNone(result)
+
+
+class GenericKudosOnAcceptTests(TestCase):
+    """Tests that accepting an action request awards Kudos to the target."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.scene = SceneFactory()
+        cls.initiator = PersonaFactory()
+        cls.target = PersonaFactory()
+        cls.action_template = ActionTemplateFactory()
+
+    @patch("world.scenes.action_services.award_kudos")
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_kudos_awarded_to_target_on_accept(
+        self, mock_resolve: MagicMock, mock_award_kudos: MagicMock
+    ) -> None:
+        """Accepting an action request calls award_kudos with target account."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        action_request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="generic",
+            status=ActionRequestStatus.PENDING,
+        )
+        action_request.action_template = self.action_template
+        action_request.save(update_fields=["action_template"])
+
+        respond_to_action_request(action_request=action_request, decision=ConsentDecision.ACCEPT)
+
+        # Verify award_kudos was called with the target account
+        mock_award_kudos.assert_called_once()
+        call_args = mock_award_kudos.call_args
+        self.assertIsNotNone(call_args)
+        # Check that source_category name is 'social_engagement'
+        self.assertEqual(
+            call_args.kwargs.get("source_category").name,
+            "social_engagement",
+        )
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_no_kudos_award_call_on_deny(self, mock_resolve: MagicMock) -> None:
+        """Denying an action request does not call award_kudos."""
+        mock_resolve.return_value = _make_pending_resolution(success=True)
+
+        action_request = SceneActionRequestFactory(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="generic",
+            status=ActionRequestStatus.PENDING,
+        )
+        action_request.action_template = self.action_template
+        action_request.save(update_fields=["action_template"])
+
+        with patch("world.scenes.action_services.award_kudos") as mock_award:
+            respond_to_action_request(action_request=action_request, decision=ConsentDecision.DENY)
+            # Verify award_kudos was NOT called
+            mock_award.assert_not_called()
