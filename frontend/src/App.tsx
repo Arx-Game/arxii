@@ -107,7 +107,7 @@ const RitualsListPage = lazy(() =>
 );
 
 // ---------------------------------------------------------------------------
-// Lazy-loaded Thread Hub page and Thread Detail page
+// Lazy-loaded Thread Hub page, Thread Detail page, and Teaching Offers page
 // ---------------------------------------------------------------------------
 
 const ThreadHubPage = lazy(() =>
@@ -116,6 +116,12 @@ const ThreadHubPage = lazy(() =>
 
 const ThreadDetailPage = lazy(() =>
   import('@/magic/pages/ThreadDetailPage').then((m) => ({ default: m.ThreadDetailPage }))
+);
+
+const WeavingTeachingOffersPage = lazy(() =>
+  import('@/magic/pages/WeavingTeachingOffersPage').then((m) => ({
+    default: m.WeavingTeachingOffersPage,
+  }))
 );
 
 // ---------------------------------------------------------------------------
@@ -505,6 +511,16 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <ThreadHubPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/threads/teaching"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <WeavingTeachingOffersPage />
               </ProtectedRoute>
             </Suspense>
           }
