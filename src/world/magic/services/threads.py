@@ -254,9 +254,17 @@ def _has_weaving_unlock(
             return base.filter(unlock__unlock_gift=target.gift).exists()  # type: ignore[union-attr]
         case TargetKind.ROOM:
             # Match if the unlock's room property is one of the anchor's properties.
-            return base.filter(
-                unlock__unlock_room_property__in=target.properties.all(),  # type: ignore[union-attr]
-            ).exists()
+            # ObjectDB exposes object_properties (ObjectProperty rows); we extract
+            # Property PKs via values_list and filter the unlock FK against them.
+            property_ids = list(
+                target.object_properties.values_list("property_id", flat=True)  # type: ignore[union-attr]
+            )
+            return (
+                bool(property_ids)
+                and base.filter(
+                    unlock__unlock_room_property_id__in=property_ids,
+                ).exists()
+            )
         case TargetKind.RELATIONSHIP_TRACK | TargetKind.RELATIONSHIP_CAPSTONE:
             # Both RelationshipTrackProgress and RelationshipCapstone expose .track
             track = target.track  # type: ignore[union-attr]  # noqa: GETATTR_LITERAL — both relationship anchor types expose .track

@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { useThreads, useThreadHubSummary, useCharacterResonances } from '../queries';
 import { ResonanceBalanceCard } from '../components/threads/ResonanceBalanceCard';
 import { ThreadCard } from '../components/threads/ThreadCard';
+import { WeaveThreadWizard } from '../components/threads/WeaveThreadWizard';
 import type { Thread, TargetKind } from '../types';
 
 /**
@@ -19,8 +21,13 @@ export function ThreadHubPage() {
   const { data: summary, isLoading: summaryLoading } = useThreadHubSummary();
   const { data: characterResonances, isLoading: resonancesLoading } = useCharacterResonances();
 
+  const [wizardOpen, setWizardOpen] = useState(false);
+
   const threads = threadsData?.results ?? [];
   const balancesLoading = summaryLoading || resonancesLoading;
+
+  // Derive characterSheetId for the wizard: prefer first resonance, fall back to first thread.
+  const characterSheetId = characterResonances?.[0]?.character_sheet ?? threads[0]?.owner ?? 0;
 
   // Group threads by target_kind
   const threadsByKind = threads.reduce<Record<string, Thread[]>>((acc, thread) => {
@@ -35,16 +42,23 @@ export function ThreadHubPage() {
   const nonEmptyKinds = Object.keys(threadsByKind) as TargetKind[];
 
   const handleThreadClick = (thread: Thread) => {
-    // TODO Task 16: thread detail page ships here — /threads/:id will resolve to ThreadDetailPage
     void navigate(`/threads/${thread.id}`);
   };
 
   const handleWeaveNew = () => {
-    // TODO Task 17: open the WeaveThreadWizard modal here
+    setWizardOpen(true);
   };
 
   return (
     <div className="container mx-auto space-y-8 px-4 py-8">
+      {/* Weave Thread Wizard modal */}
+      <WeaveThreadWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        summary={summary}
+        characterSheetId={characterSheetId}
+      />
+
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Your Threads</h1>

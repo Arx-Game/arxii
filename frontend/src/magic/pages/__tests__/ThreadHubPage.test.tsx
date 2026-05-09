@@ -23,6 +23,11 @@ vi.mock('@/magic/queries', () => ({
   useThreads: vi.fn(),
   useThreadHubSummary: vi.fn(),
   useCharacterResonances: vi.fn(),
+  useWeaveThread: vi.fn(),
+}));
+
+vi.mock('@/magic/components/threads/WeaveThreadWizard', () => ({
+  WeaveThreadWizard: () => null,
 }));
 
 import * as magicQueries from '@/magic/queries';
@@ -121,6 +126,13 @@ beforeEach(() => {
   vi.mocked(magicQueries.useThreadHubSummary).mockReturnValue(
     makeQueryResult(makeSummary()) as ReturnType<typeof magicQueries.useThreadHubSummary>
   );
+  vi.mocked(magicQueries.useWeaveThread).mockReturnValue({
+    mutate: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+    isSuccess: false,
+  } as unknown as ReturnType<typeof magicQueries.useWeaveThread>);
   vi.mocked(magicQueries.useCharacterResonances).mockReturnValue(
     makeQueryResult([]) as ReturnType<typeof magicQueries.useCharacterResonances>
   );
