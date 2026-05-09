@@ -102,12 +102,14 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911 — one arm per 
       CharacterTraitValue.character is a FK to ObjectDB, so we navigate
       thread.owner.character (CharacterSheet → ObjectDB) for the lookup.
     - TECHNIQUE: target_technique.level × 10
-    - RELATIONSHIP_TRACK: current tier_number of RelationshipTrackProgress × 10.
-      Uses RelationshipTrackProgress.current_tier (property returning the
-      highest RelationshipTier whose point_threshold ≤ developed_points);
-      defaults to 0 if no tier reached.
-    - RELATIONSHIP_CAPSTONE: character's current path stage × 10 (same
-      formula as path cap; capstone threads are gated by the mage's growth).
+    - RELATIONSHIP_TRACK: target_relationship_track.developed_points.
+      target_relationship_track is a FK to RelationshipTrackProgress;
+      developed_points reflects the relationship's accumulated permanent
+      depth on this track. anchor_cap grows continuously with relationship
+      depth (every point matters, not just tier thresholds).
+    - RELATIONSHIP_CAPSTONE: target_capstone.points. The capstone's own
+      points value (set at authoring time by the relationship system) is
+      the anchor cap. path_cap remains the absolute ceiling on Thread.level.
     - FACET: min(lifetime_earned // ANCHOR_CAP_FACET_DIVISOR,
       path_stage × ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE).
     - COVENANT_ROLE: current_level × 10.
