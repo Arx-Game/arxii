@@ -412,6 +412,7 @@ include = [
     "src/world/covenants",             # Covenant roles and speed ranks
     "src/world/items",                 # Items, equipment, facets (Spec D)
     "src/world/narrative",             # Narrative messages (IC deliveries to characters)
+    "src/world/locations",             # Location ambient stats with cascade
 ]
 exclude = [
     "**/tests/**",

@@ -77,6 +77,7 @@ INSTALLED_APPS += [
     "world.achievements.apps.AchievementsConfig",
     "world.tarot.apps.TarotConfig",
     "world.areas.apps.AreasConfig",
+    "world.locations.apps.LocationsConfig",
     "world.instances.apps.InstancesConfig",
     "world.journals.apps.JournalsConfig",
     "world.game_clock.apps.GameClockConfig",
