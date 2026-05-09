@@ -158,9 +158,21 @@ Lives in `src/world/relationships/models/shared_time.py` (new submodule). Not in
 
 #### 3.1 Scene closure (`SHARED_SCENE`)
 
-Hook: `world.scenes.services.close_scene` (verify exact path during implementation; if no service-level hook exists, add one — closing a scene is already a discrete operation).
+Hook: scene transition to `is_finished=True` (in `Scene.finish()` at `world/scenes/models.py`, or in a wrapping service if added). The implementation phase verifies whether to extend the model method or add a `close_scene_with_grants` service that wraps it.
 
-For every pair `(A, B)` of characters where both have a `SceneParticipation` row in the closing Scene with `is_active=True` (or the existing equivalent), grant Shared Time to both `A→B` and `B→A`. Amount:
+**Participant resolution.** `SceneParticipation` links `AccountDB`, not `CharacterSheet` (an account may have multiple alts). For Shared Time grants we need character-level resolution. The correct path is through `Persona`:
+
+> Iterate the distinct `Persona` rows referenced by the closing scene's `Interaction` rows where `persona_type IN (PRIMARY, ESTABLISHED)` (skipping TEMPORARY disguises so masquerade RP doesn't leak character identity into the ledger). Resolve `Persona.character_sheet` to get the `CharacterSheet`. Form unordered pairs from this set.
+
+Implementation note: query as `Persona.objects.filter(interactions_written__scene=scene, persona_type__in=[PRIMARY, ESTABLISHED]).distinct()` rather than fetching all interactions and deduplicating in Python. Single query, no N+1.
+
+This means a scene where Alice's PRIMARY persona and Bob's ESTABLISHED persona both posed produces a grant pair `(Alice, Bob)`. A scene where Alice's TEMPORARY persona posed produces no pair from Alice's side (her character identity is masked for ledger purposes — consistent with how Spec C handles masquerade in pose endorsements).
+
+For each unordered character pair `(A, B)` in the resolved set, write grants in both directions: to the `CharacterRelationship` rows `A→B` and `B→A` if they exist. **If either direction's `CharacterRelationship` row does not yet exist, the grant for that direction is silently dropped** — characters who haven't formally declared a relationship can't accrue Shared Time toward each other. Players who play together regularly will declare a first-impression relationship, after which grants begin accruing.
+
+**`is_pending` relationships:** grants apply to pending relationships normally. A pending row's currency accrues, ready to be spent once the mutual consent flips it active. (Capstone authoring already requires the relationship to exist; pending vs active is enforced at the capstone layer, not the grant layer.)
+
+Amount:
 
 ```
 amount = config.scene_grant_per_pair × scene_intensity_multiplier(scene)
@@ -182,15 +194,29 @@ Symmetric? **No — author-only.** Developments are reflective writeups by one c
 
 #### 3.3 Story episode closure (`STORY_EPISODE`)
 
-Hook: episode closure in `world/stories/services.py` (verify path — if no closure service exists yet, add a hook; episodes already have a closure concept per `Episode`). For every pair `(A, B)` where both have `StoryParticipation` rows on the closing Episode, grant `config.episode_grant_per_pair` to both `A→B` and `B→A`.
+Hook: `EpisodeResolution` creation (the existing closure record at `world/stories/models.py`).
+
+**Participant resolution.** `StoryParticipation` is at the Story level (FK to `Story`), not Episode level. There is no `EpisodeParticipation` model, and adding one is out of scope.
+
+The clean resolution: an Episode is composed of Scenes via the `EpisodeScene` join. Iterate every Scene attached to the closing Episode via `EpisodeScene`, gather the union of distinct character pairs from those scenes (using the same Persona-based resolution as §3.1), and grant once per pair at Episode-close.
+
+**Only formally-attached scenes count.** If a GM ran the episode through scenes that were never linked via `EpisodeScene`, those scenes still produced their own `SHARED_SCENE` grants but contribute nothing to the Episode-close grant. This is intentional — the `STORY_EPISODE` source rewards scenes the GM/players curated as part of this story arc, not adjacent RP that happened to occur in the same week.
+
+This **deliberately overlaps** with `SHARED_SCENE` grants — characters who played together across multiple scenes in an Episode get the per-scene `SHARED_SCENE` grants AND a single `STORY_EPISODE` grant when the Episode closes. The Episode-close grant represents "you went on this story arc together" as a higher-level recognition than the per-scene grants. Both sources are knob-tuned independently.
 
 Episode closure is naturally bounded (episodes don't close every minute), so no daily cap needed.
 
 #### 3.4 Combat encounter end (`COMBAT_ENCOUNTER`)
 
-Hook: combat encounter resolution in `world/combat/services/`. For every pair `(A, B)` where both are participants in the resolved encounter (regardless of side — sparring an enemy you respect builds bond too), grant `config.combat_grant_per_pair` to both directions.
+Hook: combat encounter resolution in `world/combat/services/` (specific service path verified during implementation — the encounter-end concept exists per Spec A's CombatPull lifecycle).
+
+**Participant resolution.** Combat encounters have a participant model (`CombatParticipant` or equivalent) that links to characters at the combat layer. For each pair `(A, B)` of distinct PC participants in the resolved encounter — regardless of which side they were on (sparring an enemy you respect builds bond too) — grant `config.combat_grant_per_pair` to both directions.
+
+NPC-only participants are excluded (no CharacterSheet to grant to). Mixed PC/NPC encounters fire grants only on the PC pairs.
 
 No daily cap; combat encounters are heavy events.
+
+**If `CombatParticipant` does not link to `CharacterSheet` directly** (e.g., links to `ObjectDB`), the implementation phase resolves to CharacterSheet via `ObjectDB.sheet_data` (the project pattern; see `world/progression/services/spends.py:54`). Skip silently for participants without a sheet.
 
 #### 3.5 Staff grant (`STAFF_GRANT`)
 
@@ -284,7 +310,9 @@ def create_capstone(*, relationship, author, ..., invested_amount, ...):
 
 **Why not allow `invested_amount > balance` and clamp?** Because narrative capstones are an explicit option (`invested_amount=0`). If a player wants to spend everything they have, they can pass `relationship.shared_time_balance` explicitly. Clamping silently would hide the trade-off.
 
-**Why not a per-spend cap?** Per user: "this is THE moment of our lives" should be permitted. Hoarding is bounded by `config.shared_time_balance_cap` (a knob, default high; a soft ceiling above which further accruals are dropped on the floor with a logged audit row).
+**Why not a per-spend cap?** Per user: "this is THE moment of our lives" should be permitted. Hoarding is bounded by `config.shared_time_balance_cap` (a knob, default high). When an accrual would push the balance above the cap, **the granted amount is clamped to fit** (so balance never exceeds the cap). The `SharedTimeGrant` audit row records the *clamped* amount actually applied — not the requested amount. This keeps audit math identity with balance math (sum of grant amounts = lifetime accrual). If we later want to surface "wasted accruals," that's a follow-up audit-only field; v1 is silent clamping.
+
+**`shared_time_lifetime` semantics under clamping:** `lifetime` increments by the clamped amount, not the requested amount. Lifetime is "how much you actually banked," which is the useful number for audit/achievements. A cap-induced loss is invisible in this metric.
 
 ### 5. Tier crossing detection
 
@@ -331,17 +359,18 @@ Important: tier crossings fire from any service that increments `developed_point
 
 #### 6.1 `compute_anchor_cap` rewrites
 
+`Thread.target_relationship_track` is a FK to `RelationshipTrackProgress` (per `world/magic/models/threads.py:354`), not to `RelationshipTrack`. The Thread already points at the per-relationship progress row that holds `developed_points`. No helper lookup needed.
+
 ```python
 case TargetKind.RELATIONSHIP_TRACK:
-    progress = _get_track_progress(thread.owner, thread.target_relationship_track)
-    return int(progress.developed_points if progress else 0)
+    return int(thread.target_relationship_track.developed_points)
 
 case TargetKind.RELATIONSHIP_CAPSTONE:
     return int(thread.target_capstone.points)
 ```
 
 Rationale:
-- For `RELATIONSHIP_TRACK`: developed_points is the most direct depth signal. Currently the formula uses `current_tier.tier_number × 10`, which loses information between tier thresholds. Using developed_points directly is monotonically increasing with relationship depth and gives Threads exactly as much room as the relationship has earned.
+- For `RELATIONSHIP_TRACK`: `RelationshipTrackProgress.developed_points` is the most direct depth signal. The current formula uses `current_tier.tier_number × 10`, which loses information between tier thresholds. Using developed_points directly is monotonically increasing with relationship depth and gives Threads exactly as much room as the relationship has earned.
 - For `RELATIONSHIP_CAPSTONE`: the capstone's own `points` field (now investment-driven) is the natural cap. A Thread woven on a 50-point capstone caps at 50; a Thread woven on a narrative-only capstone (`points=0`) is locked at 0 until the capstone is later re-invested (out of scope) or the player weaves on a different capstone.
 
 Soul Tether (Spec B) writes Sineater RELATIONSHIP_CAPSTONE Threads via `accept_soul_tether`. The new cap formula means freshly-formed Soul Tethers get Thread caps based on the formation capstone's `points`. Spec B's formation already creates a capstone via the formation ritual; this spec doesn't change Spec B but does require Spec B's formation capstone to be authored with `invested_amount > 0` (or with a staff override) to produce a non-zero Thread cap. Migration note: existing Soul Tether capstones from prior PRs will have `shared_time_invested=0`; their Thread caps reset to 0. **Documented as expected** — local dev DB is disposable, and Spec B's tests author capstones via factories which are updated to seed appropriate investment.
@@ -357,8 +386,7 @@ def _relationship_pull_multiplier(thread: Thread, config: RelationshipMagicConfi
     Returns 1.0 baseline plus a knob-driven contribution from underlying depth.
     """
     if thread.target_kind == TargetKind.RELATIONSHIP_TRACK:
-        progress = _get_track_progress(thread.owner, thread.target_relationship_track)
-        depth = progress.developed_points if progress else 0
+        depth = thread.target_relationship_track.developed_points
     elif thread.target_kind == TargetKind.RELATIONSHIP_CAPSTONE:
         depth = thread.target_capstone.points
     else:
@@ -421,13 +449,24 @@ When a capstone fires with `points > 0`, find the author's woven Threads matchin
 
 Practically v1: only the `RELATIONSHIP_TRACK` clause matters. Free development amount: `config.capstone_thread_dev_per_invested_point × capstone.shared_time_invested`. Capped by the Thread's `effective_cap` so we never push past the cap.
 
+Note: `Thread.target_relationship_track` is a FK to `RelationshipTrackProgress` (not `RelationshipTrack`). To find the author's woven Thread on the same track as the capstone, we filter through the progress row whose `track == capstone.track` and `relationship == capstone.relationship`.
+
 ```python
 def _grant_thread_development_on_capstone(capstone):
     config = get_relationship_magic_config()
     author = capstone.author  # CharacterSheet
-    track_threads = author.threads.active_filter(
+    # Find the RelationshipTrackProgress row for this capstone's relationship + track.
+    progress = RelationshipTrackProgress.objects.filter(
+        relationship=capstone.relationship,
+        track=capstone.track,
+    ).first()
+    if progress is None:
+        return
+    track_threads = Thread.objects.filter(
+        owner=author,
         target_kind=TargetKind.RELATIONSHIP_TRACK,
-        target_relationship_track=capstone.track,
+        target_relationship_track=progress,
+        retired_at__isnull=True,
     )
     for thread in track_threads:
         cap = compute_effective_cap(thread)
