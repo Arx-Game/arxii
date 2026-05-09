@@ -97,13 +97,28 @@ function RitualsListInner() {
     );
   }
 
+  // Filter out client_hosted rituals (hosted by specialized UI elsewhere, e.g., Thread Detail).
+  const displayedRituals = allRituals.filter((r) => !r.client_hosted);
+
+  if (displayedRituals.length === 0) {
+    return (
+      <p className="py-8 text-center text-muted-foreground">
+        No rituals available for your character at this time.
+      </p>
+    );
+  }
+
   // Partition rituals: SCENE_ACTION execution_kind is a proxy for "authored by you"
   // until Phase 10 backend adds author_account_id to the serializer.
   // When that lands, replace this with:
-  //   const authoredRituals = allRituals.filter(r => r.author_account_id === currentAccountId);
-  //   const knownRituals = allRituals.filter(r => r.author_account_id !== currentAccountId);
-  const authoredRituals = allRituals.filter((r) => (r.execution_kind as string) === 'SCENE_ACTION');
-  const knownRituals = allRituals.filter((r) => (r.execution_kind as string) !== 'SCENE_ACTION');
+  //   const authoredRituals = displayedRituals.filter(r => r.author_account_id === currentAccountId);
+  //   const knownRituals = displayedRituals.filter(r => r.author_account_id !== currentAccountId);
+  const authoredRituals = displayedRituals.filter(
+    (r) => (r.execution_kind as string) === 'SCENE_ACTION'
+  );
+  const knownRituals = displayedRituals.filter(
+    (r) => (r.execution_kind as string) !== 'SCENE_ACTION'
+  );
 
   const hasSections = authoredRituals.length > 0 && knownRituals.length > 0;
 
