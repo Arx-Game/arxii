@@ -14118,6 +14118,12 @@ export interface components {
      *     which delegates to ``weave_thread``. ``character_sheet_id`` must identify
      *     a CharacterSheet on an active roster tenure belonging to the requesting
      *     account (staff may pass any sheet).
+     *
+     *     Read-only computed fields (SerializerMethodFields):
+     *     - path_cap: the path-side cap (compute_path_cap)
+     *     - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
+     *       (AnchorCapNotImplemented is not yet spec'd)
+     *     - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
      */
     PatchedThreadRequest: {
       /** @description Resonance this thread channels. */
@@ -16163,6 +16169,12 @@ export interface components {
      *     which delegates to ``weave_thread``. ``character_sheet_id`` must identify
      *     a CharacterSheet on an active roster tenure belonging to the requesting
      *     account (staff may pass any sheet).
+     *
+     *     Read-only computed fields (SerializerMethodFields):
+     *     - path_cap: the path-side cap (compute_path_cap)
+     *     - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
+     *       (AnchorCapNotImplemented is not yet spec'd)
+     *     - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
      */
     Thread: {
       readonly id: number;
@@ -16191,6 +16203,12 @@ export interface components {
       readonly level: number;
       /** @description Permanent points; advances level via ThreadLevelUnlock entries. */
       readonly developed_points: number;
+      /** @description Return the path-side cap for this thread's owner. */
+      readonly path_cap: number;
+      /** @description Return the anchor-side cap, or None for ROOM threads (not yet implemented). */
+      readonly anchor_cap: number | null;
+      /** @description Return min(path_cap, anchor_cap), or None when anchor_cap is unavailable. */
+      readonly effective_cap: number | null;
       /**
        * Format: date-time
        * @description Set when owner soft-retires this thread; retired threads are excluded from list/detail views and from all pull / passive paths.
@@ -16265,6 +16283,12 @@ export interface components {
      *     which delegates to ``weave_thread``. ``character_sheet_id`` must identify
      *     a CharacterSheet on an active roster tenure belonging to the requesting
      *     account (staff may pass any sheet).
+     *
+     *     Read-only computed fields (SerializerMethodFields):
+     *     - path_cap: the path-side cap (compute_path_cap)
+     *     - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
+     *       (AnchorCapNotImplemented is not yet spec'd)
+     *     - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
      */
     ThreadRequest: {
       /** @description Resonance this thread channels. */

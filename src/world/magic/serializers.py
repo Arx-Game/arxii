@@ -664,6 +664,12 @@ class ThreadSerializer(serializers.ModelSerializer):
     which delegates to ``weave_thread``. ``character_sheet_id`` must identify
     a CharacterSheet on an active roster tenure belonging to the requesting
     account (staff may pass any sheet).
+
+    Read-only computed fields (SerializerMethodFields):
+    - path_cap: the path-side cap (compute_path_cap)
+    - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
+      (AnchorCapNotImplemented is not yet spec'd)
+    - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
     """
 
     resonance_name = serializers.CharField(source="resonance.name", read_only=True)
@@ -671,6 +677,9 @@ class ThreadSerializer(serializers.ModelSerializer):
     character_sheet_id = serializers.IntegerField(write_only=True, required=True)
     name = serializers.CharField(required=False, allow_blank=True, default="")
     description = serializers.CharField(required=False, allow_blank=True, default="")
+    path_cap = serializers.SerializerMethodField()
+    anchor_cap = serializers.SerializerMethodField()
+    effective_cap = serializers.SerializerMethodField()
 
     class Meta:
         model = Thread
@@ -686,6 +695,9 @@ class ThreadSerializer(serializers.ModelSerializer):
             "description",
             "level",
             "developed_points",
+            "path_cap",
+            "anchor_cap",
+            "effective_cap",
             "retired_at",
             "created_at",
             "updated_at",
@@ -695,10 +707,43 @@ class ThreadSerializer(serializers.ModelSerializer):
             "owner",
             "level",
             "developed_points",
+            "path_cap",
+            "anchor_cap",
+            "effective_cap",
             "retired_at",
             "created_at",
             "updated_at",
         ]
+
+    def get_path_cap(self, obj: Thread) -> int:
+        """Return the path-side cap for this thread's owner."""
+        from world.magic.services.threads import compute_path_cap  # noqa: PLC0415
+
+        return compute_path_cap(obj.owner)
+
+    def get_anchor_cap(self, obj: Thread) -> int | None:
+        """Return the anchor-side cap, or None for ROOM threads (not yet implemented)."""
+        from world.magic.exceptions import AnchorCapNotImplemented  # noqa: PLC0415
+        from world.magic.services.threads import compute_anchor_cap  # noqa: PLC0415
+
+        try:
+            return compute_anchor_cap(obj)
+        except AnchorCapNotImplemented:
+            return None
+
+    def get_effective_cap(self, obj: Thread) -> int | None:
+        """Return min(path_cap, anchor_cap), or None when anchor_cap is unavailable."""
+        from world.magic.exceptions import AnchorCapNotImplemented  # noqa: PLC0415
+        from world.magic.services.threads import (  # noqa: PLC0415
+            compute_anchor_cap,
+            compute_path_cap,
+        )
+
+        try:
+            anchor = compute_anchor_cap(obj)
+        except AnchorCapNotImplemented:
+            return None
+        return min(compute_path_cap(obj.owner), anchor)
 
     def validate_target_kind(self, value: str) -> str:
         """Ensure the discriminator is a valid TargetKind."""

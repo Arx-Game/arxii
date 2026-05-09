@@ -335,6 +335,59 @@ class ThreadViewSetTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("COVENANT_ROLE", str(response.data))
 
+    # ------------------------------------------------------------------
+    # Cap fields: path_cap, anchor_cap, effective_cap (Task 16)
+    # ------------------------------------------------------------------
+
+    def test_retrieve_includes_cap_fields(self) -> None:
+        """GET /api/magic/threads/{id}/ includes path_cap, anchor_cap, effective_cap."""
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(
+            reverse("magic:thread-detail", args=[self.thread.pk]),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertIn("path_cap", response.data)
+        self.assertIn("anchor_cap", response.data)
+        self.assertIn("effective_cap", response.data)
+
+    def test_retrieve_cap_fields_are_integers_for_trait_thread(self) -> None:
+        """Cap fields are integers for a TRAIT thread (TRAIT has a CharacterTraitValue)."""
+        from world.traits.factories import CharacterTraitValueFactory
+
+        # Wire a CharacterTraitValue so compute_anchor_cap returns a real number.
+        CharacterTraitValueFactory(
+            character=self.sheet.character,
+            trait=self.trait,
+            value=3,
+        )
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(
+            reverse("magic:thread-detail", args=[self.thread.pk]),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        # anchor_cap = trait.value = 3; path_cap ≥ 10 (stage 0 → min 1 × 10)
+        self.assertIsInstance(response.data["path_cap"], int)
+        self.assertIsInstance(response.data["anchor_cap"], int)
+        self.assertEqual(response.data["anchor_cap"], 3)
+        self.assertIsInstance(response.data["effective_cap"], int)
+        # effective_cap = min(path_cap, anchor_cap)
+        self.assertEqual(
+            response.data["effective_cap"],
+            min(response.data["path_cap"], response.data["anchor_cap"]),
+        )
+
+    def test_list_includes_cap_fields(self) -> None:
+        """GET /api/magic/threads/ list rows also expose cap fields."""
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(reverse("magic:thread-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data["results"]
+        self.assertTrue(len(results) >= 1)
+        first = results[0]
+        self.assertIn("path_cap", first)
+        self.assertIn("anchor_cap", first)
+        self.assertIn("effective_cap", first)
+
 
 class ThreadPullPreviewTests(APITestCase):
     """Tests for POST /api/magic/thread-pull-preview/ (Spec A §5.6)."""

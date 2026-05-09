@@ -516,8 +516,29 @@ export async function imbueThread(body: ImbueRequest): Promise<ImbueResponse> {
     character_sheet_id: body.character_sheet_id,
     kwargs: body.kwargs,
   });
-  // performRitual already throws on error; map to our response shape
-  return { success: true, message: (res as unknown as { message?: string }).message };
+  // performRitual already throws on error; map to our response shape.
+  // The backend wraps the ThreadImbueResult dataclass in `result`.
+  const raw = res as unknown as {
+    message?: string;
+    result?: {
+      resonance_spent?: number;
+      developed_points_added?: number;
+      levels_gained?: number;
+      new_level?: number;
+      new_developed_points?: number;
+      blocked_by?: string;
+    };
+  };
+  return {
+    success: true,
+    message: raw.message,
+    resonance_spent: raw.result?.resonance_spent,
+    developed_points_added: raw.result?.developed_points_added,
+    levels_gained: raw.result?.levels_gained,
+    new_level: raw.result?.new_level,
+    new_developed_points: raw.result?.new_developed_points,
+    blocked_by: raw.result?.blocked_by,
+  };
 }
 
 /**

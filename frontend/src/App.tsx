@@ -107,11 +107,15 @@ const RitualsListPage = lazy(() =>
 );
 
 // ---------------------------------------------------------------------------
-// Lazy-loaded Thread Hub page
+// Lazy-loaded Thread Hub page and Thread Detail page
 // ---------------------------------------------------------------------------
 
 const ThreadHubPage = lazy(() =>
   import('@/magic/pages/ThreadHubPage').then((m) => ({ default: m.ThreadHubPage }))
+);
+
+const ThreadDetailPage = lazy(() =>
+  import('@/magic/pages/ThreadDetailPage').then((m) => ({ default: m.ThreadDetailPage }))
 );
 
 // ---------------------------------------------------------------------------
@@ -493,7 +497,7 @@ function App() {
         />
 
         {/* ------------------------------------------------------------------ */}
-        {/* Thread Hub                                                           */}
+        {/* Thread Hub + Thread Detail                                          */}
         {/* ------------------------------------------------------------------ */}
         <Route
           path="/threads"
@@ -501,6 +505,16 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <ThreadHubPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/threads/:id"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <ThreadDetailPage />
               </ProtectedRoute>
             </Suspense>
           }

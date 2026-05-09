@@ -232,6 +232,21 @@ export interface ImbueRequest {
 export interface ImbueResponse {
   success: boolean;
   message?: string;
+  /** Resonance units spent this imbue call. */
+  resonance_spent?: number;
+  /** Developed points accrued this call. */
+  developed_points_added?: number;
+  /** Thread levels advanced this call (0 if blocked before levelling). */
+  levels_gained?: number;
+  /** New thread level after imbuing. */
+  new_level?: number;
+  /** New developed_points total after imbuing. */
+  new_developed_points?: number;
+  /**
+   * Why the imbue was blocked (or "NONE" if it succeeded fully).
+   * NONE | XP_LOCK | ANCHOR_CAP | PATH_CAP | INSUFFICIENT_BUCKET
+   */
+  blocked_by?: string;
 }
 
 // ---------------------------------------------------------------------------
