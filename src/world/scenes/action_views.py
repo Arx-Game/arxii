@@ -179,9 +179,9 @@ class SceneActionRequestViewSet(viewsets.ModelViewSet):
                 action_request=action_request,
                 decision=decision,
             )
-        except ValueError as exc:
+        except ValueError as _exc:
             return Response(
-                {"detail": str(exc)},
+                {"detail": "Unable to process this action request."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
