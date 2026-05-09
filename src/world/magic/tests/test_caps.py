@@ -20,13 +20,31 @@ class AnchorCapTests(TestCase):
         thread = ThreadFactory(as_technique_thread=True, _technique_level=3)
         self.assertEqual(compute_anchor_cap(thread), 30)
 
-    def test_relationship_track_cap_tier_index_times_ten(self) -> None:
-        thread = ThreadFactory(as_track_thread=True, _track_tier_index=4)
-        self.assertEqual(compute_anchor_cap(thread), 40)
+    def test_relationship_track_cap_zero_when_no_developed_points(self) -> None:
+        thread = ThreadFactory(as_track_thread=True, _developed_points=0)
+        self.assertEqual(compute_anchor_cap(thread), 0)
 
-    def test_relationship_capstone_cap_path_stage_times_ten(self) -> None:
-        thread = ThreadFactory(as_capstone_thread=True, _path_stage=2)
-        self.assertEqual(compute_anchor_cap(thread), 20)
+    def test_relationship_track_cap_reflects_developed_points_continuously(self) -> None:
+        """anchor_cap = developed_points directly. Every point matters, not just tier thresholds."""
+        thread = ThreadFactory(as_track_thread=True, _developed_points=37)
+        self.assertEqual(compute_anchor_cap(thread), 37)
+
+    def test_relationship_track_cap_scales_with_deeper_relationships(self) -> None:
+        thread = ThreadFactory(as_track_thread=True, _developed_points=500)
+        self.assertEqual(compute_anchor_cap(thread), 500)
+
+    def test_relationship_capstone_cap_zero_when_capstone_has_no_points(self) -> None:
+        thread = ThreadFactory(as_capstone_thread=True, _capstone_points=0)
+        self.assertEqual(compute_anchor_cap(thread), 0)
+
+    def test_relationship_capstone_cap_reflects_capstone_points(self) -> None:
+        """anchor_cap = target_capstone.points. Capstone significance drives Thread cap."""
+        thread = ThreadFactory(as_capstone_thread=True, _capstone_points=50)
+        self.assertEqual(compute_anchor_cap(thread), 50)
+
+    def test_relationship_capstone_cap_scales_with_capstone_size(self) -> None:
+        thread = ThreadFactory(as_capstone_thread=True, _capstone_points=500)
+        self.assertEqual(compute_anchor_cap(thread), 500)
 
     def test_room_raises_not_implemented(self) -> None:
         thread = ThreadFactory(as_room_thread=True)

@@ -124,12 +124,7 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911 — one arm per 
         case TargetKind.TECHNIQUE:
             return int(thread.target_technique.level * 10)
         case TargetKind.RELATIONSHIP_TRACK:
-            # current_tier returns the highest RelationshipTier unlocked by
-            # developed_points, or None if the relationship hasn't reached any
-            # tier threshold yet.
-            tier = thread.target_relationship_track.current_tier
-            tier_number = tier.tier_number if tier is not None else 0
-            return int(tier_number * 10)
+            return int(thread.target_relationship_track.developed_points)
         case TargetKind.RELATIONSHIP_CAPSTONE:
             stage = _current_path_stage(thread.owner)
             return int(stage * 10)
