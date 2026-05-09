@@ -1,7 +1,10 @@
 /**
  * Magic API functions
  *
- * Covers Soul Tether endpoints, Thread reads, and CharacterResonance reads.
+ * Covers Soul Tether endpoints, Thread reads, CharacterResonance reads,
+ * Thread Hub Summary, Thread mutations (weave/patch/retire/imbue/cross-xp-lock),
+ * pull preview/commit, teaching offers, and rooms-by-property.
+ *
  * Uses apiFetch from @/evennia_replacements/api.
  *
  * Note: Soul Tether *formation* (acceptance) goes through
@@ -9,15 +12,29 @@
  */
 
 import { apiFetch } from '@/evennia_replacements/api';
+import { getRituals } from '@/rituals/api';
 import type {
+  AcceptTeachingOfferRequest,
+  AcceptTeachingOfferResponse,
   CharacterResonance,
+  CrossXPLockRequest,
+  CrossXPLockResponse,
   DissolveRequest,
+  ImbueRequest,
+  ImbueResponse,
   PaginatedPendingStageAdvanceOfferList,
   PaginatedSineatingPendingOfferList,
+  PaginatedTeachingOfferList,
   PaginatedThreadList,
+  PatchThreadRequest,
   PendingStageAdvanceOffer,
+  PullCommitRequest,
+  PullCommitResponse,
+  PullPreviewRequest,
+  PullPreviewResponse,
   RescueOutcome,
   RescueRequest,
+  RoomBrief,
   SineatingOffer,
   SineatingPendingOffer,
   SineatingRequest,
@@ -27,6 +44,9 @@ import type {
   StageAdvanceBonusResult,
   StageAdvanceRespondRequest,
   TetherBond,
+  Thread,
+  ThreadHubSummary,
+  WeaveThreadRequest,
 } from './types';
 
 // ---------------------------------------------------------------------------
@@ -58,6 +78,11 @@ const SOUL_TETHER_URL = '/api/magic/soul-tether';
 const THREADS_URL = '/api/magic/threads';
 const CHAR_RESONANCES_URL = '/api/magic/character-resonances';
 const RELATIONSHIPS_URL = '/api/relationships/relationships';
+const THREAD_HUB_SUMMARY_URL = '/api/magic/thread-hub-summary/';
+const THREAD_PULL_PREVIEW_URL = '/api/magic/thread-pull-preview/';
+const THREAD_PULL_COMMIT_URL = '/api/magic/thread-pull-commit/';
+const TEACHING_OFFERS_URL = '/api/magic/teaching-offers';
+const ROOMS_BY_PROPERTY_URL = '/api/magic/rooms-by-property/';
 
 // ---------------------------------------------------------------------------
 // Soul Tether reads
@@ -321,4 +346,311 @@ export async function getMyTetherBonds(myCharacterSheetId: number): Promise<Teth
   }
 
   return bonds;
+}
+
+// ---------------------------------------------------------------------------
+// Thread Hub Summary
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/magic/thread-hub-summary/
+ *
+ * Returns balances, ready/near-lock/blocked thread ids, and weaving eligibility
+ * for the acting character. Pass characterSheetId for alt-guard disambiguation.
+ */
+export async function getThreadHubSummary(characterSheetId?: number): Promise<ThreadHubSummary> {
+  const url = characterSheetId
+    ? `${THREAD_HUB_SUMMARY_URL}?character_sheet_id=${characterSheetId}`
+    : THREAD_HUB_SUMMARY_URL;
+  const res = await apiFetch(url);
+  if (!res.ok) throw new Error('Failed to load thread hub summary');
+  return res.json() as Promise<ThreadHubSummary>;
+}
+
+// ---------------------------------------------------------------------------
+// Thread CRUD + actions
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/magic/threads/{id}/
+ *
+ * Returns the Thread with the given PK.
+ */
+export async function getThread(id: number): Promise<Thread> {
+  const res = await apiFetch(`${THREADS_URL}/${id}/`);
+  if (!res.ok) throw new Error(`Failed to load thread ${id}`);
+  return res.json() as Promise<Thread>;
+}
+
+/**
+ * POST /api/magic/threads/
+ *
+ * Weaves a new Thread for the given character/resonance/target combination.
+ */
+export async function weaveThread(body: WeaveThreadRequest): Promise<Thread> {
+  const res = await apiFetch(`${THREADS_URL}/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await parseErrorDetail(res, 'Failed to weave thread');
+  }
+  return res.json() as Promise<Thread>;
+}
+
+/**
+ * PATCH /api/magic/threads/{id}/
+ *
+ * Partially updates the thread's narrative fields (name, description).
+ */
+export async function patchThreadNarrative(id: number, body: PatchThreadRequest): Promise<Thread> {
+  const res = await apiFetch(`${THREADS_URL}/${id}/`, {
+    method: 'PATCH',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await parseErrorDetail(res, `Failed to update thread ${id}`);
+  }
+  return res.json() as Promise<Thread>;
+}
+
+/**
+ * DELETE /api/magic/threads/{id}/
+ *
+ * Soft-retires the thread. Returns no body on success (204).
+ */
+export async function retireThread(id: number): Promise<void> {
+  const res = await apiFetch(`${THREADS_URL}/${id}/`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    await parseErrorDetail(res, `Failed to retire thread ${id}`);
+  }
+}
+
+/**
+ * POST /api/magic/threads/{id}/cross_xp_lock/
+ *
+ * Spends XP to cross an XP-lock boundary on the thread.
+ * Returns {thread_id, unlocked_level, xp_spent} on success.
+ */
+export async function crossXPLock(
+  threadId: number,
+  body: CrossXPLockRequest
+): Promise<CrossXPLockResponse> {
+  const res = await apiFetch(`${THREADS_URL}/${threadId}/cross_xp_lock/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await parseErrorDetail(res, `Failed to cross XP lock on thread ${threadId}`);
+  }
+  return res.json() as Promise<CrossXPLockResponse>;
+}
+
+// ---------------------------------------------------------------------------
+// Imbue Thread
+//
+// Imbuing is a SERVICE ritual — POST /api/magic/rituals/perform/ with kwargs
+// { thread_id, amount }. getImbuingRitualId() looks up the Ritual whose
+// service_function_path contains 'spend_resonance_for_imbuing'.
+// ---------------------------------------------------------------------------
+
+const _IMBUING_SERVICE_PATH = 'spend_resonance_for_imbuing';
+
+/**
+ * @internal
+ * Module-level cache for the imbuing ritual id.
+ * Reset in tests via __resetImbuingRitualIdCacheForTests().
+ */
+let _imbuingRitualIdCache: number | null = null;
+
+/**
+ * Exported ONLY for use in beforeEach in test files. Do not call in production code.
+ */
+export function __resetImbuingRitualIdCacheForTests(): void {
+  _imbuingRitualIdCache = null;
+}
+
+/**
+ * Resolves the Ritual PK whose service_function_path wraps spend_resonance_for_imbuing.
+ * Result is cached in module scope.
+ */
+async function getImbuingRitualId(): Promise<number> {
+  if (_imbuingRitualIdCache !== null) return _imbuingRitualIdCache;
+
+  const paginatedList = await getRituals();
+  const rituals = paginatedList.results ?? [];
+
+  // The Ritual schema omits service_function_path from generated types (it is
+  // server-internal); cast through unknown to access the field safely.
+  const imbuing = rituals.find((r) => {
+    const raw = r as unknown as { service_function_path?: string };
+    return (
+      typeof raw.service_function_path === 'string' &&
+      raw.service_function_path.includes(_IMBUING_SERVICE_PATH)
+    );
+  });
+
+  if (!imbuing) {
+    throw new Error('Imbuing ritual not found — ensure the Ritual seed exists on this server');
+  }
+
+  _imbuingRitualIdCache = imbuing.id;
+  return imbuing.id;
+}
+
+/**
+ * Imbue a thread by spending resonance via the imbuing service ritual.
+ *
+ * Internally resolves the imbuing ritual id (cached after first call) and
+ * dispatches POST /api/magic/rituals/perform/ with kwargs { thread_id, amount }.
+ */
+export async function imbueThread(body: ImbueRequest): Promise<ImbueResponse> {
+  const { performRitual } = await import('@/rituals/api');
+  const res = await performRitual({
+    ritual_id: body.ritual_id,
+    character_sheet_id: body.character_sheet_id,
+    kwargs: body.kwargs,
+  });
+  // performRitual already throws on error; map to our response shape.
+  // The backend wraps the ThreadImbueResult dataclass in `result`.
+  const raw = res as unknown as {
+    message?: string;
+    result?: {
+      resonance_spent?: number;
+      developed_points_added?: number;
+      levels_gained?: number;
+      new_level?: number;
+      new_developed_points?: number;
+      blocked_by?: string;
+    };
+  };
+  return {
+    success: true,
+    message: raw.message,
+    resonance_spent: raw.result?.resonance_spent,
+    developed_points_added: raw.result?.developed_points_added,
+    levels_gained: raw.result?.levels_gained,
+    new_level: raw.result?.new_level,
+    new_developed_points: raw.result?.new_developed_points,
+    blocked_by: raw.result?.blocked_by,
+  };
+}
+
+/**
+ * Resolve the imbuing ritual id and perform imbuing in one call.
+ * This is the preferred API for UI usage.
+ */
+export async function imbueThreadAuto(
+  characterSheetId: number,
+  threadId: number,
+  amount: number
+): Promise<ImbueResponse> {
+  const ritualId = await getImbuingRitualId();
+  return imbueThread({
+    ritual_id: ritualId,
+    character_sheet_id: characterSheetId,
+    kwargs: { thread_id: threadId, amount },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Pull Preview
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/magic/thread-pull-preview/
+ *
+ * Returns a dry-run of pull effects without committing resonance.
+ * Use this for user-facing previews; debounce at the call site.
+ */
+export async function previewPull(body: PullPreviewRequest): Promise<PullPreviewResponse> {
+  const res = await apiFetch(THREAD_PULL_PREVIEW_URL, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await parseErrorDetail(res, 'Failed to preview pull effects');
+  }
+  return res.json() as Promise<PullPreviewResponse>;
+}
+
+// ---------------------------------------------------------------------------
+// Pull Commit
+// ---------------------------------------------------------------------------
+
+/**
+ * POST /api/magic/thread-pull-commit/
+ *
+ * Commits the pull: spends resonance and applies effects.
+ */
+export async function commitPull(body: PullCommitRequest): Promise<PullCommitResponse> {
+  const res = await apiFetch(THREAD_PULL_COMMIT_URL, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    await parseErrorDetail(res, 'Failed to commit pull');
+  }
+  return res.json() as Promise<PullCommitResponse>;
+}
+
+// ---------------------------------------------------------------------------
+// Teaching Offers
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/magic/teaching-offers/
+ *
+ * Returns paginated ThreadWeavingTeachingOffer records visible to the caller.
+ */
+export async function getTeachingOffers(): Promise<PaginatedTeachingOfferList> {
+  const res = await apiFetch(`${TEACHING_OFFERS_URL}/`);
+  if (!res.ok) throw new Error('Failed to load teaching offers');
+  return res.json() as Promise<PaginatedTeachingOfferList>;
+}
+
+/**
+ * POST /api/magic/teaching-offers/{id}/accept/
+ *
+ * Accepts a ThreadWeavingTeachingOffer on behalf of the requesting learner.
+ * Returns {id, unlock_id, xp_spent} for the new CharacterThreadWeavingUnlock.
+ */
+export async function acceptTeachingOffer(
+  offerId: number,
+  body?: AcceptTeachingOfferRequest
+): Promise<AcceptTeachingOfferResponse> {
+  const res = await apiFetch(`${TEACHING_OFFERS_URL}/${offerId}/accept/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    await parseErrorDetail(res, `Failed to accept teaching offer ${offerId}`);
+  }
+  return res.json() as Promise<AcceptTeachingOfferResponse>;
+}
+
+// ---------------------------------------------------------------------------
+// Rooms by property
+// ---------------------------------------------------------------------------
+
+/**
+ * GET /api/magic/rooms-by-property/?property_id=N&property_id=M...
+ *
+ * Returns rooms that have all specified property tags.
+ * Used by the thread-weaving room picker.
+ */
+export async function getRoomsByProperty(propertyIds: number[]): Promise<RoomBrief[]> {
+  const params = propertyIds.map((id) => `property_id=${id}`).join('&');
+  const url = params ? `${ROOMS_BY_PROPERTY_URL}?${params}` : ROOMS_BY_PROPERTY_URL;
+  const res = await apiFetch(url);
+  if (!res.ok) throw new Error('Failed to load rooms by property');
+  return res.json() as Promise<RoomBrief[]>;
 }

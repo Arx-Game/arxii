@@ -106,6 +106,7 @@ const knownRitual: RitualWithSchema = {
   narrative_prose: 'The sineater reaches across the veil.',
   execution_kind: 'SERVICE',
   input_schema: null,
+  client_hosted: false,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any;
 
@@ -116,6 +117,7 @@ const authoredRitual: RitualWithSchema = {
   narrative_prose: 'Breath in, breath out.',
   execution_kind: 'SCENE_ACTION',
   input_schema: null,
+  client_hosted: false,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any;
 
@@ -126,6 +128,18 @@ const knownRitual2: RitualWithSchema = {
   narrative_prose: null,
   execution_kind: 'FLOW',
   input_schema: null,
+  client_hosted: false,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+} as any;
+
+const clientHostedRitual: RitualWithSchema = {
+  id: 4,
+  name: 'Imbuing',
+  description: 'Hosted by Thread Detail page.',
+  narrative_prose: 'Weave threads into resonance.',
+  execution_kind: 'FLOW',
+  input_schema: null,
+  client_hosted: true,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any;
 
@@ -375,5 +389,27 @@ describe('RitualsListPage', () => {
       expect(screen.getByTestId('mock-scene-action-detail-panel')).toBeInTheDocument();
     });
     expect(screen.getByTestId('detail-panel-ritual-name')).toHaveTextContent('My Anima Ritual');
+  });
+
+  // 11. client_hosted rituals are filtered out from both sections
+  it('filters out client_hosted rituals from display', () => {
+    mockUseRituals.mockReturnValue({
+      isLoading: false,
+      data: { results: [knownRitual, clientHostedRitual, authoredRitual] },
+    });
+
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <RitualsListPage />
+      </Wrapper>
+    );
+
+    // Non-client_hosted rituals should appear
+    expect(screen.getByText('Soul Tether')).toBeInTheDocument();
+    expect(screen.getByText('My Anima Ritual')).toBeInTheDocument();
+
+    // client_hosted ritual should NOT appear
+    expect(screen.queryByText('Imbuing')).not.toBeInTheDocument();
   });
 });

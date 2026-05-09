@@ -107,6 +107,24 @@ const RitualsListPage = lazy(() =>
 );
 
 // ---------------------------------------------------------------------------
+// Lazy-loaded Thread Hub page, Thread Detail page, and Teaching Offers page
+// ---------------------------------------------------------------------------
+
+const ThreadHubPage = lazy(() =>
+  import('@/magic/pages/ThreadHubPage').then((m) => ({ default: m.ThreadHubPage }))
+);
+
+const ThreadDetailPage = lazy(() =>
+  import('@/magic/pages/ThreadDetailPage').then((m) => ({ default: m.ThreadDetailPage }))
+);
+
+const WeavingTeachingOffersPage = lazy(() =>
+  import('@/magic/pages/WeavingTeachingOffersPage').then((m) => ({
+    default: m.WeavingTeachingOffersPage,
+  }))
+);
+
+// ---------------------------------------------------------------------------
 // Suspense fallback — shown while lazy stories chunks load
 // ---------------------------------------------------------------------------
 
@@ -479,6 +497,40 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <RitualsListPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Thread Hub + Thread Detail                                          */}
+        {/* ------------------------------------------------------------------ */}
+        <Route
+          path="/threads"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <ThreadHubPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/threads/teaching"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <WeavingTeachingOffersPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/threads/:id"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <ThreadDetailPage />
               </ProtectedRoute>
             </Suspense>
           }

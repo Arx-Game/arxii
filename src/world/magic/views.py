@@ -13,13 +13,15 @@ import dataclasses
 from dataclasses import asdict
 from typing import cast
 
-from django.db.models import Count, Prefetch
+from django.db.models import Count, F, Prefetch
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from evennia.accounts.models import AccountDB
-from rest_framework import mixins, serializers, status, viewsets
+from evennia.objects.models import ObjectDB
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.filters import OrderingFilter, SearchFilter
@@ -69,12 +71,16 @@ from world.magic.models import (
 )
 from world.magic.permissions import IsRitualAuthorOrStaff, IsThreadOwner
 from world.magic.serializers import (
+    AcceptTeachingOfferResponseSerializer,
+    AcceptTeachingOfferSerializer,
     AlterationResolutionSerializer,
     CantripSerializer,
     CharacterAnimaSerializer,
     CharacterAuraSerializer,
     CharacterGiftSerializer,
     CharacterResonanceSerializer,
+    CrossXPLockResponseSerializer,
+    CrossXPLockSerializer,
     EffectTypeSerializer,
     FacetSerializer,
     FacetTreeSerializer,
@@ -89,9 +95,13 @@ from world.magic.serializers import (
     RitualPatchSerializer,
     RitualPerformRequestSerializer,
     RitualSerializer,
+    RoomBriefSerializer,
     SceneEntryEndorsementSerializer,
     TechniqueSerializer,
     TechniqueStyleSerializer,
+    ThreadHubSummarySerializer,
+    ThreadPullCommitRequestSerializer,
+    ThreadPullCommitResponseSerializer,
     ThreadPullPreviewRequestSerializer,
     ThreadPullPreviewResponseSerializer,
     ThreadSerializer,
@@ -102,6 +112,7 @@ from world.magic.services import (
     preview_resonance_pull,
     resolve_pending_alteration,
 )
+from world.magic.services.auth import _resolve_actor_sheet, _resolve_endorser_sheet
 from world.magic.services.gain import account_for_sheet
 from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
@@ -567,6 +578,37 @@ class ThreadViewSet(viewsets.ModelViewSet):
         thread.save(update_fields=["retired_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @extend_schema(
+        request=CrossXPLockSerializer,
+        responses={200: CrossXPLockResponseSerializer},
+    )
+    @action(detail=True, methods=["post"])
+    def cross_xp_lock(self, request: Request, pk: int | None = None) -> Response:
+        """Pay XP to unlock the next level boundary on this thread (Spec A §3.2).
+
+        POST /api/magic/threads/{id}/cross-xp-lock/
+
+        Request body: ``{boundary_level}`` — the XP-locked boundary level to unlock.
+        Response: ``{thread_id, unlocked_level, xp_spent}``.
+        Idempotent: repeat calls with the same boundary_level return the existing
+        ThreadLevelUnlock without re-spending XP.
+        """
+        thread = self.get_object()
+        serializer = CrossXPLockSerializer(
+            data=request.data,
+            context={"request": request, "thread": thread},
+        )
+        serializer.is_valid(raise_exception=True)
+        unlock = serializer.save()
+        return Response(
+            {
+                "thread_id": thread.pk,
+                "unlocked_level": unlock.unlocked_level,
+                "xp_spent": unlock.xp_spent,
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 class ThreadPullPreviewView(APIView):
     """Read-only preview of a resonance pull (Spec A §5.6).
@@ -580,6 +622,10 @@ class ThreadPullPreviewView(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=ThreadPullPreviewRequestSerializer,
+        responses={200: ThreadPullPreviewResponseSerializer},
+    )
     def post(self, request: Request) -> Response:
         """Run the preview and return its wire representation."""
         serializer = ThreadPullPreviewRequestSerializer(
@@ -630,6 +676,41 @@ class ThreadPullPreviewView(APIView):
 
         response_serializer = ThreadPullPreviewResponseSerializer(result)
         return Response(response_serializer.data)
+
+
+class ThreadPullCommitView(APIView):
+    """Atomic commit of a resonance pull (Spec A §5.4 + §7.4).
+
+    POST /api/magic/thread-pull-commit/
+
+    Request body: ``{character_sheet_id, resonance_id, tier, thread_ids[],
+    action_context?}``.  The ``action_context`` dict may carry
+    ``combat_encounter_id`` + ``combat_participant_id`` (combat mode) or be
+    absent / empty (ephemeral mode).
+
+    Response: ``{resonance_spent, anima_spent, resolved_effects[]}``.
+    Mutates state: debits resonance + anima, and — in combat mode — persists a
+    ``CombatPull`` row with ``CombatPullResolvedEffect`` snapshots.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=ThreadPullCommitRequestSerializer,
+        responses={200: ThreadPullCommitResponseSerializer},
+    )
+    def post(self, request: Request) -> Response:
+        """Dispatch the pull and return the commit result."""
+        serializer = ThreadPullCommitRequestSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        result = serializer.save()
+        return Response(
+            ThreadPullCommitResponseSerializer(result).data,
+            status=status.HTTP_200_OK,
+        )
 
 
 class RitualViewSet(viewsets.ModelViewSet):
@@ -753,50 +834,46 @@ class ThreadWeavingTeachingOfferViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_class = ThreadWeavingTeachingOfferFilter
 
+    @extend_schema(
+        request=AcceptTeachingOfferSerializer,
+        responses={201: AcceptTeachingOfferResponseSerializer},
+    )
+    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated])
+    def accept(self, request: Request, pk: int | None = None) -> Response:
+        """Accept a ThreadWeavingTeachingOffer on behalf of the requesting learner.
+
+        POST /api/magic/teaching-offers/{id}/accept/
+
+        The requesting account must have at least one active tenure.  If the
+        account has multiple active tenures the body must include
+        ``learner_sheet_id`` to identify which character is learning.
+        """
+        offer = self.get_object()
+        serializer = AcceptTeachingOfferSerializer(
+            data=request.data,
+            context={"request": request, "offer": offer},
+        )
+        serializer.is_valid(raise_exception=True)
+        char_unlock = serializer.save()
+        return Response(
+            {
+                "id": char_unlock.pk,
+                "unlock_id": char_unlock.unlock_id,
+                "xp_spent": char_unlock.xp_spent,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
 
 # =============================================================================
 # Resonance Pivot Spec C — Pose + Scene Entry Endorsement surfaces (Tasks 23, 24)
 # =============================================================================
 
 # Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
-_ERR_NO_ACTIVE_SHEET = "No active character sheet for this account."
-_ERR_ENDORSER_SHEET_REQUIRED = (
-    "endorser_sheet_id is required when account has multiple active tenures."
-)
-_ERR_ENDORSER_SHEET_INVALID = "Requested endorser_sheet_id is not among your active tenures."
 _ERR_ENDORSEMENT_SETTLED = "Endorsement already settled."
 
-
-def _resolve_endorser_sheet(request: Request) -> CharacterSheet:
-    """Return the CharacterSheet to use as endorser for an incoming request.
-
-    Single active tenure → return that sheet.
-    Multiple active tenures → require explicit ``endorser_sheet_id`` in the POST
-    body (alt system guard — no implicit first-sheet selection per project
-    conventions).
-    No active tenures → raise PermissionDenied.
-
-    Shared by PoseEndorsementViewSet and SceneEntryEndorsementViewSet.
-    """
-    account = request.user
-    sheets = list(
-        CharacterSheet.objects.filter(
-            roster_entry__tenures__player_data__account=account,
-            roster_entry__tenures__end_date__isnull=True,
-        )
-    )
-    if not sheets:
-        raise PermissionDenied(_ERR_NO_ACTIVE_SHEET)
-    if len(sheets) == 1:
-        return sheets[0]
-    # Multiple active tenures — explicit sheet required.
-    requested_pk = request.data.get("endorser_sheet_id")  # noqa: STRING_LITERAL — HTTP request body key
-    if requested_pk is None:
-        raise serializers.ValidationError({"endorser_sheet_id": _ERR_ENDORSER_SHEET_REQUIRED})
-    try:
-        return next(s for s in sheets if s.pk == int(requested_pk))
-    except (StopIteration, ValueError) as exc:
-        raise PermissionDenied(_ERR_ENDORSER_SHEET_INVALID) from exc
+# _resolve_actor_sheet and _resolve_endorser_sheet are imported at the top of this module
+# from world.magic.services.auth — see import section above.
 
 
 class PoseEndorsementViewSet(
@@ -1182,3 +1259,95 @@ class StageAdvanceRespondView(APIView):
 
         out = StageAdvanceBonusResultSerializer(result)
         return Response(out.data, status=status.HTTP_200_OK)
+
+
+# =============================================================================
+# Thread Hub Summary (GET /api/magic/thread-hub-summary/)
+# =============================================================================
+
+
+class ThreadHubSummaryView(APIView):
+    """Aggregate dashboard payload for the Thread Hub page.
+
+    Returns resonance balances, prospect ID lists (ready/near-xp-lock/blocked),
+    and per-TargetKind weaving eligibility flags in one round-trip.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        responses={200: ThreadHubSummarySerializer},
+    )
+    def get(self, request: Request) -> Response:
+        """Return the Thread Hub summary for the acting character."""
+        from world.magic.services.threads import (  # noqa: PLC0415
+            imbue_ready_threads,
+            near_xp_lock_threads,
+            threads_blocked_by_cap,
+            weaving_eligibility_for,
+        )
+
+        sheet = _resolve_actor_sheet(request, body_key="character_sheet_id", from_query=True)
+        balances = [
+            {
+                "resonance_id": cr.resonance_id,
+                "balance": cr.balance,
+                "lifetime_earned": cr.lifetime_earned,
+                "flavor_text": cr.flavor_text,
+            }
+            for cr in CharacterResonance.objects.filter(character_sheet=sheet)
+        ]
+        ready = [t.pk for t in imbue_ready_threads(sheet)]
+        near = [
+            {
+                "thread_id": p.thread.pk,
+                "boundary_level": p.boundary_level,
+                "xp_cost": p.xp_cost,
+                "dev_points_to_boundary": p.dev_points_to_boundary,
+            }
+            for p in near_xp_lock_threads(sheet)
+        ]
+        blocked = [t.pk for t in threads_blocked_by_cap(sheet)]
+        eligibility = weaving_eligibility_for(sheet)
+        payload = {
+            "balances": balances,
+            "ready_thread_ids": ready,
+            "near_xp_lock_thread_ids": near,
+            "blocked_thread_ids": blocked,
+            "weaving_eligibility": eligibility,
+        }
+        return Response(ThreadHubSummarySerializer(payload).data)
+
+
+# =============================================================================
+# Rooms-by-property (GET /api/magic/rooms-by-property/)
+# =============================================================================
+
+
+class RoomsByPropertyView(APIView):
+    """List rooms (ObjectDB) bearing any of the requested Property ids.
+
+    Used by the Weave Thread wizard to populate the ROOM-anchor picker.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        responses={200: RoomBriefSerializer(many=True)},
+    )
+    def get(self, request: Request) -> Response:
+        """Return rooms that have at least one matching ObjectProperty."""
+        from world.magic.serializers import RoomsByPropertyQuerySerializer  # noqa: PLC0415
+
+        serializer = RoomsByPropertyQuerySerializer(
+            data={"property_ids": request.query_params.getlist("property_id")},
+        )
+        serializer.is_valid(raise_exception=True)
+        ids = serializer.validated_data["property_ids"]
+        rooms = (
+            ObjectDB.objects.filter(object_properties__property__in=ids)
+            .annotate(name=F("db_key"))
+            .distinct()
+            .values("id", "name")
+        )
+        return Response(list(rooms))

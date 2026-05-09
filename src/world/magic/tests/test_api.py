@@ -37,7 +37,13 @@ from world.traits.factories import TraitFactory
 
 
 def _link_account_to_sheet(account, character, sheet):
-    """Tie an AccountDB to a CharacterSheet via an active RosterTenure."""
+    """Tie an AccountDB to a CharacterSheet via an active RosterTenure.
+
+    Also sets character.account so that service functions that navigate
+    character_sheet.character.account resolve correctly.
+    """
+    character.account = account
+    account.characters.add(character)
     return RosterTenureFactory(
         roster_entry__character_sheet=sheet,
         player_data__account=account,
@@ -328,6 +334,59 @@ class ThreadViewSetTests(APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("COVENANT_ROLE", str(response.data))
+
+    # ------------------------------------------------------------------
+    # Cap fields: path_cap, anchor_cap, effective_cap (Task 16)
+    # ------------------------------------------------------------------
+
+    def test_retrieve_includes_cap_fields(self) -> None:
+        """GET /api/magic/threads/{id}/ includes path_cap, anchor_cap, effective_cap."""
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(
+            reverse("magic:thread-detail", args=[self.thread.pk]),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertIn("path_cap", response.data)
+        self.assertIn("anchor_cap", response.data)
+        self.assertIn("effective_cap", response.data)
+
+    def test_retrieve_cap_fields_are_integers_for_trait_thread(self) -> None:
+        """Cap fields are integers for a TRAIT thread (TRAIT has a CharacterTraitValue)."""
+        from world.traits.factories import CharacterTraitValueFactory
+
+        # Wire a CharacterTraitValue so compute_anchor_cap returns a real number.
+        CharacterTraitValueFactory(
+            character=self.sheet.character,
+            trait=self.trait,
+            value=3,
+        )
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(
+            reverse("magic:thread-detail", args=[self.thread.pk]),
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        # anchor_cap = trait.value = 3; path_cap ≥ 10 (stage 0 → min 1 × 10)
+        self.assertIsInstance(response.data["path_cap"], int)
+        self.assertIsInstance(response.data["anchor_cap"], int)
+        self.assertEqual(response.data["anchor_cap"], 3)
+        self.assertIsInstance(response.data["effective_cap"], int)
+        # effective_cap = min(path_cap, anchor_cap)
+        self.assertEqual(
+            response.data["effective_cap"],
+            min(response.data["path_cap"], response.data["anchor_cap"]),
+        )
+
+    def test_list_includes_cap_fields(self) -> None:
+        """GET /api/magic/threads/ list rows also expose cap fields."""
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(reverse("magic:thread-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data["results"]
+        self.assertTrue(len(results) >= 1)
+        first = results[0]
+        self.assertIn("path_cap", first)
+        self.assertIn("anchor_cap", first)
+        self.assertIn("effective_cap", first)
 
 
 class ThreadPullPreviewTests(APITestCase):
@@ -860,7 +919,11 @@ class RitualViewSetTests(APITestCase):
         names = [r["name"] for r in results]
         self.assertIn("example_ritual", names)
         # Find our specific ritual in the results
-        target = next(r for r in results if r["name"] == "example_ritual")
+        target = next((r for r in results if r["name"] == "example_ritual"), None)
+        self.assertIsNotNone(
+            target,
+            f"'example_ritual' not found in results: {[r['name'] for r in results]}",
+        )
         self.assertEqual(target["input_schema"]["fields"][0]["name"], "x")
 
     def test_detail_returns_one_ritual(self):
@@ -877,3 +940,46 @@ class RitualViewSetTests(APITestCase):
             response.status_code,
             (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
         )
+
+
+class TestRitualClientHosted(APITestCase):
+    """Verify that Ritual.client_hosted is exposed by the list endpoint with correct values.
+
+    Creates one generic ritual (client_hosted=False) and one Imbuing ritual
+    (client_hosted=True), authenticates a player, and asserts both values are
+    present and correct in the /api/magic/rituals/ response.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.user = AccountFactory(username="client_hosted_test_user")
+        cls.generic_ritual = RitualFactory(name="generic_hosted_test_ritual")
+        cls.imbuing_ritual = ImbuingRitualFactory()
+
+    def setUp(self) -> None:
+        self.client.force_authenticate(self.user)
+
+    def test_client_hosted_false_on_generic_ritual(self) -> None:
+        url = reverse("magic:ritual-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get("results", response.data)
+        target = next((r for r in results if r["name"] == "generic_hosted_test_ritual"), None)
+        self.assertIsNotNone(
+            target,
+            f"'generic_hosted_test_ritual' not found in results: {[r['name'] for r in results]}",
+        )
+        self.assertIn("client_hosted", target)
+        self.assertFalse(target["client_hosted"])
+
+    def test_client_hosted_true_on_imbuing_ritual(self) -> None:
+        url = reverse("magic:ritual-list")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get("results", response.data)
+        target = next((r for r in results if r["name"] == "Rite of Imbuing"), None)
+        self.assertIsNotNone(
+            target, f"'Rite of Imbuing' not found in results: {[r['name'] for r in results]}"
+        )
+        self.assertIn("client_hosted", target)
+        self.assertTrue(target["client_hosted"])

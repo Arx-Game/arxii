@@ -102,6 +102,13 @@ class Ritual(SharedMemoryModel):
         blank=True,
         related_name="ritual_sites",
     )
+    client_hosted = models.BooleanField(
+        default=False,
+        help_text=(
+            "When True, the generic Rituals listing page hides this ritual; "
+            "it has a specialized host UI elsewhere (e.g., Thread Detail for Imbuing)."
+        ),
+    )
 
     class Meta:
         constraints = [

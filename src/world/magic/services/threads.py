@@ -254,9 +254,17 @@ def _has_weaving_unlock(
             return base.filter(unlock__unlock_gift=target.gift).exists()  # type: ignore[union-attr]
         case TargetKind.ROOM:
             # Match if the unlock's room property is one of the anchor's properties.
-            return base.filter(
-                unlock__unlock_room_property__in=target.properties.all(),  # type: ignore[union-attr]
-            ).exists()
+            # ObjectDB exposes object_properties (ObjectProperty rows); we extract
+            # Property PKs via values_list and filter the unlock FK against them.
+            property_ids = list(
+                target.object_properties.values_list("property_id", flat=True)  # type: ignore[union-attr]
+            )
+            return (
+                bool(property_ids)
+                and base.filter(
+                    unlock__unlock_room_property_id__in=property_ids,
+                ).exists()
+            )
         case TargetKind.RELATIONSHIP_TRACK | TargetKind.RELATIONSHIP_CAPSTONE:
             # Both RelationshipTrackProgress and RelationshipCapstone expose .track
             track = target.track  # type: ignore[union-attr]  # noqa: GETATTR_LITERAL — both relationship anchor types expose .track
@@ -362,6 +370,12 @@ def update_thread_narrative(
 # Imbuing-ritual UI queries (Spec A §3.6)
 # =============================================================================
 
+# TODO(perf): The three prospect helpers below each fire a Thread.objects.filter(owner=...)
+# query; ThreadHubSummaryView calls all three, so a hub render is 3 thread queries plus
+# any per-kind anchor-cap queries (compute_anchor_cap hits CharacterTraitValue,
+# current_tier traversal, etc.). Acceptable at low thread counts but worth profiling
+# if a character grows past ~20 threads.
+
 
 def imbue_ready_threads(character_sheet: CharacterSheet) -> list[Thread]:
     """Return threads that have matching CharacterResonance balance > 0 and level < cap.
@@ -445,6 +459,33 @@ def threads_blocked_by_cap(character_sheet: CharacterSheet) -> list[Thread]:
     threads = list(Thread.objects.filter(owner=character_sheet, retired_at__isnull=True))
     path_cap = compute_path_cap(character_sheet)
     return [t for t in threads if t.level >= min(path_cap, compute_anchor_cap(t))]
+
+
+def weaving_eligibility_for(character_sheet: CharacterSheet) -> dict[str, bool]:
+    """Return whether the character has at least one weaving unlock per TargetKind.
+
+    Returns a dict keyed by TargetKind values (strings), all False for a character
+    with no unlocks. COVENANT_ROLE is special: it requires the character to have
+    ever held any covenant role (no authored ThreadWeavingUnlock for this kind).
+    """
+    unlocks = list(
+        CharacterThreadWeavingUnlock.objects.filter(
+            character=character_sheet,
+        ).select_related("unlock")
+    )
+    eligibility: dict[str, bool] = {kind.value: False for kind in TargetKind}
+    for cu in unlocks:
+        eligibility[cu.unlock.target_kind] = True
+
+    # COVENANT_ROLE eligibility: character has ever held any covenant role.
+    # The CharacterCovenantRoleHandler is accessed via character.covenant_roles.
+    from world.covenants.models import CharacterCovenantRole  # noqa: PLC0415
+
+    eligibility[TargetKind.COVENANT_ROLE.value] = CharacterCovenantRole.objects.filter(
+        character_sheet=character_sheet
+    ).exists()
+
+    return eligibility
 
 
 # =============================================================================

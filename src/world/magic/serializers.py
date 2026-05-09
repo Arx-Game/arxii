@@ -19,6 +19,7 @@ from world.magic.models import (
     CharacterAura,
     CharacterGift,
     CharacterResonance,
+    CharacterThreadWeavingUnlock,
     EffectType,
     Facet,
     Gift,
@@ -36,6 +37,7 @@ from world.magic.models import (
     Technique,
     TechniqueStyle,
     Thread,
+    ThreadLevelUnlock,
     ThreadWeavingTeachingOffer,
 )
 from world.roster.models import RosterEntry
@@ -662,6 +664,12 @@ class ThreadSerializer(serializers.ModelSerializer):
     which delegates to ``weave_thread``. ``character_sheet_id`` must identify
     a CharacterSheet on an active roster tenure belonging to the requesting
     account (staff may pass any sheet).
+
+    Read-only computed fields (SerializerMethodFields):
+    - path_cap: the path-side cap (compute_path_cap)
+    - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
+      (AnchorCapNotImplemented is not yet spec'd)
+    - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
     """
 
     resonance_name = serializers.CharField(source="resonance.name", read_only=True)
@@ -669,6 +677,9 @@ class ThreadSerializer(serializers.ModelSerializer):
     character_sheet_id = serializers.IntegerField(write_only=True, required=True)
     name = serializers.CharField(required=False, allow_blank=True, default="")
     description = serializers.CharField(required=False, allow_blank=True, default="")
+    path_cap = serializers.SerializerMethodField()
+    anchor_cap = serializers.SerializerMethodField()
+    effective_cap = serializers.SerializerMethodField()
 
     class Meta:
         model = Thread
@@ -684,6 +695,9 @@ class ThreadSerializer(serializers.ModelSerializer):
             "description",
             "level",
             "developed_points",
+            "path_cap",
+            "anchor_cap",
+            "effective_cap",
             "retired_at",
             "created_at",
             "updated_at",
@@ -693,10 +707,43 @@ class ThreadSerializer(serializers.ModelSerializer):
             "owner",
             "level",
             "developed_points",
+            "path_cap",
+            "anchor_cap",
+            "effective_cap",
             "retired_at",
             "created_at",
             "updated_at",
         ]
+
+    def get_path_cap(self, obj: Thread) -> int:
+        """Return the path-side cap for this thread's owner."""
+        from world.magic.services.threads import compute_path_cap  # noqa: PLC0415
+
+        return compute_path_cap(obj.owner)
+
+    def get_anchor_cap(self, obj: Thread) -> int | None:
+        """Return the anchor-side cap, or None for ROOM threads (not yet implemented)."""
+        from world.magic.exceptions import AnchorCapNotImplemented  # noqa: PLC0415
+        from world.magic.services.threads import compute_anchor_cap  # noqa: PLC0415
+
+        try:
+            return compute_anchor_cap(obj)
+        except AnchorCapNotImplemented:
+            return None
+
+    def get_effective_cap(self, obj: Thread) -> int | None:
+        """Return min(path_cap, anchor_cap), or None when anchor_cap is unavailable."""
+        from world.magic.exceptions import AnchorCapNotImplemented  # noqa: PLC0415
+        from world.magic.services.threads import (  # noqa: PLC0415
+            compute_anchor_cap,
+            compute_path_cap,
+        )
+
+        try:
+            anchor = compute_anchor_cap(obj)
+        except AnchorCapNotImplemented:
+            return None
+        return min(compute_path_cap(obj.owner), anchor)
 
     def validate_target_kind(self, value: str) -> str:
         """Ensure the discriminator is a valid TargetKind."""
@@ -849,6 +896,7 @@ class RitualSerializer(serializers.ModelSerializer):
             "input_schema",
             "author_account_id",
             "scene_action_config",
+            "client_hosted",
         ]
         read_only_fields = fields
 
@@ -973,6 +1021,7 @@ class ThreadWeavingTeachingOfferSerializer(serializers.ModelSerializer):
     unlock_target_kind = serializers.CharField(source="unlock.target_kind", read_only=True)
     unlock_display_name = serializers.CharField(source="unlock.display_name", read_only=True)
     unlock_xp_cost = serializers.IntegerField(source="unlock.xp_cost", read_only=True)
+    effective_xp_cost_for_viewer = serializers.SerializerMethodField()
 
     class Meta:
         model = ThreadWeavingTeachingOffer
@@ -983,10 +1032,98 @@ class ThreadWeavingTeachingOfferSerializer(serializers.ModelSerializer):
             "unlock_target_kind",
             "unlock_display_name",
             "unlock_xp_cost",
+            "effective_xp_cost_for_viewer",
             "pitch",
             "gold_cost",
         ]
         read_only_fields = fields
+
+    def _get_viewer_sheets(self, request) -> list:
+        """Return the viewer's active CharacterSheets, cached on the request object.
+
+        Called once per list response — caches the result on ``request`` so that
+        N rows do not trigger N tenant-resolution queries.
+        """
+        cache_attr = "_cached_viewer_sheets"  # noqa: STRING_LITERAL — private cache slot name
+        if not hasattr(request, cache_attr):
+            setattr(
+                request,
+                cache_attr,
+                list(
+                    CharacterSheet.objects.filter(
+                        roster_entry__tenures__player_data__account=request.user,
+                        roster_entry__tenures__end_date__isnull=True,
+                    )
+                ),
+            )
+        return getattr(request, cache_attr)
+
+    def get_effective_xp_cost_for_viewer(self, obj: ThreadWeavingTeachingOffer) -> int | None:
+        """Compute the Path-multiplied XP cost for the requesting learner.
+
+        Returns the integer cost when the viewer has exactly one active tenure
+        OR provides a ``learner_sheet_id`` query param to disambiguate.
+        Returns ``None`` for ambiguous (multi-tenure, no key) or no-tenure cases.
+
+        Uses ``_get_viewer_sheets`` so the tenant-resolution query fires only once
+        per list response, not once per row.
+        """
+        from world.magic.services.threads import compute_thread_weaving_xp_cost  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is None:
+            return None
+
+        sheets = self._get_viewer_sheets(request)
+        if not sheets:
+            return None
+        if len(sheets) == 1:
+            learner = sheets[0]
+        else:
+            # Multi-tenure: require explicit learner_sheet_id query param.
+            requested_pk = request.query_params.get(  # noqa: STRING_LITERAL — query param key
+                "learner_sheet_id"
+            )
+            if requested_pk is None:
+                return None
+            try:
+                learner = next(s for s in sheets if s.pk == int(requested_pk))
+            except (StopIteration, ValueError):
+                return None
+
+        return compute_thread_weaving_xp_cost(obj.unlock, learner)
+
+
+class AcceptTeachingOfferSerializer(serializers.Serializer):
+    """Serializer for accepting a ThreadWeavingTeachingOffer (Spec A §6.1).
+
+    Optional ``learner_sheet_id`` disambiguates the learner when the requesting
+    account has multiple active tenures (alt-guard).  The view provides the
+    offer instance via serializer context as ``"offer"``.
+    """
+
+    learner_sheet_id = serializers.IntegerField(required=False, allow_null=True)
+
+    def validate(self, attrs: dict) -> dict:  # type: ignore[override]
+        """Resolve the learner sheet using the alt-guard helper."""
+        from world.magic.services.auth import _resolve_actor_sheet  # noqa: PLC0415
+
+        request = self.context["request"]
+        learner = _resolve_actor_sheet(request, body_key="learner_sheet_id")  # noqa: STRING_LITERAL — body key name
+        attrs["learner"] = learner
+        return attrs
+
+    def create(self, validated_data: dict) -> CharacterThreadWeavingUnlock:  # type: ignore[override]
+        """Call accept_thread_weaving_unlock; catch XPInsufficient → ValidationError."""
+        from world.magic.exceptions import XPInsufficient  # noqa: PLC0415
+        from world.magic.services.threads import accept_thread_weaving_unlock  # noqa: PLC0415
+
+        learner = validated_data["learner"]
+        offer = self.context["offer"]
+        try:
+            return accept_thread_weaving_unlock(learner, offer)
+        except XPInsufficient as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -1887,3 +2024,320 @@ class StageAdvanceBonusResultSerializer(serializers.Serializer):
     hollow_drained = serializers.IntegerField()
     strain_severity_added = serializers.IntegerField()
     declined = serializers.BooleanField()
+
+
+class CrossXPLockSerializer(serializers.Serializer):
+    """Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A §3.2)."""
+
+    boundary_level = serializers.IntegerField(min_value=1)
+
+    def create(self, validated_data: dict) -> ThreadLevelUnlock:
+        from world.magic.exceptions import (  # noqa: PLC0415
+            AnchorCapExceeded,
+            InvalidImbueAmount,
+            XPInsufficient,
+        )
+        from world.magic.services import cross_thread_xp_lock  # noqa: PLC0415
+
+        thread = self.context["thread"]
+        try:
+            return cross_thread_xp_lock(
+                character_sheet=thread.owner,
+                thread=thread,
+                boundary_level=validated_data["boundary_level"],
+            )
+        except (XPInsufficient, AnchorCapExceeded, InvalidImbueAmount) as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+
+# ---------------------------------------------------------------------------
+# Thread-pull commit (Spec A §5.4 + §7.4)
+# ---------------------------------------------------------------------------
+
+_ERR_COMBAT_CONTEXT_INCOMPLETE = (  # noqa: STRING_LITERAL — module constant
+    "combat_encounter_id and combat_participant_id must both be set or both absent."
+)
+_ERR_THREAD_NOT_FOUND_COMMIT = (  # noqa: STRING_LITERAL — module constant
+    "One or more thread_ids not found or not owned by the character."
+)
+_ERR_COMBAT_ENCOUNTER_NOT_FOUND = "Combat encounter not found."  # noqa: STRING_LITERAL — module constant
+_ERR_COMBAT_PARTICIPANT_NOT_FOUND = "Combat participant not found."  # noqa: STRING_LITERAL — module constant
+
+
+class PullActionContextCommitSerializer(serializers.Serializer):
+    """Wire shape for the optional ``action_context`` block in a pull commit.
+
+    Extends ``PullActionContextSerializer`` (used by the preview endpoint) with
+    the additional fields the commit path consumes: ``combat_participant_id`` and
+    the anchor-ID lists.  All fields are optional because ephemeral (non-combat)
+    pulls omit them entirely.
+    """
+
+    action_kind = serializers.CharField(required=False, allow_blank=True)
+    anchors_in_play = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
+    combat_encounter_id = serializers.IntegerField(required=False, allow_null=True)
+    combat_participant_id = serializers.IntegerField(required=False, allow_null=True)
+    involved_trait_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
+    involved_technique_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
+    involved_object_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        default=list,
+    )
+
+
+class ThreadPullCommitRequestSerializer(serializers.Serializer):
+    """Request serializer for POST /api/magic/thread-pull-commit/.
+
+    ``character_sheet_id`` is required and must identify a CharacterSheet owned
+    by the requesting account (staff may pass any sheet).
+
+    ``action_context`` carries optional combat context.  If
+    ``combat_encounter_id`` is set, ``combat_participant_id`` must also be
+    set (and vice versa).  Omitting the whole dict or leaving both fields
+    absent signals an ephemeral (RP) pull with no CombatPull row written.
+    """
+
+    character_sheet_id = serializers.IntegerField()
+    resonance_id = serializers.IntegerField()
+    tier = serializers.IntegerField(min_value=1, max_value=3)
+    thread_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+        max_length=20,
+    )
+    action_context = PullActionContextCommitSerializer(required=False)
+
+    def validate_character_sheet_id(self, value: int) -> "CharacterSheet":
+        """Resolve and ownership-check the caller-supplied character_sheet_id."""
+        request = self.context.get("request")
+        return _resolve_account_sheet(value, request)
+
+    def validate(self, attrs: dict) -> dict:
+        """Cross-field: combat_encounter_id and combat_participant_id must be paired."""
+        ctx = attrs.get("action_context") or {}
+        has_encounter = bool(ctx.get("combat_encounter_id"))
+        has_participant = bool(ctx.get("combat_participant_id"))
+        if has_encounter != has_participant:
+            raise serializers.ValidationError(_ERR_COMBAT_CONTEXT_INCOMPLETE)
+        return attrs
+
+    def create(self, validated_data: dict) -> object:
+        """Build PullActionContext, fetch threads, dispatch spend_resonance_for_pull.
+
+        Catches all expected service exceptions and re-raises as
+        ``serializers.ValidationError`` so the view stays thin.
+        """
+        from world.magic.exceptions import (  # noqa: PLC0415
+            InvalidImbueAmount,
+            NoMatchingWornFacetItemsError,
+            ProtagonismLockedError,
+            ResonanceInsufficient,
+        )
+        from world.magic.services.resonance import spend_resonance_for_pull  # noqa: PLC0415
+        from world.magic.types import PullActionContext  # noqa: PLC0415
+
+        sheet: CharacterSheet = validated_data["character_sheet_id"]
+        resonance_id: int = validated_data["resonance_id"]
+        tier: int = validated_data["tier"]
+        thread_ids: list[int] = validated_data["thread_ids"]
+        ctx_dict: dict = validated_data.get("action_context") or {}
+
+        # Resolve Resonance.
+        try:
+            resonance = Resonance.objects.get(pk=resonance_id)
+        except Resonance.DoesNotExist as exc:
+            raise serializers.ValidationError(_ERR_RESONANCE_NOT_FOUND) from exc
+
+        # Resolve threads — filter by owner so non-owned threads surface as
+        # "not found" rather than leaking data about other characters.
+        threads = list(
+            Thread.objects.filter(
+                pk__in=thread_ids,
+                owner=sheet,
+                retired_at__isnull=True,
+            ).select_related("resonance", "owner", "target_facet")
+        )
+        if len(threads) != len(thread_ids):
+            raise serializers.ValidationError(_ERR_THREAD_NOT_FOUND_COMMIT)
+
+        # Build PullActionContext.
+        combat_encounter = None
+        participant = None
+        if ctx_dict.get("combat_encounter_id"):
+            from world.combat.models import CombatEncounter, CombatParticipant  # noqa: PLC0415
+
+            try:
+                combat_encounter = CombatEncounter.objects.get(pk=ctx_dict["combat_encounter_id"])
+            except CombatEncounter.DoesNotExist as exc:
+                raise serializers.ValidationError(_ERR_COMBAT_ENCOUNTER_NOT_FOUND) from exc
+            try:
+                participant = CombatParticipant.objects.get(
+                    pk=ctx_dict["combat_participant_id"],
+                    encounter=combat_encounter,
+                )
+            except CombatParticipant.DoesNotExist as exc:
+                raise serializers.ValidationError(_ERR_COMBAT_PARTICIPANT_NOT_FOUND) from exc
+
+        action_context = PullActionContext(
+            combat_encounter=combat_encounter,
+            participant=participant,
+            involved_traits=tuple(ctx_dict.get("involved_trait_ids") or []),
+            involved_techniques=tuple(ctx_dict.get("involved_technique_ids") or []),
+            involved_objects=tuple(ctx_dict.get("involved_object_ids") or []),
+        )
+
+        try:
+            return spend_resonance_for_pull(
+                character_sheet=sheet,
+                resonance=resonance,
+                tier=tier,
+                threads=threads,
+                action_context=action_context,
+            )
+        except ProtagonismLockedError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        except ResonanceInsufficient as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        except InvalidImbueAmount as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+        except NoMatchingWornFacetItemsError as exc:
+            raise serializers.ValidationError(exc.user_message) from exc
+
+
+class ResolvedPullEffectCommitSerializer(serializers.Serializer):
+    """Wire shape for a single ResolvedPullEffect in the commit response.
+
+    Mirrors ResolvedPullEffectSerializer (used for preview) but also exposes
+    ``granted_capability_id`` (which the commit path includes) and uses
+    source-accessor notation for ``source_thread_id``.
+    """
+
+    kind = serializers.CharField()
+    authored_value = serializers.IntegerField(allow_null=True)
+    level_multiplier = serializers.IntegerField()
+    scaled_value = serializers.IntegerField(allow_null=True)
+    vital_target = serializers.CharField(allow_null=True)
+    source_thread_id = serializers.IntegerField(source="source_thread.pk")
+    source_thread_level = serializers.IntegerField()
+    source_tier = serializers.IntegerField()
+    granted_capability_id = serializers.SerializerMethodField()
+    narrative_snippet = serializers.CharField()
+    inactive = serializers.BooleanField()
+    inactive_reason = serializers.CharField(allow_null=True)
+
+    def get_granted_capability_id(self, obj: object) -> int | None:
+        """Return the granted_capability PK, or None if absent."""
+        from world.magic.types import ResolvedPullEffect  # noqa: PLC0415
+
+        if isinstance(obj, ResolvedPullEffect) and obj.granted_capability is not None:
+            return obj.granted_capability.pk
+        return None
+
+
+class ThreadPullCommitResponseSerializer(serializers.Serializer):
+    """Response serializer for POST /api/magic/thread-pull-commit/."""
+
+    resonance_spent = serializers.IntegerField()
+    anima_spent = serializers.IntegerField()
+    resolved_effects = ResolvedPullEffectCommitSerializer(many=True)
+
+
+# =============================================================================
+# Thread Hub Summary (GET /api/magic/thread-hub-summary/)
+# =============================================================================
+
+
+class _NearXPLockProspectSerializer(serializers.Serializer):
+    """One entry in the near-xp-lock list returned by ThreadHubSummaryView."""
+
+    thread_id = serializers.IntegerField()
+    boundary_level = serializers.IntegerField()
+    xp_cost = serializers.IntegerField()
+    dev_points_to_boundary = serializers.IntegerField()
+
+
+class _ResonanceBalanceSerializer(serializers.Serializer):
+    """One resonance balance entry returned by ThreadHubSummaryView."""
+
+    resonance_id = serializers.IntegerField()
+    balance = serializers.IntegerField()
+    lifetime_earned = serializers.IntegerField()
+    flavor_text = serializers.CharField(allow_blank=True)
+
+
+class ThreadHubSummarySerializer(serializers.Serializer):
+    """Response serializer for GET /api/magic/thread-hub-summary/."""
+
+    balances = _ResonanceBalanceSerializer(many=True)
+    ready_thread_ids = serializers.ListField(child=serializers.IntegerField())
+    near_xp_lock_thread_ids = _NearXPLockProspectSerializer(many=True)
+    blocked_thread_ids = serializers.ListField(child=serializers.IntegerField())
+    weaving_eligibility = serializers.DictField(child=serializers.BooleanField())
+
+
+# =============================================================================
+# Rooms-by-property (GET /api/magic/rooms-by-property/)
+# =============================================================================
+
+
+class RoomsByPropertyQuerySerializer(serializers.Serializer):
+    """Validates query params for RoomsByPropertyView.
+
+    Repeated ``?property_id=N`` params are gathered by the view and fed
+    into this serializer as a list, keeping validation declarative.
+    """
+
+    property_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+    )
+
+
+# =============================================================================
+# Response serializers for @extend_schema decorators
+# =============================================================================
+
+
+class CrossXPLockResponseSerializer(serializers.Serializer):
+    """Response shape for ThreadViewSet.cross_xp_lock (Spec A §3.2).
+
+    Returned by POST /api/magic/threads/{id}/cross-xp-lock/ on success.
+    """
+
+    thread_id = serializers.IntegerField()
+    unlocked_level = serializers.IntegerField()
+    xp_spent = serializers.IntegerField()
+
+
+class AcceptTeachingOfferResponseSerializer(serializers.Serializer):
+    """Response shape for ThreadWeavingTeachingOfferViewSet.accept (Spec A §6.1).
+
+    Returned by POST /api/magic/teaching-offers/{id}/accept/ on success.
+    """
+
+    id = serializers.IntegerField()
+    unlock_id = serializers.IntegerField()
+    xp_spent = serializers.IntegerField()
+
+
+class RoomBriefSerializer(serializers.Serializer):
+    """One room entry returned by RoomsByPropertyView.
+
+    Response shape: ``{id, name}``.
+    """
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()

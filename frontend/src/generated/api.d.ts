@@ -5700,6 +5700,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/rooms-by-property/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return rooms that have at least one matching ObjectProperty. */
+    get: operations['magic_rooms_by_property_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/scene-entry-endorsements/': {
     parameters: {
       query?: never;
@@ -6053,6 +6070,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/teaching-offers/{id}/accept/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Accept a ThreadWeavingTeachingOffer on behalf of the requesting learner.
+     *
+     *     POST /api/magic/teaching-offers/{id}/accept/
+     *
+     *     The requesting account must have at least one active tenure.  If the
+     *     account has multiple active tenures the body must include
+     *     ``learner_sheet_id`` to identify which character is learning.
+     */
+    post: operations['magic_teaching_offers_accept_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/techniques/': {
     parameters: {
       query?: never;
@@ -6113,6 +6155,40 @@ export interface paths {
      *     Provides CRUD access to techniques for character creation.
      */
     patch: operations['magic_techniques_partial_update'];
+    trace?: never;
+  };
+  '/api/magic/thread-hub-summary/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Return the Thread Hub summary for the acting character. */
+    get: operations['magic_thread_hub_summary_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/thread-pull-commit/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Dispatch the pull and return the commit result. */
+    post: operations['magic_thread_pull_commit_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/magic/thread-pull-preview/': {
@@ -6224,6 +6300,32 @@ export interface paths {
      *     so historical references remain.
      */
     patch: operations['magic_threads_partial_update'];
+    trace?: never;
+  };
+  '/api/magic/threads/{id}/cross_xp_lock/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Pay XP to unlock the next level boundary on this thread (Spec A §3.2).
+     *
+     *     POST /api/magic/threads/{id}/cross-xp-lock/
+     *
+     *     Request body: ``{boundary_level}`` — the XP-locked boundary level to unlock.
+     *     Response: ``{thread_id, unlocked_level, xp_spent}``.
+     *     Idempotent: repeat calls with the same boundary_level return the existing
+     *     ThreadLevelUnlock without re-spending XP.
+     */
+    post: operations['magic_threads_cross_xp_lock_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/mechanics/categories/': {
@@ -9264,6 +9366,26 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /**
+     * @description Serializer for accepting a ThreadWeavingTeachingOffer (Spec A §6.1).
+     *
+     *     Optional ``learner_sheet_id`` disambiguates the learner when the requesting
+     *     account has multiple active tenures (alt-guard).  The view provides the
+     *     offer instance via serializer context as ``"offer"``.
+     */
+    AcceptTeachingOfferRequest: {
+      learner_sheet_id?: number | null;
+    };
+    /**
+     * @description Response shape for ThreadWeavingTeachingOfferViewSet.accept (Spec A §6.1).
+     *
+     *     Returned by POST /api/magic/teaching-offers/{id}/accept/ on success.
+     */
+    AcceptTeachingOfferResponse: {
+      id: number;
+      unlock_id: number;
+      xp_spent: number;
+    };
     /** @description Full serializer for achievement detail view. */
     Achievement: {
       readonly id: number;
@@ -10601,6 +10723,20 @@ export interface components {
       post: number;
       author_persona: number;
       body: string;
+    };
+    /** @description Input + dispatch for ThreadViewSet.cross_xp_lock action (Spec A §3.2). */
+    CrossXPLockRequest: {
+      boundary_level: number;
+    };
+    /**
+     * @description Response shape for ThreadViewSet.cross_xp_lock (Spec A §3.2).
+     *
+     *     Returned by POST /api/magic/threads/{id}/cross-xp-lock/ on success.
+     */
+    CrossXPLockResponse: {
+      thread_id: number;
+      unlocked_level: number;
+      xp_spent: number;
     };
     /**
      * @description * `1` - Origin
@@ -13982,6 +14118,12 @@ export interface components {
      *     which delegates to ``weave_thread``. ``character_sheet_id`` must identify
      *     a CharacterSheet on an active roster tenure belonging to the requesting
      *     account (staff may pass any sheet).
+     *
+     *     Read-only computed fields (SerializerMethodFields):
+     *     - path_cap: the path-side cap (compute_path_cap)
+     *     - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
+     *       (AnchorCapNotImplemented is not yet spec'd)
+     *     - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
      */
     PatchedThreadRequest: {
       /** @description Resonance this thread channels. */
@@ -14656,6 +14798,36 @@ export interface components {
       /** @description Possessive pronoun (e.g., 'his') */
       possessive: string;
     };
+    /**
+     * @description Wire shape for the optional ``action_context`` block in a pull commit.
+     *
+     *     Extends ``PullActionContextSerializer`` (used by the preview endpoint) with
+     *     the additional fields the commit path consumes: ``combat_participant_id`` and
+     *     the anchor-ID lists.  All fields are optional because ephemeral (non-combat)
+     *     pulls omit them entirely.
+     */
+    PullActionContextCommitRequest: {
+      action_kind?: string;
+      anchors_in_play?: number[];
+      combat_encounter_id?: number | null;
+      combat_participant_id?: number | null;
+      involved_trait_ids?: number[];
+      involved_technique_ids?: number[];
+      involved_object_ids?: number[];
+    };
+    /**
+     * @description Wire shape for the optional ``action_context`` block in a pull preview.
+     *
+     *     Only ``combat_encounter_id`` is consumed by the preview path — the rest
+     *     of the fields are accepted for forward-compatibility with the eventual
+     *     authoring UI (the pre-commit preview doesn't care about action_kind
+     *     or anchors_in_play; the full commit path validates those).
+     */
+    PullActionContextRequest: {
+      action_kind?: string;
+      anchors_in_play?: number[];
+      combat_encounter_id?: number | null;
+    };
     /** @description Serializer for QualityTier lookup records. */
     QualityTier: {
       readonly id: number;
@@ -14827,6 +14999,43 @@ export interface components {
      * @enum {string}
      */
     ResolutionTypeEnum: 'destroy' | 'personal' | 'temporary';
+    /** @description Wire shape for a single ResolvedPullEffect row. */
+    ResolvedPullEffect: {
+      kind: string;
+      authored_value: number | null;
+      level_multiplier: number;
+      scaled_value: number;
+      vital_target: string | null;
+      /** @description Expose the source thread's PK (the dataclass carries the Thread instance). */
+      readonly source_thread_id: number;
+      source_thread_level: number;
+      source_tier: number;
+      narrative_snippet: string;
+      inactive: boolean;
+      inactive_reason: string | null;
+    };
+    /**
+     * @description Wire shape for a single ResolvedPullEffect in the commit response.
+     *
+     *     Mirrors ResolvedPullEffectSerializer (used for preview) but also exposes
+     *     ``granted_capability_id`` (which the commit path includes) and uses
+     *     source-accessor notation for ``source_thread_id``.
+     */
+    ResolvedPullEffectCommit: {
+      kind: string;
+      authored_value: number | null;
+      level_multiplier: number;
+      scaled_value: number | null;
+      vital_target: string | null;
+      source_thread_id: number;
+      source_thread_level: number;
+      source_tier: number;
+      /** @description Return the granted_capability PK, or None if absent. */
+      readonly granted_capability_id: number | null;
+      narrative_snippet: string;
+      inactive: boolean;
+      inactive_reason: string | null;
+    };
     /** @description Serializer for Resonance records. */
     Resonance: {
       readonly id: number;
@@ -14908,6 +15117,8 @@ export interface components {
       readonly scene_action_config: {
         [key: string]: unknown;
       } | null;
+      /** @description When True, the generic Rituals listing page hides this ritual; it has a specialized host UI elsewhere (e.g., Thread Detail for Imbuing). */
+      readonly client_hosted: boolean;
     };
     /**
      * @description Write serializer for partial PATCH of player-authored Rituals.
@@ -14951,6 +15162,15 @@ export interface components {
       resonance_id?: number | null;
       check_type_id?: number | null;
       target_difficulty?: number;
+    };
+    /**
+     * @description One room entry returned by RoomsByPropertyView.
+     *
+     *     Response shape: ``{id, name}``.
+     */
+    RoomBrief: {
+      id: number;
+      name: string;
     };
     /** @description Validate a roster application message. */
     RosterApplication: {
@@ -15949,6 +16169,12 @@ export interface components {
      *     which delegates to ``weave_thread``. ``character_sheet_id`` must identify
      *     a CharacterSheet on an active roster tenure belonging to the requesting
      *     account (staff may pass any sheet).
+     *
+     *     Read-only computed fields (SerializerMethodFields):
+     *     - path_cap: the path-side cap (compute_path_cap)
+     *     - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
+     *       (AnchorCapNotImplemented is not yet spec'd)
+     *     - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
      */
     Thread: {
       readonly id: number;
@@ -15977,6 +16203,12 @@ export interface components {
       readonly level: number;
       /** @description Permanent points; advances level via ThreadLevelUnlock entries. */
       readonly developed_points: number;
+      /** @description Return the path-side cap for this thread's owner. */
+      readonly path_cap: number;
+      /** @description Return the anchor-side cap, or None for ROOM threads (not yet implemented). */
+      readonly anchor_cap: number | null;
+      /** @description Return min(path_cap, anchor_cap), or None when anchor_cap is unavailable. */
+      readonly effective_cap: number | null;
       /**
        * Format: date-time
        * @description Set when owner soft-retires this thread; retired threads are excluded from list/detail views and from all pull / passive paths.
@@ -15987,6 +16219,61 @@ export interface components {
       /** Format: date-time */
       readonly updated_at: string;
     };
+    /** @description Response serializer for GET /api/magic/thread-hub-summary/. */
+    ThreadHubSummary: {
+      balances: components['schemas']['_ResonanceBalance'][];
+      ready_thread_ids: number[];
+      near_xp_lock_thread_ids: components['schemas']['_NearXPLockProspect'][];
+      blocked_thread_ids: number[];
+      weaving_eligibility: {
+        [key: string]: boolean;
+      };
+    };
+    /**
+     * @description Request serializer for POST /api/magic/thread-pull-commit/.
+     *
+     *     ``character_sheet_id`` is required and must identify a CharacterSheet owned
+     *     by the requesting account (staff may pass any sheet).
+     *
+     *     ``action_context`` carries optional combat context.  If
+     *     ``combat_encounter_id`` is set, ``combat_participant_id`` must also be
+     *     set (and vice versa).  Omitting the whole dict or leaving both fields
+     *     absent signals an ephemeral (RP) pull with no CombatPull row written.
+     */
+    ThreadPullCommitRequestRequest: {
+      character_sheet_id: number;
+      resonance_id: number;
+      tier: number;
+      thread_ids: number[];
+      action_context?: components['schemas']['PullActionContextCommitRequest'];
+    };
+    /** @description Response serializer for POST /api/magic/thread-pull-commit/. */
+    ThreadPullCommitResponse: {
+      resonance_spent: number;
+      anima_spent: number;
+      resolved_effects: components['schemas']['ResolvedPullEffectCommit'][];
+    };
+    /**
+     * @description Request serializer for POST /api/magic/thread-pull-preview/.
+     *
+     *     ``character_sheet_id`` is required and must identify a CharacterSheet the
+     *     requesting account owns (staff may pass any sheet).
+     */
+    ThreadPullPreviewRequestRequest: {
+      character_sheet_id: number;
+      resonance_id: number;
+      tier: number;
+      thread_ids: number[];
+      action_context?: components['schemas']['PullActionContextRequest'];
+    };
+    /** @description Response serializer for POST /api/magic/thread-pull-preview/. */
+    ThreadPullPreviewResponse: {
+      resonance_cost: number;
+      anima_cost: number;
+      affordable: boolean;
+      resolved_effects: components['schemas']['ResolvedPullEffect'][];
+      capped_intensity: boolean;
+    };
     /**
      * @description Serializer for Thread records (Spec A §4.5).
      *
@@ -15996,6 +16283,12 @@ export interface components {
      *     which delegates to ``weave_thread``. ``character_sheet_id`` must identify
      *     a CharacterSheet on an active roster tenure belonging to the requesting
      *     account (staff may pass any sheet).
+     *
+     *     Read-only computed fields (SerializerMethodFields):
+     *     - path_cap: the path-side cap (compute_path_cap)
+     *     - anchor_cap: the anchor-side cap (compute_anchor_cap); null for ROOM threads
+     *       (AnchorCapNotImplemented is not yet spec'd)
+     *     - effective_cap: min(path_cap, anchor_cap); null when anchor_cap is null
      */
     ThreadRequest: {
       /** @description Resonance this thread channels. */
@@ -16029,6 +16322,17 @@ export interface components {
       readonly unlock_target_kind: string;
       readonly unlock_display_name: string;
       readonly unlock_xp_cost: number;
+      /**
+       * @description Compute the Path-multiplied XP cost for the requesting learner.
+       *
+       *     Returns the integer cost when the viewer has exactly one active tenure
+       *     OR provides a ``learner_sheet_id`` query param to disambiguate.
+       *     Returns ``None`` for ambiguous (multi-tenure, no key) or no-tenure cases.
+       *
+       *     Uses ``_get_viewer_sheets`` so the tenant-resolution query fires only once
+       *     per list response, not once per row.
+       */
+      readonly effective_xp_cost_for_viewer: number | null;
       /** @description Teacher's narrative pitch for this offer. */
       readonly pitch: string;
       /** @description Gold price the teacher charges (XP cost stays on the unlock). */
@@ -16406,6 +16710,20 @@ export interface components {
      * @enum {string}
      */
     WeeklyVoteTargetTypeEnum: 'interaction' | 'scene_participation' | 'journal';
+    /** @description One entry in the near-xp-lock list returned by ThreadHubSummaryView. */
+    _NearXPLockProspect: {
+      thread_id: number;
+      boundary_level: number;
+      xp_cost: number;
+      dev_points_to_boundary: number;
+    };
+    /** @description One resonance balance entry returned by ThreadHubSummaryView. */
+    _ResonanceBalance: {
+      resonance_id: number;
+      balance: number;
+      lifetime_earned: number;
+      flavor_text: string;
+    };
   };
   responses: never;
   parameters: never;
@@ -24418,6 +24736,25 @@ export interface operations {
       };
     };
   };
+  magic_rooms_by_property_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RoomBrief'][];
+        };
+      };
+    };
+  };
   magic_scene_entry_endorsements_create: {
     parameters: {
       query?: never;
@@ -24769,6 +25106,32 @@ export interface operations {
       };
     };
   };
+  magic_teaching_offers_accept_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this thread weaving teaching offer. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['AcceptTeachingOfferRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AcceptTeachingOfferResponse'];
+        };
+      };
+    };
+  };
   magic_techniques_list: {
     parameters: {
       query?: {
@@ -24916,7 +25279,7 @@ export interface operations {
       };
     };
   };
-  magic_thread_pull_preview_create: {
+  magic_thread_hub_summary_retrieve: {
     parameters: {
       query?: never;
       header?: never;
@@ -24925,12 +25288,59 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ThreadHubSummary'];
+        };
+      };
+    };
+  };
+  magic_thread_pull_commit_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ThreadPullCommitRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ThreadPullCommitResponse'];
+        };
+      };
+    };
+  };
+  magic_thread_pull_preview_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ThreadPullPreviewRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ThreadPullPreviewResponse'];
+        };
       };
     };
   };
@@ -25068,6 +25478,31 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Thread'];
+        };
+      };
+    };
+  };
+  magic_threads_cross_xp_lock_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CrossXPLockRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CrossXPLockResponse'];
         };
       };
     };

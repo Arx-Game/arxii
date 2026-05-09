@@ -20,6 +20,7 @@ const links = [
   { to: '/codex', label: 'Codex' },
   { to: '/news', label: 'News' },
   { to: '/community', label: 'Community' },
+  { to: '/threads', label: 'Threads' },
 ];
 
 /** Nav links visible only to authenticated users (account != null). */

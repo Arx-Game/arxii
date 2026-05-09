@@ -18,8 +18,19 @@ import {
   useCharacterResonances,
   useDissolveSoulTether,
   useRespondToSineating,
+  useThreadHubSummary,
+  useThread,
+  useTeachingOffers,
+  useWeaveThread,
+  usePatchThreadNarrative,
+  useRetireThread,
+  useImbueThread,
+  useCrossXPLock,
+  useCommitPull,
+  useAcceptTeachingOffer,
   magicKeys,
 } from '../queries';
+import { __resetImbuingRitualIdCacheForTests } from '../api';
 
 // Mock the API module
 vi.mock('../api', () => ({
@@ -35,6 +46,18 @@ vi.mock('../api', () => ({
   respondToSineating: vi.fn(),
   performRescue: vi.fn(),
   respondToStageAdvance: vi.fn(),
+  // New functions for thread spending UI
+  getThreadHubSummary: vi.fn(),
+  getThread: vi.fn(),
+  getTeachingOffers: vi.fn(),
+  weaveThread: vi.fn(),
+  patchThreadNarrative: vi.fn(),
+  retireThread: vi.fn(),
+  imbueThreadAuto: vi.fn(),
+  crossXPLock: vi.fn(),
+  commitPull: vi.fn(),
+  acceptTeachingOffer: vi.fn(),
+  __resetImbuingRitualIdCacheForTests: vi.fn(),
 }));
 
 import * as api from '../api';
@@ -108,6 +131,9 @@ const mockThread = {
   description: '',
   level: 10,
   developed_points: 100,
+  path_cap: 10,
+  anchor_cap: 10,
+  effective_cap: 10,
   retired_at: null,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
@@ -441,6 +467,436 @@ describe('magicKeys', () => {
       3,
     ]);
     expect(magicKeys.threadList()).toEqual(['magic', 'threads', 'list']);
+    expect(magicKeys.thread(7)).toEqual(['magic', 'threads', 7]);
+    expect(magicKeys.threadHubSummary()).toEqual(['magic', 'thread-hub-summary']);
     expect(magicKeys.characterResonanceList()).toEqual(['magic', 'character-resonances', 'list']);
+    expect(magicKeys.teachingOffers()).toEqual(['magic', 'teaching-offers', 'list']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fixtures for new hooks
+// ---------------------------------------------------------------------------
+
+const mockThreadHubSummary = {
+  balances: [{ resonance_id: 3, balance: 50, lifetime_earned: 200, flavor_text: 'Blazing' }],
+  ready_thread_ids: [7],
+  near_xp_lock_thread_ids: [],
+  blocked_thread_ids: [],
+  weaving_eligibility: {
+    TRAIT: true,
+    TECHNIQUE: true,
+    ROOM: true,
+    RELATIONSHIP_TRACK: true,
+    RELATIONSHIP_CAPSTONE: true,
+    FACET: true,
+    COVENANT_ROLE: false,
+  },
+};
+
+const mockTeachingOffer = {
+  id: 1,
+  teacher: 5,
+  unlock: 10,
+  unlock_target_kind: 'TRAIT',
+  unlock_display_name: 'Fire Shaping',
+  unlock_xp_cost: 4,
+  effective_xp_cost_for_viewer: 3,
+  pitch: 'Let me show you the flame.',
+  gold_cost: 0,
+};
+
+// mockThread is already defined in the file above
+const mockWeaveBody = {
+  resonance: 3,
+  target_kind: 'TRAIT' as const,
+  target_id: 1,
+  character_sheet_id: 10,
+};
+
+// ---------------------------------------------------------------------------
+// useThreadHubSummary
+// ---------------------------------------------------------------------------
+
+describe('useThreadHubSummary', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('fetches thread hub summary successfully', async () => {
+    vi.mocked(api.getThreadHubSummary).mockResolvedValue(mockThreadHubSummary);
+
+    const { result } = renderHook(() => useThreadHubSummary(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(result.current.data).toEqual(mockThreadHubSummary);
+    expect(api.getThreadHubSummary).toHaveBeenCalledWith(undefined);
+  });
+
+  it('passes characterSheetId when provided', async () => {
+    vi.mocked(api.getThreadHubSummary).mockResolvedValue(mockThreadHubSummary);
+
+    const { result } = renderHook(() => useThreadHubSummary(99), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(api.getThreadHubSummary).toHaveBeenCalledWith(99);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// useThread
+// ---------------------------------------------------------------------------
+
+describe('useThread', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('fetches thread by id', async () => {
+    vi.mocked(api.getThread).mockResolvedValue(mockThread);
+
+    const { result } = renderHook(() => useThread(7), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(result.current.data).toEqual(mockThread);
+    expect(api.getThread).toHaveBeenCalledWith(7);
+  });
+
+  it('is disabled when id is 0', () => {
+    const { result } = renderHook(() => useThread(0), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(api.getThread).not.toHaveBeenCalled();
+  });
+
+  it('is disabled when id is negative', () => {
+    const { result } = renderHook(() => useThread(-1), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(api.getThread).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// useTeachingOffers
+// ---------------------------------------------------------------------------
+
+describe('useTeachingOffers', () => {
+  it('fetches teaching offers list', async () => {
+    const mockList = { count: 1, next: null, previous: null, results: [mockTeachingOffer] };
+    vi.mocked(api.getTeachingOffers).mockResolvedValue(mockList);
+
+    const { result } = renderHook(() => useTeachingOffers(), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(result.current.data).toEqual(mockList);
+    expect(api.getTeachingOffers).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// useWeaveThread
+// ---------------------------------------------------------------------------
+
+describe('useWeaveThread', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls weaveThread with correct body and succeeds', async () => {
+    vi.mocked(api.weaveThread).mockResolvedValue(mockThread);
+
+    const { result } = renderHook(() => useWeaveThread(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync(mockWeaveBody);
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(api.weaveThread).toHaveBeenCalledWith(mockWeaveBody);
+    expect(result.current.data).toEqual(mockThread);
+  });
+
+  it('surfaces error on failure', async () => {
+    vi.mocked(api.weaveThread).mockRejectedValue(new Error('Thread limit reached'));
+
+    const { result } = renderHook(() => useWeaveThread(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      try {
+        await result.current.mutateAsync(mockWeaveBody);
+      } catch {
+        // expected
+      }
+    });
+
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// usePatchThreadNarrative
+// ---------------------------------------------------------------------------
+
+describe('usePatchThreadNarrative', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('patches thread narrative and succeeds', async () => {
+    vi.mocked(api.patchThreadNarrative).mockResolvedValue(mockThread);
+
+    const { result } = renderHook(() => usePatchThreadNarrative(7), {
+      wrapper: createWrapper(),
+    });
+
+    const patchBody = { name: 'Renamed Thread' };
+
+    await act(async () => {
+      await result.current.mutateAsync(patchBody);
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(api.patchThreadNarrative).toHaveBeenCalledWith(7, patchBody);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// useRetireThread
+// ---------------------------------------------------------------------------
+
+describe('useRetireThread', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('retires thread and succeeds', async () => {
+    vi.mocked(api.retireThread).mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useRetireThread(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync(7);
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(api.retireThread).toHaveBeenCalledWith(7);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// useImbueThread
+// ---------------------------------------------------------------------------
+
+describe('useImbueThread', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    __resetImbuingRitualIdCacheForTests();
+  });
+
+  it('calls imbueThreadAuto with correct args', async () => {
+    vi.mocked(api.imbueThreadAuto).mockResolvedValue({ success: true });
+
+    const { result } = renderHook(() => useImbueThread(), {
+      wrapper: createWrapper(),
+    });
+
+    const vars = { characterSheetId: 10, threadId: 7, amount: 5 };
+
+    await act(async () => {
+      await result.current.mutateAsync(vars);
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(api.imbueThreadAuto).toHaveBeenCalledWith(10, 7, 5);
+  });
+
+  it('surfaces error on failure', async () => {
+    vi.mocked(api.imbueThreadAuto).mockRejectedValue(new Error('Insufficient resonance'));
+
+    const { result } = renderHook(() => useImbueThread(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      try {
+        await result.current.mutateAsync({ characterSheetId: 10, threadId: 7, amount: 5 });
+      } catch {
+        // expected
+      }
+    });
+
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// useCrossXPLock
+// ---------------------------------------------------------------------------
+
+describe('useCrossXPLock', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('calls crossXPLock with correct args', async () => {
+    vi.mocked(api.crossXPLock).mockResolvedValue({
+      thread_id: 7,
+      unlocked_level: 20,
+      xp_spent: 150,
+    });
+
+    const { result } = renderHook(() => useCrossXPLock(), {
+      wrapper: createWrapper(),
+    });
+
+    const vars = { threadId: 7, body: { boundary_level: 20 } };
+
+    await act(async () => {
+      await result.current.mutateAsync(vars);
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(api.crossXPLock).toHaveBeenCalledWith(7, vars.body);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// useCommitPull
+// ---------------------------------------------------------------------------
+
+describe('useCommitPull', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('commits pull with correct body and succeeds', async () => {
+    const mockResponse = {
+      resonance_spent: 10,
+      anima_spent: 2,
+      resolved_effects: [],
+    };
+    vi.mocked(api.commitPull).mockResolvedValue(mockResponse);
+
+    const { result } = renderHook(() => useCommitPull(), {
+      wrapper: createWrapper(),
+    });
+
+    const body = {
+      character_sheet_id: 10,
+      resonance_id: 3,
+      tier: 1 as const,
+      thread_ids: [7],
+    };
+
+    await act(async () => {
+      await result.current.mutateAsync(body);
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(api.commitPull).toHaveBeenCalledWith(body);
+    expect(result.current.data).toEqual(mockResponse);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// useAcceptTeachingOffer
+// ---------------------------------------------------------------------------
+
+describe('useAcceptTeachingOffer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('accepts offer with offerId and optional body', async () => {
+    const mockAcceptResponse = { id: 99, unlock_id: 10, xp_spent: 4 };
+    vi.mocked(api.acceptTeachingOffer).mockResolvedValue(mockAcceptResponse);
+
+    const { result } = renderHook(() => useAcceptTeachingOffer(), {
+      wrapper: createWrapper(),
+    });
+
+    const vars = { offerId: 1, body: { learner_sheet_id: 10 } };
+
+    await act(async () => {
+      await result.current.mutateAsync(vars);
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(api.acceptTeachingOffer).toHaveBeenCalledWith(1, { learner_sheet_id: 10 });
+  });
+
+  it('accepts offer without optional body', async () => {
+    const mockAcceptResponse = { id: 99, unlock_id: 10, xp_spent: 4 };
+    vi.mocked(api.acceptTeachingOffer).mockResolvedValue(mockAcceptResponse);
+
+    const { result } = renderHook(() => useAcceptTeachingOffer(), {
+      wrapper: createWrapper(),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ offerId: 1 });
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(api.acceptTeachingOffer).toHaveBeenCalledWith(1, undefined);
   });
 });
