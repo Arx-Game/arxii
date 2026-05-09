@@ -267,39 +267,42 @@ class SoulTetherFullPipelineTests(TestCase):
       5. Dissolve (Phase 10) → thread soft-retired, relationship flags cleared.
       6. lifetime_helped persists post-dissolution (spec §13).
 
-    The tether is formed inside setUpTestData so all tests share it.  Each test
-    method examines a different invariant against the already-formed bond.  The
-    full lifecycle test (Steps 2–6) runs as a single sequential scenario.
+    The tether is formed inside setUp (per-test) so each method gets a fresh bond.
+    Per-test setup avoids Django's TestData descriptor deepcopy guard, which trips
+    on Evennia's DbHolder when a class-level fixture's typeclass attribute graph
+    has been touched by an earlier test (SharedMemoryModel identity-map carries
+    the DbHolder pollution across tests). The cost is per-test re-creation; for
+    these 4 tests it adds a few seconds but eliminates a real flake on the full
+    sequential regression run.
     """
 
-    @classmethod
-    def setUpTestData(cls) -> None:
+    def setUp(self) -> None:
         wire_soul_tether_content()
-        cls.track = RelationshipTrackFactory()
+        self.track = RelationshipTrackFactory()
         abyssal_affinity = AffinityFactory(name="Abyssal")
-        cls.resonance = ResonanceFactory(affinity=abyssal_affinity)
-        cls.sinner, cls.sineater = _make_eligible_pair(track=cls.track)
-        _make_active_relationship(cls.sinner, cls.sineater)
+        self.resonance = ResonanceFactory(affinity=abyssal_affinity)
+        self.sinner, self.sineater = _make_eligible_pair(track=self.track)
+        _make_active_relationship(self.sinner, self.sineater)
 
         # Seed Sinner's CharacterResonance so the Sineating resonance gate passes.
-        CharacterResonanceFactory(character_sheet=cls.sinner, resonance=cls.resonance)
+        CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
 
         # Seed Sineater anima for Sineating cost deductions.
-        CharacterAnimaFactory(character=cls.sineater.character, current=50, maximum=50)
+        CharacterAnimaFactory(character=self.sineater.character, current=50, maximum=50)
 
         # Five-stage Corruption ConditionTemplate for the resonance.
-        _make_simple_corruption_template(cls.resonance)
+        _make_simple_corruption_template(self.resonance)
 
         # Place Sinner in a room so CORRUPTION_ACCRUING fires through emit_event.
-        cls.room = _create_room()
-        _place_in_room(cls.sinner, cls.room)
+        self.room = _create_room()
+        _place_in_room(self.sinner, self.room)
 
         # ---- Step 1: Form the tether (Phase 4) ----
-        cls.capstone = accept_soul_tether(
-            initiator_sheet=cls.sinner,
-            partner_sheet=cls.sineater,
+        self.capstone = accept_soul_tether(
+            initiator_sheet=self.sinner,
+            partner_sheet=self.sineater,
             sinner_role=SoulTetherRoleEnum.ABYSSAL,
-            resonance=cls.resonance,
+            resonance=self.resonance,
             writeup="A bond is forged in the witch-light.",
             ritual_components=[],
         )
