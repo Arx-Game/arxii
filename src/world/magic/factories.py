@@ -774,7 +774,11 @@ class ThreadFactory(factory.django.DjangoModelFactory):
     - _track_tier_index=<int>  → create a RelationshipTier with that tier_number on the
                                  progress.track; set developed_points >= threshold so
                                  current_tier returns that tier
+    - _developed_points=<int>  → set developed_points directly on the RelationshipTrackProgress
+                                 (overrides _track_tier_index; requires as_track_thread=True)
     - as_capstone_thread=True  → switch to RELATIONSHIP_CAPSTONE kind
+    - _capstone_points=<int>   → set points directly on the RelationshipCapstone
+                                 (overrides default 100; requires as_capstone_thread=True)
     - _path_stage=<int>        → add a CharacterPathHistory row for thread.owner with
                                  a Path of that stage (applies to capstone + effective cap)
     - as_room_thread=True   → switch to ROOM kind (raises AnchorCapNotImplemented)
@@ -880,6 +884,25 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         progress.developed_points = tier.point_threshold
         progress.save(update_fields=["developed_points"])
 
+    # Must be declared after as_track_thread so self.target_relationship_track is populated.
+    @factory.post_generation  # type: ignore[misc]
+    def _developed_points(
+        self: "Thread", create: bool, extracted: object, **kwargs: object
+    ) -> None:
+        """Set developed_points directly on the RelationshipTrackProgress.
+
+        Use this param when you need an arbitrary value (e.g. 37) rather than
+        a tier-threshold multiple of 10.  Overrides any value set by
+        _track_tier_index.  Requires as_track_thread=True.
+        """
+        if not create or extracted is None:
+            return
+        if self.target_relationship_track is None:
+            return
+        progress = self.target_relationship_track
+        progress.developed_points = int(extracted)  # type: ignore[arg-type]
+        progress.save(update_fields=["developed_points"])
+
     @factory.post_generation  # type: ignore[misc]
     def as_capstone_thread(
         self: "Thread", create: bool, extracted: object, **kwargs: object
@@ -898,6 +921,22 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         self.target_kind = TargetKind.RELATIONSHIP_CAPSTONE
         self.target_capstone = capstone
         self.target_trait = None  # type: ignore[assignment]
+
+    # Must be declared after as_capstone_thread so self.target_capstone is populated.
+    @factory.post_generation  # type: ignore[misc]
+    def _capstone_points(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
+        """Set points directly on the RelationshipCapstone.
+
+        Use this param to override the default points=100 from RelationshipCapstoneFactory
+        with an arbitrary value (e.g. 0, 50, 500).  Requires as_capstone_thread=True.
+        """
+        if not create or extracted is None:
+            return
+        if self.target_capstone is None:
+            return
+        capstone = self.target_capstone
+        capstone.points = int(extracted)  # type: ignore[arg-type]
+        capstone.save(update_fields=["points"])
 
     @factory.post_generation  # type: ignore[misc]
     def _path_stage(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
