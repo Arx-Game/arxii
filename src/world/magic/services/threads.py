@@ -126,8 +126,7 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911 — one arm per 
         case TargetKind.RELATIONSHIP_TRACK:
             return int(thread.target_relationship_track.developed_points)
         case TargetKind.RELATIONSHIP_CAPSTONE:
-            stage = _current_path_stage(thread.owner)
-            return int(stage * 10)
+            return int(thread.target_capstone.points)
         case TargetKind.FACET:
             lifetime = thread.owner.character.resonances.lifetime(thread.resonance)
             hard_max = _current_path_stage(thread.owner) * ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE
