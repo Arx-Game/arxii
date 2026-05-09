@@ -168,6 +168,80 @@ Covers: `useSoulTetherDetail`, `usePendingSineatingOffers`, `usePendingStageAdva
 
 The imbue tests call `__resetImbuingRitualIdCacheForTests()` in `beforeEach`.
 
+### `pages/ThreadHubPage.tsx`
+
+Thread hub landing page at `/threads`. Shows `ThreadHubSummary` (prospect badges, resonance
+balances, near-XP-lock prospects), a grid of `ThreadCard` items, and a "Weave Thread" button
+that opens `WeaveThreadWizard`. Links to `/threads/:id` and `/threads/teaching`.
+
+### `pages/ThreadDetailPage.tsx`
+
+Thread detail page at `/threads/:id`. Renders the full thread record with `ImbuePanel`,
+`XPLockBoundaryPanel`, `PullEffectPreview`, `ThreadRenameDialog`, and `ThreadRetireDialog`.
+
+### `pages/WeavingTeachingOffersPage.tsx`
+
+Teaching-offer inbox at `/threads/teaching`. Lists incoming `ThreadWeavingTeachingOffer`
+rows via `TeachingOfferCard`; each card opens `AcceptOfferDialog` to pay XP and accept.
+
+### `components/threads/ResonanceBalanceCard.tsx`
+
+HoverCard showing a single resonance balance (current balance + lifetime earned + flavor text).
+Used in `ThreadHubPage` to render the balance grid.
+
+### `components/threads/ThreadStateBadge.tsx`
+
+Small badge that maps a thread's `state` field to a colored label (Active, Dormant, Retired, etc.).
+
+### `components/threads/ThreadCard.tsx`
+
+Card for a single thread in the hub grid. Shows name, state badge, resonance, XP-lock level,
+and a link to the detail page.
+
+### `components/threads/ImbuePanel.tsx`
+
+Panel in `ThreadDetailPage` for spending resonance to imbue a thread. Calls `useImbueThread`.
+
+### `components/threads/XPLockBoundaryPanel.tsx`
+
+Panel in `ThreadDetailPage` for crossing an XP-lock boundary. Shows cost/prospect info
+and calls `useCrossXPLock`.
+
+### `components/threads/PullEffectPreview.tsx`
+
+Panel in `ThreadDetailPage` for previewing and committing a thread pull. Calls `api.previewPull`
+then `useCommitPull`. Shows resolved effects and affordability.
+
+### `components/threads/ThreadRenameDialog.tsx`
+
+Dialog for renaming a thread (patching `name` + `description`). Calls `usePatchThreadNarrative`.
+
+### `components/threads/ThreadRetireDialog.tsx`
+
+Confirmation dialog for retiring a thread. Calls `useRetireThread`.
+
+### `components/threads/WeaveThreadWizard.tsx`
+
+Multi-step wizard for weaving a new thread. Step 1: select `TargetKind` (FACET and
+COVENANT_ROLE fully enabled; TRAIT/TECHNIQUE/ROOM/Relationship stubbed "coming soon").
+Step 2: select anchor. Step 3: name + description + confirm. Calls `useWeaveThread`.
+
+### `components/threads/TeachingOfferCard.tsx`
+
+Card for a single `ThreadWeavingTeachingOffer` in `WeavingTeachingOffersPage`. Shows offer
+details and opens `AcceptOfferDialog`. Teacher display name currently shows "Teacher #N"
+pending a name-lookup endpoint.
+
+### `components/threads/AcceptOfferDialog.tsx`
+
+Dialog for accepting a teaching offer. Shows XP cost and calls `useAcceptTeachingOffer`.
+
+### `components/ThreadList.tsx` (legacy)
+
+Early thread list component — renders a flat list of threads filtered by optional `targetKind`.
+No longer imported by any page or component; retained for its unit test coverage. Candidate
+for removal once the hub/detail pages are confirmed stable.
+
 ## Data Flow
 
 - **GET soul-tether detail:** `useSoulTetherDetail(relationshipId)` → `SoulTetherDetail`

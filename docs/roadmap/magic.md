@@ -970,7 +970,26 @@ Interim status notes:
 ### Other MVP Needs
 - **Post-CG magic progression UI** — level-gated unlocks for resonances, threads, techniques, motifs, gifts
 - **Budget-based technique builder** — replaces restriction-based power for post-CG technique creation
-- Thread system UI integration (models exist, needs frontend)
+- **Thread system UI — DONE (branch `thread-spending-ui-design`):**
+
+  What was built:
+  - Backend: 5 new endpoints (`cross_xp_lock`, `accept teaching offer`, `pull-commit`,
+    `hub-summary`, `rooms-by-property`) + `Ritual.client_hosted` flag + cap fields
+    on `ThreadSerializer` + alt-guard helper consolidated into `services/auth.py`.
+  - Frontend: `/threads` hub with prospect badges, `/threads/:id` detail with
+    imbue / XP-lock / pull-preview / rename / retire panels, `/threads/teaching`
+    for accepting Weaving teaching offers, multi-step Weave Thread Wizard
+    (FACET + COVENANT_ROLE enabled in v1; TRAIT/TECHNIQUE/ROOM/Relationship
+    kinds stubbed pending picker hooks).
+
+  What's deferred:
+  - `ThreadPullDialog` (multi-thread pull) — designed at the component level
+    but not shipped; needs a combat panel host that doesn't exist yet.
+  - TRAIT / TECHNIQUE / ROOM / Relationship anchor pickers in the Weave
+    wizard — currently stubbed "coming soon" pending list endpoints for
+    `CharacterTraitValue` / `CharacterTechnique` / etc.
+  - E2E smoke test for `/threads`.
+  - Teacher display name in `TeachingOfferCard` (currently shows "Teacher #N").
 - Aura farming mechanics — how perception at scenes feeds into resonance strength
 - Fashion-to-resonance integration (requires Items & Crafting systems —
   designed in `docs/superpowers/specs/2026-04-26-items-fashion-mantles-spec-d-design.md`,
