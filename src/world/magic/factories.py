@@ -884,6 +884,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         progress.developed_points = tier.point_threshold
         progress.save(update_fields=["developed_points"])
 
+    # Must be declared after as_track_thread so self.target_relationship_track is populated.
     @factory.post_generation  # type: ignore[misc]
     def _developed_points(
         self: "Thread", create: bool, extracted: object, **kwargs: object
@@ -921,6 +922,7 @@ class ThreadFactory(factory.django.DjangoModelFactory):
         self.target_capstone = capstone
         self.target_trait = None  # type: ignore[assignment]
 
+    # Must be declared after as_capstone_thread so self.target_capstone is populated.
     @factory.post_generation  # type: ignore[misc]
     def _capstone_points(self: "Thread", create: bool, extracted: object, **kwargs: object) -> None:
         """Set points directly on the RelationshipCapstone.

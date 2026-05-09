@@ -21,6 +21,7 @@ class AnchorCapTests(TestCase):
         self.assertEqual(compute_anchor_cap(thread), 30)
 
     def test_relationship_track_cap_zero_when_no_developed_points(self) -> None:
+        # Default developed_points is 0; _developed_points=0 documents intent.
         thread = ThreadFactory(as_track_thread=True, _developed_points=0)
         self.assertEqual(compute_anchor_cap(thread), 0)
 
@@ -34,6 +35,7 @@ class AnchorCapTests(TestCase):
         self.assertEqual(compute_anchor_cap(thread), 500)
 
     def test_relationship_capstone_cap_zero_when_capstone_has_no_points(self) -> None:
+        # _capstone_points=0 explicitly overrides RelationshipCapstoneFactory's default of 100.
         thread = ThreadFactory(as_capstone_thread=True, _capstone_points=0)
         self.assertEqual(compute_anchor_cap(thread), 0)
 
