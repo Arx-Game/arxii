@@ -5,13 +5,20 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.db import models
+from django.utils import timezone
 
 from evennia_extensions.models import RoomProfile
 from world.areas.models import AreaClosure
 from world.locations.constants import STAT_CLAMPS, STAT_DEFAULTS, StatKey
-from world.locations.models import LocationOwnership, LocationStatModifier, LocationStatOverride
+from world.locations.models import (
+    LocationOwnership,
+    LocationStatModifier,
+    LocationStatOverride,
+    LocationTenancy,
+)
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
     from evennia.objects.objects import DefaultObject
 
 
@@ -121,3 +128,39 @@ def effective_owner(room: DefaultObject) -> LocationOwnership | None:
     if room_rows:
         return room_rows[0]
     return min(rows, key=lambda r: r.area.level)
+
+
+def current_tenants(room: DefaultObject) -> QuerySet[LocationTenancy]:
+    """Return all currently-active tenancies that apply to a room.
+
+    Includes:
+      - Room-level tenancies where ``room_profile = this`` and active.
+      - Area-level tenancies where ``area_id`` is in this room's
+        ancestor closure and active.
+
+    "Active" means ``ends_at IS NULL OR ends_at > now()``. Historical
+    or expired tenancies are excluded. Multiple concurrent tenancies
+    are valid (married couples, roommates, communal access).
+
+    2 queries per call: closure walk + tenancy fetch with tenants
+    joined via select_related.
+    """
+
+    try:
+        profile = room.room_profile
+    except RoomProfile.DoesNotExist:
+        return LocationTenancy.objects.none()
+
+    area = profile.area
+    ancestor_ids: list[int] = []
+    if area is not None:
+        ancestor_ids = list(
+            AreaClosure.objects.filter(descendant_id=area.pk).values_list("ancestor_id", flat=True)
+        )
+
+    now = timezone.now()
+    return (
+        LocationTenancy.objects.filter(models.Q(ends_at__isnull=True) | models.Q(ends_at__gt=now))
+        .select_related("area", "tenant_persona", "tenant_organization")
+        .filter(models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids))
+    )
