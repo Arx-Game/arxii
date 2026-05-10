@@ -53,9 +53,9 @@ def effective_stat(room: DefaultObject, stat_key: StatKey) -> int:
 
     # Step 3: most-specific override wins, modifiers ignored.
     overrides = list(
-        LocationStatOverride.objects.filter(stat_key=stat_key).filter(
-            models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids)
-        )
+        LocationStatOverride.objects.filter(stat_key=stat_key)
+        .select_related("area")
+        .filter(models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids))
     )
     if overrides:
         # Specificity: room beats any area; among areas, smaller level wins.

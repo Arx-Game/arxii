@@ -52,6 +52,41 @@ class CascadeDefaultsTests(TestCase):
             clamp_max,
         )
 
+    def test_modifier_path_clamps_to_bounds(self) -> None:
+        """The cascade also clamps when no override exists and modifiers
+        sum past the per-stat ceiling."""
+        ward = AreaFactory(level=AreaLevel.WARD)
+        profile = RoomProfileFactory(area=ward)
+        # Two modifiers that together exceed the clamp ceiling.
+        LocationStatModifier.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=ward,
+            stat_key=StatKey.CRIME,
+            value=80,
+        )
+        LocationStatModifier.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=ward,
+            stat_key=StatKey.CRIME,
+            value=80,
+        )
+        clamp_max = STAT_CLAMPS[StatKey.CRIME][1]
+        # 0 default + 80 + 80 = 160, clamps to 100
+        self.assertEqual(
+            effective_stat(profile.objectdb, StatKey.CRIME),
+            clamp_max,
+        )
+
+    def test_room_with_profile_but_no_area_returns_default(self) -> None:
+        """If a room has a profile but profile.area is None, the cascade
+        skips area lookup and returns the per-stat default."""
+        profile = RoomProfileFactory()  # area defaults to None
+        self.assertIsNone(profile.area)
+        self.assertEqual(
+            effective_stat(profile.objectdb, StatKey.ORDER),
+            STAT_DEFAULTS[StatKey.ORDER],
+        )
+
 
 class CascadeOverrideTests(TestCase):
     def setUp(self) -> None:
@@ -104,6 +139,23 @@ class CascadeOverrideTests(TestCase):
             value=50,
         )
         self.assertEqual(effective_stat(self.room, StatKey.CRIME), 10)
+
+    def test_room_override_hides_area_modifiers(self) -> None:
+        """A room-level Override short-circuits even modifiers stacked
+        higher in the chain."""
+        LocationStatModifier.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.city,
+            stat_key=StatKey.CRIME,
+            value=50,
+        )
+        LocationStatOverride.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.room_profile,
+            stat_key=StatKey.CRIME,
+            value=0,
+        )
+        self.assertEqual(effective_stat(self.room, StatKey.CRIME), 0)
 
 
 class CascadeModifierStackingTests(TestCase):
