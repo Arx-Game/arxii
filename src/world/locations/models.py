@@ -7,12 +7,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin
-from world.locations.constants import LocationParentType, StatKey
+from world.locations.constants import HolderType, LocationParentType, StatKey
 
 
 class LocationStatOverride(DiscriminatorMixin, SharedMemoryModel):
@@ -192,3 +193,122 @@ class LocationStatModifier(DiscriminatorMixin, SharedMemoryModel):
     def __str__(self) -> str:
         target = self.get_active_target_name()
         return f"Modifier {self.stat_key}+{self.value} @ {target}"
+
+
+class LocationOwnership(DiscriminatorMixin, SharedMemoryModel):
+    """Who holds the deed/title/claim of right to a location.
+
+    Cascades through the area hierarchy via ``AreaClosure``: the
+    most-specific active row in the chain wins. Liege/vassal nesting
+    is multiple rows at different tiers; the cascade resolver picks
+    the deepest naturally.
+
+    Historical rows (``ended_at IS NOT NULL``) are kept as audit trail.
+    The partial-unique constraint enforces at most one *active* owner
+    per location.
+    """
+
+    DISCRIMINATOR_FIELD = "parent_type"
+    DISCRIMINATOR_MAP = {
+        LocationParentType.AREA: "area",
+        LocationParentType.ROOM: "room_profile",
+    }
+
+    parent_type = models.CharField(
+        max_length=10,
+        choices=LocationParentType.choices,
+        help_text="Selects which parent FK (area or room_profile) is active.",
+    )
+    area = models.ForeignKey(
+        "areas.Area",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="ownership_records",
+    )
+    room_profile = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="ownership_records",
+    )
+
+    holder_type = models.CharField(
+        max_length=20,
+        choices=HolderType.choices,
+        help_text="Selects which holder FK (persona or organization) is active.",
+    )
+    holder_persona = models.ForeignKey(
+        "scenes.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="ownership_records",
+    )
+    holder_organization = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="ownership_records",
+    )
+
+    acquired_at = models.DateTimeField(default=timezone.now)
+    ended_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this party ceased to be the owner. NULL = currently active.",
+    )
+    notes = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Free-text provenance: 'via inheritance from House X', 'purchased 1234'.",
+    )
+
+    HOLDER_DISCRIMINATOR_FIELD = "holder_type"
+    HOLDER_DISCRIMINATOR_MAP = {
+        HolderType.PERSONA: "holder_persona",
+        HolderType.ORGANIZATION: "holder_organization",
+    }
+
+    class Meta:
+        verbose_name = "Location Ownership"
+        verbose_name_plural = "Location Ownerships"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["area"],
+                condition=models.Q(area__isnull=False) & models.Q(ended_at__isnull=True),
+                name="unique_active_ownership_per_area",
+            ),
+            models.UniqueConstraint(
+                fields=["room_profile"],
+                condition=models.Q(room_profile__isnull=False) & models.Q(ended_at__isnull=True),
+                name="unique_active_ownership_per_room",
+            ),
+        ]
+
+    def clean(self) -> None:
+        """Validate BOTH discriminators (parent and holder)."""
+        super().clean()  # parent_type via DiscriminatorMixin
+
+        expected_field = self.HOLDER_DISCRIMINATOR_MAP.get(self.holder_type)
+        if expected_field is None:
+            return
+
+        errors: dict[str, str] = {}
+        if getattr(self, expected_field) is None:
+            errors[expected_field] = f"Required when holder_type is {self.holder_type}."
+        for value, field_name in self.HOLDER_DISCRIMINATOR_MAP.items():
+            if value != self.holder_type and getattr(self, field_name) is not None:
+                errors[field_name] = f"Must be null when holder_type is {self.holder_type}."
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self) -> str:
+        target = self.get_active_target_name()
+        holder_field = self.HOLDER_DISCRIMINATOR_MAP.get(self.holder_type)
+        holder = getattr(self, holder_field, None) if holder_field else None
+        holder_name = str(holder) if holder is not None else "(deleted)"
+        active = "active" if self.ended_at is None else "historical"
+        return f"Ownership of {target} by {holder_name} ({active})"
