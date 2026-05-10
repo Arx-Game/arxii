@@ -131,6 +131,65 @@ def end_covenant_role(*, assignment: CharacterCovenantRole) -> None:
     assignment.character_sheet.character.covenant_roles.invalidate()
 
 
+@transaction.atomic
+def set_engaged_membership(*, membership: CharacterCovenantRole) -> None:
+    """Engage this membership; un-engage other same-type rows for the same character.
+
+    Atomic. The same-type un-engage step uses a filter on
+    covenant.covenant_type, which is naturally type-scoped.
+
+    Iterates and calls save() (rather than bulk update) so SharedMemoryModel's
+    identity-map cache stays in sync for rows already held in memory.
+    """
+    other_engaged = list(
+        CharacterCovenantRole.objects.filter(
+            character_sheet=membership.character_sheet,
+            covenant__covenant_type=membership.covenant.covenant_type,
+            engaged=True,
+            left_at__isnull=True,
+        ).exclude(pk=membership.pk)
+    )
+    for row in other_engaged:
+        row.engaged = False
+        row.save(update_fields=["engaged"])
+    membership.engaged = True
+    membership.save(update_fields=["engaged"])
+    membership.character_sheet.character.covenant_roles.invalidate()
+
+
+@transaction.atomic
+def clear_engaged_membership(*, membership: CharacterCovenantRole) -> None:
+    """Un-engage this membership. Idempotent."""
+    if not membership.engaged:
+        return
+    membership.engaged = False
+    membership.save(update_fields=["engaged"])
+    membership.character_sheet.character.covenant_roles.invalidate()
+
+
+@transaction.atomic
+def clear_engaged_for_type(*, character_sheet: CharacterSheet, covenant_type: str) -> None:
+    """Un-engage every engaged active membership of the given type for the character.
+
+    Iterates and calls save() (rather than bulk update) so SharedMemoryModel's
+    identity-map cache stays in sync for rows already held in memory.
+    """
+    rows = list(
+        CharacterCovenantRole.objects.filter(
+            character_sheet=character_sheet,
+            covenant__covenant_type=covenant_type,
+            engaged=True,
+            left_at__isnull=True,
+        )
+    )
+    if not rows:
+        return
+    for row in rows:
+        row.engaged = False
+        row.save(update_fields=["engaged"])
+    character_sheet.character.covenant_roles.invalidate()
+
+
 def is_gear_compatible(role: CovenantRole, archetype: str) -> bool:
     """Return True if a row exists in GearArchetypeCompatibility for this pair.
 

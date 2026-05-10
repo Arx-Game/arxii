@@ -18,10 +18,13 @@ from world.covenants.services import (
     add_member,
     assign_covenant_role,
     change_role,
+    clear_engaged_for_type,
+    clear_engaged_membership,
     create_covenant,
     dissolve_covenant,
     end_covenant_role,
     is_gear_compatible,
+    set_engaged_membership,
 )
 from world.items.constants import GearArchetype
 
@@ -202,3 +205,122 @@ class IsGearCompatibleTests(TestCase):
 
     def test_is_gear_compatible_returns_false_when_row_missing(self) -> None:
         self.assertFalse(is_gear_compatible(self.role, GearArchetype.LIGHT_ARMOR))
+
+
+class SetEngagedMembershipTests(TestCase):
+    def test_engages_membership(self) -> None:
+        m = CharacterCovenantRoleFactory()
+        set_engaged_membership(membership=m)
+        m.refresh_from_db()
+        self.assertTrue(m.engaged)
+
+    def test_un_engages_other_same_type(self) -> None:
+        sheet = CharacterSheetFactory()
+        cov_a = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        cov_b = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        role_a = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        role_b = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        m_a = CharacterCovenantRoleFactory(
+            character_sheet=sheet, covenant=cov_a, covenant_role=role_a
+        )
+        set_engaged_membership(membership=m_a)
+        m_b = CharacterCovenantRoleFactory(
+            character_sheet=sheet, covenant=cov_b, covenant_role=role_b
+        )
+        set_engaged_membership(membership=m_b)
+        m_a.refresh_from_db()
+        m_b.refresh_from_db()
+        self.assertFalse(m_a.engaged)
+        self.assertTrue(m_b.engaged)
+
+    def test_does_not_touch_battle_when_engaging_durance(self) -> None:
+        sheet = CharacterSheetFactory()
+        battle_cov = CovenantFactory(covenant_type=CovenantType.BATTLE)
+        battle_role = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        m_battle = CharacterCovenantRoleFactory(
+            character_sheet=sheet,
+            covenant=battle_cov,
+            covenant_role=battle_role,
+        )
+        set_engaged_membership(membership=m_battle)
+
+        durance_cov = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        durance_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        m_durance = CharacterCovenantRoleFactory(
+            character_sheet=sheet,
+            covenant=durance_cov,
+            covenant_role=durance_role,
+        )
+        set_engaged_membership(membership=m_durance)
+
+        m_battle.refresh_from_db()
+        m_durance.refresh_from_db()
+        self.assertTrue(m_battle.engaged)
+        self.assertTrue(m_durance.engaged)
+
+
+class ClearEngagedMembershipTests(TestCase):
+    def test_clears_engaged_flag(self) -> None:
+        m = CharacterCovenantRoleFactory()
+        set_engaged_membership(membership=m)
+        clear_engaged_membership(membership=m)
+        m.refresh_from_db()
+        self.assertFalse(m.engaged)
+
+    def test_idempotent(self) -> None:
+        m = CharacterCovenantRoleFactory()  # engaged=False by default
+        clear_engaged_membership(membership=m)
+        m.refresh_from_db()
+        self.assertFalse(m.engaged)
+
+
+class ClearEngagedForTypeTests(TestCase):
+    def test_unengages_all_engaged_of_given_type(self) -> None:
+        sheet = CharacterSheetFactory()
+        cov_a = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        cov_b = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        m_a = CharacterCovenantRoleFactory(
+            character_sheet=sheet,
+            covenant=cov_a,
+            covenant_role=CovenantRoleFactory(covenant_type=CovenantType.DURANCE),
+        )
+        m_b = CharacterCovenantRoleFactory(
+            character_sheet=sheet,
+            covenant=cov_b,
+            covenant_role=CovenantRoleFactory(covenant_type=CovenantType.DURANCE),
+        )
+        # Engage one (set_engaged_membership would un-engage the other; for the
+        # test we just want both engaged temporarily, so set them directly).
+        m_a.engaged = True
+        m_a.save(update_fields=["engaged"])
+        m_b.engaged = True
+        m_b.save(update_fields=["engaged"])
+
+        clear_engaged_for_type(character_sheet=sheet, covenant_type=CovenantType.DURANCE)
+        m_a.refresh_from_db()
+        m_b.refresh_from_db()
+        self.assertFalse(m_a.engaged)
+        self.assertFalse(m_b.engaged)
+
+    def test_does_not_touch_other_types(self) -> None:
+        sheet = CharacterSheetFactory()
+        battle_m = CharacterCovenantRoleFactory(
+            character_sheet=sheet,
+            covenant=CovenantFactory(covenant_type=CovenantType.BATTLE),
+            covenant_role=CovenantRoleFactory(covenant_type=CovenantType.BATTLE),
+        )
+        battle_m.engaged = True
+        battle_m.save(update_fields=["engaged"])
+
+        clear_engaged_for_type(character_sheet=sheet, covenant_type=CovenantType.DURANCE)
+        battle_m.refresh_from_db()
+        self.assertTrue(battle_m.engaged)
+
+
+class MakeEngagedMemberTests(TestCase):
+    def test_creates_engaged_row(self) -> None:
+        from world.covenants.factories import make_engaged_member
+
+        membership = make_engaged_member()
+        self.assertTrue(membership.engaged)
+        self.assertIsNone(membership.left_at)

@@ -3,6 +3,7 @@
 import factory
 from factory import django as factory_django
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import CovenantType, RoleArchetype
 from world.covenants.models import (
     CharacterCovenantRole,
@@ -72,3 +73,29 @@ class CharacterCovenantRoleFactory(factory_django.DjangoModelFactory):
     covenant = factory.SubFactory(CovenantFactory)
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     engaged = False
+
+
+def make_engaged_member(
+    *,
+    character_sheet: object = None,
+    covenant: object = None,
+    covenant_role: object = None,
+) -> CharacterCovenantRole:
+    """Create a covenant + active CCR row + set engaged=True, atomically.
+
+    Convenience for tests that exercise role-bonus or pull-eligibility paths.
+    Uses the `set_engaged_membership` service so the invariant is enforced
+    naturally.
+    """
+    from world.covenants.services import set_engaged_membership
+
+    sheet = character_sheet or CharacterSheetFactory()
+    cov = covenant or CovenantFactory()
+    role = covenant_role or CovenantRoleFactory(covenant_type=cov.covenant_type)
+    membership = CharacterCovenantRoleFactory(
+        character_sheet=sheet,
+        covenant=cov,
+        covenant_role=role,
+    )
+    set_engaged_membership(membership=membership)
+    return membership
