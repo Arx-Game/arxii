@@ -197,7 +197,7 @@ class RoomProfileFactory(factory.django.DjangoModelFactory):
             **{lookup_field: objectdb},
             defaults=kwargs,
         )
-        if kwargs:
+        if not _created and kwargs:
             for field, value in kwargs.items():
                 setattr(instance, field, value)
             instance.save()

@@ -26,7 +26,8 @@ def _clamp(value: int, stat_key: StatKey) -> int:
 def effective_stat(room: DefaultObject, stat_key: StatKey) -> int:
     """Cascade-resolve a single stat for a room, clamped to per-stat bounds.
 
-    Algorithm:
+    Algorithm (2 queries per call: closure walk + override or modifier
+    fetch; modifier ``current_value()`` is in-memory math):
       1. Resolve ``room.room_profile`` and its area. If the profile is
          missing, return ``STAT_DEFAULTS[stat_key]`` clamped.
       2. Look up the area's ancestors (and itself) via ``AreaClosure``.
@@ -39,6 +40,10 @@ def effective_stat(room: DefaultObject, stat_key: StatKey) -> int:
     """
 
     default = STAT_DEFAULTS.get(stat_key, 0)
+    # Django's OneToOne reverse accessor raises RelatedObjectDoesNotExist
+    # (a subclass of RoomProfile.DoesNotExist) when the room has no profile;
+    # getattr-with-default doesn't suppress that exception. Project linter
+    # also forbids getattr with a literal attribute name (GETATTR_LITERAL).
     try:
         profile = room.room_profile
     except RoomProfile.DoesNotExist:
