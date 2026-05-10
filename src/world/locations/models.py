@@ -421,4 +421,8 @@ class LocationTenancy(DiscriminatorMixin, SharedMemoryModel):
         tenant_field = self.TENANT_DISCRIMINATOR_MAP.get(self.tenant_type)
         tenant = getattr(self, tenant_field, None) if tenant_field else None
         tenant_name = str(tenant) if tenant is not None else "(deleted)"
-        return f"Tenancy of {target} by {tenant_name}"
+        if self.ends_at is None or self.ends_at > timezone.now():
+            state = "active"
+        else:
+            state = "expired"
+        return f"Tenancy of {target} by {tenant_name} ({state})"
