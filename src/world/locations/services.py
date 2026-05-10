@@ -9,7 +9,7 @@ from django.db import models
 from evennia_extensions.models import RoomProfile
 from world.areas.models import AreaClosure
 from world.locations.constants import STAT_CLAMPS, STAT_DEFAULTS, StatKey
-from world.locations.models import LocationStatModifier, LocationStatOverride
+from world.locations.models import LocationOwnership, LocationStatModifier, LocationStatOverride
 
 if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
@@ -78,3 +78,46 @@ def effective_stat(room: DefaultObject, stat_key: StatKey) -> int:
     )
     total = default + sum(mod.current_value() for mod in modifiers)
     return _clamp(total, stat_key)
+
+
+def effective_owner(room: DefaultObject) -> LocationOwnership | None:
+    """Cascade-resolve the most-specific active owner of a room.
+
+    Algorithm:
+      1. Resolve the room's RoomProfile and its area. If profile is
+         missing (or area is None), return None.
+      2. Look up area ancestors (and self at depth 0) via AreaClosure.
+      3. Filter LocationOwnership for ``room_profile=profile OR
+         area_id IN ancestor_ids`` AND ``ended_at IS NULL``.
+      4. Most-specific wins: room-level beats area-level; among areas,
+         smallest level wins (BUILDING=10 is most specific).
+
+    Returns the LocationOwnership row (caller can call
+    ``.get_active_target()`` for the Persona/Organization), or None
+    if no active ownership exists in the chain.
+    """
+
+    try:
+        profile = room.room_profile
+    except RoomProfile.DoesNotExist:
+        return None
+
+    area = profile.area
+    ancestor_ids: list[int] = []
+    if area is not None:
+        ancestor_ids = list(
+            AreaClosure.objects.filter(descendant_id=area.pk).values_list("ancestor_id", flat=True)
+        )
+
+    rows = list(
+        LocationOwnership.objects.filter(ended_at__isnull=True)
+        .select_related("area", "holder_persona", "holder_organization")
+        .filter(models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids))
+    )
+    if not rows:
+        return None
+
+    room_rows = [r for r in rows if r.room_profile_id == profile.pk]
+    if room_rows:
+        return room_rows[0]
+    return min(rows, key=lambda r: r.area.level)
