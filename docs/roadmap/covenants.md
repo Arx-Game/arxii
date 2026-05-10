@@ -37,12 +37,28 @@ dissolution paths) is the rest of the multi-slice buildout.
 The `CovenantType` `TextChoices` enum (`world.covenants.constants`) currently
 ships `DURANCE` and `BATTLE`.
 
+### Covenants Are Group-Only
+
+A covenant cannot be founded with a single character. Formation requires at
+least two distinct character sheets, each with a role, supplied as the
+initial set of founder memberships. The entire point of the system is to
+require collaborative play to be significant — there will never, ever be a
+"solo" covenant.
+
+`create_covenant(*, founders: Sequence[CovenantFounder])` enforces this at
+the service layer with typed exceptions (`InsufficientFoundersError`,
+`DuplicateFounderError`). Future UI flows (Slice B) gate participant
+selection so the API layer never receives fewer than two founders. Slice B
+will also decide dissolution behavior when membership later drops below 2
+(likely: auto-flag for replacement, then auto-dissolve after a grace period).
+
 ### Membership is Non-Exclusive
 
-A character can be an active member of multiple covenants simultaneously —
-including multiple Durance covenants, plus a Battle covenant. This is a
-deliberate design call (Slice A §3.1) so the social structure stays resilient
-to varying player activity: an active player naturally supports several groups
+While each individual covenant has ≥2 members, an individual character can
+be an active member of multiple covenants simultaneously — including
+multiple Durance covenants, plus a Battle covenant. This is a deliberate
+design call (Slice A §3.1) so the social structure stays resilient to
+varying player activity: an active player naturally supports several groups
 as "primary" in some, "supporting" in others, without having to leave any.
 
 The active-uniqueness DB constraint enforces "at most one active role per

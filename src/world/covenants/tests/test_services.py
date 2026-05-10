@@ -7,6 +7,7 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import CovenantType
+from world.covenants.exceptions import DuplicateFounderError, InsufficientFoundersError
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
@@ -26,25 +27,70 @@ from world.covenants.services import (
     is_gear_compatible,
     set_engaged_membership,
 )
+from world.covenants.types import CovenantFounder
 from world.items.constants import GearArchetype
 
 
 class CreateCovenantTests(TestCase):
-    def test_creates_covenant_with_founder_membership(self) -> None:
-        sheet = CharacterSheetFactory()
-        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+    def test_creates_covenant_with_two_founder_memberships(self) -> None:
+        sheet_a = CharacterSheetFactory()
+        sheet_b = CharacterSheetFactory()
+        role_a = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        role_b = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
         cov = create_covenant(
             name="Founders",
             covenant_type=CovenantType.DURANCE,
             sworn_objective="Forge bonds.",
-            founder_character_sheet=sheet,
-            founder_role=role,
+            founders=[
+                CovenantFounder(character_sheet=sheet_a, role=role_a),
+                CovenantFounder(character_sheet=sheet_b, role=role_b),
+            ],
         )
         self.assertEqual(cov.covenant_type, CovenantType.DURANCE)
-        membership = CharacterCovenantRole.objects.get(character_sheet=sheet, covenant=cov)
-        self.assertEqual(membership.covenant_role, role)
-        self.assertIsNone(membership.left_at)
-        self.assertFalse(membership.engaged)
+        membership_a = CharacterCovenantRole.objects.get(character_sheet=sheet_a, covenant=cov)
+        membership_b = CharacterCovenantRole.objects.get(character_sheet=sheet_b, covenant=cov)
+        self.assertEqual(membership_a.covenant_role, role_a)
+        self.assertEqual(membership_b.covenant_role, role_b)
+        for membership in (membership_a, membership_b):
+            self.assertIsNone(membership.left_at)
+            self.assertFalse(membership.engaged)
+
+    def test_rejects_single_founder(self) -> None:
+        """Covenant formation requires ≥2 founders; solo formation is a programmer error."""
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        with self.assertRaises(InsufficientFoundersError):
+            create_covenant(
+                name="Solo",
+                covenant_type=CovenantType.DURANCE,
+                sworn_objective="Alone.",
+                founders=[CovenantFounder(character_sheet=sheet, role=role)],
+            )
+
+    def test_rejects_empty_founders(self) -> None:
+        with self.assertRaises(InsufficientFoundersError):
+            create_covenant(
+                name="None",
+                covenant_type=CovenantType.DURANCE,
+                sworn_objective="Empty.",
+                founders=[],
+            )
+
+    def test_rejects_duplicate_founder_sheet(self) -> None:
+        """Two founder entries pointing at the same character sheet is rejected."""
+        sheet = CharacterSheetFactory()
+        role_a = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        role_b = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        with self.assertRaises(DuplicateFounderError):
+            create_covenant(
+                name="Dupe",
+                covenant_type=CovenantType.DURANCE,
+                sworn_objective="Same person twice.",
+                founders=[
+                    CovenantFounder(character_sheet=sheet, role=role_a),
+                    CovenantFounder(character_sheet=sheet, role=role_b),
+                ],
+            )
 
 
 class AddMemberTests(TestCase):

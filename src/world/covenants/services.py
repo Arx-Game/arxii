@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from django.db import transaction
 from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
+from world.covenants.exceptions import DuplicateFounderError, InsufficientFoundersError
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
     CovenantRole,
     GearArchetypeCompatibility,
 )
+from world.covenants.types import CovenantFounder
+
+MINIMUM_FOUNDERS = 2
 
 
 @transaction.atomic
@@ -20,21 +26,34 @@ def create_covenant(
     name: str,
     covenant_type: str,
     sworn_objective: str,
-    founder_character_sheet: CharacterSheet,
-    founder_role: CovenantRole,
+    founders: Sequence[CovenantFounder],
 ) -> Covenant:
-    """Create a covenant with a single founder membership. Atomic."""
+    """Create a covenant with its initial set of founder memberships. Atomic.
+
+    Covenants are inherently group structures — formation requires at least
+    two distinct founders (`feedback_covenants_are_group_only.md`). The
+    serializer layer enforces this for user-supplied data; the service
+    raises typed exceptions as defensive assertions against programmer
+    errors (Insufficient/DuplicateFounderError).
+    """
+    if len(founders) < MINIMUM_FOUNDERS:
+        raise InsufficientFoundersError
+    sheet_pks = [founder.character_sheet.pk for founder in founders]
+    if len(set(sheet_pks)) != len(sheet_pks):
+        raise DuplicateFounderError
+
     cov = Covenant.objects.create(
         name=name,
         covenant_type=covenant_type,
         sworn_objective=sworn_objective,
     )
-    CharacterCovenantRole.objects.create(
-        character_sheet=founder_character_sheet,
-        covenant=cov,
-        covenant_role=founder_role,
-    )
-    founder_character_sheet.character.covenant_roles.invalidate()
+    for founder in founders:
+        CharacterCovenantRole.objects.create(
+            character_sheet=founder.character_sheet,
+            covenant=cov,
+            covenant_role=founder.role,
+        )
+        founder.character_sheet.character.covenant_roles.invalidate()
     return cov
 
 
