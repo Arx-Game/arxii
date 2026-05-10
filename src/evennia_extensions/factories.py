@@ -181,3 +181,24 @@ class RoomProfileFactory(factory.django.DjangoModelFactory):
         django_get_or_create = ("objectdb",)
 
     objectdb = factory.SubFactory(ObjectDBFactory, db_typeclass_path="typeclasses.rooms.Room")
+
+    @classmethod
+    def _create(cls, model_class, *args, **kwargs):
+        """Apply non-lookup kwargs even when the row already exists.
+
+        Room.at_object_creation() auto-creates a RoomProfile when an Evennia
+        Room is saved. Without this override, factory_boy's default
+        django_get_or_create returns the existing row and silently discards
+        any kwargs the test passed beyond ``objectdb``.
+        """
+        lookup_field = "objectdb"
+        objectdb = kwargs.pop(lookup_field)
+        instance, _created = model_class.objects.get_or_create(
+            **{lookup_field: objectdb},
+            defaults=kwargs,
+        )
+        if not _created and kwargs:
+            for field, value in kwargs.items():
+                setattr(instance, field, value)
+            instance.save()
+        return instance

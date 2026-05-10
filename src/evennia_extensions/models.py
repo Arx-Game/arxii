@@ -393,6 +393,13 @@ class RoomProfile(SharedMemoryModel):
         default=True,
         help_text="Whether this room appears in public room listings",
     )
+    is_outdoor = models.BooleanField(
+        default=False,
+        help_text=(
+            "Whether this room is exposed to outdoor environment "
+            "(weather, sky, etc.). Most rooms are indoor."
+        ),
+    )
 
     class Meta:
         verbose_name = "Room Profile"
