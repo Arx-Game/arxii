@@ -16,7 +16,7 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import CharacterClassLevelFactory
 from world.covenants.exceptions import CovenantRoleNeverHeldError
-from world.covenants.factories import CovenantRoleFactory
+from world.covenants.factories import CovenantFactory, CovenantRoleFactory
 from world.covenants.services import assign_covenant_role, end_covenant_role
 from world.magic.constants import TargetKind
 from world.magic.factories import ResonanceFactory
@@ -37,8 +37,9 @@ class CovenantRoleThreadHappyPathTests(TestCase):
         CharacterClassLevelFactory(character=cls.sheet.character, level=5)
         cls.sheet.invalidate_class_level_cache()
 
-        # 3. CovenantRole.
-        cls.role = CovenantRoleFactory()
+        # 3. Covenant + CovenantRole.
+        cls.cov = CovenantFactory()
+        cls.role = CovenantRoleFactory(covenant_type=cls.cov.covenant_type)
 
         # 4. Resonance.
         cls.resonance = ResonanceFactory()
@@ -50,7 +51,7 @@ class CovenantRoleThreadHappyPathTests(TestCase):
           current_level = 5
           compute_anchor_cap(thread) = 5 * 10 = 50
         """
-        assign_covenant_role(character_sheet=self.sheet, covenant_role=self.role)
+        assign_covenant_role(character_sheet=self.sheet, covenant=self.cov, covenant_role=self.role)
 
         thread = weave_thread(
             self.sheet,
@@ -95,12 +96,15 @@ class CovenantRoleThreadHistoricalRoleTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
-        cls.role = CovenantRoleFactory()
+        cls.cov = CovenantFactory()
+        cls.role = CovenantRoleFactory(covenant_type=cls.cov.covenant_type)
         cls.resonance = ResonanceFactory()
 
     def test_role_ended_in_history_still_allows_weave(self) -> None:
         """assign then end → weave still succeeds because has_ever_held checks all rows."""
-        assignment = assign_covenant_role(character_sheet=self.sheet, covenant_role=self.role)
+        assignment = assign_covenant_role(
+            character_sheet=self.sheet, covenant=self.cov, covenant_role=self.role
+        )
         end_covenant_role(assignment=assignment)
 
         # Handler cache reflects the ended state — invalidate to be safe.
