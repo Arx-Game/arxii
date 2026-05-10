@@ -1,8 +1,9 @@
 """FilterSet classes for covenants API."""
 
+from django.db.models import QuerySet
 import django_filters
 
-from world.covenants.models import CharacterCovenantRole, GearArchetypeCompatibility
+from world.covenants.models import CharacterCovenantRole, Covenant, GearArchetypeCompatibility
 
 
 class CharacterCovenantRoleFilter(django_filters.FilterSet):
@@ -17,6 +18,25 @@ class CharacterCovenantRoleFilter(django_filters.FilterSet):
     class Meta:
         model = CharacterCovenantRole
         fields = ["character_sheet", "covenant_role", "is_active"]
+
+
+class CovenantFilter(django_filters.FilterSet):
+    """Filter covenants by type and lifecycle state."""
+
+    is_active = django_filters.BooleanFilter(method="filter_is_active")
+
+    class Meta:
+        model = Covenant
+        fields = ["covenant_type", "is_active"]
+
+    def filter_is_active(
+        self, queryset: QuerySet[Covenant], name: str, value: bool
+    ) -> QuerySet[Covenant]:
+        if value is True:
+            return queryset.filter(dissolved_at__isnull=True)
+        if value is False:
+            return queryset.filter(dissolved_at__isnull=False)
+        return queryset
 
 
 class GearArchetypeCompatibilityFilter(django_filters.FilterSet):
