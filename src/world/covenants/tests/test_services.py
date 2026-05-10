@@ -134,14 +134,16 @@ class AssignCovenantRoleTests(TestCase):
 
     def test_assign_invalidates_handler(self) -> None:
         # Warm the cache before assigning.
-        _ = self.sheet.character.covenant_roles.currently_held()
+        _ = list(self.sheet.character.covenant_roles.currently_engaged_roles())
 
         new_cov = CovenantFactory()
         new_role = CovenantRoleFactory(slug="anchor", covenant_type=new_cov.covenant_type)
         assign_covenant_role(character_sheet=self.sheet, covenant=new_cov, covenant_role=new_role)
 
-        # currently_held should reflect the new assignment, not stale cache.
-        self.assertEqual(self.sheet.character.covenant_roles.currently_held(), new_role)
+        # currently_held_role_in should reflect the new assignment, not stale cache.
+        self.assertEqual(
+            self.sheet.character.covenant_roles.currently_held_role_in(new_cov), new_role
+        )
 
     def test_assign_duplicate_active_raises_integrity_error(self) -> None:
         # Create an active assignment first.
@@ -159,18 +161,19 @@ class EndCovenantRoleTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()
-        cls.role = CovenantRoleFactory(slug="shield-end")
+        cls.cov = CovenantFactory()
+        cls.role = CovenantRoleFactory(slug="shield-end", covenant_type=cls.cov.covenant_type)
 
     def test_end_sets_left_at(self) -> None:
         assignment = CharacterCovenantRoleFactory(
-            character_sheet=self.sheet, covenant_role=self.role
+            character_sheet=self.sheet, covenant=self.cov, covenant_role=self.role
         )
         end_covenant_role(assignment=assignment)
         self.assertIsNotNone(assignment.left_at)
 
     def test_end_is_idempotent(self) -> None:
         assignment = CharacterCovenantRoleFactory(
-            character_sheet=self.sheet, covenant_role=self.role
+            character_sheet=self.sheet, covenant=self.cov, covenant_role=self.role
         )
         end_covenant_role(assignment=assignment)
         first_left_at = assignment.left_at
@@ -181,15 +184,17 @@ class EndCovenantRoleTests(TestCase):
 
     def test_end_invalidates_handler(self) -> None:
         assignment = CharacterCovenantRoleFactory(
-            character_sheet=self.sheet, covenant_role=self.role
+            character_sheet=self.sheet, covenant=self.cov, covenant_role=self.role
         )
-        # Warm the cache so currently_held returns role.
-        self.assertEqual(self.sheet.character.covenant_roles.currently_held(), self.role)
+        # Warm the cache so currently_held_role_in returns role.
+        self.assertEqual(
+            self.sheet.character.covenant_roles.currently_held_role_in(self.cov), self.role
+        )
 
         end_covenant_role(assignment=assignment)
 
-        # After ending, currently_held should return None.
-        self.assertIsNone(self.sheet.character.covenant_roles.currently_held())
+        # After ending, currently_held_role_in should return None.
+        self.assertIsNone(self.sheet.character.covenant_roles.currently_held_role_in(self.cov))
 
 
 class IsGearCompatibleTests(TestCase):

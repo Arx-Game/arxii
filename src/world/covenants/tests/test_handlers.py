@@ -21,13 +21,15 @@ class CharacterCovenantRoleHandlerTests(TestCase):
         cls.sheet = CharacterSheetFactory()
         cls.role_a = CovenantRoleFactory(name="Vanguard", slug="vanguard")
         cls.role_b = CovenantRoleFactory(name="Anchor", slug="anchor")
+        cls.cov_a = CovenantFactory()
         cls.assignment = CharacterCovenantRoleFactory(
             character_sheet=cls.sheet,
+            covenant=cls.cov_a,
             covenant_role=cls.role_a,
         )
 
-    def test_currently_held(self) -> None:
-        result = self.sheet.character.covenant_roles.currently_held()
+    def test_currently_held_role_in(self) -> None:
+        result = self.sheet.character.covenant_roles.currently_held_role_in(self.cov_a)
         self.assertEqual(result, self.role_a)
 
     def test_has_ever_held_active_role(self) -> None:
@@ -45,7 +47,7 @@ class CharacterCovenantRoleHandlerTests(TestCase):
         self.sheet.character.covenant_roles.invalidate()
 
         self.assertTrue(self.sheet.character.covenant_roles.has_ever_held(self.role_a))
-        self.assertIsNone(self.sheet.character.covenant_roles.currently_held())
+        self.assertIsNone(self.sheet.character.covenant_roles.currently_held_role_in(self.cov_a))
 
         # Restore so other tests in setUpTestData aren't affected.
         self.assignment.left_at = None

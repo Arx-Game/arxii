@@ -202,7 +202,7 @@ class GearCompatibilityPipelineTests(TestCase):
 
         char = CharacterFactory(db_key="NoRoleGearPipelineChar")
         sheet = CharacterSheetFactory(character=char, primary_persona=False)
-        # No CharacterCovenantRole — currently_held() will return None
+        # No CharacterCovenantRole — currently_held_role_in() will return None
         item = ItemInstanceFactory(
             template=ItemTemplateFactory(gear_archetype=GearArchetype.HEAVY_ARMOR)
         )
