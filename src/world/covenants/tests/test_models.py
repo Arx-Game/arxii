@@ -1,11 +1,12 @@
 """Tests for covenant models."""
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
 from world.covenants.constants import CovenantType, RoleArchetype
 from world.covenants.factories import CovenantRoleFactory
-from world.covenants.models import CovenantRole, GearArchetypeCompatibility
+from world.covenants.models import Covenant, CovenantRole, GearArchetypeCompatibility
 from world.items.constants import GearArchetype
 
 
@@ -147,3 +148,38 @@ class CharacterCovenantRoleTests(TestCase):
             ).count(),
             2,
         )
+
+
+class CovenantModelTests(TestCase):
+    def test_defaults_and_str(self) -> None:
+        cov = Covenant.objects.create(
+            name="Test Covenant",
+            covenant_type=CovenantType.DURANCE,
+            sworn_objective="To do the thing.",
+        )
+        self.assertEqual(cov.level, 1)
+        self.assertIsNone(cov.dissolved_at)
+        self.assertIsNotNone(cov.formed_at)
+        self.assertIn("Test Covenant", str(cov))
+        self.assertIn("active", str(cov))
+
+    def test_dissolved_str(self) -> None:
+        from django.utils import timezone
+
+        cov = Covenant.objects.create(
+            name="Dead Covenant",
+            covenant_type=CovenantType.BATTLE,
+            sworn_objective="Was a thing.",
+            dissolved_at=timezone.now(),
+        )
+        self.assertIn("dissolved", str(cov))
+
+    def test_blank_sworn_objective_rejected(self) -> None:
+        # Empty sworn_objective should fail full_clean (TextField with blank=False).
+        cov = Covenant(
+            name="Empty",
+            covenant_type=CovenantType.DURANCE,
+            sworn_objective="",
+        )
+        with self.assertRaises(ValidationError):
+            cov.full_clean()

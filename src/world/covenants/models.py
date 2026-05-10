@@ -13,6 +13,42 @@ from world.covenants.constants import CovenantType, RoleArchetype
 from world.items.constants import GearArchetype
 
 
+class Covenant(SharedMemoryModel):
+    """The foundational social/magical structure that binds members under a sworn oath.
+
+    Slice A scope: identity, type, level (placeholder until Slice D), formed/dissolved
+    timestamps, free-text sworn objective.
+
+    Deferred fields (future slices):
+    - durance_focus_FK / battle_encounter_FK — Slice E (type-specific data)
+    - structured sworn_objective_FK → SwornObjective — Slice C (replaces TextField)
+    - xp, milestone progression fields — Slice D
+    - description, crest, motto, cosmetic fields — post-MVP polish
+    - dissolution_reason, dissolution_kind — Slice B
+    """
+
+    name = models.CharField(max_length=120)
+    covenant_type = models.CharField(
+        max_length=20,
+        choices=CovenantType.choices,
+        default=CovenantType.DURANCE,
+    )
+    level = models.PositiveIntegerField(
+        default=1,
+        help_text="Group progression tier (Slice D will drive growth).",
+    )
+    sworn_objective = models.TextField(
+        blank=False,
+        help_text="Free text in Slice A; structured in Slice C.",
+    )
+    formed_at = models.DateTimeField(auto_now_add=True)
+    dissolved_at = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self) -> str:
+        state = "active" if self.dissolved_at is None else "dissolved"
+        return f"{self.name} ({self.get_covenant_type_display()}, {state})"
+
+
 class CovenantRole(SharedMemoryModel):
     """A role that a character can hold within a covenant.
 
