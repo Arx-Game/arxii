@@ -282,7 +282,11 @@ def _facet_effect_contribution(
 
 
 def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
-    """Sum covenant-role contributions across equipped items for a ModifierTarget (Spec D §5.6).
+    """Sum covenant-role contributions across equipped items, gated on engagement.
+
+    Per spec 2026-05-09 §3.6: role bonuses apply only when the character is
+    "engaged" with the covenant where they hold the role. Multiple engaged
+    roles (e.g., one Durance + one Battle) stack additively.
 
     Per slot:
     - Compatible gear (GearArchetypeCompatibility row exists): role_bonus + gear_stat (additive)
@@ -296,10 +300,10 @@ def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
         target: The ModifierTarget to aggregate bonuses for.
 
     Returns:
-        Integer total of all covenant-role contributions across equipped items.
+        Integer total of all engaged-covenant-role contributions across equipped items.
     """
     from world.covenants.services import (  # noqa: PLC0415 — PR3 wires covenant callbacks
-        is_gear_compatible,  # defer import to break future cycle
+        is_gear_compatible,
     )
 
     char = sheet.character
@@ -307,19 +311,21 @@ def covenant_role_bonus(sheet: object, target: ModifierTarget) -> int:
     # Character typeclass handlers. Skip the walk gracefully.
     if not hasattr(char, "covenant_roles") or not hasattr(char, "equipped_items"):
         return 0
-    role = char.covenant_roles.currently_held()
-    if role is None:
+    engaged_roles = char.covenant_roles.currently_engaged_roles()
+    if not engaged_roles:
         return 0
-    role_bonus = role_base_bonus_for_target(role, target, sheet.current_level)
+
     total = 0
-    for equipped in char.equipped_items:
-        item = equipped.item_instance
-        gear_stat = item_mundane_stat_for_target(item, target)
-        archetype = item.template.gear_archetype
-        if is_gear_compatible(role, archetype):
-            total += role_bonus + gear_stat
-        else:
-            total += max(role_bonus, gear_stat)
+    for role in engaged_roles:
+        role_bonus = role_base_bonus_for_target(role, target, sheet.current_level)
+        for equipped in char.equipped_items:
+            item = equipped.item_instance
+            gear_stat = item_mundane_stat_for_target(item, target)
+            archetype = item.template.gear_archetype
+            if is_gear_compatible(role, archetype):
+                total += role_bonus + gear_stat
+            else:
+                total += max(role_bonus, gear_stat)
     return total
 
 

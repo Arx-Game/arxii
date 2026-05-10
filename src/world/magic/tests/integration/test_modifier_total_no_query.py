@@ -165,8 +165,11 @@ class ModifierTotalQueryBudgetTests(TestCase):
             flat_bonus_amount=5,
         )
 
-        # 9. Covenant role assigned to the character
+        # 9. Covenant role assigned to the character — engaged so covenant_role_bonus fires
+        from world.covenants.services import set_engaged_membership
+
         cls.assignment = CharacterCovenantRoleFactory(character_sheet=cls.sheet)
+        set_engaged_membership(membership=cls.assignment)
 
         # 10. GearArchetypeCompatibility for (role, HEAVY_ARMOR) — compatible pair
         GearArchetypeCompatibilityFactory(

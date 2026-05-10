@@ -550,7 +550,12 @@ class CovenantRoleBonusTests(TestCase):
         assert result == 0
 
     def test_placeholders_return_zero_by_default(self) -> None:
-        """Without patching, sheet with active role + equipped item → 0 (PR1 behavior)."""
+        """Active but non-engaged role + equipped item → 0.
+
+        After Phase 8 refactor, an un-engaged membership causes early exit
+        before the equipment walk, so the result is 0 regardless of placeholder
+        bonus values.
+        """
         from evennia_extensions.factories import CharacterFactory
         from world.covenants.factories import CharacterCovenantRoleFactory
         from world.items.constants import GearArchetype
@@ -564,6 +569,7 @@ class CovenantRoleBonusTests(TestCase):
         sheet = CharacterSheetFactory(character=char, primary_persona=False)
         target = ModifierTargetFactory(name="PlaceholderTarget")
 
+        # Not engaged (factory default engaged=False)
         CharacterCovenantRoleFactory(character_sheet=sheet)
         sheet.character.covenant_roles.invalidate()
 
@@ -584,6 +590,7 @@ class CovenantRoleBonusTests(TestCase):
             CharacterCovenantRoleFactory,
             GearArchetypeCompatibilityFactory,
         )
+        from world.covenants.services import set_engaged_membership
         from world.items.constants import GearArchetype
         from world.items.factories import (
             EquippedItemFactory,
@@ -596,6 +603,7 @@ class CovenantRoleBonusTests(TestCase):
         target = ModifierTargetFactory(name="CompatTarget")
 
         assignment = CharacterCovenantRoleFactory(character_sheet=sheet)
+        set_engaged_membership(membership=assignment)
         sheet.character.covenant_roles.invalidate()
 
         template = ItemTemplateFactory(gear_archetype=GearArchetype.HEAVY_ARMOR)
@@ -623,6 +631,7 @@ class CovenantRoleBonusTests(TestCase):
 
         from evennia_extensions.factories import CharacterFactory
         from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.covenants.services import set_engaged_membership
         from world.items.constants import GearArchetype
         from world.items.factories import (
             EquippedItemFactory,
@@ -634,7 +643,8 @@ class CovenantRoleBonusTests(TestCase):
         sheet = CharacterSheetFactory(character=char, primary_persona=False)
         target = ModifierTargetFactory(name="IncompatTarget")
 
-        CharacterCovenantRoleFactory(character_sheet=sheet)
+        assignment = CharacterCovenantRoleFactory(character_sheet=sheet)
+        set_engaged_membership(membership=assignment)
         sheet.character.covenant_roles.invalidate()
 
         template = ItemTemplateFactory(gear_archetype=GearArchetype.MELEE_ONE_HAND)
@@ -658,6 +668,7 @@ class CovenantRoleBonusTests(TestCase):
 
         from evennia_extensions.factories import CharacterFactory
         from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.covenants.services import set_engaged_membership
         from world.items.constants import GearArchetype
         from world.items.factories import (
             EquippedItemFactory,
@@ -669,7 +680,8 @@ class CovenantRoleBonusTests(TestCase):
         sheet = CharacterSheetFactory(character=char, primary_persona=False)
         target = ModifierTargetFactory(name="GearDomTarget")
 
-        CharacterCovenantRoleFactory(character_sheet=sheet)
+        assignment = CharacterCovenantRoleFactory(character_sheet=sheet)
+        set_engaged_membership(membership=assignment)
         sheet.character.covenant_roles.invalidate()
 
         template = ItemTemplateFactory(gear_archetype=GearArchetype.RANGED)
@@ -695,6 +707,7 @@ class CovenantRoleBonusTests(TestCase):
             CharacterCovenantRoleFactory,
             GearArchetypeCompatibilityFactory,
         )
+        from world.covenants.services import set_engaged_membership
         from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype
         from world.items.factories import (
             EquippedItemFactory,
@@ -707,6 +720,7 @@ class CovenantRoleBonusTests(TestCase):
         target = ModifierTargetFactory(name="TwoItemRoleTarget")
 
         assignment = CharacterCovenantRoleFactory(character_sheet=sheet)
+        set_engaged_membership(membership=assignment)
         sheet.character.covenant_roles.invalidate()
 
         # Compatible item: HEAVY_ARMOR with compat row
