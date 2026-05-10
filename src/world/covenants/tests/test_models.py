@@ -1,9 +1,11 @@
 """Tests for covenant models."""
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.utils import timezone
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.covenants.constants import CovenantType, RoleArchetype
 from world.covenants.factories import CovenantRoleFactory
 from world.covenants.models import Covenant, CovenantRole, GearArchetypeCompatibility
@@ -96,10 +98,13 @@ class GearArchetypeCompatibilityTests(TestCase):
 class CharacterCovenantRoleTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        from world.character_sheets.factories import CharacterSheetFactory
-
         cls.sheet = CharacterSheetFactory()
         cls.role = CovenantRoleFactory()
+        cls.covenant = Covenant.objects.create(
+            name="Test Cov",
+            covenant_type=CovenantType.DURANCE,
+            sworn_objective="Test objective.",
+        )
 
     def test_create_active(self) -> None:
         from world.covenants.models import CharacterCovenantRole
@@ -107,6 +112,7 @@ class CharacterCovenantRoleTests(TestCase):
         row = CharacterCovenantRole.objects.create(
             character_sheet=self.sheet,
             covenant_role=self.role,
+            covenant=self.covenant,
         )
         self.assertIsNone(row.left_at)
         self.assertIsNotNone(row.joined_at)
@@ -117,22 +123,23 @@ class CharacterCovenantRoleTests(TestCase):
         CharacterCovenantRole.objects.create(
             character_sheet=self.sheet,
             covenant_role=self.role,
+            covenant=self.covenant,
         )
-        # Active row already exists; another active create must fail
+        # Active row already exists for this (character, covenant); must fail
         with self.assertRaises(IntegrityError):
             CharacterCovenantRole.objects.create(
                 character_sheet=self.sheet,
                 covenant_role=self.role,
+                covenant=self.covenant,
             )
 
     def test_historical_assignments_allowed_after_left_at_set(self) -> None:
-        from django.utils import timezone
-
         from world.covenants.models import CharacterCovenantRole
 
         first = CharacterCovenantRole.objects.create(
             character_sheet=self.sheet,
             covenant_role=self.role,
+            covenant=self.covenant,
         )
         first.left_at = timezone.now()
         first.save(update_fields=["left_at"])
@@ -140,6 +147,7 @@ class CharacterCovenantRoleTests(TestCase):
         CharacterCovenantRole.objects.create(
             character_sheet=self.sheet,
             covenant_role=self.role,
+            covenant=self.covenant,
         )
         self.assertEqual(
             CharacterCovenantRole.objects.filter(
@@ -148,6 +156,119 @@ class CharacterCovenantRoleTests(TestCase):
             ).count(),
             2,
         )
+
+
+class CharacterCovenantRoleConstraintTests(TestCase):
+    """Active-uniqueness and clean() coverage for the engagement model."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.cov_a = Covenant.objects.create(
+            name="Cov A",
+            covenant_type=CovenantType.DURANCE,
+            sworn_objective="A.",
+        )
+        cls.cov_b = Covenant.objects.create(
+            name="Cov B",
+            covenant_type=CovenantType.DURANCE,
+            sworn_objective="B.",
+        )
+        cls.cov_battle = Covenant.objects.create(
+            name="Cov Battle",
+            covenant_type=CovenantType.BATTLE,
+            sworn_objective="Battle.",
+        )
+        cls.role_vanguard = CovenantRoleFactory(
+            covenant_type=CovenantType.DURANCE,
+            archetype=RoleArchetype.SWORD,
+        )
+        cls.role_sword_battle = CovenantRoleFactory(
+            covenant_type=CovenantType.BATTLE,
+            archetype=RoleArchetype.SWORD,
+        )
+        cls.sheet = CharacterSheetFactory()
+
+    def test_one_active_role_per_covenant(self) -> None:
+        """Two active rows in the same covenant for one character is rejected."""
+        from world.covenants.models import CharacterCovenantRole
+
+        CharacterCovenantRole.objects.create(
+            character_sheet=self.sheet,
+            covenant=self.cov_a,
+            covenant_role=self.role_vanguard,
+        )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                CharacterCovenantRole.objects.create(
+                    character_sheet=self.sheet,
+                    covenant=self.cov_a,
+                    covenant_role=self.role_vanguard,
+                )
+
+    def test_same_role_in_different_covenants_allowed(self) -> None:
+        """Vanguard in covenant A AND Vanguard in covenant B is permitted."""
+        from world.covenants.models import CharacterCovenantRole
+
+        CharacterCovenantRole.objects.create(
+            character_sheet=self.sheet,
+            covenant=self.cov_a,
+            covenant_role=self.role_vanguard,
+        )
+        # Should not raise.
+        CharacterCovenantRole.objects.create(
+            character_sheet=self.sheet,
+            covenant=self.cov_b,
+            covenant_role=self.role_vanguard,
+        )
+
+    def test_clean_rejects_engaged_with_left_at(self) -> None:
+        from world.covenants.models import CharacterCovenantRole
+
+        ccr = CharacterCovenantRole.objects.create(
+            character_sheet=self.sheet,
+            covenant=self.cov_a,
+            covenant_role=self.role_vanguard,
+            engaged=True,
+            left_at=timezone.now(),
+        )
+        with self.assertRaises(ValidationError):
+            ccr.full_clean()
+
+    def test_clean_rejects_two_engaged_same_type(self) -> None:
+        from world.covenants.models import CharacterCovenantRole
+
+        CharacterCovenantRole.objects.create(
+            character_sheet=self.sheet,
+            covenant=self.cov_a,
+            covenant_role=self.role_vanguard,
+            engaged=True,
+        )
+        ccr2 = CharacterCovenantRole(
+            character_sheet=self.sheet,
+            covenant=self.cov_b,
+            covenant_role=self.role_vanguard,
+            engaged=True,
+        )
+        with self.assertRaises(ValidationError):
+            ccr2.full_clean()
+
+    def test_clean_permits_engaged_across_types(self) -> None:
+        from world.covenants.models import CharacterCovenantRole
+
+        CharacterCovenantRole.objects.create(
+            character_sheet=self.sheet,
+            covenant=self.cov_a,
+            covenant_role=self.role_vanguard,
+            engaged=True,
+        )
+        ccr2 = CharacterCovenantRole(
+            character_sheet=self.sheet,
+            covenant=self.cov_battle,
+            covenant_role=self.role_sword_battle,
+            engaged=True,
+        )
+        # Should not raise — different covenant types.
+        ccr2.full_clean()
 
 
 class CovenantModelTests(TestCase):
