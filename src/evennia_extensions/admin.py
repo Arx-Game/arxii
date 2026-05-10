@@ -247,7 +247,7 @@ class EmailAddressAdmin(admin.ModelAdmin):
 
 @admin.register(RoomProfile)
 class RoomProfileAdmin(admin.ModelAdmin):
-    list_display: ClassVar[list[str]] = ["objectdb", "area"]
-    list_filter: ClassVar[list[str]] = ["area__level"]
+    list_display: ClassVar[list[str]] = ["objectdb", "area", "is_outdoor", "is_public"]
+    list_filter: ClassVar[list[str]] = ["area__level", "is_outdoor", "is_public"]
     search_fields: ClassVar[list[str]] = ["objectdb__db_key"]
     autocomplete_fields: ClassVar[list[str]] = ["area"]
