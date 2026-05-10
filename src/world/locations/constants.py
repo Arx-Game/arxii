@@ -71,3 +71,10 @@ SUGGESTED_CHANGE_PER_DAY: dict[StatKey, int] = {
     StatKey.NOISE: -2,
     StatKey.TRAFFIC: -1,
 }
+
+
+class HolderType(models.TextChoices):
+    """Discriminator for owner/tenant rows: which holder FK is active."""
+
+    PERSONA = "persona", "Persona"
+    ORGANIZATION = "organization", "Organization"
