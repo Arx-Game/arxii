@@ -296,6 +296,8 @@
   - area -> areas.Area [FK] (nullable)
 **Pointed to by:**
   - residents <- character_sheets.CharacterSheet
+  - stat_overrides <- locations.LocationStatOverride
+  - stat_modifiers <- locations.LocationStatModifier
   - events <- events.Event
 
 
@@ -354,6 +356,33 @@
   - scriptdb_set <- scripts.ScriptDB
 
 
+## world.areas
+
+### Area
+**Foreign Keys:**
+  - parent -> areas.Area [FK] (nullable)
+  - realm -> realms.Realm [FK] (nullable)
+**Pointed to by:**
+  - children <- areas.Area
+  - stat_overrides <- locations.LocationStatOverride
+  - stat_modifiers <- locations.LocationStatModifier
+  - rooms <- evennia_extensions.RoomProfile
+
+### AreaClosure
+**Foreign Keys:**
+  - ancestor -> areas.Area [FK]
+  - descendant -> areas.Area [FK]
+
+### Service Functions
+- `get_ancestor_at_level(area: 'Area', target_level: 'AreaLevel') -> 'Area | None' — Walk the ancestry to find the ancestor at the given AreaLevel.`
+- `get_ancestry(area: 'Area') -> 'list[Area]' — Return the full ancestor chain from root down to this area.`
+- `get_descendant_areas(area: 'Area') -> 'list[Area]' — Return all areas in the subtree below this area.`
+- `get_effective_realm(area: 'Area') -> 'Realm | None' — Walk up the hierarchy to find the nearest realm assignment.`
+- `get_room_profile(room_obj: 'ObjectDB') -> 'RoomProfile' — Get or create the RoomProfile for a room ObjectDB instance.`
+- `get_rooms_in_area(area: 'Area') -> 'list[RoomProfile]' — Return all RoomProfiles in this area and everything beneath it.`
+- `reparent_area(area: 'Area', new_parent: 'Area | None') -> 'None' — Move an area under a new parent.`
+
+
 ## world.character_creation
 
 ### CGPointBudget
@@ -374,6 +403,7 @@
 **Pointed to by:**
   - beginning_traditions <- character_creation.BeginningTradition
   - drafts <- character_creation.CharacterDraft
+  - ritual_grants <- magic.BeginningsRitualGrant
   - codex_grants <- codex.BeginningsCodexGrant
 
 ### BeginningTradition
@@ -442,7 +472,6 @@
 ### CharacterSheet
 **Foreign Keys:**
   - roster_entry -> roster.RosterEntry [OneToOne] (nullable)
-  - anima_ritual -> magic.CharacterAnimaRitual [OneToOne] (nullable)
   - motif -> magic.Motif [OneToOne] (nullable)
   - weekly_journal_xp -> journals.WeeklyJournalXP [OneToOne] (nullable)
   - fatigue -> fatigue.FatiguePool [OneToOne] (nullable)
@@ -478,6 +507,10 @@
   - scene_entry_endorsements_received <- magic.SceneEntryEndorsement
   - resonance_grants <- magic.ResonanceGrant
   - reincarnations <- magic.Reincarnation
+  - sineating_offers_sent <- magic.SineatingPendingOffer
+  - sineating_offers_received <- magic.SineatingPendingOffer
+  - stage_advance_offers_sent <- magic.PendingStageAdvanceOffer
+  - stage_advance_offers_received <- magic.PendingStageAdvanceOffer
   - sineatings_as_sinner <- magic.Sineating
   - sineatings_as_sineater <- magic.Sineating
   - rescues_as_sinner <- magic.SoulTetherRescue
@@ -551,7 +584,6 @@
 **Pointed to by:**
   - action_templates <- actions.ActionTemplate
   - action_template_gates <- actions.ActionTemplateGate
-  - anima_rituals <- magic.CharacterAnimaRitual
   - soulfrayconfig_set <- magic.SoulfrayConfig
   - cures_conditions <- conditions.ConditionTemplate
   - conditionstage_set <- conditions.ConditionStage
@@ -610,6 +642,7 @@
   - path_aspects <- classes.PathAspect
   - character_selections <- progression.CharacterPathHistory
   - allowed_styles <- magic.TechniqueStyle
+  - ritual_grants <- magic.PathRitualGrant
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - codex_grants <- codex.PathCodexGrant
 
@@ -663,6 +696,7 @@
   - subject -> codex.CodexSubject [FK]
   - modifier_target -> mechanics.ModifierTarget [OneToOne] (nullable)
 **Pointed to by:**
+  - ritual_grants <- magic.CodexEntryRitualGrant
   - unlocks <- codex.CodexEntry
   - character_knowledge <- codex.CharacterCodexKnowledge
   - clues <- codex.CodexClue
@@ -881,7 +915,7 @@
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary — Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult — Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x000001FB4D455400>, default_factory=<dataclasses._MISSING_TYPE object at 0x000001FB4D455400>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x000001FB4D455400>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x000001E681436120>, default_factory=<dataclasses._MISSING_TYPE object at 0x000001E681436120>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x000001E681436120>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(target: 'ObjectDB') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(target: 'ObjectDB') -> dict[int, int] — Get all capability values for a character.`
@@ -937,6 +971,22 @@
 - `get_total_goal_points(character: 'CharacterSheet') -> int — Get the total goal points available for a character to distribute.`
 
 
+## world.locations
+
+### LocationStatOverride
+**Foreign Keys:**
+  - area -> areas.Area [FK] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+
+### LocationStatModifier
+**Foreign Keys:**
+  - area -> areas.Area [FK] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+
+### Service Functions
+- `effective_stat(room: 'DefaultObject', stat_key: 'StatKey') -> 'int' — Cascade-resolve a single stat for a room, clamped to per-stat bounds.`
+
+
 ## world.magic
 
 ### AudereThreshold
@@ -965,7 +1015,6 @@
   - alteration_templates <- magic.MagicalAlterationTemplate
   - corruption_twist_templates <- magic.MagicalAlterationTemplate
   - pending_alteration_origins <- magic.PendingAlteration
-  - anima_rituals <- magic.CharacterAnimaRitual
   - character_resonances <- magic.CharacterResonance
   - poseendorsement_set <- magic.PoseEndorsement
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
@@ -973,6 +1022,8 @@
   - motif_resonances <- magic.MotifResonance
   - imbuing_prose <- magic.ImbuingProseTemplate
   - room_tags <- magic.RoomResonance
+  - sineating_pending_offers <- magic.SineatingPendingOffer
+  - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating
   - rescues <- magic.SoulTetherRescue
   - pull_effects <- magic.ThreadPullEffect
@@ -1002,6 +1053,7 @@
   - available_beginnings <- character_creation.Beginnings
   - beginning_traditions <- character_creation.BeginningTradition
   - character_traditions <- magic.CharacterTradition
+  - ritual_grants <- magic.TraditionRitualGrant
   - codex_grants <- codex.TraditionCodexGrant
 
 ### CharacterTradition
@@ -1112,20 +1164,9 @@
 **Foreign Keys:**
   - character -> objects.ObjectDB [OneToOne]
 
-### CharacterAnimaRitual
-**Foreign Keys:**
-  - character -> character_sheets.CharacterSheet [OneToOne]
-  - stat -> traits.Trait [FK]
-  - skill -> skills.Skill [FK]
-  - specialization -> skills.Specialization [FK] (nullable)
-  - resonance -> magic.Resonance [FK]
-  - check_type -> checks.CheckType [FK]
-**Pointed to by:**
-  - performances <- magic.AnimaRitualPerformance
-
 ### AnimaRitualPerformance
 **Foreign Keys:**
-  - ritual -> magic.CharacterAnimaRitual [FK]
+  - ritual -> magic.Ritual [FK]
   - target_character -> character_sheets.CharacterSheet [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
   - outcome -> traits.CheckOutcome [FK] (nullable)
@@ -1192,6 +1233,37 @@
   - source_scene_entry_endorsement -> magic.SceneEntryEndorsement [FK] (nullable)
   - outfit_item_facet -> items.ItemFacet [FK] (nullable)
 
+### BeginningsRitualGrant
+**Foreign Keys:**
+  - beginnings -> character_creation.Beginnings [FK]
+  - ritual -> magic.Ritual [FK]
+
+### PathRitualGrant
+**Foreign Keys:**
+  - path -> classes.Path [FK]
+  - ritual -> magic.Ritual [FK]
+
+### DistinctionRitualGrant
+**Foreign Keys:**
+  - distinction -> distinctions.Distinction [FK]
+  - ritual -> magic.Ritual [FK]
+
+### TraditionRitualGrant
+**Foreign Keys:**
+  - tradition -> magic.Tradition [FK]
+  - ritual -> magic.Ritual [FK]
+
+### CodexEntryRitualGrant
+**Foreign Keys:**
+  - codex_entry -> codex.CodexEntry [FK]
+  - ritual -> magic.Ritual [FK]
+
+### CharacterRitualKnowledge
+**Foreign Keys:**
+  - roster_entry -> roster.RosterEntry [FK]
+  - ritual -> magic.Ritual [FK]
+  - learned_from -> roster.RosterTenure [FK] (nullable)
+
 ### Facet
 **Foreign Keys:**
   - parent -> magic.Facet [FK] (nullable)
@@ -1225,15 +1297,28 @@
   - character -> character_sheets.CharacterSheet [FK]
   - gift -> magic.Gift [OneToOne]
 
+### RitualSceneActionConfig
+**Foreign Keys:**
+  - ritual -> magic.Ritual [OneToOne]
+  - stat -> traits.Trait [FK]
+  - skill -> skills.Skill [FK]
+  - specialization -> skills.Specialization [FK] (nullable)
+  - resonance -> magic.Resonance [FK] (nullable)
+  - check_type -> checks.CheckType [FK] (nullable)
+
 ### ImbuingProseTemplate
 **Foreign Keys:**
   - resonance -> magic.Resonance [FK] (nullable)
 
 ### Ritual
 **Foreign Keys:**
+  - scene_action_config -> magic.RitualSceneActionConfig [OneToOne] (nullable)
   - flow -> flows.FlowDefinition [FK] (nullable)
+  - author_account -> accounts.AccountDB [FK] (nullable)
   - site_property -> mechanics.Property [FK] (nullable)
 **Pointed to by:**
+  - performances <- magic.AnimaRitualPerformance
+  - known_by_records <- magic.CharacterRitualKnowledge
   - requirements <- magic.RitualComponentRequirement
   - capstone_events <- relationships.RelationshipCapstone
 
@@ -1255,6 +1340,22 @@
   - room_aura_profile -> magic.RoomAuraProfile [FK]
   - resonance -> magic.Resonance [FK]
   - set_by -> accounts.AccountDB [FK] (nullable)
+
+### SineatingPendingOffer
+**Foreign Keys:**
+  - sinner_sheet -> character_sheets.CharacterSheet [FK]
+  - sineater_sheet -> character_sheets.CharacterSheet [FK]
+  - relationship -> relationships.CharacterRelationship [FK]
+  - scene -> scenes.Scene [FK]
+  - resonance -> magic.Resonance [FK]
+
+### PendingStageAdvanceOffer
+**Foreign Keys:**
+  - sinner_sheet -> character_sheets.CharacterSheet [FK]
+  - sineater_sheet -> character_sheets.CharacterSheet [FK]
+  - relationship -> relationships.CharacterRelationship [FK]
+  - scene -> scenes.Scene [FK]
+  - resonance -> magic.Resonance [FK]
 
 ### Sineating
 **Foreign Keys:**
@@ -1355,7 +1456,9 @@
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that have matching CharacterResonance balance > 0 and level < cap.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' — Return threads whose dev_points are within `within` of the next XP-locked boundary.`
 - `preview_resonance_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None) -> 'PullPreviewResult' — Read-only preview of a resonance pull (Spec A §5.6).`
+- `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str') -> 'Ritual | None' — Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
 - `recompute_max_health_with_threads(character_sheet: 'CharacterSheet') -> 'int' — Recompute max_health folding in thread-derived VITAL_BONUS addends.`
+- `reconcile_ritual_knowledge(roster_entry: 'RosterEntry') -> None — Ensure CharacterRitualKnowledge rows exist for all granted rituals.`
 - `resolve_pending_alteration(*, pending: 'PendingAlteration', name: 'str', player_description: 'str', observer_description: 'str', weakness_damage_type: 'DamageType | None' = None, weakness_magnitude: 'int' = 0, resonance_bonus_magnitude: 'int' = 0, social_reactivity_magnitude: 'int' = 0, is_visible_at_rest: 'bool', resolved_by: 'AccountDB | None', parent_template: 'MagicalAlterationTemplate | None' = None, is_library_entry: 'bool' = False, library_template: 'MagicalAlterationTemplate | None' = None) -> 'AlterationResolutionResult' — Resolve a PendingAlteration by creating or selecting a template.`
 - `resolve_pull_effects(threads: 'list[Thread]', tier: 'int', *, in_combat: 'bool') -> 'list[ResolvedPullEffect]' — Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.`
 - `select_mishap_pool(control_deficit: 'int') -> 'ConsequencePool | None' — Select a control mishap consequence pool based on deficit magnitude.`
@@ -1852,6 +1955,8 @@
   - displayed_tier -> relationships.RelationshipTier [FK] (nullable)
   - game_week -> game_clock.GameWeek [FK] (nullable)
 **Pointed to by:**
+  - sineating_pending_offers <- magic.SineatingPendingOffer
+  - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating
   - rescues <- magic.SoulTetherRescue
   - track_progress <- relationships.RelationshipTrackProgress
@@ -1960,6 +2065,7 @@
 **Pointed to by:**
   - tenures <- roster.RosterTenure
   - random_scene_claimed_as <- progression.RandomSceneCompletion
+  - known_rituals <- magic.CharacterRitualKnowledge
   - favorited_interactions <- scenes.InteractionFavorite
   - aggregatebeatcontribution_set <- stories.AggregateBeatContribution
   - beatcompletion_set <- stories.BeatCompletion
@@ -1997,6 +2103,7 @@
   - galleries <- roster.TenureGallery
   - shared_galleries <- roster.TenureGallery
   - media <- roster.TenureMedia
+  - taught_rituals <- magic.CharacterRitualKnowledge
   - thread_weaving_unlocks_taught <- magic.CharacterThreadWeavingUnlock
   - thread_weaving_offers <- magic.ThreadWeavingTeachingOffer
   - consent_groups <- consent.ConsentGroup
@@ -2019,6 +2126,8 @@
   - magicalalterationevent_set <- magic.MagicalAlterationEvent
   - anima_ritual_performances <- magic.AnimaRitualPerformance
   - entry_endorsements <- magic.SceneEntryEndorsement
+  - sineating_pending_offers <- magic.SineatingPendingOffer
+  - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
   - sineatings <- magic.Sineating
   - rescues <- magic.SoulTetherRescue
   - participations <- scenes.SceneParticipation
@@ -2127,6 +2236,12 @@
   - target_persona -> scenes.Persona [FK]
   - action_template -> actions.ActionTemplate [FK] (nullable)
   - technique -> magic.Technique [FK] (nullable)
+  - snapshot_ritual -> magic.Ritual [FK] (nullable)
+  - snapshot_stat -> traits.Trait [FK] (nullable)
+  - snapshot_skill -> skills.Skill [FK] (nullable)
+  - snapshot_specialization -> skills.Specialization [FK] (nullable)
+  - snapshot_resonance -> magic.Resonance [FK] (nullable)
+  - snapshot_check_type -> checks.CheckType [FK] (nullable)
   - result_interaction -> scenes.Interaction [OneToOne] (nullable)
 
 ### Place
@@ -2162,7 +2277,6 @@
   - character_values <- skills.CharacterSkillValue
   - path_suggestions <- skills.PathSkillSuggestion
   - training_allocations <- skills.TrainingAllocation
-  - anima_rituals <- magic.CharacterAnimaRitual
   - legend_spreads <- societies.LegendSpread
 
 ### Specialization
@@ -2171,7 +2285,6 @@
 **Pointed to by:**
   - character_values <- skills.CharacterSpecializationValue
   - training_allocations <- skills.TrainingAllocation
-  - anima_rituals <- magic.CharacterAnimaRitual
 
 ### CharacterSkillValue
 **Foreign Keys:**
@@ -2201,13 +2314,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x000001FB50119DF0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x000001E68349DA70>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Get the relationship tier between two characters.`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x000001FB50119DF0>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x000001E68349DA70>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies
@@ -2541,7 +2654,6 @@
   - xp_costs <- progression.TraitXPCost
   - rating_unlocks <- progression.TraitRatingUnlock
   - trait_requirements <- progression.TraitRequirement
-  - anima_rituals <- magic.CharacterAnimaRitual
   - anchored_threads <- magic.Thread
   - thread_weaving_unlocks <- magic.ThreadWeavingUnlock
   - modifier_targets <- mechanics.ModifierTarget
