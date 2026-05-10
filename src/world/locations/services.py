@@ -22,6 +22,33 @@ if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
 
 
+def _room_profile_and_ancestors(
+    room: DefaultObject,
+) -> tuple[RoomProfile | None, list[int]]:
+    """Resolve a room's RoomProfile and ancestor area ids.
+
+    Returns (profile, ancestor_ids) where profile is None if the room
+    has no RoomProfile, and ancestor_ids is the list of area ids in
+    this room's area's closure (including the room's own area at depth
+    0). When the profile exists but area is None, ancestor_ids is [].
+
+    Callers handle their own empty-result semantics (return default,
+    None, or .objects.none()) based on the returned profile.
+    """
+    try:
+        profile = room.room_profile
+    except RoomProfile.DoesNotExist:
+        return None, []
+
+    area = profile.area
+    ancestor_ids: list[int] = []
+    if area is not None:
+        ancestor_ids = list(
+            AreaClosure.objects.filter(descendant_id=area.pk).values_list("ancestor_id", flat=True)
+        )
+    return profile, ancestor_ids
+
+
 def _clamp(value: int, stat_key: StatKey) -> int:
     bounds = STAT_CLAMPS.get(stat_key)
     if bounds is None:
@@ -47,21 +74,9 @@ def effective_stat(room: DefaultObject, stat_key: StatKey) -> int:
     """
 
     default = STAT_DEFAULTS.get(stat_key, 0)
-    # Django's OneToOne reverse accessor raises RelatedObjectDoesNotExist
-    # (a subclass of RoomProfile.DoesNotExist) when the room has no profile;
-    # getattr-with-default doesn't suppress that exception. Project linter
-    # also forbids getattr with a literal attribute name (GETATTR_LITERAL).
-    try:
-        profile = room.room_profile
-    except RoomProfile.DoesNotExist:
+    profile, ancestor_ids = _room_profile_and_ancestors(room)
+    if profile is None:
         return _clamp(default, stat_key)
-
-    area = profile.area
-    ancestor_ids: list[int] = []
-    if area is not None:
-        ancestor_ids = list(
-            AreaClosure.objects.filter(descendant_id=area.pk).values_list("ancestor_id", flat=True)
-        )
 
     # Step 3: most-specific override wins, modifiers ignored.
     overrides = list(
@@ -104,17 +119,9 @@ def effective_owner(room: DefaultObject) -> LocationOwnership | None:
     if no active ownership exists in the chain.
     """
 
-    try:
-        profile = room.room_profile
-    except RoomProfile.DoesNotExist:
+    profile, ancestor_ids = _room_profile_and_ancestors(room)
+    if profile is None:
         return None
-
-    area = profile.area
-    ancestor_ids: list[int] = []
-    if area is not None:
-        ancestor_ids = list(
-            AreaClosure.objects.filter(descendant_id=area.pk).values_list("ancestor_id", flat=True)
-        )
 
     rows = list(
         LocationOwnership.objects.filter(ended_at__isnull=True)
@@ -146,17 +153,9 @@ def current_tenants(room: DefaultObject) -> QuerySet[LocationTenancy]:
     joined via select_related.
     """
 
-    try:
-        profile = room.room_profile
-    except RoomProfile.DoesNotExist:
+    profile, ancestor_ids = _room_profile_and_ancestors(room)
+    if profile is None:
         return LocationTenancy.objects.none()
-
-    area = profile.area
-    ancestor_ids: list[int] = []
-    if area is not None:
-        ancestor_ids = list(
-            AreaClosure.objects.filter(descendant_id=area.pk).values_list("ancestor_id", flat=True)
-        )
 
     now = timezone.now()
     return (
