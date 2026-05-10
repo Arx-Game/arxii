@@ -17,3 +17,27 @@ class RoomProfileIsOutdoorTests(TestCase):
         profile.save()
         profile.refresh_from_db()
         self.assertTrue(profile.is_outdoor)
+
+
+class RoomProfileFactoryAppliesKwargsTests(TestCase):
+    """Regression test for Task 6 factory fix.
+
+    Previously, RoomProfileFactory(area=...) silently dropped the kwarg
+    because django_get_or_create returned the auto-created row. The
+    _create override should apply non-lookup kwargs to the returned
+    instance.
+    """
+
+    def test_area_kwarg_is_applied(self) -> None:
+        from world.areas.constants import AreaLevel
+        from world.areas.factories import AreaFactory
+
+        ward = AreaFactory(level=AreaLevel.WARD)
+        profile = RoomProfileFactory(area=ward)
+        profile.refresh_from_db()
+        self.assertEqual(profile.area, ward)
+
+    def test_is_outdoor_kwarg_is_applied(self) -> None:
+        profile = RoomProfileFactory(is_outdoor=True)
+        profile.refresh_from_db()
+        self.assertTrue(profile.is_outdoor)
