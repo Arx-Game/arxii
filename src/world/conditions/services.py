@@ -2176,6 +2176,7 @@ def perform_treatment(  # noqa: PLR0912, PLR0913, PLR0915, C901
         "resonance_spent": resonance_spent,
         "anima_spent": anima_spent,
         "created_at": get_ic_now() or tz.now(),
+        "once_per_scene_guard": treatment.once_per_scene_per_helper,
     }
     if treatment.target_kind == TreatmentTargetKind.PENDING_ALTERATION:
         attempt_kwargs["target_pending_alteration"] = target_effect

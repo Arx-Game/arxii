@@ -1075,9 +1075,12 @@ class TreatmentAttempt(SharedMemoryModel):
     """
     Historical record of one helper attempting one treatment on one target in one scene.
 
-    The partial UniqueConstraint enforces once-per-scene-per-helper only for
-    treatments authored with ``once_per_scene_per_helper=True`` (Postgres partial
-    index — project is PG-only per CLAUDE.md).
+    The partial UniqueConstraint enforces one attempt per
+    (helper, target, scene, treatment) for treatments authored with
+    ``once_per_scene_per_helper=True`` (denormalized at insert time onto
+    ``once_per_scene_guard``). Treatments authored with
+    ``once_per_scene_per_helper=False`` permit repeats. Postgres partial
+    index — project is PG-only per CLAUDE.md.
     """
 
     helper = models.ForeignKey(
@@ -1140,19 +1143,23 @@ class TreatmentAttempt(SharedMemoryModel):
         help_text="Stamped at save with get_ic_now() fallback in the service.",
     )
 
+    once_per_scene_guard = models.BooleanField(
+        default=False,
+        editable=False,
+        help_text=(
+            "Denormalized from treatment.once_per_scene_per_helper at insert time. "
+            "True = the partial unique constraint enforces one attempt per "
+            "(helper, target, scene, treatment). False = repeats permitted for "
+            "treatments authored with once_per_scene_per_helper=False. See spec "
+            "2026-05-09 §4.10."
+        ),
+    )
+
     class Meta:
-        # NOTE: The plan specified a partial UniqueConstraint keyed on
-        # ``treatment__once_per_scene_per_helper=True``, but Django rejects
-        # joined fields in UniqueConstraint conditions (models.E041), and a
-        # Postgres partial index can't reference columns of a related table
-        # either. This plain UniqueConstraint is strictly stricter than the
-        # plan: it unconditionally blocks duplicate (helper, target, scene,
-        # treatment) rows. Treatments authored with once_per_scene_per_helper
-        # = False would need a discriminator column to allow repeats; none
-        # exist in Scope 6, so this is the pragmatic enforcement point.
         constraints = [
             models.UniqueConstraint(
                 fields=["helper", "target", "scene", "treatment"],
+                condition=models.Q(once_per_scene_guard=True),
                 name="unique_treatment_attempt_per_helper_scene",
             ),
         ]

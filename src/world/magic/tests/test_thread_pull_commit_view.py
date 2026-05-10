@@ -27,7 +27,7 @@ from world.combat.factories import (
     CombatParticipantFactory,
 )
 from world.combat.models import CombatPull
-from world.covenants.factories import CovenantRoleFactory
+from world.covenants.factories import make_engaged_member
 from world.magic.constants import TargetKind
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -63,20 +63,19 @@ def _link_account_to_sheet(account, character, sheet):
 
 
 def _make_covenant_role_thread(sheet, resonance):
-    """Create a COVENANT_ROLE Thread for ``sheet`` using the direct factory path.
+    """Create a COVENANT_ROLE Thread for ``sheet`` with an engaged membership.
 
-    COVENANT_ROLE threads are always-in-action (they bypass _anchor_in_action),
-    making them the simplest anchor for ephemeral-context happy-path tests.
-    The ThreadFactory defaults to TRAIT kind, so we override the discriminator
-    and typed FK directly.
+    Phase 10 (Slice A §3.6): COVENANT_ROLE threads now gate on engagement.
+    Creates a CharacterCovenantRole row with engaged=True so the pull
+    succeeds in both ephemeral and combat-context happy-path tests.
     """
-    role = CovenantRoleFactory()
+    membership = make_engaged_member(character_sheet=sheet)
     return ThreadFactory(
         owner=sheet,
         resonance=resonance,
         target_kind=TargetKind.COVENANT_ROLE,
         target_trait=None,
-        target_covenant_role=role,
+        target_covenant_role=membership.covenant_role,
     )
 
 

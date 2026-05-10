@@ -155,7 +155,7 @@ def apply_anima_ritual_outcome(
     stage_after = None
     if soulfray_inst is not None:
         stage_after = soulfray_inst.current_stage
-        while budget > 0 and soulfray_inst.severity > 0:
+        while budget >= config.ritual_severity_cost_per_point and soulfray_inst.severity > 0:
             decay_result = decay_condition_severity(soulfray_inst, amount=1)
             severity_reduced += 1
             budget -= config.ritual_severity_cost_per_point

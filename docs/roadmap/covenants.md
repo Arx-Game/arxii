@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (role mechanics + Spec D integration shipped; covenant entity / lifecycle / formation ritual still post-MVP)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; lifecycle / formation ritual / progression / group abilities still post-MVP)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -10,13 +10,12 @@ participant's role and bind them to a shared goal. Every covenant has a sworn
 objective that all members commit to achieving together. The magic is real: the
 oath grants power, and the roles shape how that power manifests.
 
-This domain owns role definitions, character-to-role assignment, gear
-compatibility, and combat speed integration. The data layer for those exists
-today and is consumed by combat, the modifier pipeline, and the magic Thread
-system. **The Covenant entity itself — the social structure that contains
-members, holds a sworn objective, and progresses as a unit — does not yet
-exist.** Members today hold roles in isolation; there is no covenant they
-belong to. That work is the post-MVP scope.
+This domain owns the Covenant entity, character memberships (with engagement
+context), role definitions, gear compatibility, and combat speed integration.
+Slice A landed the foundational entity + membership FK + engagement gating in
+the modifier pipeline and Thread pull eligibility. The remaining work
+(formation ritual, progression, group abilities, sworn-objective tracking,
+dissolution paths) is the rest of the multi-slice buildout.
 
 ## Key Design Points
 
@@ -37,6 +36,74 @@ belong to. That work is the post-MVP scope.
 
 The `CovenantType` `TextChoices` enum (`world.covenants.constants`) currently
 ships `DURANCE` and `BATTLE`.
+
+### Covenants Are Group-Only
+
+A covenant cannot be founded with a single character. Formation requires at
+least two distinct character sheets, each with a role, supplied as the
+initial set of founder memberships. The entire point of the system is to
+require collaborative play to be significant — there will never, ever be a
+"solo" covenant.
+
+`create_covenant(*, founders: Sequence[CovenantFounder])` enforces this at
+the service layer with typed exceptions (`InsufficientFoundersError`,
+`DuplicateFounderError`). Future UI flows (Slice B) gate participant
+selection so the API layer never receives fewer than two founders. Slice B
+will also decide dissolution behavior when membership later drops below 2
+(likely: auto-flag for replacement, then auto-dissolve after a grace period).
+
+### Membership is Non-Exclusive
+
+While each individual covenant has ≥2 members, an individual character can
+be an active member of multiple covenants simultaneously — including
+multiple Durance covenants, plus a Battle covenant. This is a deliberate
+design call (Slice A §3.1) so the social structure stays resilient to
+varying player activity: an active player naturally supports several groups
+as "primary" in some, "supporting" in others, without having to leave any.
+
+The active-uniqueness DB constraint enforces "at most one active role per
+character per covenant" — *not* "per character per covenant_type" and *not*
+"per character per role". Same role across two covenants (Vanguard of A +
+Vanguard of B) is permitted; that's two distinct memberships, not a conflict.
+
+"Primary covenant" as a player-declared designation is **future** work
+(probably a boolean on membership with a partial unique, or an FK on
+`CharacterSheet`). It is not the same concept as membership uniqueness.
+
+### Engagement (Runtime Context)
+
+`CharacterCovenantRole.engaged` is a per-row boolean indicating the character
+is currently *fulfilling* this role for this covenant. **At most one engaged
+active row per (character, covenant_type)** — i.e., a character can be engaged
+with at most one Durance covenant AND at most one Battle covenant
+simultaneously. Cross-type stacking is additive; same-type engagement is
+mutually exclusive.
+
+The invariant lives at the service layer (`set_engaged_membership` un-engages
+any same-type row before engaging the target) plus a `clean()` validator on
+the model. There is no DB-level CHECK or partial unique on the engagement
+flag — Postgres can't put a partial-index WHERE on a joined column
+(`covenant.covenant_type` lives on the related Covenant row), and
+denormalizing the type onto the membership row would violate the project's
+"avoid denormalization" rule.
+
+**Surfaces gated by engagement** (Slice A):
+- Modifier pipeline (`covenant_role_bonus`) iterates `currently_engaged_roles`
+  and SUMs contributions across engaged roles (additive across types).
+- COVENANT_ROLE Thread pull eligibility (`_anchor_in_action`) checks
+  ANY-match against engaged memberships; mismatch raises
+  `CovenantRoleNotEngagedError`.
+- Combat speed_rank stays encounter-scoped via `CombatParticipant.covenant_role`
+  (set at combat setup); Slice E will decide combat-side precedence between
+  Durance and Battle for war contexts.
+
+**Surfaces NOT gated by engagement** (persistent character properties):
+- Thread anchor cap — `max(covenant.level across all CCR rows for this role) × 10`.
+- Thread weave gate — `has_ever_held(role)`.
+
+Auto-set / scene-context detection / mission-driven engagement / UI is Slice B.
+Today, engagement is set via explicit `set_engaged_membership` calls (e.g., in
+test setUpTestData or future API endpoints).
 
 ### Foundational Role Archetypes (for Durance covenants)
 
@@ -74,42 +141,57 @@ dominate, and compatible gear adds a small mundane-stat increment on top.
 Compatibility is staff-authored existence-only data — no boolean column,
 just row-presence.
 
-### Magic Integration: COVENANT_ROLE Thread Anchors (Spec D §6.3)
+### Magic Integration: COVENANT_ROLE Thread Anchors
 
 `world.magic.constants.TargetKind` includes `COVENANT_ROLE`. Characters can
 weave Threads anchored on a `CovenantRole` and invest resonance in them.
 
 - **Weave gate:** the character must have **ever held the role** (active or
-  ended). `CharacterCovenantRoleHandler.has_ever_held(role)` enforces this.
-  Violations raise `CovenantRoleNeverHeldError`.
-- **Anchor cap formula:** `current_level × 10`, scaling with the character's
-  current covenant level. (`current_level` is a placeholder until the
-  Covenant entity ships with its own progression; today it reads from the
-  authored character level.)
+  ended) in any covenant. `CharacterCovenantRoleHandler.has_ever_held(role)`
+  enforces this. Violations raise `CovenantRoleNeverHeldError`.
+- **Anchor cap formula** (Slice A §3.5): `max(covenant.level across the
+  character's all-time CharacterCovenantRole rows for this role) × 10`. Cap
+  is a persistent character property — independent of current engagement.
+  Scales naturally when Slice D adds covenant XP. Use-based capping (legend
+  earned in role / time held in role / etc.) is Slice G.
+- **Pull eligibility** (Slice A §3.6): COVENANT_ROLE Thread pull effects fire
+  only when the character is currently engaged with a covenant where they
+  hold the anchored role. Mismatch raises `CovenantRoleNotEngagedError`
+  (subclass of `InvalidImbueAmount`). Out-of-context, the Thread is dormant.
 
 ### Constraints (cross-cutting)
 
-- Roles are unique within a covenant — no two members hold the same role
-  (enforced today only at the role-assignment level; covenant-level
-  uniqueness will land when the Covenant entity does).
+- One active role per character per covenant (enforced via partial unique
+  constraint `covenants_one_active_role_per_covenant`). The same role can be
+  active across multiple covenants — that's two memberships.
+- "Roles unique within a covenant" (no two members hold the same role) is
+  *not* a Slice A constraint and is unlikely to be added: Slice A intentionally
+  permits non-exclusive memberships, including multiple members holding the
+  same role within one covenant.
 - Covenant bonds will function like enhanced Threads with shared resonance.
 - Covenant role influences which techniques are empowered during group content.
 - Covenant-level progression unlocks group abilities.
-- Battle covenants stack with Durance covenants — a character can be in both
-  simultaneously.
+- Battle covenants stack with Durance covenants — a character can be engaged
+  with both simultaneously, and their role bonuses sum additively.
 
 ## What Exists
 
 ### Data Layer (`src/world/covenants/`)
 
 - **Models:**
+  - `Covenant` — the social/magical structure (Slice A). Fields: `name`,
+    `covenant_type`, `level` (default 1; Slice D drives growth),
+    `sworn_objective` (TextField; Slice C structures), `formed_at`,
+    `dissolved_at`. SharedMemoryModel.
   - `CovenantRole` — staff-authored lookup (SharedMemoryModel) with
     `name`, `slug`, `covenant_type`, `archetype`, `speed_rank`, `description`.
     Unique `(covenant_type, name)`.
-  - `CharacterCovenantRole` — per-character role assignment with
-    `joined_at`/`left_at` timestamps. Partial unique constraint enforces
-    "at most one active assignment per (character, role)" via
-    `left_at IS NULL`. PROTECT FK to `CovenantRole`.
+  - `CharacterCovenantRole` — per-character membership row.
+    `character_sheet`, `covenant` FK (PROTECT, related_name=`memberships`),
+    `covenant_role`, `engaged` boolean, `joined_at`/`left_at`. Partial
+    unique constraint `covenants_one_active_role_per_covenant` on
+    `(character_sheet, covenant)` where `left_at IS NULL`. `clean()`
+    enforces engagement invariants.
   - `GearArchetypeCompatibility` — existence-only join (CovenantRole ×
     `world.items.constants.GearArchetype`). Row present = additive
     compatibility; absent = `max(role_bonus, gear_stat)`.
@@ -118,16 +200,36 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
   BATTLE), `RoleArchetype` (SWORD, SHIELD, CROWN).
 
 - **Service functions** (`world.covenants.services`):
-  - `assign_covenant_role(*, character_sheet, covenant_role)` —
-    creates a new active assignment row, invalidates handler cache.
-  - `end_covenant_role(*, assignment)` — sets `left_at`, idempotent,
-    invalidates cache.
+  - **Lifecycle (Slice A):**
+    - `create_covenant(...)` — atomically creates a covenant + founder
+      membership.
+    - `add_member(...)` — creates a new active membership.
+    - `change_role(...)` — closes old membership, creates new one in same
+      covenant.
+    - `dissolve_covenant(...)` — idempotent; ends all active memberships
+      and stamps `dissolved_at`.
+    - `assign_covenant_role(*, character_sheet, covenant, covenant_role)` —
+      creates a new active membership row, invalidates handler cache.
+    - `end_covenant_role(*, assignment)` — un-engages and sets `left_at`,
+      idempotent, invalidates cache.
+  - **Engagement (Slice A):**
+    - `set_engaged_membership(*, membership)` — atomically un-engages
+      same-type rows, then engages target. Cross-type independent.
+    - `clear_engaged_membership(*, membership)` — idempotent un-engage.
+    - `clear_engaged_for_type(*, character_sheet, covenant_type)` —
+      bulk un-engage by type.
   - `is_gear_compatible(role, archetype)` — existence-only lookup.
 
 - **Cached handler** (`world.covenants.handlers.CharacterCovenantRoleHandler`,
   attached as `character.covenant_roles`):
-  - `has_ever_held(role)` — enforces the COVENANT_ROLE thread weave gate.
-  - `currently_held()` — returns the active role or `None`.
+  - `has_ever_held(role)` — enforces the COVENANT_ROLE thread weave gate
+    (covers all-time rows, any covenant).
+  - `currently_held_role_in(covenant)` — active role in the specified
+    covenant, or None.
+  - `currently_engaged_roles()` — list of roles where `engaged AND
+    left_at IS None`.
+  - `max_covenant_level_for_role(role)` — drives the COVENANT_ROLE
+    anchor cap formula. Includes historical rows.
   - `invalidate()` — called by mutator services.
 
 - **Typed exceptions** (`world.covenants.exceptions`):
@@ -135,28 +237,44 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
   - `CovenantRoleNeverHeldError` — raised by Thread weaving.
 
 - **REST API** (`/api/covenants/`):
+  - `GET /covenants/` — `CovenantViewSet` (read-only). Non-staff scoped to
+    covenants where the user has an active membership; staff see all.
+    FilterSet: `covenant_type`, `is_active`. Detail endpoint exposes
+    `member_count` + `is_active`.
   - `GET /character-roles/` — `CharacterCovenantRoleViewSet` (read-only).
     Non-staff scoped to character sheets the user currently plays via the
-    active RosterTenure chain. Staff see all.
+    active RosterTenure chain. Staff see all. Serializer exposes
+    `covenant` (PK) + `engaged`.
   - `GET /gear-compatibilities/` — `GearArchetypeCompatibilityViewSet`
     (read-only, no pagination — small lookup table). Filterable by
     `covenant_role` and `gear_archetype`.
+  - Full read+write CRUD lands in Slice B.
 
 - **Tests** (`world/covenants/tests/`): exceptions, handler caching,
-  models, services, views (5 test files).
+  models (incl. `Covenant` model + constraint + clean tests),
+  services (incl. lifecycle + engagement), views (incl. `Covenant`
+  endpoints + serializer exposure).
 
 ### Cross-App Integration
 
 - **Magic** (`world.magic`):
   - `Thread.target_covenant_role` typed FK + `COVENANT_ROLE` `TargetKind`.
-  - Anchor cap formula `current_level × 10` in `compute_anchor_cap`
-    (Spec D §6.3).
+  - Anchor cap formula (Slice A): `max_covenant_level_for_role(role) × 10`
+    in `compute_anchor_cap`. Reads from membership covenant.level; cap
+    persists across engagement changes.
   - Thread weaving validates `has_ever_held(role)` before allowing weave.
-  - Integration test: `world/magic/tests/integration/test_covenant_role_thread_pipeline.py`.
+  - Pull eligibility (Slice A): `_anchor_in_action` ANY-matches engaged
+    roles for COVENANT_ROLE Threads. Mismatch raises
+    `CovenantRoleNotEngagedError(InvalidImbueAmount)`.
+  - Integration tests: `test_covenant_role_thread_pipeline.py`,
+    `test_pull_engagement_gate.py`,
+    `test_modifier_total_no_query.py::CovenantRoleAnchorCapQueryBudgetTests`.
 
 - **Mechanics** (`world.mechanics.services`):
-  - `covenant_role_bonus(sheet, target)` contributes to `get_modifier_total`
-    via the `EQUIPMENT_RELEVANT_CATEGORIES` gate (Spec D §5.2, §5.6).
+  - `covenant_role_bonus(sheet, target)` (Slice A): iterates
+    `currently_engaged_roles()` and SUMs contributions across engaged roles.
+    Returns 0 when no roles engaged. Stacks additively across covenant
+    types (Durance + Battle).
 
 - **Items** (`world.items`):
   - `GearArchetype` enum lives in `world.items.constants` and is the join
@@ -167,45 +285,81 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
   - `CombatParticipant.covenant_role` FK → `CovenantRole`.
   - Combat resolution order sorts by `speed_rank`; characters without a
     role fall back to `NO_ROLE_SPEED_RANK = 20`.
+  - Combat-side precedence between Durance and Battle for war contexts is
+    Slice E (not yet authored).
 
 ## What's Needed for MVP
 
-The role mechanics (above) are complete. The covenant **entity** and its
-lifecycle remain unbuilt:
+Slice A landed the foundational entity + membership FK + engagement context +
+anchor cap formula + pull gating. The remaining work is decomposed into
+independent slices, each with its own design+plan+implementation cycle:
 
-- **`Covenant` model** — the social structure that contains members and a
-  sworn objective. Fields likely include `name`, `covenant_type`, `level`,
-  `sworn_objective`, `formed_at`, `dissolved_at`, plus FK columns specific
-  to type (`durance_focus_FK`, `battle_encounter_FK`, etc., or a
-  discriminator + typed FKs in the existing project pattern).
-- **`CovenantMembership`** — `Covenant ↔ CharacterSheet` with role
-  attached. Subsumes the current `CharacterCovenantRole` (which assumes
-  roles in isolation), or coexists with it as a thin lookup. Decision
-  point for the future spec.
+### Slice B — Lifecycle + UI
+
 - **Formation ritual** — a `Ritual` (already exists in `world.magic`)
   that creates the covenant, binds members, and assigns initial roles.
   Likely uses the existing `PerformRitualAction` dispatch surface.
-- **Member lifecycle** — invite, accept, leave, kick. Sub-role unlock
-  events (Vanguard → Sentinel-vs-other-Sword sub-role) tied to covenant
-  level + member level.
-- **Covenant-level progression** — XP/milestone system that levels the
-  covenant as a unit, gating access to specialized sub-roles, group
-  techniques, and the COVENANT_ROLE anchor cap (currently keyed off
-  character level).
-- **Sworn objective tracking** — what the covenant is sworn *to* —
-  hooks into Stories/Missions to mark objectives as advanced or fulfilled.
-  Likely overlaps with Stories' Beat/Episode model.
+- **Member lifecycle** — invite, accept, leave, kick. Web-first flows.
 - **Dissolution paths** — voluntary, automatic-on-objective, fractured
   (members betray oath). Each may have different magical consequences.
-- **Stacking rules** — a character in both a Durance covenant and a Battle
-  covenant: which role applies in combat? Spec implies Battle takes
-  precedence in war contexts but this is not yet authored.
-- **Group abilities** — covenant-level techniques or rituals available
-  only when ≥N members are present and active. Authored content.
-- **API surface** — full CRUD for covenants, membership management,
-  ritual invocation, sub-role unlock requests.
+  Slice A's `dissolve_covenant` covers the basic case; Slice B layers
+  reasons, kinds, and follow-on consequences.
+- **Scene/mission engagement triggers** — auto-set / clear engaged based
+  on scene context. Today engagement is set explicitly via
+  `set_engaged_membership`; Slice B wires it to runtime triggers.
+- **UI for engage/disengage** — surfaces the engagement state to players.
+- **Full CRUD API** — covenant create/dissolve, membership add/remove/
+  change-role, engage/disengage. Read-only Slice A endpoints get extended.
+
+### Slice C — Sworn Objective + Stories integration
+
+- **`SwornObjective` model** — replaces the free-text `sworn_objective`
+  field with structured data. Likely overlaps with Stories' Beat/Episode
+  model.
+- **Sworn objective tracking** — what the covenant is sworn *to* —
+  hooks into Stories/Missions to mark objectives as advanced or fulfilled.
+
+### Slice D — Covenant progression
+
+- **Covenant-level XP/milestones** — system that levels the covenant as a
+  unit. Drives the existing `Covenant.level` field that the anchor cap
+  formula already reads.
+- **Group-ability unlocks at covenant level** — gates specialized
+  sub-roles, group techniques, etc.
+- **Sub-role unlock events** — Vanguard → Sentinel-vs-other-Sword sub-role
+  tied to covenant level + member level.
+
+### Slice E — Battle Covenants + Durance × Battle stacking
+
+- **Type-specific data** — `durance_focus_FK`, `battle_encounter_FK`,
+  etc., on Covenant. Discriminator + typed FK pattern.
+- **Combat-side precedence** between Durance and Battle for war contexts.
+  Spec implies Battle takes precedence in war contexts but this is not yet
+  authored.
+
+### Slice F — Group Abilities
+
+- **Covenant-level techniques or rituals** available only when ≥N members
+  are engaged and present. Authored content layered on the Slice A
+  engagement substrate.
+
+### Slice G — Use-based Thread mechanics
+
+- **Use-based weave gate** — Tehom's "force people to actually use the
+  role before they could weave threads into it" — replaces (or augments)
+  today's `has_ever_held` gate.
+- **Use-based anchor cap** — legend earned in role / time held in role /
+  etc. — richer signal than max_covenant_level. Layered on top of the
+  Slice A formula.
+
+### Cross-cutting (post-Covenants)
+
+- **Thread situational gating for non-COVENANT_ROLE kinds** — bringing
+  RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE / FACET into the same
+  "in-action" model that Slice A added for COVENANT_ROLE. Project-wide
+  Thread-discipline work, not Covenant-specific.
 - **Frontend UI** — covenant browser, member roster, sworn-objective
-  tracker, role-assignment UI, formation/dissolution flows.
+  tracker, engage/disengage controls, formation/dissolution flows.
 
 ## Cross-References
 
@@ -222,12 +376,15 @@ lifecycle remain unbuilt:
 
 ## Notes
 
-- The `current_level` used by the COVENANT_ROLE anchor cap is a placeholder
-  until covenant-level progression ships. When the Covenant entity lands
-  with its own level field, the cap formula reads from it directly without
-  changing call sites.
+- The Slice A spec is `docs/superpowers/specs/2026-05-09-covenants-slice-a-design.md`
+  and the implementation plan is
+  `docs/superpowers/plans/2026-05-10-covenants-slice-a-implementation.md`.
+- The COVENANT_ROLE anchor cap formula now reads from `covenant.level`
+  via the membership table. The placeholder `current_level × 10` formula
+  was replaced in Slice A. When Slice D ships covenant-level XP, the cap
+  scales naturally without changing call sites.
 - Forward-looking nods elsewhere in the roadmap: `gm-system.md` references
   "Covenants stub" as a prerequisite (now understated — should read
-  "Covenants role mechanics"); `seed-and-integration-tests.md` task 2Q
+  "Covenants Slice A"); `seed-and-integration-tests.md` task 2Q
   authors the canonical CovenantRole seed set so combat resolution order
   becomes meaningful.

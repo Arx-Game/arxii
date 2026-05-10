@@ -220,7 +220,11 @@ class SuccessWithSoulfrayTests(TestCase):
 
 
 class PartialWithHighSoulfrayTests(TestCase):
-    """Partial outcome with high severity Soulfray: small severity reduction, minimal anima."""
+    """Partial outcome with high severity Soulfray: small severity reduction, leftover anima.
+
+    Spec §4.11 budget guard: loop runs while budget >= cost_per_point, so partial
+    budget=3 with cost=2 yields exactly 1 reduction (2 spent) and 1 leftover for anima.
+    """
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
@@ -247,23 +251,22 @@ class PartialWithHighSoulfrayTests(TestCase):
 
     @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
     @patch(_PERFORM_CHECK_PATH)
-    def test_partial_high_soulfray_small_severity_reduction_minimal_anima(
+    def test_partial_high_soulfray_small_severity_reduction_leftover_anima(
         self, mock_check: MagicMock, mock_scene: MagicMock
     ) -> None:
         mock_check.return_value = _make_check_result(success_level=0)
 
         result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
 
-        # Partial budget=3, cost_per_point=2:
-        #   iteration 1: budget(3)>0 → reduce, budget=1
-        #   iteration 2: budget(1)>0 → reduce, budget=-1
-        #   loop exits (budget<=0)
-        # So 2 reductions, budget=-1 (negative → max(0,-1)=0 for anima)
-        self.assertEqual(result.severity_reduced, 2)
+        # Partial budget=3, cost_per_point=2 (guard: budget >= cost_per_point):
+        #   iteration 1: budget(3) >= 2 → reduce, budget=1
+        #   iteration 2: budget(1) NOT >= 2 → exit
+        # 1 reduction, 1 budget remaining → refills 1 anima
+        self.assertEqual(result.severity_reduced, 1)
         self.anima.refresh_from_db()
-        # budget<0 → max(0, budget)=0 → no anima added
-        self.assertEqual(self.anima.current, 1)
-        self.assertEqual(result.anima_recovered, 0)
+        # 1 budget leftover → anima goes from 1 to 2
+        self.assertEqual(self.anima.current, 2)
+        self.assertEqual(result.anima_recovered, 1)
         self.assertFalse(result.soulfray_resolved)
         mock_scene.assert_called()
 
@@ -398,4 +401,115 @@ class PerformanceRowTests(TestCase):
         self.assertEqual(perf.anima_recovered, 6)
         self.assertEqual(perf.severity_reduced, 0)
         self.assertIsNotNone(perf.outcome)
+        mock_scene.assert_called()
+
+
+class AnimaRitualBudgetGuardTests(TestCase):
+    """Spec §4.11 — perform_anima_ritual loop guard prevents overspend.
+
+    The loop guard 'budget >= cost_per_point' ensures that when cost > 1
+    the loop does not run when the remaining budget cannot pay for a full
+    severity reduction. Before the fix the guard was 'budget > 0', which
+    allowed one extra (unpaid) reduction when budget < cost_per_point.
+    """
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.ritual = _make_ritual_for_sheet(self.sheet)
+        self.soulfray_template = ConditionTemplateFactory(name=SOULFRAY_CONDITION_NAME)
+        self.scene = SceneFactory(is_active=True)
+
+    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
+    @patch(_PERFORM_CHECK_PATH)
+    def test_cost_one_budget_three_three_reductions(
+        self, mock_check: MagicMock, mock_scene: MagicMock
+    ) -> None:
+        """cost=1, budget=3, severity=10 → 3 severity reductions, 0 leftover for anima.
+
+        Unchanged behavior at cost=1 (current default).
+        """
+        CharacterAnimaFactory(character=self.sheet.character, current=0, maximum=10)
+        ConditionInstanceFactory(
+            target=self.sheet.character,
+            condition=self.soulfray_template,
+            severity=10,
+        )
+        SoulfrayConfigFactory(
+            ritual_budget_critical_success=10,
+            ritual_budget_success=3,
+            ritual_budget_partial=1,
+            ritual_budget_failure=0,
+            ritual_severity_cost_per_point=1,
+        )
+        mock_check.return_value = _make_check_result(success_level=1)  # success → budget=3
+
+        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+
+        # cost=1: 3 reductions consume budget exactly; 0 leftover → no anima refill
+        self.assertEqual(result.severity_reduced, 3)
+        self.assertEqual(result.anima_recovered, 0)
+        mock_scene.assert_called()
+
+    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
+    @patch(_PERFORM_CHECK_PATH)
+    def test_cost_two_budget_three_one_reduction_one_leftover(
+        self, mock_check: MagicMock, mock_scene: MagicMock
+    ) -> None:
+        """cost=2, budget=3 → 1 reduction (2 spent), 1 leftover refills anima.
+
+        BEFORE the fix: loop ran while budget > 0, so:
+          iter 1: budget=3 (>0), decrement → budget=1, severity reduced
+          iter 2: budget=1 (>0), decrement → budget=-1, severity reduced  (overspend!)
+        AFTER the fix: loop runs while budget >= cost (=2), so:
+          iter 1: budget=3 (>=2), decrement → budget=1, severity reduced
+          iter 2: budget=1 (NOT >=2), exit. 1 leftover refills anima.
+        """
+        CharacterAnimaFactory(character=self.sheet.character, current=0, maximum=10)
+        ConditionInstanceFactory(
+            target=self.sheet.character,
+            condition=self.soulfray_template,
+            severity=10,
+        )
+        SoulfrayConfigFactory(
+            ritual_budget_critical_success=10,
+            ritual_budget_success=3,
+            ritual_budget_partial=1,
+            ritual_budget_failure=0,
+            ritual_severity_cost_per_point=2,
+        )
+        mock_check.return_value = _make_check_result(success_level=1)  # success → budget=3
+
+        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+
+        # cost=2, budget=3: only 1 reduction (2 spent), 1 leftover → anima refill of 1
+        self.assertEqual(result.severity_reduced, 1)
+        self.assertEqual(result.anima_recovered, 1)
+        mock_scene.assert_called()
+
+    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
+    @patch(_PERFORM_CHECK_PATH)
+    def test_no_soulfray_full_budget_to_anima(
+        self, mock_check: MagicMock, mock_scene: MagicMock
+    ) -> None:
+        """cost=2, no soulfray instance → 0 reductions, full budget for anima.
+
+        Regression guard for the no-soulfray short-circuit path; the loop
+        is gated by 'if soulfray_inst is not None:' and never enters.
+        """
+        CharacterAnimaFactory(character=self.sheet.character, current=0, maximum=10)
+        # No ConditionInstance created for this character
+        SoulfrayConfigFactory(
+            ritual_budget_critical_success=10,
+            ritual_budget_success=3,
+            ritual_budget_partial=1,
+            ritual_budget_failure=0,
+            ritual_severity_cost_per_point=2,
+        )
+        mock_check.return_value = _make_check_result(success_level=1)  # success → budget=3
+
+        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+
+        # No soulfray → 0 reductions; full budget=3 refills anima
+        self.assertEqual(result.severity_reduced, 0)
+        self.assertEqual(result.anima_recovered, 3)
         mock_scene.assert_called()

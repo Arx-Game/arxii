@@ -10,6 +10,7 @@ from django.db import transaction
 from world.magic.constants import EffectKind, GainSource, TargetKind
 from world.magic.exceptions import (
     AnchorCapExceeded,
+    CovenantRoleNotEngagedError,
     InvalidImbueAmount,
     NoMatchingWornFacetItemsError,
     ResonanceInsufficient,
@@ -267,14 +268,13 @@ def spend_resonance_for_imbuing(  # noqa: C901 — sequential guards + greedy lo
 # of involvement; the system never validates them per Spec §5.4 line 1450.
 # FACET threads are gated by the worn-items check (NoMatchingWornFacetItemsError),
 # not by anchor-involvement — so they bypass the generic in-action check here.
-# COVENANT_ROLE threads similarly have their own gate (role held at action time);
-# they bypass anchor-involvement in the same way.
+# COVENANT_ROLE threads gate explicitly on engagement (see _anchor_in_action below
+# for the COVENANT_ROLE arm). Slice A §3.6.
 _ALWAYS_IN_ACTION_KINDS = frozenset(
     {
         TargetKind.RELATIONSHIP_TRACK,
         TargetKind.RELATIONSHIP_CAPSTONE,
         TargetKind.FACET,
-        TargetKind.COVENANT_ROLE,
     }
 )
 
@@ -285,6 +285,9 @@ def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:
     Relationship anchors are always considered in-action (player asserts
     involvement). Other kinds are matched against the explicit ``involved_*``
     tuples on the context — the caller is responsible for populating those.
+
+    COVENANT_ROLE threads gate on engagement: the character must currently be
+    fulfilling the role for one of their covenants (Slice A §3.6).
     """
     if thread.target_kind in _ALWAYS_IN_ACTION_KINDS:
         return True
@@ -294,6 +297,11 @@ def _anchor_in_action(thread: Thread, ctx: PullActionContext) -> bool:
         return thread.target_technique_id in ctx.involved_techniques
     if thread.target_kind == TargetKind.ROOM:
         return thread.target_object_id in ctx.involved_objects
+    if thread.target_kind == TargetKind.COVENANT_ROLE:
+        sheet = thread.owner
+        engaged_roles = sheet.character.covenant_roles.currently_engaged_roles()
+        target_pk = thread.target_covenant_role_id
+        return any(role.pk == target_pk for role in engaged_roles)
     return False
 
 
@@ -568,6 +576,8 @@ def spend_resonance_for_pull(  # noqa: C901, PLR0912 — sequential guards + com
             msg = "Thread does not share the chosen resonance."
             raise InvalidImbueAmount(msg)
         if not _anchor_in_action(t, action_context):
+            if t.target_kind == TargetKind.COVENANT_ROLE:
+                raise CovenantRoleNotEngagedError
             msg = "Thread anchor is not involved in this action."
             raise InvalidImbueAmount(msg)
         if t.target_kind == TargetKind.FACET:

@@ -8,10 +8,15 @@ from rest_framework import viewsets
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 
-from world.covenants.filters import CharacterCovenantRoleFilter, GearArchetypeCompatibilityFilter
-from world.covenants.models import CharacterCovenantRole, GearArchetypeCompatibility
+from world.covenants.filters import (
+    CharacterCovenantRoleFilter,
+    CovenantFilter,
+    GearArchetypeCompatibilityFilter,
+)
+from world.covenants.models import CharacterCovenantRole, Covenant, GearArchetypeCompatibility
 from world.covenants.serializers import (
     CharacterCovenantRoleSerializer,
+    CovenantSerializer,
     GearArchetypeCompatibilitySerializer,
 )
 
@@ -40,6 +45,7 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
         qs = CharacterCovenantRole.objects.select_related(
             "character_sheet",
             "covenant_role",
+            "covenant",
         ).order_by("-joined_at")
         if self.request.user.is_staff:
             return qs
@@ -62,3 +68,28 @@ class GearArchetypeCompatibilityViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None  # Authored lookup table — small, no pagination needed.
     filter_backends = [DjangoFilterBackend]
     filterset_class = GearArchetypeCompatibilityFilter
+
+
+class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only ViewSet for Covenant.
+
+    Non-staff users only see covenants where they have an active membership
+    on a character sheet they currently play (via the active RosterTenure
+    chain). Staff see all covenants.
+    """
+
+    serializer_class = CovenantSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = CovenantsPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CovenantFilter
+
+    def get_queryset(self) -> QuerySet[Covenant]:
+        qs = Covenant.objects.all().order_by("-formed_at")
+        if self.request.user.is_staff:
+            return qs
+        return qs.filter(
+            memberships__left_at__isnull=True,
+            memberships__character_sheet__roster_entry__tenures__end_date__isnull=True,
+            memberships__character_sheet__roster_entry__tenures__player_data__account=self.request.user,
+        ).distinct()

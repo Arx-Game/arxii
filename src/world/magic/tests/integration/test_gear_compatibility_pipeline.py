@@ -57,8 +57,11 @@ class GearCompatibilityPipelineTests(TestCase):
             category=cls.category,
         )
 
-        # 3. CharacterCovenantRole assignment
+        # 3. CharacterCovenantRole assignment (engaged so the role-bonus path fires)
+        from world.covenants.services import set_engaged_membership
+
         cls.assignment = CharacterCovenantRoleFactory(character_sheet=cls.sheet)
+        set_engaged_membership(membership=cls.assignment)
         cls.sheet.character.covenant_roles.invalidate()
 
         # 4. Compatible item template: HEAVY_ARMOR, slotted at TORSO/BASE
@@ -107,12 +110,14 @@ class GearCompatibilityPipelineTests(TestCase):
             CharacterCovenantRoleFactory,
             GearArchetypeCompatibilityFactory,
         )
+        from world.covenants.services import set_engaged_membership
         from world.items.constants import GearArchetype
         from world.items.factories import EquippedItemFactory, ItemInstanceFactory
 
         char = CharacterFactory(db_key="SingleCompatChar")
         sheet = CharacterSheetFactory(character=char, primary_persona=False)
         assignment = CharacterCovenantRoleFactory(character_sheet=sheet)
+        set_engaged_membership(membership=assignment)
         char.covenant_roles.invalidate()
 
         item = ItemInstanceFactory(template=cls.compat_template)
@@ -131,11 +136,13 @@ class GearCompatibilityPipelineTests(TestCase):
         from evennia_extensions.factories import CharacterFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.covenants.services import set_engaged_membership
         from world.items.factories import EquippedItemFactory, ItemInstanceFactory
 
         char = CharacterFactory(db_key="SingleIncompatChar")
         sheet = CharacterSheetFactory(character=char, primary_persona=False)
-        CharacterCovenantRoleFactory(character_sheet=sheet)
+        assignment = CharacterCovenantRoleFactory(character_sheet=sheet)
+        set_engaged_membership(membership=assignment)
         char.covenant_roles.invalidate()
 
         item = ItemInstanceFactory(template=cls.incompat_template)
@@ -202,7 +209,7 @@ class GearCompatibilityPipelineTests(TestCase):
 
         char = CharacterFactory(db_key="NoRoleGearPipelineChar")
         sheet = CharacterSheetFactory(character=char, primary_persona=False)
-        # No CharacterCovenantRole — currently_held() will return None
+        # No CharacterCovenantRole — currently_engaged_roles() will return []
         item = ItemInstanceFactory(
             template=ItemTemplateFactory(gear_archetype=GearArchetype.HEAVY_ARMOR)
         )

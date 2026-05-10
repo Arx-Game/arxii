@@ -41,7 +41,7 @@ Query budget analysis (as of Spec D PR1):
   The first-call baseline of 4 is the most conservative (and correct) measurement.
 
   Character-side handler walks (equipped_items.iter_item_facets,
-  threads.threads_of_kind, covenant_roles.currently_held) fire ZERO queries
+  threads.threads_of_kind, covenant_roles.currently_engaged_roles) fire ZERO queries
   after warming — these are properly handler-cached. The 4 above are genuine
   "always-query" sites at the service function level.
 
@@ -65,7 +65,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
     - passive_facet_bonuses (§5.2): FACET-kind thread + equipped item bearing the facet
     - covenant_role_bonus (§5.6): CharacterCovenantRole + GearArchetypeCompatibility row
 
-    After calling iter_item_facets / threads_of_kind / currently_held to warm the
+    After calling iter_item_facets / threads_of_kind / currently_engaged_roles to warm the
     character-side handlers, exactly 4 queries remain (see module docstring).
     """
 
@@ -165,8 +165,11 @@ class ModifierTotalQueryBudgetTests(TestCase):
             flat_bonus_amount=5,
         )
 
-        # 9. Covenant role assigned to the character
+        # 9. Covenant role assigned to the character — engaged so covenant_role_bonus fires
+        from world.covenants.services import set_engaged_membership
+
         cls.assignment = CharacterCovenantRoleFactory(character_sheet=cls.sheet)
+        set_engaged_membership(membership=cls.assignment)
 
         # 10. GearArchetypeCompatibility for (role, HEAVY_ARMOR) — compatible pair
         GearArchetypeCompatibilityFactory(
@@ -197,7 +200,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
         Queries that do NOT fire after warming:
           - equipped_items queryset (warmed by iter_item_facets)
           - threads queryset (warmed by threads_of_kind)
-          - covenant_roles queryset (warmed by currently_held)
+          - covenant_roles queryset (warmed by currently_engaged_roles)
           - quality_tier FK walk (identity-mapped after first access in setUpTestData)
           - item template FK walk (identity-mapped)
 
@@ -213,7 +216,7 @@ class ModifierTotalQueryBudgetTests(TestCase):
         # threads handler: loads Thread rows into memory
         list(self.character_obj.threads.threads_of_kind(TargetKind.FACET))
         # covenant_roles handler: loads CharacterCovenantRole rows into memory
-        self.character_obj.covenant_roles.currently_held()
+        list(self.character_obj.covenant_roles.currently_engaged_roles())
 
         # --- Assert documented query count ---
         # BASELINE = 4: CharacterModifier.exists + ThreadPullEffect.filter
@@ -272,4 +275,35 @@ class ModifierTotalQueryBudgetTests(TestCase):
         # but handler state is in-process; invalidate was mutating)
         list(self.character_obj.equipped_items.iter_item_facets())
         list(self.character_obj.threads.threads_of_kind(TargetKind.FACET))
-        self.character_obj.covenant_roles.currently_held()
+        list(self.character_obj.covenant_roles.currently_engaged_roles())
+
+
+class CovenantRoleAnchorCapQueryBudgetTests(TestCase):
+    """Regression guard for the _rows select_related("covenant") requirement.
+
+    After the handler cache is warmed, compute_anchor_cap on a COVENANT_ROLE
+    thread must fire ZERO queries — proves max_covenant_level_for_role walks
+    the cache without re-fetching covenant rows.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.covenants.factories import make_engaged_member
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ThreadFactory
+
+        cls.membership = make_engaged_member()
+        cls.thread = ThreadFactory(
+            owner=cls.membership.character_sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=cls.membership.covenant_role,
+            target_trait=None,
+        )
+
+    def test_compute_anchor_cap_covenant_role_zero_queries(self) -> None:
+        from world.magic.services.threads import compute_anchor_cap
+
+        # Warm the handler.
+        list(self.membership.character_sheet.character.covenant_roles.currently_engaged_roles())
+        with self.assertNumQueries(0):
+            compute_anchor_cap(self.thread)

@@ -32,6 +32,12 @@ class InvalidImbueAmount(MagicError):
     user_message = "Invalid imbue amount."
 
 
+class CovenantRoleNotEngagedError(InvalidImbueAmount):
+    """A COVENANT_ROLE Thread pull was attempted while no engaged membership matches."""
+
+    user_message = "You're not currently fulfilling this covenant role."
+
+
 class WeavingUnlockMissing(MagicError):
     user_message = "You have not learned to weave threads of this kind."
 
