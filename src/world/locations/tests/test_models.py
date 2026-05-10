@@ -192,6 +192,36 @@ class LocationStatModifierCurrentValueTests(TestCase):
         # -10 + (2 * 10) = 10 -> original sign was negative, crossed -> 0
         self.assertEqual(mod.current_value(now=anchor + timedelta(days=10)), 0)
 
+    def test_zero_value_is_static_regardless_of_change_per_day(self) -> None:
+        area = AreaFactory()
+        anchor = timezone.now() - timedelta(days=10)
+        # value=0 with positive change_per_day shouldn't grow
+        mod = LocationStatModifier.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=area,
+            stat_key=StatKey.CRIME,
+            value=0,
+            change_per_day=2,
+            applied_at=anchor,
+        )
+        self.assertEqual(mod.current_value(now=anchor + timedelta(days=10)), 0)
+
+    def test_partial_day_truncates_toward_zero(self) -> None:
+        area = AreaFactory()
+        anchor = timezone.now() - timedelta(hours=12)  # half a day
+        mod = LocationStatModifier.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=area,
+            stat_key=StatKey.CRIME,
+            value=10,
+            change_per_day=-2,
+            applied_at=anchor,
+        )
+        # int(-2 * 0.5) = int(-1.0) = -1; 10 + (-1) = 9
+        # Note: int truncates toward zero, so on a half-day at -2/day,
+        # we get -1, not -2 (which a math.floor would give).
+        self.assertEqual(mod.current_value(now=anchor + timedelta(hours=12)), 9)
+
 
 class LocationStatModifierStackingTests(TestCase):
     def test_multiple_modifiers_on_same_area_and_stat_allowed(self) -> None:
@@ -214,3 +244,14 @@ class LocationStatModifierStackingTests(TestCase):
             LocationStatModifier.objects.filter(area=area, stat_key=StatKey.CRIME).count(),
             2,
         )
+
+    def test_create_with_room_profile(self) -> None:
+        room = RoomProfileFactory()
+        mod = LocationStatModifier.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=room,
+            stat_key=StatKey.LIGHTING,
+            value=1,
+        )
+        self.assertEqual(mod.room_profile, room)
+        self.assertIsNone(mod.area)

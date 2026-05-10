@@ -169,9 +169,15 @@ class LocationStatModifier(DiscriminatorMixin, SharedMemoryModel):
 
         Returns 0 once the modifier has crossed its original sign
         (a positive value decayed past zero, or a negative value grown
-        past zero). Otherwise returns ``value + change_per_day * days``.
+        past zero). Also returns 0 unconditionally when ``value`` is 0
+        (you can't decay or grow from zero).
+
+        Partial days truncate toward zero — a half-day with
+        ``change_per_day=-1`` produces no decay. This is intentional:
+        decay/growth advances in whole-day steps. Callers wanting finer
+        resolution can use seconds-grained ``applied_at`` updates.
         """
-        if self.change_per_day == 0:
+        if self.value == 0 or self.change_per_day == 0:
             return self.value
         anchor = now if now is not None else timezone.now()
         elapsed = anchor - self.applied_at
