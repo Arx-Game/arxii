@@ -46,6 +46,12 @@ class LocationStatModifierAdmin(admin.ModelAdmin):
             "What and where",
             {
                 "fields": ("parent_type", "area", "room_profile", "stat_key"),
+                "description": (
+                    "Modifiers stack across the cascade chain. Multiple "
+                    "modifiers on the same (parent, stat_key) are allowed "
+                    "(rebellion + market-day + noble-house-patrol can all "
+                    "stack). parent_type selects which FK is active."
+                ),
             },
         ),
         (
