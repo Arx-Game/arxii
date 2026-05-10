@@ -38,7 +38,7 @@ class StatKey(models.TextChoices):
 
 
 # Per-stat default value when no row exists in the cascade chain.
-STAT_DEFAULTS: dict[str, int] = {
+STAT_DEFAULTS: dict[StatKey, int] = {
     StatKey.CRIME: 0,
     StatKey.ORDER: 50,
     StatKey.CLEANLINESS: 50,
@@ -48,7 +48,10 @@ STAT_DEFAULTS: dict[str, int] = {
 }
 
 # Inclusive (min, max) bounds applied to the final cascade-resolved value.
-STAT_CLAMPS: dict[str, tuple[int, int]] = {
+# LIGHTING is signed and symmetric around 0: -2 = pitch dark, 0 = normal
+# daylight / no modifier, +2 = blinding bright. Other stats are non-negative
+# and 0-anchored at one end of the clamp range.
+STAT_CLAMPS: dict[StatKey, tuple[int, int]] = {
     StatKey.CRIME: (0, 100),
     StatKey.ORDER: (0, 100),
     StatKey.CLEANLINESS: (0, 100),
@@ -60,7 +63,7 @@ STAT_CLAMPS: dict[str, tuple[int, int]] = {
 # Suggested ``change_per_day`` value for new modifiers if the calling
 # system has no opinion. Negative values decay toward zero; positive
 # values grow; zero is permanent. Per-row override always wins.
-SUGGESTED_CHANGE_PER_DAY: dict[str, int] = {
+SUGGESTED_CHANGE_PER_DAY: dict[StatKey, int] = {
     StatKey.CRIME: -1,
     StatKey.ORDER: 0,
     StatKey.CLEANLINESS: -1,
