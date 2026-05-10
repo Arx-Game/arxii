@@ -206,6 +206,11 @@ class LocationOwnership(DiscriminatorMixin, SharedMemoryModel):
     Historical rows (``ended_at IS NOT NULL``) are kept as audit trail.
     The partial-unique constraint enforces at most one *active* owner
     per location.
+
+    Note: ``acquired_at`` defaults to ``timezone.now`` at instance
+    construction time, not save time. For most flows this is invisible
+    (you call ``objects.create()``), but for backfill/import scenarios
+    pass ``acquired_at`` explicitly to control the audit timestamp.
     """
 
     DISCRIMINATOR_FIELD = "parent_type"
@@ -289,19 +294,14 @@ class LocationOwnership(DiscriminatorMixin, SharedMemoryModel):
         ]
 
     def clean(self) -> None:
-        """Validate BOTH discriminators (parent and holder)."""
-        super().clean()  # parent_type via DiscriminatorMixin
-
-        expected_field = self.HOLDER_DISCRIMINATOR_MAP.get(self.holder_type)
-        if expected_field is None:
-            return
-
-        errors: dict[str, str] = {}
-        if getattr(self, expected_field) is None:
-            errors[expected_field] = f"Required when holder_type is {self.holder_type}."
-        for value, field_name in self.HOLDER_DISCRIMINATOR_MAP.items():
-            if value != self.holder_type and getattr(self, field_name) is not None:
-                errors[field_name] = f"Must be null when holder_type is {self.holder_type}."
+        """Validate BOTH discriminators (parent and holder), collecting all errors."""
+        parent_errors = self._validate_discriminator(
+            self.DISCRIMINATOR_FIELD, self.DISCRIMINATOR_MAP
+        )
+        holder_errors = self._validate_discriminator(
+            self.HOLDER_DISCRIMINATOR_FIELD, self.HOLDER_DISCRIMINATOR_MAP
+        )
+        errors = {**parent_errors, **holder_errors}
         if errors:
             raise ValidationError(errors)
 
