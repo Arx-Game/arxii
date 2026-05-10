@@ -472,10 +472,28 @@ class AnchorInActionTests(TestCase):
         ctx = PullActionContext(combat_encounter=None, participant=None)
         self.assertTrue(_anchor_in_action(thread, ctx))
 
-    def test_covenant_role_always_in_action(self) -> None:
-        """COVENANT_ROLE threads bypass the anchor-involvement check."""
+    def test_covenant_role_engaged_is_in_action(self) -> None:
+        """COVENANT_ROLE thread is in-action when the character is engaged for that role."""
+        from world.covenants.factories import make_engaged_member
+
+        m = make_engaged_member()
+        thread = Thread.objects.create(
+            owner=m.character_sheet,
+            resonance=ResonanceFactory(),
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=m.covenant_role,
+        )
+        ctx = PullActionContext(combat_encounter=None, participant=None)
+        self.assertTrue(_anchor_in_action(thread, ctx))
+
+    def test_covenant_role_not_engaged_is_not_in_action(self) -> None:
+        """COVENANT_ROLE thread is not in-action when the character holds but is not engaged."""
+        from world.covenants.factories import CharacterCovenantRoleFactory, CovenantFactory
+
         sheet = CharacterSheetFactory()
-        role = CovenantRoleFactory()
+        cov = CovenantFactory()
+        role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        CharacterCovenantRoleFactory(character_sheet=sheet, covenant=cov, covenant_role=role)
         thread = Thread.objects.create(
             owner=sheet,
             resonance=ResonanceFactory(),
@@ -483,7 +501,7 @@ class AnchorInActionTests(TestCase):
             target_covenant_role=role,
         )
         ctx = PullActionContext(combat_encounter=None, participant=None)
-        self.assertTrue(_anchor_in_action(thread, ctx))
+        self.assertFalse(_anchor_in_action(thread, ctx))
 
 
 class FacetWornItemsGateTests(TestCase):
