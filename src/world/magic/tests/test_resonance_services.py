@@ -667,19 +667,24 @@ class ComputeAnchorCapFacetCovenantTests(TestCase):
         # 10000 // 50 = 200, hard_max = 1 * 20 = 20, so result = min(200, 20) = 20
         self.assertEqual(compute_anchor_cap(thread), 20)
 
-    def test_covenant_role_cap_equals_level_x_10(self) -> None:
-        """current_level=3 → cap = 30."""
-        from world.classes.factories import CharacterClassLevelFactory
-        from world.covenants.factories import CovenantRoleFactory
+    def test_covenant_role_cap_equals_covenant_level_x_10(self) -> None:
+        """max(covenant.level) across CCR rows for this role × 10.
+
+        Math: covenant.level=3 → cap = 3 * 10 = 30
+        """
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
         from world.magic.models import Thread
         from world.magic.services.threads import compute_anchor_cap
 
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
         role = CovenantRoleFactory()
-        # Set current_level=3 via a class assignment
-        CharacterClassLevelFactory(character=sheet.character, level=3)
-        sheet.invalidate_class_level_cache()
+        cov = CovenantFactory(covenant_type=role.covenant_type, level=3)
+        CharacterCovenantRoleFactory(character_sheet=sheet, covenant=cov, covenant_role=role)
         thread = Thread.objects.create(
             owner=sheet,
             resonance=res,

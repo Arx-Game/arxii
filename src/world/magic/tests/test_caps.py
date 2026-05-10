@@ -6,6 +6,7 @@ Spec A §2.4. TDD: written before the implementation.
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.constants import TargetKind
 from world.magic.exceptions import AnchorCapNotImplemented
 from world.magic.factories import ThreadFactory
 from world.magic.services import compute_anchor_cap, compute_effective_cap, compute_path_cap
@@ -52,6 +53,61 @@ class AnchorCapTests(TestCase):
         thread = ThreadFactory(as_room_thread=True)
         with self.assertRaises(AnchorCapNotImplemented):
             compute_anchor_cap(thread)
+
+
+class CovenantRoleAnchorCapTests(TestCase):
+    """COVENANT_ROLE anchor cap reads from membership covenant.level (Slice A §3.5).
+
+    Cap is persistent (independent of engagement). max(covenant.level across all
+    CCR rows, active or historical) × 10.
+    """
+
+    def test_returns_zero_when_no_membership(self) -> None:
+        thread = ThreadFactory(as_covenant_role_thread=True)
+        # No CharacterCovenantRole rows for this owner+role pair → cap = 0
+        self.assertEqual(compute_anchor_cap(thread), 0)
+
+    def test_returns_max_level_times_ten(self) -> None:
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        cov_a = CovenantFactory(covenant_type=CovenantType.DURANCE, level=4)
+        cov_b = CovenantFactory(covenant_type=CovenantType.DURANCE, level=7)
+        for cov in (cov_a, cov_b):
+            CharacterCovenantRoleFactory(character_sheet=sheet, covenant=cov, covenant_role=role)
+        # ThreadFactory needs to use the SAME role and a sheet that already has rows.
+        thread = ThreadFactory(
+            owner=sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=role,
+            target_trait=None,
+        )
+        self.assertEqual(compute_anchor_cap(thread), 70)
+
+    def test_independent_of_engagement(self) -> None:
+        """Cap is a persistent property; engagement does not change it."""
+        from world.covenants.factories import make_engaged_member
+        from world.covenants.services import clear_engaged_membership
+
+        m = make_engaged_member()
+        thread = ThreadFactory(
+            owner=m.character_sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=m.covenant_role,
+            target_trait=None,
+        )
+        cap_engaged = compute_anchor_cap(thread)
+        clear_engaged_membership(membership=m)
+        # Invalidate handler cache to force re-read
+        m.character_sheet.character.covenant_roles.invalidate()
+        cap_disengaged = compute_anchor_cap(thread)
+        self.assertEqual(cap_engaged, cap_disengaged)
 
 
 class PathCapTests(TestCase):

@@ -112,7 +112,9 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911 — one arm per 
       the anchor cap. path_cap remains the absolute ceiling on Thread.level.
     - FACET: min(lifetime_earned // ANCHOR_CAP_FACET_DIVISOR,
       path_stage × ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE).
-    - COVENANT_ROLE: current_level × 10.
+    - COVENANT_ROLE: max(covenant.level across the character's all-time CharacterCovenantRole
+      rows for this role) × 10. Cap is a persistent character property, independent of
+      current engagement.
     - ROOM: not yet implemented — raises AnchorCapNotImplemented.
     """
     match thread.target_kind:
@@ -134,7 +136,9 @@ def compute_anchor_cap(thread: Thread) -> int:  # noqa: PLR0911 — one arm per 
             hard_max = _current_path_stage(thread.owner) * ANCHOR_CAP_FACET_HARD_MAX_PER_STAGE
             return min(lifetime // ANCHOR_CAP_FACET_DIVISOR, hard_max)
         case TargetKind.COVENANT_ROLE:
-            return thread.owner.current_level * 10
+            role = thread.target_covenant_role
+            max_level = thread.owner.character.covenant_roles.max_covenant_level_for_role(role)
+            return max_level * 10
         case TargetKind.ROOM:
             msg = thread.target_kind + " anchor cap awaits Spec D."
             raise AnchorCapNotImplemented(msg)

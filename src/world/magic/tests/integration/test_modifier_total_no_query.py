@@ -276,3 +276,34 @@ class ModifierTotalQueryBudgetTests(TestCase):
         list(self.character_obj.equipped_items.iter_item_facets())
         list(self.character_obj.threads.threads_of_kind(TargetKind.FACET))
         list(self.character_obj.covenant_roles.currently_engaged_roles())
+
+
+class CovenantRoleAnchorCapQueryBudgetTests(TestCase):
+    """Regression guard for the _rows select_related("covenant") requirement.
+
+    After the handler cache is warmed, compute_anchor_cap on a COVENANT_ROLE
+    thread must fire ZERO queries — proves max_covenant_level_for_role walks
+    the cache without re-fetching covenant rows.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.covenants.factories import make_engaged_member
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ThreadFactory
+
+        cls.membership = make_engaged_member()
+        cls.thread = ThreadFactory(
+            owner=cls.membership.character_sheet,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=cls.membership.covenant_role,
+            target_trait=None,
+        )
+
+    def test_compute_anchor_cap_covenant_role_zero_queries(self) -> None:
+        from world.magic.services.threads import compute_anchor_cap
+
+        # Warm the handler.
+        list(self.membership.character_sheet.character.covenant_roles.currently_engaged_roles())
+        with self.assertNumQueries(0):
+            compute_anchor_cap(self.thread)
