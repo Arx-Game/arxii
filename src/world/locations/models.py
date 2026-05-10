@@ -75,10 +75,6 @@ class LocationStatOverride(DiscriminatorMixin, SharedMemoryModel):
                 name="unique_override_per_room_stat",
             ),
         ]
-        indexes = [
-            models.Index(fields=["area", "stat_key"]),
-            models.Index(fields=["room_profile", "stat_key"]),
-        ]
 
     def __str__(self) -> str:
         target = self.get_active_target_name()
