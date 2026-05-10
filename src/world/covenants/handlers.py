@@ -38,13 +38,6 @@ class CharacterCovenantRoleHandler:
         """Return True if the character has ever held ``role`` (active or ended)."""
         return any(r.covenant_role_id == role.pk for r in self._rows)
 
-    def currently_held(self) -> CovenantRole | None:
-        """Return the active CovenantRole, or None if the character holds no active role."""
-        for r in self._rows:
-            if r.left_at is None:
-                return r.covenant_role
-        return None
-
     def max_covenant_level_for_role(self, role: CovenantRole) -> int:
         """Return the maximum covenant.level across all rows (active or historical) for this role.
 
