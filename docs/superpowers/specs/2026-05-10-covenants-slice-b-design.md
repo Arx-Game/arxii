@@ -18,12 +18,13 @@
 
 Land the lifecycle that turns Covenants from "data exists" into "players can actually form and grow them in play." Slice A shipped the entity, membership FK, engagement context, anchor cap formula, and pull gating — but a covenant can only be created today via factories or admin, and engagement is set only by direct service calls. Slice B introduces:
 
-- A multi-participant ritual coordination primitive (`RitualSession`) in `world/magic`, reusable for any future ritual that requires consent across N characters.
-- Two new `Ritual` rows that drive covenant formation and post-founding induction through that primitive.
+- A multi-participant ritual coordination primitive (`RitualSession`) in `world/magic`, reusable for any ritual that requires consent across N characters.
+- Two new `Ritual` factories driving covenant formation and post-founding induction through that primitive.
+- A Soul Tether retrofit that converts the existing single-actor ritual to a `BILATERAL` (sineater + sinner) multi-participant flow, validating the primitive against a second use case.
 - Manual engage/disengage UI surfaces, plus Durance scene-co-presence auto-engagement.
 - Frontend pages for the inbox, draft, response, and detail flows — placeholder UI mirroring the existing `RitualPerformDialog` shape.
 
-Slice B is intentionally lifecycle-only on the entry side: **no exit lifecycle ships in this slice.** Voluntary leave, kicking, dissolution, and dissolution-kind ceremonies are deferred to allow a careful design (see §3.7).
+Slice B is intentionally lifecycle-only on the entry side: **no exit lifecycle ships in this slice.** Voluntary leave, kicking, dissolution, and dissolution-kind ceremonies are deferred to allow a careful design (see §3.1).
 
 ---
 
@@ -52,7 +53,7 @@ The lifecycle that surfaces all of the above to players. Today:
 | Slice | Scope | Status |
 |---|---|---|
 | A | Covenant entity + membership FK + engagement context + anchor cap + COVENANT_ROLE pull gating | **Shipped** |
-| **B** | **Formation ritual + induction ritual + manual engage/disengage + Durance scene auto-engage + RitualSession primitive + UI** | **This spec** |
+| **B** | **RitualSession primitive + covenant formation + induction + Soul Tether BILATERAL retrofit + manual engage/disengage + Durance scene auto-engage + UI** | **This spec** |
 | C | Sworn Objective model + Stories/Missions integration | Future |
 | D | Covenant-level XP/progression, group-ability unlocks, sub-role unlocks | Future |
 | E | Battle Covenants + Durance × Battle stacking + war-scope combat auto-engage | Future |
@@ -60,7 +61,7 @@ The lifecycle that surfaces all of the above to players. Today:
 | G | Use-based weave gate & anchor cap for COVENANT_ROLE Threads | Future |
 | H | Thread situational gating for non-COVENANT_ROLE kinds | Future |
 
-Note that some Slice B-adjacent work intentionally lives outside Slice B: covenant exit lifecycle (see §3.7), Soul Tether retrofit through the new RitualSession primitive (forward-compatible but not in scope), Battle covenant auto-engage (depends on a Battle entity that doesn't yet exist).
+Note that some Slice B-adjacent work intentionally lives outside Slice B: covenant exit lifecycle (see §3.1), Battle covenant auto-engage (depends on a Battle entity that doesn't yet exist). Soul Tether is **in scope** as a BILATERAL retrofit (§3.12, §4.15) that validates the `RitualSession` primitive against a second use case.
 
 ---
 
@@ -97,21 +98,22 @@ Practically:
 
 The existing `PerformRitualAction` (single-actor: one performer, optional target, fire-and-forget) does not support "wait for N characters to consent." A new primitive is required.
 
-`RitualSession` lives in `world/magic` because it is a magic-system concern, not a covenant concern. It is reusable for any future ritual that requires multi-character consent (and provides a forward-compatible path for retrofitting Soul Tether and similar single-actor-with-target rituals into proper multi-participant ceremonies later).
+`RitualSession` lives in `world/magic` because it is a magic-system concern, not a covenant concern. It is reusable for any future ritual that requires multi-character consent.
 
 Rejected alternatives:
-- A separate `MultiParticipantRitual` model alongside `Ritual` — parallel infrastructure for admin/dispatch/frontend, duplication for any retrofit, two systems to maintain.
+- A separate `MultiParticipantRitual` model alongside `Ritual` — parallel infrastructure for admin/dispatch/frontend, two systems to maintain.
 - A covenant-specific `CovenantFormationSession` in `world/covenants` — locks in not-DRY; future multi-participant rituals get nothing from it.
 
 ### 3.4 Threshold rules per `Ritual.participation_rule`
 
-`Ritual` gains a `participation_rule` field (`TextChoices`: `SINGLE_ACTOR`, `FORMATION`, `INDUCTION`). Default is `SINGLE_ACTOR` — all existing rituals (Soul Tether, Imbuing, anima ritual) keep working unchanged.
+`Ritual` gains a `participation_rule` field (`TextChoices`: `SINGLE_ACTOR`, `FORMATION`, `INDUCTION`, `BILATERAL`). All `Ritual` rows live in factories today (used by integration tests and, eventually, by an authoring UI that surfaces sane defaults). The project does not use Django data migrations to seed game content — factories are the single source. Slice B adds factories for the new ritual kinds and updates the Soul Tether factory to use the new participation_rule (see §3.12 and §4.15).
 
-- **`SINGLE_ACTOR`**: legacy path. Dispatched via `PerformRitualAction` directly, no `RitualSession` involved. Ships in this slice as the default; all existing Ritual rows take this value.
+- **`SINGLE_ACTOR`**: dispatched via `PerformRitualAction` directly, no `RitualSession` involved. The simplest rule, used by rituals where one performer acts (with optional target). Default for the field. Existing single-actor factories (Imbuing, anima ritual, soul_tether_rescue) take the default; their dispatch path is unchanged.
 - **`FORMATION`**: all `INVITED` participants must respond `ACCEPTED`, with ≥2 accepts required to fire. Any `DECLINE` immediately kills the session (see lifecycle below). Initiator must explicitly fire when threshold is met.
 - **`INDUCTION`**: simple majority of respondents — `accepts > declines AND accepts ≥ 2` (initiator + at least one other). Non-respondents do not block; the initiator can fire when threshold is met. This is deliberately **respondent-based**, not membership-based, because many founders may be inactive (per §3.1) and unanimity-of-all-members is unworkable.
+- **`BILATERAL`**: exactly 2 participants, both must accept. Used by Soul Tether (sineater + sinner). Smaller-scope variant of FORMATION with a fixed participant count of 2 — distinct from FORMATION because the participant count is constrained at the model layer, and the per-participant choice is a binary role (one end of the relationship vs the other).
 
-A future "core / guest" tier or per-member admin/invite-privilege flags will likely refine this. Out of scope for B.
+A future "core / guest" tier or per-member admin/invite-privilege flags will likely refine the INDUCTION rule. Out of scope for B.
 
 ### 3.5 Engagement is a contextual state with a shared prerequisite
 
@@ -173,6 +175,26 @@ The flow system uses untyped `FlowStepDefinition.parameters: JSONField` for all 
 
 Spec-level callout: when the flow system's untyped parameters start fighting back, a similar discriminator-references treatment is a candidate refactor. Not blocking, just leaving the path lit.
 
+### 3.12 Soul Tether retrofit through `RitualSession` (BILATERAL)
+
+The existing Soul Tether ritual (factory-only today, dispatched as single-actor performer-targets-target) is retrofitted through the new primitive in this slice. The retrofit:
+
+- Validates the `RitualSession` design against a second, structurally different use case (covenant founding has N participants choosing from M roles; Soul Tether has exactly 2 participants choosing from 2 roles). If the primitive can't accommodate Soul Tether cleanly, that's an early signal to revise it.
+- Removes Slice B's only "remember to do this later" debt.
+- Reverses the May 2026 Soul Tether UI design's "no consent" decision. That decision was made when there was no infrastructure for asynchronous consent; with `RitualSession` available, requiring the sineater's explicit consent is the natural choice and reflects what the ritual *means* IC.
+
+Soul Tether shape:
+- **Two participants exactly:** the **sineater** and the **sinner**. Both are `CharacterSheet` rows. NPCs are GM-controlled characters (with character sheets) — no special NPC handling needed.
+- **Each participant chooses which end of the relationship they are.** A new `SoulTetherRole` `TextChoices` (`SINEATER`, `SINNER`) lives in `world/magic/constants` and is referenced via a new `ReferenceKind.SOUL_TETHER_ROLE` (added to the discriminator-M2M alongside `COVENANT` and `COVENANT_ROLE`).
+- **`participation_rule = BILATERAL`:** exactly 2 participants, both must accept. Validation enforces participant count = 2 at draft time AND that the two participants choose distinct roles (one sineater, one sinner) at fire time.
+- **Initiator is one of the two participants.** They draft the session naming the other character as the second participant.
+
+`soul_tether_rescue` (a separate ritual) stays `SINGLE_ACTOR` — rescue inherently doesn't allow consent (the rescuee may be incapacitated, possessed, etc.), so it remains a performer-targets-target action.
+
+The wrapper service `accept_soul_tether_via_session(session)` unpacks the two participants and their `SOUL_TETHER_ROLE` references, identifies which is sineater and which is sinner, and dispatches to the existing `world.magic.services.soul_tether.accept_soul_tether` service with arguments shaped to match its current signature. The existing service's logic is unchanged; only the call site shape changes.
+
+The existing Soul Tether frontend page is updated to route through `RitualSessionDraftDialog` (initiator picks the second character + their own role) and `RitualSessionResponseDialog` (the second participant accepts and picks the remaining role).
+
 ---
 
 ## In scope
@@ -194,7 +216,7 @@ participation_rule = models.CharField(
 )
 ```
 
-Migration default = `SINGLE_ACTOR`. Existing rituals (Soul Tether, Imbuing, anima ritual, etc.) take this value; their dispatch path is unchanged. Only `FORMATION` and `INDUCTION` rituals route through the new `RitualSession` flow.
+Field default = `SINGLE_ACTOR`. The covenant formation/induction factories (§4.7) take `FORMATION` and `INDUCTION` respectively; the Soul Tether factory (§4.15) is updated to take `BILATERAL`. Existing single-actor factories (Imbuing, anima ritual, soul_tether_rescue) take the default — their dispatch path through `PerformRitualAction` is unchanged. Only non-`SINGLE_ACTOR` rituals route through the new `RitualSession` flow.
 
 ### 4.2 `RitualSession` model
 
@@ -324,17 +346,19 @@ Both are thin wrappers around Slice A's existing `create_covenant` / `add_member
 
 **Implementation note on `Covenant.name` uniqueness.** Slice A did not add a uniqueness constraint on `Covenant.name`. If two formation rituals fire concurrently with the same proposed name, both succeed today. Implementation should decide whether to:
 (a) leave it unconstrained (matches current Slice A behavior; duplicate names in the wild are tolerable)
-(b) add `unique=True` on `Covenant.name` in the Slice B migration (catches the conflict at the DB layer; raises `IntegrityError` which `fire_session` translates to a typed `CovenantNameConflictError`)
+(b) add `unique=True` on `Covenant.name` in the Slice B model migration (catches the conflict at the DB layer; raises `IntegrityError` which `fire_session` translates to a typed `CovenantNameConflictError`)
 Recommend (b) for predictability, but the call is left for the implementation plan.
 
-### 4.7 Two new `Ritual` rows via data migration
+### 4.7 Two new `Ritual` factories
 
-In `src/world/magic/migrations/`, a data migration creates:
+The project never uses Django data migrations to seed game content. All `Ritual` rows are constructed by FactoryBoy factories used by integration tests today and surfaced through an authoring UI eventually. Slice B adds two factories in `src/world/magic/tests/factories.py` (or co-located in `src/world/covenants/tests/factories.py` if they're tied to covenant scenarios):
 
-- **Covenant Formation** ritual: `participation_rule=FORMATION`, `execution_kind=SERVICE`, `service_function_path="world.covenants.services.create_covenant_via_session"`, `input_schema` with session-level fields (`name`, `covenant_type`, `sworn_objective`, `invitees`) + `participant_fields` (`chosen_covenant_role`).
-- **Covenant Induction** ritual: `participation_rule=INDUCTION`, `execution_kind=SERVICE`, `service_function_path="world.covenants.services.induct_member_via_session"`, `input_schema` with session-level fields (`target_covenant`, `candidate`) + `participant_fields` (`chosen_covenant_role`, `applies_to: "candidate_only"`).
+- **`CovenantFormationRitualFactory`**: `participation_rule=FORMATION`, `execution_kind=SERVICE`, `service_function_path="world.covenants.services.create_covenant_via_session"`, `input_schema` with session-level fields (`name`, `covenant_type`, `sworn_objective`, `invitees`) + `participant_fields` (`chosen_covenant_role`).
+- **`CovenantInductionRitualFactory`**: `participation_rule=INDUCTION`, `execution_kind=SERVICE`, `service_function_path="world.covenants.services.induct_member_via_session"`, `input_schema` with session-level fields (`target_covenant`, `candidate`) + `participant_fields` (`chosen_covenant_role`, `applies_to: "candidate_only"`).
 
-Migration is idempotent (`update_or_create` on `name`).
+Both use `django_get_or_create=("name",)` so the factory is idempotent across `setUpTestData` calls.
+
+Authoring UI for staff to create / edit Ritual rows is a future concern; for now, these factories also serve as the canonical "sane defaults" reference for that future tooling.
 
 ### 4.8 `Ritual.input_schema` extension: `participant_fields`
 
@@ -569,13 +593,42 @@ CovenantEngagementPrerequisiteNotMetError(CovenantError)
 
 All carry `user_message` + `SAFE_MESSAGES` allowlist per project rule. Views use `exc.user_message`, never `str(exc)`.
 
+### 4.15 Soul Tether retrofit
+
+Per §3.12. Concrete deliverables:
+
+**Backend additions:**
+- `SoulTetherRole` `TextChoices` in `src/world/magic/constants.py` (`SINEATER`, `SINNER`)
+- New `ReferenceKind.SOUL_TETHER_ROLE` value + new typed FK column on `RitualSessionReference`: `ref_soul_tether_role` is NOT a model FK (it's an enum), so this case is the exception to the discriminator-FK pattern. Two options:
+  - (a) Store the SoulTetherRole enum value in `participant_kwargs` JSON (it IS a scalar enum, not a model FK — fits the JSON convention)
+  - (b) Add a `ref_soul_tether_role` `CharField(choices=SoulTetherRole.choices, null=True)` column on `RitualSessionReference` to keep all participant choices in one table
+  - **Recommend (a)** — it's a scalar enum, JSON is the right home per §3.8's split. Implementation plan picks.
+- New optional `min_participants` / `max_participants` `PositiveSmallIntegerField` columns on `Ritual`. `BILATERAL` rituals set both to 2. `FORMATION` and `INDUCTION` leave them null. `SINGLE_ACTOR` leaves them null. Validation in the draft service enforces the bounds when set.
+- Wrapper service `accept_soul_tether_via_session(session)` in `src/world/magic/services/soul_tether.py` — unpacks the two participants, identifies sineater + sinner from their respective `SoulTetherRole` choices, calls the existing `accept_soul_tether` with the existing argument shape.
+- New typed exception `BilateralRoleConflictError(RitualSessionError)` raised at fire if both participants chose the same role.
+
+**Factory update:**
+- `SoulTetherRitualFactory` (in `src/world/magic/tests/factories.py`) updated: `participation_rule=BILATERAL`, `min_participants=2`, `max_participants=2`, `service_function_path` switched to `accept_soul_tether_via_session`, `input_schema` updated to declare `participant_fields` for the SoulTetherRole choice. The existing factory's name and any other consumed attributes stay stable so other test suites aren't broken.
+- `SoulTetherRescueRitualFactory` is unchanged — stays `SINGLE_ACTOR` per §3.12.
+
+**Frontend update:**
+- The existing Soul Tether page (per the May 2026 UI spec) is updated to invoke `RitualSessionDraftDialog` with the BILATERAL Soul Tether ritual instead of the single-actor `RitualPerformDialog`.
+- New ritual-form field type: `SoulTetherRolePickerField` — small radio/dropdown for SINEATER vs SINNER. Registered via the existing field registry.
+- The existing Soul Tether dialog component is either deprecated/removed or kept as a thin shim that opens the new flow — implementation plan picks based on how widely it's referenced.
+
+**Tests:**
+- All existing Soul Tether integration tests are updated to drive the session flow (draft → both accept with role choices → fire → existing soul tether service called with correct args).
+- New tests: `BilateralRoleConflictError` raised when both participants pick the same role; `BILATERAL` participant count enforcement at draft.
+- `soul_tether_rescue` tests are unchanged.
+
 ---
 
 ## Out of scope (durably documented)
 
 - **Covenant exit lifecycle** (voluntary leave, kicking, dissolution) — see §3.1. Not in Slice B, not in MVP.
 - **Battle covenant auto-engage** — depends on a Battle entity that doesn't yet exist. When Battles ship (Slice E or earlier), the Battle branch of `can_engage_durance_membership` becomes a real prerequisite; the auto-trigger goes in the "character joins Battle's roster" code path.
-- **Soul Tether retrofit** through the new `RitualSession` primitive. Soul Tether stays `SINGLE_ACTOR` in Slice B. The primitive is designed so retrofit is non-breaking; it is just not done now.
+- **Soul Tether `BILATERAL` retrofit IS in scope** (§3.12, §4.15) — moved from out-of-scope. `soul_tether_rescue` stays `SINGLE_ACTOR` (rescue inherently doesn't allow consent).
+- **Other multi-character rituals** beyond Soul Tether are still out of scope. Future rituals (group magical workings, group sworn oaths, etc.) get their own design when authored. The `RitualSession` primitive supports them.
 - **Sworn-objective structuring** — stays free-text `TextField` in Slice B; Slice C structures it.
 - **Per-member admin / invite-privilege flags ("core / guest" tier)** — future enhancement when activity churn becomes a real problem.
 - **Use-based weave gates and use-based anchor cap** — Slice G.
@@ -649,13 +702,13 @@ Per CLAUDE.md:
 
 ## Migrations
 
-Per project rule "avoid multiple migrations during development for a new feature":
+Per project rule "avoid multiple migrations during development for a new feature" AND the project rule "no data migrations for game content":
 
-- **One model migration** in `src/world/magic/migrations/` adding `Ritual.participation_rule`, `RitualSession`, `RitualSessionParticipant`, `RitualSessionReference` (with the discriminator `CheckConstraint`s).
-- **One data migration** in the same location creating the two `Ritual` rows (formation, induction). Idempotent via `update_or_create(name=...)`.
-- **No covenants-side migration** expected — all Slice B additions in `world/covenants` are pure code (handler additions on existing classes, new service functions, new exception classes).
+- **One model migration** in `src/world/magic/migrations/` adding `Ritual.participation_rule`, optional `Ritual.min_participants` / `Ritual.max_participants` (if §3.12 BILATERAL needs them — see that section), `RitualSession`, `RitualSessionParticipant`, `RitualSessionReference` (with the discriminator `CheckConstraint`s).
+- Optional **one model migration** in `src/world/covenants/migrations/` adding `Covenant.name` `unique=True` if the implementation plan picks option (b) from §4.6.
+- **No data migrations.** All `Ritual` rows are created by FactoryBoy factories (§4.7, §4.15). Game content seeding is via factories + future authoring UI — never via Django migrations.
 
-Run `arx manage makemigrations world.magic` once at the end of feature work, not after each model tweak.
+Run `arx manage makemigrations world.magic world.covenants` once at the end of feature work, not after each model tweak.
 
 ---
 
