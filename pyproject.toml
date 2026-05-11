@@ -424,6 +424,7 @@ exclude = [
     "**/serializers.py",  # Same — DRF stub overrides cause false positives
     "**/factories.py",    # FactoryBoy's factory.django triggers false positives in ty
     "src/world/progression/services/scene_integration.py", # Complex Django TextChoices typing issues
+    "src/world/covenants/views.py",  # DRF @action(methods=[...]) stub infers list[Unknown | str], not Sequence[Literal[...]]
 ]
 
 [tool.ty.rules]

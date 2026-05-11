@@ -2,6 +2,7 @@
 
 from rest_framework import serializers
 
+from world.covenants.handlers import can_engage_durance_membership
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
@@ -39,6 +40,8 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
 
     covenant_role = CovenantRoleSerializer(read_only=True)
     is_active = serializers.SerializerMethodField()
+    can_engage = serializers.SerializerMethodField()
+    engage_blocked_reason = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterCovenantRole
@@ -51,11 +54,21 @@ class CharacterCovenantRoleSerializer(serializers.ModelSerializer):
             "joined_at",
             "left_at",
             "is_active",
+            "can_engage",
+            "engage_blocked_reason",
         ]
         read_only_fields = fields
 
     def get_is_active(self, obj: CharacterCovenantRole) -> bool:
         return obj.left_at is None
+
+    def get_can_engage(self, obj: CharacterCovenantRole) -> bool:
+        return can_engage_durance_membership(obj)
+
+    def get_engage_blocked_reason(self, obj: CharacterCovenantRole) -> str | None:
+        if can_engage_durance_membership(obj):
+            return None
+        return "No covenant members present in this scene."
 
 
 class CovenantSerializer(serializers.ModelSerializer):
