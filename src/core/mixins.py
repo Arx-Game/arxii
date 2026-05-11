@@ -15,6 +15,12 @@ class DiscriminatorMixin:
     Subclasses define:
         DISCRIMINATOR_FIELD: str — the name of the type/choice field
         DISCRIMINATOR_MAP: dict[str, str] — enum value -> FK field name
+
+    Subclasses that need MULTIPLE discriminators (e.g., parent type AND
+    holder type) should override ``clean()`` to call
+    ``_validate_discriminator`` for each pair, merge the resulting error
+    dicts, and raise a single ``ValidationError`` so all field errors
+    surface at once.
     """
 
     DISCRIMINATOR_FIELD: str
@@ -32,30 +38,49 @@ class DiscriminatorMixin:
         target = self.get_active_target()
         if target is None:
             return "(deleted)"
-        return str(target.name)
+        # Most discriminator targets expose .name (Persona, Area, Organization);
+        # fall back to str(target) for targets like RoomProfile that don't.
+        try:
+            return str(target.name)
+        except AttributeError:
+            return str(target)
+
+    def _validate_discriminator(
+        self, discriminator_field: str, discriminator_map: dict[str, str]
+    ) -> dict[str, str]:
+        """Return field-keyed errors for a discriminator/FK group.
+
+        Verifies that the discriminator value is in ``discriminator_map``
+        AND that exactly one matching FK is set. Returns an empty dict on
+        success. Does NOT raise — caller merges/raises.
+        """
+        discriminator_value = getattr(self, discriminator_field)
+        expected_field = discriminator_map.get(discriminator_value)
+        if expected_field is None:
+            if discriminator_value:
+                return {
+                    discriminator_field: (
+                        f"Unknown value {discriminator_value!r}; "
+                        f"must be one of {list(discriminator_map)}."
+                    )
+                }
+            return {discriminator_field: "This field is required."}
+
+        errors: dict[str, str] = {}
+        if getattr(self, expected_field) is None:
+            errors[expected_field] = (
+                f"Required when {discriminator_field} is {discriminator_value}."
+            )
+        for value, field_name in discriminator_map.items():
+            if value != discriminator_value and getattr(self, field_name) is not None:
+                errors[field_name] = (
+                    f"Must be null when {discriminator_field} is {discriminator_value}."
+                )
+        return errors
 
     def clean(self) -> None:
         super().clean()  # type: ignore[misc]
-        discriminator_value = getattr(self, self.DISCRIMINATOR_FIELD)
-        expected_field = self.DISCRIMINATOR_MAP.get(discriminator_value)
-        if not expected_field:
-            return
-
-        errors: dict[str, str] = {}
-
-        # Expected FK must be set
-        if getattr(self, expected_field) is None:
-            errors[expected_field] = (
-                f"Required when {self.DISCRIMINATOR_FIELD} is {discriminator_value}."
-            )
-
-        # Other FKs must be null
-        for disc_value, field_name in self.DISCRIMINATOR_MAP.items():
-            if disc_value != discriminator_value and getattr(self, field_name) is not None:
-                errors[field_name] = (
-                    f"Must be null when {self.DISCRIMINATOR_FIELD} is {discriminator_value}."
-                )
-
+        errors = self._validate_discriminator(self.DISCRIMINATOR_FIELD, self.DISCRIMINATOR_MAP)
         if errors:
             raise ValidationError(errors)
 

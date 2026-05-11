@@ -298,6 +298,8 @@
   - residents <- character_sheets.CharacterSheet
   - stat_overrides <- locations.LocationStatOverride
   - stat_modifiers <- locations.LocationStatModifier
+  - ownership_records <- locations.LocationOwnership
+  - tenancy_records <- locations.LocationTenancy
   - events <- events.Event
 
 
@@ -366,6 +368,8 @@
   - children <- areas.Area
   - stat_overrides <- locations.LocationStatOverride
   - stat_modifiers <- locations.LocationStatModifier
+  - ownership_records <- locations.LocationOwnership
+  - tenancy_records <- locations.LocationTenancy
   - rooms <- evennia_extensions.RoomProfile
 
 ### AreaClosure
@@ -915,7 +919,7 @@
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary — Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult — Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x000001E681436120>, default_factory=<dataclasses._MISSING_TYPE object at 0x000001E681436120>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x000001E681436120>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x000002A54D616120>, default_factory=<dataclasses._MISSING_TYPE object at 0x000002A54D616120>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x000002A54D616120>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(target: 'ObjectDB') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(target: 'ObjectDB') -> dict[int, int] — Get all capability values for a character.`
@@ -983,7 +987,23 @@
   - area -> areas.Area [FK] (nullable)
   - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
 
+### LocationOwnership
+**Foreign Keys:**
+  - area -> areas.Area [FK] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+  - holder_persona -> scenes.Persona [FK] (nullable)
+  - holder_organization -> societies.Organization [FK] (nullable)
+
+### LocationTenancy
+**Foreign Keys:**
+  - area -> areas.Area [FK] (nullable)
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+  - tenant_persona -> scenes.Persona [FK] (nullable)
+  - tenant_organization -> societies.Organization [FK] (nullable)
+
 ### Service Functions
+- `current_tenants(room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return all currently-active tenancies that apply to a room.`
+- `effective_owner(room: 'DefaultObject') -> 'LocationOwnership | None' — Cascade-resolve the most-specific active owner of a room.`
 - `effective_stat(room: 'DefaultObject', stat_key: 'StatKey') -> 'int' — Cascade-resolve a single stat for a room, clamped to per-stat bounds.`
 
 
@@ -1656,7 +1676,7 @@
 
 ### Service Functions
 - `chart_has_success_outcomes(rank_difference: int) -> bool — Check if the ResultChart for this rank difference has any success outcomes.`
-- `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum covenant-role contributions across equipped items for a ModifierTarget (Spec D §5.6).`
+- `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum covenant-role contributions across equipped items, gated on engagement.`
 - `create_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'list[CharacterModifier]' — Create ModifierSource + CharacterModifier records for all effects of a distinction.`
 - `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' — Delete all modifier records for a distinction.`
 - `get_all_capability_values(target: 'ObjectDB') -> dict[int, int] — Get all capability values for a character.`
@@ -2182,6 +2202,8 @@
   - legend_entries <- societies.LegendEntry
   - legend_spreads <- societies.LegendSpread
   - legend_stories_written <- societies.LegendDeedStory
+  - ownership_records <- locations.LocationOwnership
+  - tenancies <- locations.LocationTenancy
   - hosted_events <- events.EventHost
   - event_invitations <- events.EventInvitation
   - invitations_sent <- events.EventInvitation
@@ -2314,13 +2336,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x000001E68349DA70>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x000002A54F66DA70>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Get the relationship tier between two characters.`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x000001E68349DA70>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x000002A54F66DA70>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies
@@ -2348,6 +2370,8 @@
 **Pointed to by:**
   - memberships <- societies.OrganizationMembership
   - reputations <- societies.OrganizationReputation
+  - ownership_records <- locations.LocationOwnership
+  - tenancies <- locations.LocationTenancy
   - event_invitations <- events.EventInvitation
 
 ### OrganizationMembership

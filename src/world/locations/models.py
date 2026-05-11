@@ -7,12 +7,13 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin
-from world.locations.constants import LocationParentType, StatKey
+from world.locations.constants import HolderType, LocationParentType, StatKey
 
 
 class LocationStatOverride(DiscriminatorMixin, SharedMemoryModel):
@@ -192,3 +193,236 @@ class LocationStatModifier(DiscriminatorMixin, SharedMemoryModel):
     def __str__(self) -> str:
         target = self.get_active_target_name()
         return f"Modifier {self.stat_key}+{self.value} @ {target}"
+
+
+class LocationOwnership(DiscriminatorMixin, SharedMemoryModel):
+    """Who holds the deed/title/claim of right to a location.
+
+    Cascades through the area hierarchy via ``AreaClosure``: the
+    most-specific active row in the chain wins. Liege/vassal nesting
+    is multiple rows at different tiers; the cascade resolver picks
+    the deepest naturally.
+
+    Historical rows (``ended_at IS NOT NULL``) are kept as audit trail.
+    The partial-unique constraint enforces at most one *active* owner
+    per location.
+
+    Note: ``acquired_at`` defaults to ``timezone.now`` at instance
+    construction time, not save time. For most flows this is invisible
+    (you call ``objects.create()``), but for backfill/import scenarios
+    pass ``acquired_at`` explicitly to control the audit timestamp.
+    """
+
+    DISCRIMINATOR_FIELD = "parent_type"
+    DISCRIMINATOR_MAP = {
+        LocationParentType.AREA: "area",
+        LocationParentType.ROOM: "room_profile",
+    }
+
+    parent_type = models.CharField(
+        max_length=10,
+        choices=LocationParentType.choices,
+        help_text="Selects which parent FK (area or room_profile) is active.",
+    )
+    area = models.ForeignKey(
+        "areas.Area",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="ownership_records",
+    )
+    room_profile = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="ownership_records",
+    )
+
+    holder_type = models.CharField(
+        max_length=20,
+        choices=HolderType.choices,
+        help_text="Selects which holder FK (persona or organization) is active.",
+    )
+    holder_persona = models.ForeignKey(
+        "scenes.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="ownership_records",
+    )
+    holder_organization = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="ownership_records",
+    )
+
+    acquired_at = models.DateTimeField(default=timezone.now)
+    ended_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When this party ceased to be the owner. NULL = currently active.",
+    )
+    notes = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Free-text provenance: 'via inheritance from House X', 'purchased 1234'.",
+    )
+
+    HOLDER_DISCRIMINATOR_FIELD = "holder_type"
+    HOLDER_DISCRIMINATOR_MAP = {
+        HolderType.PERSONA: "holder_persona",
+        HolderType.ORGANIZATION: "holder_organization",
+    }
+
+    class Meta:
+        verbose_name = "Location Ownership"
+        verbose_name_plural = "Location Ownerships"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["area"],
+                condition=models.Q(area__isnull=False) & models.Q(ended_at__isnull=True),
+                name="unique_active_ownership_per_area",
+            ),
+            models.UniqueConstraint(
+                fields=["room_profile"],
+                condition=models.Q(room_profile__isnull=False) & models.Q(ended_at__isnull=True),
+                name="unique_active_ownership_per_room",
+            ),
+        ]
+
+    def clean(self) -> None:
+        """Validate BOTH discriminators (parent and holder), collecting all errors."""
+        parent_errors = self._validate_discriminator(
+            self.DISCRIMINATOR_FIELD, self.DISCRIMINATOR_MAP
+        )
+        holder_errors = self._validate_discriminator(
+            self.HOLDER_DISCRIMINATOR_FIELD, self.HOLDER_DISCRIMINATOR_MAP
+        )
+        errors = {**parent_errors, **holder_errors}
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self) -> str:
+        target = self.get_active_target_name()
+        holder_field = self.HOLDER_DISCRIMINATOR_MAP.get(self.holder_type)
+        holder = getattr(self, holder_field, None) if holder_field else None
+        holder_name = str(holder) if holder is not None else "(deleted)"
+        active = "active" if self.ended_at is None else "historical"
+        return f"Ownership of {target} by {holder_name} ({active})"
+
+
+class LocationTenancy(DiscriminatorMixin, SharedMemoryModel):
+    """A granted, time-bound right to use a specific location.
+
+    Does NOT cascade most-specific-wins. The ``current_tenants`` read
+    collects ALL applicable rows: room-level tenancies plus
+    ancestor-area-level tenancies (a noble with tenancy of "the west
+    wing" is a tenant of every Room within it). Multiple concurrent
+    tenancies are allowed (married couple, lease holder + roommate,
+    communal bunkroom).
+
+    Historical rows are kept (``ends_at < now`` or set to the moment of
+    eviction). Active filter is ``ends_at IS NULL OR ends_at > now()``.
+
+    Note: ``started_at`` defaults to ``timezone.now`` at instance
+    construction time, not save time. Pass it explicitly for backfill /
+    historical import.
+    """
+
+    DISCRIMINATOR_FIELD = "parent_type"
+    DISCRIMINATOR_MAP = {
+        LocationParentType.AREA: "area",
+        LocationParentType.ROOM: "room_profile",
+    }
+
+    parent_type = models.CharField(
+        max_length=10,
+        choices=LocationParentType.choices,
+        help_text="Selects which parent FK (area or room_profile) is active.",
+    )
+    area = models.ForeignKey(
+        "areas.Area",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="tenancy_records",
+    )
+    room_profile = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="tenancy_records",
+    )
+
+    tenant_type = models.CharField(
+        max_length=20,
+        choices=HolderType.choices,
+        help_text="Selects which tenant FK (persona or organization) is active.",
+    )
+    tenant_persona = models.ForeignKey(
+        "scenes.Persona",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="tenancies",
+    )
+    tenant_organization = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="tenancies",
+    )
+
+    started_at = models.DateTimeField(default=timezone.now)
+    ends_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the tenancy ends. NULL = indefinite, revocable.",
+    )
+    notes = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text=("Free-text terms. Rent and structured lease fields live in the economy system."),
+    )
+
+    TENANT_DISCRIMINATOR_FIELD = "tenant_type"
+    TENANT_DISCRIMINATOR_MAP = {
+        HolderType.PERSONA: "tenant_persona",
+        HolderType.ORGANIZATION: "tenant_organization",
+    }
+
+    class Meta:
+        verbose_name = "Location Tenancy"
+        verbose_name_plural = "Location Tenancies"
+        indexes = [
+            models.Index(fields=["area", "ends_at"]),
+            models.Index(fields=["room_profile", "ends_at"]),
+        ]
+
+    def clean(self) -> None:
+        """Validate BOTH discriminators (parent and tenant), collecting all errors."""
+        parent_errors = self._validate_discriminator(
+            self.DISCRIMINATOR_FIELD, self.DISCRIMINATOR_MAP
+        )
+        tenant_errors = self._validate_discriminator(
+            self.TENANT_DISCRIMINATOR_FIELD, self.TENANT_DISCRIMINATOR_MAP
+        )
+        errors = {**parent_errors, **tenant_errors}
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self) -> str:
+        target = self.get_active_target_name()
+        tenant_field = self.TENANT_DISCRIMINATOR_MAP.get(self.tenant_type)
+        tenant = getattr(self, tenant_field, None) if tenant_field else None
+        tenant_name = str(tenant) if tenant is not None else "(deleted)"
+        if self.ends_at is None or self.ends_at > timezone.now():
+            state = "active"
+        else:
+            state = "expired"
+        return f"Tenancy of {target} by {tenant_name} ({state})"
