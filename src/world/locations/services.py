@@ -290,6 +290,14 @@ def transfer_ownership(  # noqa: PLR0913 — keyword-only XOR-pair API by design
 
     Caller is responsible for permission gating — substrate does not
     check authority to transfer.
+
+    Concurrent transfers on the same parent serialize via
+    ``select_for_update`` on the existing-row lookup — the losing caller
+    waits for the winning transaction to commit, then re-reads the now-
+    ended row and proceeds. Concurrent *claims* of a never-owned
+    location still race at the INSERT step and rely on the partial-
+    unique constraint to surface ``IntegrityError`` for the loser; that
+    contention is rare in practice (an area is only claimed once).
     """
     _validate_location_kwargs(area, room_profile)
     _validate_holder_kwargs(to_persona, to_organization)
@@ -299,7 +307,7 @@ def transfer_ownership(  # noqa: PLR0913 — keyword-only XOR-pair API by design
     when = transferred_at if transferred_at is not None else timezone.now()
 
     with transaction.atomic():
-        existing_qs = LocationOwnership.objects.filter(ended_at__isnull=True)
+        existing_qs = LocationOwnership.objects.select_for_update().filter(ended_at__isnull=True)
         if area is not None:
             existing_qs = existing_qs.filter(area=area)
         else:
