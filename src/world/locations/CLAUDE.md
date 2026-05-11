@@ -99,3 +99,53 @@ in v1 — they're added when consumers need them.
   at save time. If you build a row and persist later, the decay anchor
   reflects construction. To "refresh" a modifier (reset its decay clock),
   set `applied_at = timezone.now()` and `save()`.
+
+## Ownership and Tenancy (added 2026-05-10)
+
+Two additional models capture *who holds the deed* and *who has been granted
+use* of a location. Designed in `docs/plans/2026-05-10-location-ownership-tenancy-design.md`.
+
+### Models
+
+- **`LocationOwnership`** — deed/title holder. Cascades through the area
+  hierarchy: most-specific active row wins. Liege/vassal nesting is
+  multiple rows at different tiers, naturally resolved by the cascade.
+- **`LocationTenancy`** — granted, time-bound, revocable use right. Does
+  NOT follow most-specific-wins. The reader collects ALL applicable rows
+  (room-level + ancestor-area-level). Multiple concurrent tenancies
+  are valid (married couples, roommates, communal bunkrooms).
+
+Both models use the existing `LocationParentType` for the parent
+discriminator (Area XOR Room) and a new `HolderType` for the holder
+discriminator (Persona XOR Organization). Each model's `clean()` calls
+`DiscriminatorMixin._validate_discriminator()` once per discriminator
+and merges errors so all field errors surface together.
+
+### Reading
+
+```python
+from world.locations.services import effective_owner, current_tenants
+
+ownership = effective_owner(room)  # LocationOwnership | None
+if ownership is not None:
+    holder = ownership.get_active_target()  # Persona or Organization
+
+for tenancy in current_tenants(room):
+    tenant = tenancy.get_active_target()
+```
+
+Both services share the `_room_profile_and_ancestors(room)` helper which
+walks `AreaClosure` once and returns `(profile, ancestor_ids)`.
+`effective_owner` uses most-specific-wins selection; `current_tenants`
+returns a `QuerySet` filtered for `ends_at IS NULL OR ends_at > now()`.
+
+### Authoring discipline
+
+- Use `ended_at` to retire an Ownership row (transfer, abandonment); do not
+  delete. The audit trail is the history.
+- For Tenancy, set `ends_at` (planned end OR moment of eviction) to
+  retire a row. Keep the row.
+- The partial-unique constraint enforces only ONE active Ownership per
+  location. Multiple active Tenancies are allowed and expected.
+- Most authoring goes through `objects.create()` until convenience helpers
+  materialize from real consumers (decoration, locks, vaults).
