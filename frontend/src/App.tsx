@@ -99,11 +99,23 @@ const MuteSettingsPage = lazy(() =>
 );
 
 // ---------------------------------------------------------------------------
-// Lazy-loaded rituals page
+// Lazy-loaded rituals pages
 // ---------------------------------------------------------------------------
 
 const RitualsListPage = lazy(() =>
   import('@/rituals/pages/RitualsListPage').then((m) => ({ default: m.RitualsListPage }))
+);
+
+const RitualSessionInboxPage = lazy(() =>
+  import('@/rituals/pages/RitualSessionInboxPage').then((m) => ({
+    default: m.RitualSessionInboxPage,
+  }))
+);
+
+const RitualSessionDetailPage = lazy(() =>
+  import('@/rituals/pages/RitualSessionDetailPage').then((m) => ({
+    default: m.RitualSessionDetailPage,
+  }))
 );
 
 // ---------------------------------------------------------------------------
@@ -497,6 +509,26 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <RitualsListPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/rituals/sessions/inbox"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <RitualSessionInboxPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/rituals/sessions/:id"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <RitualSessionDetailPage />
               </ProtectedRoute>
             </Suspense>
           }
