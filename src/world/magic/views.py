@@ -44,6 +44,7 @@ from world.magic.exceptions import (
 from world.magic.filters import (
     CantripFilter,
     ResonanceGrantFilterSet,
+    RitualSessionFilterSet,
     ThreadFilter,
     ThreadWeavingTeachingOfferFilter,
 )
@@ -1322,6 +1323,229 @@ class ThreadHubSummaryView(APIView):
 # =============================================================================
 # Rooms-by-property (GET /api/magic/rooms-by-property/)
 # =============================================================================
+
+
+class RitualSessionViewSet(viewsets.ModelViewSet):
+    """Multi-participant ritual session endpoints (Covenants Slice B §4.12).
+
+    Scoping (non-staff): sessions where the user is initiator OR invited participant.
+    Staff: all sessions.
+
+    Actions:
+    - list / retrieve: read
+    - create: draft (initiator-only, non-SINGLE_ACTOR rituals)
+    - destroy: cancel (initiator-only)
+    - accept / decline: participant-only
+    - fire: initiator-only, threshold-gated
+    """
+
+    pagination_class = None
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = RitualSessionFilterSet
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Scope to sessions where user is initiator or invited participant."""
+        from django.db.models import Q  # noqa: PLC0415
+
+        from world.magic.models.sessions import (  # noqa: PLC0415
+            RitualSession,
+            RitualSessionParticipant,
+            RitualSessionReference,
+        )
+
+        qs = RitualSession.objects.select_related("ritual", "initiator").prefetch_related(
+            Prefetch(
+                "participants",
+                queryset=RitualSessionParticipant.objects.select_related("character_sheet"),
+                to_attr="participants_cached",
+            ),
+            Prefetch(
+                "references",
+                queryset=RitualSessionReference.objects.all(),
+                to_attr="references_cached",
+            ),
+        )
+        user = self.request.user
+        if user.is_staff:
+            return qs.order_by("-created_at")
+        my_sheet_ids = list(RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids())
+        return (
+            qs.filter(
+                Q(initiator_id__in=my_sheet_ids)
+                | Q(participants__character_sheet_id__in=my_sheet_ids)
+            )
+            .distinct()
+            .order_by("-created_at")
+        )
+
+    def get_serializer_class(self):
+        from world.magic.serializers import (  # noqa: PLC0415
+            RitualSessionAcceptSerializer,
+            RitualSessionDetailSerializer,
+            RitualSessionDraftSerializer,
+            RitualSessionListSerializer,
+        )
+
+        if self.action == "create":
+            return RitualSessionDraftSerializer
+        if self.action == "retrieve":
+            return RitualSessionDetailSerializer
+        if self.action in ("accept", "decline"):
+            return RitualSessionAcceptSerializer
+        return RitualSessionListSerializer
+
+    def get_permissions(self):
+        from world.magic.permissions import (  # noqa: PLC0415
+            IsInvitedParticipant,
+            IsRitualSessionInitiator,
+            IsRitualSessionParticipantOrInitiator,
+        )
+
+        if self.action == "destroy":
+            return [IsAuthenticated(), IsRitualSessionInitiator()]
+        if self.action == "fire":
+            return [IsAuthenticated(), IsRitualSessionInitiator()]
+        if self.action in ("accept", "decline"):
+            return [IsAuthenticated(), IsInvitedParticipant()]
+        if self.action == "retrieve":
+            return [IsAuthenticated(), IsRitualSessionParticipantOrInitiator()]
+        return super().get_permissions()
+
+    def perform_create(self, serializer) -> None:
+        """Call draft_session with the serializer's validated_data."""
+        from world.magic.services.sessions import draft_session  # noqa: PLC0415
+
+        session = draft_session(**serializer.validated_data)
+        serializer.instance = session
+
+    def perform_destroy(self, instance) -> None:
+        """Cancel = delete via the typed service (which has its own select_for_update)."""
+        from world.magic.services.sessions import cancel_session  # noqa: PLC0415
+
+        cancel_session(session=instance)
+
+    def create(self, request: Request, *args, **kwargs) -> Response:
+        """POST /api/rituals/sessions/ — draft a new session."""
+        from world.magic.exceptions import (  # noqa: PLC0415
+            ParticipantCountError,
+            RitualSessionError,
+        )
+        from world.magic.serializers import RitualSessionDraftSerializer  # noqa: PLC0415
+
+        serializer = RitualSessionDraftSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        try:
+            self.perform_create(serializer)
+        except (RitualSessionError, ParticipantCountError) as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        from world.magic.serializers import RitualSessionDetailSerializer  # noqa: PLC0415
+
+        out = RitualSessionDetailSerializer(serializer.instance, context={"request": request})
+        return Response(out.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
+    def accept(self, request: Request, pk: int | None = None) -> Response:
+        """Accept invitation, supplying participant_kwargs + references."""
+        from world.magic.exceptions import RitualSessionError  # noqa: PLC0415
+        from world.magic.models.sessions import RitualSessionParticipant  # noqa: PLC0415
+        from world.magic.serializers import (  # noqa: PLC0415
+            RitualSessionAcceptSerializer,
+            RitualSessionDetailSerializer,
+        )
+        from world.magic.services.sessions import accept_session  # noqa: PLC0415
+
+        session = self.get_object()
+        user = request.user
+        my_sheet_ids = set(RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids())
+        participant = RitualSessionParticipant.objects.filter(
+            session=session,
+            character_sheet_id__in=my_sheet_ids,
+        ).first()
+        if participant is None:
+            return Response(
+                {"detail": "You are not an invited participant of this session."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        serializer = RitualSessionAcceptSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        try:
+            accept_session(
+                participant=participant,
+                participant_kwargs=data.get("participant_kwargs", {}),
+                references=data.get("references", []),
+            )
+        except RitualSessionError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        session.refresh_from_db()
+        out = RitualSessionDetailSerializer(session, context={"request": request})
+        return Response(out.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def decline(self, request: Request, pk: int | None = None) -> Response:
+        """Decline invitation. Returns 204 if session was deleted, 200 otherwise."""
+        from world.magic.exceptions import RitualSessionError  # noqa: PLC0415
+        from world.magic.models.sessions import RitualSessionParticipant  # noqa: PLC0415
+        from world.magic.serializers import RitualSessionDetailSerializer  # noqa: PLC0415
+        from world.magic.services.sessions import decline_session  # noqa: PLC0415
+
+        session = self.get_object()
+        user = request.user
+        my_sheet_ids = set(RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids())
+        participant = RitualSessionParticipant.objects.filter(
+            session=session,
+            character_sheet_id__in=my_sheet_ids,
+        ).first()
+        if participant is None:
+            return Response(
+                {"detail": "You are not an invited participant of this session."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        session_pk = session.pk
+        try:
+            decline_session(participant=participant)
+        except RitualSessionError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        # If session was deleted by the decline, return 204.
+        from world.magic.models.sessions import RitualSession  # noqa: PLC0415
+
+        if not RitualSession.objects.filter(pk=session_pk).exists():
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        session.refresh_from_db()
+        out = RitualSessionDetailSerializer(session, context={"request": request})
+        return Response(out.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"])
+    def fire(self, request: Request, pk: int | None = None) -> Response:
+        """Initiator-only fire. Returns {result_kind, result_id} envelope."""
+        from world.covenants.exceptions import CovenantError  # noqa: PLC0415
+        from world.magic.constants import ParticipationRule  # noqa: PLC0415
+        from world.magic.exceptions import RitualSessionError  # noqa: PLC0415
+        from world.magic.services.sessions import fire_session  # noqa: PLC0415
+
+        session = self.get_object()
+        rule = session.ritual.participation_rule
+        try:
+            result = fire_session(session=session)
+        except RitualSessionError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        except CovenantError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        if rule == ParticipationRule.FORMATION:
+            result_kind = "covenant"
+        elif rule == ParticipationRule.INDUCTION:
+            result_kind = "membership"
+        elif rule == ParticipationRule.BILATERAL:
+            # Soul Tether returns a RelationshipCapstone.
+            result_kind = "capstone"
+        else:
+            result_kind = "unknown"
+        result_id = getattr(result, "pk", None)  # noqa: GETATTR_LITERAL
+        return Response(
+            {"result_kind": result_kind, "result_id": result_id},
+            status=status.HTTP_200_OK,
+        )
 
 
 class RoomsByPropertyView(APIView):

@@ -24,6 +24,7 @@ from world.magic.views import (
     ResonanceGrantViewSet,
     RestrictionViewSet,
     RitualPerformView,
+    RitualSessionViewSet,
     RitualViewSet,
     RoomsByPropertyView,
     SceneEntryEndorsementViewSet,
@@ -97,6 +98,7 @@ router.register(
     basename="resonance-grant",
 )
 
+
 urlpatterns = [
     # Literal paths MUST come before *router.urls so that "rituals/perform/" is
     # matched before the router's "rituals/<pk>/" pattern treats "perform" as a pk.
@@ -124,6 +126,34 @@ urlpatterns = [
         "rituals/perform/",
         RitualPerformView.as_view(),
         name="ritual-perform",
+    ),
+    # Covenants Slice B — Multi-participant ritual sessions.
+    # These literal paths MUST come before *router.urls to avoid the router's
+    # "rituals/<pk>/" pattern matching "sessions" as a pk.
+    path(
+        "rituals/sessions/",
+        RitualSessionViewSet.as_view({"get": "list", "post": "create"}),
+        name="ritual-session-list",
+    ),
+    path(
+        "rituals/sessions/<int:pk>/",
+        RitualSessionViewSet.as_view({"get": "retrieve", "delete": "destroy"}),
+        name="ritual-session-detail",
+    ),
+    path(
+        "rituals/sessions/<int:pk>/accept/",
+        RitualSessionViewSet.as_view({"post": "accept"}),
+        name="ritual-session-accept",
+    ),
+    path(
+        "rituals/sessions/<int:pk>/decline/",
+        RitualSessionViewSet.as_view({"post": "decline"}),
+        name="ritual-session-decline",
+    ),
+    path(
+        "rituals/sessions/<int:pk>/fire/",
+        RitualSessionViewSet.as_view({"post": "fire"}),
+        name="ritual-session-fire",
     ),
     # Spec B — Soul Tether endpoints (Phase 11)
     path(

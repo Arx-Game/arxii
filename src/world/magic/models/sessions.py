@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from django.db import models
 from django.db.models import CheckConstraint, Q, UniqueConstraint
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.character_sheets.models import CharacterSheet
@@ -29,6 +30,16 @@ class RitualSession(SharedMemoryModel):
     session_kwargs = models.JSONField(default=dict, blank=True)
     expires_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @cached_property
+    def participants_cached(self) -> list:
+        """Prefetch target for participants via Prefetch(to_attr='participants_cached')."""
+        return list(self.participants.all())
+
+    @cached_property
+    def references_cached(self) -> list:
+        """Prefetch target for references via Prefetch(to_attr='references_cached')."""
+        return list(self.references.all())
 
 
 class RitualSessionParticipant(SharedMemoryModel):
