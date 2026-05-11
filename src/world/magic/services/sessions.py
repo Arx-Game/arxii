@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+import importlib
 
 from django.db import transaction
 from django.utils import timezone
@@ -16,7 +17,11 @@ from world.magic.constants import (
     ParticipantState,
     ParticipationRule,
 )
-from world.magic.exceptions import ParticipantCountError, SessionNotInPendingError
+from world.magic.exceptions import (
+    ParticipantCountError,
+    SessionNotInPendingError,
+    ThresholdNotMetError,
+)
 from world.magic.models.rituals import Ritual
 from world.magic.models.sessions import (
     RitualSession,
@@ -182,6 +187,51 @@ def _threshold_can_still_be_met(session: RitualSession) -> bool:
             return False
         return accepts + invited == _FORMATION_MIN_PARTICIPANTS
     return True  # SINGLE_ACTOR sessions shouldn't exist; permissive default
+
+
+def fire_session(*, session: RitualSession) -> object:
+    """Dispatch the ritual's service_function_path and delete the session.
+
+    Race prevented: two concurrent fires creating duplicate domain rows.
+    select_for_update on the session row serializes; loser sees DoesNotExist
+    when it tries to acquire the lock on a row that's been deleted.
+    """
+    with transaction.atomic():
+        locked = RitualSession.objects.select_for_update().get(pk=session.pk)
+        locked.refresh_from_db()
+        # Threshold check using the locked row's current participant states:
+        if not _threshold_currently_met(locked):
+            raise ThresholdNotMetError
+        # Resolve the dispatched service via importlib:
+        module_path, _, fn_name = locked.ritual.service_function_path.rpartition(".")
+        module = importlib.import_module(module_path)
+        fn = getattr(module, fn_name)  # noqa: GETATTR_LITERAL — service path is data
+        # Call the dispatched service. If it raises, transaction rolls back
+        # and the session stays alive for the initiator to retry or cancel.
+        result = fn(session=locked)
+        # Delete the session in the same transaction (CASCADE wipes participants
+        # and references):
+        locked.delete()
+        return result
+
+
+def _threshold_currently_met(session: RitualSession) -> bool:
+    """The companion to _threshold_can_still_be_met — checks current state.
+
+    .values_list() is intentional in-mutator iteration per spec §3.9 carve-out.
+    """
+    rule = session.ritual.participation_rule
+    states = list(session.participants.values_list("state", flat=True))
+    accepts = sum(1 for s in states if s == ParticipantState.ACCEPTED)
+    declines = sum(1 for s in states if s == ParticipantState.DECLINED)
+    invited = sum(1 for s in states if s == ParticipantState.INVITED)
+    if rule == ParticipationRule.FORMATION:
+        return invited == 0 and declines == 0 and accepts >= _FORMATION_MIN_PARTICIPANTS
+    if rule == ParticipationRule.INDUCTION:
+        return accepts > declines and accepts >= _FORMATION_MIN_PARTICIPANTS
+    if rule == ParticipationRule.BILATERAL:
+        return invited == 0 and declines == 0 and accepts == _FORMATION_MIN_PARTICIPANTS
+    return False  # SINGLE_ACTOR shouldn't reach here
 
 
 def _create_reference_from_spec(

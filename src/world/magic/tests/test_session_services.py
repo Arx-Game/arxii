@@ -314,3 +314,115 @@ class DeclineSessionTests(TestCase):
         decline_session(participant=invitee_ps[1])
         # Now dead (1 accept + 2 decline + 0 invited; best-case 1 ≤ 2):
         self.assertFalse(RitualSession.objects.filter(pk=session.pk).exists())
+
+
+class FireSessionTests(TestCase):
+    def _make_ready_formation_session(self):
+        """Helper: a FORMATION session with all participants accepted."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import ParticipationRule
+        from world.magic.factories import RitualFactory
+        from world.magic.services.sessions import accept_session, draft_session
+
+        ritual = RitualFactory(
+            participation_rule=ParticipationRule.FORMATION,
+            execution_kind="SERVICE",
+            service_function_path="world.magic.tests.test_session_services.dummy_fire_service",
+        )
+        initiator = CharacterSheetFactory()
+        invitee = CharacterSheetFactory()
+        session = draft_session(
+            ritual=ritual,
+            initiator=initiator,
+            proposed_terms="x",
+            session_kwargs={"foo": "bar"},
+            invitee_sheets=[invitee],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        invitee_p = session.participants.get(character_sheet=invitee)
+        accept_session(participant=invitee_p, participant_kwargs={}, references=[])
+        return session
+
+    def test_fire_dispatches_service_function_and_deletes_session(self):
+        from world.magic.models.sessions import RitualSession
+        from world.magic.services.sessions import fire_session
+
+        session = self._make_ready_formation_session()
+        session_pk = session.pk
+        result = fire_session(session=session)
+        # The dummy service returns its argument's session_kwargs:
+        self.assertEqual(result, {"foo": "bar"})
+        # Session deleted:
+        self.assertFalse(RitualSession.objects.filter(pk=session_pk).exists())
+
+    def test_fire_when_threshold_not_met_raises(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import ParticipationRule
+        from world.magic.exceptions import ThresholdNotMetError
+        from world.magic.factories import RitualFactory
+        from world.magic.services.sessions import draft_session, fire_session
+
+        # FORMATION with one INVITED still pending → not ready to fire
+        ritual = RitualFactory(participation_rule=ParticipationRule.FORMATION)
+        initiator = CharacterSheetFactory()
+        invitee = CharacterSheetFactory()
+        session = draft_session(
+            ritual=ritual,
+            initiator=initiator,
+            proposed_terms="x",
+            session_kwargs={},
+            invitee_sheets=[invitee],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        with self.assertRaises(ThresholdNotMetError):
+            fire_session(session=session)
+
+    def test_fire_propagates_service_exception_and_keeps_session_alive(self):
+        """If the dispatched service raises, transaction rolls back and session survives."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import ParticipationRule
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import RitualSession
+        from world.magic.services.sessions import accept_session, draft_session, fire_session
+
+        ritual = RitualFactory(
+            participation_rule=ParticipationRule.FORMATION,
+            execution_kind="SERVICE",
+            service_function_path="world.magic.tests.test_session_services.failing_fire_service",
+        )
+        initiator = CharacterSheetFactory()
+        invitee = CharacterSheetFactory()
+        session = draft_session(
+            ritual=ritual,
+            initiator=initiator,
+            proposed_terms="x",
+            session_kwargs={},
+            invitee_sheets=[invitee],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        invitee_p = session.participants.get(character_sheet=invitee)
+        accept_session(participant=invitee_p, participant_kwargs={}, references=[])
+        with self.assertRaises(RuntimeError):
+            fire_session(session=session)
+        # Session must survive the rollback:
+        self.assertTrue(RitualSession.objects.filter(pk=session.pk).exists())
+
+
+def dummy_fire_service(*, session):
+    """Test-only dispatched service used by FireSessionTests."""
+    return session.session_kwargs
+
+
+def failing_fire_service(*, session):
+    """Test-only dispatched service that raises."""
+    msg = "intentional test failure"
+    raise RuntimeError(msg)
