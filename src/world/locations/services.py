@@ -22,7 +22,9 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
     from evennia.objects.objects import DefaultObject
 
+    from world.areas.models import Area
     from world.scenes.models import Persona
+    from world.societies.models import Organization
 
 
 def _room_profile_and_ancestors(
@@ -64,6 +66,20 @@ def _persona_organization_ids(persona: Persona) -> set[int]:
             "organization_id", flat=True
         )
     )
+
+
+def _validate_location_kwargs(area: Area | None, room_profile: RoomProfile | None) -> None:
+    """Raise ValueError unless exactly one of (area, room_profile) is set."""
+    if (area is None) == (room_profile is None):
+        msg = "Must pass exactly one of area or room_profile."
+        raise ValueError(msg)
+
+
+def _validate_holder_kwargs(persona: Persona | None, organization: Organization | None) -> None:
+    """Raise ValueError unless exactly one of (persona, organization) is set."""
+    if (persona is None) == (organization is None):
+        msg = "Must pass exactly one of the persona or organization holder."
+        raise ValueError(msg)
 
 
 def _clamp(value: int, stat_key: StatKey) -> int:
