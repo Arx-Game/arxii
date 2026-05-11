@@ -90,3 +90,23 @@ class CurrentTenantsTests(TestCase):
             tenant_persona=PersonaFactory(),
         )
         self.assertEqual(list(current_tenants(self.room)), [])
+
+
+class CurrentTenantsEdgeCaseTests(TestCase):
+    def test_room_with_no_profile_returns_empty(self) -> None:
+        profile = RoomProfileFactory()
+        room = profile.objectdb
+        profile.delete()
+        room.refresh_from_db()
+        self.assertEqual(list(current_tenants(room)), [])
+
+    def test_room_with_profile_but_no_area_returns_room_level_only(self) -> None:
+        profile = RoomProfileFactory()  # area defaults to None
+        self.assertIsNone(profile.area)
+        row = LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=profile,
+            tenant_type=HolderType.PERSONA,
+            tenant_persona=PersonaFactory(),
+        )
+        self.assertEqual(list(current_tenants(profile.objectdb)), [row])
