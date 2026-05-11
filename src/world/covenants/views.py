@@ -15,13 +15,20 @@ from world.covenants.exceptions import CovenantEngagementPrerequisiteNotMetError
 from world.covenants.filters import (
     CharacterCovenantRoleFilter,
     CovenantFilter,
+    CovenantRoleFilter,
     GearArchetypeCompatibilityFilter,
 )
 from world.covenants.handlers import can_engage_durance_membership
-from world.covenants.models import CharacterCovenantRole, Covenant, GearArchetypeCompatibility
+from world.covenants.models import (
+    CharacterCovenantRole,
+    Covenant,
+    CovenantRole,
+    GearArchetypeCompatibility,
+)
 from world.covenants.permissions import IsOwnMembership
 from world.covenants.serializers import (
     CharacterCovenantRoleSerializer,
+    CovenantRoleSerializer,
     CovenantSerializer,
     GearArchetypeCompatibilitySerializer,
 )
@@ -96,6 +103,22 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
         membership = self.get_object()
         clear_engaged_membership(membership=membership)
         return Response(self.get_serializer(membership).data)
+
+
+class CovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only ViewSet for CovenantRole lookup data.
+
+    Staff-authored lookup table listing available roles per covenant type.
+    Supports ?covenant_type= filtering so ritual form pickers can populate
+    only the roles relevant to the chosen covenant type.
+    """
+
+    serializer_class = CovenantRoleSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Small lookup table — no pagination needed.
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CovenantRoleFilter
+    queryset = CovenantRole.objects.all().order_by("covenant_type", "name")
 
 
 class GearArchetypeCompatibilityViewSet(viewsets.ReadOnlyModelViewSet):

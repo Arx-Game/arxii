@@ -3,7 +3,20 @@
 from django.db.models import QuerySet
 import django_filters
 
-from world.covenants.models import CharacterCovenantRole, Covenant, GearArchetypeCompatibility
+from world.covenants.models import (
+    CharacterCovenantRole,
+    Covenant,
+    CovenantRole,
+    GearArchetypeCompatibility,
+)
+
+
+class CovenantRoleFilter(django_filters.FilterSet):
+    """Filter covenant roles by covenant type."""
+
+    class Meta:
+        model = CovenantRole
+        fields = ["covenant_type"]
 
 
 class CharacterCovenantRoleFilter(django_filters.FilterSet):

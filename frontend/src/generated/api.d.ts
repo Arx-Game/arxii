@@ -2726,6 +2726,52 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/covenants/roles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for CovenantRole lookup data.
+     *
+     *     Staff-authored lookup table listing available roles per covenant type.
+     *     Supports ?covenant_type= filtering so ritual form pickers can populate
+     *     only the roles relevant to the chosen covenant type.
+     */
+    get: operations['covenants_roles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/roles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for CovenantRole lookup data.
+     *
+     *     Staff-authored lookup table listing available roles per covenant type.
+     *     Supports ?covenant_type= filtering so ritual form pickers can populate
+     *     only the roles relevant to the chosen covenant type.
+     */
+    get: operations['covenants_roles_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/distinctions/categories/': {
     parameters: {
       query?: never;
@@ -20545,6 +20591,55 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['GearArchetypeCompatibility'];
+        };
+      };
+    };
+  };
+  covenants_roles_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description Which covenant type this role belongs to.
+         *
+         *     * `durance` - Covenant of the Durance
+         *     * `battle` - Covenant of Battle
+         */
+        covenant_type?: 'battle' | 'durance';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantRole'][];
+        };
+      };
+    };
+  };
+  covenants_roles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this covenant role. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantRole'];
         };
       };
     };

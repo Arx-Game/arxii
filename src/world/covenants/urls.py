@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 
 from world.covenants.views import (
     CharacterCovenantRoleViewSet,
+    CovenantRoleViewSet,
     CovenantViewSet,
     GearArchetypeCompatibilityViewSet,
 )
@@ -26,6 +27,13 @@ router.register(
     "covenants",
     CovenantViewSet,
     basename="covenant",
+)
+# Staff-authored lookup table: available roles per covenant type.
+# Supports ?covenant_type= filtering for ritual form pickers.
+router.register(
+    "roles",
+    CovenantRoleViewSet,
+    basename="covenant-role",
 )
 
 urlpatterns = router.urls
