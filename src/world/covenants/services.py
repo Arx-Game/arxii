@@ -54,6 +54,9 @@ def create_covenant(
             covenant_role=founder.role,
         )
         founder.character_sheet.character.covenant_roles.invalidate()
+    # The covenant is freshly created so its member_roster handler is new, but
+    # invalidate for consistency in case the handler was accessed during this flow.
+    cov.member_roster.invalidate()
     return cov
 
 
@@ -75,6 +78,7 @@ def add_member(
         covenant_role=role,
     )
     character_sheet.character.covenant_roles.invalidate()
+    covenant.member_roster.invalidate()
     return row
 
 
@@ -94,6 +98,7 @@ def change_role(
         covenant_role=new_role,
     )
     membership.character_sheet.character.covenant_roles.invalidate()
+    membership.covenant.member_roster.invalidate()
     return new_row
 
 
@@ -120,6 +125,7 @@ def dissolve_covenant(*, covenant: Covenant) -> None:
     for sheet_id in affected_sheet_ids:
         sheet = CharacterSheet.objects.get(pk=sheet_id)
         sheet.character.covenant_roles.invalidate()
+    covenant.member_roster.invalidate()
 
 
 @transaction.atomic
@@ -136,6 +142,7 @@ def assign_covenant_role(
         covenant_role=covenant_role,
     )
     character_sheet.character.covenant_roles.invalidate()
+    covenant.member_roster.invalidate()
     return row
 
 
@@ -148,6 +155,7 @@ def end_covenant_role(*, assignment: CharacterCovenantRole) -> None:
     assignment.left_at = timezone.now()
     assignment.save(update_fields=["engaged", "left_at"])
     assignment.character_sheet.character.covenant_roles.invalidate()
+    assignment.covenant.member_roster.invalidate()
 
 
 @transaction.atomic

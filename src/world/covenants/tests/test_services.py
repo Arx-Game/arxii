@@ -368,6 +368,67 @@ class ClearEngagedForTypeTests(TestCase):
         self.assertTrue(battle_m.engaged)
 
 
+class MemberRosterInvalidationTests(TestCase):
+    def test_add_member_invalidates_member_roster(self) -> None:
+        cov = CovenantFactory()
+        # Warm the roster cache:
+        _ = cov.member_roster.active_memberships
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        add_member(covenant=cov, character_sheet=sheet, role=role)
+        rows = cov.member_roster.active_memberships
+        self.assertEqual(len(rows), 1)
+
+    def test_change_role_invalidates_member_roster(self) -> None:
+        cov = CovenantFactory()
+        sheet = CharacterSheetFactory()
+        old_role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        new_role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        membership = CharacterCovenantRoleFactory(
+            character_sheet=sheet, covenant=cov, covenant_role=old_role
+        )
+        # Warm the roster cache:
+        _ = cov.member_roster.active_memberships
+        change_role(membership=membership, new_role=new_role)
+        rows = cov.member_roster.active_memberships
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].covenant_role, new_role)
+
+    def test_dissolve_covenant_invalidates_member_roster(self) -> None:
+        cov = CovenantFactory()
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        CharacterCovenantRoleFactory(character_sheet=sheet, covenant=cov, covenant_role=role)
+        # Warm the roster cache:
+        _ = cov.member_roster.active_memberships
+        dissolve_covenant(covenant=cov)
+        rows = cov.member_roster.active_memberships
+        self.assertEqual(len(rows), 0)
+
+    def test_assign_covenant_role_invalidates_member_roster(self) -> None:
+        cov = CovenantFactory()
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        # Warm the roster cache:
+        _ = cov.member_roster.active_memberships
+        assign_covenant_role(character_sheet=sheet, covenant=cov, covenant_role=role)
+        rows = cov.member_roster.active_memberships
+        self.assertEqual(len(rows), 1)
+
+    def test_end_covenant_role_invalidates_member_roster(self) -> None:
+        cov = CovenantFactory()
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        assignment = CharacterCovenantRoleFactory(
+            character_sheet=sheet, covenant=cov, covenant_role=role
+        )
+        # Warm the roster cache:
+        _ = cov.member_roster.active_memberships
+        end_covenant_role(assignment=assignment)
+        rows = cov.member_roster.active_memberships
+        self.assertEqual(len(rows), 0)
+
+
 class MakeEngagedMemberTests(TestCase):
     def test_creates_engaged_row(self) -> None:
         from world.covenants.factories import make_engaged_member
