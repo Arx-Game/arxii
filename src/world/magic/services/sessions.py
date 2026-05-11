@@ -9,13 +9,14 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from django.db import transaction
+from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
 from world.magic.constants import (
     ParticipantState,
     ParticipationRule,
 )
-from world.magic.exceptions import ParticipantCountError
+from world.magic.exceptions import ParticipantCountError, SessionNotInPendingError
 from world.magic.models.rituals import Ritual
 from world.magic.models.sessions import (
     RitualSession,
@@ -95,6 +96,38 @@ def draft_session(  # noqa: PLR0913 — kw-only args; each session parameter is 
                 spec=spec,
             )
         return session
+
+
+def accept_session(
+    *,
+    participant: RitualSessionParticipant,
+    participant_kwargs: dict,
+    references: Sequence[RitualSessionReferenceSpec],
+) -> None:
+    """Transition participant INVITED→ACCEPTED, creating their references.
+
+    Race prevented: two concurrent accepts on the same participant row.
+    select_for_update locks the participant; second accept sees ACCEPTED
+    state and raises SessionNotInPendingError.
+    """
+    with transaction.atomic():
+        # Lock the participant row so concurrent accepts serialize.
+        # refresh_from_db ensures the SharedMemoryModel-cached instance
+        # reflects the just-locked row's state.
+        locked = RitualSessionParticipant.objects.select_for_update().get(pk=participant.pk)
+        locked.refresh_from_db()
+        if locked.state != ParticipantState.INVITED:
+            raise SessionNotInPendingError
+        locked.state = ParticipantState.ACCEPTED
+        locked.participant_kwargs = participant_kwargs
+        locked.responded_at = timezone.now()
+        locked.save()
+        for spec in references:
+            _create_reference_from_spec(
+                session=locked.session,
+                participant=locked,
+                spec=spec,
+            )
 
 
 def _create_reference_from_spec(

@@ -114,3 +114,75 @@ class DraftSessionTests(TestCase):
                 initiator_references=[],
                 expires_at=datetime.now(UTC) + timedelta(hours=1),
             )
+
+
+class AcceptSessionTests(TestCase):
+    def _make_pending_formation_session(self):
+        """Helper: draft a FORMATION session with one initiator + one invitee."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import ParticipationRule
+        from world.magic.factories import RitualFactory
+        from world.magic.services.sessions import draft_session
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.FORMATION)
+        initiator = CharacterSheetFactory()
+        invitee = CharacterSheetFactory()
+        session = draft_session(
+            ritual=ritual,
+            initiator=initiator,
+            proposed_terms="x",
+            session_kwargs={},
+            invitee_sheets=[invitee],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        invitee_p = session.participants.get(character_sheet=invitee)
+        return session, invitee_p
+
+    def test_accept_transitions_state_and_creates_references(self):
+        from world.covenants.factories import CovenantRoleFactory
+        from world.magic.constants import ParticipantState, ReferenceKind
+        from world.magic.services.sessions import accept_session
+        from world.magic.types.sessions import RitualSessionReferenceSpec
+
+        _session, participant = self._make_pending_formation_session()
+        role = CovenantRoleFactory()
+        accept_session(
+            participant=participant,
+            participant_kwargs={"chose_intentionally": True},
+            references=[
+                RitualSessionReferenceSpec(
+                    kind=ReferenceKind.COVENANT_ROLE,
+                    ref_covenant_role=role,
+                ),
+            ],
+        )
+        participant.refresh_from_db()
+        self.assertEqual(participant.state, ParticipantState.ACCEPTED)
+        self.assertIsNotNone(participant.responded_at)
+        self.assertEqual(participant.participant_kwargs, {"chose_intentionally": True})
+        self.assertEqual(participant.references.count(), 1)
+        self.assertEqual(participant.references.first().ref_covenant_role, role)
+
+    def test_accept_already_accepted_raises_session_not_pending(self):
+        from world.magic.exceptions import SessionNotInPendingError
+        from world.magic.services.sessions import accept_session
+
+        _session, participant = self._make_pending_formation_session()
+        accept_session(participant=participant, participant_kwargs={}, references=[])
+        with self.assertRaises(SessionNotInPendingError):
+            accept_session(participant=participant, participant_kwargs={}, references=[])
+
+    def test_accept_after_session_deleted_raises(self):
+        from django.core.exceptions import ObjectDoesNotExist
+
+        from world.magic.models.sessions import RitualSessionParticipant
+        from world.magic.services.sessions import accept_session
+
+        session, participant = self._make_pending_formation_session()
+        # Delete the session out from under the participant
+        session.delete()
+        with self.assertRaises((RitualSessionParticipant.DoesNotExist, ObjectDoesNotExist)):
+            accept_session(participant=participant, participant_kwargs={}, references=[])
