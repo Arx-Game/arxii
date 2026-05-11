@@ -143,6 +143,11 @@ returns a `QuerySet` filtered for `ends_at IS NULL OR ends_at > now()`.
 
 - Use `ended_at` to retire an Ownership row (transfer, abandonment); do not
   delete. The audit trail is the history.
+- **Until a `transfer_ownership` helper exists**, wrap ownership transfers
+  in `transaction.atomic`: set `ended_at = now()` on the old row, save it,
+  then create the new row. The partial-unique constraint requires the
+  old row's commit to land first, and an atomic block prevents a
+  concurrent reader from seeing "no active owner."
 - For Tenancy, set `ends_at` (planned end OR moment of eviction) to
   retire a row. Keep the row.
 - The partial-unique constraint enforces only ONE active Ownership per
