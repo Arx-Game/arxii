@@ -22,7 +22,7 @@ from world.covenants.models import (
 )
 from world.covenants.types import CovenantFounder
 from world.magic.constants import ParticipantState, ReferenceKind
-from world.magic.exceptions import RequiredReferenceMissingError
+from world.magic.exceptions import RequiredReferenceMissingError, SessionTargetMissingError
 
 if TYPE_CHECKING:
     from world.magic.models.sessions import RitualSession
@@ -284,3 +284,42 @@ def create_covenant_via_session(*, session: RitualSession) -> Covenant:
         if _COVENANT_NAME_UNIQUE_MARKER in str(e).lower():
             raise CovenantNameConflictError from e
         raise
+
+
+@transaction.atomic
+def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRole:
+    """Dispatched on INDUCTION fire. Unpacks the session into add_member args.
+
+    Walks the session-level COVENANT reference to get the target covenant,
+    then finds the candidate — the one ACCEPTED participant with a
+    COVENANT_ROLE reference. Existing-member participants have no role
+    reference; they're just vouching.
+
+    Per spec §4.6: the .filter() on `session.references` / `participant.references`
+    (related managers) is in-mutator iteration on tightly-scoped per-row sets,
+    not a cached handler lookup — acceptable exception to spec §3.9.
+    """
+    target_ref = session.references.filter(
+        participant__isnull=True,
+        kind=ReferenceKind.COVENANT,
+    ).first()
+    if target_ref is None or target_ref.ref_covenant is None:
+        raise SessionTargetMissingError
+    target_covenant = target_ref.ref_covenant
+
+    # The candidate is the one ACCEPTED participant with a COVENANT_ROLE ref.
+    candidate_participant = None
+    chosen_role = None
+    for p in session.participants.filter(state=ParticipantState.ACCEPTED):
+        role_ref = p.references.filter(kind=ReferenceKind.COVENANT_ROLE).first()
+        if role_ref is not None:
+            candidate_participant = p
+            chosen_role = role_ref.ref_covenant_role
+            break
+    if candidate_participant is None or chosen_role is None:
+        raise RequiredReferenceMissingError
+    return add_member(
+        covenant=target_covenant,
+        character_sheet=candidate_participant.character_sheet,
+        role=chosen_role,
+    )

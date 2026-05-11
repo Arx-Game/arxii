@@ -624,3 +624,126 @@ class CreateCovenantViaSessionTests(TestCase):
 
         with self.assertRaises(CovenantNameConflictError):
             create_covenant_via_session(session=session)
+
+
+class InductMemberViaSessionTests(TestCase):
+    def _build_induction_session(
+        self,
+        *,
+        existing_members: int = 2,
+        candidate_chooses_role: bool = True,
+    ):
+        """Helper: set up an INDUCTION session with target_covenant ref +
+        candidate's COVENANT_ROLE ref. Returns (session, covenant, candidate, role).
+
+        Initiator and any extra existing-member participants are ACCEPTED but
+        have no role reference (existing members don't choose new roles).
+        Candidate is ACCEPTED with a role reference (if candidate_chooses_role)."""
+        from datetime import UTC, datetime, timedelta
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+        from world.magic.constants import ParticipantState, ParticipationRule, ReferenceKind
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import (
+            RitualSession,
+            RitualSessionParticipant,
+            RitualSessionReference,
+        )
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.INDUCTION)
+        covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        existing_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        # Existing members (initiator + extras):
+        existing_sheets = [CharacterSheetFactory() for _ in range(existing_members)]
+        for sheet in existing_sheets:
+            CharacterCovenantRoleFactory(
+                character_sheet=sheet,
+                covenant=covenant,
+                covenant_role=existing_role,
+            )
+        candidate = CharacterSheetFactory()
+        chosen_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        session = RitualSession.objects.create(
+            ritual=ritual,
+            initiator=existing_sheets[0],
+            session_kwargs={},
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        # Session-level reference: which covenant the induction targets
+        RitualSessionReference.objects.create(
+            session=session,
+            participant=None,
+            kind=ReferenceKind.COVENANT,
+            ref_covenant=covenant,
+        )
+        # Existing members are participants in ACCEPTED state, no role ref:
+        for sheet in existing_sheets:
+            RitualSessionParticipant.objects.create(
+                session=session,
+                character_sheet=sheet,
+                state=ParticipantState.ACCEPTED,
+            )
+        # Candidate is ACCEPTED with a role choice:
+        candidate_p = RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=candidate,
+            state=ParticipantState.ACCEPTED,
+        )
+        if candidate_chooses_role:
+            RitualSessionReference.objects.create(
+                session=session,
+                participant=candidate_p,
+                kind=ReferenceKind.COVENANT_ROLE,
+                ref_covenant_role=chosen_role,
+            )
+        return session, covenant, candidate, chosen_role
+
+    def test_unpacks_session_and_adds_member(self):
+        from world.covenants.models import CharacterCovenantRole
+        from world.covenants.services import induct_member_via_session
+
+        session, covenant, candidate, chosen_role = self._build_induction_session()
+        membership = induct_member_via_session(session=session)
+        self.assertIsInstance(membership, CharacterCovenantRole)
+        self.assertEqual(membership.character_sheet, candidate)
+        self.assertEqual(membership.covenant, covenant)
+        self.assertEqual(membership.covenant_role, chosen_role)
+        self.assertIsNone(membership.left_at)
+
+    def test_missing_target_covenant_reference_raises(self):
+        """Session-level COVENANT reference is required."""
+        from datetime import UTC, datetime, timedelta
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.services import induct_member_via_session
+        from world.magic.constants import ParticipationRule
+        from world.magic.exceptions import SessionTargetMissingError
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import RitualSession
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.INDUCTION)
+        session = RitualSession.objects.create(
+            ritual=ritual,
+            initiator=CharacterSheetFactory(),
+            session_kwargs={},
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        with self.assertRaises(SessionTargetMissingError):
+            induct_member_via_session(session=session)
+
+    def test_missing_candidate_role_reference_raises(self):
+        """The candidate must have a COVENANT_ROLE choice."""
+        from world.covenants.services import induct_member_via_session
+        from world.magic.exceptions import RequiredReferenceMissingError
+
+        session, _covenant, _candidate, _ = self._build_induction_session(
+            candidate_chooses_role=False,
+        )
+        with self.assertRaises(RequiredReferenceMissingError):
+            induct_member_via_session(session=session)
