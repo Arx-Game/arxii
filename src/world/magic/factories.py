@@ -1,9 +1,11 @@
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import factory
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionTemplateFactory
+from world.covenants.factories import CovenantFactory, CovenantRoleFactory
 from world.magic.audere import SOULFRAY_CONDITION_NAME, AudereThreshold
 from world.magic.constants import (
     AlterationKind,
@@ -1931,3 +1933,54 @@ class CharacterRitualKnowledgeFactory(factory.django.DjangoModelFactory):
     roster_entry = factory.SubFactory(RosterEntryFactory)
     ritual = factory.SubFactory(RitualFactory)
     learned_from = None
+
+
+class RitualSessionFactory(factory.django.DjangoModelFactory):
+    """Factory for RitualSession — transient coordination row for multi-participant rituals."""
+
+    class Meta:
+        model = "magic.RitualSession"
+
+    ritual = factory.SubFactory(RitualFactory)
+    initiator = factory.SubFactory(CharacterSheetFactory)
+    proposed_terms = ""
+    session_kwargs = factory.LazyFunction(dict)
+    expires_at = factory.LazyFunction(lambda: datetime.now(UTC) + timedelta(hours=1))
+
+
+class RitualSessionParticipantFactory(factory.django.DjangoModelFactory):
+    """Factory for RitualSessionParticipant."""
+
+    class Meta:
+        model = "magic.RitualSessionParticipant"
+
+    session = factory.SubFactory(RitualSessionFactory)
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    state = "INVITED"
+    participant_kwargs = factory.LazyFunction(dict)
+
+
+class RitualSessionCovenantRefFactory(factory.django.DjangoModelFactory):
+    """Reference of kind=COVENANT (session-level)."""
+
+    class Meta:
+        model = "magic.RitualSessionReference"
+
+    session = factory.SubFactory(RitualSessionFactory)
+    participant = None
+    kind = "COVENANT"
+    ref_covenant = factory.SubFactory(CovenantFactory)
+    ref_covenant_role = None
+
+
+class RitualSessionCovenantRoleRefFactory(factory.django.DjangoModelFactory):
+    """Reference of kind=COVENANT_ROLE (typically participant-level)."""
+
+    class Meta:
+        model = "magic.RitualSessionReference"
+
+    session = factory.SubFactory(RitualSessionFactory)
+    participant = factory.SubFactory(RitualSessionParticipantFactory)
+    kind = "COVENANT_ROLE"
+    ref_covenant = None
+    ref_covenant_role = factory.SubFactory(CovenantRoleFactory)
