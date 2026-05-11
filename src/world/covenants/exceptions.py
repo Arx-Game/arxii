@@ -60,3 +60,25 @@ class DuplicateFounderError(CovenantFormationError):
             "Each founder must be a distinct character.",
         }
     )
+
+
+class CovenantEngagementPrerequisiteNotMetError(CovenantError):
+    """Raised when attempting scene engagement without members present."""
+
+    user_message = "No covenant members present to engage with."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "No covenant members present to engage with.",
+        }
+    )
+
+
+class CovenantNameConflictError(CovenantError):
+    """Raised when covenant name already exists."""
+
+    user_message = "A covenant with that name already exists."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "A covenant with that name already exists.",
+        }
+    )
