@@ -234,6 +234,18 @@ def _threshold_currently_met(session: RitualSession) -> bool:
     return False  # SINGLE_ACTOR shouldn't reach here
 
 
+def cancel_session(*, session: RitualSession) -> None:
+    """Initiator-only — delete the session.
+
+    Race prevented: cancel + fire racing each other; cancel + cancel double-click.
+    select_for_update locks the session row so the second caller sees
+    DoesNotExist (which the API layer translates to 404).
+    """
+    with transaction.atomic():
+        locked = RitualSession.objects.select_for_update().get(pk=session.pk)
+        locked.delete()
+
+
 def _create_reference_from_spec(
     *,
     session: RitualSession,

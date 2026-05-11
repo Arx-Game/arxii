@@ -417,6 +417,60 @@ class FireSessionTests(TestCase):
         self.assertTrue(RitualSession.objects.filter(pk=session.pk).exists())
 
 
+class CancelSessionTests(TestCase):
+    def test_cancel_deletes_session(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import ParticipationRule
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import RitualSession
+        from world.magic.services.sessions import cancel_session, draft_session
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.FORMATION)
+        initiator = CharacterSheetFactory()
+        invitee = CharacterSheetFactory()
+        session = draft_session(
+            ritual=ritual,
+            initiator=initiator,
+            proposed_terms="x",
+            session_kwargs={},
+            invitee_sheets=[invitee],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        session_pk = session.pk
+        cancel_session(session=session)
+        self.assertFalse(RitualSession.objects.filter(pk=session_pk).exists())
+
+    def test_cancel_after_session_deleted_raises(self):
+        from django.core.exceptions import ObjectDoesNotExist
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import ParticipationRule
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import RitualSession
+        from world.magic.services.sessions import cancel_session, draft_session
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.FORMATION)
+        initiator = CharacterSheetFactory()
+        invitee = CharacterSheetFactory()
+        session = draft_session(
+            ritual=ritual,
+            initiator=initiator,
+            proposed_terms="x",
+            session_kwargs={},
+            invitee_sheets=[invitee],
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        session.delete()
+        with self.assertRaises((RitualSession.DoesNotExist, ObjectDoesNotExist)):
+            cancel_session(session=session)
+
+
 def dummy_fire_service(*, session):
     """Test-only dispatched service used by FireSessionTests."""
     return session.session_kwargs
