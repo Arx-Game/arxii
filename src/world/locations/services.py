@@ -213,3 +213,29 @@ def ownership_for(persona: Persona, room: DefaultObject) -> LocationOwnership | 
 def is_owner(persona: Persona, room: DefaultObject) -> bool:
     """True when ``ownership_for(persona, room)`` returns a row."""
     return ownership_for(persona, room) is not None
+
+
+def tenancies_for(persona: Persona, room: DefaultObject) -> QuerySet[LocationTenancy]:
+    """Return the QuerySet of currently-active tenancies that give this
+    persona standing at this room.
+
+    Includes:
+      - Direct persona tenancies (tenant_persona = this persona)
+      - Organization tenancies where this persona is a current member
+        of the tenant_organization
+
+    Builds on ``current_tenants(room)`` (which already filters for
+    active rows and collects across the room + ancestor-area chain),
+    then narrows to rows relevant to this persona.
+
+    Query budget: 3 queries (org_ids + closure walk + tenancy fetch).
+    """
+    org_ids = _persona_organization_ids(persona)
+    return current_tenants(room).filter(
+        models.Q(tenant_persona=persona) | models.Q(tenant_organization_id__in=org_ids)
+    )
+
+
+def is_tenant(persona: Persona, room: DefaultObject) -> bool:
+    """True when ``tenancies_for(persona, room)`` has any rows."""
+    return tenancies_for(persona, room).exists()

@@ -4,11 +4,13 @@ from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.locations.constants import HolderType, LocationParentType
-from world.locations.models import LocationOwnership
+from world.locations.models import LocationOwnership, LocationTenancy
 from world.locations.services import (
     _persona_organization_ids,
     is_owner,
+    is_tenant,
     ownership_for,
+    tenancies_for,
 )
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import (
@@ -171,3 +173,129 @@ class OwnershipForQueryBudgetTests(TestCase):
         # ORGANIZATION-holder match: effective_owner (2) + org_ids fetch (1).
         with self.assertNumQueries(3):
             ownership_for(member, room)
+
+
+class TenanciesForTests(TestCase):
+    def setUp(self) -> None:
+        self.building = AreaFactory(level=AreaLevel.BUILDING)
+        self.profile = RoomProfileFactory(area=self.building)
+        self.room = self.profile.objectdb
+
+    def test_direct_persona_tenant_matches(self) -> None:
+        tenant = PersonaFactory()
+        row = LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.profile,
+            tenant_type=HolderType.PERSONA,
+            tenant_persona=tenant,
+        )
+        self.assertEqual(list(tenancies_for(tenant, self.room)), [row])
+        self.assertTrue(is_tenant(tenant, self.room))
+
+    def test_unrelated_persona_returns_empty(self) -> None:
+        tenant = PersonaFactory()
+        stranger = PersonaFactory()
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.profile,
+            tenant_type=HolderType.PERSONA,
+            tenant_persona=tenant,
+        )
+        self.assertEqual(list(tenancies_for(stranger, self.room)), [])
+        self.assertFalse(is_tenant(stranger, self.room))
+
+    def test_org_member_has_tenant_standing(self) -> None:
+        org = OrganizationFactory()
+        member = PersonaFactory()
+        OrganizationMembershipFactory(persona=member, organization=org)
+        row = LocationTenancy.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.building,
+            tenant_type=HolderType.ORGANIZATION,
+            tenant_organization=org,
+        )
+        self.assertEqual(list(tenancies_for(member, self.room)), [row])
+        self.assertTrue(is_tenant(member, self.room))
+
+    def test_org_non_member_returns_empty(self) -> None:
+        org = OrganizationFactory()
+        non_member = PersonaFactory()
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.building,
+            tenant_type=HolderType.ORGANIZATION,
+            tenant_organization=org,
+        )
+        self.assertEqual(list(tenancies_for(non_member, self.room)), [])
+        self.assertFalse(is_tenant(non_member, self.room))
+
+    def test_multiple_tenancies_partial_match(self) -> None:
+        """Room has 1 building-org tenancy + 2 room-level persona tenancies.
+        Query as the building-org member — only the org row applies.
+        """
+        org = OrganizationFactory()
+        org_member = PersonaFactory()
+        OrganizationMembershipFactory(persona=org_member, organization=org)
+        room_tenant_a = PersonaFactory()
+        room_tenant_b = PersonaFactory()
+
+        org_row = LocationTenancy.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.building,
+            tenant_type=HolderType.ORGANIZATION,
+            tenant_organization=org,
+        )
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.profile,
+            tenant_type=HolderType.PERSONA,
+            tenant_persona=room_tenant_a,
+        )
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.profile,
+            tenant_type=HolderType.PERSONA,
+            tenant_persona=room_tenant_b,
+        )
+
+        # Org member sees only their org row
+        self.assertEqual(list(tenancies_for(org_member, self.room)), [org_row])
+        # room_tenant_a sees only their own row
+        result_a = list(tenancies_for(room_tenant_a, self.room))
+        self.assertEqual(len(result_a), 1)
+        self.assertEqual(result_a[0].tenant_persona, room_tenant_a)
+
+    def test_no_alt_piercing_on_tenancy(self) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.scenes.models import PersonaType
+
+        sheet = CharacterSheetFactory()
+        primary = sheet.primary_persona
+        alt = PersonaFactory(character_sheet=sheet, persona_type=PersonaType.ESTABLISHED)
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.profile,
+            tenant_type=HolderType.PERSONA,
+            tenant_persona=primary,
+        )
+        self.assertTrue(is_tenant(primary, self.room))
+        self.assertFalse(is_tenant(alt, self.room))
+
+
+class TenanciesForQueryBudgetTests(TestCase):
+    def test_three_queries_per_call(self) -> None:
+        building = AreaFactory(level=AreaLevel.BUILDING)
+        profile = RoomProfileFactory(area=building)
+        persona = PersonaFactory()
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=profile,
+            tenant_type=HolderType.PERSONA,
+            tenant_persona=persona,
+        )
+        from evennia.objects.models import ObjectDB
+
+        room = ObjectDB.objects.get(pk=profile.objectdb.pk)
+        # tenancies_for: org_ids (1) + closure walk (1) + tenancy fetch (1) = 3
+        with self.assertNumQueries(3):
+            list(tenancies_for(persona, room))
