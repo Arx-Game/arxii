@@ -1583,7 +1583,12 @@ class SoulTetherActiveTemplateFactory(factory.django.DjangoModelFactory):
 
 
 class AcceptSoulTetherRitualFactory(factory.django.DjangoModelFactory):
-    """SERVICE-dispatched Ritual for Soul Tether formation (Spec B §12).
+    """BILATERAL SESSION-dispatched Ritual for Soul Tether formation (Spec B §12, Slice B).
+
+    Both participants must accept a RitualSession and declare their role
+    (SINNER or SINEATER) before the session fires.  The service wrapper
+    accept_soul_tether_via_session reads both participant_kwargs entries and
+    delegates to accept_soul_tether with the canonical initiator/partner shape.
 
     Uses django_get_or_create so repeated calls return the same row.
     """
@@ -1603,47 +1608,43 @@ class AcceptSoulTetherRitualFactory(factory.django.DjangoModelFactory):
         "of the Sinner's corruption, and the bond is sealed."
     )
     execution_kind = RitualExecutionKind.SERVICE
-    service_function_path = "world.magic.services.soul_tether.accept_soul_tether"
+    service_function_path = "world.magic.services.soul_tether.accept_soul_tether_via_session"
     flow = None
     hedge_accessible = False
     glimpse_eligible = False
-    input_schema = {
-        "fields": [
-            {
-                "name": "sineater_sheet_id",
-                "label": "Sineater (the other PC)",
-                "type": "character_search",
-                "required": True,
-                "help": (
-                    "The character who will share this bond with you. "
-                    "Must not have a Celestial-dominant aura."
-                ),
-            },
-            {
-                "name": "scene_id",
-                "label": "Scene",
-                "type": "scene_picker",
-                "required": True,
-                "scope": "active_for_caller",
-            },
-            {
-                "name": "resonance_id",
-                "label": "Resonance",
-                "type": "resonance_picker",
-                "required": True,
-                "scope": "owned_by_caller",
-                "help": "The resonance that will channel the bond.",
-            },
-            {
-                "name": "capstone_id",
-                "label": "Relationship Capstone",
-                "type": "relationship_capstone_picker",
-                "required": True,
-                "scope": "with_target_character",
-                "help": "The relationship capstone that will hold the Hollow.",
-            },
-        ],
-    }
+    participation_rule = ParticipationRule.BILATERAL
+    min_participants = 2
+    max_participants = 2
+    input_schema = factory.LazyFunction(
+        lambda: {
+            "fields": [
+                {
+                    "name": "resonance_id",
+                    "label": "Resonance",
+                    "type": "resonance_picker",
+                    "required": True,
+                    "scope": "owned_by_caller",
+                    "help": "The resonance that will channel the bond.",
+                },
+                {
+                    "name": "writeup",
+                    "label": "Bond Writeup",
+                    "type": "text",
+                    "required": False,
+                    "help": "Narrative description of the bond formation.",
+                },
+            ],
+            "participant_fields": [
+                {
+                    "name": "soul_tether_role",
+                    "label": "Your Role",
+                    "type": "soul_tether_role_picker",
+                    "required": True,
+                    "help": "Choose SINNER (Abyssal-aligned) or SINEATER (Celestial/Primal).",
+                },
+            ],
+        }
+    )
 
 
 class SoulTetherRescueRitualFactory(factory.django.DjangoModelFactory):

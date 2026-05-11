@@ -295,10 +295,10 @@ class SoulTetherActiveTemplateFactoryTests(TestCase):
 
 
 class AcceptSoulTetherRitualFactoryTests(TestCase):
-    """Task 3.4: AcceptSoulTetherRitualFactory creates SERVICE-dispatched Ritual."""
+    """Task 3.4 (updated Slice B): AcceptSoulTetherRitualFactory creates BILATERAL Ritual."""
 
     def test_accept_ritual_created(self) -> None:
-        from world.magic.constants import RitualExecutionKind
+        from world.magic.constants import ParticipationRule, RitualExecutionKind
         from world.magic.factories import AcceptSoulTetherRitualFactory
         from world.magic.models import Ritual
 
@@ -309,8 +309,11 @@ class AcceptSoulTetherRitualFactoryTests(TestCase):
         self.assertEqual(ritual.execution_kind, RitualExecutionKind.SERVICE)
         self.assertEqual(
             ritual.service_function_path,
-            "world.magic.services.soul_tether.accept_soul_tether",
+            "world.magic.services.soul_tether.accept_soul_tether_via_session",
         )
+        self.assertEqual(ritual.participation_rule, ParticipationRule.BILATERAL)
+        self.assertEqual(ritual.min_participants, 2)
+        self.assertEqual(ritual.max_participants, 2)
 
     def test_accept_ritual_idempotent(self) -> None:
         from world.magic.factories import AcceptSoulTetherRitualFactory
