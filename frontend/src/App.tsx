@@ -99,6 +99,22 @@ const MuteSettingsPage = lazy(() =>
 );
 
 // ---------------------------------------------------------------------------
+// Lazy-loaded covenants pages
+// ---------------------------------------------------------------------------
+
+const CovenantsListPage = lazy(() =>
+  import('@/covenants/pages/CovenantsListPage').then((m) => ({
+    default: m.CovenantsListPage,
+  }))
+);
+
+const CovenantDetailPage = lazy(() =>
+  import('@/covenants/pages/CovenantDetailPage').then((m) => ({
+    default: m.CovenantDetailPage,
+  }))
+);
+
+// ---------------------------------------------------------------------------
 // Lazy-loaded rituals pages
 // ---------------------------------------------------------------------------
 
@@ -529,6 +545,30 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <RitualSessionDetailPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Covenants (Slice B Phase 9)                                         */}
+        {/* ------------------------------------------------------------------ */}
+        <Route
+          path="/covenants"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <CovenantsListPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/covenants/:id"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <CovenantDetailPage />
               </ProtectedRoute>
             </Suspense>
           }

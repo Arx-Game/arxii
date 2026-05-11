@@ -168,13 +168,10 @@ export function useFireRitualSession() {
     onSuccess: (_data, id) => {
       void qc.invalidateQueries({ queryKey: ritualSessionKeys.detail(id) });
       void qc.invalidateQueries({ queryKey: ritualSessionKeys.outbox() });
-      // NOTE: The fire response does not carry a {result_kind, result_id} envelope
-      // in the generated types (it returns RitualSessionList). Covenant query key
-      // invalidation is deferred until a covenantKeys factory exists in
-      // frontend/src/covenants/. When that ships, add:
-      //   if (data.result_kind === 'covenant' || data.result_kind === 'membership') {
-      //     void qc.invalidateQueries({ queryKey: covenantKeys.detail(data.result_id) });
-      //   }
+      // Broad covenant invalidation — the fire may have created a covenant or
+      // inducted a new member. We don't know which covenant is affected without
+      // a result_kind/result_id envelope, so invalidate the full covenants tree.
+      void qc.invalidateQueries({ queryKey: ['covenants'] });
     },
   });
 }
