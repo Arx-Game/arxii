@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from evennia_extensions.models import RoomProfile
 from world.areas.models import AreaClosure
-from world.locations.constants import STAT_CLAMPS, STAT_DEFAULTS, StatKey
+from world.locations.constants import STAT_CLAMPS, STAT_DEFAULTS, HolderType, StatKey
 from world.locations.models import (
     LocationOwnership,
     LocationStatModifier,
@@ -180,3 +180,36 @@ def current_tenants(room: DefaultObject) -> QuerySet[LocationTenancy]:
         .select_related("area", "tenant_persona", "tenant_organization")
         .filter(models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids))
     )
+
+
+def ownership_for(persona: Persona, room: DefaultObject) -> LocationOwnership | None:
+    """Return the LocationOwnership row that gives this persona standing
+    at this room, or None.
+
+    Standing exists when:
+      - The cascade-resolved owner is this persona directly, OR
+      - The cascade-resolved owner is an Organization this persona is a
+        current member of.
+
+    Does not consider OrganizationMembership.rank — downstream gating
+    on rank is each consumer's responsibility.
+
+    Query budget: 2 queries when the holder is a Persona (short-circuit
+    skips the org_ids fetch); 3 when the holder is an Organization.
+    """
+    row = effective_owner(room)
+    if row is None:
+        return None
+    if row.holder_type == HolderType.PERSONA:
+        if row.holder_persona_id == persona.pk:
+            return row
+        return None
+    # HolderType.ORGANIZATION
+    if row.holder_organization_id in _persona_organization_ids(persona):
+        return row
+    return None
+
+
+def is_owner(persona: Persona, room: DefaultObject) -> bool:
+    """True when ``ownership_for(persona, room)`` returns a row."""
+    return ownership_for(persona, room) is not None
