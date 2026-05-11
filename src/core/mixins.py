@@ -50,15 +50,21 @@ class DiscriminatorMixin:
     ) -> dict[str, str]:
         """Return field-keyed errors for a discriminator/FK group.
 
-        Verifies that exactly one FK in ``discriminator_map`` is set, matching
-        the value of ``discriminator_field`` on the instance. Returns an empty
-        dict on success. Does NOT raise — the caller decides whether to merge
-        with errors from other discriminators before raising once.
+        Verifies that the discriminator value is in ``discriminator_map``
+        AND that exactly one matching FK is set. Returns an empty dict on
+        success. Does NOT raise — caller merges/raises.
         """
         discriminator_value = getattr(self, discriminator_field)
         expected_field = discriminator_map.get(discriminator_value)
-        if not expected_field:
-            return {}
+        if expected_field is None:
+            if discriminator_value:
+                return {
+                    discriminator_field: (
+                        f"Unknown value {discriminator_value!r}; "
+                        f"must be one of {list(discriminator_map)}."
+                    )
+                }
+            return {discriminator_field: "This field is required."}
 
         errors: dict[str, str] = {}
         if getattr(self, expected_field) is None:
