@@ -76,7 +76,11 @@ def _validate_location_kwargs(area: Area | None, room_profile: RoomProfile | Non
 
 
 def _validate_holder_kwargs(persona: Persona | None, organization: Organization | None) -> None:
-    """Raise ValueError unless exactly one of (persona, organization) is set."""
+    """Raise ValueError unless exactly one of (persona, organization) is set.
+
+    Used by both ownership (holder) and tenancy (tenant) helpers — both have
+    the same Persona-XOR-Organization shape.
+    """
     if (persona is None) == (organization is None):
         msg = "Must pass exactly one of the persona or organization holder."
         raise ValueError(msg)
