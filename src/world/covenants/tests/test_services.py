@@ -436,3 +436,191 @@ class MakeEngagedMemberTests(TestCase):
         membership = make_engaged_member()
         self.assertTrue(membership.engaged)
         self.assertIsNone(membership.left_at)
+
+
+class CreateCovenantViaSessionTests(TestCase):
+    def test_unpacks_session_and_creates_covenant(self) -> None:
+        """Set up a FORMATION session with two ACCEPTED participants who each
+        chose a role, fire-style invoke the wrapper, assert the covenant exists
+        with both memberships and correct roles."""
+        from datetime import UTC, datetime, timedelta
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.models import Covenant
+        from world.covenants.services import create_covenant_via_session
+        from world.magic.constants import (
+            ParticipantState,
+            ParticipationRule,
+            ReferenceKind,
+        )
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import (
+            RitualSession,
+            RitualSessionParticipant,
+            RitualSessionReference,
+        )
+
+        # Manually build a "post-accept, pre-fire" session state — skipping
+        # draft/accept services to focus this test on the wrapper:
+        ritual = RitualFactory(participation_rule=ParticipationRule.FORMATION)
+        initiator = CharacterSheetFactory()
+        invitee = CharacterSheetFactory()
+        role_for_initiator = CovenantRoleFactory(
+            covenant_type=CovenantType.DURANCE,
+        )
+        role_for_invitee = CovenantRoleFactory(
+            covenant_type=CovenantType.DURANCE,
+        )
+        session = RitualSession.objects.create(
+            ritual=ritual,
+            initiator=initiator,
+            session_kwargs={
+                "name": "Sword of Aerith",
+                "covenant_type": CovenantType.DURANCE,
+                "sworn_objective": "End the curse.",
+            },
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        p_init = RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=initiator,
+            state=ParticipantState.ACCEPTED,
+        )
+        p_inv = RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=invitee,
+            state=ParticipantState.ACCEPTED,
+        )
+        RitualSessionReference.objects.create(
+            session=session,
+            participant=p_init,
+            kind=ReferenceKind.COVENANT_ROLE,
+            ref_covenant_role=role_for_initiator,
+        )
+        RitualSessionReference.objects.create(
+            session=session,
+            participant=p_inv,
+            kind=ReferenceKind.COVENANT_ROLE,
+            ref_covenant_role=role_for_invitee,
+        )
+
+        covenant = create_covenant_via_session(session=session)
+        self.assertIsInstance(covenant, Covenant)
+        self.assertEqual(covenant.name, "Sword of Aerith")
+        self.assertEqual(covenant.covenant_type, CovenantType.DURANCE)
+        self.assertEqual(covenant.sworn_objective, "End the curse.")
+        # Both founders should have memberships with their chosen roles:
+        memberships = list(covenant.member_roster.active_memberships)
+        self.assertEqual(len(memberships), 2)
+        roles_by_sheet = {m.character_sheet_id: m.covenant_role_id for m in memberships}
+        self.assertEqual(roles_by_sheet[initiator.pk], role_for_initiator.pk)
+        self.assertEqual(roles_by_sheet[invitee.pk], role_for_invitee.pk)
+
+    def test_missing_participant_role_reference_raises(self) -> None:
+        """If an ACCEPTED participant has no COVENANT_ROLE reference, raise."""
+        from datetime import UTC, datetime, timedelta
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.services import create_covenant_via_session
+        from world.magic.constants import ParticipantState, ParticipationRule, ReferenceKind
+        from world.magic.exceptions import RequiredReferenceMissingError
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import (
+            RitualSession,
+            RitualSessionParticipant,
+            RitualSessionReference,
+        )
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.FORMATION)
+        initiator = CharacterSheetFactory()
+        invitee = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        session = RitualSession.objects.create(
+            ritual=ritual,
+            initiator=initiator,
+            session_kwargs={
+                "name": "Half-Founded",
+                "covenant_type": CovenantType.DURANCE,
+                "sworn_objective": "x",
+            },
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        p_init = RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=initiator,
+            state=ParticipantState.ACCEPTED,
+        )
+        # Initiator has reference; invitee does NOT:
+        RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=invitee,
+            state=ParticipantState.ACCEPTED,
+        )
+        RitualSessionReference.objects.create(
+            session=session,
+            participant=p_init,
+            kind=ReferenceKind.COVENANT_ROLE,
+            ref_covenant_role=role,
+        )
+
+        with self.assertRaises(RequiredReferenceMissingError):
+            create_covenant_via_session(session=session)
+
+    def test_name_conflict_translates_to_covenant_name_conflict_error(self) -> None:
+        """Duplicate covenant name → IntegrityError → typed CovenantNameConflictError."""
+        from datetime import UTC, datetime, timedelta
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.constants import CovenantType
+        from world.covenants.exceptions import CovenantNameConflictError
+        from world.covenants.factories import CovenantFactory, CovenantRoleFactory
+        from world.covenants.services import create_covenant_via_session
+        from world.magic.constants import ParticipantState, ParticipationRule, ReferenceKind
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import (
+            RitualSession,
+            RitualSessionParticipant,
+            RitualSessionReference,
+        )
+
+        # Pre-existing covenant with the name we'll try to use:
+        CovenantFactory(name="Already Taken")
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.FORMATION)
+        initiator = CharacterSheetFactory()
+        invitee = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        session = RitualSession.objects.create(
+            ritual=ritual,
+            initiator=initiator,
+            session_kwargs={
+                "name": "Already Taken",
+                "covenant_type": CovenantType.DURANCE,
+                "sworn_objective": "x",
+            },
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        p_init = RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=initiator,
+            state=ParticipantState.ACCEPTED,
+        )
+        p_inv = RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=invitee,
+            state=ParticipantState.ACCEPTED,
+        )
+        for p in [p_init, p_inv]:
+            RitualSessionReference.objects.create(
+                session=session,
+                participant=p,
+                kind=ReferenceKind.COVENANT_ROLE,
+                ref_covenant_role=role,
+            )
+
+        with self.assertRaises(CovenantNameConflictError):
+            create_covenant_via_session(session=session)

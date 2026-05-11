@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
-from world.covenants.exceptions import DuplicateFounderError, InsufficientFoundersError
+from world.covenants.exceptions import (
+    CovenantNameConflictError,
+    DuplicateFounderError,
+    InsufficientFoundersError,
+)
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
@@ -16,8 +21,14 @@ from world.covenants.models import (
     GearArchetypeCompatibility,
 )
 from world.covenants.types import CovenantFounder
+from world.magic.constants import ParticipantState, ReferenceKind
+from world.magic.exceptions import RequiredReferenceMissingError
+
+if TYPE_CHECKING:
+    from world.magic.models.sessions import RitualSession
 
 MINIMUM_FOUNDERS = 2
+_COVENANT_NAME_UNIQUE_MARKER = "name"  # substring in DB integrity error for name uniqueness
 
 
 @transaction.atomic
@@ -229,3 +240,47 @@ def is_gear_compatible(role: CovenantRole, archetype: str) -> bool:
         covenant_role=role,
         gear_archetype=archetype,
     ).exists()
+
+
+@transaction.atomic
+def create_covenant_via_session(*, session: RitualSession) -> Covenant:
+    """Dispatched on FORMATION fire. Unpacks the session into create_covenant args.
+
+    Slice A's `create_covenant` enforces ≥2 founders, role-type compatibility,
+    and atomic membership creation. This wrapper only adapts shape: read
+    session_kwargs for the scalars, walk ACCEPTED participants for their
+    chosen COVENANT_ROLE references, and call through.
+
+    Per spec §4.6: the .filter() on `participant.references` (related manager)
+    is in-mutator iteration on a tightly-scoped per-row set, not a cached
+    handler lookup — acceptable exception to spec §3.9.
+    """
+    name: str = session.session_kwargs["name"]
+    covenant_type: str = session.session_kwargs["covenant_type"]
+    sworn_objective: str = session.session_kwargs["sworn_objective"]
+
+    founders: list[CovenantFounder] = []
+    for p in session.participants.filter(state=ParticipantState.ACCEPTED):
+        ref = p.references.filter(kind=ReferenceKind.COVENANT_ROLE).first()
+        if ref is None:
+            raise RequiredReferenceMissingError
+        founders.append(
+            CovenantFounder(
+                character_sheet=p.character_sheet,
+                role=ref.ref_covenant_role,
+            )
+        )
+    try:
+        return create_covenant(
+            name=name,
+            covenant_type=covenant_type,
+            sworn_objective=sworn_objective,
+            founders=founders,
+        )
+    except IntegrityError as e:
+        # Translate the DB-level uniqueness violation to a typed,
+        # user-safe exception. Other integrity errors get re-raised
+        # so they aren't accidentally masked.
+        if _COVENANT_NAME_UNIQUE_MARKER in str(e).lower():
+            raise CovenantNameConflictError from e
+        raise
