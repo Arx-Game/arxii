@@ -16,10 +16,13 @@ from world.locations.models import (
     LocationStatOverride,
     LocationTenancy,
 )
+from world.societies.models import OrganizationMembership
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
     from evennia.objects.objects import DefaultObject
+
+    from world.scenes.models import Persona
 
 
 def _room_profile_and_ancestors(
@@ -47,6 +50,20 @@ def _room_profile_and_ancestors(
             AreaClosure.objects.filter(descendant_id=area.pk).values_list("ancestor_id", flat=True)
         )
     return profile, ancestor_ids
+
+
+def _persona_organization_ids(persona: Persona) -> set[int]:
+    """Return organization IDs this persona is a current member of.
+
+    OrganizationMembership has no lifecycle fields (no left_at, no
+    is_active) — departures are model deletes. So presence in the table
+    is current membership.
+    """
+    return set(
+        OrganizationMembership.objects.filter(persona=persona).values_list(
+            "organization_id", flat=True
+        )
+    )
 
 
 def _clamp(value: int, stat_key: StatKey) -> int:
