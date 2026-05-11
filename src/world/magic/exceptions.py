@@ -209,3 +209,60 @@ class StageAdvanceBonusError(SoulTetherError):
             "This stage-advance prompt expired; you are no longer in the same scene.",
         },
     )
+
+
+# =============================================================================
+# Ritual Session exceptions (Covenants Slice B)
+# =============================================================================
+
+
+class RitualSessionError(Exception):
+    """Base for ritual session lifecycle errors."""
+
+    user_message: str = "Ritual session operation failed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset()
+
+    def __init__(self, user_message: str | None = None) -> None:
+        if user_message is not None:
+            self.user_message = user_message
+        super().__init__(self.user_message)
+
+
+class SessionNotInPendingError(RitualSessionError):
+    user_message = "This ritual session is no longer accepting responses."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+class ThresholdNotMetError(RitualSessionError):
+    user_message = "Not enough participants have accepted yet."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+class RequiredReferenceMissingError(RitualSessionError):
+    user_message = "A required choice was not provided."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+class SessionTargetMissingError(RitualSessionError):
+    user_message = "The target of this ritual is no longer available."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+class NotInvitedError(RitualSessionError):
+    user_message = "You are not invited to this ritual session."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+class NotInitiatorError(RitualSessionError):
+    user_message = "Only the ritual's initiator can perform this action."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+class BilateralRoleConflictError(RitualSessionError):
+    user_message = "Both participants chose the same role; the ritual requires distinct roles."
+    SAFE_MESSAGES = frozenset({user_message})
+
+
+class ParticipantCountError(RitualSessionError):
+    user_message = "The number of participants does not satisfy this ritual's requirements."
+    SAFE_MESSAGES = frozenset({user_message})
