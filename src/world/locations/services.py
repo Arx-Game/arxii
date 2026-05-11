@@ -9,17 +9,20 @@ from django.utils import timezone
 
 from evennia_extensions.models import RoomProfile
 from world.areas.models import AreaClosure
-from world.locations.constants import STAT_CLAMPS, STAT_DEFAULTS, StatKey
+from world.locations.constants import STAT_CLAMPS, STAT_DEFAULTS, HolderType, StatKey
 from world.locations.models import (
     LocationOwnership,
     LocationStatModifier,
     LocationStatOverride,
     LocationTenancy,
 )
+from world.societies.models import OrganizationMembership
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
     from evennia.objects.objects import DefaultObject
+
+    from world.scenes.models import Persona
 
 
 def _room_profile_and_ancestors(
@@ -47,6 +50,20 @@ def _room_profile_and_ancestors(
             AreaClosure.objects.filter(descendant_id=area.pk).values_list("ancestor_id", flat=True)
         )
     return profile, ancestor_ids
+
+
+def _persona_organization_ids(persona: Persona) -> set[int]:
+    """Return organization IDs this persona is a current member of.
+
+    OrganizationMembership has no lifecycle fields (no left_at, no
+    is_active) — departures are model deletes. So presence in the table
+    is current membership.
+    """
+    return set(
+        OrganizationMembership.objects.filter(persona=persona).values_list(
+            "organization_id", flat=True
+        )
+    )
 
 
 def _clamp(value: int, stat_key: StatKey) -> int:
@@ -163,3 +180,62 @@ def current_tenants(room: DefaultObject) -> QuerySet[LocationTenancy]:
         .select_related("area", "tenant_persona", "tenant_organization")
         .filter(models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids))
     )
+
+
+def ownership_for(persona: Persona, room: DefaultObject) -> LocationOwnership | None:
+    """Return the LocationOwnership row that gives this persona standing
+    at this room, or None.
+
+    Standing exists when:
+      - The cascade-resolved owner is this persona directly, OR
+      - The cascade-resolved owner is an Organization this persona is a
+        current member of.
+
+    Does not consider OrganizationMembership.rank — downstream gating
+    on rank is each consumer's responsibility.
+
+    Query budget: 2 queries when the holder is a Persona (short-circuit
+    skips the org_ids fetch); 3 when the holder is an Organization.
+    """
+    row = effective_owner(room)
+    if row is None:
+        return None
+    if row.holder_type == HolderType.PERSONA:
+        if row.holder_persona_id == persona.pk:
+            return row
+        return None
+    # HolderType.ORGANIZATION
+    if row.holder_organization_id in _persona_organization_ids(persona):
+        return row
+    return None
+
+
+def is_owner(persona: Persona, room: DefaultObject) -> bool:
+    """True when ``ownership_for(persona, room)`` returns a row."""
+    return ownership_for(persona, room) is not None
+
+
+def tenancies_for(persona: Persona, room: DefaultObject) -> QuerySet[LocationTenancy]:
+    """Return the QuerySet of currently-active tenancies that give this
+    persona standing at this room.
+
+    Includes:
+      - Direct persona tenancies (tenant_persona = this persona)
+      - Organization tenancies where this persona is a current member
+        of the tenant_organization
+
+    Builds on ``current_tenants(room)`` (which already filters for
+    active rows and collects across the room + ancestor-area chain),
+    then narrows to rows relevant to this persona.
+
+    Query budget: 3 queries (org_ids + closure walk + tenancy fetch).
+    """
+    org_ids = _persona_organization_ids(persona)
+    return current_tenants(room).filter(
+        models.Q(tenant_persona=persona) | models.Q(tenant_organization_id__in=org_ids)
+    )
+
+
+def is_tenant(persona: Persona, room: DefaultObject) -> bool:
+    """True when ``tenancies_for(persona, room)`` has any rows."""
+    return tenancies_for(persona, room).exists()

@@ -154,3 +154,78 @@ returns a `QuerySet` filtered for `ends_at IS NULL OR ends_at > now()`.
   location. Multiple active Tenancies are allowed and expected.
 - Most authoring goes through `objects.create()` until convenience helpers
   materialize from real consumers (decoration, locks, vaults).
+
+## Relationship lookups (added 2026-05-11)
+
+Four helpers answer "does this persona have owner / tenant standing at
+this room?" — the canonical first consumer of the Ownership and Tenancy
+substrate. Specific permission checks (`can_decorate`, `can_evict`,
+`can_install`, etc.) live in their consuming systems where the rules
+naturally belong.
+
+```python
+from world.locations.services import (
+    ownership_for,
+    is_owner,
+    tenancies_for,
+    is_tenant,
+)
+
+# Returns the LocationOwnership row, or None
+row = ownership_for(persona, room)
+
+# Same but boolean
+if is_owner(persona, room):
+    ...
+
+# QuerySet of currently-active tenancies that give this persona standing
+for tenancy in tenancies_for(persona, room):
+    ...
+
+if is_tenant(persona, room):
+    ...
+```
+
+### Standing rules
+
+A persona has **owner standing** when:
+
+- The cascade-resolved owner is this persona directly, OR
+- The cascade-resolved owner is an Organization this persona is a current
+  member of (any rank)
+
+A persona has **tenant standing** when:
+
+- An active LocationTenancy for the room or an ancestor area has
+  `tenant_persona = this persona`, OR
+- An active tenancy targets an Organization this persona is a current
+  member of (any rank)
+
+The helpers do NOT consider rank — downstream systems gate on
+`OrganizationMembership.rank` themselves.
+
+The helpers are **strictly per-persona**. This covers two distinct
+cases with different rationales:
+
+- **alt_personas** (same `CharacterSheet`, different Persona): OOC the
+  character owns the room, but the secondary persona is *secret* by
+  design — house guards / servants treat it as an intruder until the
+  persona link is discovered. Substrate reflects the IC default; a
+  discovery-aware downstream check can compose on top.
+- **alt_characters** (same Account, different `CharacterSheet`):
+  different characters, no shared standing under any circumstance. The
+  Account link is OOC bookkeeping only.
+
+Don't confuse this with the no-alt-outing hard rule — that's about
+*display* (never expose Account-level character links). Access checks
+are a separate concern.
+
+### Query budgets
+
+- `is_owner` / `ownership_for` with PERSONA-holder match: **2 queries**
+  (the org_ids fetch is short-circuited via early return)
+- `is_owner` / `ownership_for` with ORGANIZATION-holder match: **3 queries**
+- `is_tenant` / `tenancies_for`: **3 queries** (org_ids + closure walk
+  + tenancy fetch)
+
+Budgets are locked via `assertNumQueries` tests.
