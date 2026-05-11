@@ -81,6 +81,28 @@ class CurrentTenantsTests(TestCase):
         )
         self.assertEqual(list(current_tenants(self.room)), [row])
 
+    def test_query_budget_two_queries_per_call(self) -> None:
+        """Current tenants fires exactly 2 queries: AreaClosure walk +
+        LocationTenancy fetch with tenant/area joined via
+        select_related. ``room.room_profile`` is served from the
+        SharedMemoryModel identity map (no extra query) because the
+        profile was loaded upstream in setUp; walking
+        ``t.tenant_persona`` is satisfied by select_related.
+        """
+        LocationTenancy.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.building,
+            tenant_type=HolderType.PERSONA,
+            tenant_persona=PersonaFactory(),
+        )
+        from evennia.objects.models import ObjectDB
+
+        room = ObjectDB.objects.get(pk=self.room.pk)
+        with self.assertNumQueries(2):
+            rows = list(current_tenants(room))
+            for t in rows:
+                _ = t.tenant_persona  # walk confirms prefetch
+
     def test_unrelated_area_tenancy_not_returned(self) -> None:
         other_building = AreaFactory(level=AreaLevel.BUILDING)
         LocationTenancy.objects.create(

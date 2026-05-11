@@ -69,6 +69,28 @@ class EffectiveOwnerCascadeTests(TestCase):
         result = effective_owner(self.room)
         self.assertEqual(result, city_row)
 
+    def test_query_budget_two_queries_per_call(self) -> None:
+        """Effective owner fires exactly 2 queries: AreaClosure walk +
+        LocationOwnership fetch with holder/area joined via
+        select_related. ``room.room_profile`` is served from the
+        SharedMemoryModel identity map (no extra query) because the
+        profile was loaded upstream in setUp; walking
+        ``result.holder_persona`` is satisfied by select_related.
+        """
+        LocationOwnership.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.ward,
+            holder_type=HolderType.PERSONA,
+            holder_persona=PersonaFactory(),
+        )
+        # Re-fetch room to ensure room_profile isn't already cached.
+        from evennia.objects.models import ObjectDB
+
+        room = ObjectDB.objects.get(pk=self.room.pk)
+        with self.assertNumQueries(2):
+            result = effective_owner(room)
+            _ = result.holder_persona  # confirm prefetched, no extra query
+
     def test_historical_owner_ignored(self) -> None:
         old_persona = PersonaFactory()
         old_row = LocationOwnership.objects.create(
