@@ -128,7 +128,7 @@ class SoulTetherAcceptViewTests(APITestCase):
         return {
             "actor_sheet_id": self.sinner_sheet.pk,
             "partner_sheet_id": self.sineater_sheet.pk,
-            "sinner_role": "ABYSSAL",
+            "sinner_role": "SINNER",
             "resonance_id": self.resonance.pk,
             "writeup": "A bond woven between darkness and light, twenty or more chars.",
         }
@@ -204,7 +204,7 @@ class SoulTetherAcceptViewTests(APITestCase):
         accept_soul_tether(
             initiator_sheet=self.sinner_sheet,
             partner_sheet=self.sineater_sheet,
-            sinner_role=SoulTetherRole.ABYSSAL,
+            sinner_role=SoulTetherRole.SINNER,
             resonance=self.resonance,
             writeup="A bond woven between darkness and light, first formation.",
             ritual_components=[],
@@ -239,7 +239,7 @@ class SoulTetherDetailViewTests(APITestCase):
         cls.capstone = accept_soul_tether(
             initiator_sheet=cls.sinner_sheet,
             partner_sheet=cls.sineater_sheet,
-            sinner_role=SoulTetherRole.ABYSSAL,
+            sinner_role=SoulTetherRole.SINNER,
             resonance=cls.resonance,
             writeup="A bond woven in darkness, twenty or more characters here.",
             ritual_components=[],
@@ -332,7 +332,7 @@ class SoulTetherDissolveViewTests(APITestCase):
         accept_soul_tether(
             initiator_sheet=sinner_sheet,
             partner_sheet=sineater_sheet,
-            sinner_role=SoulTetherRole.ABYSSAL,
+            sinner_role=SoulTetherRole.SINNER,
             resonance=resonance,
             writeup="A bond woven in darkness, dissolve test version here.",
             ritual_components=[],
@@ -415,7 +415,7 @@ class SineatingRequestViewTests(APITestCase):
         accept_soul_tether(
             initiator_sheet=cls.sinner_sheet,
             partner_sheet=cls.sineater_sheet,
-            sinner_role=SoulTetherRole.ABYSSAL,
+            sinner_role=SoulTetherRole.SINNER,
             resonance=cls.resonance,
             writeup="A bond woven in darkness, sineating test version long enough.",
             ritual_components=[],
@@ -511,7 +511,7 @@ class SineatingRespondViewTests(APITestCase):
         accept_soul_tether(
             initiator_sheet=cls.sinner_sheet,
             partner_sheet=cls.sineater_sheet,
-            sinner_role=SoulTetherRole.ABYSSAL,
+            sinner_role=SoulTetherRole.SINNER,
             resonance=cls.resonance,
             writeup="A bond woven in darkness, respond test version long enough.",
             ritual_components=[],
@@ -625,7 +625,7 @@ class SoulTetherRescueViewTests(APITestCase):
         accept_soul_tether(
             initiator_sheet=cls.sinner_sheet,
             partner_sheet=cls.sineater_sheet,
-            sinner_role=SoulTetherRole.ABYSSAL,
+            sinner_role=SoulTetherRole.SINNER,
             resonance=cls.resonance,
             writeup="A bond woven in darkness, rescue test version long enough.",
             ritual_components=[],

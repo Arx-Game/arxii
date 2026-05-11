@@ -152,7 +152,7 @@ def accept_soul_tether(  # noqa: PLR0913
     Args:
         initiator_sheet: The character sheet of the person initiating the ritual.
         partner_sheet: The character sheet of the other party.
-        sinner_role: Which role the INITIATOR has. If ABYSSAL, initiator is the
+        sinner_role: Which role the INITIATOR has. If SINNER, initiator is the
             Sinner. If SINEATER, initiator is the Sineater (partner is Sinner).
         resonance: The Resonance the Sinner's Thread will channel.
         writeup: Narrative description of the bond's formation.
@@ -167,7 +167,7 @@ def accept_soul_tether(  # noqa: PLR0913
         SoulTetherFormationError: A Soul Tether already exists between these characters.
     """
     # 1. Determine Sinner/Sineater from sinner_role.
-    if sinner_role == SoulTetherRoleEnum.ABYSSAL:
+    if sinner_role == SoulTetherRoleEnum.SINNER:
         sinner_sheet, sineater_sheet = initiator_sheet, partner_sheet
     else:
         sinner_sheet, sineater_sheet = partner_sheet, initiator_sheet
@@ -225,7 +225,7 @@ def accept_soul_tether(  # noqa: PLR0913
 
         # 9. Flag both directional relationship rows.
         rel_outgoing.is_soul_tether = True
-        rel_outgoing.soul_tether_role = SoulTetherRole.ABYSSAL
+        rel_outgoing.soul_tether_role = SoulTetherRole.SINNER
         rel_outgoing.save(update_fields=["is_soul_tether", "soul_tether_role"])
 
         rel_incoming.is_soul_tether = True
@@ -329,7 +329,7 @@ def _sinner_has_other_active_tethers(
         CharacterRelationship.objects.filter(
             source=sinner_sheet,
             is_soul_tether=True,
-            soul_tether_role=SoulTetherRole.ABYSSAL,
+            soul_tether_role=SoulTetherRole.SINNER,
         )
         .exclude(pk=exclude_outgoing_id)
         .exists()
@@ -350,7 +350,7 @@ def dissolve_soul_tether(
 
     Args:
         relationship_id: Primary key of *either* directional relationship row.
-            The function finds the outgoing (Sinner→Sineater, role=ABYSSAL)
+            The function finds the outgoing (Sinner→Sineater, role=SINNER)
             direction automatically.
         initiator_sheet: The CharacterSheet initiating dissolution. Reserved
             for future permission/validation logic; not currently validated
@@ -372,11 +372,11 @@ def dissolve_soul_tether(
 
     from world.magic.models import Thread  # noqa: PLC0415
 
-    # Resolve the outgoing (Sinner→Sineater, ABYSSAL) row.  The caller may pass
+    # Resolve the outgoing (Sinner→Sineater, SINNER) row.  The caller may pass
     # either direction's ID; we determine which is which from soul_tether_role.
     raw = CharacterRelationship.objects.get(pk=relationship_id)
 
-    if raw.soul_tether_role == SoulTetherRole.ABYSSAL:
+    if raw.soul_tether_role == SoulTetherRole.SINNER:
         # Passed the outgoing (Sinner→Sineater) row.
         outgoing = raw
         incoming = CharacterRelationship.objects.get(
@@ -400,7 +400,7 @@ def dissolve_soul_tether(
         if not outgoing.is_soul_tether:
             return
 
-        # The Sinner is the source of the outgoing (ABYSSAL) row.
+        # The Sinner is the source of the outgoing (SINNER) row.
         sinner_sheet: CharacterSheet = outgoing.source
 
         # 1. Flip flags on both directional rows.
@@ -1343,7 +1343,7 @@ def _get_sinner_tether_threads_for_resonance(
 
     "Sinner-side" means the Thread's target_capstone belongs to a
     CharacterRelationship where sheet is the source AND soul_tether_role is
-    ABYSSAL.  Only non-retired Threads are returned.
+    SINNER.  Only non-retired Threads are returned.
 
     Args:
         sheet: The character sheet whose Threads to search.
@@ -1363,7 +1363,7 @@ def _get_sinner_tether_threads_for_resonance(
             # Capstone must belong to a soul-tether relationship where sheet is the Sinner.
             target_capstone__relationship__source=sheet,
             target_capstone__relationship__is_soul_tether=True,
-            target_capstone__relationship__soul_tether_role=SoulTetherRole.ABYSSAL,
+            target_capstone__relationship__soul_tether_role=SoulTetherRole.SINNER,
         ).select_related("target_capstone__relationship")
     )
 
@@ -1457,7 +1457,7 @@ def _active_soul_tethers_for_sinner(
     """Return all active Sinner-side CharacterRelationship rows for *sinner_sheet*.
 
     "Sinner-side" means source=sinner_sheet, is_soul_tether=True,
-    soul_tether_role=ABYSSAL.  Only active (non-soft-retired) tethers.
+    soul_tether_role=SINNER.  Only active (non-soft-retired) tethers.
 
     Args:
         sinner_sheet: The Sinner's CharacterSheet.
@@ -1469,7 +1469,7 @@ def _active_soul_tethers_for_sinner(
         CharacterRelationship.objects.filter(
             source=sinner_sheet,
             is_soul_tether=True,
-            soul_tether_role=SoulTetherRole.ABYSSAL,
+            soul_tether_role=SoulTetherRole.SINNER,
         ).select_related("target")
     )
 

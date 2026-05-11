@@ -15,7 +15,7 @@ from world.relationships.models import CharacterRelationship
 class SoulTetherRole(str, Enum):
     """Roles in a Soul Tether bond (Spec B §1.4)."""
 
-    ABYSSAL = "ABYSSAL"
+    SINNER = "SINNER"
     SINEATER = "SINEATER"
 
 

@@ -72,7 +72,7 @@ def _make_sineater_thread_for(
         target=sineater_sheet,
         is_pending=False,
         is_soul_tether=True,
-        soul_tether_role=SoulTetherRole.ABYSSAL,
+        soul_tether_role=SoulTetherRole.SINNER,
     )
 
     capstone = RelationshipCapstoneFactory(

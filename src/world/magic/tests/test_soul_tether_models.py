@@ -86,7 +86,7 @@ class TypesImportTests(TestCase):
             SoulTetherRole,
         )
 
-        self.assertEqual(SoulTetherRole.ABYSSAL.value, "ABYSSAL")
+        self.assertEqual(SoulTetherRole.SINNER.value, "SINNER")
         self.assertEqual(SoulTetherRole.SINEATER.value, "SINEATER")
 
     def test_sineating_offer_frozen(self) -> None:

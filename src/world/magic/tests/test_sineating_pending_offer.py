@@ -125,7 +125,7 @@ def _make_tethered_pair_with_tenures(track=None):
     accept_soul_tether(
         initiator_sheet=sinner_sheet,
         partner_sheet=sineater_sheet,
-        sinner_role=SoulTetherRoleEnum.ABYSSAL,
+        sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
         writeup="Bond for pending offer tests, at least twenty chars.",
         ritual_components=[],
@@ -187,7 +187,7 @@ class SineatingPendingOfferUniquenessTests(TestCase):
         accept_soul_tether(
             initiator_sheet=sinner_sheet,
             partner_sheet=sineater_sheet,
-            sinner_role=SoulTetherRoleEnum.ABYSSAL,
+            sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=resonance,
             writeup="Bond for uniqueness constraint test, at least twenty chars.",
             ritual_components=[],

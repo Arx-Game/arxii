@@ -161,7 +161,7 @@ def _make_tethered_pair(
     capstone = accept_soul_tether(
         initiator_sheet=sinner,
         partner_sheet=sineater,
-        sinner_role=SoulTetherRoleEnum.ABYSSAL,
+        sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
         writeup="Integration test bond.",
         ritual_components=[],
@@ -301,7 +301,7 @@ class SoulTetherFullPipelineTests(TestCase):
         self.capstone = accept_soul_tether(
             initiator_sheet=self.sinner,
             partner_sheet=self.sineater,
-            sinner_role=SoulTetherRoleEnum.ABYSSAL,
+            sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=self.resonance,
             writeup="A bond is forged in the witch-light.",
             ritual_components=[],
@@ -317,7 +317,7 @@ class SoulTetherFullPipelineTests(TestCase):
         rel_in = CharacterRelationship.objects.get(source=self.sineater, target=self.sinner)
         self.assertTrue(rel_out.is_soul_tether)
         self.assertTrue(rel_in.is_soul_tether)
-        self.assertEqual(rel_out.soul_tether_role, SoulTetherRole.ABYSSAL)
+        self.assertEqual(rel_out.soul_tether_role, SoulTetherRole.SINNER)
         self.assertEqual(rel_in.soul_tether_role, SoulTetherRole.SINEATER)
 
     def test_02_formation_weaves_sinner_thread(self) -> None:
@@ -533,7 +533,7 @@ class AntiResentmentInvariantTests(TestCase):
         cls.capstone = accept_soul_tether(
             initiator_sheet=cls.sinner,
             partner_sheet=cls.sineater,
-            sinner_role=SoulTetherRoleEnum.ABYSSAL,
+            sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=cls.resonance,
             writeup="A bond sealed in candlelight.",
             ritual_components=[],
@@ -716,7 +716,7 @@ class ManyToManyIndependenceTests(TestCase):
         cls.capstone_a = accept_soul_tether(
             initiator_sheet=cls.sinner_a,
             partner_sheet=cls.sineater,
-            sinner_role=SoulTetherRoleEnum.ABYSSAL,
+            sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=cls.resonance_a,
             writeup="First bond — dark resonance.",
             ritual_components=[],
@@ -726,7 +726,7 @@ class ManyToManyIndependenceTests(TestCase):
         cls.capstone_b = accept_soul_tether(
             initiator_sheet=cls.sinner_b,
             partner_sheet=cls.sineater,
-            sinner_role=SoulTetherRoleEnum.ABYSSAL,
+            sinner_role=SoulTetherRoleEnum.SINNER,
             resonance=cls.resonance_b,
             writeup="Second bond — primal resonance.",
             ritual_components=[],
@@ -855,7 +855,7 @@ class ManyToManyIndependenceTests(TestCase):
         # Bond B should be intact.
         rel_b = CharacterRelationship.objects.get(source=self.sinner_b, target=self.sineater)
         self.assertTrue(rel_b.is_soul_tether)
-        self.assertEqual(rel_b.soul_tether_role, SoulTetherRole.ABYSSAL)
+        self.assertEqual(rel_b.soul_tether_role, SoulTetherRole.SINNER)
 
         # Sinner B's Thread must still be active (not retired).
         thread_b = Thread.objects.filter(

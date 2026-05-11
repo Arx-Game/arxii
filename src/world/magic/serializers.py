@@ -1428,14 +1428,14 @@ class AcceptSoulTetherSerializer(serializers.Serializer):
 
     ``actor_sheet_id`` identifies the character sheet of the requesting account.
     ``partner_sheet_id`` identifies the partner's character sheet.
-    ``sinner_role`` determines which side (ABYSSAL or SINEATER) the initiator holds.
+    ``sinner_role`` determines which side (SINNER or SINEATER) the initiator holds.
     ``resonance_id`` selects the resonance for the Sinner's Thread.
     ``writeup`` is the narrative description of the bond (20+ chars).
     """
 
     actor_sheet_id = serializers.IntegerField()
     partner_sheet_id = serializers.IntegerField()
-    sinner_role = serializers.ChoiceField(choices=["ABYSSAL", "SINEATER"])
+    sinner_role = serializers.ChoiceField(choices=["SINNER", "SINEATER"])
     resonance_id = serializers.IntegerField()
     writeup = serializers.CharField(min_length=20, max_length=4000)
 
@@ -1518,7 +1518,7 @@ class SoulTetherDetailSerializer(serializers.Serializer):
         from world.magic.constants import SoulTetherRole  # noqa: PLC0415
         from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
-        if obj.soul_tether_role == SoulTetherRole.ABYSSAL:  # type: ignore[union-attr]
+        if obj.soul_tether_role == SoulTetherRole.SINNER:  # type: ignore[union-attr]
             outgoing = obj
             incoming = CharacterRelationship.objects.filter(
                 source=obj.target,  # type: ignore[union-attr]
