@@ -25,6 +25,9 @@ from world.magic.constants import ParticipantState, ReferenceKind
 from world.magic.exceptions import RequiredReferenceMissingError, SessionTargetMissingError
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from world.covenants.models import CharacterCovenantRole as _CharacterCovenantRole
     from world.magic.models.sessions import RitualSession
 
 MINIMUM_FOUNDERS = 2
@@ -284,6 +287,62 @@ def create_covenant_via_session(*, session: RitualSession) -> Covenant:
         if _COVENANT_NAME_UNIQUE_MARKER in str(e).lower():
             raise CovenantNameConflictError from e
         raise
+
+
+def evaluate_scene_engagement(
+    *,
+    character_sheet: CharacterSheet,
+    room: ObjectDB,
+) -> None:
+    """Auto-engage a Durance covenant if co-presence prerequisites met.
+
+    Manual engagement sticks — this no-ops if the character is already
+    engaged for the Durance type. See Slice B spec §3.6, §4.10.
+    """
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+    from world.covenants.handlers import can_engage_durance_membership  # noqa: PLC0415
+
+    if (
+        character_sheet.character.covenant_roles.currently_engaged_for_type(CovenantType.DURANCE)
+        is not None
+    ):
+        return  # manual sticks; auto never overrides
+    candidates: list[tuple[_CharacterCovenantRole, int]] = []
+    for membership in character_sheet.character.covenant_roles.active_memberships_for_type(
+        CovenantType.DURANCE
+    ):
+        if not can_engage_durance_membership(membership):
+            continue
+        co_present = _co_present_member_count(membership, room)
+        if co_present > 0:
+            candidates.append((membership, co_present))
+    if not candidates:
+        return
+    # Sort by most co-present (desc) then by covenant_id (asc) for deterministic ties:
+    candidates.sort(key=lambda c: (-c[1], c[0].covenant_id))
+    set_engaged_membership(membership=candidates[0][0])
+
+
+def _co_present_member_count(
+    membership: _CharacterCovenantRole,
+    room: ObjectDB,
+) -> int:
+    """Count distinct other active members of `membership.covenant` in `room`.
+
+    Uses cached handlers per project rule (spec §3.9) — no .filter() on
+    related managers. The Character ↔ CharacterSheet accessor is `sheet_data`
+    (reverse OneToOne).
+    """
+    self_sheet = membership.character_sheet
+    target = membership.covenant
+    n = 0
+    for obj in room.contents:
+        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne accessor absent on non-Character objects; runtime duck-typing with default is intentional
+        if sheet is None or sheet == self_sheet:
+            continue
+        if sheet.character.covenant_roles.currently_held_role_in(target) is not None:
+            n += 1
+    return n
 
 
 @transaction.atomic

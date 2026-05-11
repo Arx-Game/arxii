@@ -747,3 +747,189 @@ class InductMemberViaSessionTests(TestCase):
         )
         with self.assertRaises(RequiredReferenceMissingError):
             induct_member_via_session(session=session)
+
+
+class EvaluateSceneEngagementTests(TestCase):
+    """Cover all branches of evaluate_scene_engagement.
+
+    Setup mirrors test_engagement_prerequisite.py — same room/scene/membership
+    idioms (ObjectDBFactory for rooms, SceneFactory for active scenes).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+
+        cls.role_durance = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        cls.cov_a = CovenantFactory(name="CovA", covenant_type=CovenantType.DURANCE)
+        cls.cov_b = CovenantFactory(name="CovB", covenant_type=CovenantType.DURANCE)
+        cls.sheet_a1 = CharacterSheetFactory()
+        cls.sheet_a2 = CharacterSheetFactory()
+        cls.sheet_b1 = CharacterSheetFactory()
+        cls.mem_a1 = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet_a1,
+            covenant=cls.cov_a,
+            covenant_role=cls.role_durance,
+        )
+        cls.mem_a2 = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet_a2,
+            covenant=cls.cov_a,
+            covenant_role=cls.role_durance,
+        )
+        cls.mem_b1 = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet_b1,
+            covenant=cls.cov_b,
+            covenant_role=cls.role_durance,
+        )
+
+    def _make_room(self, key: str = "test-room"):
+        """Create a Room typeclass instance for use as a scene location."""
+        from evennia_extensions.factories import ObjectDBFactory
+
+        return ObjectDBFactory(
+            db_key=key,
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+
+    def _place_chars_in_room(self, room, sheets):
+        """Place each sheet's character into the room via the location property.
+
+        Using the location property setter ensures Evennia's contents_cache is
+        updated correctly (the direct db_location assignment bypasses the cache
+        and triggers a full reinit of all cached instances instead).
+        """
+        for sheet in sheets:
+            char = sheet.character
+            char.location = room
+
+    def setUp(self):
+        """Invalidate cached handlers so each test starts from a clean DB state."""
+        self.sheet_a1.character.covenant_roles.invalidate()
+        self.sheet_a2.character.covenant_roles.invalidate()
+        self.sheet_b1.character.covenant_roles.invalidate()
+        self.mem_a1.refresh_from_db()
+        self.mem_a2.refresh_from_db()
+        self.mem_b1.refresh_from_db()
+
+    def _build_room_with_scene_and_chars(self, sheets):
+        """Create a room, add an active Scene there, place the characters. Returns the room."""
+        from world.scenes.factories import SceneFactory
+
+        room = self._make_room()
+        if hasattr(room, "_active_scene_cache"):
+            del room._active_scene_cache
+        SceneFactory(location=room, is_active=True)
+        self._place_chars_in_room(room, sheets)
+        return room
+
+    def _cleanup_chars(self, sheets):
+        """Move each sheet's character out of any room via the location deleter."""
+        for sheet in sheets:
+            char = sheet.character
+            del char.location
+
+    def test_already_engaged_is_noop(self):
+        """Manual engagement sticks — auto never overrides."""
+        from world.covenants.services import evaluate_scene_engagement, set_engaged_membership
+
+        # Manually engage sheet_a1 with covenant A first:
+        set_engaged_membership(membership=self.mem_a1)
+        room = self._build_room_with_scene_and_chars([self.sheet_a1, self.sheet_b1])
+        try:
+            # sheet_b1 is from covenant B; sheet_a1 is already engaged with A.
+            # The helper should no-op (stay engaged with A) regardless of co-presence:
+            evaluate_scene_engagement(character_sheet=self.sheet_a1, room=room)
+            self.mem_a1.refresh_from_db()
+            self.assertTrue(self.mem_a1.engaged)
+        finally:
+            self._cleanup_chars([self.sheet_a1, self.sheet_b1])
+
+    def test_no_candidates_is_noop(self):
+        """No co-present covenant members → engagement unchanged."""
+        from world.covenants.services import evaluate_scene_engagement
+
+        room = self._build_room_with_scene_and_chars([self.sheet_a1])
+        try:
+            # Only one character in room — no co-present members.
+            evaluate_scene_engagement(character_sheet=self.sheet_a1, room=room)
+            self.mem_a1.refresh_from_db()
+            self.assertFalse(self.mem_a1.engaged)
+        finally:
+            self._cleanup_chars([self.sheet_a1])
+
+    def test_single_candidate_engages(self):
+        """One co-present member of one covenant → auto-engage."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+        from world.covenants.services import evaluate_scene_engagement
+
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        cov = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        sheet_1 = CharacterSheetFactory()
+        sheet_2 = CharacterSheetFactory()
+        mem_1 = CharacterCovenantRoleFactory(
+            character_sheet=sheet_1,
+            covenant=cov,
+            covenant_role=role,
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=sheet_2,
+            covenant=cov,
+            covenant_role=role,
+        )
+        room = self._build_room_with_scene_and_chars([sheet_1, sheet_2])
+        evaluate_scene_engagement(character_sheet=sheet_1, room=room)
+        mem_1.refresh_from_db()
+        self.assertTrue(mem_1.engaged)
+
+    def test_multiple_candidates_picks_most_co_present(self):
+        """Tie-broken by most co-present, then by lowest covenant_id."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.covenants.services import evaluate_scene_engagement
+
+        # Add another covenant-A member so A has 2 co-present, B has 1:
+        sheet_a3 = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=sheet_a3,
+            covenant=self.cov_a,
+            covenant_role=self.role_durance,
+        )
+        # sheet_a1 is also a member of cov_b for this test:
+        mem_a1_in_b = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_a1,
+            covenant=self.cov_b,
+            covenant_role=self.role_durance,
+        )
+        room = self._build_room_with_scene_and_chars(
+            [self.sheet_a1, self.sheet_a2, sheet_a3, self.sheet_b1]
+        )
+        try:
+            # Invalidate handler cache so fresh memberships are loaded:
+            self.sheet_a1.character.covenant_roles.invalidate()
+            evaluate_scene_engagement(character_sheet=self.sheet_a1, room=room)
+            # sheet_a1 has 2 co-present cov_a members (a2, a3) vs 1 co-present cov_b
+            # member (b1) → cov_a membership wins.
+            self.mem_a1.refresh_from_db()
+            self.assertTrue(self.mem_a1.engaged)
+            # And the cov_b membership for sheet_a1 stays unengaged:
+            mem_a1_in_b.refresh_from_db()
+            self.assertFalse(mem_a1_in_b.engaged)
+        finally:
+            self._cleanup_chars([self.sheet_a1, self.sheet_a2, sheet_a3, self.sheet_b1])
+            # Reset engaged state
+            self.mem_a1.engaged = False
+            self.mem_a1.save(update_fields=["engaged"])
+            mem_a1_in_b.delete()
+            # sheet_a3 and its membership are TestCase-scoped so they'll be rolled back
