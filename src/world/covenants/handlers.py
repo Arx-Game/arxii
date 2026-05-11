@@ -60,6 +60,28 @@ class CharacterCovenantRoleHandler:
         """Return roles for every active+engaged membership row."""
         return [r.covenant_role for r in self._rows if r.engaged and r.left_at is None]
 
+    @property
+    def active_memberships(self) -> list[CharacterCovenantRole]:
+        """All active memberships (left_at IS NULL) for this character."""
+        return [m for m in self._rows if m.left_at is None]
+
+    def active_memberships_for_type(
+        self,
+        covenant_type: str,
+    ) -> list[CharacterCovenantRole]:
+        """Active memberships filtered by covenant_type — no DB."""
+        return [m for m in self.active_memberships if m.covenant.covenant_type == covenant_type]
+
+    def currently_engaged_for_type(
+        self,
+        covenant_type: str,
+    ) -> CharacterCovenantRole | None:
+        """At-most-one engaged membership for the given type per Slice A invariant."""
+        for m in self.active_memberships_for_type(covenant_type):
+            if m.engaged:
+                return m
+        return None
+
     def invalidate(self) -> None:
         """Clear the cached assignment list. Called by mutation services."""
         self._cached = None
