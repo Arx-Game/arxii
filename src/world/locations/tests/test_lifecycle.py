@@ -10,6 +10,7 @@ from world.locations.models import LocationOwnership, LocationTenancy
 from world.locations.services import (
     _validate_holder_kwargs,
     _validate_location_kwargs,
+    end_tenancy,
     grant_tenancy,
     transfer_ownership,
 )
@@ -187,3 +188,36 @@ class GrantTenancyValidationTests(TestCase):
                 tenant_persona=PersonaFactory(),
                 tenant_organization=OrganizationFactory(),
             )
+
+
+class EndTenancyTests(TestCase):
+    def test_defaults_to_now(self) -> None:
+        tenancy = grant_tenancy(room_profile=RoomProfileFactory(), tenant_persona=PersonaFactory())
+        before = timezone.now()
+        result = end_tenancy(tenancy)
+        after = timezone.now()
+        self.assertIsNotNone(result.ends_at)
+        self.assertGreaterEqual(result.ends_at, before)
+        self.assertLessEqual(result.ends_at, after)
+
+    def test_honors_supplied_ended_at(self) -> None:
+        tenancy = grant_tenancy(room_profile=RoomProfileFactory(), tenant_persona=PersonaFactory())
+        explicit = timezone.now() - timedelta(hours=2)
+        result = end_tenancy(tenancy, ended_at=explicit)
+        self.assertEqual(result.ends_at, explicit)
+
+    def test_returns_same_instance(self) -> None:
+        tenancy = grant_tenancy(room_profile=RoomProfileFactory(), tenant_persona=PersonaFactory())
+        result = end_tenancy(tenancy)
+        self.assertIs(result, tenancy)
+
+    def test_idempotent_re_end_overwrites(self) -> None:
+        tenancy = grant_tenancy(room_profile=RoomProfileFactory(), tenant_persona=PersonaFactory())
+        first = timezone.now() - timedelta(days=2)
+        second = timezone.now() - timedelta(days=1)
+        end_tenancy(tenancy, ended_at=first)
+        tenancy.refresh_from_db()
+        self.assertEqual(tenancy.ends_at, first)
+        end_tenancy(tenancy, ended_at=second)
+        tenancy.refresh_from_db()
+        self.assertEqual(tenancy.ends_at, second)

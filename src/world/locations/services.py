@@ -359,3 +359,23 @@ def grant_tenancy(  # noqa: PLR0913 — keyword-only XOR-pair API by design
         ends_at=ends_at,
         notes=notes,
     )
+
+
+def end_tenancy(
+    tenancy: LocationTenancy,
+    *,
+    ended_at: datetime | None = None,
+) -> LocationTenancy:
+    """End a tenancy by setting ``ends_at``.
+
+    Covers eviction AND voluntary departure — the code path is identical
+    and the semantic distinction is the caller's UX concern.
+
+    Idempotent: re-calling on an already-ended tenancy overwrites
+    ``ends_at`` with the new value. The new value can be in the past
+    (eviction effective immediately) or in the future (planned end of
+    lease).
+    """
+    tenancy.ends_at = ended_at if ended_at is not None else timezone.now()
+    tenancy.save()
+    return tenancy
