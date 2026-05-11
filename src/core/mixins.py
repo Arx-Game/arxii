@@ -38,7 +38,12 @@ class DiscriminatorMixin:
         target = self.get_active_target()
         if target is None:
             return "(deleted)"
-        return str(target.name)
+        # Most discriminator targets expose .name (Persona, Area, Organization);
+        # fall back to str(target) for targets like RoomProfile that don't.
+        try:
+            return str(target.name)
+        except AttributeError:
+            return str(target)
 
     def _validate_discriminator(
         self, discriminator_field: str, discriminator_map: dict[str, str]
