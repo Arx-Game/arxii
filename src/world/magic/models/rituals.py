@@ -10,7 +10,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.magic.constants import RitualExecutionKind, TargetKind
+from world.magic.constants import ParticipationRule, RitualExecutionKind, TargetKind
 from world.magic.models.ritual_scene_action import RitualSceneActionConfig
 
 
@@ -109,6 +109,14 @@ class Ritual(SharedMemoryModel):
             "it has a specialized host UI elsewhere (e.g., Thread Detail for Imbuing)."
         ),
     )
+
+    participation_rule = models.CharField(
+        max_length=32,
+        choices=ParticipationRule.choices,
+        default=ParticipationRule.SINGLE_ACTOR,
+    )
+    min_participants = models.PositiveSmallIntegerField(null=True, blank=True)
+    max_participants = models.PositiveSmallIntegerField(null=True, blank=True)
 
     class Meta:
         constraints = [
