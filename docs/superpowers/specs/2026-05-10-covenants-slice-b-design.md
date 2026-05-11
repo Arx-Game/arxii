@@ -159,7 +159,7 @@ This is Slice A discipline restated: Slice B code does **not** call `.filter()` 
 
 Slice B extends `CharacterCovenantRoleHandler` with new methods (`active_memberships`, `active_memberships_for_type`, `currently_engaged_for_type`) and introduces a new `CovenantMembershipHandler` attached to `Covenant.member_roster`. All membership lookups in Slice B services and helpers route through these handlers.
 
-Reviewer responsibility: grep for `.filter(left_at__isnull=...)` and `covenant.memberships.` access patterns; flag any violations.
+Reviewer responsibility: grep for `.filter(left_at__isnull=...)` and `covenant.memberships.` access patterns in **new Slice B code**; flag any violations. Note that existing Slice A `dissolve_covenant` already iterates `covenant.memberships.filter(left_at__isnull=True)` inside its mutation transaction — this is intentional (mutators need fresh DB state, not cached handler reads) and must NOT be flagged. The handler-routing rule applies to *read* paths, not to in-transaction mutator iteration.
 
 ### 3.10 Validation in serializers, permissions in permission classes, services do atomic operations
 
@@ -301,7 +301,15 @@ def cancel_session(*, session: RitualSession) -> None: ...
 
 All state-changing services wrap in `transaction.atomic()` + `select_for_update()` on the session (or participant for `accept`/`decline`) to serialize concurrent writers. Each `select_for_update().get()` is followed by `refresh_from_db()` to ensure the SharedMemoryModel-cached instance reflects the just-locked row's values. Inline comments in each service explain the specific race the lock prevents.
 
-`fire_session` validates: state-derived threshold met, all `ACCEPTED` participants have all required references (per the ritual's `participant_fields` schema), session-level required references present. On success: dispatches the ritual's `service_function_path`, deletes the session in the same transaction, returns the dispatched service's return value. On failure: typed exception, transaction rolls back, session stays alive for the initiator to retry or cancel.
+`fire_session` validates: state-derived threshold met, all `ACCEPTED` participants have all required references (per the ritual's `participant_fields` schema), session-level required references present. On success: dispatches the ritual's `service_function_path`, deletes the session in the same transaction, returns the dispatched service's return value (`Covenant` for formation, `CharacterCovenantRole` for induction). On failure: typed exception, transaction rolls back, session stays alive for the initiator to retry or cancel.
+
+The HTTP `POST /api/rituals/sessions/{id}/fire/` view returns `200 OK` with a small JSON envelope so the frontend can navigate to the result:
+
+```json
+{"result_kind": "covenant" | "membership", "result_id": <pk>}
+```
+
+The `result_kind` discriminator lets the frontend route appropriately (formation → covenant detail page; induction → covenant detail with the new member highlighted). The view derives `result_kind` from the ritual's `participation_rule` (FORMATION → "covenant"; INDUCTION → "membership"). No nested serialization in this response — the frontend invalidates the relevant react-query caches after fire and re-fetches the full object via existing endpoints.
 
 ### 4.6 Covenant ritual service wrappers
 
@@ -313,6 +321,11 @@ def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRol
 ```
 
 Both are thin wrappers around Slice A's existing `create_covenant` / `add_member`. They unpack `session.session_kwargs` + iterate `session.participants` + read each participant's references, then call the Slice A service. All actual creation logic and invariant enforcement stays in Slice A. If Slice A's service raises a typed `CovenantError`, it propagates up through `fire_session` and the transaction rolls back.
+
+**Implementation note on `Covenant.name` uniqueness.** Slice A did not add a uniqueness constraint on `Covenant.name`. If two formation rituals fire concurrently with the same proposed name, both succeed today. Implementation should decide whether to:
+(a) leave it unconstrained (matches current Slice A behavior; duplicate names in the wild are tolerable)
+(b) add `unique=True` on `Covenant.name` in the Slice B migration (catches the conflict at the DB layer; raises `IntegrityError` which `fire_session` translates to a typed `CovenantNameConflictError`)
+Recommend (b) for predictability, but the call is left for the implementation plan.
 
 ### 4.7 Two new `Ritual` rows via data migration
 
@@ -414,6 +427,8 @@ Subscription points (call `evaluate_scene_engagement` from):
 
 Each subscription point is a single new function call inside the existing service's transaction. No Django signals (per project rule).
 
+**Implementation discovery step.** The exact callsite names in `world/scenes/services.py` and `flows/services/` are not pinned down by this spec. The implementation plan must include a discovery task that locates the canonical "character arrived in room" and "joined active scene" service-function callsites and wires `evaluate_scene_engagement` calls into them. If a single canonical callsite doesn't exist, the implementation plan must propose where to add one (and whether to refactor existing scattered callsites to converge through it).
+
 ### 4.11 Handler additions
 
 `CharacterCovenantRoleHandler` (extend Slice A, in `src/world/covenants/handlers.py`):
@@ -431,7 +446,7 @@ def currently_engaged_for_type(
 ) -> CharacterCovenantRole | None: ...
 ```
 
-New handler `CovenantMembershipHandler` (in same file), attached as `covenant.member_roster`:
+New handler `CovenantMembershipHandler` (in same file):
 
 ```python
 class CovenantMembershipHandler:
@@ -445,6 +460,20 @@ class CovenantMembershipHandler:
 
     def invalidate(self) -> None: ...
 ```
+
+**Attachment.** Slice A's `CharacterCovenantRoleHandler` is attached via `@cached_property` on the `Character` typeclass (`src/typeclasses/characters.py:158-163`). `Covenant` is a Django model, not a typeclass, so the equivalent attachment goes on the `Covenant` model itself:
+
+```python
+# src/world/covenants/models.py
+class Covenant(SharedMemoryModel):
+    ...
+    @cached_property                                # from django.utils.functional
+    def member_roster(self) -> "CovenantMembershipHandler":
+        from world.covenants.handlers import CovenantMembershipHandler
+        return CovenantMembershipHandler(self)
+```
+
+Lazy import inside the property avoids the circular-import that would otherwise surface (handlers import models). The cached_property is per-instance; SharedMemoryModel's identity map ensures the same Covenant instance is reused, so the handler also persists across accesses.
 
 `invalidate()` is called from existing Slice A mutators (`assign_covenant_role`, `end_covenant_role`, `add_member`, `change_role`, `dissolve_covenant`) — extend each to invalidate both `character.covenant_roles` (already done in Slice A) AND the affected `covenant.member_roster`.
 
@@ -460,7 +489,7 @@ POST   /api/rituals/sessions/                   # draft
 POST   /api/rituals/sessions/{id}/accept/       # body: {participant_kwargs, references}
 POST   /api/rituals/sessions/{id}/decline/
 POST   /api/rituals/sessions/{id}/fire/
-DELETE /api/rituals/sessions/{id}/              # cancel
+DELETE /api/rituals/sessions/{id}/              # cancel (custom action)
 ```
 
 Permission classes:
@@ -468,6 +497,8 @@ Permission classes:
 - `IsInvitedParticipant` for `accept`, `decline` (rejects if not invited; rejects if state is not `INVITED`)
 - `IsRitualSessionInitiator` for `fire`, cancel (`DELETE`)
 - `IsAuthenticated` + per-action validation for `POST` (draft)
+
+`DELETE` is wired via DRF's standard `destroy` mixin (which calls `cancel_session`); this preserves the standard router URL shape while routing through the typed cancel service. Alternative — a custom action `POST /api/rituals/sessions/{id}/cancel/` — is acceptable but less conventional. Implementation should pick one and stay consistent.
 
 Serializers do all user-input validation. Services raise typed exceptions only for state-transition violations.
 
