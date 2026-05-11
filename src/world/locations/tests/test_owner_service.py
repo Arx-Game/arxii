@@ -93,3 +93,17 @@ class EffectiveOwnerEdgeCaseTests(TestCase):
     def test_room_with_profile_but_no_area_returns_none(self) -> None:
         profile = RoomProfileFactory()  # area defaults to None
         self.assertIsNone(effective_owner(profile.objectdb))
+
+    def test_room_with_profile_but_no_area_returns_room_level_owner(self) -> None:
+        """A room-level Ownership row must be returned even when the
+        profile has no area (so ancestor_ids is empty).
+        """
+        profile = RoomProfileFactory()  # area=None
+        self.assertIsNone(profile.area)
+        row = LocationOwnership.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=profile,
+            holder_type=HolderType.PERSONA,
+            holder_persona=PersonaFactory(),
+        )
+        self.assertEqual(effective_owner(profile.objectdb), row)
