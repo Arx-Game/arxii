@@ -92,6 +92,11 @@ from world.magic.models.rituals import (
     RitualComponentRequirement,
 )
 from world.magic.models.room_aura import RoomAuraProfile, RoomResonance
+from world.magic.models.sessions import (
+    RitualSession,
+    RitualSessionParticipant,
+    RitualSessionReference,
+)
 from world.magic.models.soul_tether import (
     PendingStageAdvanceOffer,
     Sineating,
@@ -194,6 +199,10 @@ __all__ = [
     "Ritual",
     "RitualComponentRequirement",
     "RitualSceneActionConfig",
+    # sessions (Slice B §4.2–§4.4)
+    "RitualSession",
+    "RitualSessionParticipant",
+    "RitualSessionReference",
     # room aura (Spec C §2.5, §2.6)
     "RoomAuraProfile",
     "RoomResonance",
