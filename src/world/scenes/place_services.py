@@ -36,11 +36,21 @@ def ensure_scene_for_location(
         return existing
 
     scene_name = name or f"Scene at {room.key}"
-    return Scene.objects.create(
+    scene = Scene.objects.create(
         name=scene_name,
         location=room,
         privacy_mode=ScenePrivacyMode.PUBLIC,
     )
+
+    # Auto-engage Durance covenant for room occupants when a new scene starts (Slice B §4.10)
+    from world.covenants.services import evaluate_scene_engagement  # noqa: PLC0415
+
+    for obj in room.contents:
+        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne absent on non-Character objects; duck-typing is intentional
+        if sheet is not None:
+            evaluate_scene_engagement(character_sheet=sheet, room=room)
+
+    return scene
 
 
 def join_place(
