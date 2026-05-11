@@ -262,3 +262,44 @@ class CharacterCovenantRoleHandlerExtensionTests(TestCase):
         self.mem_b.left_at = None
         self.mem_b.save()
         self.sheet.character.covenant_roles.invalidate()
+
+
+class CovenantMembershipHandlerTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+
+        cls.cov = CovenantFactory(name="Sword")
+        cls.sheet1 = CharacterSheetFactory()
+        cls.sheet2 = CharacterSheetFactory()
+        cls.role = CovenantRoleFactory()
+        cls.m1 = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet1,
+            covenant=cls.cov,
+            covenant_role=cls.role,
+        )
+        cls.m2 = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet2,
+            covenant=cls.cov,
+            covenant_role=cls.role,
+        )
+
+    def test_active_memberships(self) -> None:
+        rows = self.cov.member_roster.active_memberships
+        self.assertEqual(set(rows), {self.m1, self.m2})
+
+    def test_active_character_sheets(self) -> None:
+        sheets = self.cov.member_roster.active_character_sheets
+        self.assertEqual(set(sheets), {self.sheet1, self.sheet2})
+
+    def test_invalidate_clears_cache(self) -> None:
+        _ = self.cov.member_roster.active_memberships
+        self.m1.left_at = self.m1.joined_at
+        self.m1.save()
+        self.cov.member_roster.invalidate()
+        self.assertEqual(set(self.cov.member_roster.active_memberships), {self.m2})

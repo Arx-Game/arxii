@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from typeclasses.characters import Character
+    from world.character_sheets.models import CharacterSheet
     from world.covenants.models import CharacterCovenantRole, Covenant, CovenantRole
 
 
@@ -84,4 +85,39 @@ class CharacterCovenantRoleHandler:
 
     def invalidate(self) -> None:
         """Clear the cached assignment list. Called by mutation services."""
+        self._cached = None
+
+
+class CovenantMembershipHandler:
+    """Cached handler for a Covenant's active memberships.
+
+    Per project SharedMemoryModel discipline: services and serializers route
+    membership lookups through this handler, never via .filter() on the
+    related manager.
+    """
+
+    def __init__(self, covenant: Covenant) -> None:
+        self._covenant = covenant
+        self._cached: list[CharacterCovenantRole] | None = None
+
+    @property
+    def _rows(self) -> list[CharacterCovenantRole]:
+        if self._cached is None:
+            self._cached = list(
+                self._covenant.memberships.select_related(
+                    "character_sheet",
+                    "covenant_role",
+                )
+            )
+        return self._cached
+
+    @property
+    def active_memberships(self) -> list[CharacterCovenantRole]:
+        return [m for m in self._rows if m.left_at is None]
+
+    @property
+    def active_character_sheets(self) -> list[CharacterSheet]:
+        return [m.character_sheet for m in self.active_memberships]
+
+    def invalidate(self) -> None:
         self._cached = None
