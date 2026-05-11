@@ -186,3 +186,131 @@ class AcceptSessionTests(TestCase):
         session.delete()
         with self.assertRaises((RitualSessionParticipant.DoesNotExist, ObjectDoesNotExist)):
             accept_session(participant=participant, participant_kwargs={}, references=[])
+
+
+class DeclineSessionTests(TestCase):
+    def _make_pending_formation_session(self, n_invitees: int = 2):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import ParticipationRule
+        from world.magic.factories import RitualFactory
+        from world.magic.services.sessions import draft_session
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.FORMATION)
+        initiator = CharacterSheetFactory()
+        invitees = [CharacterSheetFactory() for _ in range(n_invitees)]
+        session = draft_session(
+            ritual=ritual,
+            initiator=initiator,
+            proposed_terms="x",
+            session_kwargs={},
+            invitee_sheets=invitees,
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        invitee_ps = list(session.participants.exclude(character_sheet=initiator))
+        return session, invitee_ps
+
+    def test_decline_transitions_state_to_declined_for_induction(self):
+        """INDUCTION can absorb a single decline if accepts can still reach majority."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import ParticipantState, ParticipationRule
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import RitualSession
+        from world.magic.services.sessions import decline_session, draft_session
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.INDUCTION)
+        initiator = CharacterSheetFactory()
+        invitees = [CharacterSheetFactory() for _ in range(3)]
+        session = draft_session(
+            ritual=ritual,
+            initiator=initiator,
+            proposed_terms="x",
+            session_kwargs={},
+            invitee_sheets=invitees,
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        # Initiator already accepted (1 accept, 0 decline). Decline one invitee.
+        # Best-case = 1 + 2 still-invited = 3 accepts vs 1 decline; threshold can
+        # still be met. Session survives.
+        invitee_ps = list(session.participants.exclude(character_sheet=initiator))
+        decline_session(participant=invitee_ps[0])
+        invitee_ps[0].refresh_from_db()
+        self.assertEqual(invitee_ps[0].state, ParticipantState.DECLINED)
+        # Session should still exist:
+        self.assertTrue(RitualSession.objects.filter(pk=session.pk).exists())
+
+    def test_decline_kills_formation_session(self):
+        """FORMATION: any decline kills the session."""
+        from world.magic.models.sessions import RitualSession
+        from world.magic.services.sessions import decline_session
+
+        session, invitee_ps = self._make_pending_formation_session(n_invitees=2)
+        decline_session(participant=invitee_ps[0])
+        # Session should be deleted (CASCADE wipes participants + references):
+        self.assertFalse(RitualSession.objects.filter(pk=session.pk).exists())
+
+    def test_decline_already_declined_raises(self):
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import ParticipationRule
+        from world.magic.exceptions import SessionNotInPendingError
+        from world.magic.factories import RitualFactory
+
+        # Use INDUCTION so the first decline doesn't kill the session
+        from world.magic.services.sessions import decline_session, draft_session
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.INDUCTION)
+        initiator = CharacterSheetFactory()
+        invitees = [CharacterSheetFactory() for _ in range(3)]
+        session = draft_session(
+            ritual=ritual,
+            initiator=initiator,
+            proposed_terms="x",
+            session_kwargs={},
+            invitee_sheets=invitees,
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        invitee_ps = list(session.participants.exclude(character_sheet=initiator))
+        decline_session(participant=invitee_ps[0])
+        with self.assertRaises(SessionNotInPendingError):
+            decline_session(participant=invitee_ps[0])
+
+    def test_decline_killing_induction_threshold_deletes_session(self):
+        """INDUCTION: enough declines such that majority-of-respondents can't be met → delete."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.magic.constants import ParticipationRule
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import RitualSession
+        from world.magic.services.sessions import decline_session, draft_session
+
+        # INDUCTION: 1 initiator + 2 invitees. Initiator counts as 1 accept.
+        # If both invitees decline, we have 1 accept + 2 declines + 0 invited;
+        # accepts (1) is NOT > declines (2) → threshold cannot be met → delete.
+        ritual = RitualFactory(participation_rule=ParticipationRule.INDUCTION)
+        initiator = CharacterSheetFactory()
+        invitees = [CharacterSheetFactory() for _ in range(2)]
+        session = draft_session(
+            ritual=ritual,
+            initiator=initiator,
+            proposed_terms="x",
+            session_kwargs={},
+            invitee_sheets=invitees,
+            session_references=[],
+            initiator_participant_kwargs={},
+            initiator_references=[],
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        invitee_ps = list(session.participants.exclude(character_sheet=initiator))
+        decline_session(participant=invitee_ps[0])
+        # Still alive (1 accept + 1 decline + 1 invited; best-case 2 accepts > 1 decline):
+        self.assertTrue(RitualSession.objects.filter(pk=session.pk).exists())
+        decline_session(participant=invitee_ps[1])
+        # Now dead (1 accept + 2 decline + 0 invited; best-case 1 ≤ 2):
+        self.assertFalse(RitualSession.objects.filter(pk=session.pk).exists())

@@ -130,6 +130,60 @@ def accept_session(
             )
 
 
+def decline_session(*, participant: RitualSessionParticipant) -> None:
+    """Transition participant INVITED→DECLINED.
+
+    If the decline drops accepts below the ritual's threshold, the entire
+    session is deleted in the same transaction (CASCADE wipes participants
+    and references).
+
+    Race prevented: two concurrent declines on the same participant.
+    select_for_update on the participant row serializes; second decline sees
+    DECLINED state and raises SessionNotInPendingError.
+    """
+    with transaction.atomic():
+        locked = RitualSessionParticipant.objects.select_for_update().get(pk=participant.pk)
+        locked.refresh_from_db()
+        if locked.state != ParticipantState.INVITED:
+            raise SessionNotInPendingError
+        locked.state = ParticipantState.DECLINED
+        locked.responded_at = timezone.now()
+        locked.save()
+        if not _threshold_can_still_be_met(locked.session):
+            locked.session.delete()
+
+
+def _threshold_can_still_be_met(session: RitualSession) -> bool:
+    """Determine whether the session has any path to a successful fire.
+
+    Called inside the decline_session transaction after a state change. The
+    .values_list call is on the participants related manager but it's
+    intentional in-mutator iteration — we need fresh DB state, not cached
+    handler reads (per spec §3.9 carve-out for in-transaction iteration).
+    """
+    rule = session.ritual.participation_rule
+    states = list(session.participants.values_list("state", flat=True))
+    accepts = sum(1 for s in states if s == ParticipantState.ACCEPTED)
+    declines = sum(1 for s in states if s == ParticipantState.DECLINED)
+    invited = sum(1 for s in states if s == ParticipantState.INVITED)
+    if rule == ParticipationRule.FORMATION:
+        # All must accept; any decline kills it; ≥2 accepts required:
+        if declines > 0:
+            return False
+        return accepts + invited >= _FORMATION_MIN_PARTICIPANTS
+    if rule == ParticipationRule.INDUCTION:
+        # Majority of respondents, ≥2 accepts. Best-case = current accepts +
+        # all remaining INVITED accept:
+        best_accepts = accepts + invited
+        return best_accepts >= _FORMATION_MIN_PARTICIPANTS and best_accepts > declines
+    if rule == ParticipationRule.BILATERAL:
+        # Exactly 2; any decline kills it.
+        if declines > 0:
+            return False
+        return accepts + invited == _FORMATION_MIN_PARTICIPANTS
+    return True  # SINGLE_ACTOR sessions shouldn't exist; permissive default
+
+
 def _create_reference_from_spec(
     *,
     session: RitualSession,
