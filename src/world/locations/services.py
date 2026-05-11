@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from evennia_extensions.models import RoomProfile
 from world.areas.models import AreaClosure
-from world.locations.constants import STAT_CLAMPS, STAT_DEFAULTS, HolderType, StatKey
+from world.locations.constants import (
+    STAT_CLAMPS,
+    STAT_DEFAULTS,
+    HolderType,
+    LocationParentType,
+    StatKey,
+)
 from world.locations.models import (
     LocationOwnership,
     LocationStatModifier,
@@ -19,6 +25,8 @@ from world.locations.models import (
 from world.societies.models import OrganizationMembership
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from django.db.models import QuerySet
     from evennia.objects.objects import DefaultObject
 
@@ -259,3 +267,55 @@ def tenancies_for(persona: Persona, room: DefaultObject) -> QuerySet[LocationTen
 def is_tenant(persona: Persona, room: DefaultObject) -> bool:
     """True when ``tenancies_for(persona, room)`` has any rows."""
     return tenancies_for(persona, room).exists()
+
+
+def transfer_ownership(  # noqa: PLR0913 — keyword-only XOR-pair API by design
+    *,
+    area: Area | None = None,
+    room_profile: RoomProfile | None = None,
+    to_persona: Persona | None = None,
+    to_organization: Organization | None = None,
+    notes: str = "",
+    transferred_at: datetime | None = None,
+) -> LocationOwnership:
+    """Atomically transfer (or claim) ownership of a location.
+
+    Ends the current active LocationOwnership row (if any) and creates a
+    new row with the new holder. Wrapped in transaction.atomic so the
+    "no active owner" window never appears to concurrent readers.
+
+    Handles both first-time claims (no current owner) and transfers
+    (current owner ended, new owner created). The protocol is identical;
+    conflating them reduces API surface.
+
+    Caller is responsible for permission gating — substrate does not
+    check authority to transfer.
+    """
+    _validate_location_kwargs(area, room_profile)
+    _validate_holder_kwargs(to_persona, to_organization)
+
+    parent_type = LocationParentType.AREA if area is not None else LocationParentType.ROOM
+    holder_type = HolderType.PERSONA if to_persona is not None else HolderType.ORGANIZATION
+    when = transferred_at if transferred_at is not None else timezone.now()
+
+    with transaction.atomic():
+        existing_qs = LocationOwnership.objects.filter(ended_at__isnull=True)
+        if area is not None:
+            existing_qs = existing_qs.filter(area=area)
+        else:
+            existing_qs = existing_qs.filter(room_profile=room_profile)
+        existing = existing_qs.first()
+        if existing is not None:
+            existing.ended_at = when
+            existing.save()
+
+        return LocationOwnership.objects.create(
+            parent_type=parent_type,
+            area=area,
+            room_profile=room_profile,
+            holder_type=holder_type,
+            holder_persona=to_persona,
+            holder_organization=to_organization,
+            acquired_at=when,
+            notes=notes,
+        )
