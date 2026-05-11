@@ -152,8 +152,10 @@ returns a `QuerySet` filtered for `ends_at IS NULL OR ends_at > now()`.
   retire a row. Keep the row.
 - The partial-unique constraint enforces only ONE active Ownership per
   location. Multiple active Tenancies are allowed and expected.
-- Most authoring goes through `objects.create()` until convenience helpers
-  materialize from real consumers (decoration, locks, vaults).
+- Most authoring goes through the lifecycle helpers (see below). Direct
+  `objects.create()` is fine for test fixtures, but production code uses
+  the helpers so the partial-unique + transactional protocol stays in
+  one place.
 
 ## Relationship lookups (added 2026-05-11)
 
@@ -229,3 +231,38 @@ are a separate concern.
   + tenancy fetch)
 
 Budgets are locked via `assertNumQueries` tests.
+
+## Lifecycle write helpers (added 2026-05-11)
+
+Three helpers in `world.locations.services` wrap the partial-unique +
+transactional protocol so callers don't have to reimplement it:
+
+```python
+from world.locations.services import (
+    transfer_ownership,
+    grant_tenancy,
+    end_tenancy,
+)
+
+# Atomic transfer or claim — ends current owner (if any), creates new row
+transfer_ownership(area=ward, to_organization=house_stark, notes="conquest")
+
+# Single-insert new tenancy — no conflict check
+grant_tenancy(room_profile=apartment, tenant_persona=traveler, ends_at=next_week)
+
+# Single-update setting ends_at — covers eviction and voluntary departure
+end_tenancy(tenancy)
+```
+
+`transfer_ownership` wraps the end-existing + create-new sequence in
+`transaction.atomic` so concurrent readers never see a "no active owner"
+window. It also calls `select_for_update` on the existing-row lookup so
+concurrent transfers on the same parent serialize cleanly (T2 waits for
+T1's commit). Concurrent *claims* of a never-owned location still race
+at the INSERT and rely on the partial-unique constraint to surface
+`IntegrityError` to the loser — rare contention in practice.
+
+**Permission gating is the caller's concern.** These helpers do not
+call `is_owner` or check authority. Consumers must gate access first
+(via `is_owner`, `OrganizationMembership.rank`, etc.) before invoking
+them.
