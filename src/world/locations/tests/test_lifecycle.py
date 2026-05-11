@@ -6,10 +6,11 @@ from django.utils import timezone
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.factories import AreaFactory
 from world.locations.constants import HolderType, LocationParentType
-from world.locations.models import LocationOwnership
+from world.locations.models import LocationOwnership, LocationTenancy
 from world.locations.services import (
     _validate_holder_kwargs,
     _validate_location_kwargs,
+    grant_tenancy,
     transfer_ownership,
 )
 from world.scenes.factories import PersonaFactory
@@ -126,4 +127,63 @@ class TransferOwnershipValidationTests(TestCase):
                 area=AreaFactory(),
                 to_persona=PersonaFactory(),
                 to_organization=OrganizationFactory(),
+            )
+
+
+class GrantTenancyTests(TestCase):
+    def test_persona_tenant_on_room(self) -> None:
+        room = RoomProfileFactory()
+        persona = PersonaFactory()
+        row = grant_tenancy(room_profile=room, tenant_persona=persona)
+        self.assertEqual(row.room_profile, room)
+        self.assertEqual(row.tenant_persona, persona)
+        self.assertEqual(row.parent_type, LocationParentType.ROOM)
+        self.assertEqual(row.tenant_type, HolderType.PERSONA)
+        self.assertIsNone(row.ends_at)
+
+    def test_organization_tenant_on_area(self) -> None:
+        area = AreaFactory()
+        org = OrganizationFactory()
+        row = grant_tenancy(area=area, tenant_organization=org)
+        self.assertEqual(row.area, area)
+        self.assertEqual(row.tenant_organization, org)
+        self.assertEqual(row.parent_type, LocationParentType.AREA)
+        self.assertEqual(row.tenant_type, HolderType.ORGANIZATION)
+
+    def test_with_planned_ends_at(self) -> None:
+        room = RoomProfileFactory()
+        expiry = timezone.now() + timedelta(days=30)
+        row = grant_tenancy(room_profile=room, tenant_persona=PersonaFactory(), ends_at=expiry)
+        self.assertEqual(row.ends_at, expiry)
+
+    def test_multiple_concurrent_tenancies_allowed(self) -> None:
+        room = RoomProfileFactory()
+        for _ in range(3):
+            grant_tenancy(room_profile=room, tenant_persona=PersonaFactory())
+        self.assertEqual(LocationTenancy.objects.filter(room_profile=room).count(), 3)
+
+
+class GrantTenancyValidationTests(TestCase):
+    def test_missing_parent_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            grant_tenancy(tenant_persona=PersonaFactory())
+
+    def test_both_parents_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            grant_tenancy(
+                area=AreaFactory(),
+                room_profile=RoomProfileFactory(),
+                tenant_persona=PersonaFactory(),
+            )
+
+    def test_missing_tenant_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            grant_tenancy(room_profile=RoomProfileFactory())
+
+    def test_both_tenants_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            grant_tenancy(
+                room_profile=RoomProfileFactory(),
+                tenant_persona=PersonaFactory(),
+                tenant_organization=OrganizationFactory(),
             )

@@ -327,3 +327,35 @@ def transfer_ownership(  # noqa: PLR0913 — keyword-only XOR-pair API by design
             acquired_at=when,
             notes=notes,
         )
+
+
+def grant_tenancy(  # noqa: PLR0913 — keyword-only XOR-pair API by design
+    *,
+    area: Area | None = None,
+    room_profile: RoomProfile | None = None,
+    tenant_persona: Persona | None = None,
+    tenant_organization: Organization | None = None,
+    ends_at: datetime | None = None,
+    notes: str = "",
+) -> LocationTenancy:
+    """Create a new LocationTenancy row.
+
+    Multiple concurrent tenancies on the same location are valid by
+    design — no conflict check. Caller is responsible for permission
+    gating (only owners should grant tenancy).
+    """
+    _validate_location_kwargs(area, room_profile)
+    _validate_holder_kwargs(tenant_persona, tenant_organization)
+
+    parent_type = LocationParentType.AREA if area is not None else LocationParentType.ROOM
+    tenant_type = HolderType.PERSONA if tenant_persona is not None else HolderType.ORGANIZATION
+    return LocationTenancy.objects.create(
+        parent_type=parent_type,
+        area=area,
+        room_profile=room_profile,
+        tenant_type=tenant_type,
+        tenant_persona=tenant_persona,
+        tenant_organization=tenant_organization,
+        ends_at=ends_at,
+        notes=notes,
+    )
