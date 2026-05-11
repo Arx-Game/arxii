@@ -1886,3 +1886,91 @@ def resolve_stage_advance_prompt_from_db(
         locked_pending.delete()
 
     return result
+
+
+# =============================================================================
+# Bilateral session wrapper: accept_soul_tether_via_session
+# =============================================================================
+
+_BILATERAL_PARTICIPANT_COUNT = 2
+
+
+def accept_soul_tether_via_session(*, session: Any) -> Any:
+    """Dispatched on Soul Tether BILATERAL fire (Slice B §4.15).
+
+    The SoulTetherRole choice lives in participant_kwargs["soul_tether_role"]
+    (scalar enum, JSON is the right home for discriminating-scalar choices per
+    the Slice B spec discriminator-FK split).
+
+    Reads exactly two ACCEPTED participants, maps each to their role, then
+    delegates to accept_soul_tether with the canonical initiator/partner shape.
+
+    Session kwargs:
+        "resonance_id" (int): PK of the Resonance the Sinner's Thread will
+            channel. Required; raises RequiredReferenceMissingError if absent
+            or invalid.
+        "writeup" (str): Narrative description of the bond formation. Optional;
+            defaults to empty string if not provided.
+        "ritual_components" (list): Component items (validated by caller).
+            Optional; defaults to [].
+
+    NOTE (Slice B scope): resonance and writeup come from session_kwargs as
+    scalar values (ID and string). The frontend draft dialog (Phase 9) will
+    populate these via the session draft. No session_reference kinds exist yet
+    for Resonance objects — if that changes, this wrapper should be updated to
+    read from references instead.
+
+    Raises:
+        RequiredReferenceMissingError: If participant count != 2, any
+            participant lacks a valid soul_tether_role choice, or resonance_id
+            is missing/invalid.
+        BilateralRoleConflictError: If both participants chose the same role.
+    """
+    from world.magic.constants import ParticipantState  # noqa: PLC0415
+    from world.magic.exceptions import (  # noqa: PLC0415
+        BilateralRoleConflictError,
+        RequiredReferenceMissingError,
+    )
+    from world.magic.models.affinity import Resonance  # noqa: PLC0415
+    from world.magic.types.soul_tether import SoulTetherRole as SoulTetherRoleEnum  # noqa: PLC0415
+
+    valid_roles = {SoulTetherRoleEnum.SINNER, SoulTetherRoleEnum.SINEATER}
+
+    # 1. Verify exactly two ACCEPTED participants.
+    participants = list(session.participants.filter(state=ParticipantState.ACCEPTED))
+    if len(participants) != _BILATERAL_PARTICIPANT_COUNT:
+        raise RequiredReferenceMissingError
+
+    # 2. Map each participant's declared role to their CharacterSheet.
+    role_to_sheet: dict[str, Any] = {}
+    for p in participants:
+        role = p.participant_kwargs.get("soul_tether_role")
+        if role not in valid_roles:
+            raise RequiredReferenceMissingError
+        if role in role_to_sheet:
+            raise BilateralRoleConflictError
+        role_to_sheet[role] = p.character_sheet
+
+    # 3. Extract session-level scalar kwargs.
+    resonance_id: int | None = session.session_kwargs.get("resonance_id")
+    if resonance_id is None:
+        raise RequiredReferenceMissingError
+    try:
+        resonance = Resonance.objects.get(pk=resonance_id)
+    except Resonance.DoesNotExist as exc:
+        raise RequiredReferenceMissingError from exc
+
+    writeup: str = session.session_kwargs.get("writeup", "")
+    ritual_components: list[Any] = session.session_kwargs.get("ritual_components", [])
+
+    # 4. Build the accept_soul_tether call using its initiator/partner + sinner_role shape.
+    #    We treat the sinner as the "initiator" (arbitrary — the function uses sinner_role
+    #    to resolve which sheet is which, not the argument name).
+    return accept_soul_tether(
+        initiator_sheet=role_to_sheet[SoulTetherRoleEnum.SINNER],
+        partner_sheet=role_to_sheet[SoulTetherRoleEnum.SINEATER],
+        sinner_role=SoulTetherRoleEnum.SINNER,
+        resonance=resonance,
+        writeup=writeup,
+        ritual_components=ritual_components,
+    )
