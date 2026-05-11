@@ -121,3 +121,37 @@ class CovenantMembershipHandler:
 
     def invalidate(self) -> None:
         self._cached = None
+
+
+def can_engage_durance_membership(membership: CharacterCovenantRole) -> bool:
+    """Shared prerequisite check used by manual + auto engage paths.
+
+    Returns True iff:
+      - The membership is for a non-Durance covenant (placeholder until Battles
+        ship — Slice E will refine), OR
+      - The character is in a room with an active scene AND at least one other
+        active member of the same covenant is physically present in that room.
+
+    All membership lookups go through cached handlers per project rule §3.9 of
+    the Slice B spec — no .filter() on related managers.
+    """
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+    from world.scenes.interaction_services import _get_active_scene  # noqa: PLC0415
+
+    if membership.covenant.covenant_type != CovenantType.DURANCE:
+        return True
+    char = membership.character_sheet.character
+    location = char.location
+    if location is None:
+        return False
+    if _get_active_scene(location) is None:
+        return False
+    self_sheet = membership.character_sheet
+    target_covenant = membership.covenant
+    for obj in location.contents:
+        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne accessor absent on non-Character objects; runtime duck-typing with default is intentional
+        if sheet is None or sheet == self_sheet:
+            continue
+        if sheet.character.covenant_roles.currently_held_role_in(target_covenant) is not None:
+            return True
+    return False
