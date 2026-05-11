@@ -28,7 +28,7 @@ class Covenant(SharedMemoryModel):
     - dissolution_reason, dissolution_kind — Slice B
     """
 
-    name = models.CharField(max_length=120)
+    name = models.CharField(max_length=120, unique=True)
     covenant_type = models.CharField(
         max_length=20,
         choices=CovenantType.choices,

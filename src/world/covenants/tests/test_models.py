@@ -304,3 +304,13 @@ class CovenantModelTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             cov.full_clean()
+
+
+class CovenantNameUniqueTests(TestCase):
+    def test_duplicate_name_raises_integrity_error(self) -> None:
+        from world.covenants.factories import CovenantFactory
+
+        CovenantFactory(name="Sword of Aerith")
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                CovenantFactory(name="Sword of Aerith")
