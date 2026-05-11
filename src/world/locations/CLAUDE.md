@@ -202,9 +202,23 @@ A persona has **tenant standing** when:
   member of (any rank)
 
 The helpers do NOT consider rank — downstream systems gate on
-`OrganizationMembership.rank` themselves. The helpers DO respect the
-no-alt-outing rule — an alt persona of the same CharacterSheet that
-owns the room does NOT get owner standing.
+`OrganizationMembership.rank` themselves.
+
+The helpers are **strictly per-persona**. This covers two distinct
+cases with different rationales:
+
+- **alt_personas** (same `CharacterSheet`, different Persona): OOC the
+  character owns the room, but the secondary persona is *secret* by
+  design — house guards / servants treat it as an intruder until the
+  persona link is discovered. Substrate reflects the IC default; a
+  discovery-aware downstream check can compose on top.
+- **alt_characters** (same Account, different `CharacterSheet`):
+  different characters, no shared standing under any circumstance. The
+  Account link is OOC bookkeeping only.
+
+Don't confuse this with the no-alt-outing hard rule — that's about
+*display* (never expose Account-level character links). Access checks
+are a separate concern.
 
 ### Query budgets
 

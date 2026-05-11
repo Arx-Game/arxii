@@ -70,13 +70,39 @@ will filter further on rank. Downstream systems already have to read
 membership for rank; pushing rank logic into the substrate would duplicate
 that read pointlessly.
 
-### Strict persona scoping — no alt-piercing
+### Strict persona scoping — IC visibility drives recognition
 
-Per the no-alt-outing hard rule, all helpers are strictly persona-scoped.
-If LordAiden's primary persona owns the manor, his alt persona (e.g.,
-"Captain Storm") is NOT recognized as an owner — even though they share
-a CharacterSheet. This falls out naturally from FK filtering on persona
-exactly. Tests explicitly verify the no-alt-piercing case.
+All helpers are strictly persona-scoped. This serves **two distinct
+cases**, with different rationales:
+
+- **alt_personas** (different personas of the **same** `CharacterSheet`):
+  OOC, the character owns the property. IC, the *whole point* of a
+  secondary persona is that it's secret — the household knows the
+  outward-facing persona as the owner, and would treat the character's
+  other personas as intruders unless those personas have been
+  discovered/revealed. A discovery-aware downstream check can compose
+  permissions on top, but the substrate reflects the IC default: secret
+  personas are not recognized.
+
+- **alt_characters** (different `CharacterSheet`s under the same
+  Account): different characters, full stop. The Account-level link is
+  an OOC bookkeeping construct and never grants standing. We actively
+  *want* alt_characters to be treated as strangers to one another's
+  property so that players can't game the system via shared rights
+  between their own characters.
+
+Both cases collapse to: compare by `holder_persona_id == persona.pk`
+(or the org-membership equivalent). The no-alt-outing hard rule (about
+*display*) is unrelated — it bans surfacing the Account-level link to
+other users, which is separate from access checks.
+
+Tests explicitly cover:
+- `test_alt_persona_of_owner_not_recognized_as_owner` — alt_personas
+  case (substrate doesn't pierce)
+- `test_alt_persona_with_own_org_membership_gets_standing` — positive
+  test that membership is per-persona, not per-character
+- `test_alt_persona_of_tenant_not_recognized_as_tenant` — tenancy
+  equivalent
 
 ## Service surface
 

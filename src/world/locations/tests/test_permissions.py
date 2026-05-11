@@ -113,17 +113,28 @@ class OwnershipForTests(TestCase):
         )
         self.assertEqual(ownership_for(member, self.room), row)
 
-    def test_no_alt_piercing(self) -> None:
-        """An alt persona of the same character that owns the room does
-        not get owner standing. Persona scoping is strict per the
-        no-alt-outing hard rule.
+    def test_alt_persona_of_owner_not_recognized_as_owner(self) -> None:
+        """An alt_persona (secondary persona of the same character) does
+        not automatically get owner standing.
+
+        OOC the character owns the room, but the WHOLE POINT of a
+        secondary persona is that it's secret — the household knows the
+        outward-facing persona as the owner, and would treat the
+        character's other personas as intruders unless those personas
+        have been discovered/revealed. Substrate is therefore strictly
+        per-persona; downstream PersonaDiscovery-aware code can compose
+        a discovery-respecting check on top.
+
+        Distinct from the alt_characters case (different CharacterSheet,
+        same Account) — those never share standing under any
+        circumstance.
         """
         from world.character_sheets.factories import CharacterSheetFactory
         from world.scenes.models import PersonaType
 
         sheet = CharacterSheetFactory()
         primary = sheet.primary_persona
-        alt = PersonaFactory(character_sheet=sheet, persona_type=PersonaType.ESTABLISHED)
+        alt_persona = PersonaFactory(character_sheet=sheet, persona_type=PersonaType.ESTABLISHED)
         LocationOwnership.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.ward,
@@ -131,7 +142,31 @@ class OwnershipForTests(TestCase):
             holder_persona=primary,
         )
         self.assertTrue(is_owner(primary, self.room))
-        self.assertFalse(is_owner(alt, self.room))
+        self.assertFalse(is_owner(alt_persona, self.room))
+
+    def test_alt_persona_with_own_org_membership_gets_standing(self) -> None:
+        """An alt_persona with its OWN independent OrganizationMembership
+        gets standing via that membership — the substrate is per-persona,
+        not per-character. Locks in that having a sibling persona who
+        is a member is NOT the same as having the membership.
+        """
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.scenes.models import PersonaType
+
+        sheet = CharacterSheetFactory()
+        primary = sheet.primary_persona
+        alt_persona = PersonaFactory(character_sheet=sheet, persona_type=PersonaType.ESTABLISHED)
+        org = OrganizationFactory()
+        # Only the alt_persona joins the org — primary has no membership.
+        OrganizationMembershipFactory(persona=alt_persona, organization=org)
+        LocationOwnership.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.ward,
+            holder_type=HolderType.ORGANIZATION,
+            holder_organization=org,
+        )
+        self.assertTrue(is_owner(alt_persona, self.room))
+        self.assertFalse(is_owner(primary, self.room))
 
 
 class OwnershipForQueryBudgetTests(TestCase):
@@ -265,13 +300,21 @@ class TenanciesForTests(TestCase):
         self.assertEqual(len(result_a), 1)
         self.assertEqual(result_a[0].tenant_persona, room_tenant_a)
 
-    def test_no_alt_piercing_on_tenancy(self) -> None:
+    def test_alt_persona_of_tenant_not_recognized_as_tenant(self) -> None:
+        """An alt_persona (secondary persona of the same character) does
+        not automatically get tenant standing for the same reason as the
+        ownership case: the secondary persona is secret IC and would not
+        be recognized as the legitimate tenant until discovered.
+
+        Substrate is per-persona. Discovery-aware tenant checks are a
+        downstream concern.
+        """
         from world.character_sheets.factories import CharacterSheetFactory
         from world.scenes.models import PersonaType
 
         sheet = CharacterSheetFactory()
         primary = sheet.primary_persona
-        alt = PersonaFactory(character_sheet=sheet, persona_type=PersonaType.ESTABLISHED)
+        alt_persona = PersonaFactory(character_sheet=sheet, persona_type=PersonaType.ESTABLISHED)
         LocationTenancy.objects.create(
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile,
@@ -279,7 +322,7 @@ class TenanciesForTests(TestCase):
             tenant_persona=primary,
         )
         self.assertTrue(is_tenant(primary, self.room))
-        self.assertFalse(is_tenant(alt, self.room))
+        self.assertFalse(is_tenant(alt_persona, self.room))
 
 
 class TenanciesForQueryBudgetTests(TestCase):
