@@ -12,6 +12,7 @@ from world.magic.constants import (
     AlterationTier,
     CantripArchetype,
     EffectKind,
+    ParticipationRule,
     PendingAlterationStatus,
     RitualExecutionKind,
     TargetKind,
@@ -1984,3 +1985,97 @@ class RitualSessionCovenantRoleRefFactory(factory.django.DjangoModelFactory):
     kind = "COVENANT_ROLE"
     ref_covenant = None
     ref_covenant_role = factory.SubFactory(CovenantRoleFactory)
+
+
+class CovenantFormationRitualFactory(factory.django.DjangoModelFactory):
+    """Factory for the covenant formation ritual.
+
+    Per project rule "no data migrations for game content": this factory is
+    the single source for the formation ritual definition, used by tests and
+    (eventually) by an authoring UI surfacing sane defaults. It is NOT
+    seeded via Django data migrations.
+    """
+
+    class Meta:
+        model = "magic.Ritual"
+        django_get_or_create = ("name",)
+
+    name = "Covenant Formation"
+    description = "Bind multiple souls in a sworn magical covenant."
+    narrative_prose = "Three or more swear an oath of magical bond..."
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.covenants.services.create_covenant_via_session"
+    flow = None
+    participation_rule = ParticipationRule.FORMATION
+    input_schema = factory.LazyFunction(
+        lambda: {
+            "fields": [
+                {"name": "name", "type": "text", "label": "Covenant name", "required": True},
+                {
+                    "name": "covenant_type",
+                    "type": "select",
+                    "options": ["DURANCE", "BATTLE"],
+                    "required": True,
+                },
+                {"name": "sworn_objective", "type": "textarea", "required": True},
+                {
+                    "name": "invitees",
+                    "type": "character_search",
+                    "multi": True,
+                    "min": 1,
+                    "required": True,
+                },
+            ],
+            "participant_fields": [
+                {
+                    "name": "chosen_covenant_role",
+                    "type": "covenant_role_picker",
+                    "depends_on": "covenant_type",
+                    "required": True,
+                },
+            ],
+        }
+    )
+
+
+class CovenantInductionRitualFactory(factory.django.DjangoModelFactory):
+    """Factory for the covenant induction ritual."""
+
+    class Meta:
+        model = "magic.Ritual"
+        django_get_or_create = ("name",)
+
+    name = "Covenant Induction"
+    description = "Welcome a new member into an existing covenant."
+    narrative_prose = "An existing covenant inducts a new member..."
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.covenants.services.induct_member_via_session"
+    flow = None
+    participation_rule = ParticipationRule.INDUCTION
+    input_schema = factory.LazyFunction(
+        lambda: {
+            "fields": [
+                {
+                    "name": "target_covenant",
+                    "type": "covenant_picker",
+                    "filter": "initiator_active_memberships",
+                    "required": True,
+                },
+                {
+                    "name": "candidate",
+                    "type": "character_search",
+                    "multi": False,
+                    "required": True,
+                },
+            ],
+            "participant_fields": [
+                {
+                    "name": "chosen_covenant_role",
+                    "type": "covenant_role_picker",
+                    "depends_on": "session.target_covenant.covenant_type",
+                    "applies_to": "candidate_only",
+                    "required": True,
+                },
+            ],
+        }
+    )
