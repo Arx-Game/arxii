@@ -289,6 +289,59 @@ def create_covenant_via_session(*, session: RitualSession) -> Covenant:
         raise
 
 
+@transaction.atomic
+def recompute_covenant_level(*, covenant: Covenant) -> int | None:
+    """Look up the covenant's current legend total, find the max satisfied
+    threshold, and update Covenant.level if changed.
+
+    Returns the new level when the stored level rose, or None when unchanged.
+    Fires one NarrativeMessage to engaged members when the level rises.
+    """
+    from world.covenants.models import CovenantLevelThreshold  # noqa: PLC0415
+    from world.societies.services import get_covenant_legend_total  # noqa: PLC0415
+
+    total = get_covenant_legend_total(covenant)
+    new_level = (
+        CovenantLevelThreshold.objects.filter(required_legend__lte=total)
+        .order_by("-level")
+        .values_list("level", flat=True)
+        .first()
+    ) or 1
+    if new_level == covenant.level:
+        return None
+    covenant.level = new_level
+    covenant.save(update_fields=["level"])
+    _emit_level_change_message(covenant, new_level)
+    return new_level
+
+
+def _emit_level_change_message(covenant: Covenant, new_level: int) -> None:
+    """Fire one NarrativeMessage to engaged members on level change.
+
+    send_narrative_message takes CharacterSheet recipients directly — no
+    walk through RosterTenure → AccountDB needed.
+    """
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    # The covenant.memberships related manager is fine here — one-shot lookup
+    # on level-up, not a hot path. Walking every membership through the
+    # SharedMemoryModel identity map would add no measurable benefit.
+    sheets = [
+        m.character_sheet
+        for m in covenant.memberships.filter(  # noqa: SHARED_MEMORY — cold path, not a hot query loop
+            engaged=True, left_at__isnull=True
+        ).select_related("character_sheet")
+    ]
+    if not sheets:
+        return
+    send_narrative_message(
+        recipients=sheets,
+        body=f"The Covenant '{covenant.name}' has reached level {new_level}.",
+        category=NarrativeCategory.COVENANT,
+    )
+
+
 def evaluate_scene_engagement(
     *,
     character_sheet: CharacterSheet,

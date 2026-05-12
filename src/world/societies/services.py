@@ -66,8 +66,12 @@ def create_solo_deed(  # noqa: PLR0913
         event=None,
         spread_multiplier=config.default_spread_multiplier,
     )
-    credit_engaged_covenants(entry=entry)
+    new_credits = credit_engaged_covenants(entry=entry)
     refresh_legend_views()
+    from world.covenants.services import recompute_covenant_level  # noqa: PLC0415
+
+    for credit in new_credits:
+        recompute_covenant_level(covenant=credit.covenant)
     return entry
 
 
@@ -128,9 +132,17 @@ def create_legend_event(  # noqa: PLR0913
             for persona in personas
         ]
     )
+    all_credits: list[CovenantLegendCredit] = []
     for e in entries:
-        credit_engaged_covenants(entry=e)
+        all_credits.extend(credit_engaged_covenants(entry=e))
     refresh_legend_views()
+    from world.covenants.services import recompute_covenant_level  # noqa: PLC0415
+
+    seen_covenant_ids: set[int] = set()
+    for credit in all_credits:
+        if credit.covenant_id not in seen_covenant_ids:
+            seen_covenant_ids.add(credit.covenant_id)
+            recompute_covenant_level(covenant=credit.covenant)
     return event, entries
 
 
@@ -185,6 +197,10 @@ def spread_deed(  # noqa: PLR0913
     if societies_reached:
         spread.societies_reached.set(societies_reached)
     refresh_legend_views()
+    from world.covenants.services import recompute_covenant_level  # noqa: PLC0415
+
+    for credit in deed.covenant_credits.all():
+        recompute_covenant_level(covenant=credit.covenant)
     return spread
 
 
@@ -217,7 +233,7 @@ def spread_event(  # noqa: PLR0913
     Returns:
         List of created LegendSpread instances.
     """
-    deeds = event.deeds.filter(is_active=True)
+    deeds = list(event.deeds.filter(is_active=True))
     spreads: list[LegendSpread] = []
     # Loop is intentional: each deed's remaining_spread_capacity depends on its
     # existing spreads, so clamping must be calculated per-deed individually.
@@ -237,6 +253,14 @@ def spread_event(  # noqa: PLR0913
             spread.societies_reached.set(societies_reached)
         spreads.append(spread)
     refresh_legend_views()
+    from world.covenants.services import recompute_covenant_level  # noqa: PLC0415
+
+    seen_covenant_ids: set[int] = set()
+    for deed in deeds:
+        for credit in deed.covenant_credits.all():
+            if credit.covenant_id not in seen_covenant_ids:
+                seen_covenant_ids.add(credit.covenant_id)
+                recompute_covenant_level(covenant=credit.covenant)
     return spreads
 
 
