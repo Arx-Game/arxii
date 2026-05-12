@@ -262,6 +262,53 @@ def _grant_codex(
     )
 
 
+def _legend_award(
+    effect: "ConsequenceEffect",
+    context: "ResolutionContext",
+) -> AppliedEffect:
+    """Award legend to all participants listed in context.
+
+    Reads ``context.participants`` (must be non-empty) and calls
+    ``create_legend_event``, which also fans out covenant credits via
+    ``credit_engaged_covenants`` (Task 4).
+
+    Description fallback chain:
+      1. ``effect.legend_description_template`` (if non-blank)
+      2. ``context.beat.player_resolution_text`` (if beat present and non-blank)
+      3. ``"Legendary deed"`` (generic fallback)
+    """
+    from world.societies.exceptions import LegendAwardParticipantMissingError  # noqa: PLC0415
+    from world.societies.services import create_legend_event  # noqa: PLC0415
+
+    if not context.participants:
+        raise LegendAwardParticipantMissingError
+
+    fallback_text = (
+        context.beat.player_resolution_text
+        if context.beat is not None and context.beat.player_resolution_text
+        else "Legendary deed"
+    )
+    description = effect.legend_description_template or fallback_text
+    # LegendEvent.title has max_length=200 (AbstractLegendRecord).
+    title = description[:200]
+
+    event, entries = create_legend_event(
+        title,
+        effect.legend_source_type,
+        effect.legend_base_value,
+        list(context.participants),
+        description=description,
+        scene=context.scene,
+        story=context.story,
+    )
+    return AppliedEffect(
+        effect_type=EffectType.LEGEND_AWARD,
+        description=(f"Awarded {effect.legend_base_value} legend to {len(entries)} participant(s)"),
+        applied=True,
+        created_instance=event,
+    )
+
+
 def _severity_to_tier(severity: int) -> int:
     """Map a condition_severity value to an AlterationTier integer (clamped 1–5)."""
     valid_tiers = {t.value for t in AlterationTier}
@@ -361,4 +408,5 @@ _HANDLER_REGISTRY: dict[str, type[None] | object] = {
     EffectType.LAUNCH_FLOW: _launch_flow,
     EffectType.GRANT_CODEX: _grant_codex,
     EffectType.MAGICAL_SCARS: _apply_magical_scars,
+    EffectType.LEGEND_AWARD: _legend_award,
 }
