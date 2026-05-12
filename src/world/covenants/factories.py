@@ -30,6 +30,26 @@ class CovenantRoleFactory(factory_django.DjangoModelFactory):
     description = ""
 
 
+class SubroleCovenantRoleFactory(CovenantRoleFactory):
+    """Factory for sub-role CovenantRole instances.
+
+    Generates a valid sub-role: parent_role and resonance are both set,
+    and covenant_type/archetype are inherited from the parent.
+    """
+
+    parent_role = factory.SubFactory(CovenantRoleFactory)
+    resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
+    unlock_thread_level = 3
+
+    @factory.lazy_attribute
+    def covenant_type(self) -> str:
+        return self.parent_role.covenant_type
+
+    @factory.lazy_attribute
+    def archetype(self) -> str:
+        return self.parent_role.archetype
+
+
 class GearArchetypeCompatibilityFactory(factory_django.DjangoModelFactory):
     """Factory for GearArchetypeCompatibility."""
 

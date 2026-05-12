@@ -100,13 +100,85 @@ class CovenantRole(SharedMemoryModel):
         help_text="Player-facing description of the role's identity and combat style.",
     )
 
+    parent_role = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="sub_roles",
+        help_text="Null for primary roles. Set for sub-roles.",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="covenant_subroles",
+        help_text="Null for primary roles. Set for sub-roles.",
+    )
+    unlock_thread_level = models.PositiveIntegerField(
+        default=0,
+        help_text="0 for primary roles; 3+ for sub-roles (Thread level needed to unlock).",
+    )
+
     class Meta:
         constraints = [
             models.UniqueConstraint(
                 fields=["covenant_type", "name"],
                 name="unique_role_name_per_covenant_type",
             ),
+            models.UniqueConstraint(
+                fields=["parent_role", "resonance", "unlock_thread_level"],
+                condition=models.Q(parent_role__isnull=False),
+                name="covenant_subrole_unique_per_parent_resonance_level",
+            ),
         ]
+
+    def clean(self) -> None:
+        super().clean()
+        has_parent = self.parent_role_id is not None
+        has_resonance = self.resonance_id is not None
+
+        # XOR rule: both must be set (sub-role) or both must be null (primary role)
+        if has_parent != has_resonance:
+            msg = (
+                "parent_role and resonance must both be set (sub-role) or both be null "
+                "(primary role)."
+            )
+            raise ValidationError(msg)
+
+        if has_parent and has_resonance:
+            # Sub-role rules
+            if self.unlock_thread_level == 0:
+                raise ValidationError(
+                    {"unlock_thread_level": "Sub-roles must have unlock_thread_level > 0."}
+                )
+            parent = self.parent_role
+            if parent.covenant_type != self.covenant_type:
+                raise ValidationError(
+                    {
+                        "covenant_type": (
+                            "Sub-role covenant_type must match parent_role.covenant_type."
+                        )
+                    }
+                )
+            if parent.archetype != self.archetype:
+                raise ValidationError(
+                    {"archetype": "Sub-role archetype must match parent_role.archetype."}
+                )
+            if parent.parent_role_id is not None:
+                raise ValidationError(
+                    {"parent_role": "Sub-sub-roles are not allowed (single-depth only)."}
+                )
+        # Primary role rules
+        elif self.unlock_thread_level != 0:
+            raise ValidationError(
+                {
+                    "unlock_thread_level": (
+                        "Primary roles (no parent_role/resonance) must have unlock_thread_level=0."
+                    )
+                }
+            )
 
     def __str__(self) -> str:
         return f"{self.name} ({self.get_covenant_type_display()})"
