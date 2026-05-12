@@ -691,3 +691,27 @@ def end_tenancy(
     tenancy.ends_at = ended_at if ended_at is not None else timezone.now()
     tenancy.save()
     return tenancy
+
+
+def cleanup_decayed_modifiers(now: datetime | None = None) -> int:
+    """Delete LocationStatModifier rows whose current_value() has
+    decayed to zero.
+
+    Iterates rows with non-zero change_per_day (zero-rate rows never
+    decay), computes current_value() in Python (matching the read-side
+    semantics), and deletes those whose value has crossed zero.
+
+    Returns the count of rows deleted.
+
+    Cheap to call from a cron or management command on any cadence —
+    rows that haven't decayed yet are skipped without write traffic.
+
+    The caller may pass ``now`` to make the sweep deterministic for
+    tests; otherwise the model's current_value() defaults to
+    timezone.now().
+    """
+    candidates = LocationStatModifier.objects.exclude(change_per_day=0)
+    to_delete_ids: list[int] = [row.pk for row in candidates if row.current_value(now=now) == 0]
+    if to_delete_ids:
+        LocationStatModifier.objects.filter(pk__in=to_delete_ids).delete()
+    return len(to_delete_ids)
