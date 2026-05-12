@@ -182,8 +182,9 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
 - **Models:**
   - `Covenant` — the social/magical structure (Slice A). Fields: `name`,
     `covenant_type`, `level` (default 1; Slice D drives growth),
-    `sworn_objective` (TextField; Slice C structures), `formed_at`,
-    `dissolved_at`. SharedMemoryModel.
+    `sworn_objective` (TextField; intentionally free-text — see "Durable
+    Design Decision: Sworn Objective" below), `formed_at`, `dissolved_at`.
+    SharedMemoryModel.
   - `CovenantRole` — staff-authored lookup (SharedMemoryModel) with
     `name`, `slug`, `covenant_type`, `archetype`, `speed_rank`, `description`.
     Unique `(covenant_type, name)`.
@@ -339,6 +340,28 @@ design constraint:
 **Future slices must respect this constraint.** Do not add exit mechanics or
 dissolution triggers in Slice C–G without a dedicated design session.
 
+### Durable Design Decision: Sworn Objective Is an Enduring Mission Statement
+
+`Covenant.sworn_objective` is intentionally a free-text TextField, and is
+intended to stay that way. It is **not** an achievable goal that triggers
+events when "completed":
+
+- Examples that fit the intent: "Defense of the Umbral Empire", "The
+  Reformation of my lost Noble House", "To protect the innocent from Evil".
+- Sworn objectives are enduring mission statements / oaths — closer to a
+  Player's House motto or a knightly Order's vow than to a quest objective.
+- Achieving the objective should NOT dissolve the covenant. The covenant
+  persists as long as members care to engage with it.
+- There is no `SwornObjective` model planned. Earlier roadmap drafts and
+  Slice A's spec speculated about structuring this into a separate model
+  ("Slice C structures it"); that speculation was AI-authored and never
+  validated. Discard it.
+
+**Future slices must respect this constraint.** If a future system wants
+covenants to participate in goal/objective mechanics, route that through a
+different concept (Stories, Missions) and link the covenant to those — do
+not retrofit `sworn_objective` into structured data.
+
 ## What's Needed for MVP
 
 Slices A and B are shipped. The remaining work is decomposed into independent
@@ -354,23 +377,43 @@ slices, each with its own design+plan+implementation cycle:
 - Soul Tether BILATERAL retrofit — DONE
 - No exit lifecycle in MVP (languish design decision) — DOCUMENTED
 
-### Slice C — Sworn Objective + Stories integration
+### Slice C — Dropped (was: Sworn Objective + Stories)
 
-- **`SwornObjective` model** — replaces the free-text `sworn_objective`
-  field with structured data. Likely overlaps with Stories' Beat/Episode
-  model.
-- **Sworn objective tracking** — what the covenant is sworn *to* —
-  hooks into Stories/Missions to mark objectives as advanced or fulfilled.
+The original Slice C scope ("structure `sworn_objective` into a model;
+hook objectives into Stories/Missions to mark fulfillment") was AI-authored
+speculation, not user-validated design. See "Durable Design Decision: Sworn
+Objective Is an Enduring Mission Statement" above. Sworn objective stays
+free-text.
 
-### Slice D — Covenant progression
+The "Stories integration" half of the original Slice C is preserved in
+**Slice D** below (covenants can be tied to Stories; story-beat completion
+is the primary covenant XP source). The "structured objective" half is
+discarded entirely.
 
+### Slice D — Covenant progression + Story integration
+
+Combines the original Slice D (covenant XP / leveling) with the surviving
+half of Slice C (covenants can be tied to Stories; story participation is
+where XP comes from). Sworn objective stays free-text per the design
+decision above.
+
+**Mechanics:**
 - **Covenant-level XP/milestones** — system that levels the covenant as a
   unit. Drives the existing `Covenant.level` field that the anchor cap
   formula already reads.
-- **Group-ability unlocks at covenant level** — gates specialized
-  sub-roles, group techniques, etc.
-- **Sub-role unlock events** — Vanguard → Sentinel-vs-other-Sword sub-role
-  tied to covenant level + member level.
+- **Story integration** — covenants can be linked to Stories, either
+  implicitly (when all participants in a Story share a covenant, that
+  Story is treated as a "covenant story") or explicitly (a Story can be
+  declared as the covenant's storyline by the table running it).
+  Achieving a related Story's beats grants the covenant XP.
+- **Sub-role unlocks at covenant level** — Vanguard → Sentinel-vs-other-Sword
+  sub-role tied to covenant level + member level. (Sub-role authoring is
+  the bulk-content piece that ties to integration tests / future
+  "start-your-own-arx" quickstart.)
+
+**Group-ability unlocks** at covenant level were originally bundled here but
+are split into Slice F so this slice stays focused on the XP loop and the
+authoring foundation.
 
 ### Slice E — Battle Covenants + Durance × Battle stacking
 
@@ -401,9 +444,11 @@ slices, each with its own design+plan+implementation cycle:
   RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE / FACET into the same
   "in-action" model that Slice A added for COVENANT_ROLE. Project-wide
   Thread-discipline work, not Covenant-specific.
-- **Frontend UI (remaining)** — sworn-objective tracker, advanced dissolution
-  flows, Battle covenant UI, group ability triggers. Covenant browser,
-  engage/disengage controls, and formation/induction flows landed in Slice B.
+- **Frontend UI (remaining)** — Battle covenant UI, group ability triggers,
+  covenant-Story linkage UI (Slice D). Covenant browser, engage/disengage
+  controls, and formation/induction flows landed in Slice B. (No
+  sworn-objective tracker — sworn_objective is intentionally free text;
+  see the durable design decision above.)
 
 ## Cross-References
 
