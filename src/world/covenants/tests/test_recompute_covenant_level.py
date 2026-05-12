@@ -106,7 +106,7 @@ class RecomputeCovenantLevelTests(TestCase):
         covenant = CovenantFactory(level=1)
         memberships = [self._make_engaged_member(covenant) for _ in range(3)]
         # Seed legend via factories — bypass mutation path to isolate the service
-        persona = memberships[0].character_sheet.personas.first()
+        persona = memberships[0].character_sheet.primary_persona
         entry = LegendEntryFactory(persona=persona, base_value=150)
         CovenantLegendCreditFactory(entry=entry, covenant=covenant)
         refresh_legend_views()
@@ -151,7 +151,7 @@ class RecomputeCovenantLevelTests(TestCase):
         """End-to-end: create_legend_event auto-wires recompute after view refresh."""
         covenant = CovenantFactory(level=1)
         membership = self._make_engaged_member(covenant)
-        persona = membership.character_sheet.personas.first()
+        persona = membership.character_sheet.primary_persona
 
         create_legend_event(
             title="A Great Event",

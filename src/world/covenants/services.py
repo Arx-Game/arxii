@@ -289,13 +289,16 @@ def create_covenant_via_session(*, session: RitualSession) -> Covenant:
         raise
 
 
-@transaction.atomic
 def recompute_covenant_level(*, covenant: Covenant) -> int | None:
     """Look up the covenant's current legend total, find the max satisfied
     threshold, and update Covenant.level if changed.
 
     Returns the new level when the stored level rose, or None when unchanged.
     Fires one NarrativeMessage to engaged members when the level rises.
+
+    Assumes the caller has an open atomic block (all call sites are wrapped
+    in @transaction.atomic: create_solo_deed, create_legend_event, spread_deed,
+    spread_event). No nested decorator needed.
     """
     from world.covenants.models import CovenantLevelThreshold  # noqa: PLC0415
     from world.societies.services import get_covenant_legend_total  # noqa: PLC0415
