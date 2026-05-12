@@ -266,3 +266,119 @@ at the INSERT and rely on the partial-unique constraint to surface
 call `is_owner` or check authority. Consumers must gate access first
 (via `is_owner`, `OrganizationMembership.rank`, etc.) before invoking
 them.
+
+## Bulk read helpers (added 2026-05-12)
+
+Three bulk variants of the singular cascade readers, for surfaces that
+need to resolve many rooms at once (where-command coloring, dashboards,
+list views).
+
+```python
+from world.locations.services import (
+    effective_stats_for_rooms,
+    effective_owners_for_rooms,
+    tenancies_for_rooms,
+)
+
+# {room.pk: {stat_key: int}}
+stat_map = effective_stats_for_rooms(rooms, [StatKey.CRIME, StatKey.LIGHTING])
+
+# {room.pk: LocationOwnership | None}
+owner_map = effective_owners_for_rooms(rooms)
+
+# {room.pk: list[LocationTenancy]}  (list, not QuerySet — see below)
+tenant_map = tenancies_for_rooms(rooms)
+```
+
+All three share a private `_bulk_room_profiles_and_ancestors(rooms)`
+helper that batches `RoomProfile` resolution and emits ONE
+`AreaClosure` query for the union of areas. Per-room resolution
+happens in Python.
+
+### Query budgets
+
+- `effective_stats_for_rooms`: **4 queries** (profiles + closure + overrides + modifiers)
+- `effective_owners_for_rooms`: **3 queries** (profiles + closure + active ownership rows)
+- `tenancies_for_rooms`: **3 queries** (profiles + closure + active tenancy rows)
+
+All budgets are independent of room count (one bulk SQL query per kind
+of row) and locked via `assertNumQueries` tests.
+
+### Why `tenancies_for_rooms` returns a list, not a QuerySet
+
+Grouping in Python after the bulk fetch precludes lazy evaluation —
+the rows are already materialized once. Returning a list per room is
+honest about that. The singular `current_tenants` still returns a
+QuerySet because it doesn't need to group.
+
+### Rooms without a RoomProfile
+
+Fall through cleanly:
+
+- `effective_stats_for_rooms` → `{stat_key: STAT_DEFAULTS[stat_key]_clamped}` for each requested stat
+- `effective_owners_for_rooms` → `None`
+- `tenancies_for_rooms` → `[]`
+
+## Cleanup sweep (added 2026-05-12)
+
+`LocationStatModifier` rows whose `current_value()` has decayed to
+zero accumulate forever without a sweep. The service that prunes them:
+
+```python
+from world.locations.services import cleanup_decayed_modifiers
+
+# Returns the count of rows deleted
+deleted = cleanup_decayed_modifiers()
+
+# Caller may supply `now` to make the sweep deterministic
+deleted = cleanup_decayed_modifiers(now=some_datetime)
+```
+
+Iterates rows with non-zero `change_per_day`, computes `current_value()`
+in Python (matching read-side semantics), deletes those that have
+crossed zero. Static (zero-rate) modifiers are never touched.
+
+### Management command
+
+```bash
+arx manage cleanup_decayed_modifiers
+```
+
+Prints the count of deleted rows.
+
+### Cron / scheduling
+
+Not wired in v1. Run manually, via `just`, or hook up a scheduled job
+later. The function is idempotent.
+
+## Audit history helpers (added 2026-05-12)
+
+Two read-only services that return the full history of a location's
+ownership / tenancy rows (active + ended), ordered ascending by
+`acquired_at` / `started_at`. Useful for forensics, GM tooling, and
+audit log displays.
+
+```python
+from world.locations.services import ownership_history_for, tenancy_history_for
+
+# QuerySet[LocationOwnership], oldest first, includes ended rows
+for row in ownership_history_for(area=manor):
+    ...
+
+# QuerySet[LocationTenancy], same shape
+for row in tenancy_history_for(room_profile=apartment):
+    ...
+```
+
+### No closure walk
+
+History is **per-target-row**, not per-cascade. If you want the
+ownership history of the manor and the ward it sits in, call this on
+each level yourself. The substrate doesn't conflate those audit
+stories.
+
+### Validation
+
+Same `_validate_location_kwargs` shape as the lifecycle helpers —
+exactly one of `area` or `room_profile`. Raises `ValueError` on
+violation.
