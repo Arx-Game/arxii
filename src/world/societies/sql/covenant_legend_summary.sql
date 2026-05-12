@@ -13,7 +13,11 @@
 CREATE MATERIALIZED VIEW IF NOT EXISTS societies_covenantlegendsummary AS
 SELECT
     c.id AS covenant_id,
-    COALESCE(SUM(le.base_value + COALESCE(spreads.total, 0)), 0)::bigint AS legend_total
+    COALESCE(SUM(
+        CASE WHEN le.is_active THEN
+            le.base_value + COALESCE(spreads.total, 0)
+        ELSE 0 END
+    ), 0)::bigint AS legend_total
 FROM covenants_covenant c
 LEFT JOIN societies_covenantlegendcredit clc ON clc.covenant_id = c.id
 LEFT JOIN societies_legendentry le ON le.id = clc.entry_id

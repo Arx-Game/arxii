@@ -1004,8 +1004,7 @@ class CovenantLegendCredit(SharedMemoryModel):
         return f"{self.entry} → {self.covenant}"
 
 
-# managed=False: this is a read-only view, not a real table — SharedMemoryModel not applicable.
-class CovenantLegendSummary(models.Model):  # noqa: SHARED_MEMORY
+class CovenantLegendSummary(SharedMemoryModel):
     """Materialized view of covenant legend totals (base + spreads).
 
     DO NOT WRITE TO THIS MODEL DIRECTLY. Backed by SQL view refreshed by
