@@ -11,6 +11,8 @@ if TYPE_CHECKING:
     from actions.types import ActionContext
     from world.checks.models import CheckType, Consequence
     from world.mechanics.models import ChallengeInstance
+    from world.scenes.models import Persona, Scene
+    from world.stories.models import Beat, Story
     from world.traits.models import CheckOutcome, CheckRank, ResultChart
 
 
@@ -59,6 +61,10 @@ class ResolutionContext:
     challenge_instance: ChallengeInstance | None = None
     action_context: ActionContext | None = None
     target: ObjectDB | None = None
+    participants: list[Persona] | None = None
+    beat: Beat | None = None
+    scene: Scene | None = None
+    story: Story | None = None
 
     @property
     def location(self) -> ObjectDB:
