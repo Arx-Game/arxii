@@ -25,6 +25,7 @@ from world.locations.models import (
 from world.societies.models import OrganizationMembership
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from datetime import datetime
 
     from django.db.models import QuerySet
@@ -60,6 +61,57 @@ def _room_profile_and_ancestors(
             AreaClosure.objects.filter(descendant_id=area.pk).values_list("ancestor_id", flat=True)
         )
     return profile, ancestor_ids
+
+
+def _bulk_room_profiles_and_ancestors(
+    rooms: Iterable[DefaultObject],
+) -> tuple[dict[int, RoomProfile], dict[int, list[int]], set[int]]:
+    """Bulk-resolve RoomProfiles and area ancestors for many rooms.
+
+    Returns three values:
+      - room_to_profile: room.pk -> RoomProfile (rooms without a
+        profile are absent from this dict)
+      - profile_to_ancestor_ids: profile.pk -> list of ancestor area
+        ids from the area closure (empty list if profile.area is None)
+      - all_ancestor_ids: union of every ancestor id, useful for
+        bulk filters like Q(area_id__in=all_ancestor_ids)
+
+    One DB query for the area closure walk regardless of room count.
+    Profile fetches use the SharedMemoryModel identity map if rooms
+    were already loaded; otherwise one query per uncached profile
+    accessor (Evennia OneToOne reverse). Callers are encouraged to
+    pre-load profiles upstream via select_related when possible.
+    """
+    room_to_profile: dict[int, RoomProfile] = {}
+    profile_to_area_pk: dict[int, int] = {}
+    all_area_pks: set[int] = set()
+
+    for room in rooms:
+        try:
+            profile = room.room_profile
+        except RoomProfile.DoesNotExist:
+            continue
+        room_to_profile[room.pk] = profile
+        if profile.area_id is not None:
+            profile_to_area_pk[profile.pk] = profile.area_id
+            all_area_pks.add(profile.area_id)
+
+    # One closure query for the union of areas.
+    closure_rows = AreaClosure.objects.filter(descendant_id__in=all_area_pks).values_list(
+        "descendant_id", "ancestor_id"
+    )
+
+    descendant_to_ancestors: dict[int, list[int]] = {}
+    all_ancestor_ids: set[int] = set()
+    for descendant_id, ancestor_id in closure_rows:
+        descendant_to_ancestors.setdefault(descendant_id, []).append(ancestor_id)
+        all_ancestor_ids.add(ancestor_id)
+
+    profile_to_ancestor_ids: dict[int, list[int]] = {}
+    for profile_pk, area_pk in profile_to_area_pk.items():
+        profile_to_ancestor_ids[profile_pk] = descendant_to_ancestors.get(area_pk, [])
+
+    return room_to_profile, profile_to_ancestor_ids, all_ancestor_ids
 
 
 def _persona_organization_ids(persona: Persona) -> set[int]:
