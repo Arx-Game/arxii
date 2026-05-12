@@ -693,6 +693,48 @@ def end_tenancy(
     return tenancy
 
 
+def ownership_history_for(
+    *,
+    area: Area | None = None,
+    room_profile: RoomProfile | None = None,
+) -> QuerySet[LocationOwnership]:
+    """Return ALL LocationOwnership rows (active and ended) for a
+    location, ordered by acquired_at ascending.
+
+    No closure walk — returns only rows directly attached to this
+    location. Caller passes exactly one of (area, room_profile).
+
+    Useful for forensics, GM tooling, and audit log displays.
+    """
+    _validate_location_kwargs(area, room_profile)
+    qs = LocationOwnership.objects.select_related("area", "holder_persona", "holder_organization")
+    if area is not None:
+        qs = qs.filter(area=area)
+    else:
+        qs = qs.filter(room_profile=room_profile)
+    return qs.order_by("acquired_at")
+
+
+def tenancy_history_for(
+    *,
+    area: Area | None = None,
+    room_profile: RoomProfile | None = None,
+) -> QuerySet[LocationTenancy]:
+    """Return ALL LocationTenancy rows (active and ended) for a
+    location, ordered by started_at ascending.
+
+    No closure walk — returns only rows directly attached to this
+    location. Caller passes exactly one of (area, room_profile).
+    """
+    _validate_location_kwargs(area, room_profile)
+    qs = LocationTenancy.objects.select_related("area", "tenant_persona", "tenant_organization")
+    if area is not None:
+        qs = qs.filter(area=area)
+    else:
+        qs = qs.filter(room_profile=room_profile)
+    return qs.order_by("started_at")
+
+
 def cleanup_decayed_modifiers(now: datetime | None = None) -> int:
     """Delete LocationStatModifier rows whose current_value() has
     decayed to zero.
