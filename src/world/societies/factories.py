@@ -12,6 +12,7 @@ from world.character_creation.factories import RealmFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 from world.societies.models import (
+    CovenantLegendCredit,
     LegendDeedStory,
     LegendEntry,
     LegendEvent,
@@ -204,6 +205,21 @@ class LegendDeedStoryFactory(factory_django.DjangoModelFactory):
     deed = factory.SubFactory(LegendEntryFactory)
     author = factory.SubFactory(PersonaFactory)
     text = factory.Faker("paragraph")
+
+
+class CovenantLegendCreditFactory(factory_django.DjangoModelFactory):
+    """Factory for creating CovenantLegendCredit instances.
+
+    No django_get_or_create — intentionally omitted so that duplicate
+    (entry, covenant) pairs raise IntegrityError in tests that exercise
+    the DB constraint.
+    """
+
+    class Meta:
+        model = CovenantLegendCredit
+
+    entry = factory.SubFactory(LegendEntryFactory)
+    covenant = factory.SubFactory("world.covenants.factories.CovenantFactory")
 
 
 # Specialized factories for common test scenarios

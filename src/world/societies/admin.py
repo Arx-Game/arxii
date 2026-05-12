@@ -9,6 +9,7 @@ Note: Realm admin is in the `realms` app.
 from django.contrib import admin
 
 from world.societies.models import (
+    CovenantLegendCredit,
     LegendDeedStory,
     LegendEntry,
     LegendEvent,
@@ -468,3 +469,11 @@ class SpreadingConfigAdmin(admin.ModelAdmin):
     ) -> bool:
         """Prevent deleting the config."""
         return False
+
+
+@admin.register(CovenantLegendCredit)
+class CovenantLegendCreditAdmin(admin.ModelAdmin):
+    """Admin interface for CovenantLegendCredit management."""
+
+    list_display = ("entry", "covenant", "created_at")
+    list_select_related = ("entry", "covenant")
