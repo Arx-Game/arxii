@@ -26,33 +26,37 @@ def _make_room(key: str = "TestRoom"):
 class EngagementPrerequisiteBranchesTests(TestCase):
     """Cover all branches of can_engage_durance_membership."""
 
-    @classmethod
-    def setUpTestData(cls) -> None:
-        # DURANCE covenant with two members
-        cls.cov_durance = CovenantFactory(name="DuranceCov", covenant_type=CovenantType.DURANCE)
-        cls.role_durance = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
-
-        cls.sheet_a = CharacterSheetFactory()
-        cls.sheet_b = CharacterSheetFactory()
-
-        cls.mem_a_durance = CharacterCovenantRoleFactory(
-            character_sheet=cls.sheet_a,
-            covenant=cls.cov_durance,
-            covenant_role=cls.role_durance,
+    def setUp(self) -> None:
+        # Per-test setup (not setUpTestData): Evennia's ObjectDB carries a
+        # DbHolder that doesn't survive the inter-test deepcopy Django performs
+        # on class-scoped fixtures. Use setUp to avoid the deepcopy.
+        self.cov_durance = CovenantFactory(
+            name="DuranceCov",
+            covenant_type=CovenantType.DURANCE,
         )
-        cls.mem_b_durance = CharacterCovenantRoleFactory(
-            character_sheet=cls.sheet_b,
-            covenant=cls.cov_durance,
-            covenant_role=cls.role_durance,
+        self.role_durance = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+
+        self.sheet_a = CharacterSheetFactory()
+        self.sheet_b = CharacterSheetFactory()
+
+        self.mem_a_durance = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_a,
+            covenant=self.cov_durance,
+            covenant_role=self.role_durance,
+        )
+        self.mem_b_durance = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_b,
+            covenant=self.cov_durance,
+            covenant_role=self.role_durance,
         )
 
         # BATTLE covenant with sheet_a as a member
-        cls.cov_battle = CovenantFactory(name="BattleCov", covenant_type=CovenantType.BATTLE)
-        cls.role_battle = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
-        cls.mem_a_battle = CharacterCovenantRoleFactory(
-            character_sheet=cls.sheet_a,
-            covenant=cls.cov_battle,
-            covenant_role=cls.role_battle,
+        self.cov_battle = CovenantFactory(name="BattleCov", covenant_type=CovenantType.BATTLE)
+        self.role_battle = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        self.mem_a_battle = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_a,
+            covenant=self.cov_battle,
+            covenant_role=self.role_battle,
         )
 
     def test_battle_short_circuits_true(self) -> None:

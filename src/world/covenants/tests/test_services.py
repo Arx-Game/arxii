@@ -756,8 +756,10 @@ class EvaluateSceneEngagementTests(TestCase):
     idioms (ObjectDBFactory for rooms, SceneFactory for active scenes).
     """
 
-    @classmethod
-    def setUpTestData(cls):
+    def _build_fixtures(self) -> None:
+        # Per-test fixture build (not setUpTestData): Evennia's ObjectDB carries
+        # a DbHolder that doesn't survive the inter-test deepcopy Django performs
+        # on class-scoped fixtures. setUp() calls this so each test starts fresh.
         from world.character_sheets.factories import CharacterSheetFactory
         from world.covenants.constants import CovenantType
         from world.covenants.factories import (
@@ -766,26 +768,26 @@ class EvaluateSceneEngagementTests(TestCase):
             CovenantRoleFactory,
         )
 
-        cls.role_durance = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
-        cls.cov_a = CovenantFactory(name="CovA", covenant_type=CovenantType.DURANCE)
-        cls.cov_b = CovenantFactory(name="CovB", covenant_type=CovenantType.DURANCE)
-        cls.sheet_a1 = CharacterSheetFactory()
-        cls.sheet_a2 = CharacterSheetFactory()
-        cls.sheet_b1 = CharacterSheetFactory()
-        cls.mem_a1 = CharacterCovenantRoleFactory(
-            character_sheet=cls.sheet_a1,
-            covenant=cls.cov_a,
-            covenant_role=cls.role_durance,
+        self.role_durance = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        self.cov_a = CovenantFactory(name="CovA", covenant_type=CovenantType.DURANCE)
+        self.cov_b = CovenantFactory(name="CovB", covenant_type=CovenantType.DURANCE)
+        self.sheet_a1 = CharacterSheetFactory()
+        self.sheet_a2 = CharacterSheetFactory()
+        self.sheet_b1 = CharacterSheetFactory()
+        self.mem_a1 = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_a1,
+            covenant=self.cov_a,
+            covenant_role=self.role_durance,
         )
-        cls.mem_a2 = CharacterCovenantRoleFactory(
-            character_sheet=cls.sheet_a2,
-            covenant=cls.cov_a,
-            covenant_role=cls.role_durance,
+        self.mem_a2 = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_a2,
+            covenant=self.cov_a,
+            covenant_role=self.role_durance,
         )
-        cls.mem_b1 = CharacterCovenantRoleFactory(
-            character_sheet=cls.sheet_b1,
-            covenant=cls.cov_b,
-            covenant_role=cls.role_durance,
+        self.mem_b1 = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_b1,
+            covenant=self.cov_b,
+            covenant_role=self.role_durance,
         )
 
     def _make_room(self, key: str = "test-room"):
@@ -809,13 +811,8 @@ class EvaluateSceneEngagementTests(TestCase):
             char.location = room
 
     def setUp(self):
-        """Invalidate cached handlers so each test starts from a clean DB state."""
-        self.sheet_a1.character.covenant_roles.invalidate()
-        self.sheet_a2.character.covenant_roles.invalidate()
-        self.sheet_b1.character.covenant_roles.invalidate()
-        self.mem_a1.refresh_from_db()
-        self.mem_a2.refresh_from_db()
-        self.mem_b1.refresh_from_db()
+        """Build fixtures fresh per test to avoid Evennia DbHolder deepcopy issues."""
+        self._build_fixtures()
 
     def _build_room_with_scene_and_chars(self, sheets):
         """Create a room, add an active Scene there, place the characters. Returns the room."""
