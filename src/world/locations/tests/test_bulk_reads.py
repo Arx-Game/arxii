@@ -1,11 +1,25 @@
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
+from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
-from world.locations.services import _bulk_room_profiles_and_ancestors
+from world.locations.constants import (
+    STAT_DEFAULTS,
+    LocationParentType,
+    StatKey,
+)
+from world.locations.factories import (
+    LocationStatModifierFactory,
+    LocationStatOverrideFactory,
+)
+from world.locations.services import (
+    _bulk_room_profiles_and_ancestors,
+    effective_stat,
+    effective_stats_for_rooms,
+)
 
 
 class BulkRoomProfilesAndAncestorsTests(TestCase):
@@ -90,3 +104,72 @@ class BulkRoomProfilesAndAncestorsTests(TestCase):
             1,
             f"Expected 1 AreaClosure query, got {len(closure_queries)}",
         )
+
+
+class EffectiveStatsForRoomsTests(TestCase):
+    def test_empty_rooms_returns_empty_dict(self) -> None:
+        result = effective_stats_for_rooms([], [StatKey.CRIME])
+        self.assertEqual(result, {})
+
+    def test_empty_stat_keys_returns_empty_per_room(self) -> None:
+        profile = RoomProfileFactory()
+        room = profile.objectdb
+        result = effective_stats_for_rooms([room], [])
+        self.assertEqual(result, {room.pk: {}})
+
+    def test_single_room_matches_singular_helper(self) -> None:
+        ward = AreaFactory(level=AreaLevel.WARD)
+        profile = RoomProfileFactory(area=ward)
+        room = profile.objectdb
+        LocationStatOverrideFactory(area=ward, stat_key=StatKey.CRIME, value=42)
+
+        bulk_result = effective_stats_for_rooms([room], [StatKey.CRIME])
+        singular_result = effective_stat(room, StatKey.CRIME)
+
+        self.assertEqual(bulk_result[room.pk][StatKey.CRIME], singular_result)
+
+    def test_multiple_rooms_distinct_results(self) -> None:
+        ward = AreaFactory(level=AreaLevel.WARD)
+        profile_a = RoomProfileFactory(area=ward)
+        profile_b = RoomProfileFactory(area=ward)
+        room_a, room_b = profile_a.objectdb, profile_b.objectdb
+
+        # Room A has a room-level override; Room B uses the ward default
+        LocationStatOverrideFactory(
+            parent_type=LocationParentType.ROOM,
+            area=None,
+            room_profile=profile_a,
+            stat_key=StatKey.CRIME,
+            value=80,
+        )
+
+        result = effective_stats_for_rooms([room_a, room_b], [StatKey.CRIME])
+        self.assertEqual(result[room_a.pk][StatKey.CRIME], 80)
+        # Room B falls through to default (no override, no modifier)
+        self.assertEqual(
+            result[room_b.pk][StatKey.CRIME],
+            effective_stat(room_b, StatKey.CRIME),
+        )
+
+    def test_room_without_profile_falls_through_to_defaults(self) -> None:
+        profile = RoomProfileFactory()
+        room = profile.objectdb
+        profile.delete()
+        room.refresh_from_db()
+
+        result = effective_stats_for_rooms([room], [StatKey.CRIME, StatKey.LIGHTING])
+        self.assertEqual(result[room.pk][StatKey.CRIME], STAT_DEFAULTS[StatKey.CRIME])
+        self.assertEqual(result[room.pk][StatKey.LIGHTING], STAT_DEFAULTS[StatKey.LIGHTING])
+
+    def test_query_budget_three_queries(self) -> None:
+        ward = AreaFactory(level=AreaLevel.WARD)
+        profiles = [RoomProfileFactory(area=ward) for _ in range(3)]
+        rooms = [p.objectdb for p in profiles]
+        LocationStatOverrideFactory(area=ward, stat_key=StatKey.CRIME, value=20)
+        LocationStatModifierFactory(area=ward, stat_key=StatKey.NOISE, value=10)
+
+        # Re-fetch rooms to defeat upstream caching for a clean budget read.
+        rooms = [ObjectDB.objects.get(pk=r.pk) for r in rooms]
+
+        with self.assertNumQueries(3):
+            effective_stats_for_rooms(rooms, [StatKey.CRIME, StatKey.NOISE])

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from django.db import models, transaction
 from django.utils import timezone
@@ -197,6 +197,148 @@ def effective_stat(room: DefaultObject, stat_key: StatKey) -> int:
     )
     total = default + sum(mod.current_value() for mod in modifiers)
     return _clamp(total, stat_key)
+
+
+class _StatCascadeIndex(NamedTuple):
+    """Pre-built lookup indexes for bulk stat resolution.
+
+    Keyed by (profile_pk | area_pk) -> stat_key -> override/modifier(s).
+    Built once per ``effective_stats_for_rooms`` call and reused for
+    every (room, stat_key) pair in the pass.
+    """
+
+    overrides_by_profile: dict[int, dict[str, LocationStatOverride]]
+    overrides_by_area: dict[int, dict[str, LocationStatOverride]]
+    modifiers_by_profile: dict[int, dict[str, list[LocationStatModifier]]]
+    modifiers_by_area: dict[int, dict[str, list[LocationStatModifier]]]
+
+
+def _build_stat_cascade_index(
+    overrides: list[LocationStatOverride],
+    modifiers: list[LocationStatModifier],
+) -> _StatCascadeIndex:
+    """Build profile/area-keyed lookup indexes for stat overrides + modifiers."""
+    overrides_by_profile: dict[int, dict[str, LocationStatOverride]] = {}
+    overrides_by_area: dict[int, dict[str, LocationStatOverride]] = {}
+    for o in overrides:
+        if o.room_profile_id is not None:
+            overrides_by_profile.setdefault(o.room_profile_id, {})[o.stat_key] = o
+        elif o.area_id is not None:
+            overrides_by_area.setdefault(o.area_id, {})[o.stat_key] = o
+
+    modifiers_by_profile: dict[int, dict[str, list[LocationStatModifier]]] = {}
+    modifiers_by_area: dict[int, dict[str, list[LocationStatModifier]]] = {}
+    for m in modifiers:
+        if m.room_profile_id is not None:
+            modifiers_by_profile.setdefault(m.room_profile_id, {}).setdefault(
+                m.stat_key, []
+            ).append(m)
+        elif m.area_id is not None:
+            modifiers_by_area.setdefault(m.area_id, {}).setdefault(m.stat_key, []).append(m)
+
+    return _StatCascadeIndex(
+        overrides_by_profile=overrides_by_profile,
+        overrides_by_area=overrides_by_area,
+        modifiers_by_profile=modifiers_by_profile,
+        modifiers_by_area=modifiers_by_area,
+    )
+
+
+def _resolve_stat_for_profile(
+    profile: RoomProfile,
+    stat_key: StatKey,
+    ancestor_ids: list[int],
+    index: _StatCascadeIndex,
+) -> int:
+    """Resolve one (profile, stat_key) from a pre-built index.
+
+    Mirrors the singular ``effective_stat`` cascade rules: most-specific
+    override wins (room beats deepest area); otherwise sum modifier
+    current_values across the chain plus STAT_DEFAULTS, then clamp.
+    """
+    # Step 1: most-specific override (room beats deepest area)
+    room_override = index.overrides_by_profile.get(profile.pk, {}).get(stat_key)
+    if room_override is not None:
+        return _clamp(room_override.value, stat_key)
+    area_overrides = [
+        index.overrides_by_area.get(area_id, {}).get(stat_key) for area_id in ancestor_ids
+    ]
+    area_overrides = [o for o in area_overrides if o is not None]
+    if area_overrides:
+        # Smaller area.level wins (BUILDING=10 most specific)
+        chosen = min(area_overrides, key=lambda o: o.area.level)
+        return _clamp(chosen.value, stat_key)
+
+    # Step 2: sum modifier current_values
+    total = STAT_DEFAULTS.get(stat_key, 0)
+    for m in index.modifiers_by_profile.get(profile.pk, {}).get(stat_key, []):
+        total += m.current_value()
+    for area_id in ancestor_ids:
+        for m in index.modifiers_by_area.get(area_id, {}).get(stat_key, []):
+            total += m.current_value()
+    return _clamp(total, stat_key)
+
+
+def effective_stats_for_rooms(
+    rooms: Iterable[DefaultObject],
+    stat_keys: Iterable[StatKey],
+) -> dict[int, dict[StatKey, int]]:
+    """Bulk-resolve stats for many rooms in one pass.
+
+    Returns: {room.pk: {stat_key: int}}.
+
+    One AreaClosure walk for the union of all ancestor area ids (via
+    _bulk_room_profiles_and_ancestors), one fetch of LocationStatOverride
+    for those ids + room_profiles + stat_keys, one fetch of
+    LocationStatModifier for the same scope, then resolves per room in
+    Python.
+
+    Rooms with no RoomProfile fall through to STAT_DEFAULTS[stat_key]
+    clamped to STAT_CLAMPS[stat_key] for each requested stat_key.
+
+    Query budget: 3 total queries regardless of room count.
+    """
+    rooms_list = list(rooms)
+    stat_keys_list = list(stat_keys)
+    if not rooms_list:
+        return {}
+    if not stat_keys_list:
+        # Rooms present but no stat keys → empty per-room dicts
+        return {room.pk: {} for room in rooms_list}
+
+    room_to_profile, profile_to_ancestor_ids, all_ancestor_ids = _bulk_room_profiles_and_ancestors(
+        rooms_list
+    )
+
+    # Bulk fetch overrides matching the union of (room_profiles, ancestor_ids).
+    profile_pks = {p.pk for p in room_to_profile.values()}
+    overrides = list(
+        LocationStatOverride.objects.filter(stat_key__in=stat_keys_list)
+        .select_related("area")
+        .filter(models.Q(room_profile_id__in=profile_pks) | models.Q(area_id__in=all_ancestor_ids))
+    )
+    modifiers = list(
+        LocationStatModifier.objects.filter(stat_key__in=stat_keys_list).filter(
+            models.Q(room_profile_id__in=profile_pks) | models.Q(area_id__in=all_ancestor_ids)
+        )
+    )
+    index = _build_stat_cascade_index(overrides, modifiers)
+
+    result: dict[int, dict[StatKey, int]] = {}
+    for room in rooms_list:
+        profile = room_to_profile.get(room.pk)
+        if profile is None:
+            result[room.pk] = {
+                stat_key: _clamp(STAT_DEFAULTS.get(stat_key, 0), stat_key)
+                for stat_key in stat_keys_list
+            }
+            continue
+        ancestor_ids = profile_to_ancestor_ids.get(profile.pk, [])
+        result[room.pk] = {
+            stat_key: _resolve_stat_for_profile(profile, stat_key, ancestor_ids, index)
+            for stat_key in stat_keys_list
+        }
+    return result
 
 
 def effective_owner(room: DefaultObject) -> LocationOwnership | None:
