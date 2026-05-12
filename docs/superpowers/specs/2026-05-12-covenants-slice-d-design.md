@@ -206,7 +206,7 @@ GMs author structured consequence packages per Beat outcome. Legend awards are o
 |---|---|---|
 | `legend_base_value` | PositiveIntegerField (nullable) | The `LegendEntry.base_value` to create on each participant persona. Required when `effect_type=LEGEND_AWARD`. |
 | `legend_source_type` | FK → `world.societies.LegendSourceType` (PROTECT, nullable) | Categorizes the deed (typically `STORY`). Required when `effect_type=LEGEND_AWARD`. |
-| `legend_description_template` | TextField, blank | Optional GM-authored deed description. Falls back to `beat.player_resolution_text` if blank. |
+| `legend_description_template` | TextField, blank | Optional GM-authored deed description. Falls back to `beat.player_resolution_text` if blank, then to a generic "Legendary deed" if the beat has no resolution text either. The `LegendEvent.title` field is derived from the same chain (truncated to fit). |
 
 `clean()` enforces: when `effect_type=LEGEND_AWARD`, `legend_base_value > 0` and `legend_source_type` is set. When any other effect type, all three legend fields must be null.
 
