@@ -297,12 +297,12 @@ happens in Python.
 
 ### Query budgets
 
-- `effective_stats_for_rooms`: **3 queries** (closure + overrides + modifiers)
-- `effective_owners_for_rooms`: **2 queries** (closure + active ownership rows)
-- `tenancies_for_rooms`: **2 queries** (closure + active tenancy rows)
+- `effective_stats_for_rooms`: **4 queries** (profiles + closure + overrides + modifiers)
+- `effective_owners_for_rooms`: **3 queries** (profiles + closure + active ownership rows)
+- `tenancies_for_rooms`: **3 queries** (profiles + closure + active tenancy rows)
 
-All budgets are independent of room count and locked via
-`assertNumQueries` tests.
+All budgets are independent of room count (one bulk SQL query per kind
+of row) and locked via `assertNumQueries` tests.
 
 ### Why `tenancies_for_rooms` returns a list, not a QuerySet
 

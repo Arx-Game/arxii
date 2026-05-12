@@ -76,22 +76,22 @@ def _bulk_room_profiles_and_ancestors(
       - all_ancestor_ids: union of every ancestor id, useful for
         bulk filters like Q(area_id__in=all_ancestor_ids)
 
-    One DB query for the area closure walk regardless of room count.
-    Profile fetches use the SharedMemoryModel identity map if rooms
-    were already loaded; otherwise one query per uncached profile
-    accessor (Evennia OneToOne reverse). Callers are encouraged to
-    pre-load profiles upstream via select_related when possible.
+    **One SQL query** for profiles + **one** for the area closure
+    walk, regardless of room count. RoomProfile is keyed by
+    ``objectdb_id`` (its primary key IS the room pk), so we can fetch
+    all profiles in a single ``filter(objectdb_id__in=...)`` instead
+    of relying on the per-room reverse OneToOne accessor (which fires
+    a separate query per uncached room).
     """
+    rooms_list = list(rooms)
+    room_pks = [r.pk for r in rooms_list]
     room_to_profile: dict[int, RoomProfile] = {}
     profile_to_area_pk: dict[int, int] = {}
     all_area_pks: set[int] = set()
 
-    for room in rooms:
-        try:
-            profile = room.room_profile
-        except RoomProfile.DoesNotExist:
-            continue
-        room_to_profile[room.pk] = profile
+    profiles = RoomProfile.objects.filter(objectdb_id__in=room_pks)
+    for profile in profiles:
+        room_to_profile[profile.objectdb_id] = profile
         if profile.area_id is not None:
             profile_to_area_pk[profile.pk] = profile.area_id
             all_area_pks.add(profile.area_id)
@@ -296,7 +296,8 @@ def effective_stats_for_rooms(
     Rooms with no RoomProfile fall through to STAT_DEFAULTS[stat_key]
     clamped to STAT_CLAMPS[stat_key] for each requested stat_key.
 
-    Query budget: 3 total queries regardless of room count.
+    Query budget: 4 total queries regardless of room count (profiles +
+    closure + overrides + modifiers).
     """
     rooms_list = list(rooms)
     stat_keys_list = list(stat_keys)
@@ -389,7 +390,8 @@ def effective_owners_for_rooms(
     select_related on area + holders), then most-specific-wins
     selection per room in Python.
 
-    Query budget: 2 total queries regardless of room count.
+    Query budget: 3 total queries regardless of room count (profiles +
+    closure + ownership).
     """
     rooms_list = list(rooms)
     if not rooms_list:
@@ -480,7 +482,8 @@ def tenancies_for_rooms(
     Python after the bulk fetch precludes lazy evaluation. Rooms
     without a RoomProfile get an empty list.
 
-    Query budget: 2 total queries regardless of room count.
+    Query budget: 3 total queries regardless of room count (profiles +
+    closure + tenancy).
     """
     rooms_list = list(rooms)
     if not rooms_list:

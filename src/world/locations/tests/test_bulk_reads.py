@@ -4,7 +4,6 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
-from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.constants import AreaLevel
@@ -171,17 +170,14 @@ class EffectiveStatsForRoomsTests(TestCase):
         self.assertEqual(result[room.pk][StatKey.CRIME], STAT_DEFAULTS[StatKey.CRIME])
         self.assertEqual(result[room.pk][StatKey.LIGHTING], STAT_DEFAULTS[StatKey.LIGHTING])
 
-    def test_query_budget_three_queries(self) -> None:
+    def test_query_budget_four_queries(self) -> None:
         ward = AreaFactory(level=AreaLevel.WARD)
         profiles = [RoomProfileFactory(area=ward) for _ in range(3)]
         rooms = [p.objectdb for p in profiles]
         LocationStatOverrideFactory(area=ward, stat_key=StatKey.CRIME, value=20)
         LocationStatModifierFactory(area=ward, stat_key=StatKey.NOISE, value=10)
 
-        # Re-fetch rooms to defeat upstream caching for a clean budget read.
-        rooms = [ObjectDB.objects.get(pk=r.pk) for r in rooms]
-
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(4):
             effective_stats_for_rooms(rooms, [StatKey.CRIME, StatKey.NOISE])
 
 
@@ -252,15 +248,13 @@ class EffectiveOwnersForRoomsTests(TestCase):
         result = effective_owners_for_rooms([room])
         self.assertIsNone(result[room.pk])
 
-    def test_query_budget_two_queries(self) -> None:
+    def test_query_budget_three_queries(self) -> None:
         ward = AreaFactory(level=AreaLevel.WARD)
         profiles = [RoomProfileFactory(area=ward) for _ in range(3)]
         rooms = [p.objectdb for p in profiles]
         LocationOwnershipFactory(area=ward, holder_persona=PersonaFactory())
 
-        rooms = [ObjectDB.objects.get(pk=r.pk) for r in rooms]
-
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             effective_owners_for_rooms(rooms)
 
 
@@ -335,13 +329,11 @@ class TenanciesForRoomsTests(TestCase):
         result = tenancies_for_rooms([room])
         self.assertEqual(result[room.pk], [])
 
-    def test_query_budget_two_queries(self) -> None:
+    def test_query_budget_three_queries(self) -> None:
         building = AreaFactory(level=AreaLevel.BUILDING)
         profiles = [RoomProfileFactory(area=building) for _ in range(3)]
         rooms = [p.objectdb for p in profiles]
         LocationTenancyFactory(on_area=True, area=building, tenant_persona=PersonaFactory())
 
-        rooms = [ObjectDB.objects.get(pk=r.pk) for r in rooms]
-
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             tenancies_for_rooms(rooms)
