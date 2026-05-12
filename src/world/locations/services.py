@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 
 from evennia_extensions.models import RoomProfile
 from world.areas.models import AreaClosure
-from world.locations.constants import STAT_CLAMPS, STAT_DEFAULTS, HolderType, StatKey
+from world.locations.constants import (
+    STAT_CLAMPS,
+    STAT_DEFAULTS,
+    HolderType,
+    LocationParentType,
+    StatKey,
+)
 from world.locations.models import (
     LocationOwnership,
     LocationStatModifier,
@@ -19,10 +25,14 @@ from world.locations.models import (
 from world.societies.models import OrganizationMembership
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from django.db.models import QuerySet
     from evennia.objects.objects import DefaultObject
 
+    from world.areas.models import Area
     from world.scenes.models import Persona
+    from world.societies.models import Organization
 
 
 def _room_profile_and_ancestors(
@@ -64,6 +74,24 @@ def _persona_organization_ids(persona: Persona) -> set[int]:
             "organization_id", flat=True
         )
     )
+
+
+def _validate_location_kwargs(area: Area | None, room_profile: RoomProfile | None) -> None:
+    """Raise ValueError unless exactly one of (area, room_profile) is set."""
+    if (area is None) == (room_profile is None):
+        msg = "Must pass exactly one of area or room_profile."
+        raise ValueError(msg)
+
+
+def _validate_holder_kwargs(persona: Persona | None, organization: Organization | None) -> None:
+    """Raise ValueError unless exactly one of (persona, organization) is set.
+
+    Used by both ownership (holder) and tenancy (tenant) helpers — both have
+    the same Persona-XOR-Organization shape.
+    """
+    if (persona is None) == (organization is None):
+        msg = "Must pass exactly one of the persona or organization holder."
+        raise ValueError(msg)
 
 
 def _clamp(value: int, stat_key: StatKey) -> int:
@@ -239,3 +267,115 @@ def tenancies_for(persona: Persona, room: DefaultObject) -> QuerySet[LocationTen
 def is_tenant(persona: Persona, room: DefaultObject) -> bool:
     """True when ``tenancies_for(persona, room)`` has any rows."""
     return tenancies_for(persona, room).exists()
+
+
+def transfer_ownership(  # noqa: PLR0913 — keyword-only XOR-pair API by design
+    *,
+    area: Area | None = None,
+    room_profile: RoomProfile | None = None,
+    to_persona: Persona | None = None,
+    to_organization: Organization | None = None,
+    notes: str = "",
+    transferred_at: datetime | None = None,
+) -> LocationOwnership:
+    """Atomically transfer (or claim) ownership of a location.
+
+    Ends the current active LocationOwnership row (if any) and creates a
+    new row with the new holder. Wrapped in transaction.atomic so the
+    "no active owner" window never appears to concurrent readers.
+
+    Handles both first-time claims (no current owner) and transfers
+    (current owner ended, new owner created). The protocol is identical;
+    conflating them reduces API surface.
+
+    Caller is responsible for permission gating — substrate does not
+    check authority to transfer.
+
+    Concurrent transfers on the same parent serialize via
+    ``select_for_update`` on the existing-row lookup — the losing caller
+    waits for the winning transaction to commit, then re-reads the now-
+    ended row and proceeds. Concurrent *claims* of a never-owned
+    location still race at the INSERT step and rely on the partial-
+    unique constraint to surface ``IntegrityError`` for the loser; that
+    contention is rare in practice (an area is only claimed once).
+    """
+    _validate_location_kwargs(area, room_profile)
+    _validate_holder_kwargs(to_persona, to_organization)
+
+    parent_type = LocationParentType.AREA if area is not None else LocationParentType.ROOM
+    holder_type = HolderType.PERSONA if to_persona is not None else HolderType.ORGANIZATION
+    when = transferred_at if transferred_at is not None else timezone.now()
+
+    with transaction.atomic():
+        existing_qs = LocationOwnership.objects.select_for_update().filter(ended_at__isnull=True)
+        if area is not None:
+            existing_qs = existing_qs.filter(area=area)
+        else:
+            existing_qs = existing_qs.filter(room_profile=room_profile)
+        existing = existing_qs.first()
+        if existing is not None:
+            existing.ended_at = when
+            existing.save()
+
+        return LocationOwnership.objects.create(
+            parent_type=parent_type,
+            area=area,
+            room_profile=room_profile,
+            holder_type=holder_type,
+            holder_persona=to_persona,
+            holder_organization=to_organization,
+            acquired_at=when,
+            notes=notes,
+        )
+
+
+def grant_tenancy(  # noqa: PLR0913 — keyword-only XOR-pair API by design
+    *,
+    area: Area | None = None,
+    room_profile: RoomProfile | None = None,
+    tenant_persona: Persona | None = None,
+    tenant_organization: Organization | None = None,
+    ends_at: datetime | None = None,
+    notes: str = "",
+) -> LocationTenancy:
+    """Create a new LocationTenancy row.
+
+    Multiple concurrent tenancies on the same location are valid by
+    design — no conflict check. Caller is responsible for permission
+    gating (only owners should grant tenancy).
+    """
+    _validate_location_kwargs(area, room_profile)
+    _validate_holder_kwargs(tenant_persona, tenant_organization)
+
+    parent_type = LocationParentType.AREA if area is not None else LocationParentType.ROOM
+    tenant_type = HolderType.PERSONA if tenant_persona is not None else HolderType.ORGANIZATION
+    return LocationTenancy.objects.create(
+        parent_type=parent_type,
+        area=area,
+        room_profile=room_profile,
+        tenant_type=tenant_type,
+        tenant_persona=tenant_persona,
+        tenant_organization=tenant_organization,
+        ends_at=ends_at,
+        notes=notes,
+    )
+
+
+def end_tenancy(
+    tenancy: LocationTenancy,
+    *,
+    ended_at: datetime | None = None,
+) -> LocationTenancy:
+    """End a tenancy by setting ``ends_at``.
+
+    Covers eviction AND voluntary departure — the code path is identical
+    and the semantic distinction is the caller's UX concern.
+
+    Idempotent: re-calling on an already-ended tenancy overwrites
+    ``ends_at`` with the new value. The new value can be in the past
+    (eviction effective immediately) or in the future (planned end of
+    lease).
+    """
+    tenancy.ends_at = ended_at if ended_at is not None else timezone.now()
+    tenancy.save()
+    return tenancy
