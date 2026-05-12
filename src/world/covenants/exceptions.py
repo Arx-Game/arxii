@@ -82,3 +82,49 @@ class CovenantNameConflictError(CovenantError):
             "A covenant with that name already exists.",
         }
     )
+
+
+class SubrolePromotionError(CovenantError):
+    """Base for sub-role promotion failures."""
+
+    user_message = "Sub-role promotion failed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Sub-role promotion failed.",
+        }
+    )
+
+
+class SubroleParentMismatchError(SubrolePromotionError):
+    """Raised when the target sub-role's parent does not match the membership's role."""
+
+    user_message = "Target sub-role's parent does not match your current role in this covenant."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Target sub-role's parent does not match your current role in this covenant.",
+        }
+    )
+
+
+class SubroleThreadLevelInsufficientError(SubrolePromotionError):
+    """Raised when the character's Thread level on the parent role is too low."""
+
+    user_message = (
+        "Your Thread level on the parent role is not yet high enough to unlock this sub-role."
+    )
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "Your Thread level on the parent role is not yet high enough to unlock this sub-role.",
+        }
+    )
+
+
+class SubroleResonanceMismatchError(SubrolePromotionError):
+    """Raised when the character has no Thread on the parent role with the matching resonance."""
+
+    user_message = "You do not have a Thread on the parent role with the matching resonance."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {
+            "You do not have a Thread on the parent role with the matching resonance.",
+        }
+    )

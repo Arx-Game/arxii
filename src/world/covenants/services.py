@@ -13,6 +13,9 @@ from world.covenants.exceptions import (
     CovenantNameConflictError,
     DuplicateFounderError,
     InsufficientFoundersError,
+    SubroleParentMismatchError,
+    SubroleResonanceMismatchError,
+    SubroleThreadLevelInsufficientError,
 )
 from world.covenants.models import (
     CharacterCovenantRole,
@@ -399,6 +402,54 @@ def _co_present_member_count(
         if sheet.character.covenant_roles.currently_held_role_in(target) is not None:
             n += 1
     return n
+
+
+@transaction.atomic
+def promote_to_subrole(
+    *,
+    membership: CharacterCovenantRole,
+    target_subrole: CovenantRole,
+) -> CharacterCovenantRole:
+    """Promote a character from their current parent role to a sub-role.
+
+    Validates:
+    - target_subrole.parent_role == membership.covenant_role
+    - The character has at least one Thread anchored on
+      target_subrole.parent_role with resonance=target_subrole.resonance
+      and level >= target_subrole.unlock_thread_level.
+
+    Atomic. Closes the existing membership row (sets left_at) and creates
+    a new active row with target_subrole, preserving the engaged flag.
+    Reuses change_role mechanics underneath. Invalidates the
+    character.covenant_roles handler cache.
+    """
+    if target_subrole.parent_role_id != membership.covenant_role_id:
+        raise SubroleParentMismatchError
+    # CharacterThreadHandler.all() returns list[Thread] — NOT a queryset.
+    # No .filter() / .exists() — filter in Python.
+    handler = membership.character_sheet.character.threads
+    matching = [
+        t
+        for t in handler.all()
+        if t.target_covenant_role_id == target_subrole.parent_role_id
+        and t.resonance_id == target_subrole.resonance_id
+    ]
+    if not matching:
+        raise SubroleResonanceMismatchError
+    if not any(t.level >= target_subrole.unlock_thread_level for t in matching):
+        raise SubroleThreadLevelInsufficientError
+    # Reuse change_role: close old, open new with same engaged flag
+    was_engaged = membership.engaged
+    end_covenant_role(assignment=membership)
+    new_membership = assign_covenant_role(
+        character_sheet=membership.character_sheet,
+        covenant=membership.covenant,
+        covenant_role=target_subrole,
+    )
+    if was_engaged:
+        set_engaged_membership(membership=new_membership)
+    membership.character_sheet.character.covenant_roles.invalidate()
+    return new_membership
 
 
 @transaction.atomic
