@@ -101,9 +101,9 @@ def credit_engaged_covenants(*, entry: LegendEntry) -> list[CovenantLegendCredit
 Called from the end of `create_solo_deed`, `create_legend_event` (for every `LegendEntry` row the event creates), and any future LegendEntry-creating path. Fan-out rules:
 
 - The persona's character is resolved via the existing `Persona.character_sheet` FK.
-- `currently_engaged_roles()` on the cached `character.covenant_roles` handler returns the engaged memberships.
-- One `CovenantLegendCredit` row per `(entry, role.covenant)`. Full deed value flows to each covenant — no fractional split. Multi-covenant participation is additive (a member engaged with both a Durance and a Battle covenant credits both).
-- If the persona has no engaged covenants at deed time, zero credits are created. The entry still exists at persona level.
+- The cached `character.covenant_roles` handler exposes `active_memberships` (a `list[CharacterCovenantRole]`). Filter to `engaged=True` to get the engaged membership rows. (Note: the existing `currently_engaged_roles()` helper returns `list[CovenantRole]` — role templates, not memberships — so it is the wrong call here. The fan-out needs the membership row's `covenant` FK.)
+- One `CovenantLegendCredit` row per `(entry, membership.covenant)`. Full deed value flows to each covenant — no fractional split. Multi-covenant participation is additive (a member engaged with both a Durance and a Battle covenant credits both).
+- If the persona has no engaged covenant memberships at deed time, zero credits are created. The entry still exists at persona level.
 
 #### §1.3 Spread integration
 
@@ -121,14 +121,16 @@ FROM covenants_covenant c
 LEFT JOIN societies_covenantlegendcredit clc ON clc.covenant_id = c.id
 LEFT JOIN societies_legendentry le ON le.id = clc.entry_id
 LEFT JOIN (
-    SELECT entry_id, SUM(value_added) AS total
+    SELECT legend_entry_id, SUM(value_added) AS total
     FROM societies_legendspread
-    GROUP BY entry_id
-) spreads ON spreads.entry_id = le.id
+    GROUP BY legend_entry_id
+) spreads ON spreads.legend_entry_id = le.id
 GROUP BY c.id
 ```
 
-`managed=False` Django model `CovenantLegendSummary` provides ORM access. Materialized view migration in `world/societies/migrations/` mirrors the existing two views (`0002_create_legend_materialized_views.py` adds this one alongside the existing CONCURRENTLY refresh logic).
+Column name note: `LegendSpread.legend_entry` is the FK field, so the underlying DB column is `legend_entry_id` (not `entry_id`). The view above uses the correct column name.
+
+`managed=False` Django model `CovenantLegendSummary` provides ORM access. The materialized view ships in a **new numbered migration** in `world/societies/migrations/` (a sibling of the existing `0002_create_legend_materialized_views.py`, NOT a modification to that file — once-applied migrations are immutable). The new migration creates the `CovenantLegendSummary` view, adds a CONCURRENTLY-capable unique index, and extends the existing `refresh_legend_views()` helper to refresh it alongside the two existing views.
 
 `refresh_legend_views()` is extended to refresh `CovenantLegendSummary` after every mutation that already triggers the persona/character refresh.
 
@@ -182,7 +184,7 @@ The following services in `world.societies.services` call `recompute_covenant_le
 
 #### §2.4 Level-up notification
 
-New `NarrativeMessageCategory.COVENANT` TextChoices value in `world.narrative.constants`. When `recompute_covenant_level` raises the stored level, it fires one `NarrativeMessage` per currently-engaged member:
+New `NarrativeCategory.COVENANT` enum value added to the existing `NarrativeCategory` TextChoices class in `world.narrative.constants`. When `recompute_covenant_level` raises the stored level, it fires one `NarrativeMessage` per currently-engaged member:
 
 - `category=COVENANT`
 - `recipient=member.character_sheet.account` (or whatever the existing narrative-message recipient resolution expects)
@@ -256,13 +258,19 @@ def handle_legend_award(
     """
 ```
 
-#### §3.5 `ResolutionContext` extension
+#### §3.5 `ResolutionContext` extension and participant resolution
 
-`world.checks.types.ResolutionContext` gains a new optional field `participants: list[Persona] | None`. Beat-driven resolutions populate this from:
+`world.checks.types.ResolutionContext` gains a new optional field `participants: list[Persona] | None`. **`BeatCompletion` has no `scene` FK**, so participants must be resolved at the call site (in `world.stories.services.beats`) before building the context. The resolution rules:
 
-1. The Scene FK on the Beat's `BeatCompletion`, if present — pull engaged `Persona` rows from `SceneParticipation`.
-2. For GROUP-scope `GM_MARKED` beats with no scene, the resolving GM provides the participant list explicitly via the existing mark-action serializer (which gains a `participants: list[int]` field).
-3. Falls back to empty — `LEGEND_AWARD` handler raises a typed error if no participants are available, since a deed without an actor is meaningless.
+1. **CHARACTER-scope, auto-evaluated beat (`evaluate_auto_beats`):** participants = the primary `Persona` of `progress.character_sheet` (the one character whose state satisfied the predicate). Single-element list.
+2. **CHARACTER-scope, `GM_MARKED` beat:** same as (1), plus any additional personas the GM provides via the mark-action serializer's new `extra_participants: list[int]` field.
+3. **GROUP-scope, `GM_MARKED` beat:** the resolving GM provides the participant list explicitly via the mark-action serializer's `participants: list[int]` field (required for pools containing `LEGEND_AWARD`). The system does NOT auto-derive participants for GROUP scope — too ambiguous, and the user's earlier guidance was that GMs explicitly think through who deserves the deed.
+4. **GROUP-scope, `AGGREGATE_THRESHOLD` beat:** participants = the primary Personas of every `CharacterSheet` with a non-zero `AggregateBeatContribution` row on this beat at threshold-crossing time. (`AggregateBeatContribution` is keyed on `character_sheet`, so the resolution layer maps `character_sheet → primary_persona` via the existing `Persona.persona_type=PRIMARY` lookup before building the participant list.)
+5. **GLOBAL-scope:** out of scope for this slice — GLOBAL beats with `LEGEND_AWARD` are unusual and best deferred until a real use case appears. Pool authors targeting GLOBAL beats with `LEGEND_AWARD` will get a typed `LegendAwardScopeError` at apply-time.
+
+The existing `world.stories.services.beats` callers (`_evaluate_and_record_beat`, `record_gm_marked_outcome`, `record_aggregate_contribution`) each know their scope and outcome at the moment of beat resolution, so each constructs its `ResolutionContext.participants` per the rule above before calling `apply_pool_deterministically`.
+
+If a pool contains a `LEGEND_AWARD` effect and the resolved participant list is empty, the handler raises a typed `LegendAwardParticipantMissingError` — a deed without an actor is meaningless and indicates either a misauthored pool or a missing `participants` payload from the GM. This is a hard error, not a silent skip.
 
 #### §3.6 Beat-resolution wiring
 
@@ -406,7 +414,7 @@ Four apps gain additive migrations in this slice. None are data migrations.
 - `world/societies/migrations/` — `CovenantLegendCredit` model, `CovenantLegendSummary` SQL materialized view alongside the existing two views.
 - `world/stories/migrations/` — three nullable FKs on `Beat`, one nullable FK on `Story`.
 - `world/checks/migrations/` — three nullable fields on `ConsequenceEffect`, new `EffectType.LEGEND_AWARD` enum value.
-- `world/narrative/migrations/` — new `NarrativeMessageCategory.COVENANT` enum value.
+- `world/narrative/migrations/` — new `NarrativeCategory.COVENANT` enum value.
 
 ---
 
@@ -429,7 +437,7 @@ Tests live in each app's `tests/` directory, focused on application logic (not D
 ### `world.checks.tests`
 
 - **`test_apply_pool_deterministically.py`** — fires every consequence in the pool regardless of weight; inheritance + exclusion honored; transactional rollback covers partial failure.
-- **`test_legend_award_handler.py`** — `LEGEND_AWARD` effect creates `LegendEvent` with correct base_value + source_type; participants pulled from `ResolutionContext`; empty participants raises a typed error.
+- **`test_legend_award_handler.py`** — `LEGEND_AWARD` effect creates `LegendEvent` with correct base_value + source_type; participants pulled from `ResolutionContext`; empty participants raises `LegendAwardParticipantMissingError`; GLOBAL-scope application raises `LegendAwardScopeError`.
 
 ### `world.stories.tests`
 
@@ -468,5 +476,5 @@ Substrate changes touch ≥4 apps. Per the project rule, run the full suite with
 
 ## Open Questions
 
-- **Beat-resolution participants for GROUP-scope `AGGREGATE_THRESHOLD` beats.** The threshold-crossing event has a single triggering character (the last contributor) but the deed conceptually belongs to all contributors. Spec defaults to "all contributors with non-zero `AggregateBeatContribution` rows at threshold-crossing time" — confirm during implementation that this matches the intent for the first real use case.
-- **`NarrativeMessageCategory.COVENANT` recipient resolution.** Existing categories address recipients by `Account` (via `RosterTenure → AccountDB`). Confirm that the covenant-level-up message uses the same path; if engaged member recipients ever need to address an explicit persona, that's a future refinement.
+- **`NarrativeCategory.COVENANT` recipient resolution.** Existing categories address recipients by `Account` (via `RosterTenure → AccountDB`). Confirm during implementation that the covenant-level-up message uses the same path; if engaged member recipients ever need to address an explicit persona, that's a future refinement.
+- **`LegendAwardScopeError` placement.** This exception fires when a `LEGEND_AWARD` effect is applied via a pool attached to a GLOBAL-scope beat (§3.5 rule 5). Lives in `world.checks.exceptions` next to other consequence-resolution errors, but could also live in `world.societies.exceptions` since the actual error case is in the legend-award handler. Choose at implementation time based on import dependency direction.
