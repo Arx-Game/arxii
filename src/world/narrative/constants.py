@@ -7,3 +7,4 @@ class NarrativeCategory(models.TextChoices):
     VISIONS = "visions", "Visions"
     HAPPENSTANCE = "happenstance", "Happenstance"
     SYSTEM = "system", "System"
+    COVENANT = "covenant", "Covenant"
