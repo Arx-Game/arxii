@@ -8,6 +8,7 @@ from world.covenants.constants import CovenantType, RoleArchetype
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
+    CovenantLevelThreshold,
     CovenantRole,
     GearArchetypeCompatibility,
 )
@@ -73,6 +74,17 @@ class CharacterCovenantRoleFactory(factory_django.DjangoModelFactory):
     covenant = factory.SubFactory(CovenantFactory)
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     engaged = False
+
+
+class CovenantLevelThresholdFactory(factory_django.DjangoModelFactory):
+    """Factory for CovenantLevelThreshold."""
+
+    class Meta:
+        model = CovenantLevelThreshold
+        django_get_or_create = ("level",)
+
+    level = factory.Sequence(lambda n: n + 1)
+    required_legend = factory.LazyAttribute(lambda o: (o.level - 1) * 100)
 
 
 def make_engaged_member(

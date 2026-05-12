@@ -226,3 +226,22 @@ class CharacterCovenantRole(SharedMemoryModel):
     def __str__(self) -> str:
         state = "active" if self.left_at is None else "ended"
         return f"{self.character_sheet}: {self.covenant_role.name} ({state})"
+
+
+class CovenantLevelThreshold(SharedMemoryModel):
+    """Legend total required to reach each covenant level. Authored content."""
+
+    level = models.PositiveIntegerField(unique=True)
+    required_legend = models.PositiveIntegerField()
+
+    class Meta:
+        ordering = ["level"]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(level__gte=1),
+                name="covenant_level_threshold_level_gte_1",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"Level {self.level} (≥ {self.required_legend} legend)"
