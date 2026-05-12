@@ -1,6 +1,7 @@
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import RoomProfileFactory
@@ -12,14 +13,18 @@ from world.locations.constants import (
     StatKey,
 )
 from world.locations.factories import (
+    LocationOwnershipFactory,
     LocationStatModifierFactory,
     LocationStatOverrideFactory,
 )
 from world.locations.services import (
     _bulk_room_profiles_and_ancestors,
+    effective_owner,
+    effective_owners_for_rooms,
     effective_stat,
     effective_stats_for_rooms,
 )
+from world.scenes.factories import PersonaFactory
 
 
 class BulkRoomProfilesAndAncestorsTests(TestCase):
@@ -173,3 +178,82 @@ class EffectiveStatsForRoomsTests(TestCase):
 
         with self.assertNumQueries(3):
             effective_stats_for_rooms(rooms, [StatKey.CRIME, StatKey.NOISE])
+
+
+class EffectiveOwnersForRoomsTests(TestCase):
+    def test_empty_rooms_returns_empty_dict(self) -> None:
+        self.assertEqual(effective_owners_for_rooms([]), {})
+
+    def test_single_room_matches_singular_helper(self) -> None:
+        ward = AreaFactory(level=AreaLevel.WARD)
+        profile = RoomProfileFactory(area=ward)
+        room = profile.objectdb
+        row = LocationOwnershipFactory(area=ward, holder_persona=PersonaFactory())
+        result = effective_owners_for_rooms([room])
+        self.assertEqual(result[room.pk], row)
+        self.assertEqual(result[room.pk], effective_owner(room))
+
+    def test_multiple_rooms_room_override_wins_over_area(self) -> None:
+        ward = AreaFactory(level=AreaLevel.WARD)
+        profile_a = RoomProfileFactory(area=ward)
+        profile_b = RoomProfileFactory(area=ward)
+        room_a, room_b = profile_a.objectdb, profile_b.objectdb
+
+        ward_owner = LocationOwnershipFactory(area=ward, holder_persona=PersonaFactory())
+        room_owner = LocationOwnershipFactory(
+            on_room=True,
+            room_profile=profile_a,
+            holder_persona=PersonaFactory(),
+        )
+
+        result = effective_owners_for_rooms([room_a, room_b])
+        self.assertEqual(result[room_a.pk], room_owner)
+        self.assertEqual(result[room_b.pk], ward_owner)
+
+    def test_more_specific_area_wins(self) -> None:
+        city = AreaFactory(level=AreaLevel.CITY)
+        ward = AreaFactory(level=AreaLevel.WARD, parent=city)
+        profile = RoomProfileFactory(area=ward)
+        room = profile.objectdb
+
+        LocationOwnershipFactory(area=city, holder_persona=PersonaFactory())
+        ward_row = LocationOwnershipFactory(area=ward, holder_persona=PersonaFactory())
+
+        result = effective_owners_for_rooms([room])
+        self.assertEqual(result[room.pk], ward_row)
+
+    def test_no_ownership_returns_none(self) -> None:
+        ward = AreaFactory(level=AreaLevel.WARD)
+        profile = RoomProfileFactory(area=ward)
+        room = profile.objectdb
+        result = effective_owners_for_rooms([room])
+        self.assertIsNone(result[room.pk])
+
+    def test_room_without_profile_returns_none(self) -> None:
+        profile = RoomProfileFactory()
+        room = profile.objectdb
+        profile.delete()
+        room.refresh_from_db()
+        result = effective_owners_for_rooms([room])
+        self.assertIsNone(result[room.pk])
+
+    def test_historical_owner_ignored(self) -> None:
+        ward = AreaFactory(level=AreaLevel.WARD)
+        profile = RoomProfileFactory(area=ward)
+        room = profile.objectdb
+        row = LocationOwnershipFactory(area=ward, holder_persona=PersonaFactory())
+        row.ended_at = timezone.now()
+        row.save()
+        result = effective_owners_for_rooms([room])
+        self.assertIsNone(result[room.pk])
+
+    def test_query_budget_two_queries(self) -> None:
+        ward = AreaFactory(level=AreaLevel.WARD)
+        profiles = [RoomProfileFactory(area=ward) for _ in range(3)]
+        rooms = [p.objectdb for p in profiles]
+        LocationOwnershipFactory(area=ward, holder_persona=PersonaFactory())
+
+        rooms = [ObjectDB.objects.get(pk=r.pk) for r in rooms]
+
+        with self.assertNumQueries(2):
+            effective_owners_for_rooms(rooms)

@@ -376,6 +376,66 @@ def effective_owner(room: DefaultObject) -> LocationOwnership | None:
     return min(rows, key=lambda r: r.area.level)
 
 
+def effective_owners_for_rooms(
+    rooms: Iterable[DefaultObject],
+) -> dict[int, LocationOwnership | None]:
+    """Bulk-resolve owners for many rooms in one pass.
+
+    Returns: {room.pk: LocationOwnership | None}.
+
+    One AreaClosure walk for the union of ancestor area ids (via
+    _bulk_room_profiles_and_ancestors), one fetch of active
+    LocationOwnership rows for those ids + room_profiles (with
+    select_related on area + holders), then most-specific-wins
+    selection per room in Python.
+
+    Query budget: 2 total queries regardless of room count.
+    """
+    rooms_list = list(rooms)
+    if not rooms_list:
+        return {}
+
+    room_to_profile, profile_to_ancestor_ids, all_ancestor_ids = _bulk_room_profiles_and_ancestors(
+        rooms_list
+    )
+
+    profile_pks = {p.pk for p in room_to_profile.values()}
+
+    rows = list(
+        LocationOwnership.objects.filter(ended_at__isnull=True)
+        .select_related("area", "holder_persona", "holder_organization")
+        .filter(models.Q(room_profile_id__in=profile_pks) | models.Q(area_id__in=all_ancestor_ids))
+    )
+
+    # Index: profile-level overrides and area-level rows
+    by_room: dict[int, LocationOwnership] = {}
+    by_area: dict[int, LocationOwnership] = {}
+    for r in rows:
+        if r.room_profile_id is not None:
+            by_room[r.room_profile_id] = r
+        elif r.area_id is not None:
+            by_area[r.area_id] = r
+
+    result: dict[int, LocationOwnership | None] = {}
+    for room in rooms_list:
+        profile = room_to_profile.get(room.pk)
+        if profile is None:
+            result[room.pk] = None
+            continue
+        # Room-level wins
+        if profile.pk in by_room:
+            result[room.pk] = by_room[profile.pk]
+            continue
+        # Among area-level rows, smallest level wins (BUILDING=10 most specific)
+        ancestor_ids = profile_to_ancestor_ids.get(profile.pk, [])
+        area_rows = [by_area[aid] for aid in ancestor_ids if aid in by_area]
+        if area_rows:
+            result[room.pk] = min(area_rows, key=lambda r: r.area.level)
+        else:
+            result[room.pk] = None
+    return result
+
+
 def current_tenants(room: DefaultObject) -> QuerySet[LocationTenancy]:
     """Return all currently-active tenancies that apply to a room.
 
