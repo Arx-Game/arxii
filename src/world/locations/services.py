@@ -715,7 +715,7 @@ def ownership_history_for(
         qs = qs.filter(area=area)
     else:
         qs = qs.filter(room_profile=room_profile)
-    return qs.order_by("acquired_at")
+    return qs.order_by("acquired_at", "pk")
 
 
 def tenancy_history_for(
@@ -735,7 +735,7 @@ def tenancy_history_for(
         qs = qs.filter(area=area)
     else:
         qs = qs.filter(room_profile=room_profile)
-    return qs.order_by("started_at")
+    return qs.order_by("started_at", "pk")
 
 
 def cleanup_decayed_modifiers(now: datetime | None = None) -> int:
@@ -754,9 +754,16 @@ def cleanup_decayed_modifiers(now: datetime | None = None) -> int:
     The caller may pass ``now`` to make the sweep deterministic for
     tests; otherwise the model's current_value() defaults to
     timezone.now().
+
+    Wrapped in transaction.atomic with select_for_update on the
+    candidate iteration so concurrent ``applied_at = now()`` refreshes
+    can't slip past us — the sweep serializes against modifier writes
+    while it runs. Safe for daily-cadence cron; not recommended for
+    high-frequency invocation.
     """
-    candidates = LocationStatModifier.objects.exclude(change_per_day=0)
-    to_delete_ids: list[int] = [row.pk for row in candidates if row.current_value(now=now) == 0]
-    if to_delete_ids:
-        LocationStatModifier.objects.filter(pk__in=to_delete_ids).delete()
-    return len(to_delete_ids)
+    with transaction.atomic():
+        candidates = LocationStatModifier.objects.exclude(change_per_day=0).select_for_update()
+        to_delete_ids: list[int] = [row.pk for row in candidates if row.current_value(now=now) == 0]
+        if to_delete_ids:
+            LocationStatModifier.objects.filter(pk__in=to_delete_ids).delete()
+        return len(to_delete_ids)

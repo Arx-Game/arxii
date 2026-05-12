@@ -156,3 +156,38 @@ class TenancyHistoryForTests(TestCase):
         LocationTenancyFactory(on_area=True, area=building, tenant_persona=PersonaFactory())
         result = tenancy_history_for(area=building)
         self.assertEqual(result.model, LocationTenancy)
+
+
+class HistoryDeterministicOrderingTests(TestCase):
+    def test_ownership_tied_timestamps_break_by_pk(self) -> None:
+        area = AreaFactory()
+        same_ts = timezone.now() - timedelta(days=1)
+        first = LocationOwnershipFactory(
+            area=area, holder_persona=PersonaFactory(), acquired_at=same_ts
+        )
+        first.ended_at = timezone.now()
+        first.save()
+        second = LocationOwnershipFactory(
+            area=area, holder_persona=PersonaFactory(), acquired_at=same_ts
+        )
+        # First created has the smaller pk; tiebreaker should put it first.
+        result = list(ownership_history_for(area=area))
+        self.assertEqual(result, [first, second])
+
+    def test_tenancy_tied_timestamps_break_by_pk(self) -> None:
+        building = AreaFactory()
+        same_ts = timezone.now() - timedelta(days=1)
+        first = LocationTenancyFactory(
+            on_area=True,
+            area=building,
+            tenant_persona=PersonaFactory(),
+            started_at=same_ts,
+        )
+        second = LocationTenancyFactory(
+            on_area=True,
+            area=building,
+            tenant_persona=PersonaFactory(),
+            started_at=same_ts,
+        )
+        result = list(tenancy_history_for(area=building))
+        self.assertEqual(result, [first, second])
