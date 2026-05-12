@@ -97,6 +97,10 @@ def create_legend_event(  # noqa: PLR0913
 
     Returns:
         Tuple of (LegendEvent, list of LegendEntry instances).
+
+    Note:
+        Each created LegendEntry is also credited to the persona's
+        currently-engaged covenants via credit_engaged_covenants.
     """
     config = SpreadingConfig.get_active_config()
     event = LegendEvent.objects.create(
@@ -280,14 +284,9 @@ def credit_engaged_covenants(*, entry: LegendEntry) -> list[CovenantLegendCredit
     Returns:
         List of CovenantLegendCredit rows (created or found).
     """
-    persona = entry.persona
-    if persona.character_sheet is None:
-        return []
-    sheet = persona.character_sheet
-    if not hasattr(sheet, "character") or sheet.character is None:
-        return []
     # `active_memberships` returns all rows with left_at IS NULL.
     # Filter to engaged=True in Python — no DB hit (identity-map cached).
+    sheet = entry.persona.character_sheet
     handler = sheet.character.covenant_roles
     memberships = [m for m in handler.active_memberships if m.engaged]
     result: list[CovenantLegendCredit] = []
