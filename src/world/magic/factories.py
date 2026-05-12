@@ -1,15 +1,18 @@
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import factory
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import ConditionTemplateFactory
+from world.covenants.factories import CovenantFactory, CovenantRoleFactory
 from world.magic.audere import SOULFRAY_CONDITION_NAME, AudereThreshold
 from world.magic.constants import (
     AlterationKind,
     AlterationTier,
     CantripArchetype,
     EffectKind,
+    ParticipationRule,
     PendingAlterationStatus,
     RitualExecutionKind,
     TargetKind,
@@ -1580,7 +1583,12 @@ class SoulTetherActiveTemplateFactory(factory.django.DjangoModelFactory):
 
 
 class AcceptSoulTetherRitualFactory(factory.django.DjangoModelFactory):
-    """SERVICE-dispatched Ritual for Soul Tether formation (Spec B §12).
+    """BILATERAL SESSION-dispatched Ritual for Soul Tether formation (Spec B §12, Slice B).
+
+    Both participants must accept a RitualSession and declare their role
+    (SINNER or SINEATER) before the session fires.  The service wrapper
+    accept_soul_tether_via_session reads both participant_kwargs entries and
+    delegates to accept_soul_tether with the canonical initiator/partner shape.
 
     Uses django_get_or_create so repeated calls return the same row.
     """
@@ -1600,47 +1608,43 @@ class AcceptSoulTetherRitualFactory(factory.django.DjangoModelFactory):
         "of the Sinner's corruption, and the bond is sealed."
     )
     execution_kind = RitualExecutionKind.SERVICE
-    service_function_path = "world.magic.services.soul_tether.accept_soul_tether"
+    service_function_path = "world.magic.services.soul_tether.accept_soul_tether_via_session"
     flow = None
     hedge_accessible = False
     glimpse_eligible = False
-    input_schema = {
-        "fields": [
-            {
-                "name": "sineater_sheet_id",
-                "label": "Sineater (the other PC)",
-                "type": "character_search",
-                "required": True,
-                "help": (
-                    "The character who will share this bond with you. "
-                    "Must not have a Celestial-dominant aura."
-                ),
-            },
-            {
-                "name": "scene_id",
-                "label": "Scene",
-                "type": "scene_picker",
-                "required": True,
-                "scope": "active_for_caller",
-            },
-            {
-                "name": "resonance_id",
-                "label": "Resonance",
-                "type": "resonance_picker",
-                "required": True,
-                "scope": "owned_by_caller",
-                "help": "The resonance that will channel the bond.",
-            },
-            {
-                "name": "capstone_id",
-                "label": "Relationship Capstone",
-                "type": "relationship_capstone_picker",
-                "required": True,
-                "scope": "with_target_character",
-                "help": "The relationship capstone that will hold the Hollow.",
-            },
-        ],
-    }
+    participation_rule = ParticipationRule.BILATERAL
+    min_participants = 2
+    max_participants = 2
+    input_schema = factory.LazyFunction(
+        lambda: {
+            "fields": [
+                {
+                    "name": "resonance_id",
+                    "label": "Resonance",
+                    "type": "resonance_picker",
+                    "required": True,
+                    "scope": "owned_by_caller",
+                    "help": "The resonance that will channel the bond.",
+                },
+                {
+                    "name": "writeup",
+                    "label": "Bond Writeup",
+                    "type": "text",
+                    "required": False,
+                    "help": "Narrative description of the bond formation.",
+                },
+            ],
+            "participant_fields": [
+                {
+                    "name": "soul_tether_role",
+                    "label": "Your Role",
+                    "type": "soul_tether_role_picker",
+                    "required": True,
+                    "help": "Choose SINNER (Abyssal-aligned) or SINEATER (Celestial/Primal).",
+                },
+            ],
+        }
+    )
 
 
 class SoulTetherRescueRitualFactory(factory.django.DjangoModelFactory):
@@ -1931,3 +1935,148 @@ class CharacterRitualKnowledgeFactory(factory.django.DjangoModelFactory):
     roster_entry = factory.SubFactory(RosterEntryFactory)
     ritual = factory.SubFactory(RitualFactory)
     learned_from = None
+
+
+class RitualSessionFactory(factory.django.DjangoModelFactory):
+    """Factory for RitualSession — transient coordination row for multi-participant rituals."""
+
+    class Meta:
+        model = "magic.RitualSession"
+
+    ritual = factory.SubFactory(RitualFactory)
+    initiator = factory.SubFactory(CharacterSheetFactory)
+    proposed_terms = ""
+    session_kwargs = factory.LazyFunction(dict)
+    expires_at = factory.LazyFunction(lambda: datetime.now(UTC) + timedelta(hours=1))
+
+
+class RitualSessionParticipantFactory(factory.django.DjangoModelFactory):
+    """Factory for RitualSessionParticipant."""
+
+    class Meta:
+        model = "magic.RitualSessionParticipant"
+
+    session = factory.SubFactory(RitualSessionFactory)
+    character_sheet = factory.SubFactory(CharacterSheetFactory)
+    state = "INVITED"
+    participant_kwargs = factory.LazyFunction(dict)
+
+
+class RitualSessionCovenantRefFactory(factory.django.DjangoModelFactory):
+    """Reference of kind=COVENANT (session-level)."""
+
+    class Meta:
+        model = "magic.RitualSessionReference"
+
+    session = factory.SubFactory(RitualSessionFactory)
+    participant = None
+    kind = "COVENANT"
+    ref_covenant = factory.SubFactory(CovenantFactory)
+    ref_covenant_role = None
+
+
+class RitualSessionCovenantRoleRefFactory(factory.django.DjangoModelFactory):
+    """Reference of kind=COVENANT_ROLE (typically participant-level)."""
+
+    class Meta:
+        model = "magic.RitualSessionReference"
+
+    session = factory.SubFactory(RitualSessionFactory)
+    participant = factory.SubFactory(RitualSessionParticipantFactory)
+    kind = "COVENANT_ROLE"
+    ref_covenant = None
+    ref_covenant_role = factory.SubFactory(CovenantRoleFactory)
+
+
+class CovenantFormationRitualFactory(factory.django.DjangoModelFactory):
+    """Factory for the covenant formation ritual.
+
+    Per project rule "no data migrations for game content": this factory is
+    the single source for the formation ritual definition, used by tests and
+    (eventually) by an authoring UI surfacing sane defaults. It is NOT
+    seeded via Django data migrations.
+    """
+
+    class Meta:
+        model = "magic.Ritual"
+        django_get_or_create = ("name",)
+
+    name = "Covenant Formation"
+    description = "Bind multiple souls in a sworn magical covenant."
+    narrative_prose = "Three or more swear an oath of magical bond..."
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.covenants.services.create_covenant_via_session"
+    flow = None
+    participation_rule = ParticipationRule.FORMATION
+    input_schema = factory.LazyFunction(
+        lambda: {
+            "fields": [
+                {"name": "name", "type": "text", "label": "Covenant name", "required": True},
+                {
+                    "name": "covenant_type",
+                    "type": "select",
+                    "options": ["DURANCE", "BATTLE"],
+                    "required": True,
+                },
+                {"name": "sworn_objective", "type": "textarea", "required": True},
+                {
+                    "name": "invitees",
+                    "type": "character_search",
+                    "multi": True,
+                    "min": 1,
+                    "required": True,
+                },
+            ],
+            "participant_fields": [
+                {
+                    "name": "chosen_covenant_role",
+                    "type": "covenant_role_picker",
+                    "depends_on": "covenant_type",
+                    "required": True,
+                },
+            ],
+        }
+    )
+
+
+class CovenantInductionRitualFactory(factory.django.DjangoModelFactory):
+    """Factory for the covenant induction ritual."""
+
+    class Meta:
+        model = "magic.Ritual"
+        django_get_or_create = ("name",)
+
+    name = "Covenant Induction"
+    description = "Welcome a new member into an existing covenant."
+    narrative_prose = "An existing covenant inducts a new member..."
+    execution_kind = RitualExecutionKind.SERVICE
+    service_function_path = "world.covenants.services.induct_member_via_session"
+    flow = None
+    participation_rule = ParticipationRule.INDUCTION
+    input_schema = factory.LazyFunction(
+        lambda: {
+            "fields": [
+                {
+                    "name": "target_covenant",
+                    "type": "covenant_picker",
+                    "filter": "initiator_active_memberships",
+                    "required": True,
+                },
+                {
+                    "name": "candidate",
+                    "type": "character_search",
+                    "multi": False,
+                    "required": True,
+                },
+            ],
+            "participant_fields": [
+                {
+                    "name": "chosen_covenant_role",
+                    "type": "covenant_role_picker",
+                    "depends_on": "session.target_covenant.covenant_type",
+                    "applies_to": "candidate_only",
+                    "required": True,
+                },
+            ],
+        }
+    )

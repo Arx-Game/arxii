@@ -4,21 +4,35 @@ from __future__ import annotations
 
 from django.db.models import QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import viewsets
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
 
+from world.covenants.exceptions import CovenantEngagementPrerequisiteNotMetError
 from world.covenants.filters import (
     CharacterCovenantRoleFilter,
     CovenantFilter,
+    CovenantRoleFilter,
     GearArchetypeCompatibilityFilter,
 )
-from world.covenants.models import CharacterCovenantRole, Covenant, GearArchetypeCompatibility
+from world.covenants.handlers import can_engage_durance_membership
+from world.covenants.models import (
+    CharacterCovenantRole,
+    Covenant,
+    CovenantRole,
+    GearArchetypeCompatibility,
+)
+from world.covenants.permissions import IsOwnMembership
 from world.covenants.serializers import (
     CharacterCovenantRoleSerializer,
+    CovenantRoleSerializer,
     CovenantSerializer,
     GearArchetypeCompatibilitySerializer,
 )
+from world.covenants.services import clear_engaged_membership, set_engaged_membership
 
 
 class CovenantsPagination(PageNumberPagination):
@@ -54,6 +68,57 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
             character_sheet__roster_entry__tenures__end_date__isnull=True,
             character_sheet__roster_entry__tenures__player_data__account=self.request.user,
         ).distinct()
+
+    @action(
+        detail=True,
+        methods=["POST"],
+        permission_classes=[IsAuthenticated, IsOwnMembership],
+    )
+    def engage(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/covenants/character-roles/{id}/engage/
+
+        Engage the membership for scene presence.  Returns 400 when the
+        IC prerequisite is not met (no covenant members present in scene).
+        """
+        membership = self.get_object()
+        if not can_engage_durance_membership(membership):
+            return Response(
+                {"detail": CovenantEngagementPrerequisiteNotMetError.user_message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        set_engaged_membership(membership=membership)
+        return Response(self.get_serializer(membership).data)
+
+    @action(
+        detail=True,
+        methods=["POST"],
+        permission_classes=[IsAuthenticated, IsOwnMembership],
+    )
+    def disengage(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/covenants/character-roles/{id}/disengage/
+
+        Un-engage the membership.  Idempotent — succeeds even if not currently
+        engaged.
+        """
+        membership = self.get_object()
+        clear_engaged_membership(membership=membership)
+        return Response(self.get_serializer(membership).data)
+
+
+class CovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only ViewSet for CovenantRole lookup data.
+
+    Staff-authored lookup table listing available roles per covenant type.
+    Supports ?covenant_type= filtering so ritual form pickers can populate
+    only the roles relevant to the chosen covenant type.
+    """
+
+    serializer_class = CovenantRoleSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Small lookup table — no pagination needed.
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CovenantRoleFilter
+    queryset = CovenantRole.objects.all().order_by("covenant_type", "name")
 
 
 class GearArchetypeCompatibilityViewSet(viewsets.ReadOnlyModelViewSet):

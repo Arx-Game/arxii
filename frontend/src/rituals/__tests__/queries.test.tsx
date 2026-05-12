@@ -55,6 +55,9 @@ const mockRitual = {
   author_account_id: null,
   scene_action_config: null,
   client_hosted: false,
+  participation_rule: 'SINGLE_ACTOR' as const,
+  min_participants: null,
+  max_participants: null,
 };
 
 describe('Rituals Query Hooks', () => {

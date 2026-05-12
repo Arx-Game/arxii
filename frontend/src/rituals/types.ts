@@ -18,7 +18,10 @@ export type RitualFieldType =
   | 'character_search'
   | 'scene_picker'
   | 'resonance_picker'
-  | 'relationship_capstone_picker';
+  | 'relationship_capstone_picker'
+  | 'covenant_picker'
+  | 'covenant_role_picker'
+  | 'soul_tether_role_picker';
 
 export interface RitualField {
   name: string;
@@ -28,6 +31,15 @@ export interface RitualField {
   help?: string;
   scope?: string;
   choices?: Array<{ value: string | number; label: string }>;
+  /**
+   * Name of another form field this field depends on for filtering.
+   * May be a sibling field name (e.g. "covenant_type") or a session-level
+   * reference path (e.g. "session.target_covenant.covenant_type") — the
+   * latter is resolved by the parent form or dialog.
+   */
+  depends_on?: string;
+  /** Hint for server-side filtering when fetching options (e.g. "initiator_active_memberships"). */
+  filter?: string;
 }
 
 export interface FieldProps {

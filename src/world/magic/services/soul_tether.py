@@ -152,7 +152,7 @@ def accept_soul_tether(  # noqa: PLR0913
     Args:
         initiator_sheet: The character sheet of the person initiating the ritual.
         partner_sheet: The character sheet of the other party.
-        sinner_role: Which role the INITIATOR has. If ABYSSAL, initiator is the
+        sinner_role: Which role the INITIATOR has. If SINNER, initiator is the
             Sinner. If SINEATER, initiator is the Sineater (partner is Sinner).
         resonance: The Resonance the Sinner's Thread will channel.
         writeup: Narrative description of the bond's formation.
@@ -167,7 +167,7 @@ def accept_soul_tether(  # noqa: PLR0913
         SoulTetherFormationError: A Soul Tether already exists between these characters.
     """
     # 1. Determine Sinner/Sineater from sinner_role.
-    if sinner_role == SoulTetherRoleEnum.ABYSSAL:
+    if sinner_role == SoulTetherRoleEnum.SINNER:
         sinner_sheet, sineater_sheet = initiator_sheet, partner_sheet
     else:
         sinner_sheet, sineater_sheet = partner_sheet, initiator_sheet
@@ -225,7 +225,7 @@ def accept_soul_tether(  # noqa: PLR0913
 
         # 9. Flag both directional relationship rows.
         rel_outgoing.is_soul_tether = True
-        rel_outgoing.soul_tether_role = SoulTetherRole.ABYSSAL
+        rel_outgoing.soul_tether_role = SoulTetherRole.SINNER
         rel_outgoing.save(update_fields=["is_soul_tether", "soul_tether_role"])
 
         rel_incoming.is_soul_tether = True
@@ -329,7 +329,7 @@ def _sinner_has_other_active_tethers(
         CharacterRelationship.objects.filter(
             source=sinner_sheet,
             is_soul_tether=True,
-            soul_tether_role=SoulTetherRole.ABYSSAL,
+            soul_tether_role=SoulTetherRole.SINNER,
         )
         .exclude(pk=exclude_outgoing_id)
         .exists()
@@ -350,7 +350,7 @@ def dissolve_soul_tether(
 
     Args:
         relationship_id: Primary key of *either* directional relationship row.
-            The function finds the outgoing (Sinner→Sineater, role=ABYSSAL)
+            The function finds the outgoing (Sinner→Sineater, role=SINNER)
             direction automatically.
         initiator_sheet: The CharacterSheet initiating dissolution. Reserved
             for future permission/validation logic; not currently validated
@@ -372,11 +372,11 @@ def dissolve_soul_tether(
 
     from world.magic.models import Thread  # noqa: PLC0415
 
-    # Resolve the outgoing (Sinner→Sineater, ABYSSAL) row.  The caller may pass
+    # Resolve the outgoing (Sinner→Sineater, SINNER) row.  The caller may pass
     # either direction's ID; we determine which is which from soul_tether_role.
     raw = CharacterRelationship.objects.get(pk=relationship_id)
 
-    if raw.soul_tether_role == SoulTetherRole.ABYSSAL:
+    if raw.soul_tether_role == SoulTetherRole.SINNER:
         # Passed the outgoing (Sinner→Sineater) row.
         outgoing = raw
         incoming = CharacterRelationship.objects.get(
@@ -400,7 +400,7 @@ def dissolve_soul_tether(
         if not outgoing.is_soul_tether:
             return
 
-        # The Sinner is the source of the outgoing (ABYSSAL) row.
+        # The Sinner is the source of the outgoing (SINNER) row.
         sinner_sheet: CharacterSheet = outgoing.source
 
         # 1. Flip flags on both directional rows.
@@ -1343,7 +1343,7 @@ def _get_sinner_tether_threads_for_resonance(
 
     "Sinner-side" means the Thread's target_capstone belongs to a
     CharacterRelationship where sheet is the source AND soul_tether_role is
-    ABYSSAL.  Only non-retired Threads are returned.
+    SINNER.  Only non-retired Threads are returned.
 
     Args:
         sheet: The character sheet whose Threads to search.
@@ -1363,7 +1363,7 @@ def _get_sinner_tether_threads_for_resonance(
             # Capstone must belong to a soul-tether relationship where sheet is the Sinner.
             target_capstone__relationship__source=sheet,
             target_capstone__relationship__is_soul_tether=True,
-            target_capstone__relationship__soul_tether_role=SoulTetherRole.ABYSSAL,
+            target_capstone__relationship__soul_tether_role=SoulTetherRole.SINNER,
         ).select_related("target_capstone__relationship")
     )
 
@@ -1457,7 +1457,7 @@ def _active_soul_tethers_for_sinner(
     """Return all active Sinner-side CharacterRelationship rows for *sinner_sheet*.
 
     "Sinner-side" means source=sinner_sheet, is_soul_tether=True,
-    soul_tether_role=ABYSSAL.  Only active (non-soft-retired) tethers.
+    soul_tether_role=SINNER.  Only active (non-soft-retired) tethers.
 
     Args:
         sinner_sheet: The Sinner's CharacterSheet.
@@ -1469,7 +1469,7 @@ def _active_soul_tethers_for_sinner(
         CharacterRelationship.objects.filter(
             source=sinner_sheet,
             is_soul_tether=True,
-            soul_tether_role=SoulTetherRole.ABYSSAL,
+            soul_tether_role=SoulTetherRole.SINNER,
         ).select_related("target")
     )
 
@@ -1886,3 +1886,91 @@ def resolve_stage_advance_prompt_from_db(
         locked_pending.delete()
 
     return result
+
+
+# =============================================================================
+# Bilateral session wrapper: accept_soul_tether_via_session
+# =============================================================================
+
+_BILATERAL_PARTICIPANT_COUNT = 2
+
+
+def accept_soul_tether_via_session(*, session: Any) -> Any:
+    """Dispatched on Soul Tether BILATERAL fire (Slice B §4.15).
+
+    The SoulTetherRole choice lives in participant_kwargs["soul_tether_role"]
+    (scalar enum, JSON is the right home for discriminating-scalar choices per
+    the Slice B spec discriminator-FK split).
+
+    Reads exactly two ACCEPTED participants, maps each to their role, then
+    delegates to accept_soul_tether with the canonical initiator/partner shape.
+
+    Session kwargs:
+        "resonance_id" (int): PK of the Resonance the Sinner's Thread will
+            channel. Required; raises RequiredReferenceMissingError if absent
+            or invalid.
+        "writeup" (str): Narrative description of the bond formation. Optional;
+            defaults to empty string if not provided.
+        "ritual_components" (list): Component items (validated by caller).
+            Optional; defaults to [].
+
+    NOTE (Slice B scope): resonance and writeup come from session_kwargs as
+    scalar values (ID and string). The frontend draft dialog (Phase 9) will
+    populate these via the session draft. No session_reference kinds exist yet
+    for Resonance objects — if that changes, this wrapper should be updated to
+    read from references instead.
+
+    Raises:
+        RequiredReferenceMissingError: If participant count != 2, any
+            participant lacks a valid soul_tether_role choice, or resonance_id
+            is missing/invalid.
+        BilateralRoleConflictError: If both participants chose the same role.
+    """
+    from world.magic.constants import ParticipantState  # noqa: PLC0415
+    from world.magic.exceptions import (  # noqa: PLC0415
+        BilateralRoleConflictError,
+        RequiredReferenceMissingError,
+    )
+    from world.magic.models.affinity import Resonance  # noqa: PLC0415
+    from world.magic.types.soul_tether import SoulTetherRole as SoulTetherRoleEnum  # noqa: PLC0415
+
+    valid_roles = {SoulTetherRoleEnum.SINNER, SoulTetherRoleEnum.SINEATER}
+
+    # 1. Verify exactly two ACCEPTED participants.
+    participants = list(session.participants.filter(state=ParticipantState.ACCEPTED))
+    if len(participants) != _BILATERAL_PARTICIPANT_COUNT:
+        raise RequiredReferenceMissingError
+
+    # 2. Map each participant's declared role to their CharacterSheet.
+    role_to_sheet: dict[str, Any] = {}
+    for p in participants:
+        role = p.participant_kwargs.get("soul_tether_role")
+        if role not in valid_roles:
+            raise RequiredReferenceMissingError
+        if role in role_to_sheet:
+            raise BilateralRoleConflictError
+        role_to_sheet[role] = p.character_sheet
+
+    # 3. Extract session-level scalar kwargs.
+    resonance_id: int | None = session.session_kwargs.get("resonance_id")
+    if resonance_id is None:
+        raise RequiredReferenceMissingError
+    try:
+        resonance = Resonance.objects.get(pk=resonance_id)
+    except Resonance.DoesNotExist as exc:
+        raise RequiredReferenceMissingError from exc
+
+    writeup: str = session.session_kwargs.get("writeup", "")
+    ritual_components: list[Any] = session.session_kwargs.get("ritual_components", [])
+
+    # 4. Build the accept_soul_tether call using its initiator/partner + sinner_role shape.
+    #    We treat the sinner as the "initiator" (arbitrary — the function uses sinner_role
+    #    to resolve which sheet is which, not the argument name).
+    return accept_soul_tether(
+        initiator_sheet=role_to_sheet[SoulTetherRoleEnum.SINNER],
+        partner_sheet=role_to_sheet[SoulTetherRoleEnum.SINEATER],
+        sinner_role=SoulTetherRoleEnum.SINNER,
+        resonance=resonance,
+        writeup=writeup,
+        ritual_components=ritual_components,
+    )

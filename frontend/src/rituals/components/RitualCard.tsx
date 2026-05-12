@@ -11,9 +11,11 @@
  */
 
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { RitualPerformDialog } from './RitualPerformDialog';
+import { RitualSessionDraftDialog } from './RitualSessionDraftDialog';
 import { RitualSceneActionDetailPanel } from './RitualSceneActionDetailPanel';
 import type { RitualWithSchema } from '../types';
 
@@ -39,6 +41,14 @@ function isSceneAction(ritual: RitualWithSchema): boolean {
   return (ritual.execution_kind as string) === 'SCENE_ACTION';
 }
 
+/**
+ * BILATERAL rituals (e.g. Soul Tether formation, Covenant Induction) require
+ * the multi-participant session flow rather than a single-actor perform.
+ */
+function isBilateral(ritual: RitualWithSchema): boolean {
+  return (ritual.participation_rule as string) === 'BILATERAL';
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -50,10 +60,12 @@ export function RitualCard({
   authorAccountId,
   onSuccess,
 }: RitualCardProps) {
+  const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
 
   const sceneAction = isSceneAction(ritual);
+  const bilateral = isBilateral(ritual);
 
   return (
     <>
@@ -89,7 +101,7 @@ export function RitualCard({
                 className="shrink-0"
                 onClick={() => setDialogOpen(true)}
               >
-                Perform
+                {bilateral ? 'Begin Session' : 'Perform'}
               </Button>
             )}
           </div>
@@ -108,8 +120,23 @@ export function RitualCard({
         </CardContent>
       </Card>
 
-      {/* Perform dialog — only for non-SCENE_ACTION rituals */}
-      {!sceneAction && (
+      {/* BILATERAL rituals use the multi-participant session draft flow */}
+      {!sceneAction && bilateral && (
+        <RitualSessionDraftDialog
+          ritual={ritual}
+          characterSheetId={characterSheetId}
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          onSuccess={(session) => {
+            setDialogOpen(false);
+            onSuccess?.();
+            navigate(`/rituals/sessions/${session.id}`);
+          }}
+        />
+      )}
+
+      {/* Single-actor perform dialog — only for non-SCENE_ACTION, non-BILATERAL rituals */}
+      {!sceneAction && !bilateral && (
         <RitualPerformDialog
           ritual={ritual}
           characterSheetId={characterSheetId}

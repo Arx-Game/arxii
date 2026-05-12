@@ -6,12 +6,20 @@ properties (like combat speed rank). The full covenant lifecycle (formation,
 membership, progression) is future work.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.covenants.constants import CovenantType, RoleArchetype
 from world.items.constants import GearArchetype
+
+if TYPE_CHECKING:
+    from world.covenants.handlers import CovenantMembershipHandler
 
 
 class Covenant(SharedMemoryModel):
@@ -28,7 +36,7 @@ class Covenant(SharedMemoryModel):
     - dissolution_reason, dissolution_kind — Slice B
     """
 
-    name = models.CharField(max_length=120)
+    name = models.CharField(max_length=120, unique=True)
     covenant_type = models.CharField(
         max_length=20,
         choices=CovenantType.choices,
@@ -44,6 +52,12 @@ class Covenant(SharedMemoryModel):
     )
     formed_at = models.DateTimeField(auto_now_add=True)
     dissolved_at = models.DateTimeField(null=True, blank=True)
+
+    @cached_property
+    def member_roster(self) -> CovenantMembershipHandler:
+        from world.covenants.handlers import CovenantMembershipHandler  # noqa: PLC0415, I001 — avoids circular import (handlers imports models)
+
+        return CovenantMembershipHandler(self)
 
     def __str__(self) -> str:
         state = "active" if self.dissolved_at is None else "dissolved"

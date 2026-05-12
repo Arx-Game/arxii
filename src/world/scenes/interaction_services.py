@@ -444,6 +444,12 @@ def _ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
 
     account_id = _get_account_for_character(character.pk)
     if account_id is None:
+        # Character has no account yet — still evaluate covenant engagement (Slice B §4.10)
+        sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne absent on non-Character objects; duck-typing is intentional
+        if sheet is not None and scene.location is not None:
+            from world.covenants.services import evaluate_scene_engagement  # noqa: PLC0415
+
+            evaluate_scene_engagement(character_sheet=sheet, room=scene.location)
         return
 
     # Check in-memory cache first
@@ -463,6 +469,13 @@ def _ensure_scene_participation(scene: Scene, character: ObjectDB) -> None:
         account_id=account_id,
     )
     known_ids.add(account_id)
+
+    # Auto-engage on scene participation (Slice B §4.10)
+    sheet = getattr(character, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne absent on non-Character objects; duck-typing is intentional
+    if sheet is not None and scene.location is not None:
+        from world.covenants.services import evaluate_scene_engagement  # noqa: PLC0415
+
+        evaluate_scene_engagement(character_sheet=sheet, room=scene.location)
 
 
 def mark_very_private(

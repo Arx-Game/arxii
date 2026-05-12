@@ -2602,6 +2602,96 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/covenants/character-roles/{id}/disengage/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/covenants/character-roles/{id}/disengage/
+     *
+     *     Un-engage the membership.  Idempotent — succeeds even if not currently
+     *     engaged.
+     */
+    post: operations['covenants_character_roles_disengage_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/character-roles/{id}/engage/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/covenants/character-roles/{id}/engage/
+     *
+     *     Engage the membership for scene presence.  Returns 400 when the
+     *     IC prerequisite is not met (no covenant members present in scene).
+     */
+    post: operations['covenants_character_roles_engage_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/covenants/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for Covenant.
+     *
+     *     Non-staff users only see covenants where they have an active membership
+     *     on a character sheet they currently play (via the active RosterTenure
+     *     chain). Staff see all covenants.
+     */
+    get: operations['covenants_covenants_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/covenants/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for Covenant.
+     *
+     *     Non-staff users only see covenants where they have an active membership
+     *     on a character sheet they currently play (via the active RosterTenure
+     *     chain). Staff see all covenants.
+     */
+    get: operations['covenants_covenants_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/covenants/gear-compatibilities/': {
     parameters: {
       query?: never;
@@ -2628,6 +2718,52 @@ export interface paths {
     };
     /** @description Read-only ViewSet for authored covenant×archetype compatibility rows. */
     get: operations['covenants_gear_compatibilities_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/roles/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for CovenantRole lookup data.
+     *
+     *     Staff-authored lookup table listing available roles per covenant type.
+     *     Supports ?covenant_type= filtering so ritual form pickers can populate
+     *     only the roles relevant to the chosen covenant type.
+     */
+    get: operations['covenants_roles_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/covenants/roles/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Read-only ViewSet for CovenantRole lookup data.
+     *
+     *     Staff-authored lookup table listing available roles per covenant type.
+     *     Supports ?covenant_type= filtering so ritual form pickers can populate
+     *     only the roles relevant to the chosen covenant type.
+     */
+    get: operations['covenants_roles_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -5694,6 +5830,135 @@ export interface paths {
     put?: never;
     /** @description Validate, resolve, and dispatch the ritual; return a result payload. */
     post: operations['magic_rituals_perform_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/rituals/sessions/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Multi-participant ritual session endpoints (Covenants Slice B §4.12).
+     *
+     *     Scoping (non-staff): sessions where the user is initiator OR invited participant.
+     *     Staff: all sessions.
+     *
+     *     Actions:
+     *     - list / retrieve: read
+     *     - create: draft (initiator-only, non-SINGLE_ACTOR rituals)
+     *     - destroy: cancel (initiator-only)
+     *     - accept / decline: participant-only
+     *     - fire: initiator-only, threshold-gated
+     */
+    get: operations['magic_rituals_sessions_list'];
+    put?: never;
+    /**
+     * @description POST /api/rituals/sessions/ — draft a new session.
+     *
+     *     Request body: RitualSessionDraftSerializer.
+     *     Response: RitualSessionDetailSerializer (201) — includes the new
+     *     session's id so the frontend can navigate to its detail page.
+     */
+    post: operations['magic_rituals_sessions_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/rituals/sessions/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Multi-participant ritual session endpoints (Covenants Slice B §4.12).
+     *
+     *     Scoping (non-staff): sessions where the user is initiator OR invited participant.
+     *     Staff: all sessions.
+     *
+     *     Actions:
+     *     - list / retrieve: read
+     *     - create: draft (initiator-only, non-SINGLE_ACTOR rituals)
+     *     - destroy: cancel (initiator-only)
+     *     - accept / decline: participant-only
+     *     - fire: initiator-only, threshold-gated
+     */
+    get: operations['magic_rituals_sessions_retrieve'];
+    put?: never;
+    post?: never;
+    /**
+     * @description Multi-participant ritual session endpoints (Covenants Slice B §4.12).
+     *
+     *     Scoping (non-staff): sessions where the user is initiator OR invited participant.
+     *     Staff: all sessions.
+     *
+     *     Actions:
+     *     - list / retrieve: read
+     *     - create: draft (initiator-only, non-SINGLE_ACTOR rituals)
+     *     - destroy: cancel (initiator-only)
+     *     - accept / decline: participant-only
+     *     - fire: initiator-only, threshold-gated
+     */
+    delete: operations['magic_rituals_sessions_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/rituals/sessions/{id}/accept/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Accept invitation, supplying participant_kwargs + references. */
+    post: operations['magic_rituals_sessions_accept_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/rituals/sessions/{id}/decline/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Decline invitation. Returns 204 if session was deleted, 200 otherwise. */
+    post: operations['magic_rituals_sessions_decline_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/rituals/sessions/{id}/fire/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Initiator-only fire. Returns {result_kind, result_id} envelope. */
+    post: operations['magic_rituals_sessions_fire_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -10155,12 +10420,17 @@ export interface components {
       readonly id: number;
       /** @description The character this sheet belongs to */
       readonly character_sheet: number;
+      readonly covenant: number;
       readonly covenant_role: components['schemas']['CovenantRole'];
+      /** @description True when the character is currently 'fulfilling' this role for this covenant. At most one engaged active row per (character_sheet, covenant.covenant_type) — service-enforced + clean()-enforced. Drives role bonuses (modifier pipeline) and COVENANT_ROLE Thread pull eligibility. See spec 2026-05-09 §3.6. */
+      readonly engaged: boolean;
       /** Format: date-time */
       readonly joined_at: string;
       /** Format: date-time */
       readonly left_at: string | null;
       readonly is_active: boolean;
+      readonly can_engage: boolean;
+      readonly engage_blocked_reason: string | null;
     };
     /** @description Serializer for character drafts. */
     CharacterDraft: {
@@ -10380,10 +10650,10 @@ export interface components {
       /** @description Whether this relationship is a soul-tether bond (Spec B mechanics). */
       readonly is_soul_tether: boolean;
       /**
-       * @description Soul-tether role (ABYSSAL or SINEATER); empty when not a tether.
+       * @description Soul-tether role (SINNER or SINEATER); empty when not a tether.
        *
-       *     * `ABYSSAL` - Abyssal Side
-       *     * `SINEATER` - Sineater Side
+       *     * `SINEATER` - Sineater
+       *     * `SINNER` - Sinner
        */
       readonly soul_tether_role: components['schemas']['SoulTetherRoleEnum'];
       readonly absolute_value: number;
@@ -10612,6 +10882,23 @@ export interface components {
      * @enum {string}
      */
     ConnectionTypeEnum: 'therefore' | 'but';
+    /** @description Read-only serializer for Covenant identity, type, level, and lifecycle state. */
+    Covenant: {
+      readonly id: number;
+      readonly name: string;
+      readonly covenant_type: components['schemas']['CovenantTypeEnum'];
+      readonly covenant_type_display: string;
+      /** @description Group progression tier (Slice D will drive growth). */
+      readonly level: number;
+      /** @description Free text in Slice A; structured in Slice C. */
+      readonly sworn_objective: string;
+      /** Format: date-time */
+      readonly formed_at: string;
+      /** Format: date-time */
+      readonly dissolved_at: string | null;
+      readonly is_active: boolean;
+      readonly member_count: number;
+    };
     /** @description Read-only serializer for CovenantRole lookup data. */
     CovenantRole: {
       readonly id: number;
@@ -12702,6 +12989,21 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['CharacterRelationshipList'][];
     };
+    PaginatedCovenantList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['Covenant'][];
+    };
     PaginatedDraftApplicationList: {
       /** @example 123 */
       count?: number;
@@ -13634,6 +13936,14 @@ export interface components {
      * @enum {string}
      */
     ParticipationLevelEnum: 'critical' | 'important' | 'optional';
+    /**
+     * @description * `SINGLE_ACTOR` - Single Actor
+     *     * `FORMATION` - Formation (all must accept, ≥2)
+     *     * `INDUCTION` - Induction (majority of respondents)
+     *     * `BILATERAL` - Bilateral (exactly 2, both must accept)
+     * @enum {string}
+     */
+    ParticipationRuleEnum: 'SINGLE_ACTOR' | 'FORMATION' | 'INDUCTION' | 'BILATERAL';
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     PatchedBeatRequest: {
       episode?: number;
@@ -15119,6 +15429,9 @@ export interface components {
       } | null;
       /** @description When True, the generic Rituals listing page hides this ritual; it has a specialized host UI elsewhere (e.g., Thread Detail for Imbuing). */
       readonly client_hosted: boolean;
+      readonly participation_rule: components['schemas']['ParticipationRuleEnum'];
+      readonly min_participants: number | null;
+      readonly max_participants: number | null;
     };
     /**
      * @description Write serializer for partial PATCH of player-authored Rituals.
@@ -15162,6 +15475,115 @@ export interface components {
       resonance_id?: number | null;
       check_type_id?: number | null;
       target_difficulty?: number;
+    };
+    /**
+     * @description Write-only serializer for POST /api/rituals/sessions/{id}/accept/.
+     *
+     *     Validates the shape of participant_kwargs and references. Deep schema
+     *     validation against participant_fields is future work — services raise
+     *     RequiredReferenceMissingError for missing required choices.
+     */
+    RitualSessionAccept: {
+      participant_kwargs?: {
+        [key: string]: unknown;
+      };
+      references?: {
+        [key: string]: unknown;
+      }[];
+    };
+    /**
+     * @description Write-only serializer for POST /api/rituals/sessions/{id}/accept/.
+     *
+     *     Validates the shape of participant_kwargs and references. Deep schema
+     *     validation against participant_fields is future work — services raise
+     *     RequiredReferenceMissingError for missing required choices.
+     */
+    RitualSessionAcceptRequest: {
+      participant_kwargs?: {
+        [key: string]: unknown;
+      };
+      references?: {
+        [key: string]: unknown;
+      }[];
+    };
+    /**
+     * @description Read-only serializer for the RitualSession detail endpoint.
+     *
+     *     Exposes all participants with per-participant state and responded_at,
+     *     plus session_kwargs and a summary of session_references.
+     */
+    RitualSessionDetail: {
+      readonly id: number;
+      readonly ritual_name: string;
+      readonly participation_rule: string;
+      readonly initiator_id: number;
+      readonly initiator_name: string;
+      readonly proposed_terms: string;
+      readonly session_kwargs: unknown;
+      /** Format: date-time */
+      readonly expires_at: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      readonly participants: components['schemas']['RitualSessionParticipantSummary'][];
+      readonly session_references: string;
+    };
+    /**
+     * @description Write-only serializer for POST /api/rituals/sessions/ (draft a session).
+     *
+     *     Validates inputs and resolves PKs to model instances. The view calls
+     *     draft_session(**validated_data) with the resolved data.
+     */
+    RitualSessionDraftRequest: {
+      ritual_id: number;
+      /** @default  */
+      proposed_terms: string;
+      session_kwargs?: {
+        [key: string]: unknown;
+      };
+      invitee_ids?: number[];
+      session_references?: {
+        [key: string]: unknown;
+      }[];
+      initiator_participant_kwargs?: {
+        [key: string]: unknown;
+      };
+      initiator_references?: {
+        [key: string]: unknown;
+      }[];
+      /** Format: date-time */
+      expires_at?: string;
+    };
+    /**
+     * @description Read-only serializer for listing RitualSessions (list endpoints).
+     *
+     *     Exposes ritual name, initiator name, proposed terms, expiry,
+     *     participant count summary, and the requesting user's role in this session.
+     */
+    RitualSessionList: {
+      readonly id: number;
+      readonly ritual_name: string;
+      readonly participation_rule: string;
+      /** @description Return primary persona name of the initiator sheet. */
+      readonly initiator_name: string;
+      readonly proposed_terms: string;
+      /** Format: date-time */
+      readonly expires_at: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      /** @description Return counts by state. Uses participants_cached if prefetched. */
+      readonly participant_count: {
+        [key: string]: number;
+      };
+      readonly my_role: string;
+    };
+    /** @description Brief participant row used inside list/detail session serializers. */
+    RitualSessionParticipantSummary: {
+      character_sheet_id: number;
+      /** @description Return primary persona name for the participant's sheet. */
+      readonly character_name: string;
+      state: string;
+      /** Format: date-time */
+      responded_at: string | null;
     };
     /**
      * @description One room entry returned by RoomsByPropertyView.
@@ -15597,11 +16019,11 @@ export interface components {
       name: string;
     };
     /**
-     * @description * `ABYSSAL` - Abyssal Side
-     *     * `SINEATER` - Sineater Side
+     * @description * `SINEATER` - Sineater
+     *     * `SINNER` - Sinner
      * @enum {string}
      */
-    SoulTetherRoleEnum: 'ABYSSAL' | 'SINEATER';
+    SoulTetherRoleEnum: 'SINEATER' | 'SINNER';
     /**
      * @description * `POSE_ENDORSEMENT` - Pose endorsement
      *     * `SCENE_ENTRY` - Scene entry endorsement
@@ -20009,6 +20431,91 @@ export interface operations {
       };
     };
   };
+  covenants_character_roles_disengage_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterCovenantRole'];
+        };
+      };
+    };
+  };
+  covenants_character_roles_engage_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterCovenantRole'];
+        };
+      };
+    };
+  };
+  covenants_covenants_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedCovenantList'];
+        };
+      };
+    };
+  };
+  covenants_covenants_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Covenant'];
+        };
+      };
+    };
+  };
   covenants_gear_compatibilities_list: {
     parameters: {
       query?: {
@@ -20075,6 +20582,55 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['GearArchetypeCompatibility'];
+        };
+      };
+    };
+  };
+  covenants_roles_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description Which covenant type this role belongs to.
+         *
+         *     * `durance` - Covenant of the Durance
+         *     * `battle` - Covenant of Battle
+         */
+        covenant_type?: 'battle' | 'durance';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantRole'][];
+        };
+      };
+    };
+  };
+  covenants_roles_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this covenant role. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CovenantRole'];
         };
       };
     };
@@ -24733,6 +25289,160 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+    };
+  };
+  magic_rituals_sessions_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RitualSessionList'][];
+        };
+      };
+    };
+  };
+  magic_rituals_sessions_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RitualSessionDraftRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RitualSessionDetail'];
+        };
+      };
+    };
+  };
+  magic_rituals_sessions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RitualSessionDetail'];
+        };
+      };
+    };
+  };
+  magic_rituals_sessions_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  magic_rituals_sessions_accept_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['RitualSessionAcceptRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RitualSessionAccept'];
+        };
+      };
+    };
+  };
+  magic_rituals_sessions_decline_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['RitualSessionAcceptRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RitualSessionAccept'];
+        };
+      };
+    };
+  };
+  magic_rituals_sessions_fire_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RitualSessionList'];
+        };
       };
     };
   };

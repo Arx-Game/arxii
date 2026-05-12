@@ -9,13 +9,13 @@ class SoulTetherFieldRoundTripTests(TestCase):
         rel = CharacterRelationshipFactory()
         self.assertFalse(rel.is_soul_tether)
 
-    def test_set_soul_tether_role_abyssal(self):
+    def test_set_soul_tether_role_sinner(self):
         rel = CharacterRelationshipFactory(
             is_soul_tether=True,
-            soul_tether_role=SoulTetherRole.ABYSSAL,
+            soul_tether_role=SoulTetherRole.SINNER,
             magical_flavor="the weight of debts owed",
         )
         rel.refresh_from_db()
         self.assertTrue(rel.is_soul_tether)
-        self.assertEqual(rel.soul_tether_role, SoulTetherRole.ABYSSAL)
+        self.assertEqual(rel.soul_tether_role, SoulTetherRole.SINNER)
         self.assertEqual(rel.magical_flavor, "the weight of debts owed")

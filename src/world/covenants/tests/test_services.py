@@ -368,6 +368,67 @@ class ClearEngagedForTypeTests(TestCase):
         self.assertTrue(battle_m.engaged)
 
 
+class MemberRosterInvalidationTests(TestCase):
+    def test_add_member_invalidates_member_roster(self) -> None:
+        cov = CovenantFactory()
+        # Warm the roster cache:
+        _ = cov.member_roster.active_memberships
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory()
+        add_member(covenant=cov, character_sheet=sheet, role=role)
+        rows = cov.member_roster.active_memberships
+        self.assertEqual(len(rows), 1)
+
+    def test_change_role_invalidates_member_roster(self) -> None:
+        cov = CovenantFactory()
+        sheet = CharacterSheetFactory()
+        old_role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        new_role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        membership = CharacterCovenantRoleFactory(
+            character_sheet=sheet, covenant=cov, covenant_role=old_role
+        )
+        # Warm the roster cache:
+        _ = cov.member_roster.active_memberships
+        change_role(membership=membership, new_role=new_role)
+        rows = cov.member_roster.active_memberships
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].covenant_role, new_role)
+
+    def test_dissolve_covenant_invalidates_member_roster(self) -> None:
+        cov = CovenantFactory()
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        CharacterCovenantRoleFactory(character_sheet=sheet, covenant=cov, covenant_role=role)
+        # Warm the roster cache:
+        _ = cov.member_roster.active_memberships
+        dissolve_covenant(covenant=cov)
+        rows = cov.member_roster.active_memberships
+        self.assertEqual(len(rows), 0)
+
+    def test_assign_covenant_role_invalidates_member_roster(self) -> None:
+        cov = CovenantFactory()
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        # Warm the roster cache:
+        _ = cov.member_roster.active_memberships
+        assign_covenant_role(character_sheet=sheet, covenant=cov, covenant_role=role)
+        rows = cov.member_roster.active_memberships
+        self.assertEqual(len(rows), 1)
+
+    def test_end_covenant_role_invalidates_member_roster(self) -> None:
+        cov = CovenantFactory()
+        sheet = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=cov.covenant_type)
+        assignment = CharacterCovenantRoleFactory(
+            character_sheet=sheet, covenant=cov, covenant_role=role
+        )
+        # Warm the roster cache:
+        _ = cov.member_roster.active_memberships
+        end_covenant_role(assignment=assignment)
+        rows = cov.member_roster.active_memberships
+        self.assertEqual(len(rows), 0)
+
+
 class MakeEngagedMemberTests(TestCase):
     def test_creates_engaged_row(self) -> None:
         from world.covenants.factories import make_engaged_member
@@ -375,3 +436,497 @@ class MakeEngagedMemberTests(TestCase):
         membership = make_engaged_member()
         self.assertTrue(membership.engaged)
         self.assertIsNone(membership.left_at)
+
+
+class CreateCovenantViaSessionTests(TestCase):
+    def test_unpacks_session_and_creates_covenant(self) -> None:
+        """Set up a FORMATION session with two ACCEPTED participants who each
+        chose a role, fire-style invoke the wrapper, assert the covenant exists
+        with both memberships and correct roles."""
+        from datetime import UTC, datetime, timedelta
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.models import Covenant
+        from world.covenants.services import create_covenant_via_session
+        from world.magic.constants import (
+            ParticipantState,
+            ParticipationRule,
+            ReferenceKind,
+        )
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import (
+            RitualSession,
+            RitualSessionParticipant,
+            RitualSessionReference,
+        )
+
+        # Manually build a "post-accept, pre-fire" session state — skipping
+        # draft/accept services to focus this test on the wrapper:
+        ritual = RitualFactory(participation_rule=ParticipationRule.FORMATION)
+        initiator = CharacterSheetFactory()
+        invitee = CharacterSheetFactory()
+        role_for_initiator = CovenantRoleFactory(
+            covenant_type=CovenantType.DURANCE,
+        )
+        role_for_invitee = CovenantRoleFactory(
+            covenant_type=CovenantType.DURANCE,
+        )
+        session = RitualSession.objects.create(
+            ritual=ritual,
+            initiator=initiator,
+            session_kwargs={
+                "name": "Sword of Aerith",
+                "covenant_type": CovenantType.DURANCE,
+                "sworn_objective": "End the curse.",
+            },
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        p_init = RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=initiator,
+            state=ParticipantState.ACCEPTED,
+        )
+        p_inv = RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=invitee,
+            state=ParticipantState.ACCEPTED,
+        )
+        RitualSessionReference.objects.create(
+            session=session,
+            participant=p_init,
+            kind=ReferenceKind.COVENANT_ROLE,
+            ref_covenant_role=role_for_initiator,
+        )
+        RitualSessionReference.objects.create(
+            session=session,
+            participant=p_inv,
+            kind=ReferenceKind.COVENANT_ROLE,
+            ref_covenant_role=role_for_invitee,
+        )
+
+        covenant = create_covenant_via_session(session=session)
+        self.assertIsInstance(covenant, Covenant)
+        self.assertEqual(covenant.name, "Sword of Aerith")
+        self.assertEqual(covenant.covenant_type, CovenantType.DURANCE)
+        self.assertEqual(covenant.sworn_objective, "End the curse.")
+        # Both founders should have memberships with their chosen roles:
+        memberships = list(covenant.member_roster.active_memberships)
+        self.assertEqual(len(memberships), 2)
+        roles_by_sheet = {m.character_sheet_id: m.covenant_role_id for m in memberships}
+        self.assertEqual(roles_by_sheet[initiator.pk], role_for_initiator.pk)
+        self.assertEqual(roles_by_sheet[invitee.pk], role_for_invitee.pk)
+
+    def test_missing_participant_role_reference_raises(self) -> None:
+        """If an ACCEPTED participant has no COVENANT_ROLE reference, raise."""
+        from datetime import UTC, datetime, timedelta
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import CovenantRoleFactory
+        from world.covenants.services import create_covenant_via_session
+        from world.magic.constants import ParticipantState, ParticipationRule, ReferenceKind
+        from world.magic.exceptions import RequiredReferenceMissingError
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import (
+            RitualSession,
+            RitualSessionParticipant,
+            RitualSessionReference,
+        )
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.FORMATION)
+        initiator = CharacterSheetFactory()
+        invitee = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        session = RitualSession.objects.create(
+            ritual=ritual,
+            initiator=initiator,
+            session_kwargs={
+                "name": "Half-Founded",
+                "covenant_type": CovenantType.DURANCE,
+                "sworn_objective": "x",
+            },
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        p_init = RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=initiator,
+            state=ParticipantState.ACCEPTED,
+        )
+        # Initiator has reference; invitee does NOT:
+        RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=invitee,
+            state=ParticipantState.ACCEPTED,
+        )
+        RitualSessionReference.objects.create(
+            session=session,
+            participant=p_init,
+            kind=ReferenceKind.COVENANT_ROLE,
+            ref_covenant_role=role,
+        )
+
+        with self.assertRaises(RequiredReferenceMissingError):
+            create_covenant_via_session(session=session)
+
+    def test_name_conflict_translates_to_covenant_name_conflict_error(self) -> None:
+        """Duplicate covenant name → IntegrityError → typed CovenantNameConflictError."""
+        from datetime import UTC, datetime, timedelta
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.constants import CovenantType
+        from world.covenants.exceptions import CovenantNameConflictError
+        from world.covenants.factories import CovenantFactory, CovenantRoleFactory
+        from world.covenants.services import create_covenant_via_session
+        from world.magic.constants import ParticipantState, ParticipationRule, ReferenceKind
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import (
+            RitualSession,
+            RitualSessionParticipant,
+            RitualSessionReference,
+        )
+
+        # Pre-existing covenant with the name we'll try to use:
+        CovenantFactory(name="Already Taken")
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.FORMATION)
+        initiator = CharacterSheetFactory()
+        invitee = CharacterSheetFactory()
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        session = RitualSession.objects.create(
+            ritual=ritual,
+            initiator=initiator,
+            session_kwargs={
+                "name": "Already Taken",
+                "covenant_type": CovenantType.DURANCE,
+                "sworn_objective": "x",
+            },
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        p_init = RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=initiator,
+            state=ParticipantState.ACCEPTED,
+        )
+        p_inv = RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=invitee,
+            state=ParticipantState.ACCEPTED,
+        )
+        for p in [p_init, p_inv]:
+            RitualSessionReference.objects.create(
+                session=session,
+                participant=p,
+                kind=ReferenceKind.COVENANT_ROLE,
+                ref_covenant_role=role,
+            )
+
+        with self.assertRaises(CovenantNameConflictError):
+            create_covenant_via_session(session=session)
+
+
+class InductMemberViaSessionTests(TestCase):
+    def _build_induction_session(
+        self,
+        *,
+        existing_members: int = 2,
+        candidate_chooses_role: bool = True,
+    ):
+        """Helper: set up an INDUCTION session with target_covenant ref +
+        candidate's COVENANT_ROLE ref. Returns (session, covenant, candidate, role).
+
+        Initiator and any extra existing-member participants are ACCEPTED but
+        have no role reference (existing members don't choose new roles).
+        Candidate is ACCEPTED with a role reference (if candidate_chooses_role)."""
+        from datetime import UTC, datetime, timedelta
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+        from world.magic.constants import ParticipantState, ParticipationRule, ReferenceKind
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import (
+            RitualSession,
+            RitualSessionParticipant,
+            RitualSessionReference,
+        )
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.INDUCTION)
+        covenant = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        existing_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        # Existing members (initiator + extras):
+        existing_sheets = [CharacterSheetFactory() for _ in range(existing_members)]
+        for sheet in existing_sheets:
+            CharacterCovenantRoleFactory(
+                character_sheet=sheet,
+                covenant=covenant,
+                covenant_role=existing_role,
+            )
+        candidate = CharacterSheetFactory()
+        chosen_role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        session = RitualSession.objects.create(
+            ritual=ritual,
+            initiator=existing_sheets[0],
+            session_kwargs={},
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        # Session-level reference: which covenant the induction targets
+        RitualSessionReference.objects.create(
+            session=session,
+            participant=None,
+            kind=ReferenceKind.COVENANT,
+            ref_covenant=covenant,
+        )
+        # Existing members are participants in ACCEPTED state, no role ref:
+        for sheet in existing_sheets:
+            RitualSessionParticipant.objects.create(
+                session=session,
+                character_sheet=sheet,
+                state=ParticipantState.ACCEPTED,
+            )
+        # Candidate is ACCEPTED with a role choice:
+        candidate_p = RitualSessionParticipant.objects.create(
+            session=session,
+            character_sheet=candidate,
+            state=ParticipantState.ACCEPTED,
+        )
+        if candidate_chooses_role:
+            RitualSessionReference.objects.create(
+                session=session,
+                participant=candidate_p,
+                kind=ReferenceKind.COVENANT_ROLE,
+                ref_covenant_role=chosen_role,
+            )
+        return session, covenant, candidate, chosen_role
+
+    def test_unpacks_session_and_adds_member(self):
+        from world.covenants.models import CharacterCovenantRole
+        from world.covenants.services import induct_member_via_session
+
+        session, covenant, candidate, chosen_role = self._build_induction_session()
+        membership = induct_member_via_session(session=session)
+        self.assertIsInstance(membership, CharacterCovenantRole)
+        self.assertEqual(membership.character_sheet, candidate)
+        self.assertEqual(membership.covenant, covenant)
+        self.assertEqual(membership.covenant_role, chosen_role)
+        self.assertIsNone(membership.left_at)
+
+    def test_missing_target_covenant_reference_raises(self):
+        """Session-level COVENANT reference is required."""
+        from datetime import UTC, datetime, timedelta
+
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.services import induct_member_via_session
+        from world.magic.constants import ParticipationRule
+        from world.magic.exceptions import SessionTargetMissingError
+        from world.magic.factories import RitualFactory
+        from world.magic.models.sessions import RitualSession
+
+        ritual = RitualFactory(participation_rule=ParticipationRule.INDUCTION)
+        session = RitualSession.objects.create(
+            ritual=ritual,
+            initiator=CharacterSheetFactory(),
+            session_kwargs={},
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+        with self.assertRaises(SessionTargetMissingError):
+            induct_member_via_session(session=session)
+
+    def test_missing_candidate_role_reference_raises(self):
+        """The candidate must have a COVENANT_ROLE choice."""
+        from world.covenants.services import induct_member_via_session
+        from world.magic.exceptions import RequiredReferenceMissingError
+
+        session, _covenant, _candidate, _ = self._build_induction_session(
+            candidate_chooses_role=False,
+        )
+        with self.assertRaises(RequiredReferenceMissingError):
+            induct_member_via_session(session=session)
+
+
+class EvaluateSceneEngagementTests(TestCase):
+    """Cover all branches of evaluate_scene_engagement.
+
+    Setup mirrors test_engagement_prerequisite.py — same room/scene/membership
+    idioms (ObjectDBFactory for rooms, SceneFactory for active scenes).
+    """
+
+    def _build_fixtures(self) -> None:
+        # Per-test fixture build (not setUpTestData): Evennia's ObjectDB carries
+        # a DbHolder that doesn't survive the inter-test deepcopy Django performs
+        # on class-scoped fixtures. setUp() calls this so each test starts fresh.
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+
+        self.role_durance = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        self.cov_a = CovenantFactory(name="CovA", covenant_type=CovenantType.DURANCE)
+        self.cov_b = CovenantFactory(name="CovB", covenant_type=CovenantType.DURANCE)
+        self.sheet_a1 = CharacterSheetFactory()
+        self.sheet_a2 = CharacterSheetFactory()
+        self.sheet_b1 = CharacterSheetFactory()
+        self.mem_a1 = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_a1,
+            covenant=self.cov_a,
+            covenant_role=self.role_durance,
+        )
+        self.mem_a2 = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_a2,
+            covenant=self.cov_a,
+            covenant_role=self.role_durance,
+        )
+        self.mem_b1 = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_b1,
+            covenant=self.cov_b,
+            covenant_role=self.role_durance,
+        )
+
+    def _make_room(self, key: str = "test-room"):
+        """Create a Room typeclass instance for use as a scene location."""
+        from evennia_extensions.factories import ObjectDBFactory
+
+        return ObjectDBFactory(
+            db_key=key,
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+
+    def _place_chars_in_room(self, room, sheets):
+        """Place each sheet's character into the room via the location property.
+
+        Using the location property setter ensures Evennia's contents_cache is
+        updated correctly (the direct db_location assignment bypasses the cache
+        and triggers a full reinit of all cached instances instead).
+        """
+        for sheet in sheets:
+            char = sheet.character
+            char.location = room
+
+    def setUp(self):
+        """Build fixtures fresh per test to avoid Evennia DbHolder deepcopy issues."""
+        self._build_fixtures()
+
+    def _build_room_with_scene_and_chars(self, sheets):
+        """Create a room, add an active Scene there, place the characters. Returns the room."""
+        from world.scenes.factories import SceneFactory
+
+        room = self._make_room()
+        if hasattr(room, "_active_scene_cache"):
+            del room._active_scene_cache
+        SceneFactory(location=room, is_active=True)
+        self._place_chars_in_room(room, sheets)
+        return room
+
+    def _cleanup_chars(self, sheets):
+        """Move each sheet's character out of any room via the location deleter."""
+        for sheet in sheets:
+            char = sheet.character
+            del char.location
+
+    def test_already_engaged_is_noop(self):
+        """Manual engagement sticks — auto never overrides."""
+        from world.covenants.services import evaluate_scene_engagement, set_engaged_membership
+
+        # Manually engage sheet_a1 with covenant A first:
+        set_engaged_membership(membership=self.mem_a1)
+        room = self._build_room_with_scene_and_chars([self.sheet_a1, self.sheet_b1])
+        try:
+            # sheet_b1 is from covenant B; sheet_a1 is already engaged with A.
+            # The helper should no-op (stay engaged with A) regardless of co-presence:
+            evaluate_scene_engagement(character_sheet=self.sheet_a1, room=room)
+            self.mem_a1.refresh_from_db()
+            self.assertTrue(self.mem_a1.engaged)
+        finally:
+            self._cleanup_chars([self.sheet_a1, self.sheet_b1])
+
+    def test_no_candidates_is_noop(self):
+        """No co-present covenant members → engagement unchanged."""
+        from world.covenants.services import evaluate_scene_engagement
+
+        room = self._build_room_with_scene_and_chars([self.sheet_a1])
+        try:
+            # Only one character in room — no co-present members.
+            evaluate_scene_engagement(character_sheet=self.sheet_a1, room=room)
+            self.mem_a1.refresh_from_db()
+            self.assertFalse(self.mem_a1.engaged)
+        finally:
+            self._cleanup_chars([self.sheet_a1])
+
+    def test_single_candidate_engages(self):
+        """One co-present member of one covenant → auto-engage."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+        from world.covenants.services import evaluate_scene_engagement
+
+        role = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        cov = CovenantFactory(covenant_type=CovenantType.DURANCE)
+        sheet_1 = CharacterSheetFactory()
+        sheet_2 = CharacterSheetFactory()
+        mem_1 = CharacterCovenantRoleFactory(
+            character_sheet=sheet_1,
+            covenant=cov,
+            covenant_role=role,
+        )
+        CharacterCovenantRoleFactory(
+            character_sheet=sheet_2,
+            covenant=cov,
+            covenant_role=role,
+        )
+        room = self._build_room_with_scene_and_chars([sheet_1, sheet_2])
+        evaluate_scene_engagement(character_sheet=sheet_1, room=room)
+        mem_1.refresh_from_db()
+        self.assertTrue(mem_1.engaged)
+
+    def test_multiple_candidates_picks_most_co_present(self):
+        """Tie-broken by most co-present, then by lowest covenant_id."""
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import CharacterCovenantRoleFactory
+        from world.covenants.services import evaluate_scene_engagement
+
+        # Add another covenant-A member so A has 2 co-present, B has 1:
+        sheet_a3 = CharacterSheetFactory()
+        CharacterCovenantRoleFactory(
+            character_sheet=sheet_a3,
+            covenant=self.cov_a,
+            covenant_role=self.role_durance,
+        )
+        # sheet_a1 is also a member of cov_b for this test:
+        mem_a1_in_b = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet_a1,
+            covenant=self.cov_b,
+            covenant_role=self.role_durance,
+        )
+        room = self._build_room_with_scene_and_chars(
+            [self.sheet_a1, self.sheet_a2, sheet_a3, self.sheet_b1]
+        )
+        try:
+            # Invalidate handler cache so fresh memberships are loaded:
+            self.sheet_a1.character.covenant_roles.invalidate()
+            evaluate_scene_engagement(character_sheet=self.sheet_a1, room=room)
+            # sheet_a1 has 2 co-present cov_a members (a2, a3) vs 1 co-present cov_b
+            # member (b1) → cov_a membership wins.
+            self.mem_a1.refresh_from_db()
+            self.assertTrue(self.mem_a1.engaged)
+            # And the cov_b membership for sheet_a1 stays unengaged:
+            mem_a1_in_b.refresh_from_db()
+            self.assertFalse(mem_a1_in_b.engaged)
+        finally:
+            self._cleanup_chars([self.sheet_a1, self.sheet_a2, sheet_a3, self.sheet_b1])
+            # Reset engaged state
+            self.mem_a1.engaged = False
+            self.mem_a1.save(update_fields=["engaged"])
+            mem_a1_in_b.delete()
+            # sheet_a3 and its membership are TestCase-scoped so they'll be rolled back

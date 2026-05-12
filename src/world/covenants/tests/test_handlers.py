@@ -185,3 +185,121 @@ class CurrentlyEngagedRolesTests(TestCase):
             list(sheet.character.covenant_roles.currently_engaged_roles()),
             [],
         )
+
+
+class CharacterCovenantRoleHandlerExtensionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.constants import CovenantType
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+
+        cls.sheet = CharacterSheetFactory()
+        cls.cov_durance_a = CovenantFactory(name="DurA", covenant_type=CovenantType.DURANCE)
+        cls.cov_durance_b = CovenantFactory(name="DurB", covenant_type=CovenantType.DURANCE)
+        cls.cov_battle = CovenantFactory(name="Bat", covenant_type=CovenantType.BATTLE)
+        cls.role_durance = CovenantRoleFactory(covenant_type=CovenantType.DURANCE)
+        cls.role_battle = CovenantRoleFactory(covenant_type=CovenantType.BATTLE)
+        cls.mem_a = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet,
+            covenant=cls.cov_durance_a,
+            covenant_role=cls.role_durance,
+        )
+        cls.mem_b = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet,
+            covenant=cls.cov_durance_b,
+            covenant_role=cls.role_durance,
+        )
+        cls.mem_battle = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet,
+            covenant=cls.cov_battle,
+            covenant_role=cls.role_battle,
+        )
+
+    def test_active_memberships_returns_all_active(self) -> None:
+        rows = self.sheet.character.covenant_roles.active_memberships
+        self.assertEqual(set(rows), {self.mem_a, self.mem_b, self.mem_battle})
+
+    def test_active_memberships_for_type_filters_by_covenant_type(self) -> None:
+        from world.covenants.constants import CovenantType
+
+        rows = self.sheet.character.covenant_roles.active_memberships_for_type(CovenantType.DURANCE)
+        self.assertEqual(set(rows), {self.mem_a, self.mem_b})
+
+    def test_currently_engaged_for_type_returns_engaged_membership(self) -> None:
+        from world.covenants.constants import CovenantType
+        from world.covenants.services import set_engaged_membership
+
+        set_engaged_membership(membership=self.mem_a)
+        engaged = self.sheet.character.covenant_roles.currently_engaged_for_type(
+            CovenantType.DURANCE
+        )
+        self.sheet.character.covenant_roles.invalidate()  # restore for other tests
+        self.assertEqual(engaged, self.mem_a)
+
+    def test_currently_engaged_for_type_returns_none_when_unset(self) -> None:
+        from world.covenants.constants import CovenantType
+
+        engaged = self.sheet.character.covenant_roles.currently_engaged_for_type(
+            CovenantType.BATTLE
+        )
+        self.assertIsNone(engaged)
+
+    def test_invalidate_clears_cache(self) -> None:
+        # Hydrate the cache.
+        _ = self.sheet.character.covenant_roles.active_memberships
+        # Mutate behind the cache (simulating a service-call effect):
+        self.mem_b.left_at = self.mem_b.joined_at
+        self.mem_b.save()
+        self.sheet.character.covenant_roles.invalidate()
+        rows = self.sheet.character.covenant_roles.active_memberships
+        self.assertNotIn(self.mem_b, rows)
+        # Restore so other tests aren't affected.
+        self.mem_b.left_at = None
+        self.mem_b.save()
+        self.sheet.character.covenant_roles.invalidate()
+
+
+class CovenantMembershipHandlerTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+        )
+
+        cls.cov = CovenantFactory(name="Sword")
+        cls.sheet1 = CharacterSheetFactory()
+        cls.sheet2 = CharacterSheetFactory()
+        cls.role = CovenantRoleFactory()
+        cls.m1 = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet1,
+            covenant=cls.cov,
+            covenant_role=cls.role,
+        )
+        cls.m2 = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet2,
+            covenant=cls.cov,
+            covenant_role=cls.role,
+        )
+
+    def test_active_memberships(self) -> None:
+        rows = self.cov.member_roster.active_memberships
+        self.assertEqual(set(rows), {self.m1, self.m2})
+
+    def test_active_character_sheets(self) -> None:
+        sheets = self.cov.member_roster.active_character_sheets
+        self.assertEqual(set(sheets), {self.sheet1, self.sheet2})
+
+    def test_invalidate_clears_cache(self) -> None:
+        _ = self.cov.member_roster.active_memberships
+        self.m1.left_at = self.m1.joined_at
+        self.m1.save()
+        self.cov.member_roster.invalidate()
+        self.assertEqual(set(self.cov.member_roster.active_memberships), {self.m2})

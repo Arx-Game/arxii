@@ -4,8 +4,9 @@ from django.db.models import QuerySet
 import django_filters
 from rest_framework.exceptions import ValidationError
 
-from world.magic.constants import GainSource
+from world.magic.constants import GainSource, ParticipationRule
 from world.magic.models import Cantrip, ResonanceGrant, Thread, ThreadWeavingTeachingOffer
+from world.magic.models.sessions import RitualSession
 
 
 class CantripFilter(django_filters.FilterSet):
@@ -62,3 +63,64 @@ class ResonanceGrantFilterSet(django_filters.FilterSet):
     class Meta:
         model = ResonanceGrant
         fields = ["source", "resonance", "granted_after", "granted_before"]
+
+
+class RitualSessionFilterSet(django_filters.FilterSet):
+    """FilterSet for RitualSession list endpoint (Covenants Slice B §4.12).
+
+    as_invitee=me — sessions where the requesting user is an INVITED participant.
+    as_initiator=me — sessions where the requesting user is the initiator.
+    ritual — filter by Ritual PK.
+    participation_rule — filter by ParticipationRule enum value.
+
+    The as_invitee / as_initiator filters accept the literal value "me" (case-insensitive).
+    Any other value is ignored (no-op filter).
+    """
+
+    as_invitee = django_filters.CharFilter(method="filter_as_invitee")
+    as_initiator = django_filters.CharFilter(method="filter_as_initiator")
+    ritual = django_filters.NumberFilter(field_name="ritual_id")
+    participation_rule = django_filters.ChoiceFilter(
+        field_name="ritual__participation_rule",
+        choices=ParticipationRule.choices,
+    )
+
+    class Meta:
+        model = RitualSession
+        fields = ["as_invitee", "as_initiator", "ritual", "participation_rule"]
+
+    def _my_sheet_ids(self) -> "list[int]":
+        """Resolve the requesting user's active character sheet PKs."""
+        from typing import cast  # noqa: PLC0415
+
+        from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+        from world.roster.models import RosterEntry  # noqa: PLC0415
+
+        request = self.request
+        if request is None or not request.user.is_authenticated:
+            return []
+        user = cast(AccountDB, request.user)
+        return list(RosterEntry.objects.for_account(user).character_ids())
+
+    def filter_as_invitee(
+        self, queryset: QuerySet[RitualSession], name: str, value: str
+    ) -> QuerySet[RitualSession]:
+        """Filter to sessions where the requesting user is an invited participant."""
+        if value.lower() != "me":  # noqa: STRING_LITERAL — filter sentinel value
+            return queryset
+        sheet_ids = self._my_sheet_ids()
+        if not sheet_ids:
+            return queryset.none()
+        return queryset.filter(participants__character_sheet_id__in=sheet_ids).distinct()
+
+    def filter_as_initiator(
+        self, queryset: QuerySet[RitualSession], name: str, value: str
+    ) -> QuerySet[RitualSession]:
+        """Filter to sessions where the requesting user is the initiator."""
+        if value.lower() != "me":  # noqa: STRING_LITERAL — filter sentinel value
+            return queryset
+        sheet_ids = self._my_sheet_ids()
+        if not sheet_ids:
+            return queryset.none()
+        return queryset.filter(initiator_id__in=sheet_ids)

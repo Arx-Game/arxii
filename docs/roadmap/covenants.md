@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; lifecycle / formation ritual / progression / group abilities still post-MVP)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; progression / group abilities / dissolution still post-MVP)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -47,10 +47,10 @@ require collaborative play to be significant — there will never, ever be a
 
 `create_covenant(*, founders: Sequence[CovenantFounder])` enforces this at
 the service layer with typed exceptions (`InsufficientFoundersError`,
-`DuplicateFounderError`). Future UI flows (Slice B) gate participant
-selection so the API layer never receives fewer than two founders. Slice B
-will also decide dissolution behavior when membership later drops below 2
-(likely: auto-flag for replacement, then auto-dissolve after a grace period).
+`DuplicateFounderError`). The Slice B `CovenantFormationRitualFactory` gates
+participant selection so the API layer never receives fewer than two founders.
+Dissolution behavior when membership later drops below 2 is **not in MVP** —
+see the "Covenants Languish" design decision in "What Slice B Added".
 
 ### Membership is Non-Exclusive
 
@@ -101,9 +101,10 @@ denormalizing the type onto the membership row would violate the project's
 - Thread anchor cap — `max(covenant.level across all CCR rows for this role) × 10`.
 - Thread weave gate — `has_ever_held(role)`.
 
-Auto-set / scene-context detection / mission-driven engagement / UI is Slice B.
-Today, engagement is set via explicit `set_engaged_membership` calls (e.g., in
-test setUpTestData or future API endpoints).
+Auto-set via scene context is wired in Slice B: `evaluate_scene_engagement`
+fires at `move_object`, `ensure_scene_for_location`, and
+`_ensure_scene_participation` subscription points. Manual engage/disengage
+endpoints also landed in Slice B. Mission-driven engagement is post-MVP.
 
 ### Foundational Role Archetypes (for Durance covenants)
 
@@ -248,7 +249,8 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
   - `GET /gear-compatibilities/` — `GearArchetypeCompatibilityViewSet`
     (read-only, no pagination — small lookup table). Filterable by
     `covenant_role` and `gear_archetype`.
-  - Full read+write CRUD lands in Slice B.
+  - Engage/disengage actions + `RitualSessionViewSet` landed in Slice B.
+    Full lifecycle CRUD (invite/leave/kick) is post-MVP.
 
 - **Tests** (`world/covenants/tests/`): exceptions, handler caching,
   models (incl. `Covenant` model + constraint + clean tests),
@@ -288,28 +290,69 @@ weave Threads anchored on a `CovenantRole` and invest resonance in them.
   - Combat-side precedence between Durance and Battle for war contexts is
     Slice E (not yet authored).
 
+### What Slice B Added
+
+- **`RitualSession` primitive in `world/magic`** — multi-participant ritual
+  coordination (draft/accept/decline/fire/cancel lifecycle), discriminator-M2M
+  `RitualSessionReference` for typed FK references, factory-driven Ritual rows
+  (no data migrations). Participation rules: `SINGLE_ACTOR`, `BILATERAL`,
+  `OPEN_ENROLLMENT`. Session-level role choices propagate through `reference_kind`
+  to the fired service.
+- **Covenant ritual wrappers** — `create_covenant_via_session` and
+  `induct_member_via_session` thin shims around Slice A services;
+  `CovenantFormationRitualFactory` and `CovenantInductionRitualFactory` that seed
+  the Ritual rows on startup.
+- **Soul Tether BILATERAL retrofit** — Soul Tether ritual factory now `BILATERAL`
+  with sineater + sinner role choices; `accept_soul_tether_via_session` wrapper.
+  `soul_tether_rescue` stays `SINGLE_ACTOR` (rescue inherently can't require
+  consent). All `SoulTetherRole.ABYSSAL` references renamed `SINNER` everywhere
+  (models, tests, services, frontend).
+- **Engagement** — manual UI (POST engage/disengage endpoints with
+  `can_engage_durance_membership` prerequisite check) + scene auto-engage via
+  three subscription points: `move_object`, `ensure_scene_for_location`,
+  `_ensure_scene_participation`. `evaluate_scene_engagement` selects the best
+  membership for the room context (most co-present covenant members).
+- **API** — `RitualSessionViewSet` at `/api/magic/rituals/sessions/` with
+  list/detail/draft/accept/decline/fire/cancel actions; engage/disengage actions
+  on `CharacterCovenantRoleViewSet`.
+- **Frontend** — `RitualSessionInboxPage`, `RitualSessionDetailPage`,
+  `RitualSessionDraftDialog`, `RitualSessionResponseDialog`; new field types
+  (`covenant_picker`, `covenant_role_picker`, `soul_tether_role_picker`);
+  `CovenantsListPage`, `CovenantDetailPage`; inbox notification badge in header.
+
+### Durable Design Decision: Covenants Languish, No Exit Lifecycle in MVP
+
+Covenants do not have an exit lifecycle in MVP. There is no "leave covenant",
+"kick member", or "dissolve when membership drops below 2" flow. Members simply
+stop engaging; the covenant record persists indefinitely. This is an intentional
+design constraint:
+
+- Dissolution paths (voluntary, automatic-on-objective, fractured betrayal) are
+  post-MVP and belong in a later Slice. All future slice designs must treat this
+  as a given — do not add exit mechanics unless explicitly specced.
+- If membership falls below 2, the covenant remains valid but effectively
+  dormant. There is no auto-flag, grace period, or auto-dissolve in MVP.
+- This keeps Slice B scope bounded and avoids speccing dissolution consequences
+  (magical fallout, Thread breakage, etc.) before the magic system is mature
+  enough to design them properly.
+
+**Future slices must respect this constraint.** Do not add exit mechanics or
+dissolution triggers in Slice C–G without a dedicated design session.
+
 ## What's Needed for MVP
 
-Slice A landed the foundational entity + membership FK + engagement context +
-anchor cap formula + pull gating. The remaining work is decomposed into
-independent slices, each with its own design+plan+implementation cycle:
+Slices A and B are shipped. The remaining work is decomposed into independent
+slices, each with its own design+plan+implementation cycle:
 
-### Slice B — Lifecycle + UI
+### Slice B — Lifecycle + UI (SHIPPED)
 
-- **Formation ritual** — a `Ritual` (already exists in `world.magic`)
-  that creates the covenant, binds members, and assigns initial roles.
-  Likely uses the existing `PerformRitualAction` dispatch surface.
-- **Member lifecycle** — invite, accept, leave, kick. Web-first flows.
-- **Dissolution paths** — voluntary, automatic-on-objective, fractured
-  (members betray oath). Each may have different magical consequences.
-  Slice A's `dissolve_covenant` covers the basic case; Slice B layers
-  reasons, kinds, and follow-on consequences.
-- **Scene/mission engagement triggers** — auto-set / clear engaged based
-  on scene context. Today engagement is set explicitly via
-  `set_engaged_membership`; Slice B wires it to runtime triggers.
-- **UI for engage/disengage** — surfaces the engagement state to players.
-- **Full CRUD API** — covenant create/dissolve, membership add/remove/
-  change-role, engage/disengage. Read-only Slice A endpoints get extended.
+- Formation ritual via `RitualSession` — DONE
+- Member induction via `RitualSession` — DONE
+- Scene/mission engagement auto-triggers — DONE
+- Manual engage/disengage API — DONE
+- Covenant + RitualSession frontend pages — DONE
+- Soul Tether BILATERAL retrofit — DONE
+- No exit lifecycle in MVP (languish design decision) — DOCUMENTED
 
 ### Slice C — Sworn Objective + Stories integration
 
@@ -358,8 +401,9 @@ independent slices, each with its own design+plan+implementation cycle:
   RELATIONSHIP_TRACK / RELATIONSHIP_CAPSTONE / FACET into the same
   "in-action" model that Slice A added for COVENANT_ROLE. Project-wide
   Thread-discipline work, not Covenant-specific.
-- **Frontend UI** — covenant browser, member roster, sworn-objective
-  tracker, engage/disengage controls, formation/dissolution flows.
+- **Frontend UI (remaining)** — sworn-objective tracker, advanced dissolution
+  flows, Battle covenant UI, group ability triggers. Covenant browser,
+  engage/disengage controls, and formation/induction flows landed in Slice B.
 
 ## Cross-References
 
@@ -371,20 +415,30 @@ independent slices, each with its own design+plan+implementation cycle:
 - **`docs/roadmap/magic.md`** — Resonance Pivot Spec D PR1 documents the
   COVENANT_ROLE Thread anchor and weave gate. (The "Covenants (Post-MVP)"
   section there has been superseded by this file.)
-- **Spec:** `docs/superpowers/specs/2026-04-26-items-fashion-mantles-spec-d-design.md`
+- **Spec (Slice A):** `docs/superpowers/specs/2026-04-26-items-fashion-mantles-spec-d-design.md`
   — the design that landed the role/gear/Thread integration.
+- **Spec (Slice B):** `docs/superpowers/specs/2026-05-10-covenants-slice-b-design.md`
+  — the design for the RitualSession primitive, Soul Tether BILATERAL retrofit,
+  formation/induction wrappers, engagement auto-triggers, and frontend pages.
 
 ## Notes
 
 - The Slice A spec is `docs/superpowers/specs/2026-05-09-covenants-slice-a-design.md`
   and the implementation plan is
   `docs/superpowers/plans/2026-05-10-covenants-slice-a-implementation.md`.
+- The Slice B spec is `docs/superpowers/specs/2026-05-10-covenants-slice-b-design.md`
+  and the implementation plan is
+  `docs/superpowers/plans/2026-05-10-covenants-slice-b-implementation.md`.
 - The COVENANT_ROLE anchor cap formula now reads from `covenant.level`
   via the membership table. The placeholder `current_level × 10` formula
   was replaced in Slice A. When Slice D ships covenant-level XP, the cap
   scales naturally without changing call sites.
 - Forward-looking nods elsewhere in the roadmap: `gm-system.md` references
   "Covenants stub" as a prerequisite (now understated — should read
-  "Covenants Slice A"); `seed-and-integration-tests.md` task 2Q
+  "Covenants Slices A+B"); `seed-and-integration-tests.md` task 2Q
   authors the canonical CovenantRole seed set so combat resolution order
   becomes meaningful.
+- The "Frontend UI" bullet in Cross-cutting is partially delivered by Slice B
+  (covenant browser, engage/disengage, formation/induction ritual flow). What
+  remains: sworn-objective tracker, advanced dissolution flows, Battle covenant
+  UI, group ability triggers.

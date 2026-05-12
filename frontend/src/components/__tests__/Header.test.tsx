@@ -24,6 +24,12 @@ vi.mock('@/narrative/components/UnreadNarrativeBadge', () => ({
   UnreadNarrativeBadge: () => <div data-testid="unread-badge" />,
 }));
 
+vi.mock('@/rituals/queries', () => ({
+  useRitualSessionInbox: () => ({
+    data: [],
+  }),
+}));
+
 function Wrapper({ children }: { children: ReactNode }) {
   const store = configureStore({
     reducer: {

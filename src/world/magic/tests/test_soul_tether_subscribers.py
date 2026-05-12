@@ -155,7 +155,7 @@ def _form_tether(sinner: object, sineater: object, resonance: object) -> object:
     return accept_soul_tether(
         initiator_sheet=sinner,
         partner_sheet=sineater,
-        sinner_role=SoulTetherRoleEnum.ABYSSAL,
+        sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
         writeup="Test bond.",
         ritual_components=[],

@@ -11,6 +11,7 @@ import { navigationMenuTriggerStyle } from '@/components/ui/navigation-menu-trig
 import { useAppSelector } from '@/store/hooks';
 import { useOpenSubmissionCount } from '@/staff/queries';
 import { UnreadNarrativeBadge } from '@/narrative/components/UnreadNarrativeBadge';
+import { useRitualSessionInbox } from '@/rituals/queries';
 
 const links = [
   { to: '/game', label: 'Play' },
@@ -30,6 +31,8 @@ export function Header() {
   const account = useAppSelector((state) => state.auth.account);
   const isStaff = account?.is_staff ?? false;
   const { data: pendingCount } = useOpenSubmissionCount(isStaff);
+  const { data: inboxSessions } = useRitualSessionInbox();
+  const pendingInvitationCount = account ? (inboxSessions?.length ?? 0) : 0;
 
   return (
     <header className="border-b">
@@ -52,6 +55,22 @@ export function Header() {
                   </Link>
                 </NavigationMenuItem>
               ))}
+            {account && (
+              <NavigationMenuItem>
+                <Link to="/rituals/sessions/inbox" className={navigationMenuTriggerStyle()}>
+                  Inbox
+                  {pendingInvitationCount > 0 ? (
+                    <Badge
+                      variant="destructive"
+                      className="ml-1.5 h-5 min-w-5 px-1 text-xs"
+                      data-testid="inbox-badge"
+                    >
+                      {pendingInvitationCount}
+                    </Badge>
+                  ) : null}
+                </Link>
+              </NavigationMenuItem>
+            )}
             {isStaff && (
               <NavigationMenuItem>
                 <Link to="/staff" className={navigationMenuTriggerStyle()}>
@@ -103,6 +122,11 @@ export function Header() {
                       {link.label}
                     </Link>
                   ))}
+                {account && (
+                  <Link to="/rituals/sessions/inbox" className="text-lg">
+                    Inbox {pendingInvitationCount > 0 ? `(${pendingInvitationCount})` : ''}
+                  </Link>
+                )}
                 {isStaff && (
                   <Link to="/staff" className="text-lg">
                     Staff {pendingCount && pendingCount > 0 ? `(${pendingCount})` : ''}

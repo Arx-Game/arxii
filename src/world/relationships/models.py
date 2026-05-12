@@ -331,7 +331,7 @@ class CharacterRelationship(SharedMemoryModel):
         max_length=16,
         choices=SoulTetherRole.choices,
         blank=True,
-        help_text="Soul-tether role (ABYSSAL or SINEATER); empty when not a tether.",
+        help_text="Soul-tether role (SINNER or SINEATER); empty when not a tether.",
     )
     magical_flavor = models.TextField(
         blank=True,

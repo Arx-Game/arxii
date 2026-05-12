@@ -55,7 +55,7 @@ class RitualExecutionKindTests(SimpleTestCase):
 
 class SoulTetherRoleTests(SimpleTestCase):
     def test_two_roles(self):
-        self.assertEqual(set(SoulTetherRole.values), {"ABYSSAL", "SINEATER"})
+        self.assertEqual(set(SoulTetherRole.values), {"SINEATER", "SINNER"})
 
 
 class GainSourceTests(SimpleTestCase):

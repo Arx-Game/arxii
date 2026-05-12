@@ -104,9 +104,27 @@ class RitualExecutionKind(models.TextChoices):
     SCENE_ACTION = "SCENE_ACTION", "Scene Action"
 
 
+class ParticipationRule(models.TextChoices):
+    SINGLE_ACTOR = "SINGLE_ACTOR", "Single Actor"
+    FORMATION = "FORMATION", "Formation (all must accept, ≥2)"
+    INDUCTION = "INDUCTION", "Induction (majority of respondents)"
+    BILATERAL = "BILATERAL", "Bilateral (exactly 2, both must accept)"
+
+
+class ParticipantState(models.TextChoices):
+    INVITED = "INVITED", "Invited"
+    ACCEPTED = "ACCEPTED", "Accepted"
+    DECLINED = "DECLINED", "Declined"
+
+
+class ReferenceKind(models.TextChoices):
+    COVENANT = "COVENANT", "Covenant"
+    COVENANT_ROLE = "COVENANT_ROLE", "Covenant Role"
+
+
 class SoulTetherRole(models.TextChoices):
-    ABYSSAL = "ABYSSAL", "Abyssal Side"
-    SINEATER = "SINEATER", "Sineater Side"
+    SINEATER = "SINEATER", "Sineater"
+    SINNER = "SINNER", "Sinner"
 
 
 class GainSource(models.TextChoices):

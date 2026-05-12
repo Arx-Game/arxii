@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from world.character_sheets.models import CharacterSheet
-from world.covenants.exceptions import DuplicateFounderError, InsufficientFoundersError
+from world.covenants.exceptions import (
+    CovenantNameConflictError,
+    DuplicateFounderError,
+    InsufficientFoundersError,
+)
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
@@ -16,8 +21,17 @@ from world.covenants.models import (
     GearArchetypeCompatibility,
 )
 from world.covenants.types import CovenantFounder
+from world.magic.constants import ParticipantState, ReferenceKind
+from world.magic.exceptions import RequiredReferenceMissingError, SessionTargetMissingError
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from world.covenants.models import CharacterCovenantRole as _CharacterCovenantRole
+    from world.magic.models.sessions import RitualSession
 
 MINIMUM_FOUNDERS = 2
+_COVENANT_NAME_UNIQUE_MARKER = "name"  # substring in DB integrity error for name uniqueness
 
 
 @transaction.atomic
@@ -54,6 +68,9 @@ def create_covenant(
             covenant_role=founder.role,
         )
         founder.character_sheet.character.covenant_roles.invalidate()
+    # The covenant is freshly created so its member_roster handler is new, but
+    # invalidate for consistency in case the handler was accessed during this flow.
+    cov.member_roster.invalidate()
     return cov
 
 
@@ -75,6 +92,7 @@ def add_member(
         covenant_role=role,
     )
     character_sheet.character.covenant_roles.invalidate()
+    covenant.member_roster.invalidate()
     return row
 
 
@@ -94,6 +112,7 @@ def change_role(
         covenant_role=new_role,
     )
     membership.character_sheet.character.covenant_roles.invalidate()
+    membership.covenant.member_roster.invalidate()
     return new_row
 
 
@@ -120,6 +139,7 @@ def dissolve_covenant(*, covenant: Covenant) -> None:
     for sheet_id in affected_sheet_ids:
         sheet = CharacterSheet.objects.get(pk=sheet_id)
         sheet.character.covenant_roles.invalidate()
+    covenant.member_roster.invalidate()
 
 
 @transaction.atomic
@@ -136,6 +156,7 @@ def assign_covenant_role(
         covenant_role=covenant_role,
     )
     character_sheet.character.covenant_roles.invalidate()
+    covenant.member_roster.invalidate()
     return row
 
 
@@ -148,6 +169,7 @@ def end_covenant_role(*, assignment: CharacterCovenantRole) -> None:
     assignment.left_at = timezone.now()
     assignment.save(update_fields=["engaged", "left_at"])
     assignment.character_sheet.character.covenant_roles.invalidate()
+    assignment.covenant.member_roster.invalidate()
 
 
 @transaction.atomic
@@ -221,3 +243,142 @@ def is_gear_compatible(role: CovenantRole, archetype: str) -> bool:
         covenant_role=role,
         gear_archetype=archetype,
     ).exists()
+
+
+@transaction.atomic
+def create_covenant_via_session(*, session: RitualSession) -> Covenant:
+    """Dispatched on FORMATION fire. Unpacks the session into create_covenant args.
+
+    Slice A's `create_covenant` enforces ≥2 founders, role-type compatibility,
+    and atomic membership creation. This wrapper only adapts shape: read
+    session_kwargs for the scalars, walk ACCEPTED participants for their
+    chosen COVENANT_ROLE references, and call through.
+
+    Per spec §4.6: the .filter() on `participant.references` (related manager)
+    is in-mutator iteration on a tightly-scoped per-row set, not a cached
+    handler lookup — acceptable exception to spec §3.9.
+    """
+    name: str = session.session_kwargs["name"]
+    covenant_type: str = session.session_kwargs["covenant_type"]
+    sworn_objective: str = session.session_kwargs["sworn_objective"]
+
+    founders: list[CovenantFounder] = []
+    for p in session.participants.filter(state=ParticipantState.ACCEPTED):
+        ref = p.references.filter(kind=ReferenceKind.COVENANT_ROLE).first()
+        if ref is None:
+            raise RequiredReferenceMissingError
+        founders.append(
+            CovenantFounder(
+                character_sheet=p.character_sheet,
+                role=ref.ref_covenant_role,
+            )
+        )
+    try:
+        return create_covenant(
+            name=name,
+            covenant_type=covenant_type,
+            sworn_objective=sworn_objective,
+            founders=founders,
+        )
+    except IntegrityError as e:
+        # Translate the DB-level uniqueness violation to a typed,
+        # user-safe exception. Other integrity errors get re-raised
+        # so they aren't accidentally masked.
+        if _COVENANT_NAME_UNIQUE_MARKER in str(e).lower():
+            raise CovenantNameConflictError from e
+        raise
+
+
+def evaluate_scene_engagement(
+    *,
+    character_sheet: CharacterSheet,
+    room: ObjectDB,
+) -> None:
+    """Auto-engage a Durance covenant if co-presence prerequisites met.
+
+    Manual engagement sticks — this no-ops if the character is already
+    engaged for the Durance type. See Slice B spec §3.6, §4.10.
+    """
+    from world.covenants.constants import CovenantType  # noqa: PLC0415
+    from world.covenants.handlers import can_engage_durance_membership  # noqa: PLC0415
+
+    if (
+        character_sheet.character.covenant_roles.currently_engaged_for_type(CovenantType.DURANCE)
+        is not None
+    ):
+        return  # manual sticks; auto never overrides
+    candidates: list[tuple[_CharacterCovenantRole, int]] = []
+    for membership in character_sheet.character.covenant_roles.active_memberships_for_type(
+        CovenantType.DURANCE
+    ):
+        if not can_engage_durance_membership(membership):
+            continue
+        co_present = _co_present_member_count(membership, room)
+        if co_present > 0:
+            candidates.append((membership, co_present))
+    if not candidates:
+        return
+    # Sort by most co-present (desc) then by covenant_id (asc) for deterministic ties:
+    candidates.sort(key=lambda c: (-c[1], c[0].covenant_id))
+    set_engaged_membership(membership=candidates[0][0])
+
+
+def _co_present_member_count(
+    membership: _CharacterCovenantRole,
+    room: ObjectDB,
+) -> int:
+    """Count distinct other active members of `membership.covenant` in `room`.
+
+    Uses cached handlers per project rule (spec §3.9) — no .filter() on
+    related managers. The Character ↔ CharacterSheet accessor is `sheet_data`
+    (reverse OneToOne).
+    """
+    self_sheet = membership.character_sheet
+    target = membership.covenant
+    n = 0
+    for obj in room.contents:
+        sheet = getattr(obj, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne accessor absent on non-Character objects; runtime duck-typing with default is intentional
+        if sheet is None or sheet == self_sheet:
+            continue
+        if sheet.character.covenant_roles.currently_held_role_in(target) is not None:
+            n += 1
+    return n
+
+
+@transaction.atomic
+def induct_member_via_session(*, session: RitualSession) -> CharacterCovenantRole:
+    """Dispatched on INDUCTION fire. Unpacks the session into add_member args.
+
+    Walks the session-level COVENANT reference to get the target covenant,
+    then finds the candidate — the one ACCEPTED participant with a
+    COVENANT_ROLE reference. Existing-member participants have no role
+    reference; they're just vouching.
+
+    Per spec §4.6: the .filter() on `session.references` / `participant.references`
+    (related managers) is in-mutator iteration on tightly-scoped per-row sets,
+    not a cached handler lookup — acceptable exception to spec §3.9.
+    """
+    target_ref = session.references.filter(
+        participant__isnull=True,
+        kind=ReferenceKind.COVENANT,
+    ).first()
+    if target_ref is None or target_ref.ref_covenant is None:
+        raise SessionTargetMissingError
+    target_covenant = target_ref.ref_covenant
+
+    # The candidate is the one ACCEPTED participant with a COVENANT_ROLE ref.
+    candidate_participant = None
+    chosen_role = None
+    for p in session.participants.filter(state=ParticipantState.ACCEPTED):
+        role_ref = p.references.filter(kind=ReferenceKind.COVENANT_ROLE).first()
+        if role_ref is not None:
+            candidate_participant = p
+            chosen_role = role_ref.ref_covenant_role
+            break
+    if candidate_participant is None or chosen_role is None:
+        raise RequiredReferenceMissingError
+    return add_member(
+        covenant=target_covenant,
+        character_sheet=candidate_participant.character_sheet,
+        role=chosen_role,
+    )

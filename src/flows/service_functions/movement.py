@@ -38,6 +38,13 @@ def move_object(
         msg = "Could not move object."
         raise CommandError(msg)
 
+    # Auto-engage Durance covenant if co-present with members (Slice B §4.10)
+    sheet = getattr(obj.obj, "sheet_data", None)  # noqa: GETATTR_LITERAL — reverse OneToOne absent on non-Character objects; duck-typing is intentional
+    if sheet is not None and obj.obj.location is not None:
+        from world.covenants.services import evaluate_scene_engagement  # noqa: PLC0415
+
+        evaluate_scene_engagement(character_sheet=sheet, room=obj.obj.location)
+
 
 def check_exit_traversal(
     caller: BaseState,

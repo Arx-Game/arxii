@@ -40,6 +40,7 @@ from world.magic.models import (
     ThreadLevelUnlock,
     ThreadWeavingTeachingOffer,
 )
+from world.magic.models.sessions import RitualSession
 from world.roster.models import RosterEntry
 
 # Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
@@ -897,6 +898,9 @@ class RitualSerializer(serializers.ModelSerializer):
             "author_account_id",
             "scene_action_config",
             "client_hosted",
+            "participation_rule",
+            "min_participants",
+            "max_participants",
         ]
         read_only_fields = fields
 
@@ -1428,14 +1432,14 @@ class AcceptSoulTetherSerializer(serializers.Serializer):
 
     ``actor_sheet_id`` identifies the character sheet of the requesting account.
     ``partner_sheet_id`` identifies the partner's character sheet.
-    ``sinner_role`` determines which side (ABYSSAL or SINEATER) the initiator holds.
+    ``sinner_role`` determines which side (SINNER or SINEATER) the initiator holds.
     ``resonance_id`` selects the resonance for the Sinner's Thread.
     ``writeup`` is the narrative description of the bond (20+ chars).
     """
 
     actor_sheet_id = serializers.IntegerField()
     partner_sheet_id = serializers.IntegerField()
-    sinner_role = serializers.ChoiceField(choices=["ABYSSAL", "SINEATER"])
+    sinner_role = serializers.ChoiceField(choices=["SINNER", "SINEATER"])
     resonance_id = serializers.IntegerField()
     writeup = serializers.CharField(min_length=20, max_length=4000)
 
@@ -1518,7 +1522,7 @@ class SoulTetherDetailSerializer(serializers.Serializer):
         from world.magic.constants import SoulTetherRole  # noqa: PLC0415
         from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
-        if obj.soul_tether_role == SoulTetherRole.ABYSSAL:  # type: ignore[union-attr]
+        if obj.soul_tether_role == SoulTetherRole.SINNER:  # type: ignore[union-attr]
             outgoing = obj
             incoming = CharacterRelationship.objects.filter(
                 source=obj.target,  # type: ignore[union-attr]
@@ -2341,3 +2345,336 @@ class RoomBriefSerializer(serializers.Serializer):
 
     id = serializers.IntegerField()
     name = serializers.CharField()
+
+
+# =============================================================================
+# Ritual Session serializers (Covenants Slice B §4.12)
+# =============================================================================
+
+
+class RitualSessionParticipantSummarySerializer(serializers.Serializer):
+    """Brief participant row used inside list/detail session serializers."""
+
+    character_sheet_id = serializers.IntegerField(source="character_sheet.pk")
+    character_name = serializers.SerializerMethodField()
+    state = serializers.CharField()
+    responded_at = serializers.DateTimeField(allow_null=True)
+
+    def get_character_name(self, obj: object) -> str:
+        """Return primary persona name for the participant's sheet."""
+        sheet = getattr(obj, "character_sheet", None)  # noqa: GETATTR_LITERAL
+        if sheet is None:
+            return ""
+        persona = getattr(sheet, "primary_persona", None)  # noqa: GETATTR_LITERAL
+        return getattr(persona, "name", "") if persona is not None else ""  # noqa: GETATTR_LITERAL
+
+
+class RitualSessionListSerializer(serializers.ModelSerializer):
+    """Read-only serializer for listing RitualSessions (list endpoints).
+
+    Exposes ritual name, initiator name, proposed terms, expiry,
+    participant count summary, and the requesting user's role in this session.
+    """
+
+    ritual_name = serializers.CharField(source="ritual.name", read_only=True)
+    participation_rule = serializers.CharField(source="ritual.participation_rule", read_only=True)
+    initiator_name = serializers.SerializerMethodField()
+    participant_count = serializers.SerializerMethodField()
+    my_role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RitualSession
+        fields = [
+            "id",
+            "ritual_name",
+            "participation_rule",
+            "initiator_name",
+            "proposed_terms",
+            "expires_at",
+            "created_at",
+            "participant_count",
+            "my_role",
+        ]
+        read_only_fields = fields
+
+    def get_initiator_name(self, obj: object) -> str:
+        """Return primary persona name of the initiator sheet."""
+        initiator = getattr(obj, "initiator", None)  # noqa: GETATTR_LITERAL
+        if initiator is None:
+            return ""
+        persona = getattr(initiator, "primary_persona", None)  # noqa: GETATTR_LITERAL
+        return getattr(persona, "name", "") if persona is not None else ""  # noqa: GETATTR_LITERAL
+
+    def get_participant_count(self, obj: object) -> dict[str, int]:
+        """Return counts by state. Uses participants_cached if prefetched."""
+        from world.magic.constants import ParticipantState  # noqa: PLC0415
+
+        # Use participants_cached (populated by Prefetch to_attr) when available.
+        cached = getattr(obj, "participants_cached", None)  # noqa: GETATTR_LITERAL
+        if cached is not None:
+            participants = cached
+        else:
+            participants = list(getattr(obj, "participants", None).all())  # noqa: GETATTR_LITERAL
+        return {
+            "invited": sum(1 for p in participants if p.state == ParticipantState.INVITED),
+            "accepted": sum(1 for p in participants if p.state == ParticipantState.ACCEPTED),
+            "declined": sum(1 for p in participants if p.state == ParticipantState.DECLINED),
+            "total": len(participants),
+        }
+
+    def get_my_role(self, obj: object) -> dict[str, object]:
+        """Return {role: 'initiator'|'participant', state: <ParticipantState|None>}."""
+        request = self.context.get("request")
+        if request is None or not request.user.is_authenticated:
+            return {"role": "unknown", "state": None}
+        user = request.user
+        initiator = getattr(obj, "initiator", None)  # noqa: GETATTR_LITERAL
+        # Check if initiator's sheet belongs to this user.
+        my_sheet_ids = set(RosterEntry.objects.for_account(user).character_ids())
+        if initiator is not None and initiator.pk in my_sheet_ids:
+            return {"role": "initiator", "state": None}
+        # Check participant rows. Use participants_cached when prefetched.
+        cached = getattr(obj, "participants_cached", None)  # noqa: GETATTR_LITERAL
+        participants_iter = (
+            cached if cached is not None else getattr(obj, "participants", None).all()  # noqa: GETATTR_LITERAL
+        )
+        for participant in participants_iter:
+            if participant.character_sheet_id in my_sheet_ids:
+                return {"role": "participant", "state": participant.state}
+        return {"role": "unknown", "state": None}
+
+
+class RitualSessionDetailSerializer(serializers.ModelSerializer):
+    """Read-only serializer for the RitualSession detail endpoint.
+
+    Exposes all participants with per-participant state and responded_at,
+    plus session_kwargs and a summary of session_references.
+    """
+
+    ritual_name = serializers.CharField(source="ritual.name", read_only=True)
+    participation_rule = serializers.CharField(source="ritual.participation_rule", read_only=True)
+    initiator_id = serializers.IntegerField(source="initiator.pk", read_only=True)
+    initiator_name = serializers.SerializerMethodField()
+    participants = RitualSessionParticipantSummarySerializer(
+        source="participants_cached", many=True, read_only=True
+    )
+    session_references = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RitualSession
+        fields = [
+            "id",
+            "ritual_name",
+            "participation_rule",
+            "initiator_id",
+            "initiator_name",
+            "proposed_terms",
+            "session_kwargs",
+            "expires_at",
+            "created_at",
+            "participants",
+            "session_references",
+        ]
+        read_only_fields = fields
+
+    def get_initiator_name(self, obj: object) -> str:
+        initiator = getattr(obj, "initiator", None)  # noqa: GETATTR_LITERAL
+        if initiator is None:
+            return ""
+        persona = getattr(initiator, "primary_persona", None)  # noqa: GETATTR_LITERAL
+        return getattr(persona, "name", "") if persona is not None else ""  # noqa: GETATTR_LITERAL
+
+    def get_session_references(self, obj: object) -> list[dict[str, object]]:
+        """Summarise session-level references (participant=None).
+
+        Uses references_cached (populated by Prefetch to_attr) when available,
+        filtering in Python. Falls back to a DB .filter() query.
+        """
+        result = []
+        # Prefer prefetched list; fall back to DB query.
+        cached = getattr(obj, "references_cached", None)  # noqa: GETATTR_LITERAL
+        if cached is not None:
+            refs_iter = [r for r in cached if r.participant_id is None]
+        else:
+            refs = getattr(obj, "references", None)  # noqa: GETATTR_LITERAL
+            if refs is None:
+                return result
+            refs_iter = refs.filter(participant__isnull=True)
+        for ref in refs_iter:
+            entry: dict[str, object] = {"kind": ref.kind}
+            if ref.ref_covenant_id is not None:
+                entry["ref_covenant_id"] = ref.ref_covenant_id
+            if ref.ref_covenant_role_id is not None:
+                entry["ref_covenant_role_id"] = ref.ref_covenant_role_id
+            result.append(entry)
+        return result
+
+
+# Error messages for RitualSessionDraftSerializer.
+_ERR_RITUAL_NOT_FOUND = "Ritual not found."
+_ERR_RITUAL_SINGLE_ACTOR = "Single-actor rituals do not use sessions."
+_ERR_INVITEE_NOT_FOUND = "One or more invitee IDs do not match known CharacterSheets."
+_ERR_REFERENCE_SPEC_INVALID = (
+    "Each reference spec must have 'kind' and exactly one of 'ref_covenant_id' or "
+    "'ref_covenant_role_id'."
+)
+_ERR_EXPIRES_AT_IN_PAST = "expires_at must be in the future."
+_ERR_NO_ACTIVE_CHARACTER = "You must have an active character to draft a ritual session."
+_ERR_REQUEST_CONTEXT_REQUIRED = "Request context is required."
+
+
+def _parse_reference_specs(raw_specs: list[dict]) -> list:
+    """Convert raw dicts to RitualSessionReferenceSpec instances.
+
+    Validates that each spec has a kind and exactly one ref FK. Raises
+    serializers.ValidationError if any spec is malformed.
+    """
+    from world.covenants.models import Covenant, CovenantRole  # noqa: PLC0415
+    from world.magic.constants import ReferenceKind  # noqa: PLC0415
+    from world.magic.types.sessions import RitualSessionReferenceSpec  # noqa: PLC0415
+
+    specs = []
+    valid_kinds = {ReferenceKind.COVENANT, ReferenceKind.COVENANT_ROLE}
+    for raw in raw_specs:
+        kind = raw.get("kind")
+        covenant_id = raw.get("ref_covenant_id")
+        role_id = raw.get("ref_covenant_role_id")
+        has_covenant = covenant_id is not None
+        has_role = role_id is not None
+        if kind not in valid_kinds or not (has_covenant ^ has_role):
+            raise serializers.ValidationError(_ERR_REFERENCE_SPEC_INVALID)
+        ref_covenant = None
+        ref_covenant_role = None
+        if has_covenant:
+            try:
+                ref_covenant = Covenant.objects.get(pk=covenant_id)
+            except Covenant.DoesNotExist:
+                raise serializers.ValidationError(
+                    {"ref_covenant_id": f"Covenant {covenant_id} not found."}
+                ) from None
+        else:
+            try:
+                ref_covenant_role = CovenantRole.objects.get(pk=role_id)
+            except CovenantRole.DoesNotExist:
+                raise serializers.ValidationError(
+                    {"ref_covenant_role_id": f"CovenantRole {role_id} not found."}
+                ) from None
+        specs.append(
+            RitualSessionReferenceSpec(
+                kind=kind,
+                ref_covenant=ref_covenant,
+                ref_covenant_role=ref_covenant_role,
+            )
+        )
+    return specs
+
+
+class RitualSessionDraftSerializer(serializers.Serializer):
+    """Write-only serializer for POST /api/rituals/sessions/ (draft a session).
+
+    Validates inputs and resolves PKs to model instances. The view calls
+    draft_session(**validated_data) with the resolved data.
+    """
+
+    ritual_id = serializers.IntegerField()
+    proposed_terms = serializers.CharField(default="", allow_blank=True)
+    session_kwargs = serializers.DictField(
+        child=serializers.JSONField(binary=False),
+        required=False,
+        default=dict,
+    )
+    invitee_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list
+    )
+    session_references = serializers.ListField(
+        child=serializers.DictField(), required=False, default=list
+    )
+    initiator_participant_kwargs = serializers.DictField(
+        child=serializers.JSONField(binary=False),
+        required=False,
+        default=dict,
+    )
+    initiator_references = serializers.ListField(
+        child=serializers.DictField(), required=False, default=list
+    )
+    expires_at = serializers.DateTimeField(required=False, default=None)
+
+    def validate_ritual_id(self, value: int) -> "Ritual":  # type: ignore[override]
+        """Resolve to a Ritual instance; reject SINGLE_ACTOR rituals."""
+        from world.magic.constants import ParticipationRule  # noqa: PLC0415
+
+        try:
+            ritual = Ritual.objects.get(pk=value)
+        except Ritual.DoesNotExist:
+            raise serializers.ValidationError(_ERR_RITUAL_NOT_FOUND) from None
+        if ritual.participation_rule == ParticipationRule.SINGLE_ACTOR:
+            raise serializers.ValidationError(_ERR_RITUAL_SINGLE_ACTOR)
+        return ritual
+
+    def validate_invitee_ids(self, value: list[int]) -> "list[CharacterSheet]":  # type: ignore[override]
+        """Resolve to CharacterSheet instances."""
+        if not value:
+            return []
+        sheets = list(CharacterSheet.objects.filter(pk__in=value))
+        if len(sheets) != len(set(value)):
+            raise serializers.ValidationError(_ERR_INVITEE_NOT_FOUND)
+        return sheets
+
+    def validate_session_references(self, value: list[dict]) -> list:  # type: ignore[override]
+        """Parse and validate reference spec dicts."""
+        return _parse_reference_specs(value)
+
+    def validate_initiator_references(self, value: list[dict]) -> list:  # type: ignore[override]
+        """Parse and validate initiator reference spec dicts."""
+        return _parse_reference_specs(value)
+
+    def validate(self, attrs: dict) -> dict:
+        """Resolve initiator from request, set expires_at default, remap keys."""
+        import datetime as _dt  # noqa: PLC0415
+
+        from django.utils import timezone  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is None:
+            raise serializers.ValidationError(_ERR_REQUEST_CONTEXT_REQUIRED)
+        user = request.user
+        owned_ids = set(RosterEntry.objects.for_account(user).character_ids())
+        if not owned_ids:
+            raise serializers.ValidationError(_ERR_NO_ACTIVE_CHARACTER)
+        # Pick the first active sheet for the initiator.
+        # The spec does not require explicit initiator selection — the user's
+        # active character is implicit. If a user has multiple active tenures,
+        # the caller should specify via context; for now, take the lowest PK.
+        initiator_sheet = CharacterSheet.objects.filter(pk__in=owned_ids).order_by("pk").first()
+        if initiator_sheet is None:
+            raise serializers.ValidationError(_ERR_NO_ACTIVE_CHARACTER)
+        if attrs.get("expires_at") is None:
+            attrs["expires_at"] = timezone.now() + _dt.timedelta(hours=24)
+        expires_at = attrs["expires_at"]
+        if expires_at <= timezone.now():
+            raise serializers.ValidationError({"expires_at": _ERR_EXPIRES_AT_IN_PAST})
+        # Remap field names to match draft_session keyword arguments.
+        attrs["ritual"] = attrs.pop("ritual_id")
+        attrs["initiator"] = initiator_sheet
+        attrs["invitee_sheets"] = attrs.pop("invitee_ids")
+        return attrs
+
+
+class RitualSessionAcceptSerializer(serializers.Serializer):
+    """Write-only serializer for POST /api/rituals/sessions/{id}/accept/.
+
+    Validates the shape of participant_kwargs and references. Deep schema
+    validation against participant_fields is future work — services raise
+    RequiredReferenceMissingError for missing required choices.
+    """
+
+    participant_kwargs = serializers.DictField(
+        child=serializers.JSONField(binary=False),
+        required=False,
+        default=dict,
+    )
+    references = serializers.ListField(child=serializers.DictField(), required=False, default=list)
+
+    def validate_references(self, value: list[dict]) -> list:  # type: ignore[override]
+        """Validate reference spec shape (well-formedness only)."""
+        return _parse_reference_specs(value)

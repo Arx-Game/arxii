@@ -99,11 +99,39 @@ const MuteSettingsPage = lazy(() =>
 );
 
 // ---------------------------------------------------------------------------
-// Lazy-loaded rituals page
+// Lazy-loaded covenants pages
+// ---------------------------------------------------------------------------
+
+const CovenantsListPage = lazy(() =>
+  import('@/covenants/pages/CovenantsListPage').then((m) => ({
+    default: m.CovenantsListPage,
+  }))
+);
+
+const CovenantDetailPage = lazy(() =>
+  import('@/covenants/pages/CovenantDetailPage').then((m) => ({
+    default: m.CovenantDetailPage,
+  }))
+);
+
+// ---------------------------------------------------------------------------
+// Lazy-loaded rituals pages
 // ---------------------------------------------------------------------------
 
 const RitualsListPage = lazy(() =>
   import('@/rituals/pages/RitualsListPage').then((m) => ({ default: m.RitualsListPage }))
+);
+
+const RitualSessionInboxPage = lazy(() =>
+  import('@/rituals/pages/RitualSessionInboxPage').then((m) => ({
+    default: m.RitualSessionInboxPage,
+  }))
+);
+
+const RitualSessionDetailPage = lazy(() =>
+  import('@/rituals/pages/RitualSessionDetailPage').then((m) => ({
+    default: m.RitualSessionDetailPage,
+  }))
 );
 
 // ---------------------------------------------------------------------------
@@ -497,6 +525,50 @@ function App() {
             <Suspense fallback={<PageLoadingFallback />}>
               <ProtectedRoute>
                 <RitualsListPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/rituals/sessions/inbox"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <RitualSessionInboxPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/rituals/sessions/:id"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <RitualSessionDetailPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* Covenants (Slice B Phase 9)                                         */}
+        {/* ------------------------------------------------------------------ */}
+        <Route
+          path="/covenants"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <CovenantsListPage />
+              </ProtectedRoute>
+            </Suspense>
+          }
+        />
+        <Route
+          path="/covenants/:id"
+          element={
+            <Suspense fallback={<PageLoadingFallback />}>
+              <ProtectedRoute>
+                <CovenantDetailPage />
               </ProtectedRoute>
             </Suspense>
           }
