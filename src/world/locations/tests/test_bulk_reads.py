@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -16,13 +18,16 @@ from world.locations.factories import (
     LocationOwnershipFactory,
     LocationStatModifierFactory,
     LocationStatOverrideFactory,
+    LocationTenancyFactory,
 )
 from world.locations.services import (
     _bulk_room_profiles_and_ancestors,
+    current_tenants,
     effective_owner,
     effective_owners_for_rooms,
     effective_stat,
     effective_stats_for_rooms,
+    tenancies_for_rooms,
 )
 from world.scenes.factories import PersonaFactory
 
@@ -257,3 +262,86 @@ class EffectiveOwnersForRoomsTests(TestCase):
 
         with self.assertNumQueries(2):
             effective_owners_for_rooms(rooms)
+
+
+class TenanciesForRoomsTests(TestCase):
+    def test_empty_rooms_returns_empty_dict(self) -> None:
+        self.assertEqual(tenancies_for_rooms([]), {})
+
+    def test_single_room_matches_singular_helper(self) -> None:
+        building = AreaFactory(level=AreaLevel.BUILDING)
+        profile = RoomProfileFactory(area=building)
+        room = profile.objectdb
+        row = LocationTenancyFactory(room_profile=profile, tenant_persona=PersonaFactory())
+        result = tenancies_for_rooms([room])
+        self.assertEqual(result[room.pk], [row])
+        self.assertEqual(list(current_tenants(room)), result[room.pk])
+
+    def test_includes_room_and_ancestor_area_tenancies(self) -> None:
+        building = AreaFactory(level=AreaLevel.BUILDING)
+        profile = RoomProfileFactory(area=building)
+        room = profile.objectdb
+
+        building_tenancy = LocationTenancyFactory(
+            on_area=True, area=building, tenant_persona=PersonaFactory()
+        )
+        room_tenancy = LocationTenancyFactory(room_profile=profile, tenant_persona=PersonaFactory())
+
+        result = tenancies_for_rooms([room])
+        self.assertEqual(set(result[room.pk]), {building_tenancy, room_tenancy})
+
+    def test_multiple_rooms_distinct_results(self) -> None:
+        building = AreaFactory(level=AreaLevel.BUILDING)
+        profile_a = RoomProfileFactory(area=building)
+        profile_b = RoomProfileFactory(area=building)
+        room_a, room_b = profile_a.objectdb, profile_b.objectdb
+
+        tenancy_a = LocationTenancyFactory(room_profile=profile_a, tenant_persona=PersonaFactory())
+        tenancy_b = LocationTenancyFactory(room_profile=profile_b, tenant_persona=PersonaFactory())
+
+        result = tenancies_for_rooms([room_a, room_b])
+        self.assertEqual(result[room_a.pk], [tenancy_a])
+        self.assertEqual(result[room_b.pk], [tenancy_b])
+
+    def test_expired_tenancy_excluded(self) -> None:
+        building = AreaFactory(level=AreaLevel.BUILDING)
+        profile = RoomProfileFactory(area=building)
+        room = profile.objectdb
+        LocationTenancyFactory(
+            room_profile=profile,
+            tenant_persona=PersonaFactory(),
+            ends_at=timezone.now() - timedelta(days=1),
+        )
+        result = tenancies_for_rooms([room])
+        self.assertEqual(result[room.pk], [])
+
+    def test_future_ends_at_included(self) -> None:
+        building = AreaFactory(level=AreaLevel.BUILDING)
+        profile = RoomProfileFactory(area=building)
+        room = profile.objectdb
+        row = LocationTenancyFactory(
+            room_profile=profile,
+            tenant_persona=PersonaFactory(),
+            ends_at=timezone.now() + timedelta(days=30),
+        )
+        result = tenancies_for_rooms([room])
+        self.assertEqual(result[room.pk], [row])
+
+    def test_room_without_profile_returns_empty_list(self) -> None:
+        profile = RoomProfileFactory()
+        room = profile.objectdb
+        profile.delete()
+        room.refresh_from_db()
+        result = tenancies_for_rooms([room])
+        self.assertEqual(result[room.pk], [])
+
+    def test_query_budget_two_queries(self) -> None:
+        building = AreaFactory(level=AreaLevel.BUILDING)
+        profiles = [RoomProfileFactory(area=building) for _ in range(3)]
+        rooms = [p.objectdb for p in profiles]
+        LocationTenancyFactory(on_area=True, area=building, tenant_persona=PersonaFactory())
+
+        rooms = [ObjectDB.objects.get(pk=r.pk) for r in rooms]
+
+        with self.assertNumQueries(2):
+            tenancies_for_rooms(rooms)

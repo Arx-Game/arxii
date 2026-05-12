@@ -464,6 +464,64 @@ def current_tenants(room: DefaultObject) -> QuerySet[LocationTenancy]:
     )
 
 
+def tenancies_for_rooms(
+    rooms: Iterable[DefaultObject],
+) -> dict[int, list[LocationTenancy]]:
+    """Bulk-resolve currently-active tenancies for many rooms.
+
+    Returns: {room.pk: [LocationTenancy, ...]}.
+
+    One AreaClosure walk for the union of ancestor area ids (via
+    _bulk_room_profiles_and_ancestors), one fetch of active
+    LocationTenancy rows (with select_related on area + tenants),
+    then group per room in Python.
+
+    Returns a list per room (not a QuerySet) because grouping in
+    Python after the bulk fetch precludes lazy evaluation. Rooms
+    without a RoomProfile get an empty list.
+
+    Query budget: 2 total queries regardless of room count.
+    """
+    rooms_list = list(rooms)
+    if not rooms_list:
+        return {}
+
+    room_to_profile, profile_to_ancestor_ids, all_ancestor_ids = _bulk_room_profiles_and_ancestors(
+        rooms_list
+    )
+
+    profile_pks = {p.pk for p in room_to_profile.values()}
+
+    now = timezone.now()
+    rows = list(
+        LocationTenancy.objects.filter(models.Q(ends_at__isnull=True) | models.Q(ends_at__gt=now))
+        .select_related("area", "tenant_persona", "tenant_organization")
+        .filter(models.Q(room_profile_id__in=profile_pks) | models.Q(area_id__in=all_ancestor_ids))
+    )
+
+    # Index rows by their parent
+    by_room: dict[int, list[LocationTenancy]] = {}
+    by_area: dict[int, list[LocationTenancy]] = {}
+    for t in rows:
+        if t.room_profile_id is not None:
+            by_room.setdefault(t.room_profile_id, []).append(t)
+        elif t.area_id is not None:
+            by_area.setdefault(t.area_id, []).append(t)
+
+    result: dict[int, list[LocationTenancy]] = {}
+    for room in rooms_list:
+        profile = room_to_profile.get(room.pk)
+        if profile is None:
+            result[room.pk] = []
+            continue
+        applicable: list[LocationTenancy] = list(by_room.get(profile.pk, []))
+        ancestor_ids = profile_to_ancestor_ids.get(profile.pk, [])
+        for aid in ancestor_ids:
+            applicable.extend(by_area.get(aid, []))
+        result[room.pk] = applicable
+    return result
+
+
 def ownership_for(persona: Persona, room: DefaultObject) -> LocationOwnership | None:
     """Return the LocationOwnership row that gives this persona standing
     at this room, or None.
