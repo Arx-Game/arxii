@@ -10,10 +10,13 @@ from django.db import transaction
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 
+from world.covenants.models import Covenant
 from world.scenes.models import Persona, Scene
 from world.skills.models import Skill
 from world.societies.models import (
     CharacterLegendSummary,
+    CovenantLegendCredit,
+    CovenantLegendSummary,
     LegendEntry,
     LegendEvent,
     LegendSourceType,
@@ -63,6 +66,7 @@ def create_solo_deed(  # noqa: PLR0913
         event=None,
         spread_multiplier=config.default_spread_multiplier,
     )
+    credit_engaged_covenants(entry=entry)
     refresh_legend_views()
     return entry
 
@@ -120,6 +124,8 @@ def create_legend_event(  # noqa: PLR0913
             for persona in personas
         ]
     )
+    for e in entries:
+        credit_engaged_covenants(entry=e)
     refresh_legend_views()
     return event, entries
 
@@ -260,3 +266,51 @@ def get_persona_legend_total(persona: Persona) -> int:
         return summary.persona_legend
     except PersonaLegendSummary.DoesNotExist:
         return 0
+
+
+def credit_engaged_covenants(*, entry: LegendEntry) -> list[CovenantLegendCredit]:
+    """Snapshot the persona's currently-engaged covenants and create credit rows.
+
+    Called immediately after a LegendEntry is created (solo deed or event entry).
+    Idempotent on retry via get_or_create per (entry, covenant).
+
+    Args:
+        entry: The newly-created LegendEntry to credit.
+
+    Returns:
+        List of CovenantLegendCredit rows (created or found).
+    """
+    persona = entry.persona
+    if persona.character_sheet is None:
+        return []
+    sheet = persona.character_sheet
+    if not hasattr(sheet, "character") or sheet.character is None:
+        return []
+    # `active_memberships` returns all rows with left_at IS NULL.
+    # Filter to engaged=True in Python — no DB hit (identity-map cached).
+    handler = sheet.character.covenant_roles
+    memberships = [m for m in handler.active_memberships if m.engaged]
+    result: list[CovenantLegendCredit] = []
+    for m in memberships:
+        credit, _ = CovenantLegendCredit.objects.get_or_create(entry=entry, covenant=m.covenant)
+        result.append(credit)
+    return result
+
+
+def get_covenant_legend_total(covenant: Covenant) -> int:
+    """Return the covenant's total legend from the materialized view.
+
+    Args:
+        covenant: The Covenant instance.
+
+    Returns:
+        The covenant's legend total, or 0 if no view row exists yet.
+
+    Note: Uses values_list to bypass the SharedMemoryModel identity-map cache,
+    which would otherwise return stale totals after a view refresh.
+    """
+    row = CovenantLegendSummary.objects.filter(pk=covenant.pk).values_list(
+        "legend_total", flat=True
+    )
+    result = list(row)
+    return result[0] if result else 0
