@@ -96,6 +96,8 @@ from world.magic.serializers import (
     RitualPatchSerializer,
     RitualPerformRequestSerializer,
     RitualSerializer,
+    RitualSessionDetailSerializer,
+    RitualSessionDraftSerializer,
     RoomBriefSerializer,
     SceneEntryEndorsementSerializer,
     TechniqueSerializer,
@@ -1425,13 +1427,21 @@ class RitualSessionViewSet(viewsets.ModelViewSet):
 
         cancel_session(session=instance)
 
+    @extend_schema(
+        request=RitualSessionDraftSerializer,
+        responses={201: RitualSessionDetailSerializer},
+    )
     def create(self, request: Request, *args, **kwargs) -> Response:
-        """POST /api/rituals/sessions/ — draft a new session."""
+        """POST /api/rituals/sessions/ — draft a new session.
+
+        Request body: RitualSessionDraftSerializer.
+        Response: RitualSessionDetailSerializer (201) — includes the new
+        session's id so the frontend can navigate to its detail page.
+        """
         from world.magic.exceptions import (  # noqa: PLC0415
             ParticipantCountError,
             RitualSessionError,
         )
-        from world.magic.serializers import RitualSessionDraftSerializer  # noqa: PLC0415
 
         serializer = RitualSessionDraftSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
@@ -1439,8 +1449,6 @@ class RitualSessionViewSet(viewsets.ModelViewSet):
             self.perform_create(serializer)
         except (RitualSessionError, ParticipantCountError) as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
-        from world.magic.serializers import RitualSessionDetailSerializer  # noqa: PLC0415
-
         out = RitualSessionDetailSerializer(serializer.instance, context={"request": request})
         return Response(out.data, status=status.HTTP_201_CREATED)
 

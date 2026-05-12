@@ -25,7 +25,11 @@ import type { components } from '@/generated/api';
 
 export type RitualSessionList = components['schemas']['RitualSessionList'];
 export type RitualSessionDetail = components['schemas']['RitualSessionDetail'];
-export type RitualSessionDraft = components['schemas']['RitualSessionDraft'];
+// The create endpoint returns RitualSessionDetail (declared via @extend_schema
+// on the view). Keep the legacy `RitualSessionDraft` name as an alias so
+// callers that imported it continue to work — but resolve it to the detail
+// shape so consumers see `.id` and other read fields.
+export type RitualSessionDraft = components['schemas']['RitualSessionDetail'];
 export type RitualSessionDraftRequest = components['schemas']['RitualSessionDraftRequest'];
 export type RitualSessionAccept = components['schemas']['RitualSessionAccept'];
 export type RitualSessionAcceptRequest = components['schemas']['RitualSessionAcceptRequest'];

@@ -5858,7 +5858,13 @@ export interface paths {
      */
     get: operations['magic_rituals_sessions_list'];
     put?: never;
-    /** @description POST /api/rituals/sessions/ — draft a new session. */
+    /**
+     * @description POST /api/rituals/sessions/ — draft a new session.
+     *
+     *     Request body: RitualSessionDraftSerializer.
+     *     Response: RitualSessionDetailSerializer (201) — includes the new
+     *     session's id so the frontend can navigate to its detail page.
+     */
     post: operations['magic_rituals_sessions_create'];
     delete?: never;
     options?: never;
@@ -13930,6 +13936,14 @@ export interface components {
      * @enum {string}
      */
     ParticipationLevelEnum: 'critical' | 'important' | 'optional';
+    /**
+     * @description * `SINGLE_ACTOR` - Single Actor
+     *     * `FORMATION` - Formation (all must accept, ≥2)
+     *     * `INDUCTION` - Induction (majority of respondents)
+     *     * `BILATERAL` - Bilateral (exactly 2, both must accept)
+     * @enum {string}
+     */
+    ParticipationRuleEnum: 'SINGLE_ACTOR' | 'FORMATION' | 'INDUCTION' | 'BILATERAL';
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     PatchedBeatRequest: {
       episode?: number;
@@ -15415,6 +15429,9 @@ export interface components {
       } | null;
       /** @description When True, the generic Rituals listing page hides this ritual; it has a specialized host UI elsewhere (e.g., Thread Detail for Imbuing). */
       readonly client_hosted: boolean;
+      readonly participation_rule: components['schemas']['ParticipationRuleEnum'];
+      readonly min_participants: number | null;
+      readonly max_participants: number | null;
     };
     /**
      * @description Write serializer for partial PATCH of player-authored Rituals.
@@ -15509,32 +15526,6 @@ export interface components {
       readonly created_at: string;
       readonly participants: components['schemas']['RitualSessionParticipantSummary'][];
       readonly session_references: string;
-    };
-    /**
-     * @description Write-only serializer for POST /api/rituals/sessions/ (draft a session).
-     *
-     *     Validates inputs and resolves PKs to model instances. The view calls
-     *     draft_session(**validated_data) with the resolved data.
-     */
-    RitualSessionDraft: {
-      ritual_id: number;
-      /** @default  */
-      proposed_terms: string;
-      session_kwargs?: {
-        [key: string]: unknown;
-      };
-      invitee_ids?: number[];
-      session_references?: {
-        [key: string]: unknown;
-      }[];
-      initiator_participant_kwargs?: {
-        [key: string]: unknown;
-      };
-      initiator_references?: {
-        [key: string]: unknown;
-      }[];
-      /** Format: date-time */
-      expires_at?: string;
     };
     /**
      * @description Write-only serializer for POST /api/rituals/sessions/ (draft a session).
@@ -25338,7 +25329,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['RitualSessionDraft'];
+          'application/json': components['schemas']['RitualSessionDetail'];
         };
       };
     };
