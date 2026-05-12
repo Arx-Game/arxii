@@ -159,6 +159,7 @@ class SubroleUniqueConstraintTests(TestCase):
                 slug="different-slug",
                 covenant_type=parent.covenant_type,
                 archetype=parent.archetype,
+                speed_rank=parent.speed_rank,
                 parent_role=parent,
                 resonance=resonance,
                 unlock_thread_level=3,

@@ -145,7 +145,7 @@ class CovenantRole(SharedMemoryModel):
                 "parent_role and resonance must both be set (sub-role) or both be null "
                 "(primary role)."
             )
-            raise ValidationError(msg)
+            raise ValidationError({"parent_role": msg, "resonance": msg})
 
         if has_parent and has_resonance:
             # Sub-role rules
