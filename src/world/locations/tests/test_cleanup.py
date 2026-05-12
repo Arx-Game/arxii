@@ -1,5 +1,7 @@
 from datetime import timedelta
+from io import StringIO
 
+from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 
@@ -107,3 +109,29 @@ class CleanupDecayedModifiersTests(TestCase):
         deleted_with_future_now = cleanup_decayed_modifiers(now=far_future)
         self.assertEqual(deleted_with_future_now, 1)
         self.assertEqual(LocationStatModifier.objects.count(), 0)
+
+
+class CleanupDecayedModifiersCommandTests(TestCase):
+    def test_command_runs_and_reports_count(self) -> None:
+        area = AreaFactory()
+        # One decayed, one not
+        LocationStatModifierFactory(
+            area=area,
+            stat_key=StatKey.CRIME,
+            value=5,
+            change_per_day=-1,
+            applied_at=timezone.now() - timedelta(days=30),
+        )
+        LocationStatModifierFactory(
+            area=area,
+            stat_key=StatKey.NOISE,
+            value=20,
+            change_per_day=-1,
+            applied_at=timezone.now() - timedelta(days=3),
+        )
+
+        out = StringIO()
+        call_command("cleanup_decayed_modifiers", stdout=out)
+        output = out.getvalue()
+        self.assertIn("Deleted 1", output)
+        self.assertEqual(LocationStatModifier.objects.count(), 1)
