@@ -28,8 +28,13 @@ export function ThreadDetailPage() {
   const threadId = Number(id ?? '0');
 
   const { data: thread, isLoading: threadLoading } = useThread(threadId);
-  const { data: summary, isLoading: summaryLoading } = useThreadHubSummary();
-  const { data: characterResonances } = useCharacterResonances();
+  // Scope summary + resonances to the thread's owning character so users
+  // with alts see balances and resonance options for the right character.
+  const characterSheetIdFromThread = thread?.owner;
+  const { data: summary, isLoading: summaryLoading } = useThreadHubSummary(
+    characterSheetIdFromThread
+  );
+  const { data: characterResonances } = useCharacterResonances(characterSheetIdFromThread);
   const { data: progressionData } = useAccountProgressionQuery();
 
   const [renameOpen, setRenameOpen] = useState(false);

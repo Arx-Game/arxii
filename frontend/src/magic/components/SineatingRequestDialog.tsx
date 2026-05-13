@@ -94,8 +94,10 @@ export function SineatingRequestDialog({
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Data hooks
-  const { data: resonances, isLoading: resonancesLoading } = useCharacterResonances();
+  // Data hooks. Sineating is initiated by the Sinner — scope resonance
+  // lookup to the Sinner's character_sheet so users with alts only see
+  // the right character's resonances in the picker.
+  const { data: resonances, isLoading: resonancesLoading } = useCharacterResonances(sinnerSheetId);
   const { data: scenesData, isLoading: scenesLoading } = useQuery({
     queryKey: ['scenes', 'active'],
     queryFn: fetchActiveScenes,

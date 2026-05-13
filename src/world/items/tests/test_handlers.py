@@ -93,6 +93,23 @@ class CharacterCarriedItemsHandlerTests(TestCase):
         cls.mine_b = _item_on(cls.character, "MineB")
         cls.theirs = _item_on(cls.other_character, "Theirs")
 
+    def setUp(self) -> None:
+        # Cross-app test pollution guard. The ``flush_instance_cache()``
+        # is the one doing the real work — when other apps' tests have
+        # populated the SharedMemoryModel identity map with ItemInstance
+        # rows whose pks may collide with ours, a fresh handler read
+        # would otherwise pull in those stale Python instances. Flushing
+        # the model cache forces the next queryset to materialize new
+        # instances from fresh rows. The handler ``invalidate()`` calls
+        # are belt-and-suspenders: they reset ``_cached`` so even if
+        # something repopulated the handler between flush and read,
+        # it'd still re-fetch.
+        from world.items.models import ItemInstance
+
+        ItemInstance.flush_instance_cache()
+        self.character.carried_items.invalidate()
+        self.other_character.carried_items.invalidate()
+
     def test_returns_only_items_carried_by_character(self) -> None:
         items = list(self.character.carried_items)
         pks = {it.pk for it in items}
@@ -164,6 +181,16 @@ class CharacterSheetOutfitsHandlerTests(TestCase):
             wardrobe=cls.wardrobe,
             name="Theirs",
         )
+
+    def setUp(self) -> None:
+        # Cross-app pollution guard — see CharacterCarriedItemsHandlerTests.setUp
+        # for what each line does. The ``flush_instance_cache()`` is the
+        # real fix; the ``invalidate()`` calls are defense-in-depth.
+        from world.items.models import Outfit
+
+        Outfit.flush_instance_cache()
+        self.sheet.saved_outfits.invalidate()
+        self.other_sheet.saved_outfits.invalidate()
 
     def test_returns_only_outfits_for_sheet(self) -> None:
         outfits = list(self.sheet.saved_outfits)

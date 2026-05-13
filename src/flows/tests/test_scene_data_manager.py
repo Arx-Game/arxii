@@ -56,8 +56,15 @@ class TestSceneDataManager(TestCase):
         assert self.mock_state.test_attr == "new_value"
 
     def test_set_context_value_missing_state(self):
-        """Test setting an attribute when state doesn't exist."""
-        result = self.manager.set_context_value(999, "test_attr", "new_value")
+        """Test setting an attribute when state doesn't exist.
+
+        ``get_state_by_pk`` falls back to ``ObjectDB.objects.get(pk=...)``
+        when the state isn't already cached, so we mock that lookup to
+        guarantee no real row collides with the test pk (which can happen
+        in cross-app fresh-DB runs where the auto-increment passes 999).
+        """
+        with patch.object(ObjectDB.objects, "get", side_effect=ObjectDB.DoesNotExist):
+            result = self.manager.set_context_value(999, "test_attr", "new_value")
 
         assert result is None
 
@@ -79,8 +86,13 @@ class TestSceneDataManager(TestCase):
         assert result is None
 
     def test_get_context_value_missing_state(self):
-        """Test getting an attribute when state doesn't exist."""
-        result = self.manager.get_context_value(999, "test_attr")
+        """Test getting an attribute when state doesn't exist.
+
+        See ``test_set_context_value_missing_state`` for why the
+        ObjectDB lookup is mocked.
+        """
+        with patch.object(ObjectDB.objects, "get", side_effect=ObjectDB.DoesNotExist):
+            result = self.manager.get_context_value(999, "test_attr")
 
         assert result is None
 
@@ -110,12 +122,17 @@ class TestSceneDataManager(TestCase):
         assert simple_state.missing_attr == "default_value"
 
     def test_modify_context_value_missing_state(self):
-        """Test modifying when state doesn't exist."""
+        """Test modifying when state doesn't exist.
+
+        See ``test_set_context_value_missing_state`` for why the
+        ObjectDB lookup is mocked.
+        """
 
         def modifier(value):
             return "modified"
 
-        result = self.manager.modify_context_value(999, "test_attr", modifier)
+        with patch.object(ObjectDB.objects, "get", side_effect=ObjectDB.DoesNotExist):
+            result = self.manager.modify_context_value(999, "test_attr", modifier)
 
         assert result is None
 

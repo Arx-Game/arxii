@@ -249,11 +249,20 @@ export async function getThreads(): Promise<PaginatedThreadList> {
 /**
  * GET /api/magic/character-resonances/
  *
- * Returns all CharacterResonance rows for the requesting account's characters.
- * Used by ResonancePickerField and similar UI surfaces.
+ * Returns CharacterResonance rows scoped to the requesting account. When
+ * ``characterSheetId`` is provided, narrows the response to that one
+ * character — required for callers operating on a single character so
+ * users with alts don't see a mixed list. Used by ResonancePickerField,
+ * the thread hub/detail pages, and the soul-tether dialogs.
  */
-export async function getCharacterResonances(): Promise<CharacterResonance[]> {
-  const res = await apiFetch(`${CHAR_RESONANCES_URL}/`);
+export async function getCharacterResonances(
+  characterSheetId?: number
+): Promise<CharacterResonance[]> {
+  const url =
+    characterSheetId != null
+      ? `${CHAR_RESONANCES_URL}/?character_sheet=${characterSheetId}`
+      : `${CHAR_RESONANCES_URL}/`;
+  const res = await apiFetch(url);
   if (!res.ok) throw new Error('Failed to load character resonances');
   return res.json() as Promise<CharacterResonance[]>;
 }

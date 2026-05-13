@@ -5,7 +5,16 @@ import django_filters
 from rest_framework.exceptions import ValidationError
 
 from world.magic.constants import GainSource, ParticipationRule
-from world.magic.models import Cantrip, ResonanceGrant, Thread, ThreadWeavingTeachingOffer
+from world.magic.models import (
+    Cantrip,
+    CharacterAnima,
+    CharacterAura,
+    CharacterGift,
+    CharacterResonance,
+    ResonanceGrant,
+    Thread,
+    ThreadWeavingTeachingOffer,
+)
 from world.magic.models.sessions import RitualSession
 
 
@@ -40,6 +49,48 @@ class ThreadFilter(django_filters.FilterSet):
     class Meta:
         model = Thread
         fields = ["resonance", "target_kind"]
+
+
+class CharacterAuraFilter(django_filters.FilterSet):
+    """Filter for CharacterAura. Allows narrowing to a specific character."""
+
+    character = django_filters.NumberFilter(field_name="character_id")
+
+    class Meta:
+        model = CharacterAura
+        fields = ["character"]
+
+
+class CharacterResonanceFilter(django_filters.FilterSet):
+    """Filter for CharacterResonance. Narrows to a specific character_sheet."""
+
+    character_sheet = django_filters.NumberFilter(field_name="character_sheet_id")
+    resonance = django_filters.NumberFilter(field_name="resonance_id")
+
+    class Meta:
+        model = CharacterResonance
+        fields = ["character_sheet", "resonance"]
+
+
+class CharacterGiftFilter(django_filters.FilterSet):
+    """Filter for CharacterGift. Narrows to a specific character."""
+
+    character = django_filters.NumberFilter(field_name="character_id")
+    gift = django_filters.NumberFilter(field_name="gift_id")
+
+    class Meta:
+        model = CharacterGift
+        fields = ["character", "gift"]
+
+
+class CharacterAnimaFilter(django_filters.FilterSet):
+    """Filter for CharacterAnima. Narrows to a specific character."""
+
+    character = django_filters.NumberFilter(field_name="character_id")
+
+    class Meta:
+        model = CharacterAnima
+        fields = ["character"]
 
 
 class ThreadWeavingTeachingOfferFilter(django_filters.FilterSet):

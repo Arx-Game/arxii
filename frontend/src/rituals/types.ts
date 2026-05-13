@@ -53,6 +53,12 @@ export interface FieldProps {
    * to filter capstones by the selected sineater's character sheet.
    */
   formValues?: Record<string, string | number | null>;
+  /**
+   * The active character_sheet_id for this ritual performance — used by
+   * fields that need to scope their options to a single character
+   * (e.g., ResonancePickerField). Always provided by RitualPerformDialog.
+   */
+  characterSheetId?: number;
 }
 
 export interface RitualInputSchema {

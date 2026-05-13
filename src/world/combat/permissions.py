@@ -1,14 +1,29 @@
 """Permission classes for combat API endpoints."""
 
-from typing import cast
-
-from evennia.accounts.models import AccountDB
 from rest_framework.permissions import BasePermission
 from rest_framework.request import Request
 from rest_framework.views import APIView
 
 from world.combat.models import CombatEncounter
-from world.roster.models import RosterEntry
+
+
+def _viewer_character_ids(request: Request, _view: APIView) -> frozenset[int]:
+    """Return the request user's played character_sheet ids.
+
+    Reads ``request.user.played_character_sheet_ids`` — a cached_property
+    on the ``Account`` typeclass populated lazily and invalidated when
+    any of the account's ``RosterTenure`` rows mutate (see
+    ``RosterTenure.related_cache_fields``). The cache lives on the
+    identity-mapped Account instance, so it persists across requests for
+    the same user within the same Python process.
+
+    For anonymous users or non-Account user models, ``AttributeError``
+    bubbles up from the missing property and we return an empty set.
+    """
+    try:
+        return request.user.played_character_sheet_ids
+    except AttributeError:
+        return frozenset()
 
 
 class IsEncounterGMOrStaff(BasePermission):
@@ -35,7 +50,19 @@ class IsEncounterParticipant(BasePermission):
     """Allow authenticated users who have an active CombatParticipant.
 
     Uses the encounter's participants_cached when available (prefetched
-    by _base_queryset) to avoid a separate query.
+    by _base_queryset) to avoid a separate query. Routes the roster
+    lookup through the view's per-request cache when available so the
+    permission check and view body share a single roster query.
+
+    **No staff bypass.** The endpoints gated by this permission
+    (``declare``, ``ready``, ``my_action``, ``flee``, ``upgrade_combo``,
+    ``revert_combo``) operate on the caller's own participant row. Staff
+    do not own a participant by virtue of being staff — they must be
+    added as a participant first (e.g., via the ``add_participant`` GM
+    action) before they can act. Granting a staff bypass here paints an
+    inconsistent picture: the permission check passes, but the view
+    body's ``_get_participant`` returns None and the request 403s on
+    "Not a participant" — confusing and pointless.
     """
 
     def has_object_permission(
@@ -44,12 +71,7 @@ class IsEncounterParticipant(BasePermission):
         view: APIView,
         obj: CombatEncounter,
     ) -> bool:
-        if request.user.is_staff:
-            return True
-        user = cast(AccountDB, request.user)
-        character_ids = set(
-            RosterEntry.objects.for_account(user).character_ids(),
-        )
+        character_ids = _viewer_character_ids(request, view)
         return any(p.character_sheet.character_id in character_ids for p in obj.participants_cached)
 
 
@@ -70,8 +92,5 @@ class IsInEncounterRoom(BasePermission):
             return True
         if not obj.scene:
             return False
-        user = cast(AccountDB, request.user)
-        character_ids = set(
-            RosterEntry.objects.for_account(user).character_ids(),
-        )
+        character_ids = _viewer_character_ids(request, view)
         return obj.scene.has_character_present(character_ids)

@@ -6,9 +6,17 @@ export interface RitualFormProps {
   values: Record<string, string | number | null>;
   onChange: (values: Record<string, string | number | null>) => void;
   disabled?: boolean;
+  /** Active character_sheet_id for the performance; passed through to fields. */
+  characterSheetId?: number;
 }
 
-export function RitualForm({ schema, values, onChange, disabled }: RitualFormProps) {
+export function RitualForm({
+  schema,
+  values,
+  onChange,
+  disabled,
+  characterSheetId,
+}: RitualFormProps) {
   const handleFieldChange = (fieldName: string, newValue: string | number | null) => {
     const updatedValues = { ...values, [fieldName]: newValue };
     onChange(updatedValues);
@@ -28,6 +36,7 @@ export function RitualForm({ schema, values, onChange, disabled }: RitualFormPro
             onChange={(newValue) => handleFieldChange(field.name, newValue)}
             disabled={disabled}
             formValues={values}
+            characterSheetId={characterSheetId}
           />
         );
       })}

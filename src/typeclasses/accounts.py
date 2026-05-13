@@ -116,6 +116,28 @@ class Account(DefaultAccount):
         return CharacterList(self)
 
     @cached_property
+    def played_character_sheet_ids(self) -> frozenset[int]:
+        """Set of CharacterSheet pks for every character this account currently plays.
+
+        Cached on the AccountDB instance — Evennia's identity map shares
+        the same Account object across requests in a process, so this set
+        survives the request boundary. Used by ViewSets and permission
+        classes that need to scope querysets to "characters the user
+        plays" without re-running the RosterEntry join on every request.
+
+        CharacterSheet shares its pk with its underlying ObjectDB
+        (``primary_key=True`` on the OneToOneField), so these values also
+        serve as character ObjectDB pks for callers that need either.
+
+        Invalidation: any ``RosterTenure`` save (create, ``end_date``
+        change, etc.) clears this cache automatically via
+        ``RosterTenure.related_cache_fields`` → ``clear_cached_properties``.
+        """
+        from world.roster.models import RosterEntry
+
+        return frozenset(RosterEntry.objects.for_account(self).character_ids())
+
+    @cached_property
     def cached_primary_persona_ids(self) -> list[int]:
         """IDs of PRIMARY personas this account is currently playing.
 
@@ -157,7 +179,11 @@ class Account(DefaultAccount):
         Django's ``cached_property``, so we override to clear them
         explicitly.
         """
-        for prop in ("cached_primary_persona_ids", "characters"):
+        for prop in (
+            "cached_primary_persona_ids",
+            "played_character_sheet_ids",
+            "characters",
+        ):
             self.__dict__.pop(prop, None)
 
     def get_available_characters(self):

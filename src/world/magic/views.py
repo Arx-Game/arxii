@@ -43,6 +43,10 @@ from world.magic.exceptions import (
 )
 from world.magic.filters import (
     CantripFilter,
+    CharacterAnimaFilter,
+    CharacterAuraFilter,
+    CharacterGiftFilter,
+    CharacterResonanceFilter,
     ResonanceGrantFilterSet,
     RitualSessionFilterSet,
     ThreadFilter,
@@ -313,34 +317,46 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
     """
     ViewSet for CharacterAura records.
 
-    Provides access to character aura data. Users can only access
-    auras for characters they own (or all if staff).
+    Provides access to character aura data. Non-staff users see all
+    characters they currently play (active roster tenure), regardless
+    of whether they are actively puppeting them right now. Frontends
+    that need a single-character view should pass ``?character=<pk>``
+    to disambiguate when the user has alts.
     """
 
     serializer_class = CharacterAuraSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CharacterAuraFilter
 
     def get_queryset(self):
-        """Filter to characters owned by the current user."""
+        """Filter to characters the current user plays (or all if staff)."""
         user = self.request.user
         if user.is_staff:
             return CharacterAura.objects.all()
-        # Filter to characters owned by this account
-        return CharacterAura.objects.filter(character__db_account=user)
+        character_ids = RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids()
+        return CharacterAura.objects.filter(character_id__in=character_ids)
 
 
 class CharacterResonanceViewSet(viewsets.ModelViewSet):
     """
     ViewSet for CharacterResonance records.
 
-    Manages personal resonances attached to characters.
+    Manages personal resonances attached to characters. Non-staff users
+    see all characters they currently play (active roster tenure),
+    regardless of whether they are actively puppeting them right now.
+    Frontends that operate on a single character (e.g., the resonance
+    picker for rituals) should pass ``?character_sheet=<pk>`` so the
+    result is unambiguous when the user has alts.
     """
 
     serializer_class = CharacterResonanceSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CharacterResonanceFilter
 
     def get_queryset(self):
-        """Filter to characters owned by the current user."""
+        """Filter to characters the current user plays (or all if staff)."""
         user = self.request.user
         queryset = CharacterResonance.objects.select_related(
             "character_sheet",
@@ -351,21 +367,27 @@ class CharacterResonanceViewSet(viewsets.ModelViewSet):
         )
         if user.is_staff:
             return queryset
-        return queryset.filter(character_sheet__character__db_account=user)
+        sheet_ids = RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids()
+        return queryset.filter(character_sheet_id__in=sheet_ids)
 
 
 class CharacterGiftViewSet(viewsets.ModelViewSet):
     """
     ViewSet for CharacterGift records.
 
-    Manages gifts possessed by characters.
+    Manages gifts possessed by characters. Non-staff users see all
+    characters they currently play (active roster tenure), regardless
+    of whether they are actively puppeting them right now. Pass
+    ``?character=<pk>`` to narrow to a single character.
     """
 
     serializer_class = CharacterGiftSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CharacterGiftFilter
 
     def get_queryset(self):
-        """Filter to characters owned by the current user."""
+        """Filter to characters the current user plays (or all if staff)."""
         user = self.request.user
         queryset = CharacterGift.objects.select_related("gift").prefetch_related(
             Prefetch(
@@ -383,25 +405,32 @@ class CharacterGiftViewSet(viewsets.ModelViewSet):
         )
         if user.is_staff:
             return queryset
-        return queryset.filter(character__db_account=user)
+        character_ids = RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids()
+        return queryset.filter(character_id__in=character_ids)
 
 
 class CharacterAnimaViewSet(viewsets.ModelViewSet):
     """
     ViewSet for CharacterAnima records.
 
-    Manages character anima (magical energy) tracking.
+    Manages character anima (magical energy) tracking. Non-staff users
+    see all characters they currently play (active roster tenure),
+    regardless of whether they are actively puppeting them right now.
+    Pass ``?character=<pk>`` to narrow to a single character.
     """
 
     serializer_class = CharacterAnimaSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = CharacterAnimaFilter
 
     def get_queryset(self):
-        """Filter to characters owned by the current user."""
+        """Filter to characters the current user plays (or all if staff)."""
         user = self.request.user
         if user.is_staff:
             return CharacterAnima.objects.all()
-        return CharacterAnima.objects.filter(character__db_account=user)
+        character_ids = RosterEntry.objects.for_account(cast(AccountDB, user)).character_ids()
+        return CharacterAnima.objects.filter(character_id__in=character_ids)
 
 
 # =============================================================================
