@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { useAppSelector } from '@/store/hooks';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useThreads, useThreadHubSummary, useCharacterResonances } from '../queries';
 import { ResonanceBalanceCard } from '../components/threads/ResonanceBalanceCard';
 import { ThreadCard } from '../components/threads/ThreadCard';
@@ -11,23 +13,33 @@ import type { Thread, TargetKind } from '../types';
 /**
  * Thread Hub page at /threads.
  *
- * Shows the player's resonance balances and thread list grouped by target_kind.
- * Threads are clickable — navigates to /threads/:id (route ships in Task 16).
- * The "Weave New" button is a stub placeholder (TODO Task 17: mount wizard modal).
+ * Shows the active character's resonance balances and thread list grouped
+ * by target_kind. The active character is the one currently selected in
+ * the game UI (``state.game.active`` from Redux) resolved against the
+ * user's roster entries — never inferred from "the first row of some
+ * unordered list."
  */
 export function ThreadHubPage() {
   const navigate = useNavigate();
+  const activeCharacterName = useAppSelector((state) => state.game.active);
+  const { data: myEntries = [] } = useMyRosterEntriesQuery();
+  // Resolve active character to a character_sheet pk. CharacterSheet
+  // shares its pk with the underlying ObjectDB (character_id) via the
+  // OneToOneField(primary_key=True).
+  const characterSheetId = useMemo(() => {
+    const entry = myEntries.find((e) => e.name === activeCharacterName);
+    return entry?.character_id ?? undefined;
+  }, [myEntries, activeCharacterName]);
+
   const { data: threadsData, isLoading: threadsLoading } = useThreads();
-  const { data: summary, isLoading: summaryLoading } = useThreadHubSummary();
-  const { data: characterResonances, isLoading: resonancesLoading } = useCharacterResonances();
+  const { data: summary, isLoading: summaryLoading } = useThreadHubSummary(characterSheetId);
+  const { data: characterResonances, isLoading: resonancesLoading } =
+    useCharacterResonances(characterSheetId);
 
   const [wizardOpen, setWizardOpen] = useState(false);
 
   const threads = threadsData?.results ?? [];
   const balancesLoading = summaryLoading || resonancesLoading;
-
-  // Derive characterSheetId for the wizard: prefer first resonance, fall back to first thread.
-  const characterSheetId = characterResonances?.[0]?.character_sheet ?? threads[0]?.owner ?? 0;
 
   // Group threads by target_kind
   const threadsByKind = threads.reduce<Record<string, Thread[]>>((acc, thread) => {

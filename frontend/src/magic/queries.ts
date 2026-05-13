@@ -136,16 +136,20 @@ export function useThreads() {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch all CharacterResonance rows for the requesting account's characters.
+ * Fetch CharacterResonance rows scoped to the requesting account.
+ *
+ * Pass ``characterSheetId`` to narrow the result to a single character —
+ * required for any caller that operates on one character at a time, so
+ * users with alts don't see resonances from other characters mixed in.
  *
  * Currently also used inline by ResonancePickerField in the rituals module
  * (see rituals/components/fields/ResonancePickerField.tsx TODO). A follow-up
  * task will import this hook there instead of the inline duplicate.
  */
-export function useCharacterResonances() {
+export function useCharacterResonances(characterSheetId?: number) {
   return useQuery({
-    queryKey: magicKeys.characterResonanceList(),
-    queryFn: () => api.getCharacterResonances(),
+    queryKey: [...magicKeys.characterResonanceList(), characterSheetId ?? null],
+    queryFn: () => api.getCharacterResonances(characterSheetId),
     throwOnError: true,
   });
 }

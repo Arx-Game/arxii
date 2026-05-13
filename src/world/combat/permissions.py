@@ -1,36 +1,22 @@
 """Permission classes for combat API endpoints."""
 
-from typing import cast
-
-from evennia.accounts.models import AccountDB
 from rest_framework.permissions import BasePermission
 from rest_framework.request import Request
 from rest_framework.views import APIView
 
 from world.combat.models import CombatEncounter
-from world.roster.models import RosterEntry
 
 
-def _viewer_character_ids(request: Request, view: APIView | None) -> set[int]:
+def _viewer_character_ids(request: Request, view: APIView) -> set[int]:
     """Return the request user's played character_sheet ids.
 
-    In production these permissions are only wired to
-    ``CombatEncounterViewSet``, which exposes ``_viewer_character_ids``
-    and caches the set on the request object so permission checks and
-    view body share a single roster query — we prefer that path.
-
-    When the helper isn't available (notably in ``test_permissions``
-    which pass ``view=None`` to drive ``has_object_permission`` in
-    isolation), fall back to a direct query. The fallback is functionally
-    equivalent; it just doesn't share state with a view that isn't there.
+    Always routes through ``view._viewer_character_ids(request)`` —
+    these permissions are wired to ``CombatEncounterViewSet`` (in
+    production) and to a stub view in ``test_permissions`` (in tests).
+    The view caches the set on ``request._combat_viewer_character_ids``
+    so the permission check and view body share a single roster query.
     """
-    helper = getattr(view, "_viewer_character_ids", None)  # noqa: GETATTR_LITERAL
-    if helper is not None:
-        return helper(request)
-    if not request.user.is_authenticated:
-        return set()
-    user = cast(AccountDB, request.user)
-    return set(RosterEntry.objects.for_account(user).character_ids())
+    return view._viewer_character_ids(request)  # noqa: SLF001 — known cooperator
 
 
 class IsEncounterGMOrStaff(BasePermission):

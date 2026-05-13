@@ -276,10 +276,26 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
         )
 
     def _get_viewer_character_ids(self, request: object) -> set[int]:
-        """Get character IDs for the requesting user, with context caching."""
+        """Get character IDs for the requesting user.
+
+        Resolution order, fastest first:
+        1. Serializer context (populated by ``_build_serializer_context``)
+        2. Per-request cache on ``request._combat_viewer_character_ids``
+           (populated by ``CombatEncounterViewSet._viewer_character_ids``)
+        3. Fresh ``RosterEntry`` query — used only when the serializer
+           is invoked outside the viewset (e.g., from a management
+           command or other code path)
+        Caches into context after fetching so subsequent fields in the
+        same serializer pass don't re-query.
+        """
         cached = self.context.get("viewer_character_ids")
         if cached is not None:
             return cached
+        # Per-request cache populated by CombatEncounterViewSet._viewer_character_ids.
+        request_cached = getattr(request, "_combat_viewer_character_ids", None)  # noqa: GETATTR_LITERAL
+        if request_cached is not None:
+            self.context["viewer_character_ids"] = request_cached
+            return request_cached
         active_entries = RosterEntry.objects.for_account(request.user)  # type: ignore[union-attr]
         character_ids = set(
             active_entries.values_list("character_sheet_id", flat=True),

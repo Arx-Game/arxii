@@ -30,6 +30,17 @@ vi.mock('@/magic/components/threads/WeaveThreadWizard', () => ({
   WeaveThreadWizard: () => null,
 }));
 
+// ThreadHubPage resolves the active character via Redux + roster (matches
+// WardrobePage's pattern). Stub both so the component renders without a
+// real Redux Provider or roster fetch.
+vi.mock('@/store/hooks', () => ({
+  useAppSelector: vi.fn(() => null),
+}));
+
+vi.mock('@/roster/queries', () => ({
+  useMyRosterEntriesQuery: vi.fn(() => ({ data: [] })),
+}));
+
 import * as magicQueries from '@/magic/queries';
 import { ThreadHubPage } from '../ThreadHubPage';
 

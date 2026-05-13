@@ -121,19 +121,24 @@ class MyActionQueryCountTests(_SharedSetupMixin, TestCase):
     def test_warm_my_action_query_count(self) -> None:
         url = f"/api/combat/{self.encounter.pk}/my_action/"
         self.client.get(url)  # warm-up
-        # 4 queries on the second call:
+        # 4 queries observed on the second call (SQL captured via
+        # ``CaptureQueriesContext``):
         #   1. DRF session lookup
-        #   2. CombatEncounter SELECT (get_object runs the .get(), even
-        #      though SharedMemoryModel returns the identity-mapped row)
-        #   3. RosterEntry.for_account(...).character_ids() — shared
-        #      between IsEncounterParticipant and _get_participant via
-        #      request._combat_viewer_character_ids
-        #   4. CombatRoundAction.filter(participant, round_number)
-        # The participants_cached + opponents_cached prefetches do NOT
-        # fire on the warm call: they ran during warm-up and populated
-        # attributes on the identity-mapped encounter, so the second
-        # get_object hands back the same instance with those lists
-        # already attached.
+        #   2. CombatEncounter SELECT (``get_object`` re-evaluates the
+        #      queryset; SharedMemoryModel still returns the same Python
+        #      instance for the row)
+        #   3. RosterEntry character_ids subquery — issued exactly once
+        #      because ``IsEncounterParticipant`` and ``_get_participant``
+        #      share ``request._combat_viewer_character_ids``
+        #   4. CombatRoundAction filter for this participant/round
+        # Notably absent from the warm call: the participants/opponents
+        # prefetch queries that fire during the warm-up. The exact
+        # mechanism is the interaction between Django's prefetch_related
+        # cache and SharedMemoryModel's identity-mapped instances — the
+        # important property is the count, not the explanation. This
+        # assertion is a regression guard: if a new query slips into the
+        # hot path (a new ``.filter`` / ``.get`` / ``.values``), this
+        # test will catch it.
         with self.assertNumQueries(4):
             response = self.client.get(url)
         # 200 with None body when no action declared yet.

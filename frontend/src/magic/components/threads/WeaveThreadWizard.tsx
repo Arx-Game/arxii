@@ -177,8 +177,14 @@ interface WeaveThreadWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   summary: ThreadHubSummary | undefined;
-  /** PK of the acting character sheet (from thread.owner / summary context). */
-  characterSheetId: number;
+  /**
+   * PK of the acting character sheet — the character that will own the
+   * newly woven thread. The wizard scopes resonance lookup to this
+   * sheet so users with alts only see the right character's resonances.
+   * ``undefined`` when there is no active character; the wizard renders
+   * an empty state in that case.
+   */
+  characterSheetId: number | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -192,7 +198,8 @@ export function WeaveThreadWizard({
   characterSheetId,
 }: WeaveThreadWizardProps) {
   const navigate = useNavigate();
-  const { data: characterResonances, isLoading: resonancesLoading } = useCharacterResonances();
+  const { data: characterResonances, isLoading: resonancesLoading } =
+    useCharacterResonances(characterSheetId);
   const { mutate: weaveThread, isPending: weaving, error: weaveError } = useWeaveThread();
 
   const [state, setState] = useState<WizardState>(INITIAL_STATE);
@@ -264,7 +271,8 @@ export function WeaveThreadWizard({
     if (
       !state.selectedKind ||
       state.selectedAnchorId === null ||
-      state.selectedResonanceId === null
+      state.selectedResonanceId === null ||
+      characterSheetId == null
     ) {
       return;
     }
