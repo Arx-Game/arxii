@@ -159,19 +159,44 @@ class ItemFacetViewTests(ItemViewTestCase):
         super().setUp()
         # Authenticate as the item owner by default.
         self.client.force_authenticate(user=self.owner)
+        # Test pollution guard: prior tests leave stale prefetch caches on the
+        # identity-mapped ItemInstances. Flushing the model's instance cache
+        # forces a fresh instance on the next ``.get(pk=...)`` so the view's
+        # prefetch isn't shadowed by stale state on the test class's instances.
+        from world.items.models import ItemFacet, ItemInstance
+
+        ItemFacet.flush_instance_cache()
+        ItemInstance.flush_instance_cache()
 
     def test_list_returns_facets(self) -> None:
-        """GET list includes an attached ItemFacet."""
+        """GET list includes an attached ItemFacet for an owned item."""
         row = attach_facet_to_item(
             crafter=self.owner,
             item_instance=self.item_owner,
             facet=self.facet_a,
             attachment_quality_tier=self.quality,
         )
-        response = self.client.get("/api/items/item-facets/")
+        response = self.client.get(f"/api/items/item-facets/?item_instance={self.item_owner.pk}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         result_ids = [r["id"] for r in response.data["results"]]
         self.assertIn(row.pk, result_ids)
+
+    def test_list_requires_item_instance_param(self) -> None:
+        """GET without ?item_instance returns 400."""
+        response = self.client.get("/api/items/item-facets/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_list_non_owner_returns_404(self) -> None:
+        """Non-owner asking for another user's item's facets gets 404 (no leak)."""
+        attach_facet_to_item(
+            crafter=self.non_owner,
+            item_instance=self.item_other,
+            facet=self.facet_a,
+            attachment_quality_tier=self.quality,
+        )
+        # Authenticated as owner — but item_other belongs to non_owner.
+        response = self.client.get(f"/api/items/item-facets/?item_instance={self.item_other.pk}")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_filter_by_item_instance(self) -> None:
         """GET ?item_instance=<pk> returns only that item's facets."""
@@ -363,6 +388,22 @@ class EquippedItemViewTests(ItemViewTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.client.force_authenticate(user=self.user)
+        # Test pollution guard: prior tests that bypass unequip_item with
+        # direct ``row.delete()`` leave stale entries in the equipped_items
+        # handler cache. Direct .invalidate() on self.character resets that
+        # character's handler. We also flush EquippedItem instance cache so
+        # any stale (pk=None) instances aren't returned by later filter().
+        from evennia.objects.models import ObjectDB
+
+        from world.items.models import EquippedItem
+
+        EquippedItem.flush_instance_cache()
+        # Invalidate via the same path the view uses (ObjectDB.objects.get)
+        # so handler state matches across test and view code paths.
+        char = ObjectDB.objects.get(pk=self.character.pk)
+        char.equipped_items.invalidate()
+        other = ObjectDB.objects.get(pk=self.other_character.pk)
+        other.equipped_items.invalidate()
 
     # ------------------------------------------------------------------
     # GET list
@@ -377,12 +418,45 @@ class EquippedItemViewTests(ItemViewTestCase):
             body_region=BodyRegion.TORSO,
             equipment_layer=EquipmentLayer.BASE,
         )
-        response = self.client.get("/api/items/equipped-items/")
+        response = self.client.get(f"/api/items/equipped-items/?character={self.character.pk}")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         result_ids = [r["id"] for r in response.data["results"]]
         self.assertIn(row.pk, result_ids)
         # Clean up so other tests don't see this row.
         row.delete()
+
+    def test_list_requires_character_param(self) -> None:
+        """GET list without ?character returns 400."""
+        response = self.client.get("/api/items/equipped-items/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_list_other_user_character_returns_404(self) -> None:
+        """Non-staff cannot list a character they don't play."""
+        response = self.client.get(
+            f"/api/items/equipped-items/?character={self.other_character.pk}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_list_staff_can_view_any_character(self) -> None:
+        """Staff bypass: can list any character's equipped items."""
+        self.user.is_staff = True
+        self.user.save()
+        instance = ItemInstanceFactory(template=self.template)
+        row = equip_item(
+            character_sheet=self.other_sheet,
+            item_instance=instance,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        response = self.client.get(
+            f"/api/items/equipped-items/?character={self.other_character.pk}"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        result_ids = [r["id"] for r in response.data["results"]]
+        self.assertIn(row.pk, result_ids)
+        row.delete()
+        self.user.is_staff = False
+        self.user.save()
 
     def test_filter_by_character(self) -> None:
         """GET ?character=<pk> filters to only that character's equipped items."""

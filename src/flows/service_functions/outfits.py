@@ -141,6 +141,7 @@ def save_outfit(
                 for row in rows
             ]
         )
+    character_sheet.saved_outfits.invalidate()
     return outfit
 
 
@@ -150,7 +151,9 @@ def delete_outfit(outfit: Outfit) -> None:
     Items are not touched — the OutfitSlot rows cascade-delete with the
     Outfit, but never the underlying ItemInstance.
     """
+    sheet = outfit.character_sheet
     outfit.delete()
+    sheet.saved_outfits.invalidate()
 
 
 @transaction.atomic
@@ -193,12 +196,14 @@ def add_outfit_slot(
         body_region=body_region,
         equipment_layer=equipment_layer,
     ).delete()
-    return OutfitSlot.objects.create(
+    slot = OutfitSlot.objects.create(
         outfit=outfit,
         item_instance=item_instance,
         body_region=body_region,
         equipment_layer=equipment_layer,
     )
+    _invalidate_outfit_slot_caches(outfit)
+    return slot
 
 
 @transaction.atomic
@@ -214,3 +219,19 @@ def remove_outfit_slot(
         body_region=body_region,
         equipment_layer=equipment_layer,
     ).delete()
+    _invalidate_outfit_slot_caches(outfit)
+
+
+def _invalidate_outfit_slot_caches(outfit: Outfit) -> None:
+    """Invalidate the per-outfit slot cache AND the parent sheet's outfits cache.
+
+    The per-outfit ``cached_outfit_slots`` lives in ``outfit.__dict__``. The
+    parent ``CharacterSheetOutfitsHandler`` caches a list of Outfit instances
+    that were loaded with their slots prefetched — those instances may be
+    different Python objects than ``outfit`` here (SharedMemoryModel identity
+    is path-dependent on FK access patterns), so we also invalidate the
+    sheet-level handler to be safe.
+    """
+    if hasattr(outfit, "cached_outfit_slots"):
+        del outfit.cached_outfit_slots
+    outfit.character_sheet.saved_outfits.invalidate()
