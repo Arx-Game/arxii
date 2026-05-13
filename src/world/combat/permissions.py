@@ -7,16 +7,23 @@ from rest_framework.views import APIView
 from world.combat.models import CombatEncounter
 
 
-def _viewer_character_ids(request: Request, view: APIView) -> set[int]:
+def _viewer_character_ids(request: Request, _view: APIView) -> frozenset[int]:
     """Return the request user's played character_sheet ids.
 
-    Always routes through ``view._viewer_character_ids(request)`` —
-    these permissions are wired to ``CombatEncounterViewSet`` (in
-    production) and to a stub view in ``test_permissions`` (in tests).
-    The view caches the set on ``request._combat_viewer_character_ids``
-    so the permission check and view body share a single roster query.
+    Reads ``request.user.played_character_sheet_ids`` — a cached_property
+    on the ``Account`` typeclass populated lazily and invalidated when
+    any of the account's ``RosterTenure`` rows mutate (see
+    ``RosterTenure.related_cache_fields``). The cache lives on the
+    identity-mapped Account instance, so it persists across requests for
+    the same user within the same Python process.
+
+    For anonymous users or non-Account user models, ``AttributeError``
+    bubbles up from the missing property and we return an empty set.
     """
-    return view._viewer_character_ids(request)  # noqa: SLF001 — known cooperator
+    try:
+        return request.user.played_character_sheet_ids
+    except AttributeError:
+        return frozenset()
 
 
 class IsEncounterGMOrStaff(BasePermission):

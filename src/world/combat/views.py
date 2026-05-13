@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from http import HTTPMethod
-from typing import cast
 
 from django.db.models import Prefetch, QuerySet
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from evennia.accounts.models import AccountDB
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -58,7 +56,6 @@ from world.combat.services import (
 )
 from world.covenants.models import CovenantRole
 from world.magic.models import Technique
-from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
 
 # Fixed error messages for API responses (never expose raw exception strings).
@@ -466,24 +463,17 @@ class CombatEncounterViewSet(ModelViewSet):
 
     # --- Helpers ---
 
-    def _viewer_character_ids(self, request: Request) -> set[int]:
+    def _viewer_character_ids(self, request: Request) -> frozenset[int]:
         """Return character_sheet ids the request user currently plays.
 
-        Caches the result on the ``request`` object so multiple callers in
-        the same request (serializer context + ``_get_participant``) share
-        a single roster query instead of duplicating it.
+        Reads the cached property on ``request.user`` (the ``Account``
+        typeclass exposes ``played_character_sheet_ids``); falls back to
+        an empty set for anonymous / non-Account users.
         """
-        if hasattr(request, "_combat_viewer_character_ids"):
-            return request._combat_viewer_character_ids  # noqa: SLF001
-        if not request.user.is_authenticated:
-            ids: set[int] = set()
-        else:
-            user = cast(AccountDB, request.user)
-            ids = set(RosterEntry.objects.for_account(user).character_ids())
-        # Per-request cache attribute. Namespaced with the combat prefix so
-        # it doesn't collide with any other code stashing state on request.
-        request._combat_viewer_character_ids = ids  # noqa: SLF001
-        return ids
+        try:
+            return request.user.played_character_sheet_ids
+        except AttributeError:
+            return frozenset()
 
     def _serialize_encounter(
         self,

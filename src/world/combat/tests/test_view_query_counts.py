@@ -109,8 +109,17 @@ class EncounterRetrieveQueryCountTests(_SharedSetupMixin, TestCase):
     def test_warm_retrieve_query_count(self) -> None:
         url = f"/api/combat/{self.encounter.pk}/"
         self.client.get(url)  # warm-up
-        # 1 session + 1 encounter + 2 prefetch (participants + opponents).
-        with self.assertNumQueries(4):
+        # 3 queries on the warm call: session + encounter + the lone
+        # remaining roster lookup the permission classes need. The
+        # account-level ``played_character_sheet_ids`` cached_property
+        # makes that lookup a single Account attribute read after the
+        # first request fills the cache, but the cache itself wasn't
+        # filled before this test class's warm-up call, so it still
+        # fires once during warm-up. (After warm-up: zero roster
+        # queries.) The participants/opponents prefetches do not fire
+        # on the warm call — they ran during warm-up and the
+        # identity-mapped encounter retains the attribute.
+        with self.assertNumQueries(3):
             response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
 
@@ -121,25 +130,24 @@ class MyActionQueryCountTests(_SharedSetupMixin, TestCase):
     def test_warm_my_action_query_count(self) -> None:
         url = f"/api/combat/{self.encounter.pk}/my_action/"
         self.client.get(url)  # warm-up
-        # 4 queries observed on the second call (SQL captured via
+        # 3 queries observed on the second call (captured via
         # ``CaptureQueriesContext``):
         #   1. DRF session lookup
         #   2. CombatEncounter SELECT (``get_object`` re-evaluates the
-        #      queryset; SharedMemoryModel still returns the same Python
+        #      queryset; SharedMemoryModel returns the same Python
         #      instance for the row)
-        #   3. RosterEntry character_ids subquery — issued exactly once
-        #      because ``IsEncounterParticipant`` and ``_get_participant``
-        #      share ``request._combat_viewer_character_ids``
-        #   4. CombatRoundAction filter for this participant/round
-        # Notably absent from the warm call: the participants/opponents
-        # prefetch queries that fire during the warm-up. The exact
-        # mechanism is the interaction between Django's prefetch_related
-        # cache and SharedMemoryModel's identity-mapped instances — the
-        # important property is the count, not the explanation. This
-        # assertion is a regression guard: if a new query slips into the
-        # hot path (a new ``.filter`` / ``.get`` / ``.values``), this
+        #   3. CombatRoundAction filter for this participant/round
+        # Notably absent from the warm call:
+        #   - participants/opponents prefetches (fired during warm-up;
+        #     identity-mapped encounter retains the attribute)
+        #   - the RosterEntry character_ids query (now served by
+        #     ``Account.played_character_sheet_ids`` — a cached_property
+        #     filled on warm-up and read directly from the in-memory
+        #     Account instance thereafter)
+        # This assertion is a regression guard: if a new query slips into
+        # the hot path (a new ``.filter`` / ``.get`` / ``.values``), this
         # test will catch it.
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(3):
             response = self.client.get(url)
         # 200 with None body when no action declared yet.
         self.assertEqual(response.status_code, 200)

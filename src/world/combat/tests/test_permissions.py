@@ -1,10 +1,6 @@
 """Tests for combat permission classes."""
 
-from typing import cast
-
 from django.test import TestCase
-from evennia.accounts.models import AccountDB
-from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
@@ -17,7 +13,6 @@ from world.combat.permissions import (
     IsInEncounterRoom,
 )
 from world.roster.factories import RosterTenureFactory
-from world.roster.models import RosterEntry
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 
@@ -27,22 +22,6 @@ def _make_request(user: object) -> object:
     request = factory.get("/fake/")
     request.user = user
     return request
-
-
-class _StubView:
-    """Minimal stub of ``CombatEncounterViewSet`` for permission tests.
-
-    Exposes the same ``_viewer_character_ids(request)`` contract the
-    production viewset provides, so the permission classes can route
-    their roster lookup through the view as they would in production —
-    no test-only fallback path needed in ``permissions.py``.
-    """
-
-    def _viewer_character_ids(self, request: Request) -> set[int]:
-        if not request.user.is_authenticated:
-            return set()
-        user = cast(AccountDB, request.user)
-        return set(RosterEntry.objects.for_account(user).character_ids())
 
 
 class IsEncounterGMOrStaffTest(TestCase):
@@ -58,7 +37,7 @@ class IsEncounterGMOrStaffTest(TestCase):
         staff = AccountFactory(is_staff=True)
         request = _make_request(staff)
         self.assertTrue(
-            self.permission.has_object_permission(request, _StubView(), self.encounter),
+            self.permission.has_object_permission(request, None, self.encounter),
         )
 
     def test_scene_gm_allowed(self) -> None:
@@ -66,7 +45,7 @@ class IsEncounterGMOrStaffTest(TestCase):
         SceneParticipationFactory(scene=self.scene, account=account, is_gm=True)
         request = _make_request(account)
         self.assertTrue(
-            self.permission.has_object_permission(request, _StubView(), self.encounter),
+            self.permission.has_object_permission(request, None, self.encounter),
         )
 
     def test_non_gm_participant_denied(self) -> None:
@@ -74,14 +53,14 @@ class IsEncounterGMOrStaffTest(TestCase):
         SceneParticipationFactory(scene=self.scene, account=account, is_gm=False)
         request = _make_request(account)
         self.assertFalse(
-            self.permission.has_object_permission(request, _StubView(), self.encounter),
+            self.permission.has_object_permission(request, None, self.encounter),
         )
 
     def test_non_participant_denied(self) -> None:
         account = AccountFactory()
         request = _make_request(account)
         self.assertFalse(
-            self.permission.has_object_permission(request, _StubView(), self.encounter),
+            self.permission.has_object_permission(request, None, self.encounter),
         )
 
     def test_no_scene_denied(self) -> None:
@@ -91,7 +70,7 @@ class IsEncounterGMOrStaffTest(TestCase):
         self.assertFalse(
             self.permission.has_object_permission(
                 request,
-                _StubView(),
+                None,
                 encounter_no_scene,
             ),
         )
@@ -136,7 +115,7 @@ class IsEncounterParticipantTest(TestCase):
     def test_participant_allowed(self) -> None:
         request = _make_request(self.account)
         self.assertTrue(
-            self.permission.has_object_permission(request, _StubView(), self.encounter),
+            self.permission.has_object_permission(request, None, self.encounter),
         )
 
     def test_non_participant_denied(self) -> None:
@@ -149,7 +128,7 @@ class IsEncounterParticipantTest(TestCase):
         )
         request = _make_request(other_account)
         self.assertFalse(
-            self.permission.has_object_permission(request, _StubView(), self.encounter),
+            self.permission.has_object_permission(request, None, self.encounter),
         )
 
     def test_fled_participant_denied(self) -> None:
@@ -168,7 +147,7 @@ class IsEncounterParticipantTest(TestCase):
         )
         request = _make_request(fled_account)
         self.assertFalse(
-            self.permission.has_object_permission(request, _StubView(), self.encounter),
+            self.permission.has_object_permission(request, None, self.encounter),
         )
 
     def test_staff_without_participant_denied(self) -> None:
@@ -180,7 +159,7 @@ class IsEncounterParticipantTest(TestCase):
         staff = AccountFactory(is_staff=True)
         request = _make_request(staff)
         self.assertFalse(
-            self.permission.has_object_permission(request, _StubView(), self.encounter),
+            self.permission.has_object_permission(request, None, self.encounter),
         )
 
 
@@ -203,7 +182,7 @@ class IsInEncounterRoomTest(TestCase):
         )
         request = _make_request(account)
         self.assertTrue(
-            self.permission.has_object_permission(request, _StubView(), self.encounter),
+            self.permission.has_object_permission(request, None, self.encounter),
         )
 
     def test_character_elsewhere_denied(self) -> None:
@@ -216,14 +195,14 @@ class IsInEncounterRoomTest(TestCase):
         )
         request = _make_request(account)
         self.assertFalse(
-            self.permission.has_object_permission(request, _StubView(), self.encounter),
+            self.permission.has_object_permission(request, None, self.encounter),
         )
 
     def test_no_roster_entry_denied(self) -> None:
         account = AccountFactory()
         request = _make_request(account)
         self.assertFalse(
-            self.permission.has_object_permission(request, _StubView(), self.encounter),
+            self.permission.has_object_permission(request, None, self.encounter),
         )
 
     def test_no_scene_denied(self) -> None:
@@ -233,7 +212,7 @@ class IsInEncounterRoomTest(TestCase):
         self.assertFalse(
             self.permission.has_object_permission(
                 request,
-                _StubView(),
+                None,
                 encounter_no_scene,
             ),
         )
@@ -242,5 +221,5 @@ class IsInEncounterRoomTest(TestCase):
         staff = AccountFactory(is_staff=True)
         request = _make_request(staff)
         self.assertTrue(
-            self.permission.has_object_permission(request, _StubView(), self.encounter),
+            self.permission.has_object_permission(request, None, self.encounter),
         )
