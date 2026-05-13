@@ -136,16 +136,19 @@ def apply_pool_deterministically(
     """
     from world.mechanics.effect_handlers import apply_all_effects  # noqa: PLC0415
 
-    consequences = _resolve_pool_consequences(pool)
+    consequences = resolve_pool_consequences(pool)
     applied: list[AppliedEffect] = []
     for c in consequences:
         applied.extend(apply_all_effects(c, context))
     return applied
 
 
-def _resolve_pool_consequences(pool: ConsequencePool) -> list[Consequence]:
+def resolve_pool_consequences(pool: ConsequencePool) -> list[Consequence]:
     """Walk pool + parent, honoring is_excluded child entries. Returns the
     flat list of Consequence rows to fire (in declaration order: parent first).
+
+    Public alias for beat resolution wiring and other callers that need to
+    inspect the pool's full consequence list without firing effects.
     """
     own_entries = list(pool.entries.select_related("consequence"))
     if pool.parent_id is None:
@@ -159,3 +162,7 @@ def _resolve_pool_consequences(pool: ConsequencePool) -> list[Consequence]:
     ]
     own_included = [e.consequence for e in own_entries if not e.is_excluded]
     return parent_consequences + own_included
+
+
+# Private alias preserved for backward compatibility.
+_resolve_pool_consequences = resolve_pool_consequences

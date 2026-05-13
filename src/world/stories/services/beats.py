@@ -5,8 +5,11 @@ Public API:
         progress's current episode, recording BeatCompletion rows for any that
         transition from UNSATISFIED to a resolved outcome.
 
-    record_gm_marked_outcome(*, progress, beat, outcome, gm_notes) — GM's manual
-        call to mark a GM_MARKED beat with SUCCESS or FAILURE.
+    record_gm_marked_outcome(*, progress, beat, outcome, gm_notes,
+        participants, extra_participants) — GM's manual call to mark a GM_MARKED
+        beat with SUCCESS or FAILURE. ``participants`` is the explicit list of
+        Persona instances for GROUP-scope LEGEND_AWARD pools; ``extra_participants``
+        extends the primary persona for CHARACTER-scope pools.
 
     record_aggregate_contribution(*, beat, character_sheet, points, source_note) —
         records a per-character contribution toward an AGGREGATE_THRESHOLD beat and
@@ -32,6 +35,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from datetime import datetime
 
+    from actions.models.consequence_pools import ConsequencePool
+    from world.scenes.models import Persona
     from world.stories.models import Episode
 
 
@@ -82,12 +87,14 @@ def evaluate_auto_beats(progress: AnyStoryProgress) -> None:
 _GM_MARKED_VALID_OUTCOMES = {BeatOutcome.SUCCESS, BeatOutcome.FAILURE}
 
 
-def record_gm_marked_outcome(
+def record_gm_marked_outcome(  # noqa: PLR0913 — all args are required for scope-aware pool wiring
     *,
     progress: AnyStoryProgress,
     beat: Beat,
     outcome: BeatOutcome,
     gm_notes: str = "",
+    participants: list[Persona] | None = None,
+    extra_participants: list[Persona] | None = None,
 ) -> BeatCompletion:
     """Record a GM's manual outcome on a GM_MARKED beat.
 
@@ -95,6 +102,14 @@ def record_gm_marked_outcome(
       - CHARACTER: writes character_sheet (from StoryProgress).
       - GROUP:     writes gm_table (from GroupStoryProgress).
       - GLOBAL:    writes neither (the beat's story scope is the sole identifier).
+
+    ``participants`` — explicit list of Persona instances for GROUP-scope
+        LEGEND_AWARD pools. Required when the matching pool contains a
+        LEGEND_AWARD effect; otherwise ignored for GROUP scope.
+
+    ``extra_participants`` — additional Persona instances to credit alongside
+        the progress's primary persona in CHARACTER scope. Ignored for other
+        scopes.
 
     Defensive assertions (programmer errors — the API serializer validates these
     for user-facing calls; assertions guard direct service callers):
@@ -141,6 +156,13 @@ def record_gm_marked_outcome(
         beat.save(update_fields=["outcome", "updated_at"])
 
         completion = BeatCompletion.objects.create(**completion_kwargs)
+
+        _maybe_fire_pool_on_completion(
+            completion=completion,
+            progress=progress,
+            scope=scope,
+            explicit_participants=participants if scope == StoryScope.GROUP else extra_participants,
+        )
 
         # Write-path hook: open a SessionRequest if the episode is now ready-to-run
         # and requires a GM session. Idempotent — safe to call unconditionally.
@@ -227,6 +249,22 @@ def record_aggregate_contribution(
                 # GLOBAL: no scope-specific FK
 
                 aggregate_completion = BeatCompletion.objects.create(**completion_kwargs)
+
+                # Fire consequence pool for the aggregate threshold crossing.
+                # Participants are auto-derived from contribution rows.
+                # For GROUP scope, group_progress may be None if no active progress exists
+                # (defined in the elif block above); other scopes always pass None.
+                _agg_pool_progress = (
+                    group_progress  # type: ignore[possibly-undefined]
+                    if scope == StoryScope.GROUP
+                    else None
+                )
+                _maybe_fire_pool_on_completion(
+                    completion=aggregate_completion,
+                    progress=_agg_pool_progress,
+                    scope=story.scope,
+                    explicit_participants=None,
+                )
 
                 # Narrative notification for the aggregate threshold crossing.
                 # Resolve an active progress to fan out recipients per scope.
@@ -348,6 +386,12 @@ def _evaluate_and_record_beat(  # noqa: PLR0913 — scope/sheet/roster_entry/era
     # GLOBAL: no scope-specific FK
 
     completion = BeatCompletion.objects.create(**completion_kwargs)
+    _maybe_fire_pool_on_completion(
+        completion=completion,
+        progress=progress,
+        scope=scope,
+        explicit_participants=None,
+    )
     _notify_beat_completion(completion, progress)
 
 
@@ -637,3 +681,157 @@ def _current_roster_entry(sheet: CharacterSheet) -> RosterEntry | None:
         return sheet.roster_entry
     except RosterEntry.DoesNotExist:
         return None
+
+
+# ---------------------------------------------------------------------------
+# Consequence pool helpers (Task 13: beat resolution wiring)
+# ---------------------------------------------------------------------------
+
+
+def _pool_for_outcome(beat: Beat, outcome: BeatOutcome) -> ConsequencePool | None:
+    """Return the ConsequencePool for this outcome, or None when unset."""
+    return {
+        BeatOutcome.SUCCESS: beat.success_consequences,
+        BeatOutcome.FAILURE: beat.failure_consequences,
+        BeatOutcome.EXPIRED: beat.expired_consequences,
+    }.get(outcome)
+
+
+def _pool_has_legend_award(pool: ConsequencePool) -> bool:
+    """Return True when any consequence in the pool (including parent) has a LEGEND_AWARD effect."""
+    from world.checks.consequence_resolution import resolve_pool_consequences  # noqa: PLC0415
+
+    consequences = resolve_pool_consequences(pool)
+    return any(c.effects.filter(effect_type="legend_award").exists() for c in consequences)
+
+
+def _resolve_participants_for_pool(
+    *,
+    completion: BeatCompletion,
+    progress: AnyStoryProgress | None,
+    scope: str,
+    explicit_participants: list[Persona] | None,
+) -> list[Persona]:
+    """Resolve the participant list for pool firing per spec §3.5.
+
+    CHARACTER scope: primary persona + optional extras from explicit_participants.
+    GROUP scope: use explicit_participants if provided; auto-derive from
+        AggregateBeatContribution rows for AGGREGATE_THRESHOLD beats; empty list
+        otherwise (will raise LegendAwardParticipantMissingError if pool needs it).
+    GLOBAL scope: always empty (raises LegendAwardScopeError if pool needs it).
+    """
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    if scope == StoryScope.CHARACTER:
+        if progress is None:
+            return list(explicit_participants) if explicit_participants else []
+        participants: list[Persona] = [progress.character_sheet.primary_persona]
+        if explicit_participants:
+            participants.extend(explicit_participants)
+        return participants
+
+    if scope == StoryScope.GROUP:
+        if explicit_participants is not None:
+            return list(explicit_participants)
+        # Auto-derive for AGGREGATE_THRESHOLD: all contributors → primary personas.
+        if completion.beat.predicate_type == BeatPredicateType.AGGREGATE_THRESHOLD:
+            sheet_ids = list(
+                AggregateBeatContribution.objects.filter(beat=completion.beat)
+                .values_list("character_sheet_id", flat=True)
+                .distinct()
+            )
+            derived: list[Persona] = []
+            for sid in sheet_ids:
+                persona = Persona.objects.filter(
+                    character_sheet_id=sid, persona_type=PersonaType.PRIMARY
+                ).first()
+                if persona is not None:
+                    derived.append(persona)
+            return derived
+        # GM_MARKED without explicit list → empty (pool guard checks later).
+        return []
+
+    # GLOBAL: no auto-derived participants.
+    return []
+
+
+def _maybe_fire_pool_on_completion(
+    *,
+    completion: BeatCompletion,
+    progress: AnyStoryProgress | None,
+    scope: str,
+    explicit_participants: list[Persona] | None = None,
+) -> None:
+    """Fire the consequence pool matching the completion's outcome, if any.
+
+    Called after BeatCompletion creation inside the existing atomic transaction.
+    Handles participant resolution and LEGEND_AWARD requirement guards per spec.
+
+    Args:
+        completion: The just-created BeatCompletion row.
+        progress: The active progress record (may be None for AGGREGATE path when
+            no group progress was found).
+        scope: The story scope string (StoryScope.CHARACTER / GROUP / GLOBAL).
+        explicit_participants: Caller-supplied Persona list; semantics vary by scope:
+            - CHARACTER: extra personas to credit alongside the primary persona.
+            - GROUP: the explicit participant list (required for LEGEND_AWARD pools).
+            - GLOBAL: ignored.
+    """
+    from world.checks.consequence_resolution import apply_pool_deterministically  # noqa: PLC0415
+    from world.checks.types import ResolutionContext  # noqa: PLC0415
+    from world.societies.exceptions import (  # noqa: PLC0415
+        LegendAwardParticipantMissingError,
+        LegendAwardScopeError,
+    )
+
+    pool = _pool_for_outcome(completion.beat, completion.outcome)
+    if pool is None:
+        return
+
+    participants = _resolve_participants_for_pool(
+        completion=completion,
+        progress=progress,
+        scope=scope,
+        explicit_participants=explicit_participants,
+    )
+
+    # Guard: GLOBAL scope cannot fire LEGEND_AWARD effects.
+    if scope == StoryScope.GLOBAL and _pool_has_legend_award(pool):
+        raise LegendAwardScopeError
+
+    # Guard: non-GLOBAL scopes require at least one participant for LEGEND_AWARD.
+    if not participants and _pool_has_legend_award(pool):
+        raise LegendAwardParticipantMissingError
+
+    # Resolve the "resolving character" for the context:
+    # - CHARACTER scope: the character whose sheet drives the progress.
+    # - GROUP/GLOBAL: use the first participant's character_sheet (if any); the
+    #   LEGEND_AWARD handler only reads context.participants, but ResolutionContext
+    #   requires a non-None character for other effect types.
+    character = None
+    if scope == StoryScope.CHARACTER and progress is not None:
+        character = progress.character_sheet.character
+    elif participants:
+        character = (
+            participants[0].character_sheet.character
+            if participants[0].character_sheet_id
+            else None
+        )
+
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    if character is None:
+        # Fallback: create a transient stub only when no real character is resolvable.
+        # This path is only reached for pools containing no character-targeted effects
+        # (e.g., LEGEND_AWARD is participant-targeted, not character-targeted).
+        character = ObjectDB()  # unsaved stub — only identity-safe for non-character effects
+
+    context = ResolutionContext(
+        character=character,
+        beat=completion.beat,
+        story=completion.beat.episode.chapter.story,
+        scene=None,
+        participants=participants,
+    )
+    apply_pool_deterministically(pool=pool, context=context)
