@@ -1,8 +1,10 @@
 /**
  * ResonancePickerField — dropdown of the caller's CharacterResonance rows.
  *
- * Calls GET /api/magic/character-resonances/ — scoped to the authenticated
- * user server-side. Each option's value is the CharacterResonance row id
+ * Calls GET /api/magic/character-resonances/?character_sheet=<pk> — scoped
+ * to the authenticated user server-side AND narrowed to the active
+ * character_sheet so users with alts see only the relevant character's
+ * resonances. Each option's value is the CharacterResonance row id
  * (NOT the Resonance type id). Label is the resonance type name.
  *
  * NOTE: This file contains a one-off fetch hook. When Task 3.1 creates
@@ -25,22 +27,34 @@ import type { FieldProps } from '@/rituals/types';
 
 type CharacterResonance = components['schemas']['CharacterResonance'];
 
-async function fetchCharacterResonances(): Promise<CharacterResonance[]> {
-  const res = await apiFetch('/api/magic/character-resonances/');
+async function fetchCharacterResonances(
+  characterSheetId: number | undefined
+): Promise<CharacterResonance[]> {
+  const url =
+    characterSheetId != null
+      ? `/api/magic/character-resonances/?character_sheet=${characterSheetId}`
+      : '/api/magic/character-resonances/';
+  const res = await apiFetch(url);
   if (!res.ok) throw new Error('Failed to load character resonances');
   return res.json() as Promise<CharacterResonance[]>;
 }
 
 /** Temporary hook — move to frontend/src/magic/queries.ts when Task 3.1 lands. */
-function useCharacterResonances() {
+function useCharacterResonances(characterSheetId: number | undefined) {
   return useQuery({
-    queryKey: ['character-resonances'],
-    queryFn: fetchCharacterResonances,
+    queryKey: ['character-resonances', characterSheetId ?? null],
+    queryFn: () => fetchCharacterResonances(characterSheetId),
   });
 }
 
-export function ResonancePickerField({ field, value, onChange, disabled }: FieldProps) {
-  const { data, isLoading } = useCharacterResonances();
+export function ResonancePickerField({
+  field,
+  value,
+  onChange,
+  disabled,
+  characterSheetId,
+}: FieldProps) {
+  const { data, isLoading } = useCharacterResonances(characterSheetId);
   const resonances = data ?? [];
 
   function handleChange(selectedValue: string) {

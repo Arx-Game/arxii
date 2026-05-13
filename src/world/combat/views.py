@@ -418,6 +418,13 @@ class CombatEncounterViewSet(ModelViewSet):
         Requires an explicit ``character_sheet_id`` in the request body;
         never auto-selects a character. The chosen sheet must belong to
         an active roster tenure for the requesting user.
+
+        **No staff bypass on the ownership check.** Staff users who want
+        to put a character into an encounter use the GM-side
+        ``add_participant`` action — which lets them name any
+        character_sheet without an ownership requirement. ``join`` is the
+        self-service "act as my own character" entry point, and the
+        ownership check applies to staff identically to players.
         """
         encounter = self.get_object()
         serializer = JoinEncounterSerializer(data=request.data)

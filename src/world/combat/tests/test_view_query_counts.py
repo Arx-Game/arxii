@@ -121,11 +121,19 @@ class MyActionQueryCountTests(_SharedSetupMixin, TestCase):
     def test_warm_my_action_query_count(self) -> None:
         url = f"/api/combat/{self.encounter.pk}/my_action/"
         self.client.get(url)  # warm-up
-        # 1 session + 1 encounter + 2 prefetch. The per-request roster
-        # cache shared between IsEncounterParticipant and
-        # _get_participant collapses two roster queries into one — and
-        # the prefetch warm-up means it doesn't fire a second time on
-        # the cached request.
+        # 4 queries on the second call:
+        #   1. DRF session lookup
+        #   2. CombatEncounter SELECT (get_object runs the .get(), even
+        #      though SharedMemoryModel returns the identity-mapped row)
+        #   3. RosterEntry.for_account(...).character_ids() — shared
+        #      between IsEncounterParticipant and _get_participant via
+        #      request._combat_viewer_character_ids
+        #   4. CombatRoundAction.filter(participant, round_number)
+        # The participants_cached + opponents_cached prefetches do NOT
+        # fire on the warm call: they ran during warm-up and populated
+        # attributes on the identity-mapped encounter, so the second
+        # get_object hands back the same instance with those lists
+        # already attached.
         with self.assertNumQueries(4):
             response = self.client.get(url)
         # 200 with None body when no action declared yet.

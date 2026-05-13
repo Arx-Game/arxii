@@ -150,10 +150,15 @@ class IsEncounterParticipantTest(TestCase):
             self.permission.has_object_permission(request, None, self.encounter),
         )
 
-    def test_staff_allowed(self) -> None:
+    def test_staff_without_participant_denied(self) -> None:
+        """Staff users without a CombatParticipant row are denied — this
+        permission gates "act as your own participant" endpoints, which
+        staff can't meaningfully use unless they were added as a
+        participant by a GM. See IsEncounterParticipant docstring.
+        """
         staff = AccountFactory(is_staff=True)
         request = _make_request(staff)
-        self.assertTrue(
+        self.assertFalse(
             self.permission.has_object_permission(request, None, self.encounter),
         )
 

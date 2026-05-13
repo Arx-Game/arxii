@@ -94,10 +94,13 @@ class CharacterCarriedItemsHandlerTests(TestCase):
         cls.theirs = _item_on(cls.other_character, "Theirs")
 
     def setUp(self) -> None:
-        # Cross-app test pollution guard: when this suite runs alongside
-        # apps that create many ObjectDBs (e.g., magic), the identity-map
-        # can hand back stale instances on character.carried_items lookups.
-        # Flushing ItemInstance forces a fresh load of the prefetched rows.
+        # Cross-app test pollution guard. The two explicit ``invalidate()``
+        # calls below do the real work — they reset the handler's
+        # ``_cached`` so the next read fetches fresh rows. The
+        # ``flush_instance_cache()`` is belt-and-suspenders: it drops any
+        # stale ItemInstance Python objects that other apps' tests left
+        # in the SharedMemoryModel identity map, so the fresh fetch is
+        # built from clean instances rather than warmed-over ones.
         from world.items.models import ItemInstance
 
         ItemInstance.flush_instance_cache()
@@ -177,7 +180,9 @@ class CharacterSheetOutfitsHandlerTests(TestCase):
         )
 
     def setUp(self) -> None:
-        # Cross-app pollution guard — see CharacterCarriedItemsHandlerTests.setUp.
+        # Cross-app pollution guard — see CharacterCarriedItemsHandlerTests.setUp
+        # for what each line does. The ``invalidate()`` calls are the real
+        # fix; ``flush_instance_cache()`` is defense-in-depth.
         from world.items.models import Outfit
 
         Outfit.flush_instance_cache()

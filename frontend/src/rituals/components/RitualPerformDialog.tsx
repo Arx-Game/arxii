@@ -146,6 +146,7 @@ export function RitualPerformDialog({
                 values={values}
                 onChange={setValues}
                 disabled={performMutation.isPending}
+                characterSheetId={characterSheetId}
               />
             </div>
           )}
