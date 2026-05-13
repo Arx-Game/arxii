@@ -5,6 +5,7 @@ from typing import cast
 
 from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers, viewsets
@@ -155,6 +156,7 @@ class ItemTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         return ItemTemplateListSerializer
 
 
+@extend_schema(tags=["items"])
 class ItemFacetViewSet(viewsets.ViewSet):
     """ViewSet for ItemFacet attach/list/delete.
 
@@ -171,7 +173,23 @@ class ItemFacetViewSet(viewsets.ViewSet):
     permission_classes = [ItemFacetWritePermission]
     filter_backends = [DjangoFilterBackend]
     filterset_class = ItemFacetFilter
+    # ``serializer_class`` is the default read shape — drf-spectacular uses
+    # it for schema introspection on ``viewsets.ViewSet``. Write actions
+    # override request/response via ``@extend_schema`` decorators.
+    serializer_class = ItemFacetReadSerializer
 
+    @extend_schema(
+        responses=ItemFacetReadSerializer(many=True),
+        parameters=[
+            OpenApiParameter(
+                name="item_instance",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="ItemInstance pk whose facets to list.",
+            ),
+        ],
+    )
     def list(self, request: Request) -> Response:
         """Return ItemFacet rows for ``?item_instance=<pk>``."""
         user = cast(AccountDB, request.user)
@@ -209,6 +227,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
         serializer = ItemFacetReadSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
 
+    @extend_schema(responses=ItemFacetReadSerializer)
     def retrieve(self, request: Request, pk: str | None = None) -> Response:
         """Return a single ItemFacet if the requester owns its item."""
         user = cast(AccountDB, request.user)
@@ -232,6 +251,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
         serializer = ItemFacetReadSerializer(row)
         return Response(serializer.data)
 
+    @extend_schema(request=ItemFacetWriteSerializer, responses=ItemFacetReadSerializer)
     def create(self, request: Request) -> Response:
         """Attach a facet via the serializer (which calls the service)."""
         serializer = ItemFacetWriteSerializer(data=request.data, context={"request": request})
@@ -240,6 +260,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
         read = ItemFacetReadSerializer(row)
         return Response(read.data, status=201)
 
+    @extend_schema(responses={204: None})
     def destroy(self, request: Request, pk: str | None = None) -> Response:
         """Remove the facet via the service (which fires cache invalidation)."""
         row_pk = _parse_int_param(pk)
@@ -255,6 +276,7 @@ class ItemFacetViewSet(viewsets.ViewSet):
         return Response(status=204)
 
 
+@extend_schema(tags=["items"])
 class ItemInstanceViewSet(viewsets.ViewSet):
     """Read-only listing of ItemInstance rows for a character's inventory.
 
@@ -273,7 +295,20 @@ class ItemInstanceViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_class = ItemInstanceFilter
+    serializer_class = ItemInstanceReadSerializer
 
+    @extend_schema(
+        responses=ItemInstanceReadSerializer(many=True),
+        parameters=[
+            OpenApiParameter(
+                name="character",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="Character ObjectDB pk whose inventory to list.",
+            ),
+        ],
+    )
     def list(self, request: Request) -> Response:
         """Return ItemInstance rows located on ``?character=<pk>``."""
         user = cast(AccountDB, request.user)
@@ -295,6 +330,7 @@ class ItemInstanceViewSet(viewsets.ViewSet):
         serializer = ItemInstanceReadSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
 
+    @extend_schema(responses=ItemInstanceReadSerializer)
     def retrieve(self, request: Request, pk: str | None = None) -> Response:
         """Return a single ItemInstance if the requester may view it."""
         user = cast(AccountDB, request.user)
@@ -334,6 +370,7 @@ class ItemInstanceViewSet(viewsets.ViewSet):
         return Response(serializer.data)
 
 
+@extend_schema(tags=["items"])
 class EquippedItemViewSet(viewsets.ViewSet):
     """Read-only ViewSet for EquippedItem (GET list/detail).
 
@@ -352,7 +389,20 @@ class EquippedItemViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_class = EquippedItemFilter
+    serializer_class = EquippedItemReadSerializer
 
+    @extend_schema(
+        responses=EquippedItemReadSerializer(many=True),
+        parameters=[
+            OpenApiParameter(
+                name="character",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="Character ObjectDB pk whose equipment to list.",
+            ),
+        ],
+    )
     def list(self, request: Request) -> Response:
         """Return equipped items for ``?character=<pk>``."""
         user = cast(AccountDB, request.user)
@@ -374,6 +424,7 @@ class EquippedItemViewSet(viewsets.ViewSet):
         serializer = EquippedItemReadSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
 
+    @extend_schema(responses=EquippedItemReadSerializer)
     def retrieve(self, request: Request, pk: str | None = None) -> Response:
         """Return a single EquippedItem if the requester may view it."""
         user = cast(AccountDB, request.user)
@@ -446,6 +497,7 @@ class OutfitSlotWritePermission(PlayerOrStaffPermission):
         return _user_plays_pk(cast(AccountDB, request.user), obj.outfit.character_sheet_id)
 
 
+@extend_schema(tags=["items"])
 class OutfitViewSet(viewsets.ViewSet):
     """ViewSet for Outfit definitions (save / list / rename / delete).
 
@@ -460,7 +512,20 @@ class OutfitViewSet(viewsets.ViewSet):
     permission_classes = [OutfitWritePermission]
     filter_backends = [DjangoFilterBackend]
     filterset_class = OutfitFilter
+    serializer_class = OutfitReadSerializer
 
+    @extend_schema(
+        responses=OutfitReadSerializer(many=True),
+        parameters=[
+            OpenApiParameter(
+                name="character_sheet",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="CharacterSheet pk whose saved outfits to list.",
+            ),
+        ],
+    )
     def list(self, request: Request) -> Response:
         """Return outfits saved on ``?character_sheet=<pk>``."""
         user = cast(AccountDB, request.user)
@@ -484,6 +549,7 @@ class OutfitViewSet(viewsets.ViewSet):
         serializer = OutfitReadSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
 
+    @extend_schema(responses=OutfitReadSerializer)
     def retrieve(self, request: Request, pk: str | None = None) -> Response:
         """Return a single Outfit if the requester may view it."""
         user = cast(AccountDB, request.user)
@@ -519,6 +585,7 @@ class OutfitViewSet(viewsets.ViewSet):
         serializer = OutfitReadSerializer(outfit)
         return Response(serializer.data)
 
+    @extend_schema(request=OutfitWriteSerializer, responses=OutfitReadSerializer)
     def create(self, request: Request) -> Response:
         """Create an Outfit via the existing write serializer (calls save_outfit)."""
         serializer = OutfitWriteSerializer(data=request.data, context={"request": request})
@@ -527,10 +594,12 @@ class OutfitViewSet(viewsets.ViewSet):
         read = OutfitReadSerializer(outfit)
         return Response(read.data, status=201)
 
+    @extend_schema(request=OutfitWriteSerializer, responses=OutfitReadSerializer)
     def update(self, request: Request, pk: str | None = None) -> Response:
         """Full update (PUT) — rename/edit outfit row directly."""
         return self._update(request, pk, partial=False)
 
+    @extend_schema(request=OutfitWriteSerializer, responses=OutfitReadSerializer)
     def partial_update(self, request: Request, pk: str | None = None) -> Response:
         """Partial update (PATCH)."""
         return self._update(request, pk, partial=True)
@@ -557,6 +626,7 @@ class OutfitViewSet(viewsets.ViewSet):
         read = OutfitReadSerializer(outfit)
         return Response(read.data)
 
+    @extend_schema(responses={204: None})
     def destroy(self, request: Request, pk: str | None = None) -> Response:
         """Delete via the delete_outfit service (cascades slots)."""
         outfit_pk = _parse_int_param(pk)
@@ -573,6 +643,7 @@ class OutfitViewSet(viewsets.ViewSet):
         return Response(status=204)
 
 
+@extend_schema(tags=["items"])
 class OutfitSlotViewSet(viewsets.ViewSet):
     """ViewSet for OutfitSlot create/list/delete.
 
@@ -587,7 +658,20 @@ class OutfitSlotViewSet(viewsets.ViewSet):
     permission_classes = [OutfitSlotWritePermission]
     filter_backends = [DjangoFilterBackend]
     filterset_class = OutfitSlotFilter
+    serializer_class = OutfitSlotReadSerializer
 
+    @extend_schema(
+        responses=OutfitSlotReadSerializer(many=True),
+        parameters=[
+            OpenApiParameter(
+                name="outfit",
+                type=OpenApiTypes.INT,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="Outfit pk whose slots to list.",
+            ),
+        ],
+    )
     def list(self, request: Request) -> Response:
         """Return OutfitSlot rows for ``?outfit=<pk>``."""
         user = cast(AccountDB, request.user)
@@ -623,6 +707,7 @@ class OutfitSlotViewSet(viewsets.ViewSet):
         serializer = OutfitSlotReadSerializer(page, many=True)
         return paginator.get_paginated_response(serializer.data)
 
+    @extend_schema(responses=OutfitSlotReadSerializer)
     def retrieve(self, request: Request, pk: str | None = None) -> Response:
         """Return a single OutfitSlot if the requester may view it."""
         user = cast(AccountDB, request.user)
@@ -646,6 +731,7 @@ class OutfitSlotViewSet(viewsets.ViewSet):
         serializer = OutfitSlotReadSerializer(slot)
         return Response(serializer.data)
 
+    @extend_schema(request=OutfitSlotWriteSerializer, responses=OutfitSlotReadSerializer)
     def create(self, request: Request) -> Response:
         """Create an OutfitSlot via the existing write serializer.
 
@@ -658,6 +744,7 @@ class OutfitSlotViewSet(viewsets.ViewSet):
         read = OutfitSlotReadSerializer(slot)
         return Response(read.data, status=201)
 
+    @extend_schema(responses={204: None})
     def destroy(self, request: Request, pk: str | None = None) -> Response:
         """Delete via remove_outfit_slot (idempotent).
 
