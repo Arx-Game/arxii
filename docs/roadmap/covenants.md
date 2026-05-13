@@ -1,6 +1,6 @@
 # Covenants
 
-**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; progression / group abilities / dissolution still post-MVP)
+**Status:** in-progress (Slice A entity + membership FK + engagement context shipped; Slice B RitualSession primitive + formation ritual + engagement UI shipped; Slice D covenant progression + Story integration shipped; group abilities / dissolution still post-MVP)
 **Depends on:** Magic (Threads, Rituals), Combat (uses speed_rank), Items (gear archetype compatibility), Character Sheets
 
 ## Overview
@@ -390,30 +390,76 @@ The "Stories integration" half of the original Slice C is preserved in
 is the primary covenant XP source). The "structured objective" half is
 discarded entirely.
 
-### Slice D — Covenant progression + Story integration
+### Slice D — Covenant progression + Story integration (SHIPPED)
 
 Combines the original Slice D (covenant XP / leveling) with the surviving
 half of Slice C (covenants can be tied to Stories; story participation is
 where XP comes from). Sworn objective stays free-text per the design
 decision above.
 
-**Mechanics:**
-- **Covenant-level XP/milestones** — system that levels the covenant as a
-  unit. Drives the existing `Covenant.level` field that the anchor cap
-  formula already reads.
-- **Story integration** — covenants can be linked to Stories, either
-  implicitly (when all participants in a Story share a covenant, that
-  Story is treated as a "covenant story") or explicitly (a Story can be
-  declared as the covenant's storyline by the table running it).
-  Achieving a related Story's beats grants the covenant XP.
-- **Sub-role unlocks at covenant level** — Vanguard → Sentinel-vs-other-Sword
-  sub-role tied to covenant level + member level. (Sub-role authoring is
-  the bulk-content piece that ties to integration tests / future
-  "start-your-own-arx" quickstart.)
+**What landed:**
 
-**Group-ability unlocks** at covenant level were originally bundled here but
-are split into Slice F so this slice stays focused on the XP loop and the
-authoring foundation.
+- **`NarrativeCategory.COVENANT`** — new narrative category for covenant
+  level-up messages, so level milestones surface in the narrative feed.
+- **`CovenantLevelThreshold`** — staff-authored legend→level mapping table.
+  Each row maps a `min_legend` score to a `level` integer. The curve lives
+  entirely in authored data; the service recomputes `Covenant.level`
+  whenever the summary changes.
+- **`CovenantLegendCredit`** (in `world/societies`) — per-deed-per-covenant
+  snapshot created when a `LegendEntry` is created and the character holds
+  any active membership in that covenant. One row per (legend_entry,
+  covenant) pair; additive across engaged covenants.
+- **`CovenantLegendSummary`** — PostgreSQL materialized view (no Django
+  migration; managed separately) summing `total_legend` and `deed_count`
+  per covenant. Refreshed atomically by `recompute_covenant_level`.
+- **`credit_engaged_covenants`** service — fan-out called from `LegendEntry`
+  creation: iterates all engaged memberships for the character at the moment
+  of deed, writes one `CovenantLegendCredit` snapshot per covenant, then
+  calls `recompute_covenant_level` for each affected covenant.
+- **`recompute_covenant_level`** service — refreshes the materialized view,
+  reads the new `total_legend`, walks `CovenantLevelThreshold` rows to find
+  the highest threshold met, updates `Covenant.level`, and emits a
+  `NarrativeMessage(category=COVENANT)` on level-up.
+- **Sub-role fields on `CovenantRole`** — `parent_role` (self-FK, nullable),
+  `resonance` (IntegerField, 0–5 scale), `unlock_thread_level` (IntegerField).
+  Together these encode the sub-role lattice: a sub-role is a `CovenantRole`
+  with a non-null `parent_role`. Uniqueness: `(covenant_type, name)` still
+  enforced; `(parent_role, resonance)` ensures each resonance slot is filled
+  at most once per parent.
+- **`promote_to_subrole`** service — validates character eligibility
+  (current membership, covenant level ≥ threshold, thread level ≥ unlock),
+  ends the existing membership row, creates a new one for the sub-role.
+  Typed exceptions: `SubRoleError`, `NotEligibleForSubRoleError`,
+  `SubRoleAlreadyHeldError`.
+- **Beat consequence pool framework** — `LEGEND_AWARD` added to
+  `ConsequenceEffectType`; `ConsequenceEffect` gains `legend_amount`
+  (IntegerField) and `award_covenant` FK (nullable, → `Covenant`).
+  `ResolutionContext` extended with `participants`, `beat`, `scene`, `story`.
+  `apply_pool_deterministically` handles non-weighted pool application
+  (all-consequences-at-once). `handle_legend_award` in
+  `world/mechanics/services` calls `credit_engaged_covenants` for each
+  participant with the consequence's `legend_amount`.
+- **`Story.covenant` FK** — nullable FK on `Story` declaring the storyline's
+  owning covenant. Beat resolution now passes `story` through
+  `ResolutionContext` so consequence handlers can read it.
+- **API surface** — `promote` action on `CharacterCovenantRoleViewSet`;
+  `CovenantLevelThresholdViewSet` (staff-only, read-only); serializer
+  additions for `parent_role`, `resonance`, `unlock_thread_level` on
+  `CovenantRoleSerializer`; `covenant` FK on `StorySerializer`.
+
+**Not in Slice D (explicitly out-of-scope per spec):**
+
+- Authored sub-role content (Vanguard of Flame, Sentinel of the Deep, etc.)
+  — sub-role rows are empty; authoring is future staff work.
+- Frontend UI for promotion flow, legend totals dashboard, threshold curve
+  editor.
+- Higher-tier sub-role promotions (sub-role → sub-sub-role).
+- `GLOBAL`-scope `LEGEND_AWARD` (awards to all covenant members regardless
+  of scene presence) — only `SCENE`-scope is wired.
+- Mission-driven covenant XP (missions reference Situations, not Beats —
+  separate integration point).
+
+**Group-ability unlocks** at covenant level remain in Slice F.
 
 ### Slice E — Battle Covenants + Durance × Battle stacking
 
