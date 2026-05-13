@@ -327,9 +327,18 @@ def register_all_tasks() -> None:
     )
 
     from world.conditions.services import decay_all_conditions_tick
+    from world.locations.tasks import decayed_modifier_cleanup_task
     from world.magic.services.anima import anima_regen_tick
     from world.magic.services.gain import resonance_daily_tick, resonance_weekly_settlement_tick
 
+    register_task(
+        CronDefinition(
+            task_key="locations.decayed_modifier_cleanup",
+            callable=decayed_modifier_cleanup_task,
+            interval=timedelta(hours=24),
+            description="Delete LocationStatModifier rows that have decayed to zero.",
+        )
+    )
     register_task(
         CronDefinition(
             task_key="magic.anima_regen_daily",
