@@ -5,7 +5,12 @@ from typing import cast
 
 from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiTypes,
+    extend_schema,
+    inline_serializer,
+)
 from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers, viewsets
@@ -20,13 +25,8 @@ from core_management.permissions import PlayerOrStaffPermission
 from flows.service_functions.outfits import delete_outfit, remove_outfit_slot
 from world.character_sheets.models import CharacterSheet
 from world.items.filters import (
-    EquippedItemFilter,
     InteractionTypeFilter,
-    ItemFacetFilter,
-    ItemInstanceFilter,
     ItemTemplateFilter,
-    OutfitFilter,
-    OutfitSlotFilter,
     QualityTierFilter,
     VisibleWornItemFilter,
 )
@@ -51,6 +51,7 @@ from world.items.serializers import (
     ItemTemplateDetailSerializer,
     ItemTemplateListSerializer,
     OutfitReadSerializer,
+    OutfitRenameSerializer,
     OutfitSlotReadSerializer,
     OutfitSlotWriteSerializer,
     OutfitWriteSerializer,
@@ -97,6 +98,27 @@ class ItemTemplatePagination(PageNumberPagination):
     """Pagination for item template listings."""
 
     page_size = 50
+
+
+def _paginated_response(
+    item_serializer_cls: type[serializers.Serializer],
+) -> serializers.Serializer:
+    """Build an ``inline_serializer`` describing DRF's paginated wrapper.
+
+    The five item-first viewsets all return ``paginator.get_paginated_response(...)``
+    which wraps the serialized list as ``{count, next, previous, results}``.
+    Declaring the same shape to drf-spectacular gives the frontend an
+    accurate generated type instead of a bare-array lie.
+    """
+    return inline_serializer(
+        name=f"Paginated{item_serializer_cls.__name__.replace('Serializer', '')}List",
+        fields={
+            "count": serializers.IntegerField(),
+            "next": serializers.URLField(allow_null=True),
+            "previous": serializers.URLField(allow_null=True),
+            "results": item_serializer_cls(many=True),
+        },
+    )
 
 
 class QualityTierViewSet(viewsets.ReadOnlyModelViewSet):
@@ -171,15 +193,13 @@ class ItemFacetViewSet(viewsets.ViewSet):
 
     http_method_names = ["get", "post", "delete", "head", "options"]
     permission_classes = [ItemFacetWritePermission]
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = ItemFacetFilter
     # ``serializer_class`` is the default read shape — drf-spectacular uses
     # it for schema introspection on ``viewsets.ViewSet``. Write actions
     # override request/response via ``@extend_schema`` decorators.
     serializer_class = ItemFacetReadSerializer
 
     @extend_schema(
-        responses=ItemFacetReadSerializer(many=True),
+        responses=_paginated_response(ItemFacetReadSerializer),
         parameters=[
             OpenApiParameter(
                 name="item_instance",
@@ -293,12 +313,10 @@ class ItemInstanceViewSet(viewsets.ViewSet):
     """
 
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = ItemInstanceFilter
     serializer_class = ItemInstanceReadSerializer
 
     @extend_schema(
-        responses=ItemInstanceReadSerializer(many=True),
+        responses=_paginated_response(ItemInstanceReadSerializer),
         parameters=[
             OpenApiParameter(
                 name="character",
@@ -387,12 +405,10 @@ class EquippedItemViewSet(viewsets.ViewSet):
     """
 
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = EquippedItemFilter
     serializer_class = EquippedItemReadSerializer
 
     @extend_schema(
-        responses=EquippedItemReadSerializer(many=True),
+        responses=_paginated_response(EquippedItemReadSerializer),
         parameters=[
             OpenApiParameter(
                 name="character",
@@ -510,12 +526,10 @@ class OutfitViewSet(viewsets.ViewSet):
     """
 
     permission_classes = [OutfitWritePermission]
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = OutfitFilter
     serializer_class = OutfitReadSerializer
 
     @extend_schema(
-        responses=OutfitReadSerializer(many=True),
+        responses=_paginated_response(OutfitReadSerializer),
         parameters=[
             OpenApiParameter(
                 name="character_sheet",
@@ -594,14 +608,22 @@ class OutfitViewSet(viewsets.ViewSet):
         read = OutfitReadSerializer(outfit)
         return Response(read.data, status=201)
 
-    @extend_schema(request=OutfitWriteSerializer, responses=OutfitReadSerializer)
+    @extend_schema(request=OutfitRenameSerializer, responses=OutfitReadSerializer)
     def update(self, request: Request, pk: str | None = None) -> Response:
-        """Full update (PUT) — rename/edit outfit row directly."""
+        """Full update (PUT) — rename/redescribe an outfit.
+
+        Only ``name`` and ``description`` are mutable. ``character_sheet``
+        and ``wardrobe`` are write-once (set at create time). See
+        ``OutfitRenameSerializer`` for the accepted request shape.
+        """
         return self._update(request, pk, partial=False)
 
-    @extend_schema(request=OutfitWriteSerializer, responses=OutfitReadSerializer)
+    @extend_schema(request=OutfitRenameSerializer, responses=OutfitReadSerializer)
     def partial_update(self, request: Request, pk: str | None = None) -> Response:
-        """Partial update (PATCH)."""
+        """Partial update (PATCH) — rename/redescribe an outfit.
+
+        Same field set as PUT (only ``name``/``description``).
+        """
         return self._update(request, pk, partial=True)
 
     def _update(self, request: Request, pk: str | None, *, partial: bool) -> Response:
@@ -613,7 +635,7 @@ class OutfitViewSet(viewsets.ViewSet):
         except Outfit.DoesNotExist as exc:
             raise NotFound from exc
         self.check_object_permissions(request, outfit)
-        serializer = OutfitWriteSerializer(
+        serializer = OutfitRenameSerializer(
             outfit,
             data=request.data,
             partial=partial,
@@ -656,12 +678,10 @@ class OutfitSlotViewSet(viewsets.ViewSet):
 
     http_method_names = ["get", "post", "delete", "head", "options"]
     permission_classes = [OutfitSlotWritePermission]
-    filter_backends = [DjangoFilterBackend]
-    filterset_class = OutfitSlotFilter
     serializer_class = OutfitSlotReadSerializer
 
     @extend_schema(
-        responses=OutfitSlotReadSerializer(many=True),
+        responses=_paginated_response(OutfitSlotReadSerializer),
         parameters=[
             OpenApiParameter(
                 name="outfit",

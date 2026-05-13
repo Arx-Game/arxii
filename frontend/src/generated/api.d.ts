@@ -4914,14 +4914,24 @@ export interface paths {
     };
     /** @description Return a single Outfit if the requester may view it. */
     get: operations['items_outfits_retrieve'];
-    /** @description Full update (PUT) — rename/edit outfit row directly. */
+    /**
+     * @description Full update (PUT) — rename/redescribe an outfit.
+     *
+     *     Only ``name`` and ``description`` are mutable. ``character_sheet``
+     *     and ``wardrobe`` are write-once (set at create time). See
+     *     ``OutfitRenameSerializer`` for the accepted request shape.
+     */
     put: operations['items_outfits_update'];
     post?: never;
     /** @description Delete via the delete_outfit service (cascades slots). */
     delete: operations['items_outfits_destroy'];
     options?: never;
     head?: never;
-    /** @description Partial update (PATCH). */
+    /**
+     * @description Partial update (PATCH) — rename/redescribe an outfit.
+     *
+     *     Same field set as PUT (only ``name``/``description``).
+     */
     patch: operations['items_outfits_partial_update'];
     trace?: never;
   };
@@ -12865,6 +12875,20 @@ export interface components {
       /** Format: date-time */
       readonly updated_at: string;
     };
+    /**
+     * @description Write serializer for renames/redescribes (PUT / PATCH on Outfit).
+     *
+     *     Distinct from ``OutfitWriteSerializer`` because update only touches
+     *     ``name`` and ``description`` — exposing ``character_sheet`` and
+     *     ``wardrobe`` in the request schema would imply they're editable when
+     *     they're write-once. The viewset wires this serializer via
+     *     ``@extend_schema`` on update/partial_update so the public API contract
+     *     matches reality.
+     */
+    OutfitRenameRequest: {
+      name: string;
+      description?: string;
+    };
     /** @description Read serializer for OutfitSlot — nests the item instance. */
     OutfitSlotRead: {
       readonly id: number;
@@ -13166,6 +13190,14 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['EpisodeScene'][];
     };
+    PaginatedEquippedItemReadList: {
+      count: number;
+      /** Format: uri */
+      next: string | null;
+      /** Format: uri */
+      previous: string | null;
+      results: components['schemas']['EquippedItemRead'][];
+    };
     PaginatedEraList: {
       /** @example 123 */
       count?: number;
@@ -13381,6 +13413,22 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['InteractionList'][];
     };
+    PaginatedItemFacetReadList: {
+      count: number;
+      /** Format: uri */
+      next: string | null;
+      /** Format: uri */
+      previous: string | null;
+      results: components['schemas']['ItemFacetRead'][];
+    };
+    PaginatedItemInstanceReadList: {
+      count: number;
+      /** Format: uri */
+      next: string | null;
+      /** Format: uri */
+      previous: string | null;
+      results: components['schemas']['ItemInstanceRead'][];
+    };
     PaginatedItemTemplateListList: {
       /** @example 123 */
       count?: number;
@@ -13425,6 +13473,22 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['OrganizationSearch'][];
+    };
+    PaginatedOutfitReadList: {
+      count: number;
+      /** Format: uri */
+      next: string | null;
+      /** Format: uri */
+      previous: string | null;
+      results: components['schemas']['OutfitRead'][];
+    };
+    PaginatedOutfitSlotReadList: {
+      count: number;
+      /** Format: uri */
+      next: string | null;
+      /** Format: uri */
+      previous: string | null;
+      results: components['schemas']['OutfitSlotRead'][];
     };
     PaginatedPendingAlterationList: {
       /** @example 123 */
@@ -14273,14 +14337,19 @@ export interface components {
       current_episode?: number | null;
       is_active?: boolean;
     };
-    /** @description Write serializer for Outfit — POST snapshots current loadout via save_outfit. */
-    PatchedOutfitWriteRequest: {
+    /**
+     * @description Write serializer for renames/redescribes (PUT / PATCH on Outfit).
+     *
+     *     Distinct from ``OutfitWriteSerializer`` because update only touches
+     *     ``name`` and ``description`` — exposing ``character_sheet`` and
+     *     ``wardrobe`` in the request schema would imply they're editable when
+     *     they're write-once. The viewset wires this serializer via
+     *     ``@extend_schema`` on update/partial_update so the public API contract
+     *     matches reality.
+     */
+    PatchedOutfitRenameRequest: {
       name?: string;
       description?: string;
-      /** @description The character this sheet belongs to */
-      character_sheet?: number;
-      /** @description The wardrobe ItemInstance this outfit is stored in. */
-      wardrobe?: number;
     };
     PatchedPersonaRequest: {
       /** @description The character sheet this persona belongs to. */
@@ -23558,7 +23627,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['EquippedItemRead'][];
+          'application/json': components['schemas']['PaginatedEquippedItemReadList'][];
         };
       };
     };
@@ -23644,7 +23713,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ItemInstanceRead'][];
+          'application/json': components['schemas']['PaginatedItemInstanceReadList'][];
         };
       };
     };
@@ -23687,7 +23756,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ItemFacetRead'][];
+          'application/json': components['schemas']['PaginatedItemFacetReadList'][];
         };
       };
     };
@@ -23773,7 +23842,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['OutfitSlotRead'][];
+          'application/json': components['schemas']['PaginatedOutfitSlotReadList'][];
         };
       };
     };
@@ -23859,7 +23928,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['OutfitRead'][];
+          'application/json': components['schemas']['PaginatedOutfitReadList'][];
         };
       };
     };
@@ -23919,7 +23988,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['OutfitWriteRequest'];
+        'application/json': components['schemas']['OutfitRenameRequest'];
       };
     };
     responses: {
@@ -23964,7 +24033,7 @@ export interface operations {
     };
     requestBody?: {
       content: {
-        'application/json': components['schemas']['PatchedOutfitWriteRequest'];
+        'application/json': components['schemas']['PatchedOutfitRenameRequest'];
       };
     };
     responses: {
