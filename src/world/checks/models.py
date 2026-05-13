@@ -223,6 +223,17 @@ class ConsequenceEffect(SharedMemoryModel):
         related_name="consequence_effects",
     )
 
+    # Legend award effects
+    legend_base_value = models.PositiveIntegerField(null=True, blank=True)
+    legend_source_type = models.ForeignKey(
+        "societies.LegendSourceType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="consequence_effects",
+    )
+    legend_description_template = models.TextField(blank=True, default="")
+
     class Meta:
         ordering = ["execution_order"]
 
@@ -252,5 +263,24 @@ class ConsequenceEffect(SharedMemoryModel):
         for field_name, id_attr in required:
             if not getattr(self, id_attr, None):
                 errors[field_name] = f"{field_name} is required for {self.effect_type}"
+
+        if self.effect_type == EffectType.LEGEND_AWARD:
+            if not self.legend_base_value or self.legend_base_value <= 0:
+                msg = "legend_base_value must be a positive integer for LEGEND_AWARD effects"
+                errors["legend_base_value"] = msg
+            if not self.legend_source_type_id:
+                msg = "legend_source_type is required for LEGEND_AWARD effects"
+                errors["legend_source_type"] = msg
+        else:
+            if self.legend_base_value is not None:
+                msg = "legend_base_value must be null for non-LEGEND_AWARD effects"
+                errors["legend_base_value"] = msg
+            if self.legend_source_type_id:
+                msg = "legend_source_type must be null for non-LEGEND_AWARD effects"
+                errors["legend_source_type"] = msg
+            if self.legend_description_template:
+                msg = "legend_description_template must be blank for non-LEGEND_AWARD effects"
+                errors["legend_description_template"] = msg
+
         if errors:
             raise ValidationError(errors)

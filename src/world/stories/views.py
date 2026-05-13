@@ -1223,6 +1223,8 @@ class BeatViewSet(viewsets.ModelViewSet):
             beat=beat,
             outcome=data["outcome"],
             gm_notes=data["gm_notes"],
+            participants=data.get("participants") or None,
+            extra_participants=data.get("extra_participants") or None,
         )
         return Response(BeatCompletionSerializer(completion).data, status=status.HTTP_201_CREATED)
 

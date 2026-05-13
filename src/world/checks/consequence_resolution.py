@@ -17,8 +17,9 @@ from world.mechanics.types import AppliedEffect
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from actions.models.consequence_pools import ConsequencePool
     from actions.types import WeightedConsequence
-    from world.checks.models import CheckType
+    from world.checks.models import CheckType, Consequence
     from world.checks.types import CheckResult, ResolutionContext
 
 
@@ -117,3 +118,51 @@ def apply_resolution(
         consequence = consequence.consequence
 
     return apply_all_effects(consequence, context)
+
+
+def apply_pool_deterministically(
+    *,
+    pool: ConsequencePool,
+    context: ResolutionContext,
+) -> list[AppliedEffect]:
+    """Run every Consequence in the pool (including inherited parent rows
+    where not excluded). No weighted selection — deterministic application
+    used by Story-beat outcome resolution. Returns the flattened list of
+    applied effects for caller introspection / tests / audit.
+
+    Walks parent pool first (in declaration order, skipping is_excluded rows
+    from the child), then child pool entries. This mirrors how
+    select_consequence handles inheritance.
+    """
+    from world.mechanics.effect_handlers import apply_all_effects  # noqa: PLC0415
+
+    consequences = resolve_pool_consequences(pool)
+    applied: list[AppliedEffect] = []
+    for c in consequences:
+        applied.extend(apply_all_effects(c, context))
+    return applied
+
+
+def resolve_pool_consequences(pool: ConsequencePool) -> list[Consequence]:
+    """Walk pool + parent, honoring is_excluded child entries. Returns the
+    flat list of Consequence rows to fire (in declaration order: parent first).
+
+    Public alias for beat resolution wiring and other callers that need to
+    inspect the pool's full consequence list without firing effects.
+    """
+    own_entries = list(pool.entries.select_related("consequence"))
+    if pool.parent_id is None:
+        return [e.consequence for e in own_entries if not e.is_excluded]
+
+    excluded_ids = {e.consequence_id for e in own_entries if e.is_excluded}
+    parent_consequences = [
+        e.consequence
+        for e in pool.parent.entries.select_related("consequence")
+        if e.consequence_id not in excluded_ids
+    ]
+    own_included = [e.consequence for e in own_entries if not e.is_excluded]
+    return parent_consequences + own_included
+
+
+# Private alias preserved for backward compatibility.
+_resolve_pool_consequences = resolve_pool_consequences

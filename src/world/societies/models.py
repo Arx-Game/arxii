@@ -974,8 +974,60 @@ class PersonaLegendSummary(SharedMemoryModel):
         db_table = "societies_personalegendsummary"
 
 
+class CovenantLegendCredit(SharedMemoryModel):
+    """Per-deed-per-covenant credit row. Snapshotted at LegendEntry creation
+    from the persona's currently-engaged covenants. The covenant's total
+    derives by summing base_value + spreads across these rows.
+    """
+
+    entry = models.ForeignKey(
+        LegendEntry,
+        on_delete=models.CASCADE,
+        related_name="covenant_credits",
+    )
+    covenant = models.ForeignKey(
+        "covenants.Covenant",
+        on_delete=models.PROTECT,
+        related_name="legend_credits",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["entry", "covenant"],
+                name="societies_credit_unique_per_entry_covenant",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.entry} → {self.covenant}"
+
+
+class CovenantLegendSummary(SharedMemoryModel):
+    """Materialized view of covenant legend totals (base + spreads).
+
+    DO NOT WRITE TO THIS MODEL DIRECTLY. Backed by SQL view refreshed by
+    refresh_legend_views().
+    """
+
+    covenant = models.OneToOneField(
+        "covenants.Covenant",
+        on_delete=models.DO_NOTHING,
+        primary_key=True,
+        db_column="covenant_id",
+        related_name="legend_summary",
+    )
+    legend_total = models.PositiveBigIntegerField()
+
+    class Meta:
+        managed = False
+        db_table = "societies_covenantlegendsummary"
+
+
 def refresh_legend_views() -> None:
-    """Refresh both legend materialized views concurrently."""
+    """Refresh all legend materialized views concurrently."""
     with connection.cursor() as cursor:
         cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_characterlegendsummary")
         cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_personalegendsummary")
+        cursor.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY societies_covenantlegendsummary")

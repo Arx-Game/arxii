@@ -13,6 +13,9 @@
   - action_templates <- actions.ActionTemplate
   - action_template_gates <- actions.ActionTemplateGate
   - mishap_tiers <- magic.MishapPoolTier
+  - success_beats <- stories.Beat
+  - failure_beats <- stories.Beat
+  - expired_beats <- stories.Beat
   - condition_stages <- conditions.ConditionStage
   - context_attachments <- mechanics.ContextConsequencePool
 
@@ -64,13 +67,13 @@
   - conditiononcheckconfig_configs <- actions.ConditionOnCheckConfig
 
 ### Service Functions
-- `advance_resolution(pending: 'PendingActionResolution', context: 'ResolutionContext', player_decision: 'str | None' = None) -> 'PendingActionResolution' â€” Resume a paused pipeline after player decision.`
-- `apply_resolution(pending: 'PendingResolution', context: 'ResolutionContext') -> 'list[AppliedEffect]' â€” Apply all effects from the selected consequence.`
-- `get_effective_consequences(pool: 'ConsequencePool') -> 'list[WeightedConsequence]' â€” Resolve pool inheritance into a flat list of weighted consequences.`
-- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult â€” Main check resolution function.`
-- `resolve_scene_action(*, character: 'ObjectDB', action_template: 'ActionTemplate | None', action_key: 'str', difficulty: 'int') -> 'SceneActionResult' â€” Resolve a scene-based action check using an ActionTemplate.`
-- `select_consequence_from_result(character: 'ObjectDB', check_result: 'CheckResult', consequences: 'list[WeightedConsequence]') -> 'PendingResolution' â€” Select a consequence using an existing check result.`
-- `start_action_resolution(character: 'ObjectDB', template: 'ActionTemplate', target_difficulty: 'int', context: 'ResolutionContext') -> 'PendingActionResolution' â€” Start an action resolution pipeline and run it to completion or pause.`
+- `advance_resolution(pending: 'PendingActionResolution', context: 'ResolutionContext', player_decision: 'str | None' = None) -> 'PendingActionResolution' — Resume a paused pipeline after player decision.`
+- `apply_resolution(pending: 'PendingResolution', context: 'ResolutionContext') -> 'list[AppliedEffect]' — Apply all effects from the selected consequence.`
+- `get_effective_consequences(pool: 'ConsequencePool') -> 'list[WeightedConsequence]' — Resolve pool inheritance into a flat list of weighted consequences.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
+- `resolve_scene_action(*, character: 'ObjectDB', action_template: 'ActionTemplate | None', action_key: 'str', difficulty: 'int') -> 'SceneActionResult' — Resolve a scene-based action check using an ActionTemplate.`
+- `select_consequence_from_result(character: 'ObjectDB', check_result: 'CheckResult', consequences: 'list[WeightedConsequence]') -> 'PendingResolution' — Select a consequence using an existing check result.`
+- `start_action_resolution(character: 'ObjectDB', template: 'ActionTemplate', target_difficulty: 'int', context: 'ResolutionContext') -> 'PendingActionResolution' — Start an action resolution pipeline and run it to completion or pause.`
 
 
 ## behaviors
@@ -378,13 +381,13 @@
   - descendant -> areas.Area [FK]
 
 ### Service Functions
-- `get_ancestor_at_level(area: 'Area', target_level: 'AreaLevel') -> 'Area | None' â€” Walk the ancestry to find the ancestor at the given AreaLevel.`
-- `get_ancestry(area: 'Area') -> 'list[Area]' â€” Return the full ancestor chain from root down to this area.`
-- `get_descendant_areas(area: 'Area') -> 'list[Area]' â€” Return all areas in the subtree below this area.`
-- `get_effective_realm(area: 'Area') -> 'Realm | None' â€” Walk up the hierarchy to find the nearest realm assignment.`
-- `get_room_profile(room_obj: 'ObjectDB') -> 'RoomProfile' â€” Get or create the RoomProfile for a room ObjectDB instance.`
-- `get_rooms_in_area(area: 'Area') -> 'list[RoomProfile]' â€” Return all RoomProfiles in this area and everything beneath it.`
-- `reparent_area(area: 'Area', new_parent: 'Area | None') -> 'None' â€” Move an area under a new parent.`
+- `get_ancestor_at_level(area: 'Area', target_level: 'AreaLevel') -> 'Area | None' — Walk the ancestry to find the ancestor at the given AreaLevel.`
+- `get_ancestry(area: 'Area') -> 'list[Area]' — Return the full ancestor chain from root down to this area.`
+- `get_descendant_areas(area: 'Area') -> 'list[Area]' — Return all areas in the subtree below this area.`
+- `get_effective_realm(area: 'Area') -> 'Realm | None' — Walk up the hierarchy to find the nearest realm assignment.`
+- `get_room_profile(room_obj: 'ObjectDB') -> 'RoomProfile' — Get or create the RoomProfile for a room ObjectDB instance.`
+- `get_rooms_in_area(area: 'Area') -> 'list[RoomProfile]' — Return all RoomProfiles in this area and everything beneath it.`
+- `reparent_area(area: 'Area', new_parent: 'Area | None') -> 'None' — Move an area under a new parent.`
 
 
 ## world.character_creation
@@ -448,22 +451,22 @@
 ### CGExplanation
 
 ### Service Functions
-- `add_application_comment(application: 'DraftApplication', *, author: 'AbstractBaseUser | AnonymousUser', text: 'str') -> 'DraftApplicationComment' â€” Add a message comment to an application.`
-- `approve_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str' = '') -> 'None' â€” Approve an application and finalize the character.`
-- `calculate_weight(height_inches: int, build: world.forms.models.Build) -> int â€” Calculate weight in pounds from height and build.`
-- `can_create_character(account: 'AbstractBaseUser | AnonymousUser') -> 'tuple[bool, str]' â€” Check if an account can create a new character.`
-- `claim_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser') -> 'None' â€” Claim a submitted application for staff review.`
-- `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' â€” Atomically create a Character + CharacterSheet + PRIMARY Persona.`
-- `deny_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' â€” Deny an application.`
-- `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False) -> 'ObjectDB' â€” Create a Character from a completed CharacterDraft.`
-- `finalize_gm_character(draft: 'CharacterDraft') -> 'tuple[RosterEntry, Story]' â€” Finalize a GM-initiated draft into a roster character + story.`
-- `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' â€” Create magic models from cantrip selection during finalization.`
-- `get_accessible_starting_areas(account: 'AbstractBaseUser | AnonymousUser') -> 'QuerySet' â€” Get all starting areas accessible to an account.`
-- `request_revisions(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' â€” Request revisions on an application.`
-- `resubmit_draft(application: 'DraftApplication', *, comment: 'str' = '') -> 'None' â€” Resubmit a draft application after revisions.`
-- `submit_draft_for_review(draft: 'CharacterDraft', *, submission_notes: 'str' = '') -> 'DraftApplication' â€” Submit a character draft for staff review.`
-- `unsubmit_draft(application: 'DraftApplication') -> 'None' â€” Un-submit a draft application, returning it to editable state.`
-- `withdraw_draft(application: 'DraftApplication') -> 'None' â€” Withdraw a draft application.`
+- `add_application_comment(application: 'DraftApplication', *, author: 'AbstractBaseUser | AnonymousUser', text: 'str') -> 'DraftApplicationComment' — Add a message comment to an application.`
+- `approve_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str' = '') -> 'None' — Approve an application and finalize the character.`
+- `calculate_weight(height_inches: int, build: world.forms.models.Build) -> int — Calculate weight in pounds from height and build.`
+- `can_create_character(account: 'AbstractBaseUser | AnonymousUser') -> 'tuple[bool, str]' — Check if an account can create a new character.`
+- `claim_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser') -> 'None' — Claim a submitted application for staff review.`
+- `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' — Atomically create a Character + CharacterSheet + PRIMARY Persona.`
+- `deny_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' — Deny an application.`
+- `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False) -> 'ObjectDB' — Create a Character from a completed CharacterDraft.`
+- `finalize_gm_character(draft: 'CharacterDraft') -> 'tuple[RosterEntry, Story]' — Finalize a GM-initiated draft into a roster character + story.`
+- `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' — Create magic models from cantrip selection during finalization.`
+- `get_accessible_starting_areas(account: 'AbstractBaseUser | AnonymousUser') -> 'QuerySet' — Get all starting areas accessible to an account.`
+- `request_revisions(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' — Request revisions on an application.`
+- `resubmit_draft(application: 'DraftApplication', *, comment: 'str' = '') -> 'None' — Resubmit a draft application after revisions.`
+- `submit_draft_for_review(draft: 'CharacterDraft', *, submission_notes: 'str' = '') -> 'DraftApplication' — Submit a character draft for staff review.`
+- `unsubmit_draft(application: 'DraftApplication') -> 'None' — Un-submit a draft application, returning it to editable state.`
+- `withdraw_draft(application: 'DraftApplication') -> 'None' — Withdraw a draft application.`
 
 
 ## world.character_sheets
@@ -511,6 +514,8 @@
   - scene_entry_endorsements_received <- magic.SceneEntryEndorsement
   - resonance_grants <- magic.ResonanceGrant
   - reincarnations <- magic.Reincarnation
+  - ritualsession_set <- magic.RitualSession
+  - ritualsessionparticipant_set <- magic.RitualSessionParticipant
   - sineating_offers_sent <- magic.SineatingPendingOffer
   - sineating_offers_received <- magic.SineatingPendingOffer
   - stage_advance_offers_sent <- magic.PendingStageAdvanceOffer
@@ -570,9 +575,9 @@
   - character_sheets <- character_sheets.CharacterSheet
 
 ### Service Functions
-- `can_edit_character_sheet(user: 'AbstractBaseUser | AnonymousUser', roster_entry: 'RosterEntry') -> 'bool' â€” True if the user is the original creator (player_number=1) or staff.`
-- `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' â€” Atomically create a Character + CharacterSheet + PRIMARY Persona.`
-- `create_object(*args, **kwargs) â€” Create a new in-game object.`
+- `can_edit_character_sheet(user: 'AbstractBaseUser | AnonymousUser', roster_entry: 'RosterEntry') -> 'bool' — True if the user is the original creator (player_number=1) or staff.`
+- `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' — Atomically create a Character + CharacterSheet + PRIMARY Persona.`
+- `create_object(*args, **kwargs) — Create a new in-game object.`
 
 
 ## world.checks
@@ -627,13 +632,14 @@
   - damage_type -> conditions.DamageType [FK] (nullable)
   - flow_definition -> flows.FlowDefinition [FK] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - legend_source_type -> societies.LegendSourceType [FK] (nullable)
 
 ### Service Functions
-- `cast(typ, val) â€” Cast a value to a type.`
-- `chart_has_success_outcomes(rank_difference: int) -> bool â€” Check if the ResultChart for this rank difference has any success outcomes.`
-- `get_rollmod(character: 'ObjectDB') -> int â€” Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
-- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult â€” Main check resolution function.`
-- `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int â€” Preview the rank difference for a check without rolling.`
+- `cast(typ, val) — Cast a value to a type.`
+- `chart_has_success_outcomes(rank_difference: int) -> bool — Check if the ResultChart for this rank difference has any success outcomes.`
+- `get_rollmod(character: 'ObjectDB') -> int — Sum character.sheet_data.rollmod + character.account.player_data.rollmod.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
+- `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
 
 
 ## world.classes
@@ -754,7 +760,7 @@
   - entry -> codex.CodexEntry [FK]
 
 ### Service Functions
-- `add_codex_progress(*, knowledge: world.codex.models.CharacterCodexKnowledge, amount: int) -> world.codex.models.CharacterCodexKnowledge â€” Add learning progress to a CharacterCodexKnowledge instance.`
+- `add_codex_progress(*, knowledge: world.codex.models.CharacterCodexKnowledge, amount: int) -> world.codex.models.CharacterCodexKnowledge — Add learning progress to a CharacterCodexKnowledge instance.`
 
 
 ## world.conditions
@@ -910,41 +916,94 @@
 ### DamageSuccessLevelMultiplier
 
 ### Service Functions
-- `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult â€” Increment a condition's severity and advance stage if threshold crossed.`
-- `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult â€” Apply a condition to a target, handling stacking and interactions.`
-- `apply_stage_entry_aftermath(payload: flows.events.payloads.ConditionStageChangedPayload) -> None â€” On ascending stage changes, apply the stage's on_entry_conditions.`
-- `bulk_apply_conditions(applications: list[world.conditions.types.BulkConditionApplication], *, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> list[world.conditions.types.ApplyConditionResult] â€” Apply multiple conditions in a single transaction with batched queries.`
-- `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int â€” Remove all conditions from a target.`
-- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) â€” Add dunder methods based on the fields defined in the class.`
-- `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary â€” Scheduler entry point. Decays all opt-in conditions by one tick.`
-- `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult â€” Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
-- `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack â€” Dispatch ``event_name`` to every handler in ``location`` + contents.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x000002A54D616120>, default_factory=<dataclasses._MISSING_TYPE object at 0x000002A54D616120>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x000002A54D616120>) â€” Return an object to identify dataclass fields.`
-- `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet â€” Get active condition instances on a target.`
-- `get_aggro_priority(target: 'ObjectDB') -> int â€” Get the total aggro priority from all conditions.`
-- `get_all_capability_values(target: 'ObjectDB') -> dict[int, int] â€” Get all capability values for a character.`
-- `get_capability_status(target: 'ObjectDB', capability: world.conditions.models.CapabilityType) -> world.conditions.types.CapabilityStatus â€” Get the status of a capability for a target based on active conditions.`
-- `get_capability_value(target: 'ObjectDB', capability: world.conditions.models.CapabilityType) -> int â€” Get the total value of a capability for a character.`
-- `get_check_modifier(target: 'ObjectDB', check_type: world.checks.models.CheckType) -> world.conditions.types.CheckModifierResult â€” Get the total modifier for a check type from active conditions.`
-- `get_condition_control_percent_modifier(target: 'ObjectDB', condition_name: str) -> int â€” Get percentage modifier to control loss rate for a condition.`
-- `get_condition_instance(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> world.conditions.models.ConditionInstance | None â€” Get a specific condition instance on a target.`
-- `get_condition_intensity_percent_modifier(target: 'ObjectDB', condition_name: str) -> int â€” Get percentage modifier to intensity gain for a condition.`
-- `get_condition_penalty_percent_modifier(target: 'ObjectDB', condition_name: str) -> int â€” Get percentage modifier to check penalties for a condition.`
-- `get_damage_multiplier(success_level: int) -> decimal.Decimal â€” Look up the damage multiplier for a given success level.`
-- `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None â€” Return the current IC datetime, or None if no clock exists.`
-- `get_resistance_modifier(target: 'ObjectDB', damage_type: world.conditions.models.DamageType | None = None) -> world.conditions.types.ResistanceModifierResult â€” Get the total resistance modifier for a damage type from active conditions.`
-- `get_turn_order_modifier(target: 'ObjectDB') -> int â€” Get the total turn order modifier from all conditions.`
-- `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool â€” Check if target has a specific condition.`
-- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult â€” Main check resolution function.`
-- `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None) -> world.conditions.types.TreatmentOutcome â€” Resolve a TreatmentTemplate against an effect instance.`
-- `process_action_tick(target: 'ObjectDB') -> world.conditions.types.RoundTickResult â€” Process on-action damage for conditions (when target takes an action).`
-- `process_damage_interactions(target: 'ObjectDB', damage_type: world.conditions.models.DamageType) -> world.conditions.types.DamageInteractionResult â€” Process condition interactions when target takes damage.`
-- `process_round_end(target: 'ObjectDB') -> world.conditions.types.RoundTickResult â€” Process end-of-round effects for all conditions on a target.`
-- `process_round_start(target: 'ObjectDB') -> world.conditions.types.RoundTickResult â€” Process start-of-round effects for all conditions on a target.`
-- `remove_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, remove_all_stacks: bool = True) -> bool â€” Remove a condition from a target.`
-- `remove_conditions_by_category(target: 'ObjectDB', category: 'ConditionCategory') -> list[world.conditions.models.ConditionTemplate] â€” Remove all conditions in a category from a target.`
-- `suppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, duration_rounds: int | None = None) -> bool â€” Temporarily suppress a condition's effects.`
-- `unsuppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate) -> bool â€” Remove suppression from a condition.`
+- `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult — Increment a condition's severity and advance stage if threshold crossed.`
+- `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult — Apply a condition to a target, handling stacking and interactions.`
+- `apply_stage_entry_aftermath(payload: flows.events.payloads.ConditionStageChangedPayload) -> None — On ascending stage changes, apply the stage's on_entry_conditions.`
+- `bulk_apply_conditions(applications: list[world.conditions.types.BulkConditionApplication], *, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> list[world.conditions.types.ApplyConditionResult] — Apply multiple conditions in a single transaction with batched queries.`
+- `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int — Remove all conditions from a target.`
+- `dataclass(cls=None, /, *, init=True, repr=True, eq=True, order=False, unsafe_hash=False, frozen=False, match_args=True, kw_only=False, slots=False, weakref_slot=False) — Add dunder methods based on the fields defined in the class.`
+- `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary — Scheduler entry point. Decays all opt-in conditions by one tick.`
+- `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult — Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
+- `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x0000015FA5E69400>, default_factory=<dataclasses._MISSING_TYPE object at 0x0000015FA5E69400>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x0000015FA5E69400>) — Return an object to identify dataclass fields.`
+- `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
+- `get_aggro_priority(target: 'ObjectDB') -> int — Get the total aggro priority from all conditions.`
+- `get_all_capability_values(target: 'ObjectDB') -> dict[int, int] — Get all capability values for a character.`
+- `get_capability_status(target: 'ObjectDB', capability: world.conditions.models.CapabilityType) -> world.conditions.types.CapabilityStatus — Get the status of a capability for a target based on active conditions.`
+- `get_capability_value(target: 'ObjectDB', capability: world.conditions.models.CapabilityType) -> int — Get the total value of a capability for a character.`
+- `get_check_modifier(target: 'ObjectDB', check_type: world.checks.models.CheckType) -> world.conditions.types.CheckModifierResult — Get the total modifier for a check type from active conditions.`
+- `get_condition_control_percent_modifier(target: 'ObjectDB', condition_name: str) -> int — Get percentage modifier to control loss rate for a condition.`
+- `get_condition_instance(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> world.conditions.models.ConditionInstance | None — Get a specific condition instance on a target.`
+- `get_condition_intensity_percent_modifier(target: 'ObjectDB', condition_name: str) -> int — Get percentage modifier to intensity gain for a condition.`
+- `get_condition_penalty_percent_modifier(target: 'ObjectDB', condition_name: str) -> int — Get percentage modifier to check penalties for a condition.`
+- `get_damage_multiplier(success_level: int) -> decimal.Decimal — Look up the damage multiplier for a given success level.`
+- `get_ic_now(*, real_now: datetime.datetime | None = None) -> datetime.datetime | None — Return the current IC datetime, or None if no clock exists.`
+- `get_resistance_modifier(target: 'ObjectDB', damage_type: world.conditions.models.DamageType | None = None) -> world.conditions.types.ResistanceModifierResult — Get the total resistance modifier for a damage type from active conditions.`
+- `get_turn_order_modifier(target: 'ObjectDB') -> int — Get the total turn order modifier from all conditions.`
+- `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool — Check if target has a specific condition.`
+- `perform_check(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0) -> world.checks.types.CheckResult — Main check resolution function.`
+- `perform_treatment(helper_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', scene: 'Scene', treatment: world.conditions.models.TreatmentTemplate, target_effect: 'ConditionInstance | PendingAlteration', bond_thread: 'Thread | None' = None) -> world.conditions.types.TreatmentOutcome — Resolve a TreatmentTemplate against an effect instance.`
+- `process_action_tick(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process on-action damage for conditions (when target takes an action).`
+- `process_damage_interactions(target: 'ObjectDB', damage_type: world.conditions.models.DamageType) -> world.conditions.types.DamageInteractionResult — Process condition interactions when target takes damage.`
+- `process_round_end(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process end-of-round effects for all conditions on a target.`
+- `process_round_start(target: 'ObjectDB') -> world.conditions.types.RoundTickResult — Process start-of-round effects for all conditions on a target.`
+- `remove_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, remove_all_stacks: bool = True) -> bool — Remove a condition from a target.`
+- `remove_conditions_by_category(target: 'ObjectDB', category: 'ConditionCategory') -> list[world.conditions.models.ConditionTemplate] — Remove all conditions in a category from a target.`
+- `suppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, duration_rounds: int | None = None) -> bool — Temporarily suppress a condition's effects.`
+- `unsuppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate) -> bool — Remove suppression from a condition.`
+
+
+## world.covenants
+
+### Covenant
+**Foreign Keys:**
+  - legend_summary -> societies.CovenantLegendSummary [OneToOne] (nullable)
+**Pointed to by:**
+  - ritualsessionreference_set <- magic.RitualSessionReference
+  - storylines <- stories.Story
+  - legend_credits <- societies.CovenantLegendCredit
+  - memberships <- covenants.CharacterCovenantRole
+
+### CovenantRole
+**Foreign Keys:**
+  - parent_role -> covenants.CovenantRole [FK] (nullable)
+  - resonance -> magic.Resonance [FK] (nullable)
+**Pointed to by:**
+  - ritualsessionreference_set <- magic.RitualSessionReference
+  - anchored_threads <- magic.Thread
+  - sub_roles <- covenants.CovenantRole
+  - gear_compatibilities <- covenants.GearArchetypeCompatibility
+  - character_assignments <- covenants.CharacterCovenantRole
+  - combat_participations <- combat.CombatParticipant
+
+### GearArchetypeCompatibility
+**Foreign Keys:**
+  - covenant_role -> covenants.CovenantRole [FK]
+
+### CharacterCovenantRole
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - covenant_role -> covenants.CovenantRole [FK]
+  - covenant -> covenants.Covenant [FK]
+
+### CovenantLevelThreshold
+
+### Service Functions
+- `add_member(*, covenant: 'Covenant', character_sheet: 'CharacterSheet', role: 'CovenantRole') -> 'CharacterCovenantRole' — Create a new active membership row. Atomic.`
+- `assign_covenant_role(*, character_sheet: 'CharacterSheet', covenant: 'Covenant', covenant_role: 'CovenantRole') -> 'CharacterCovenantRole' — Create a new active CharacterCovenantRole row. Atomic.`
+- `change_role(*, membership: 'CharacterCovenantRole', new_role: 'CovenantRole') -> 'CharacterCovenantRole' — Close the existing membership row; create a new active row in the same covenant.`
+- `clear_engaged_for_type(*, character_sheet: 'CharacterSheet', covenant_type: 'str') -> 'None' — Un-engage every engaged active membership of the given type for the character.`
+- `clear_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Un-engage this membership. Idempotent.`
+- `create_covenant(*, name: 'str', covenant_type: 'str', sworn_objective: 'str', founders: 'Sequence[CovenantFounder]') -> 'Covenant' — Create a covenant with its initial set of founder memberships. Atomic.`
+- `create_covenant_via_session(*, session: 'RitualSession') -> 'Covenant' — Dispatched on FORMATION fire. Unpacks the session into create_covenant args.`
+- `dissolve_covenant(*, covenant: 'Covenant') -> 'None' — End all active memberships of the covenant; mark covenant dissolved.`
+- `end_covenant_role(*, assignment: 'CharacterCovenantRole') -> 'None' — Mark an active assignment as ended. Idempotent. Un-engages first.`
+- `evaluate_scene_engagement(*, character_sheet: 'CharacterSheet', room: 'ObjectDB') -> 'None' — Auto-engage a Durance covenant if co-presence prerequisites met.`
+- `induct_member_via_session(*, session: 'RitualSession') -> 'CharacterCovenantRole' — Dispatched on INDUCTION fire. Unpacks the session into add_member args.`
+- `is_gear_compatible(role: 'CovenantRole', archetype: 'str') -> 'bool' — Return True if a row exists in GearArchetypeCompatibility for this pair.`
+- `promote_to_subrole(*, membership: 'CharacterCovenantRole', target_subrole: 'CovenantRole') -> 'CharacterCovenantRole' — Promote a character from their current parent role to a sub-role.`
+- `recompute_covenant_level(*, covenant: 'Covenant') -> 'int | None' — Look up the covenant's current legend total, find the max satisfied`
+- `set_engaged_membership(*, membership: 'CharacterCovenantRole') -> 'None' — Engage this membership; un-engage other same-type rows for the same character.`
 
 
 ## world.goals
@@ -970,9 +1029,9 @@
   - goal -> goals.CharacterGoal [FK]
 
 ### Service Functions
-- `get_goal_bonus(character: 'CharacterSheet', domain: 'ModifierTarget') -> int â€” Get the goal bonus for a specific domain, applying percentage modifiers.`
-- `get_goal_bonuses_breakdown(character: 'CharacterSheet') -> dict[str, world.goals.types.GoalBonusBreakdown] â€” Get breakdown of all goal bonuses for a character.`
-- `get_total_goal_points(character: 'CharacterSheet') -> int â€” Get the total goal points available for a character to distribute.`
+- `get_goal_bonus(character: 'CharacterSheet', domain: 'ModifierTarget') -> int — Get the goal bonus for a specific domain, applying percentage modifiers.`
+- `get_goal_bonuses_breakdown(character: 'CharacterSheet') -> dict[str, world.goals.types.GoalBonusBreakdown] — Get breakdown of all goal bonuses for a character.`
+- `get_total_goal_points(character: 'CharacterSheet') -> int — Get the total goal points available for a character to distribute.`
 
 
 ## world.locations
@@ -1002,9 +1061,13 @@
   - tenant_organization -> societies.Organization [FK] (nullable)
 
 ### Service Functions
-- `current_tenants(room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' â€” Return all currently-active tenancies that apply to a room.`
-- `effective_owner(room: 'DefaultObject') -> 'LocationOwnership | None' â€” Cascade-resolve the most-specific active owner of a room.`
-- `effective_stat(room: 'DefaultObject', stat_key: 'StatKey') -> 'int' â€” Cascade-resolve a single stat for a room, clamped to per-stat bounds.`
+- `current_tenants(room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return all currently-active tenancies that apply to a room.`
+- `effective_owner(room: 'DefaultObject') -> 'LocationOwnership | None' — Cascade-resolve the most-specific active owner of a room.`
+- `effective_stat(room: 'DefaultObject', stat_key: 'StatKey') -> 'int' — Cascade-resolve a single stat for a room, clamped to per-stat bounds.`
+- `is_owner(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``ownership_for(persona, room)`` returns a row.`
+- `is_tenant(persona: 'Persona', room: 'DefaultObject') -> 'bool' — True when ``tenancies_for(persona, room)`` has any rows.`
+- `ownership_for(persona: 'Persona', room: 'DefaultObject') -> 'LocationOwnership | None' — Return the LocationOwnership row that gives this persona standing`
+- `tenancies_for(persona: 'Persona', room: 'DefaultObject') -> 'QuerySet[LocationTenancy]' — Return the QuerySet of currently-active tenancies that give this`
 
 
 ## world.magic
@@ -1049,6 +1112,7 @@
   - pull_effects <- magic.ThreadPullEffect
   - threads <- magic.Thread
   - corruption_condition_templates <- conditions.ConditionTemplate
+  - covenant_subroles <- covenants.CovenantRole
   - combo_slots <- combat.ComboSlot
   - combat_pulls <- combat.CombatPull
 
@@ -1340,6 +1404,7 @@
   - performances <- magic.AnimaRitualPerformance
   - known_by_records <- magic.CharacterRitualKnowledge
   - requirements <- magic.RitualComponentRequirement
+  - ritualsession_set <- magic.RitualSession
   - capstone_events <- relationships.RelationshipCapstone
 
 ### RitualComponentRequirement
@@ -1360,6 +1425,28 @@
   - room_aura_profile -> magic.RoomAuraProfile [FK]
   - resonance -> magic.Resonance [FK]
   - set_by -> accounts.AccountDB [FK] (nullable)
+
+### RitualSession
+**Foreign Keys:**
+  - ritual -> magic.Ritual [FK]
+  - initiator -> character_sheets.CharacterSheet [FK]
+**Pointed to by:**
+  - participants <- magic.RitualSessionParticipant
+  - references <- magic.RitualSessionReference
+
+### RitualSessionParticipant
+**Foreign Keys:**
+  - session -> magic.RitualSession [FK]
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+**Pointed to by:**
+  - references <- magic.RitualSessionReference
+
+### RitualSessionReference
+**Foreign Keys:**
+  - session -> magic.RitualSession [FK]
+  - participant -> magic.RitualSessionParticipant [FK] (nullable)
+  - ref_covenant -> covenants.Covenant [FK] (nullable)
+  - ref_covenant_role -> covenants.CovenantRole [FK] (nullable)
 
 ### SineatingPendingOffer
 **Foreign Keys:**
@@ -1455,41 +1542,41 @@
   - unlock -> magic.ThreadWeavingUnlock [FK]
 
 ### Service Functions
-- `accept_thread_weaving_unlock(learner: 'CharacterSheet', offer: 'ThreadWeavingTeachingOffer') -> 'CharacterThreadWeavingUnlock' â€” Accept a ThreadWeavingTeachingOffer on behalf of a learner (Spec A Â§6.1).`
-- `apply_damage_reduction_from_threads(character: 'ObjectDB', incoming_damage: 'int') -> 'int' â€” Reduce incoming damage by thread-derived DAMAGE_TAKEN_REDUCTION.`
-- `calculate_affinity_breakdown(resonances: 'QuerySet[ResonanceModel]') -> 'dict[str, int]' â€” Derive affinity counts from a set of resonances.`
-- `calculate_effective_anima_cost(*, base_cost: 'int', runtime_intensity: 'int', runtime_control: 'int', current_anima: 'int') -> 'AnimaCostResult' â€” Calculate effective anima cost using the delta formula.`
-- `calculate_soulfray_severity(current_anima: 'int', max_anima: 'int', deficit: 'int', config: 'SoulfrayConfig') -> 'int' â€” Compute Soulfray severity contribution from post-deduction anima state.`
-- `compute_anchor_cap(thread: 'Thread') -> 'int' â€” Return the anchor-side cap for this thread (Spec A Â§2.4).`
-- `compute_effective_cap(thread: 'Thread') -> 'int' â€” Return min(path cap, anchor cap) â€” the binding limit on this thread (Spec A Â§2.4).`
-- `compute_path_cap(character_sheet: 'CharacterSheet') -> 'int' â€” Return the path-side cap for a character (Spec A Â§2.4).`
-- `compute_thread_weaving_xp_cost(unlock: 'ThreadWeavingUnlock', learner: 'CharacterSheet') -> 'int' â€” Compute the XP cost for a learner to acquire a ThreadWeavingUnlock (Spec A Â§6.2).`
-- `create_pending_alteration(*, character: 'CharacterSheet', tier: 'int', origin_affinity: 'Affinity', origin_resonance: 'ResonanceModel', scene: 'Scene | None', triggering_technique: 'Technique | None' = None, triggering_intensity: 'int | None' = None, triggering_control: 'int | None' = None, triggering_anima_cost: 'int | None' = None, triggering_anima_deficit: 'int | None' = None, triggering_soulfray_stage: 'int | None' = None, audere_active: 'bool' = False) -> 'PendingAlterationResult' â€” Create or escalate a PendingAlteration for a character.`
-- `cross_thread_xp_lock(character_sheet: 'CharacterSheet', thread: 'Thread', boundary_level: 'int') -> 'ThreadLevelUnlock' â€” Pay XP to unlock an XP-locked level boundary on a thread.`
-- `deduct_anima(character: 'ObjectDB', effective_cost: 'int') -> 'int' â€” Deduct anima from character, returning the overburn deficit.`
-- `get_aura_percentages(character_sheet: 'CharacterSheet') -> 'AuraPercentages' â€” Calculate aura percentages from affinity totals and resonance-targeting modifiers.`
-- `get_library_entries(*, tier: 'int', character_affinity_id: 'int | None' = None) -> 'QuerySet[MagicalAlterationTemplate]' â€” Return library entries matching the given tier.`
-- `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None') -> 'RuntimeTechniqueStats' â€” Calculate runtime intensity and control for a technique.`
-- `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' â€” Return the current Soulfray stage warning for the safety checkpoint.`
-- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_aura_profile: 'RoomAuraProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None) -> 'CharacterResonance' â€” Atomically grant resonance AND write the ResonanceGrant ledger row.`
-- `has_pending_alterations(character: 'CharacterSheet') -> 'bool' â€” Check if this character has any unresolved Mage Scars.`
-- `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' â€” Return threads that have matching CharacterResonance balance > 0 and level < cap.`
-- `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' â€” Return threads whose dev_points are within `within` of the next XP-locked boundary.`
-- `preview_resonance_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None) -> 'PullPreviewResult' â€” Read-only preview of a resonance pull (Spec A Â§5.6).`
-- `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str') -> 'Ritual | None' â€” Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
-- `recompute_max_health_with_threads(character_sheet: 'CharacterSheet') -> 'int' â€” Recompute max_health folding in thread-derived VITAL_BONUS addends.`
-- `reconcile_ritual_knowledge(roster_entry: 'RosterEntry') -> None â€” Ensure CharacterRitualKnowledge rows exist for all granted rituals.`
-- `resolve_pending_alteration(*, pending: 'PendingAlteration', name: 'str', player_description: 'str', observer_description: 'str', weakness_damage_type: 'DamageType | None' = None, weakness_magnitude: 'int' = 0, resonance_bonus_magnitude: 'int' = 0, social_reactivity_magnitude: 'int' = 0, is_visible_at_rest: 'bool', resolved_by: 'AccountDB | None', parent_template: 'MagicalAlterationTemplate | None' = None, is_library_entry: 'bool' = False, library_template: 'MagicalAlterationTemplate | None' = None) -> 'AlterationResolutionResult' â€” Resolve a PendingAlteration by creating or selecting a template.`
-- `resolve_pull_effects(threads: 'list[Thread]', tier: 'int', *, in_combat: 'bool') -> 'list[ResolvedPullEffect]' â€” Resolve every (thread Ã— effect_tier 0..tier) pair into ResolvedPullEffect rows.`
-- `select_mishap_pool(control_deficit: 'int') -> 'ConsequencePool | None' â€” Select a control mishap consequence pool based on deficit magnitude.`
-- `spend_resonance_for_imbuing(character_sheet: 'CharacterSheet', thread: 'Thread', amount: 'int') -> 'ThreadImbueResult' â€” Deduct resonance balance and greedily advance thread level.`
-- `spend_resonance_for_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', action_context: 'PullActionContext') -> 'ResonancePullResult' â€” Atomic pull commit (Spec A Â§5.4 + Â§7.4).`
-- `staff_clear_alteration(*, pending: 'PendingAlteration', staff_account: 'AccountDB | None', notes: 'str' = '') -> 'None' â€” Clear a PendingAlteration without resolving it. Staff escape hatch.`
-- `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' â€” Return threads that are at their effective cap (no further imbuing helps).`
-- `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' â€” Update the narrative name and/or description of a thread.`
-- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None) -> 'TechniqueUseResult' â€” Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
-- `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None) -> 'list[str]' â€” Validate a resolution payload against the pending's tier and origin.`
-- `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' â€” Create a new Thread anchored to the given target.`
+- `accept_thread_weaving_unlock(learner: 'CharacterSheet', offer: 'ThreadWeavingTeachingOffer') -> 'CharacterThreadWeavingUnlock' — Accept a ThreadWeavingTeachingOffer on behalf of a learner (Spec A §6.1).`
+- `apply_damage_reduction_from_threads(character: 'ObjectDB', incoming_damage: 'int') -> 'int' — Reduce incoming damage by thread-derived DAMAGE_TAKEN_REDUCTION.`
+- `calculate_affinity_breakdown(resonances: 'QuerySet[ResonanceModel]') -> 'dict[str, int]' — Derive affinity counts from a set of resonances.`
+- `calculate_effective_anima_cost(*, base_cost: 'int', runtime_intensity: 'int', runtime_control: 'int', current_anima: 'int') -> 'AnimaCostResult' — Calculate effective anima cost using the delta formula.`
+- `calculate_soulfray_severity(current_anima: 'int', max_anima: 'int', deficit: 'int', config: 'SoulfrayConfig') -> 'int' — Compute Soulfray severity contribution from post-deduction anima state.`
+- `compute_anchor_cap(thread: 'Thread') -> 'int' — Return the anchor-side cap for this thread (Spec A §2.4).`
+- `compute_effective_cap(thread: 'Thread') -> 'int' — Return min(path cap, anchor cap) — the binding limit on this thread (Spec A §2.4).`
+- `compute_path_cap(character_sheet: 'CharacterSheet') -> 'int' — Return the path-side cap for a character (Spec A §2.4).`
+- `compute_thread_weaving_xp_cost(unlock: 'ThreadWeavingUnlock', learner: 'CharacterSheet') -> 'int' — Compute the XP cost for a learner to acquire a ThreadWeavingUnlock (Spec A §6.2).`
+- `create_pending_alteration(*, character: 'CharacterSheet', tier: 'int', origin_affinity: 'Affinity', origin_resonance: 'ResonanceModel', scene: 'Scene | None', triggering_technique: 'Technique | None' = None, triggering_intensity: 'int | None' = None, triggering_control: 'int | None' = None, triggering_anima_cost: 'int | None' = None, triggering_anima_deficit: 'int | None' = None, triggering_soulfray_stage: 'int | None' = None, audere_active: 'bool' = False) -> 'PendingAlterationResult' — Create or escalate a PendingAlteration for a character.`
+- `cross_thread_xp_lock(character_sheet: 'CharacterSheet', thread: 'Thread', boundary_level: 'int') -> 'ThreadLevelUnlock' — Pay XP to unlock an XP-locked level boundary on a thread.`
+- `deduct_anima(character: 'ObjectDB', effective_cost: 'int') -> 'int' — Deduct anima from character, returning the overburn deficit.`
+- `get_aura_percentages(character_sheet: 'CharacterSheet') -> 'AuraPercentages' — Calculate aura percentages from affinity totals and resonance-targeting modifiers.`
+- `get_library_entries(*, tier: 'int', character_affinity_id: 'int | None' = None) -> 'QuerySet[MagicalAlterationTemplate]' — Return library entries matching the given tier.`
+- `get_runtime_technique_stats(technique: 'Technique', character: 'ObjectDB | None') -> 'RuntimeTechniqueStats' — Calculate runtime intensity and control for a technique.`
+- `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' — Return the current Soulfray stage warning for the safety checkpoint.`
+- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_aura_profile: 'RoomAuraProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None) -> 'CharacterResonance' — Atomically grant resonance AND write the ResonanceGrant ledger row.`
+- `has_pending_alterations(character: 'CharacterSheet') -> 'bool' — Check if this character has any unresolved Mage Scars.`
+- `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that have matching CharacterResonance balance > 0 and level < cap.`
+- `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' — Return threads whose dev_points are within `within` of the next XP-locked boundary.`
+- `preview_resonance_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None) -> 'PullPreviewResult' — Read-only preview of a resonance pull (Spec A §5.6).`
+- `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str') -> 'Ritual | None' — Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
+- `recompute_max_health_with_threads(character_sheet: 'CharacterSheet') -> 'int' — Recompute max_health folding in thread-derived VITAL_BONUS addends.`
+- `reconcile_ritual_knowledge(roster_entry: 'RosterEntry') -> None — Ensure CharacterRitualKnowledge rows exist for all granted rituals.`
+- `resolve_pending_alteration(*, pending: 'PendingAlteration', name: 'str', player_description: 'str', observer_description: 'str', weakness_damage_type: 'DamageType | None' = None, weakness_magnitude: 'int' = 0, resonance_bonus_magnitude: 'int' = 0, social_reactivity_magnitude: 'int' = 0, is_visible_at_rest: 'bool', resolved_by: 'AccountDB | None', parent_template: 'MagicalAlterationTemplate | None' = None, is_library_entry: 'bool' = False, library_template: 'MagicalAlterationTemplate | None' = None) -> 'AlterationResolutionResult' — Resolve a PendingAlteration by creating or selecting a template.`
+- `resolve_pull_effects(threads: 'list[Thread]', tier: 'int', *, in_combat: 'bool') -> 'list[ResolvedPullEffect]' — Resolve every (thread × effect_tier 0..tier) pair into ResolvedPullEffect rows.`
+- `select_mishap_pool(control_deficit: 'int') -> 'ConsequencePool | None' — Select a control mishap consequence pool based on deficit magnitude.`
+- `spend_resonance_for_imbuing(character_sheet: 'CharacterSheet', thread: 'Thread', amount: 'int') -> 'ThreadImbueResult' — Deduct resonance balance and greedily advance thread level.`
+- `spend_resonance_for_pull(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', tier: 'int', threads: 'list[Thread]', action_context: 'PullActionContext') -> 'ResonancePullResult' — Atomic pull commit (Spec A §5.4 + §7.4).`
+- `staff_clear_alteration(*, pending: 'PendingAlteration', staff_account: 'AccountDB | None', notes: 'str' = '') -> 'None' — Clear a PendingAlteration without resolving it. Staff escape hatch.`
+- `threads_blocked_by_cap(character_sheet: 'CharacterSheet') -> 'list[Thread]' — Return threads that are at their effective cap (no further imbuing helps).`
+- `update_thread_narrative(thread: 'Thread', *, name: 'str | None' = None, description: 'str | None' = None) -> 'Thread' — Update the narrative name and/or description of a thread.`
+- `use_technique(*, character: 'ObjectDB', technique: 'Technique', resolve_fn: 'Callable[..., Any]', confirm_soulfray_risk: 'bool' = True, check_result: 'CheckResult | None' = None, targets: 'list | None' = None) -> 'TechniqueUseResult' — Orchestrate technique use: cost -> checkpoint -> resolve -> soulfray -> mishap.`
+- `validate_alteration_resolution(*, pending_tier: 'int', pending_affinity_id: 'int', pending_resonance_id: 'int', payload: 'dict', is_staff: 'bool', character_sheet: 'CharacterSheet | None' = None) -> 'list[str]' — Validate a resolution payload against the pending's tier and origin.`
+- `weave_thread(character_sheet: 'CharacterSheet', target_kind: 'str', target: 'object', resonance: 'ResonanceModel', *, name: 'str' = '', description: 'str' = '') -> 'Thread' — Create a new Thread anchored to the given target.`
 
 
 ## world.mechanics
@@ -1675,20 +1762,20 @@
   - source_content_type -> contenttypes.ContentType [FK]
 
 ### Service Functions
-- `chart_has_success_outcomes(rank_difference: int) -> bool â€” Check if the ResultChart for this rank difference has any success outcomes.`
-- `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' â€” Sum covenant-role contributions across equipped items, gated on engagement.`
-- `create_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'list[CharacterModifier]' â€” Create ModifierSource + CharacterModifier records for all effects of a distinction.`
-- `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' â€” Delete all modifier records for a distinction.`
-- `get_all_capability_values(target: 'ObjectDB') -> dict[int, int] â€” Get all capability values for a character.`
-- `get_available_actions(character: 'ObjectDB', location: 'ObjectDB', capability_sources: 'list[CapabilitySource] | None' = None) -> 'list[AvailableAction]' â€” Generate available Actions for a character at a location.`
-- `get_capability_sources_for_character(character: 'ObjectDB') -> 'list[CapabilitySource]' â€” Collect all Capability sources for a character (per-source, not aggregated).`
-- `get_modifier_breakdown(character, modifier_target: 'ModifierTarget') -> 'ModifierBreakdown' â€” Get detailed breakdown of all modifiers for a target.`
-- `get_modifier_total(character, modifier_target: 'ModifierTarget') -> 'int' â€” Get total modifier value for a target.`
-- `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' â€” PLACEHOLDER â€” returns 0 in PR1. PR3 reads ItemCombatStat.`
-- `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' â€” Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D Â§5.2).`
-- `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int â€” Preview the rank difference for a check without rolling.`
-- `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' â€” PLACEHOLDER â€” returns 0 in PR1. PR3 wires authored values.`
-- `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' â€” Update CharacterModifier values when rank changes.`
+- `chart_has_success_outcomes(rank_difference: int) -> bool — Check if the ResultChart for this rank difference has any success outcomes.`
+- `covenant_role_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum covenant-role contributions across equipped items, gated on engagement.`
+- `create_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'list[CharacterModifier]' — Create ModifierSource + CharacterModifier records for all effects of a distinction.`
+- `delete_distinction_modifiers(character_distinction: 'CharacterDistinction') -> 'int' — Delete all modifier records for a distinction.`
+- `get_all_capability_values(target: 'ObjectDB') -> dict[int, int] — Get all capability values for a character.`
+- `get_available_actions(character: 'ObjectDB', location: 'ObjectDB', capability_sources: 'list[CapabilitySource] | None' = None) -> 'list[AvailableAction]' — Generate available Actions for a character at a location.`
+- `get_capability_sources_for_character(character: 'ObjectDB') -> 'list[CapabilitySource]' — Collect all Capability sources for a character (per-source, not aggregated).`
+- `get_modifier_breakdown(character, modifier_target: 'ModifierTarget') -> 'ModifierBreakdown' — Get detailed breakdown of all modifiers for a target.`
+- `get_modifier_total(character, modifier_target: 'ModifierTarget') -> 'int' — Get total modifier value for a target.`
+- `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' — PLACEHOLDER — returns 0 in PR1. PR3 reads ItemCombatStat.`
+- `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' — Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
+- `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0) -> int — Preview the rank difference for a check without rolling.`
+- `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' — PLACEHOLDER — returns 0 in PR1. PR3 wires authored values.`
+- `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' — Update CharacterModifier values when rank changes.`
 
 
 ## world.narrative
@@ -1719,10 +1806,10 @@
   - story -> stories.Story [FK]
 
 ### Service Functions
-- `broadcast_gemit(*, body: 'str', sender_account: 'AccountDB', related_era: 'Era | None' = None, related_story: 'Story | None' = None) -> 'Gemit' â€” Create a Gemit and push to all currently-connected sessions in green.`
-- `deliver_queued_messages(character_sheet: 'CharacterSheet') -> 'int' â€” Push all undelivered messages for this character and mark delivered.`
-- `send_narrative_message(*, recipients: 'Iterable[CharacterSheet]', body: 'str', category: 'str', sender_account: 'AccountDB | None' = None, ooc_note: 'str' = '', related_story: 'Story | None' = None, related_beat_completion: 'BeatCompletion | None' = None, related_episode_resolution: 'EpisodeResolution | None' = None) -> 'NarrativeMessage' â€” Create a NarrativeMessage and fan out deliveries to each recipient.`
-- `send_story_ooc_message(*, story: 'Story', sender_account: 'AccountDB', body: 'str', ooc_note: 'str' = '') -> 'NarrativeMessage' â€” Lead GM or staff sends an OOC notice to all participants of a story.`
+- `broadcast_gemit(*, body: 'str', sender_account: 'AccountDB', related_era: 'Era | None' = None, related_story: 'Story | None' = None) -> 'Gemit' — Create a Gemit and push to all currently-connected sessions in green.`
+- `deliver_queued_messages(character_sheet: 'CharacterSheet') -> 'int' — Push all undelivered messages for this character and mark delivered.`
+- `send_narrative_message(*, recipients: 'Iterable[CharacterSheet]', body: 'str', category: 'str', sender_account: 'AccountDB | None' = None, ooc_note: 'str' = '', related_story: 'Story | None' = None, related_beat_completion: 'BeatCompletion | None' = None, related_episode_resolution: 'EpisodeResolution | None' = None) -> 'NarrativeMessage' — Create a NarrativeMessage and fan out deliveries to each recipient.`
+- `send_story_ooc_message(*, story: 'Story', sender_account: 'AccountDB', body: 'str', ooc_note: 'str' = '') -> 'NarrativeMessage' — Lead GM or staff sends an OOC notice to all participants of a story.`
 
 
 ## world.progression
@@ -1897,32 +1984,32 @@
   - author_account -> accounts.AccountDB [FK]
 
 ### Service Functions
-- `award_cg_conversion_xp(character: evennia.objects.models.ObjectDB, *, remaining_cg_points: int, conversion_rate: int) -> None â€” Award locked XP to a character for unspent CG points.`
-- `award_check_development(character_sheet: 'CharacterSheet', check_type: 'CheckType', effort_level: 'str | None', path_level: 'int') -> 'list[tuple[str, int, int]]' â€” Award dp to traits used in a check.`
-- `award_combat_development(characters: list, combat_actions: dict[str, list[str]]) -> dict[str, dict[str, int]] â€” Award development points for combat actions.`
-- `award_crafting_development(characters: list, crafting_actions: dict[str, str]) -> dict[str, dict[str, int]] â€” Award development points for crafting actions.`
-- `award_development_points(character_sheet: 'CharacterSheet', trait: 'Trait', source: 'str', amount: 'int', scene: 'Scene | None' = None, reason: 'str' = ProgressionReason.SCENE_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'DevelopmentTransaction' â€” Award development points to a character and automatically apply them.`
-- `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: evennia.objects.models.ObjectDB | None = None) -> world.progression.types.AwardResult â€” Award kudos to an account with full audit trail.`
-- `award_scene_development_points(scene: world.scenes.models.Scene, participants: list, awards: dict[str, dict]) -> None â€” Award development points to scene participants.`
-- `award_social_development(characters: list, social_actions: dict[str, list[str]]) -> dict[str, dict[str, int]] â€” Award development points for social actions.`
-- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' â€” Award XP to an account.`
-- `calculate_automatic_scene_awards(scene: world.scenes.models.Scene, participants: list) -> dict[str, dict] â€” Calculate automatic development point awards based on scene content.`
-- `calculate_check_dev_points(effort_level: 'str', path_level: 'int') -> 'int' â€” Calculate dp earned from a single check.`
-- `calculate_level_up_requirements(character: 'ObjectDB', character_class: 'CharacterClass', target_level: 'int') -> 'LevelUpRequirements | dict[str, str]' â€” Calculate what's required to level up a character in a specific class.`
-- `cast_vote(voter_account: evennia.accounts.models.AccountDB, target_type: str, target_id: int, author_account: evennia.accounts.models.AccountDB) -> world.progression.models.voting.WeeklyVote â€” Cast a vote on a piece of content.`
-- `check_requirements_for_unlock(character: 'ObjectDB', unlock_target: 'ClassLevelUnlock') -> 'tuple[bool, list[str]]' â€” Check if a character meets all requirements for an unlock.`
-- `claim_kudos(account: evennia.accounts.models.AccountDB, amount: int, claim_category: world.progression.models.kudos.KudosClaimCategory, description: str) -> world.progression.types.ClaimResult â€” Claim kudos from an account for conversion to rewards.`
-- `claim_kudos_for_xp(account: evennia.accounts.models.AccountDB, amount: int, claim_category: world.progression.models.kudos.KudosClaimCategory, description: str = '') -> world.progression.types.KudosXPResult â€” Claim kudos and convert the reward to account-level XP.`
-- `get_available_unlocks_for_character(character: 'ObjectDB') -> 'AvailableUnlocks' â€” Get all unlocks that a character could potentially purchase.`
-- `get_development_suggestions_for_character(character: 'ObjectDB') -> 'dict[str, list[str]]' â€” Get development suggestions for a character based on their current traits.`
-- `get_or_create_vote_budget(account: evennia.accounts.models.AccountDB, game_week: world.game_clock.models.GameWeek | None = None) -> world.progression.models.voting.WeeklyVoteBudget â€” Return the vote budget for the current week, creating with defaults if needed.`
-- `get_or_create_xp_tracker(account: 'AccountDB') -> 'ExperiencePointsData' â€” Get or create XP tracker for an account.`
-- `get_vote_state(voter_account: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> bool â€” Return whether the voter has an unprocessed vote for this target this week.`
-- `get_votes_by_voter(voter_account: evennia.accounts.models.AccountDB) -> django.db.models.query.QuerySet â€” Return all unprocessed votes for the current week.`
-- `increment_scene_bonus(account: evennia.accounts.models.AccountDB) -> None â€” Add 1 to scene_bonus_votes for the current week's budget (capped at 7).`
-- `on_scene_finished(scene: world.scenes.models.Scene) -> None â€” Grant scene completion rewards to all participants.`
-- `remove_vote(voter_account: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> None â€” Remove an unprocessed vote for the current week.`
-- `spend_xp_on_unlock(character: 'ObjectDB', unlock_target: 'ClassLevelUnlock', gm: 'AccountDB | None' = None) -> 'tuple[bool, str, CharacterUnlock | None]' â€” Spend XP to unlock something for a character.`
+- `award_cg_conversion_xp(character: evennia.objects.models.ObjectDB, *, remaining_cg_points: int, conversion_rate: int) -> None — Award locked XP to a character for unspent CG points.`
+- `award_check_development(character_sheet: 'CharacterSheet', check_type: 'CheckType', effort_level: 'str | None', path_level: 'int') -> 'list[tuple[str, int, int]]' — Award dp to traits used in a check.`
+- `award_combat_development(characters: list, combat_actions: dict[str, list[str]]) -> dict[str, dict[str, int]] — Award development points for combat actions.`
+- `award_crafting_development(characters: list, crafting_actions: dict[str, str]) -> dict[str, dict[str, int]] — Award development points for crafting actions.`
+- `award_development_points(character_sheet: 'CharacterSheet', trait: 'Trait', source: 'str', amount: 'int', scene: 'Scene | None' = None, reason: 'str' = ProgressionReason.SCENE_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'DevelopmentTransaction' — Award development points to a character and automatically apply them.`
+- `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: evennia.objects.models.ObjectDB | None = None) -> world.progression.types.AwardResult — Award kudos to an account with full audit trail.`
+- `award_scene_development_points(scene: world.scenes.models.Scene, participants: list, awards: dict[str, dict]) -> None — Award development points to scene participants.`
+- `award_social_development(characters: list, social_actions: dict[str, list[str]]) -> dict[str, dict[str, int]] — Award development points for social actions.`
+- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' — Award XP to an account.`
+- `calculate_automatic_scene_awards(scene: world.scenes.models.Scene, participants: list) -> dict[str, dict] — Calculate automatic development point awards based on scene content.`
+- `calculate_check_dev_points(effort_level: 'str', path_level: 'int') -> 'int' — Calculate dp earned from a single check.`
+- `calculate_level_up_requirements(character: 'ObjectDB', character_class: 'CharacterClass', target_level: 'int') -> 'LevelUpRequirements | dict[str, str]' — Calculate what's required to level up a character in a specific class.`
+- `cast_vote(voter_account: evennia.accounts.models.AccountDB, target_type: str, target_id: int, author_account: evennia.accounts.models.AccountDB) -> world.progression.models.voting.WeeklyVote — Cast a vote on a piece of content.`
+- `check_requirements_for_unlock(character: 'ObjectDB', unlock_target: 'ClassLevelUnlock') -> 'tuple[bool, list[str]]' — Check if a character meets all requirements for an unlock.`
+- `claim_kudos(account: evennia.accounts.models.AccountDB, amount: int, claim_category: world.progression.models.kudos.KudosClaimCategory, description: str) -> world.progression.types.ClaimResult — Claim kudos from an account for conversion to rewards.`
+- `claim_kudos_for_xp(account: evennia.accounts.models.AccountDB, amount: int, claim_category: world.progression.models.kudos.KudosClaimCategory, description: str = '') -> world.progression.types.KudosXPResult — Claim kudos and convert the reward to account-level XP.`
+- `get_available_unlocks_for_character(character: 'ObjectDB') -> 'AvailableUnlocks' — Get all unlocks that a character could potentially purchase.`
+- `get_development_suggestions_for_character(character: 'ObjectDB') -> 'dict[str, list[str]]' — Get development suggestions for a character based on their current traits.`
+- `get_or_create_vote_budget(account: evennia.accounts.models.AccountDB, game_week: world.game_clock.models.GameWeek | None = None) -> world.progression.models.voting.WeeklyVoteBudget — Return the vote budget for the current week, creating with defaults if needed.`
+- `get_or_create_xp_tracker(account: 'AccountDB') -> 'ExperiencePointsData' — Get or create XP tracker for an account.`
+- `get_vote_state(voter_account: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> bool — Return whether the voter has an unprocessed vote for this target this week.`
+- `get_votes_by_voter(voter_account: evennia.accounts.models.AccountDB) -> django.db.models.query.QuerySet — Return all unprocessed votes for the current week.`
+- `increment_scene_bonus(account: evennia.accounts.models.AccountDB) -> None — Add 1 to scene_bonus_votes for the current week's budget (capped at 7).`
+- `on_scene_finished(scene: world.scenes.models.Scene) -> None — Grant scene completion rewards to all participants.`
+- `remove_vote(voter_account: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> None — Remove an unprocessed vote for the current week.`
+- `spend_xp_on_unlock(character: 'ObjectDB', unlock_target: 'ClassLevelUnlock', gm: 'AccountDB | None' = None) -> 'tuple[bool, str, CharacterUnlock | None]' — Spend XP to unlock something for a character.`
 
 
 ## world.realms
@@ -2025,13 +2112,13 @@
   - target_track -> relationships.RelationshipTrack [FK]
 
 ### Service Functions
-- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' â€” Award XP to an account.`
-- `create_capstone(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipCapstone' â€” Record a capstone event â€” adds points to both capacity and developed_points.`
-- `create_development(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', xp_awarded: 'int' = 0, visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipDevelopment' â€” Add permanent (developed) points to a track, up to capacity.`
-- `create_first_impression(*, source: 'CharacterSheet', target: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', coloring: 'FirstImpressionColoring', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'CharacterRelationship' â€” Create a pending relationship with an initial update and track progress.`
-- `get_account_for_character(character: 'ObjectDB') -> 'AccountDB | None' â€” Get the account currently playing this character via roster tenure.`
-- `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' â€” Increment a stat tracker (create if needed) and check for achievements.`
-- `redistribute_points(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', source_track: 'RelationshipTrack', target_track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility') -> 'RelationshipChange' â€” Move developed points from one track to another. No new value is added.`
+- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' — Award XP to an account.`
+- `create_capstone(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipCapstone' — Record a capstone event — adds points to both capacity and developed_points.`
+- `create_development(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', xp_awarded: 'int' = 0, visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipDevelopment' — Add permanent (developed) points to a track, up to capacity.`
+- `create_first_impression(*, source: 'CharacterSheet', target: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', coloring: 'FirstImpressionColoring', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'CharacterRelationship' — Create a pending relationship with an initial update and track progress.`
+- `get_account_for_character(character: 'ObjectDB') -> 'AccountDB | None' — Get the account currently playing this character via roster tenure.`
+- `increment_stat(character_sheet: 'CharacterSheet', stat: 'StatDefinition', amount: 'int' = 1) -> 'int' — Increment a stat tracker (create if needed) and check for achievements.`
+- `redistribute_points(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', source_track: 'RelationshipTrack', target_track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility') -> 'RelationshipChange' — Move developed points from one track to another. No new value is added.`
 
 
 ## world.roster
@@ -2284,9 +2371,9 @@
   - persona -> scenes.Persona [FK]
 
 ### Service Functions
-- `broadcast_scene_message(scene: 'Scene', action: 'ActionType') -> 'None' â€” Send scene information to all accounts in the scene's location.`
-- `cast(typ, val) â€” Cast a value to a type.`
-- `invalidate_active_scene_cache(location: 'ObjectDB') -> 'None' â€” Clear the cached active scene for a location.`
+- `broadcast_scene_message(scene: 'Scene', action: 'ActionType') -> 'None' — Send scene information to all accounts in the scene's location.`
+- `cast(typ, val) — Cast a value to a type.`
+- `invalidate_active_scene_cache(location: 'ObjectDB') -> 'None' — Clear the cached active scene for a location.`
 
 
 ## world.skills
@@ -2335,14 +2422,14 @@
   - mentor -> scenes.Persona [FK] (nullable)
 
 ### Service Functions
-- `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' â€” Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x000002A54F66DA70>, _path_levels: 'dict[int, int] | None' = None) -> 'int' â€” Calculate development points earned from a training allocation.`
-- `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' â€” Create a new training allocation for a character.`
-- `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int â€” Get the relationship tier between two characters.`
-- `process_weekly_training() -> 'dict[int, set[int]]' â€” Process all training allocations for the weekly tick.`
-- `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' â€” Delete a training allocation.`
-- `run_weekly_skill_cron() -> 'None' â€” Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x000002A54F66DA70>) -> 'TrainingAllocation' â€” Update an existing training allocation.`
+- `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x0000015FA22930F0>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
+- `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Get the relationship tier between two characters.`
+- `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
+- `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
+- `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x0000015FA22930F0>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies
@@ -2393,6 +2480,7 @@
 **Pointed to by:**
   - events <- societies.LegendEvent
   - deeds <- societies.LegendEntry
+  - consequence_effects <- checks.ConsequenceEffect
 
 ### SpreadingConfig
 
@@ -2415,6 +2503,7 @@
 **Pointed to by:**
   - spreads <- societies.LegendSpread
   - deed_stories <- societies.LegendDeedStory
+  - covenant_credits <- societies.CovenantLegendCredit
 
 ### LegendSpread
 **Foreign Keys:**
@@ -2436,14 +2525,25 @@
 **Foreign Keys:**
   - persona -> scenes.Persona [OneToOne]
 
+### CovenantLegendCredit
+**Foreign Keys:**
+  - entry -> societies.LegendEntry [FK]
+  - covenant -> covenants.Covenant [FK]
+
+### CovenantLegendSummary
+**Foreign Keys:**
+  - covenant -> covenants.Covenant [OneToOne]
+
 ### Service Functions
-- `create_legend_event(title: str, source_type: world.societies.models.LegendSourceType, base_value: int, personas: list[world.scenes.models.Persona], *, description: str = '', scene: world.scenes.models.Scene | None = None, story: world.stories.models.Story | None = None, created_by: evennia.accounts.models.AccountDB | None = None) -> tuple[world.societies.models.LegendEvent, list[world.societies.models.LegendEntry]] â€” Create a shared event and individual deeds for each participant.`
-- `create_solo_deed(persona: world.scenes.models.Persona, title: str, source_type: world.societies.models.LegendSourceType, base_value: int, *, description: str = '', scene: world.scenes.models.Scene | None = None, story: world.stories.models.Story | None = None) -> world.societies.models.LegendEntry â€” Create a legend deed not tied to a shared event.`
-- `get_character_legend_total(character: evennia.objects.models.ObjectDB) -> int â€” Fast lookup of a character's total legend from materialized view.`
-- `get_persona_legend_total(persona: world.scenes.models.Persona) -> int â€” Per-persona legend lookup from materialized view.`
-- `refresh_legend_views() -> None â€” Refresh both legend materialized views concurrently.`
-- `spread_deed(deed: world.societies.models.LegendEntry, spreader_persona: world.scenes.models.Persona, value_added: int, *, description: str = '', method: str = '', skill: world.skills.models.Skill | None = None, audience_factor: decimal.Decimal = Decimal('1.0'), scene: world.scenes.models.Scene | None = None, societies_reached: list[world.societies.models.Society] | None = None) -> world.societies.models.LegendSpread â€” Record a spreading action and add legend value, clamped to capacity.`
-- `spread_event(event: world.societies.models.LegendEvent, spreader_persona: world.scenes.models.Persona, value_per_deed: int, *, description: str = '', method: str = '', skill: world.skills.models.Skill | None = None, audience_factor: decimal.Decimal = Decimal('1.0'), scene: world.scenes.models.Scene | None = None, societies_reached: list[world.societies.models.Society] | None = None) -> list[world.societies.models.LegendSpread] â€” Spread all active deeds linked to an event at once.`
+- `create_legend_event(title: str, source_type: world.societies.models.LegendSourceType, base_value: int, personas: list[world.scenes.models.Persona], *, description: str = '', scene: world.scenes.models.Scene | None = None, story: world.stories.models.Story | None = None, created_by: evennia.accounts.models.AccountDB | None = None) -> tuple[world.societies.models.LegendEvent, list[world.societies.models.LegendEntry]] — Create a shared event and individual deeds for each participant.`
+- `create_solo_deed(persona: world.scenes.models.Persona, title: str, source_type: world.societies.models.LegendSourceType, base_value: int, *, description: str = '', scene: world.scenes.models.Scene | None = None, story: world.stories.models.Story | None = None) -> world.societies.models.LegendEntry — Create a legend deed not tied to a shared event.`
+- `credit_engaged_covenants(*, entry: world.societies.models.LegendEntry) -> list[world.societies.models.CovenantLegendCredit] — Snapshot the persona's currently-engaged covenants and create credit rows.`
+- `get_character_legend_total(character: evennia.objects.models.ObjectDB) -> int — Fast lookup of a character's total legend from materialized view.`
+- `get_covenant_legend_total(covenant: world.covenants.models.Covenant) -> int — Return the covenant's total legend from the materialized view.`
+- `get_persona_legend_total(persona: world.scenes.models.Persona) -> int — Per-persona legend lookup from materialized view.`
+- `refresh_legend_views() -> None — Refresh all legend materialized views concurrently.`
+- `spread_deed(deed: world.societies.models.LegendEntry, spreader_persona: world.scenes.models.Persona, value_added: int, *, description: str = '', method: str = '', skill: world.skills.models.Skill | None = None, audience_factor: decimal.Decimal = Decimal('1.0'), scene: world.scenes.models.Scene | None = None, societies_reached: list[world.societies.models.Society] | None = None) -> world.societies.models.LegendSpread — Record a spreading action and add legend value, clamped to capacity.`
+- `spread_event(event: world.societies.models.LegendEvent, spreader_persona: world.scenes.models.Persona, value_per_deed: int, *, description: str = '', method: str = '', skill: world.skills.models.Skill | None = None, audience_factor: decimal.Decimal = Decimal('1.0'), scene: world.scenes.models.Scene | None = None, societies_reached: list[world.societies.models.Society] | None = None) -> list[world.societies.models.LegendSpread] — Spread all active deeds linked to an event at once.`
 
 
 ## world.stories
@@ -2465,6 +2565,7 @@
   - global_progress -> stories.GlobalStoryProgress [OneToOne] (nullable)
   - character_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - created_in_era -> stories.Era [FK] (nullable)
+  - covenant -> covenants.Covenant [FK] (nullable)
   - primary_table -> gm.GMTable [FK] (nullable)
 **Pointed to by:**
   - trust_requirements <- stories.StoryTrustRequirement
@@ -2568,6 +2669,9 @@
   - referenced_story -> stories.Story [FK] (nullable)
   - referenced_chapter -> stories.Chapter [FK] (nullable)
   - referenced_episode -> stories.Episode [FK] (nullable)
+  - success_consequences -> actions.ConsequencePool [FK] (nullable)
+  - failure_consequences -> actions.ConsequencePool [FK] (nullable)
+  - expired_consequences -> actions.ConsequencePool [FK] (nullable)
 **Pointed to by:**
   - gating_for_episodes <- stories.EpisodeProgressionRequirement
   - routing_for_transitions <- stories.TransitionRequiredOutcome

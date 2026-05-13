@@ -2,7 +2,7 @@
 
 from django.contrib import admin
 
-from world.covenants.models import Covenant, CovenantRole
+from world.covenants.models import Covenant, CovenantLevelThreshold, CovenantRole
 
 
 @admin.register(CovenantRole)
@@ -19,3 +19,8 @@ class CovenantAdmin(admin.ModelAdmin):
     list_filter = ("covenant_type",)
     search_fields = ("name",)
     readonly_fields = ("formed_at",)
+
+
+@admin.register(CovenantLevelThreshold)
+class CovenantLevelThresholdAdmin(admin.ModelAdmin):
+    list_display = ("level", "required_legend")

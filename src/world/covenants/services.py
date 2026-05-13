@@ -13,6 +13,9 @@ from world.covenants.exceptions import (
     CovenantNameConflictError,
     DuplicateFounderError,
     InsufficientFoundersError,
+    SubroleParentMismatchError,
+    SubroleResonanceMismatchError,
+    SubroleThreadLevelInsufficientError,
 )
 from world.covenants.models import (
     CharacterCovenantRole,
@@ -289,6 +292,62 @@ def create_covenant_via_session(*, session: RitualSession) -> Covenant:
         raise
 
 
+def recompute_covenant_level(*, covenant: Covenant) -> int | None:
+    """Look up the covenant's current legend total, find the max satisfied
+    threshold, and update Covenant.level if changed.
+
+    Returns the new level when the stored level rose, or None when unchanged.
+    Fires one NarrativeMessage to engaged members when the level rises.
+
+    Assumes the caller has an open atomic block (all call sites are wrapped
+    in @transaction.atomic: create_solo_deed, create_legend_event, spread_deed,
+    spread_event). No nested decorator needed.
+    """
+    from world.covenants.models import CovenantLevelThreshold  # noqa: PLC0415
+    from world.societies.services import get_covenant_legend_total  # noqa: PLC0415
+
+    total = get_covenant_legend_total(covenant)
+    new_level = (
+        CovenantLevelThreshold.objects.filter(required_legend__lte=total)
+        .order_by("-level")
+        .values_list("level", flat=True)
+        .first()
+    ) or 1
+    if new_level == covenant.level:
+        return None
+    covenant.level = new_level
+    covenant.save(update_fields=["level"])
+    _emit_level_change_message(covenant, new_level)
+    return new_level
+
+
+def _emit_level_change_message(covenant: Covenant, new_level: int) -> None:
+    """Fire one NarrativeMessage to engaged members on level change.
+
+    send_narrative_message takes CharacterSheet recipients directly — no
+    walk through RosterTenure → AccountDB needed.
+    """
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    # The covenant.memberships related manager is fine here — one-shot lookup
+    # on level-up, not a hot path. Walking every membership through the
+    # SharedMemoryModel identity map would add no measurable benefit.
+    sheets = [
+        m.character_sheet
+        for m in covenant.memberships.filter(  # noqa: SHARED_MEMORY — cold path, not a hot query loop
+            engaged=True, left_at__isnull=True
+        ).select_related("character_sheet")
+    ]
+    if not sheets:
+        return
+    send_narrative_message(
+        recipients=sheets,
+        body=f"The Covenant '{covenant.name}' has reached level {new_level}.",
+        category=NarrativeCategory.COVENANT,
+    )
+
+
 def evaluate_scene_engagement(
     *,
     character_sheet: CharacterSheet,
@@ -343,6 +402,54 @@ def _co_present_member_count(
         if sheet.character.covenant_roles.currently_held_role_in(target) is not None:
             n += 1
     return n
+
+
+@transaction.atomic
+def promote_to_subrole(
+    *,
+    membership: CharacterCovenantRole,
+    target_subrole: CovenantRole,
+) -> CharacterCovenantRole:
+    """Promote a character from their current parent role to a sub-role.
+
+    Validates:
+    - target_subrole.parent_role == membership.covenant_role
+    - The character has at least one Thread anchored on
+      target_subrole.parent_role with resonance=target_subrole.resonance
+      and level >= target_subrole.unlock_thread_level.
+
+    Atomic. Closes the existing membership row (sets left_at) and creates
+    a new active row with target_subrole, preserving the engaged flag.
+    Reuses change_role mechanics underneath. Invalidates the
+    character.covenant_roles handler cache.
+    """
+    if target_subrole.parent_role_id != membership.covenant_role_id:
+        raise SubroleParentMismatchError
+    # CharacterThreadHandler.all() returns list[Thread] — NOT a queryset.
+    # No .filter() / .exists() — filter in Python.
+    handler = membership.character_sheet.character.threads
+    matching = [
+        t
+        for t in handler.all()
+        if t.target_covenant_role_id == target_subrole.parent_role_id
+        and t.resonance_id == target_subrole.resonance_id
+    ]
+    if not matching:
+        raise SubroleResonanceMismatchError
+    if not any(t.level >= target_subrole.unlock_thread_level for t in matching):
+        raise SubroleThreadLevelInsufficientError
+    # Reuse change_role: close old, open new with same engaged flag
+    was_engaged = membership.engaged
+    end_covenant_role(assignment=membership)
+    new_membership = assign_covenant_role(
+        character_sheet=membership.character_sheet,
+        covenant=membership.covenant,
+        covenant_role=target_subrole,
+    )
+    if was_engaged:
+        set_engaged_membership(membership=new_membership)
+    membership.character_sheet.character.covenant_roles.invalidate()
+    return new_membership
 
 
 @transaction.atomic

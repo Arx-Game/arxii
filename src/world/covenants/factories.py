@@ -8,6 +8,7 @@ from world.covenants.constants import CovenantType, RoleArchetype
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
+    CovenantLevelThreshold,
     CovenantRole,
     GearArchetypeCompatibility,
 )
@@ -27,6 +28,26 @@ class CovenantRoleFactory(factory_django.DjangoModelFactory):
     archetype = RoleArchetype.SWORD
     speed_rank = 5
     description = ""
+
+
+class SubroleCovenantRoleFactory(CovenantRoleFactory):
+    """Factory for sub-role CovenantRole instances.
+
+    Generates a valid sub-role: parent_role and resonance are both set,
+    and covenant_type/archetype are inherited from the parent.
+    """
+
+    parent_role = factory.SubFactory(CovenantRoleFactory)
+    resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
+    unlock_thread_level = 3
+
+    @factory.lazy_attribute
+    def covenant_type(self) -> str:
+        return self.parent_role.covenant_type
+
+    @factory.lazy_attribute
+    def archetype(self) -> str:
+        return self.parent_role.archetype
 
 
 class GearArchetypeCompatibilityFactory(factory_django.DjangoModelFactory):
@@ -73,6 +94,17 @@ class CharacterCovenantRoleFactory(factory_django.DjangoModelFactory):
     covenant = factory.SubFactory(CovenantFactory)
     covenant_role = factory.SubFactory(CovenantRoleFactory)
     engaged = False
+
+
+class CovenantLevelThresholdFactory(factory_django.DjangoModelFactory):
+    """Factory for CovenantLevelThreshold."""
+
+    class Meta:
+        model = CovenantLevelThreshold
+        django_get_or_create = ("level",)
+
+    level = factory.Sequence(lambda n: n + 1)
+    required_legend = factory.LazyAttribute(lambda o: (o.level - 1) * 100)
 
 
 def make_engaged_member(

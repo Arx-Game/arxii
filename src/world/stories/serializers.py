@@ -149,6 +149,19 @@ class StoryDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "completed_at",
+            "covenant",
+        ]
+        read_only_fields = [
+            "id",
+            "owners",
+            "active_gms",
+            "trust_requirements",
+            "character_sheet",
+            "primary_table",
+            "chapters_count",
+            "created_at",
+            "updated_at",
+            "completed_at",
         ]
 
     def get_trust_requirements(self, obj):
@@ -822,6 +835,10 @@ class BeatSerializer(serializers.ModelSerializer):
             # AGM / scheduling
             "agm_eligible",
             "deadline",
+            # Consequence pools
+            "success_consequences",
+            "failure_consequences",
+            "expired_consequences",
             # Timestamps
             "created_at",
             "updated_at",
@@ -1171,12 +1188,32 @@ class MarkBeatInputSerializer(serializers.Serializer):
         - beat.predicate_type == GM_MARKED.
         - An active progress record exists for the beat's story.
 
-    Stores ``progress`` in validated_data.
+    Stores ``progress``, ``participants``, and ``extra_participants`` in validated_data.
     """
 
     outcome = serializers.ChoiceField(choices=BeatOutcome.choices)
     gm_notes = serializers.CharField(required=False, allow_blank=True, default="")
     progress_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+    participants = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Persona.objects.all(),
+        required=False,
+        default=list,
+        help_text=(
+            "Required for GROUP-scope LEGEND_AWARD pools; ignored otherwise. "
+            "List of Persona PKs who receive legend credit."
+        ),
+    )
+    extra_participants = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Persona.objects.all(),
+        required=False,
+        default=list,
+        help_text=(
+            "CHARACTER scope only: additional personas to credit alongside the "
+            "progress's primary persona."
+        ),
+    )
 
     def validate(self, attrs: Any) -> Any:  # type: ignore[override]
         beat: Beat = self.context["beat"]
