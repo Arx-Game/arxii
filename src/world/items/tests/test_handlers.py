@@ -93,6 +93,17 @@ class CharacterCarriedItemsHandlerTests(TestCase):
         cls.mine_b = _item_on(cls.character, "MineB")
         cls.theirs = _item_on(cls.other_character, "Theirs")
 
+    def setUp(self) -> None:
+        # Cross-app test pollution guard: when this suite runs alongside
+        # apps that create many ObjectDBs (e.g., magic), the identity-map
+        # can hand back stale instances on character.carried_items lookups.
+        # Flushing ItemInstance forces a fresh load of the prefetched rows.
+        from world.items.models import ItemInstance
+
+        ItemInstance.flush_instance_cache()
+        self.character.carried_items.invalidate()
+        self.other_character.carried_items.invalidate()
+
     def test_returns_only_items_carried_by_character(self) -> None:
         items = list(self.character.carried_items)
         pks = {it.pk for it in items}
@@ -164,6 +175,14 @@ class CharacterSheetOutfitsHandlerTests(TestCase):
             wardrobe=cls.wardrobe,
             name="Theirs",
         )
+
+    def setUp(self) -> None:
+        # Cross-app pollution guard — see CharacterCarriedItemsHandlerTests.setUp.
+        from world.items.models import Outfit
+
+        Outfit.flush_instance_cache()
+        self.sheet.saved_outfits.invalidate()
+        self.other_sheet.saved_outfits.invalidate()
 
     def test_returns_only_outfits_for_sheet(self) -> None:
         outfits = list(self.sheet.saved_outfits)

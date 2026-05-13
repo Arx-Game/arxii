@@ -407,7 +407,7 @@ class JoinEncounterSerializer(serializers.Serializer):
     sheet belongs to one of the user's active tenures.
     """
 
-    character_sheet_id = serializers.IntegerField()
+    character_sheet_id = serializers.IntegerField(min_value=1)
 
 
 class AddOpponentSerializer(serializers.Serializer):

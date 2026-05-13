@@ -520,7 +520,13 @@ class CombatEncounterViewSet(ModelViewSet):
         participant: CombatParticipant,
         encounter: CombatEncounter,
     ) -> CombatRoundAction | None:
-        """Return the participant's CombatRoundAction for the current round."""
+        """Return the participant's CombatRoundAction for the current round.
+
+        Uses ``.first()`` because the unique constraint
+        ``unique_action_per_participant_per_round`` (see
+        ``CombatRoundAction.Meta``) guarantees at most one row per
+        ``(participant, round_number)`` — no ordering needed.
+        """
         return CombatRoundAction.objects.filter(
             participant=participant,
             round_number=encounter.round_number,

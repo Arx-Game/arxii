@@ -121,13 +121,12 @@ class MyActionQueryCountTests(_SharedSetupMixin, TestCase):
     def test_warm_my_action_query_count(self) -> None:
         url = f"/api/combat/{self.encounter.pk}/my_action/"
         self.client.get(url)  # warm-up
-        # 1 session + 1 encounter + 2 prefetch + 1 roster (in
-        # _get_participant). The per-request roster cache eliminates
-        # the duplicate when an endpoint calls both _get_participant
-        # AND _build_serializer_context — my_action only calls the
-        # former, so it doesn't benefit. Endpoints like ready/declare
-        # that call both shed one query in the same fix.
-        with self.assertNumQueries(5):
+        # 1 session + 1 encounter + 2 prefetch. The per-request roster
+        # cache shared between IsEncounterParticipant and
+        # _get_participant collapses two roster queries into one — and
+        # the prefetch warm-up means it doesn't fire a second time on
+        # the cached request.
+        with self.assertNumQueries(4):
             response = self.client.get(url)
         # 200 with None body when no action declared yet.
         self.assertEqual(response.status_code, 200)

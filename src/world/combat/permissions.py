@@ -11,6 +11,24 @@ from world.combat.models import CombatEncounter
 from world.roster.models import RosterEntry
 
 
+def _viewer_character_ids(request: Request, view: APIView) -> set[int]:
+    """Return the request user's played character_sheet ids.
+
+    Prefers ``view._viewer_character_ids(request)`` when the view exposes
+    it (``CombatEncounterViewSet`` does — it caches the set on the
+    request object so permission checks and view body share the same
+    roster query). Falls back to a direct query for any caller wired up
+    with these permissions but lacking the helper.
+    """
+    helper = getattr(view, "_viewer_character_ids", None)  # noqa: GETATTR_LITERAL
+    if helper is not None:
+        return helper(request)
+    if not request.user.is_authenticated:
+        return set()
+    user = cast(AccountDB, request.user)
+    return set(RosterEntry.objects.for_account(user).character_ids())
+
+
 class IsEncounterGMOrStaff(BasePermission):
     """Allow access to GMs of the encounter's scene or staff.
 
@@ -35,7 +53,9 @@ class IsEncounterParticipant(BasePermission):
     """Allow authenticated users who have an active CombatParticipant.
 
     Uses the encounter's participants_cached when available (prefetched
-    by _base_queryset) to avoid a separate query.
+    by _base_queryset) to avoid a separate query. Routes the roster
+    lookup through the view's per-request cache when available so the
+    permission check and view body share a single roster query.
     """
 
     def has_object_permission(
@@ -46,10 +66,7 @@ class IsEncounterParticipant(BasePermission):
     ) -> bool:
         if request.user.is_staff:
             return True
-        user = cast(AccountDB, request.user)
-        character_ids = set(
-            RosterEntry.objects.for_account(user).character_ids(),
-        )
+        character_ids = _viewer_character_ids(request, view)
         return any(p.character_sheet.character_id in character_ids for p in obj.participants_cached)
 
 
@@ -70,8 +87,5 @@ class IsInEncounterRoom(BasePermission):
             return True
         if not obj.scene:
             return False
-        user = cast(AccountDB, request.user)
-        character_ids = set(
-            RosterEntry.objects.for_account(user).character_ids(),
-        )
+        character_ids = _viewer_character_ids(request, view)
         return obj.scene.has_character_present(character_ids)
