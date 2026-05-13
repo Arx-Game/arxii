@@ -11,7 +11,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from world.covenants.exceptions import CovenantEngagementPrerequisiteNotMetError
+from world.covenants.exceptions import (
+    CovenantEngagementPrerequisiteNotMetError,
+    SubrolePromotionError,
+)
 from world.covenants.filters import (
     CharacterCovenantRoleFilter,
     CovenantFilter,
@@ -22,17 +25,24 @@ from world.covenants.handlers import can_engage_durance_membership
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
+    CovenantLevelThreshold,
     CovenantRole,
     GearArchetypeCompatibility,
 )
 from world.covenants.permissions import IsOwnMembership
 from world.covenants.serializers import (
     CharacterCovenantRoleSerializer,
+    CovenantLevelThresholdSerializer,
     CovenantRoleSerializer,
     CovenantSerializer,
     GearArchetypeCompatibilitySerializer,
+    PromoteSubroleSerializer,
 )
-from world.covenants.services import clear_engaged_membership, set_engaged_membership
+from world.covenants.services import (
+    clear_engaged_membership,
+    promote_to_subrole,
+    set_engaged_membership,
+)
 
 
 class CovenantsPagination(PageNumberPagination):
@@ -104,6 +114,42 @@ class CharacterCovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
         clear_engaged_membership(membership=membership)
         return Response(self.get_serializer(membership).data)
 
+    @action(
+        detail=True,
+        methods=["POST"],
+        permission_classes=[IsAuthenticated, IsOwnMembership],
+        serializer_class=PromoteSubroleSerializer,
+    )
+    def promote(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/covenants/character-roles/{id}/promote/
+
+        Promote the membership from its current parent role to a sub-role.
+        Body: { "target_subrole": <pk> }
+
+        Returns the new CharacterCovenantRole row on success.
+        Returns 400 with a user_message body on promotion failures.
+        """
+        membership = self.get_object()
+        ser = PromoteSubroleSerializer(
+            data=request.data,
+            context={"membership": membership},
+        )
+        ser.is_valid(raise_exception=True)
+        try:
+            new_membership = promote_to_subrole(
+                membership=membership,
+                target_subrole=ser.validated_data["target_subrole"],
+            )
+        except SubrolePromotionError as exc:
+            return Response(
+                {"detail": exc.user_message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            CharacterCovenantRoleSerializer(new_membership, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
+
 
 class CovenantRoleViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only ViewSet for CovenantRole lookup data.
@@ -158,3 +204,16 @@ class CovenantViewSet(viewsets.ReadOnlyModelViewSet):
             memberships__character_sheet__roster_entry__tenures__end_date__isnull=True,
             memberships__character_sheet__roster_entry__tenures__player_data__account=self.request.user,
         ).distinct()
+
+
+class CovenantLevelThresholdViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only ViewSet for CovenantLevelThreshold authored lookup table.
+
+    Returns the legend totals required to reach each covenant level.
+    No pagination — this is a small, stable lookup table.
+    """
+
+    queryset = CovenantLevelThreshold.objects.all().order_by("level")
+    serializer_class = CovenantLevelThresholdSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Small lookup table — no pagination needed.

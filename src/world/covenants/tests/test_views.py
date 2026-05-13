@@ -437,3 +437,254 @@ class CharacterCovenantRoleSerializerExposureTests(CovenantsViewTestCase):
         self.assertEqual(response.data["covenant"], self.cov.pk)
         self.assertIn("engaged", response.data)
         self.assertFalse(response.data["engaged"])
+
+
+class CovenantSerializerLegendAndStorylinesTests(CovenantsViewTestCase):
+    """Verify CovenantSerializer detail includes legend_total and storylines."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+        )
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        super().setUpTestData()
+        cls.sheet = CharacterSheetFactory()
+        cls.roster_entry = RosterEntryFactory(character_sheet=cls.sheet)
+        cls.player_data = PlayerDataFactory(account=cls.user)
+        cls.tenure = RosterTenureFactory(
+            roster_entry=cls.roster_entry,
+            player_data=cls.player_data,
+            end_date=None,
+        )
+        cls.cov = CovenantFactory(name="LegendTestCov")
+        cls.assignment = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet,
+            covenant=cls.cov,
+        )
+
+    def test_detail_includes_legend_total(self) -> None:
+        """GET /api/covenants/covenants/{pk}/ includes legend_total field."""
+        response = self.client.get(f"/api/covenants/covenants/{self.cov.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("legend_total", response.data)
+        # No legend credits seeded — should be 0.
+        self.assertEqual(response.data["legend_total"], 0)
+
+    def test_detail_includes_storylines(self) -> None:
+        """GET /api/covenants/covenants/{pk}/ includes storylines (list of story PKs)."""
+        response = self.client.get(f"/api/covenants/covenants/{self.cov.pk}/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("storylines", response.data)
+        # No stories linked yet — empty list.
+        self.assertEqual(response.data["storylines"], [])
+
+
+class CovenantLevelThresholdViewTests(CovenantsViewTestCase):
+    """Tests for GET /api/covenants/level-thresholds/."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.covenants.factories import CovenantLevelThresholdFactory
+
+        super().setUpTestData()
+        cls.threshold1 = CovenantLevelThresholdFactory(level=1, required_legend=0)
+        cls.threshold2 = CovenantLevelThresholdFactory(level=2, required_legend=100)
+
+    def test_list_returns_thresholds(self) -> None:
+        """GET list returns seeded threshold rows."""
+        response = self.client.get("/api/covenants/level-thresholds/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        levels = [row["level"] for row in response.data]
+        self.assertIn(1, levels)
+        self.assertIn(2, levels)
+
+    def test_response_shape(self) -> None:
+        """Each threshold row exposes level and required_legend."""
+        response = self.client.get("/api/covenants/level-thresholds/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        for row in response.data:
+            self.assertIn("level", row)
+            self.assertIn("required_legend", row)
+
+    def test_ordered_by_level(self) -> None:
+        """Thresholds are returned in ascending level order."""
+        response = self.client.get("/api/covenants/level-thresholds/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        levels = [row["level"] for row in response.data]
+        self.assertEqual(levels, sorted(levels))
+
+    def test_no_pagination(self) -> None:
+        """Response is a plain list (not paginated with results/count wrapper)."""
+        response = self.client.get("/api/covenants/level-thresholds/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsInstance(response.data, list)
+
+    def test_post_not_allowed(self) -> None:
+        """Read-only endpoint: POST returns 405."""
+        response = self.client.post(
+            "/api/covenants/level-thresholds/",
+            {"level": 99, "required_legend": 9999},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_unauthenticated_denied(self) -> None:
+        """Unauthenticated requests receive 403."""
+        unauthenticated_client = APIClient()
+        response = unauthenticated_client.get("/api/covenants/level-thresholds/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class PromoteActionViewTests(CovenantsViewTestCase):
+    """Tests for POST /api/covenants/character-roles/{pk}/promote/."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+            SubroleCovenantRoleFactory,
+        )
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+
+        super().setUpTestData()
+
+        cls.sheet = CharacterSheetFactory()
+        cls.roster_entry = RosterEntryFactory(character_sheet=cls.sheet)
+        cls.player_data = PlayerDataFactory(account=cls.user)
+        cls.tenure = RosterTenureFactory(
+            roster_entry=cls.roster_entry,
+            player_data=cls.player_data,
+            end_date=None,
+        )
+
+        # Create parent role + subrole
+        cls.parent_role = CovenantRoleFactory(name="PromoteParent")
+        cls.resonance = ResonanceFactory()
+        cls.subrole = SubroleCovenantRoleFactory(
+            parent_role=cls.parent_role,
+            resonance=cls.resonance,
+            unlock_thread_level=3,
+        )
+        # Unrelated subrole for mismatched-parent test
+        other_parent = CovenantRoleFactory(name="PromoteOtherParent")
+        cls.other_subrole = SubroleCovenantRoleFactory(
+            parent_role=other_parent,
+            resonance=cls.resonance,
+            unlock_thread_level=3,
+        )
+
+        cls.covenant = CovenantFactory(covenant_type=cls.parent_role.covenant_type)
+        cls.membership = CharacterCovenantRoleFactory(
+            character_sheet=cls.sheet,
+            covenant=cls.covenant,
+            covenant_role=cls.parent_role,
+        )
+
+        # Thread to satisfy promotion prerequisites
+        ThreadFactory(
+            owner=cls.sheet,
+            resonance=cls.resonance,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=cls.parent_role,
+            target_trait=None,
+            level=5,
+        )
+
+    def test_promote_succeeds_with_valid_subrole(self) -> None:
+        """POST promote with valid subrole returns 200 with new membership data."""
+        response = self.client.post(
+            f"/api/covenants/character-roles/{self.membership.pk}/promote/",
+            {"target_subrole": self.subrole.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("id", response.data)
+        self.assertEqual(response.data["covenant"], self.covenant.pk)
+
+    def test_promote_returns_400_on_parent_mismatch(self) -> None:
+        """POST promote with mismatched parent_role returns 400."""
+        # Use a fresh membership so the prior test's promotion doesn't interfere.
+        from world.covenants.factories import CharacterCovenantRoleFactory, CovenantFactory
+
+        cov2 = CovenantFactory(covenant_type=self.parent_role.covenant_type)
+        membership2 = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet,
+            covenant=cov2,
+            covenant_role=self.parent_role,
+        )
+        response = self.client.post(
+            f"/api/covenants/character-roles/{membership2.pk}/promote/",
+            {"target_subrole": self.other_subrole.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_promote_returns_400_on_insufficient_thread_level(self) -> None:
+        """POST promote when Thread level < unlock_thread_level returns 400 with detail."""
+        from world.covenants.factories import (
+            CharacterCovenantRoleFactory,
+            CovenantFactory,
+            CovenantRoleFactory,
+            SubroleCovenantRoleFactory,
+        )
+        from world.magic.constants import TargetKind
+        from world.magic.factories import ResonanceFactory, ThreadFactory
+
+        # A subrole requiring level 10, but we only have a level-5 thread.
+        parent2 = CovenantRoleFactory(name="PromoteLowLevelParent")
+        res2 = ResonanceFactory()
+        high_level_subrole = SubroleCovenantRoleFactory(
+            parent_role=parent2,
+            resonance=res2,
+            unlock_thread_level=10,
+        )
+        cov3 = CovenantFactory(covenant_type=parent2.covenant_type)
+        membership3 = CharacterCovenantRoleFactory(
+            character_sheet=self.sheet,
+            covenant=cov3,
+            covenant_role=parent2,
+        )
+        ThreadFactory(
+            owner=self.sheet,
+            resonance=res2,
+            target_kind=TargetKind.COVENANT_ROLE,
+            target_covenant_role=parent2,
+            target_trait=None,
+            level=5,
+        )
+        response = self.client.post(
+            f"/api/covenants/character-roles/{membership3.pk}/promote/",
+            {"target_subrole": high_level_subrole.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detail", response.data)
+        # Must use exc.user_message, not str(exc)
+        self.assertIsInstance(response.data["detail"], str)
+
+    def test_unauthenticated_denied(self) -> None:
+        """Unauthenticated promote request returns 403."""
+        unauthenticated_client = APIClient()
+        response = unauthenticated_client.post(
+            f"/api/covenants/character-roles/{self.membership.pk}/promote/",
+            {"target_subrole": self.subrole.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)

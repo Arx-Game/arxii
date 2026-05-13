@@ -149,6 +149,19 @@ class StoryDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "completed_at",
+            "covenant",
+        ]
+        read_only_fields = [
+            "id",
+            "owners",
+            "active_gms",
+            "trust_requirements",
+            "character_sheet",
+            "primary_table",
+            "chapters_count",
+            "created_at",
+            "updated_at",
+            "completed_at",
         ]
 
     def get_trust_requirements(self, obj):
@@ -822,6 +835,10 @@ class BeatSerializer(serializers.ModelSerializer):
             # AGM / scheduling
             "agm_eligible",
             "deadline",
+            # Consequence pools
+            "success_consequences",
+            "failure_consequences",
+            "expired_consequences",
             # Timestamps
             "created_at",
             "updated_at",

@@ -6,6 +6,7 @@ from world.covenants.handlers import can_engage_durance_membership
 from world.covenants.models import (
     CharacterCovenantRole,
     Covenant,
+    CovenantLevelThreshold,
     CovenantRole,
     GearArchetypeCompatibility,
 )
@@ -79,6 +80,8 @@ class CovenantSerializer(serializers.ModelSerializer):
     )
     member_count = serializers.SerializerMethodField()
     is_active = serializers.SerializerMethodField()
+    legend_total = serializers.SerializerMethodField()
+    storylines = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
 
     class Meta:
         model = Covenant
@@ -93,6 +96,8 @@ class CovenantSerializer(serializers.ModelSerializer):
             "dissolved_at",
             "is_active",
             "member_count",
+            "legend_total",
+            "storylines",
         ]
         read_only_fields = fields
 
@@ -101,6 +106,38 @@ class CovenantSerializer(serializers.ModelSerializer):
 
     def get_is_active(self, obj: Covenant) -> bool:
         return obj.dissolved_at is None
+
+    def get_legend_total(self, obj: Covenant) -> int:
+        from world.societies.services import get_covenant_legend_total  # noqa: PLC0415
+
+        return get_covenant_legend_total(obj)
+
+
+class PromoteSubroleSerializer(serializers.Serializer):
+    """Input serializer for the CharacterCovenantRoleViewSet.promote action.
+
+    Validates that the target sub-role's parent matches the membership's current role.
+    The actual promotion is performed by the promote_to_subrole service function.
+    """
+
+    target_subrole = serializers.PrimaryKeyRelatedField(
+        queryset=CovenantRole.objects.filter(parent_role__isnull=False),
+    )
+
+    def validate_target_subrole(self, subrole: CovenantRole) -> CovenantRole:
+        membership: CharacterCovenantRole = self.context["membership"]
+        if subrole.parent_role_id != membership.covenant_role_id:
+            msg = "Target sub-role's parent must match your current role in this covenant."
+            raise serializers.ValidationError(msg)
+        return subrole
+
+
+class CovenantLevelThresholdSerializer(serializers.ModelSerializer):
+    """Read-only serializer for CovenantLevelThreshold lookup rows."""
+
+    class Meta:
+        model = CovenantLevelThreshold
+        fields = ("level", "required_legend")
 
 
 class GearArchetypeCompatibilitySerializer(serializers.ModelSerializer):

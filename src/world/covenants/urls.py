@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 
 from world.covenants.views import (
     CharacterCovenantRoleViewSet,
+    CovenantLevelThresholdViewSet,
     CovenantRoleViewSet,
     CovenantViewSet,
     GearArchetypeCompatibilityViewSet,
@@ -34,6 +35,12 @@ router.register(
     "roles",
     CovenantRoleViewSet,
     basename="covenant-role",
+)
+# Legend-threshold lookup table: legend required to reach each covenant level.
+router.register(
+    "level-thresholds",
+    CovenantLevelThresholdViewSet,
+    basename="covenant-level-threshold",
 )
 
 urlpatterns = router.urls
