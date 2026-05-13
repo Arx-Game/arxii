@@ -1,6 +1,5 @@
 """API ViewSets for items."""
 
-import contextlib
 from dataclasses import dataclass
 from typing import cast
 
@@ -62,9 +61,15 @@ from world.items.services.facets import remove_facet_from_item
 from world.roster.models import RosterEntry
 
 
-def _account_currently_plays(user: AccountDB, sheet: CharacterSheet) -> bool:
-    """True if ``user`` has an active roster tenure on ``sheet``."""
-    return RosterEntry.objects.for_account(user).filter(character_sheet=sheet).exists()
+def _user_plays_pk(user: AccountDB, pk: int) -> bool:
+    """True if ``user`` has an active roster tenure on the character_sheet at ``pk``.
+
+    Character pk equals CharacterSheet pk by construction
+    (``CharacterSheet.character = OneToOneField(primary_key=True)``), so this
+    helper covers both "does the user play this Character?" and "does the
+    user play this CharacterSheet?" without needing two helpers.
+    """
+    return RosterEntry.objects.for_account(user).filter(character_sheet_id=pk).exists()
 
 
 class ItemFacetWritePermission(PlayerOrStaffPermission):
@@ -281,7 +286,7 @@ class ItemInstanceViewSet(viewsets.ViewSet):
         except ObjectDB.DoesNotExist as exc:
             raise NotFound from exc
 
-        if not user.is_staff and not _user_owns_character(user, character):
+        if not user.is_staff and not _user_plays_pk(user, character.pk):
             raise NotFound
 
         rows = list(character.carried_items)
@@ -322,20 +327,11 @@ class ItemInstanceViewSet(viewsets.ViewSet):
 
         if not user.is_staff:
             holder = item.game_object.db_location
-            if holder is None or not _user_owns_character(user, holder):
+            if holder is None or not _user_plays_pk(user, holder.pk):
                 raise NotFound
 
         serializer = ItemInstanceReadSerializer(item)
         return Response(serializer.data)
-
-
-def _user_owns_character(user: AccountDB, character: ObjectDB) -> bool:
-    """True if ``user`` currently plays the character at ``character.pk``.
-
-    Uses ``RosterEntry.objects.for_account`` — the canonical helper. The
-    character_sheet pk equals the character ObjectDB pk by construction.
-    """
-    return RosterEntry.objects.for_account(user).filter(character_sheet_id=character.pk).exists()
 
 
 class EquippedItemViewSet(viewsets.ViewSet):
@@ -369,7 +365,7 @@ class EquippedItemViewSet(viewsets.ViewSet):
         except ObjectDB.DoesNotExist as exc:
             raise NotFound from exc
 
-        if not user.is_staff and not _user_owns_character(user, character):
+        if not user.is_staff and not _user_plays_pk(user, character.pk):
             raise NotFound  # don't leak existence
 
         rows = list(character.equipped_items)
@@ -394,7 +390,7 @@ class EquippedItemViewSet(viewsets.ViewSet):
         except EquippedItem.DoesNotExist as exc:
             raise NotFound from exc
 
-        if not user.is_staff and not _user_owns_character(user, row.character):
+        if not user.is_staff and not _user_plays_pk(user, row.character.pk):
             raise NotFound
 
         serializer = EquippedItemReadSerializer(row)
@@ -421,12 +417,12 @@ class OutfitWritePermission(PlayerOrStaffPermission):
             sheet = CharacterSheet.objects.get(pk=sheet_pk)
         except (CharacterSheet.DoesNotExist, ValueError, TypeError):
             return True
-        return _account_currently_plays(cast(AccountDB, request.user), sheet)
+        return _user_plays_pk(cast(AccountDB, request.user), sheet.pk)
 
     def has_object_permission_for_player(
         self, request: Request, view: APIView, obj: Outfit
     ) -> bool:
-        return _account_currently_plays(cast(AccountDB, request.user), obj.character_sheet)
+        return _user_plays_pk(cast(AccountDB, request.user), obj.character_sheet_id)
 
 
 class OutfitSlotWritePermission(PlayerOrStaffPermission):
@@ -442,12 +438,12 @@ class OutfitSlotWritePermission(PlayerOrStaffPermission):
             outfit = Outfit.objects.select_related("character_sheet").get(pk=outfit_pk)
         except (Outfit.DoesNotExist, ValueError, TypeError):
             return True
-        return _account_currently_plays(cast(AccountDB, request.user), outfit.character_sheet)
+        return _user_plays_pk(cast(AccountDB, request.user), outfit.character_sheet_id)
 
     def has_object_permission_for_player(
         self, request: Request, view: APIView, obj: OutfitSlot
     ) -> bool:
-        return _account_currently_plays(cast(AccountDB, request.user), obj.outfit.character_sheet)
+        return _user_plays_pk(cast(AccountDB, request.user), obj.outfit.character_sheet_id)
 
 
 class OutfitViewSet(viewsets.ViewSet):
@@ -479,7 +475,7 @@ class OutfitViewSet(viewsets.ViewSet):
         except CharacterSheet.DoesNotExist as exc:
             raise NotFound from exc
 
-        if not user.is_staff and not _account_currently_plays(user, sheet):
+        if not user.is_staff and not _user_plays_pk(user, sheet.pk):
             raise NotFound
 
         rows = list(sheet.saved_outfits)
@@ -517,7 +513,7 @@ class OutfitViewSet(viewsets.ViewSet):
         except Outfit.DoesNotExist as exc:
             raise NotFound from exc
 
-        if not user.is_staff and not _account_currently_plays(user, outfit.character_sheet):
+        if not user.is_staff and not _user_plays_pk(user, outfit.character_sheet_id):
             raise NotFound
 
         serializer = OutfitReadSerializer(outfit)
@@ -618,7 +614,7 @@ class OutfitSlotViewSet(viewsets.ViewSet):
         except Outfit.DoesNotExist as exc:
             raise NotFound from exc
 
-        if not user.is_staff and not _account_currently_plays(user, outfit.character_sheet):
+        if not user.is_staff and not _user_plays_pk(user, outfit.character_sheet_id):
             raise NotFound
 
         rows = list(outfit.cached_outfit_slots)
@@ -644,25 +640,29 @@ class OutfitSlotViewSet(viewsets.ViewSet):
         except OutfitSlot.DoesNotExist as exc:
             raise NotFound from exc
 
-        if not user.is_staff and not _account_currently_plays(user, slot.outfit.character_sheet):
+        if not user.is_staff and not _user_plays_pk(user, slot.outfit.character_sheet_id):
             raise NotFound
 
         serializer = OutfitSlotReadSerializer(slot)
         return Response(serializer.data)
 
     def create(self, request: Request) -> Response:
-        """Create an OutfitSlot via the existing write serializer."""
+        """Create an OutfitSlot via the existing write serializer.
+
+        Cache invalidation lives inside ``add_outfit_slot`` (called by the
+        serializer's ``create``), so no manual invalidation is needed here.
+        """
         serializer = OutfitSlotWriteSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         slot = serializer.save()
-        # Invalidate the outfit's slots cache so future reads see the new row.
-        with contextlib.suppress(AttributeError):
-            del slot.outfit.cached_outfit_slots
         read = OutfitSlotReadSerializer(slot)
         return Response(read.data, status=201)
 
     def destroy(self, request: Request, pk: str | None = None) -> Response:
-        """Delete via remove_outfit_slot (idempotent)."""
+        """Delete via remove_outfit_slot (idempotent).
+
+        Cache invalidation lives inside ``remove_outfit_slot``.
+        """
         slot_pk = _parse_int_param(pk)
         if slot_pk is None:
             raise NotFound
@@ -673,14 +673,11 @@ class OutfitSlotViewSet(viewsets.ViewSet):
         except OutfitSlot.DoesNotExist as exc:
             raise NotFound from exc
         self.check_object_permissions(request, slot)
-        outfit = slot.outfit
         remove_outfit_slot(
-            outfit=outfit,
+            outfit=slot.outfit,
             body_region=slot.body_region,
             equipment_layer=slot.equipment_layer,
         )
-        with contextlib.suppress(AttributeError):
-            del outfit.cached_outfit_slots
         return Response(status=204)
 
 

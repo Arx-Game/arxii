@@ -2,6 +2,29 @@
 
 Spec D §3.3. Single load, in-memory cache, explicit invalidation by
 mutators (equip/unequip/attach_facet/remove_facet_from_item).
+
+Identity-divergence caveat
+--------------------------
+Handler invalidation works by mutating state on a specific Python
+instance: ``handler._cached = None``. The handler is stored on the
+parent (``character.equipped_items`` is a cached_property), so the
+mutation only propagates to readers that walk the same Python instance.
+
+SharedMemoryModel's identity map *usually* returns the same instance
+for the same pk — but the guarantee is path-dependent. ``ObjectDB.objects.get(pk=X)``
+and FK descriptor access (``sheet.character``) go through the identity
+map; ``select_related("character")`` on a queryset bypasses it and
+materializes a fresh instance.
+
+Practical rule: **never invalidate a handler reached through
+``select_related``**. If you fetched a row with
+``EquippedItem.objects.select_related("character").get(...)`` and need
+to invalidate, refetch the character via
+``ObjectDB.objects.get(pk=row.character_id)`` first, or skip
+``select_related("character")`` and let lazy FK access go through the
+identity map.
+
+See ``services/facets.py`` for an existing comment on the same point.
 """
 
 from __future__ import annotations

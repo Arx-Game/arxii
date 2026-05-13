@@ -7,7 +7,6 @@ live alongside but are called from the REST layer for player bookkeeping.
 
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -203,8 +202,7 @@ def add_outfit_slot(
         body_region=body_region,
         equipment_layer=equipment_layer,
     )
-    with contextlib.suppress(AttributeError):
-        del outfit.cached_outfit_slots
+    _invalidate_outfit_slot_caches(outfit)
     return slot
 
 
@@ -221,5 +219,19 @@ def remove_outfit_slot(
         body_region=body_region,
         equipment_layer=equipment_layer,
     ).delete()
-    with contextlib.suppress(AttributeError):
+    _invalidate_outfit_slot_caches(outfit)
+
+
+def _invalidate_outfit_slot_caches(outfit: Outfit) -> None:
+    """Invalidate the per-outfit slot cache AND the parent sheet's outfits cache.
+
+    The per-outfit ``cached_outfit_slots`` lives in ``outfit.__dict__``. The
+    parent ``CharacterSheetOutfitsHandler`` caches a list of Outfit instances
+    that were loaded with their slots prefetched — those instances may be
+    different Python objects than ``outfit`` here (SharedMemoryModel identity
+    is path-dependent on FK access patterns), so we also invalidate the
+    sheet-level handler to be safe.
+    """
+    if hasattr(outfit, "cached_outfit_slots"):
         del outfit.cached_outfit_slots
+    outfit.character_sheet.saved_outfits.invalidate()
