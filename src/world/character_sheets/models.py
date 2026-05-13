@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from world.achievements.models import Achievement
     from world.classes.models import CharacterClassLevel
     from world.conditions.models import ConditionTemplate
+    from world.items.handlers import CharacterSheetOutfitsHandler
     from world.magic.models.affinity import Resonance
     from world.scenes.models import Persona
 
@@ -502,6 +503,18 @@ class CharacterSheet(SharedMemoryModel):
         if instance is None or instance.current_stage is None:
             return 0
         return instance.current_stage.stage_order
+
+    @cached_property
+    def saved_outfits(self) -> CharacterSheetOutfitsHandler:
+        """Cached handler for this sheet's saved outfit definitions.
+
+        Named ``saved_outfits`` rather than ``outfits`` because Django's
+        reverse RelatedManager from ``Outfit.character_sheet`` already
+        occupies the ``outfits`` attribute on this class.
+        """
+        from world.items.handlers import CharacterSheetOutfitsHandler  # noqa: PLC0415
+
+        return CharacterSheetOutfitsHandler(self)
 
     @cached_property
     def is_protagonism_locked(self) -> bool:

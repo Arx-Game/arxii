@@ -1,5 +1,6 @@
 """API ViewSets for items."""
 
+import contextlib
 from dataclasses import dataclass
 from typing import cast
 
@@ -149,95 +150,255 @@ class ItemTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         return ItemTemplateListSerializer
 
 
-class ItemFacetViewSet(viewsets.ModelViewSet):
-    """ViewSet for ItemFacet attach/list/delete."""
+class ItemFacetViewSet(viewsets.ViewSet):
+    """ViewSet for ItemFacet attach/list/delete.
+
+    Item-first / item-scoped shape:
+
+    - ``item_instance`` query parameter is REQUIRED for list.
+    - List/retrieve return 404 unless the requester owns the item or
+      is staff.
+    - Walks ``item.cached_item_facets`` for list (one prefetch on cold
+      load, zero on warm cache).
+    """
 
     http_method_names = ["get", "post", "delete", "head", "options"]
     permission_classes = [ItemFacetWritePermission]
-    pagination_class = ItemTemplatePagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = ItemFacetFilter
-    queryset = ItemFacet.objects.select_related(
-        "item_instance",
-        "facet",
-        "applied_by_account",
-        "attachment_quality_tier",
-    ).order_by("-applied_at")
 
-    def get_serializer_class(self) -> type[serializers.ModelSerializer]:
-        """Use write serializer for create, read serializer otherwise."""
-        if self.action == "create":
-            return ItemFacetWriteSerializer
-        return ItemFacetReadSerializer
+    def list(self, request: Request) -> Response:
+        """Return ItemFacet rows for ``?item_instance=<pk>``."""
+        user = cast(AccountDB, request.user)
+        # noqa: USE_FILTERSET — required scope param for item-first endpoint
+        instance_pk = _parse_int_param(request.query_params.get("item_instance"))  # noqa: USE_FILTERSET
+        if instance_pk is None:
+            raise serializers.ValidationError(
+                {"item_instance": "This query parameter is required."}
+            )
+        try:
+            item = (
+                ItemInstance.objects.select_related("owner")
+                .prefetch_related(
+                    Prefetch(
+                        "item_facets",
+                        queryset=ItemFacet.objects.select_related(
+                            "facet",
+                            "attachment_quality_tier",
+                            "applied_by_account",
+                        ),
+                        to_attr="cached_item_facets",
+                    ),
+                )
+                .get(pk=instance_pk)
+            )
+        except ItemInstance.DoesNotExist as exc:
+            raise NotFound from exc
 
-    def perform_destroy(self, instance: ItemFacet) -> None:
-        """Remove facet via service so cache invalidation fires."""
-        remove_facet_from_item(item_facet=instance)
+        if not user.is_staff and item.owner_id != user.pk:
+            raise NotFound
+
+        rows = list(item.cached_item_facets)
+        paginator = ItemTemplatePagination()
+        page = paginator.paginate_queryset(rows, request, view=self)  # ty: ignore[invalid-argument-type]
+        serializer = ItemFacetReadSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    def retrieve(self, request: Request, pk: str | None = None) -> Response:
+        """Return a single ItemFacet if the requester owns its item."""
+        user = cast(AccountDB, request.user)
+        row_pk = _parse_int_param(pk)
+        if row_pk is None:
+            raise NotFound
+        try:
+            row = ItemFacet.objects.select_related(
+                "item_instance",
+                "item_instance__owner",
+                "facet",
+                "attachment_quality_tier",
+                "applied_by_account",
+            ).get(pk=row_pk)
+        except ItemFacet.DoesNotExist as exc:
+            raise NotFound from exc
+
+        if not user.is_staff and row.item_instance.owner_id != user.pk:
+            raise NotFound
+
+        serializer = ItemFacetReadSerializer(row)
+        return Response(serializer.data)
+
+    def create(self, request: Request) -> Response:
+        """Attach a facet via the serializer (which calls the service)."""
+        serializer = ItemFacetWriteSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        row = serializer.save()
+        read = ItemFacetReadSerializer(row)
+        return Response(read.data, status=201)
+
+    def destroy(self, request: Request, pk: str | None = None) -> Response:
+        """Remove the facet via the service (which fires cache invalidation)."""
+        row_pk = _parse_int_param(pk)
+        if row_pk is None:
+            raise NotFound
+        try:
+            row = ItemFacet.objects.select_related("item_instance").get(pk=row_pk)
+        except ItemFacet.DoesNotExist as exc:
+            raise NotFound from exc
+        # Run object-level permission so non-owners are rejected with 403.
+        self.check_object_permissions(request, row)
+        remove_facet_from_item(item_facet=row)
+        return Response(status=204)
 
 
-class ItemInstanceViewSet(viewsets.ReadOnlyModelViewSet):
+class ItemInstanceViewSet(viewsets.ViewSet):
     """Read-only listing of ItemInstance rows for a character's inventory.
 
-    The wardrobe page uses this to render carried-but-not-worn items. The
-    ``character`` query parameter filters to items whose ``game_object.location``
-    is the requested character (i.e., currently held by them).
+    Item-first / character-scoped shape:
 
-    Permission scoping (non-staff): only items located on a character the
-    request user currently plays are returned. Staff see everything.
+    - ``character`` query parameter is REQUIRED.
+    - Non-staff users can only inspect inventory of characters they
+      currently play (active roster tenure).
+    - Walks ``character.carried_items`` cached handler — no DB query
+      when warm.
+
+    The wardrobe page uses this to render carried-but-not-worn items;
+    the frontend filters out equipped items locally.
     """
 
     permission_classes = [IsAuthenticated]
-    serializer_class = ItemInstanceReadSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = ItemInstanceFilter
-    pagination_class = ItemTemplatePagination
-    queryset = (
-        ItemInstance.objects.select_related(
-            "template",
-            "quality_tier",
-            "game_object",
-            "image",
-            "template__image",
-        )
-        .prefetch_related(
-            Prefetch(
-                "item_facets",
-                queryset=ItemFacet.objects.select_related("facet", "attachment_quality_tier"),
-                to_attr="cached_item_facets",
-            ),
-        )
-        .order_by("-pk")
-    )
 
-    def get_queryset(self) -> QuerySet[ItemInstance]:
-        """Scope to items located on characters the request user plays."""
-        qs = super().get_queryset()
-        if self.request.user.is_staff:
-            return qs
-        character_ids = RosterEntry.objects.for_account(
-            cast(AccountDB, self.request.user)
-        ).values_list("character_sheet_id", flat=True)
-        return qs.filter(game_object__db_location__id__in=character_ids)
+    def list(self, request: Request) -> Response:
+        """Return ItemInstance rows located on ``?character=<pk>``."""
+        user = cast(AccountDB, request.user)
+        # noqa: USE_FILTERSET — required scope param for item-first endpoint
+        character_pk = _parse_int_param(request.query_params.get("character"))  # noqa: USE_FILTERSET
+        if character_pk is None:
+            raise serializers.ValidationError({"character": "This query parameter is required."})
+        try:
+            character = ObjectDB.objects.get(pk=character_pk)
+        except ObjectDB.DoesNotExist as exc:
+            raise NotFound from exc
+
+        if not user.is_staff and not _user_owns_character(user, character):
+            raise NotFound
+
+        rows = list(character.carried_items)
+        paginator = ItemTemplatePagination()
+        page = paginator.paginate_queryset(rows, request, view=self)  # ty: ignore[invalid-argument-type]
+        serializer = ItemInstanceReadSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    def retrieve(self, request: Request, pk: str | None = None) -> Response:
+        """Return a single ItemInstance if the requester may view it."""
+        user = cast(AccountDB, request.user)
+        item_pk = _parse_int_param(pk)
+        if item_pk is None:
+            raise NotFound
+        try:
+            item = (
+                ItemInstance.objects.select_related(
+                    "template",
+                    "quality_tier",
+                    "game_object",
+                    "image",
+                    "template__image",
+                )
+                .prefetch_related(
+                    Prefetch(
+                        "item_facets",
+                        queryset=ItemFacet.objects.select_related(
+                            "facet",
+                            "attachment_quality_tier",
+                        ),
+                        to_attr="cached_item_facets",
+                    ),
+                )
+                .get(pk=item_pk)
+            )
+        except ItemInstance.DoesNotExist as exc:
+            raise NotFound from exc
+
+        if not user.is_staff:
+            holder = item.game_object.db_location
+            if holder is None or not _user_owns_character(user, holder):
+                raise NotFound
+
+        serializer = ItemInstanceReadSerializer(item)
+        return Response(serializer.data)
 
 
-class EquippedItemViewSet(viewsets.ReadOnlyModelViewSet):
+def _user_owns_character(user: AccountDB, character: ObjectDB) -> bool:
+    """True if ``user`` currently plays the character at ``character.pk``.
+
+    Uses ``RosterEntry.objects.for_account`` — the canonical helper. The
+    character_sheet pk equals the character ObjectDB pk by construction.
+    """
+    return RosterEntry.objects.for_account(user).filter(character_sheet_id=character.pk).exists()
+
+
+class EquippedItemViewSet(viewsets.ViewSet):
     """Read-only ViewSet for EquippedItem (GET list/detail).
+
+    Item-first / character-scoped shape:
+
+    - ``character`` query parameter is REQUIRED for list.
+    - Non-staff users can only see equipped items for characters they
+      currently play (active roster tenure).
+    - Walks ``character.equipped_items`` cached handler — no DB query
+      when warm.
 
     Mutations (equip/unequip) flow through the unified action dispatcher
     via the ``execute_action`` websocket inputfunc — REST stays read-only.
     """
 
-    serializer_class = EquippedItemReadSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = ItemTemplatePagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = EquippedItemFilter
-    queryset = EquippedItem.objects.select_related(
-        "item_instance",
-        "item_instance__template",
-        "character",
-        "character__sheet_data",
-    ).order_by("-pk")
+
+    def list(self, request: Request) -> Response:
+        """Return equipped items for ``?character=<pk>``."""
+        user = cast(AccountDB, request.user)
+        # noqa: USE_FILTERSET — required scope param for item-first endpoint
+        character_pk = _parse_int_param(request.query_params.get("character"))  # noqa: USE_FILTERSET
+        if character_pk is None:
+            raise serializers.ValidationError({"character": "This query parameter is required."})
+        try:
+            character = ObjectDB.objects.get(pk=character_pk)
+        except ObjectDB.DoesNotExist as exc:
+            raise NotFound from exc
+
+        if not user.is_staff and not _user_owns_character(user, character):
+            raise NotFound  # don't leak existence
+
+        rows = list(character.equipped_items)
+        paginator = ItemTemplatePagination()
+        page = paginator.paginate_queryset(rows, request, view=self)  # ty: ignore[invalid-argument-type]
+        serializer = EquippedItemReadSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    def retrieve(self, request: Request, pk: str | None = None) -> Response:
+        """Return a single EquippedItem if the requester may view it."""
+        user = cast(AccountDB, request.user)
+        row_pk = _parse_int_param(pk)
+        if row_pk is None:
+            raise NotFound
+        try:
+            row = EquippedItem.objects.select_related(
+                "item_instance",
+                "item_instance__template",
+                "character",
+                "character__sheet_data",
+            ).get(pk=row_pk)
+        except EquippedItem.DoesNotExist as exc:
+            raise NotFound from exc
+
+        if not user.is_staff and not _user_owns_character(user, row.character):
+            raise NotFound
+
+        serializer = EquippedItemReadSerializer(row)
+        return Response(serializer.data)
 
 
 class OutfitWritePermission(PlayerOrStaffPermission):
@@ -289,103 +450,238 @@ class OutfitSlotWritePermission(PlayerOrStaffPermission):
         return _account_currently_plays(cast(AccountDB, request.user), obj.outfit.character_sheet)
 
 
-class OutfitViewSet(viewsets.ModelViewSet):
+class OutfitViewSet(viewsets.ViewSet):
     """ViewSet for Outfit definitions (save / list / rename / delete).
 
-    Save delegates to ``save_outfit`` (snapshots current loadout). PATCH
-    updates the Outfit row directly. DELETE delegates to ``delete_outfit``.
-    Per design, equip/unequip and apply/undress flow through the action
-    dispatcher — this ViewSet only handles configuration CRUD.
+    Item-first / sheet-scoped shape:
+
+    - ``character_sheet`` query parameter is REQUIRED for list.
+    - List walks ``sheet.saved_outfits`` cached handler.
+    - Write actions delegate to existing serializers + services,
+      gated by OutfitWritePermission.
     """
 
     permission_classes = [OutfitWritePermission]
-    pagination_class = ItemTemplatePagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = OutfitFilter
-    queryset = (
-        Outfit.objects.select_related(
-            "character_sheet",
-            "wardrobe",
-            "wardrobe__template",
+
+    def list(self, request: Request) -> Response:
+        """Return outfits saved on ``?character_sheet=<pk>``."""
+        user = cast(AccountDB, request.user)
+        # noqa: USE_FILTERSET — required scope param for item-first endpoint
+        sheet_pk = _parse_int_param(request.query_params.get("character_sheet"))  # noqa: USE_FILTERSET
+        if sheet_pk is None:
+            raise serializers.ValidationError(
+                {"character_sheet": "This query parameter is required."}
+            )
+        try:
+            sheet = CharacterSheet.objects.get(pk=sheet_pk)
+        except CharacterSheet.DoesNotExist as exc:
+            raise NotFound from exc
+
+        if not user.is_staff and not _account_currently_plays(user, sheet):
+            raise NotFound
+
+        rows = list(sheet.saved_outfits)
+        paginator = ItemTemplatePagination()
+        page = paginator.paginate_queryset(rows, request, view=self)  # ty: ignore[invalid-argument-type]
+        serializer = OutfitReadSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    def retrieve(self, request: Request, pk: str | None = None) -> Response:
+        """Return a single Outfit if the requester may view it."""
+        user = cast(AccountDB, request.user)
+        outfit_pk = _parse_int_param(pk)
+        if outfit_pk is None:
+            raise NotFound
+        try:
+            outfit = (
+                Outfit.objects.select_related(
+                    "character_sheet",
+                    "wardrobe",
+                    "wardrobe__template",
+                )
+                .prefetch_related(
+                    Prefetch(
+                        "slots",
+                        queryset=OutfitSlot.objects.select_related(
+                            "item_instance",
+                            "item_instance__template",
+                            "item_instance__quality_tier",
+                        ),
+                        to_attr="cached_outfit_slots",
+                    ),
+                )
+                .get(pk=outfit_pk)
+            )
+        except Outfit.DoesNotExist as exc:
+            raise NotFound from exc
+
+        if not user.is_staff and not _account_currently_plays(user, outfit.character_sheet):
+            raise NotFound
+
+        serializer = OutfitReadSerializer(outfit)
+        return Response(serializer.data)
+
+    def create(self, request: Request) -> Response:
+        """Create an Outfit via the existing write serializer (calls save_outfit)."""
+        serializer = OutfitWriteSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        outfit = serializer.save()
+        read = OutfitReadSerializer(outfit)
+        return Response(read.data, status=201)
+
+    def update(self, request: Request, pk: str | None = None) -> Response:
+        """Full update (PUT) — rename/edit outfit row directly."""
+        return self._update(request, pk, partial=False)
+
+    def partial_update(self, request: Request, pk: str | None = None) -> Response:
+        """Partial update (PATCH)."""
+        return self._update(request, pk, partial=True)
+
+    def _update(self, request: Request, pk: str | None, *, partial: bool) -> Response:
+        outfit_pk = _parse_int_param(pk)
+        if outfit_pk is None:
+            raise NotFound
+        try:
+            outfit = Outfit.objects.select_related("character_sheet").get(pk=outfit_pk)
+        except Outfit.DoesNotExist as exc:
+            raise NotFound from exc
+        self.check_object_permissions(request, outfit)
+        serializer = OutfitWriteSerializer(
+            outfit,
+            data=request.data,
+            partial=partial,
+            context={"request": request},
         )
-        .prefetch_related(
-            Prefetch(
-                "slots",
-                queryset=OutfitSlot.objects.select_related(
-                    "item_instance",
-                    "item_instance__template",
-                    "item_instance__quality_tier",
-                ),
-                to_attr="cached_outfit_slots",
-            ),
-        )
-        .order_by("name")
-    )
+        serializer.is_valid(raise_exception=True)
+        outfit = serializer.save()
+        # Invalidate the sheet's outfits handler so the rename shows next read.
+        outfit.character_sheet.saved_outfits.invalidate()
+        read = OutfitReadSerializer(outfit)
+        return Response(read.data)
 
-    def get_queryset(self) -> QuerySet[Outfit]:
-        """Scope to outfits owned by characters the request user plays."""
-        qs = super().get_queryset()
-        if self.request.user.is_staff:
-            return qs
-        sheet_ids = RosterEntry.objects.for_account(cast(AccountDB, self.request.user)).values_list(
-            "character_sheet_id", flat=True
-        )
-        return qs.filter(character_sheet_id__in=sheet_ids)
-
-    def get_serializer_class(self) -> type[serializers.ModelSerializer]:
-        """Use write serializer for create/update; read serializer otherwise."""
-        if self.action in ("create", "update", "partial_update"):
-            return OutfitWriteSerializer
-        return OutfitReadSerializer
-
-    def perform_destroy(self, instance: Outfit) -> None:
-        """Delegate destruction to the delete_outfit service."""
-        delete_outfit(instance)
+    def destroy(self, request: Request, pk: str | None = None) -> Response:
+        """Delete via the delete_outfit service (cascades slots)."""
+        outfit_pk = _parse_int_param(pk)
+        if outfit_pk is None:
+            raise NotFound
+        try:
+            outfit = Outfit.objects.select_related("character_sheet").get(pk=outfit_pk)
+        except Outfit.DoesNotExist as exc:
+            raise NotFound from exc
+        self.check_object_permissions(request, outfit)
+        sheet = outfit.character_sheet
+        delete_outfit(outfit)
+        sheet.saved_outfits.invalidate()
+        return Response(status=204)
 
 
-class OutfitSlotViewSet(viewsets.ModelViewSet):
+class OutfitSlotViewSet(viewsets.ViewSet):
     """ViewSet for OutfitSlot create/list/delete.
 
-    Flat per-slot endpoint (matches ``EquippedItemViewSet`` shape — one
-    POST adds or replaces a single slot, one DELETE removes one slot).
+    Item-first / outfit-scoped shape:
+
+    - ``outfit`` query parameter is REQUIRED for list.
+    - List walks ``outfit.cached_outfit_slots`` (prefetch target).
+    - Write actions delegate to existing serializers + services.
     """
 
     http_method_names = ["get", "post", "delete", "head", "options"]
     permission_classes = [OutfitSlotWritePermission]
-    pagination_class = ItemTemplatePagination
     filter_backends = [DjangoFilterBackend]
     filterset_class = OutfitSlotFilter
-    queryset = OutfitSlot.objects.select_related(
-        "outfit",
-        "outfit__character_sheet",
-        "item_instance",
-        "item_instance__template",
-        "item_instance__quality_tier",
-    ).order_by("body_region", "equipment_layer")
 
-    def get_queryset(self) -> QuerySet[OutfitSlot]:
-        """Scope to slots whose outfit belongs to a character the user plays."""
-        qs = super().get_queryset()
-        if self.request.user.is_staff:
-            return qs
-        sheet_ids = RosterEntry.objects.for_account(cast(AccountDB, self.request.user)).values_list(
-            "character_sheet_id", flat=True
-        )
-        return qs.filter(outfit__character_sheet_id__in=sheet_ids)
+    def list(self, request: Request) -> Response:
+        """Return OutfitSlot rows for ``?outfit=<pk>``."""
+        user = cast(AccountDB, request.user)
+        # noqa: USE_FILTERSET — required scope param for item-first endpoint
+        outfit_pk = _parse_int_param(request.query_params.get("outfit"))  # noqa: USE_FILTERSET
+        if outfit_pk is None:
+            raise serializers.ValidationError({"outfit": "This query parameter is required."})
+        try:
+            outfit = (
+                Outfit.objects.select_related("character_sheet")
+                .prefetch_related(
+                    Prefetch(
+                        "slots",
+                        queryset=OutfitSlot.objects.select_related(
+                            "item_instance",
+                            "item_instance__template",
+                            "item_instance__quality_tier",
+                        ),
+                        to_attr="cached_outfit_slots",
+                    ),
+                )
+                .get(pk=outfit_pk)
+            )
+        except Outfit.DoesNotExist as exc:
+            raise NotFound from exc
 
-    def get_serializer_class(self) -> type[serializers.ModelSerializer]:
-        """Use write serializer for create; read serializer otherwise."""
-        if self.action == "create":
-            return OutfitSlotWriteSerializer
-        return OutfitSlotReadSerializer
+        if not user.is_staff and not _account_currently_plays(user, outfit.character_sheet):
+            raise NotFound
 
-    def perform_destroy(self, instance: OutfitSlot) -> None:
-        """Delegate destruction to remove_outfit_slot (idempotent)."""
+        rows = list(outfit.cached_outfit_slots)
+        paginator = ItemTemplatePagination()
+        page = paginator.paginate_queryset(rows, request, view=self)  # ty: ignore[invalid-argument-type]
+        serializer = OutfitSlotReadSerializer(page, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
+    def retrieve(self, request: Request, pk: str | None = None) -> Response:
+        """Return a single OutfitSlot if the requester may view it."""
+        user = cast(AccountDB, request.user)
+        slot_pk = _parse_int_param(pk)
+        if slot_pk is None:
+            raise NotFound
+        try:
+            slot = OutfitSlot.objects.select_related(
+                "outfit",
+                "outfit__character_sheet",
+                "item_instance",
+                "item_instance__template",
+                "item_instance__quality_tier",
+            ).get(pk=slot_pk)
+        except OutfitSlot.DoesNotExist as exc:
+            raise NotFound from exc
+
+        if not user.is_staff and not _account_currently_plays(user, slot.outfit.character_sheet):
+            raise NotFound
+
+        serializer = OutfitSlotReadSerializer(slot)
+        return Response(serializer.data)
+
+    def create(self, request: Request) -> Response:
+        """Create an OutfitSlot via the existing write serializer."""
+        serializer = OutfitSlotWriteSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        slot = serializer.save()
+        # Invalidate the outfit's slots cache so future reads see the new row.
+        with contextlib.suppress(AttributeError):
+            del slot.outfit.cached_outfit_slots
+        read = OutfitSlotReadSerializer(slot)
+        return Response(read.data, status=201)
+
+    def destroy(self, request: Request, pk: str | None = None) -> Response:
+        """Delete via remove_outfit_slot (idempotent)."""
+        slot_pk = _parse_int_param(pk)
+        if slot_pk is None:
+            raise NotFound
+        try:
+            slot = OutfitSlot.objects.select_related("outfit", "outfit__character_sheet").get(
+                pk=slot_pk
+            )
+        except OutfitSlot.DoesNotExist as exc:
+            raise NotFound from exc
+        self.check_object_permissions(request, slot)
+        outfit = slot.outfit
         remove_outfit_slot(
-            outfit=instance.outfit,
-            body_region=instance.body_region,
-            equipment_layer=instance.equipment_layer,
+            outfit=outfit,
+            body_region=slot.body_region,
+            equipment_layer=slot.equipment_layer,
         )
+        with contextlib.suppress(AttributeError):
+            del outfit.cached_outfit_slots
+        return Response(status=204)
 
 
 def _parse_int_param(value: object) -> int | None:

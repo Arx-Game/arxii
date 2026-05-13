@@ -7,6 +7,7 @@ live alongside but are called from the REST layer for player bookkeeping.
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING
 
 from django.db import transaction
@@ -141,6 +142,7 @@ def save_outfit(
                 for row in rows
             ]
         )
+    character_sheet.saved_outfits.invalidate()
     return outfit
 
 
@@ -150,7 +152,9 @@ def delete_outfit(outfit: Outfit) -> None:
     Items are not touched — the OutfitSlot rows cascade-delete with the
     Outfit, but never the underlying ItemInstance.
     """
+    sheet = outfit.character_sheet
     outfit.delete()
+    sheet.saved_outfits.invalidate()
 
 
 @transaction.atomic
@@ -193,12 +197,15 @@ def add_outfit_slot(
         body_region=body_region,
         equipment_layer=equipment_layer,
     ).delete()
-    return OutfitSlot.objects.create(
+    slot = OutfitSlot.objects.create(
         outfit=outfit,
         item_instance=item_instance,
         body_region=body_region,
         equipment_layer=equipment_layer,
     )
+    with contextlib.suppress(AttributeError):
+        del outfit.cached_outfit_slots
+    return slot
 
 
 @transaction.atomic
@@ -214,3 +221,5 @@ def remove_outfit_slot(
         body_region=body_region,
         equipment_layer=equipment_layer,
     ).delete()
+    with contextlib.suppress(AttributeError):
+        del outfit.cached_outfit_slots

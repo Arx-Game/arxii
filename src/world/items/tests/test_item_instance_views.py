@@ -119,6 +119,11 @@ class ItemInstanceViewSetTests(TestCase):
     # Auth guard
     # ------------------------------------------------------------------
 
+    def test_list_requires_character_param(self) -> None:
+        """GET without ?character returns 400."""
+        response = self.client.get("/api/items/inventory/")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_list_unauthenticated_returns_401(self) -> None:
         """Unauthenticated requests are rejected."""
         self.client.force_authenticate(user=None)
@@ -187,8 +192,8 @@ class ItemInstanceViewSetTests(TestCase):
     def test_list_excludes_items_on_characters_user_does_not_play(self) -> None:
         """A non-staff user cannot see items located on a character they do not play.
 
-        Even if they pass that character's id as a filter — the queryset scope
-        runs first, the filter is just a refinement.
+        Item-first scoping: passing another character's pk returns 404 —
+        we don't reveal whether the character exists or not.
         """
         # Build a character the request user does NOT play.
         other_character = CharacterFactory(
@@ -196,17 +201,15 @@ class ItemInstanceViewSetTests(TestCase):
             location=self.room,
         )
         CharacterSheetFactory(character=other_character)
-        # No tenure for self.user → scope excludes other_character's items.
-        other_item = self._make_item_at(
+        # No tenure for self.user → scope rejects this request.
+        self._make_item_at(
             location=other_character,
             db_key="InvViewOtherItem",
             quality_tier=self.quality,
         )
 
         response = self.client.get(f"/api/items/inventory/?character={other_character.pk}")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        result_ids = {row["id"] for row in response.data["results"]}
-        self.assertNotIn(other_item.pk, result_ids)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_staff_sees_all_items(self) -> None:
         """Staff users bypass the per-account scope."""

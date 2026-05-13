@@ -7,6 +7,8 @@ failures roll back fully.
 
 from __future__ import annotations
 
+import contextlib
+
 from django.db import transaction
 
 from flows.object_states.character_state import CharacterState
@@ -42,11 +44,17 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     if item.instance.contained_in is not None:
         item.instance.contained_in = None
         item.instance.save(update_fields=["contained_in"])
+    previous_location = item.instance.game_object.location
     if not item.instance.game_object.move_to(character.obj, quiet=True):
         raise NotReachable
     if item.instance.owner is None:
         item.instance.owner = character.obj.account
         item.instance.save(update_fields=["owner"])
+    character.obj.carried_items.invalidate()
+    # If the item came from another character (rare), invalidate that too.
+    if previous_location is not None and previous_location.pk != character.obj.pk:
+        with contextlib.suppress(AttributeError):
+            previous_location.carried_items.invalidate()
 
 
 @transaction.atomic
@@ -71,6 +79,7 @@ def drop(character: CharacterState, item: ItemState) -> None:
         unequip_item(equipped_item=equipped)
     if not item.instance.game_object.move_to(character.obj.location, quiet=True):
         raise NotReachable
+    character.obj.carried_items.invalidate()
 
 
 @transaction.atomic
@@ -105,6 +114,8 @@ def give(
         from_account=previous_owner,
         to_account=recipient.obj.account,
     )
+    giver.obj.carried_items.invalidate()
+    recipient.obj.carried_items.invalidate()
 
 
 @transaction.atomic
