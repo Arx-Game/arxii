@@ -42,11 +42,21 @@ def pick_up(character: CharacterState, item: ItemState) -> None:
     if item.instance.contained_in is not None:
         item.instance.contained_in = None
         item.instance.save(update_fields=["contained_in"])
+    previous_location = item.instance.game_object.location
     if not item.instance.game_object.move_to(character.obj, quiet=True):
         raise NotReachable
     if item.instance.owner is None:
         item.instance.owner = character.obj.account
         item.instance.save(update_fields=["owner"])
+    character.obj.carried_items.invalidate()
+    # If the item came from another character (rare), invalidate that too.
+    # Rooms/containers don't have ``carried_items`` — only characters do.
+    if (
+        previous_location is not None
+        and previous_location.pk != character.obj.pk
+        and hasattr(previous_location, "carried_items")
+    ):
+        previous_location.carried_items.invalidate()
 
 
 @transaction.atomic
@@ -71,6 +81,7 @@ def drop(character: CharacterState, item: ItemState) -> None:
         unequip_item(equipped_item=equipped)
     if not item.instance.game_object.move_to(character.obj.location, quiet=True):
         raise NotReachable
+    character.obj.carried_items.invalidate()
 
 
 @transaction.atomic
@@ -105,6 +116,8 @@ def give(
         from_account=previous_owner,
         to_account=recipient.obj.account,
     )
+    giver.obj.carried_items.invalidate()
+    recipient.obj.carried_items.invalidate()
 
 
 @transaction.atomic
@@ -193,6 +206,9 @@ def put_in(
     item.instance.save(update_fields=["contained_in"])
     if not item.instance.game_object.move_to(container.instance.game_object, quiet=True):
         raise NotReachable
+    # Item moved off the character (now nested in the container's game_object),
+    # so the carried-items cache for the character is stale.
+    character.obj.carried_items.invalidate()
 
 
 @transaction.atomic
@@ -212,3 +228,5 @@ def take_out(character: CharacterState, item: ItemState) -> None:
     item.instance.save(update_fields=["contained_in"])
     if not item.instance.game_object.move_to(character.obj, quiet=True):
         raise NotReachable
+    # Item now located on character — invalidate so the next read sees it.
+    character.obj.carried_items.invalidate()

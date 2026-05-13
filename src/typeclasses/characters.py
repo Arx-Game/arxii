@@ -156,6 +156,13 @@ class Character(ObjectParent, DefaultCharacter):
         return CharacterEquipmentHandler(self)
 
     @cached_property
+    def carried_items(self):
+        """Cached handler for items located on this character (inventory)."""
+        from world.items.handlers import CharacterCarriedItemsHandler
+
+        return CharacterCarriedItemsHandler(self)
+
+    @cached_property
     def covenant_roles(self):
         """Cached handler for this character's covenant role assignments (Spec D §3.3)."""
         from world.covenants.handlers import CharacterCovenantRoleHandler
