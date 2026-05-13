@@ -39,6 +39,7 @@ from world.combat.serializers import (
     DeclareActionSerializer,
     EncounterDetailSerializer,
     EncounterListSerializer,
+    JoinEncounterSerializer,
     RemoveParticipantSerializer,
     RoundActionSerializer,
     UpgradeComboSerializer,
@@ -64,7 +65,7 @@ from world.stories.pagination import StandardResultsSetPagination
 _ERR_NOT_PARTICIPANT = "Not a participant in this encounter."
 _ERR_NO_ACTION = "No action declared for this round."
 _ERR_ALREADY_JOINED = "Already in this encounter."
-_ERR_NO_CHARACTER = "No active character found."
+_ERR_CHARACTER_NOT_YOURS = "You do not currently play that character."
 _ERR_ADD_PARTICIPANT = "Failed to add participant."
 _ERR_DECLARE_FAILED = "Failed to declare action."
 _ERR_INVALID_STATUS = "Encounter is not in a valid status for this action."
@@ -311,10 +312,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_NOT_PARTICIPANT},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        current_action = CombatRoundAction.objects.filter(
-            participant=participant,
-            round_number=encounter.round_number,
-        ).first()
+        current_action = self._current_round_action(participant, encounter)
         if not current_action:
             return Response(
                 {"detail": _ERR_NO_ACTION},
@@ -334,10 +332,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_NOT_PARTICIPANT},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        action_obj = CombatRoundAction.objects.filter(
-            participant=participant,
-            round_number=encounter.round_number,
-        ).first()
+        action_obj = self._current_round_action(participant, encounter)
         if not action_obj:
             return Response(None)
         return Response(RoundActionSerializer(action_obj).data)
@@ -376,10 +371,7 @@ class CombatEncounterViewSet(ModelViewSet):
         serializer.is_valid(raise_exception=True)
         combo_id = serializer.validated_data["combo_id"]
         combo = get_object_or_404(ComboDefinition, pk=combo_id)
-        current_action = CombatRoundAction.objects.filter(
-            participant=participant,
-            round_number=encounter.round_number,
-        ).first()
+        current_action = self._current_round_action(participant, encounter)
         if not current_action:
             return Response(
                 {"detail": _ERR_NO_ACTION},
@@ -406,10 +398,7 @@ class CombatEncounterViewSet(ModelViewSet):
                 {"detail": _ERR_NOT_PARTICIPANT},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        current_action = CombatRoundAction.objects.filter(
-            participant=participant,
-            round_number=encounter.round_number,
-        ).first()
+        current_action = self._current_round_action(participant, encounter)
         if not current_action:
             return Response(
                 {"detail": _ERR_NO_ACTION},
@@ -424,17 +413,22 @@ class CombatEncounterViewSet(ModelViewSet):
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def join(self, request: Request, pk: int | None = None) -> Response:
-        """Player self-joins the encounter."""
+        """Player self-joins the encounter as the specified character.
+
+        Requires an explicit ``character_sheet_id`` in the request body;
+        never auto-selects a character. The chosen sheet must belong to
+        an active roster tenure for the requesting user.
+        """
         encounter = self.get_object()
-        user = cast(AccountDB, request.user)
-        active_entries = RosterEntry.objects.for_account(user)
-        character_ids = active_entries.values_list("character_sheet_id", flat=True)
-        sheet = CharacterSheet.objects.filter(character_id__in=character_ids).first()
-        if not sheet:
+        serializer = JoinEncounterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        sheet_pk = serializer.validated_data["character_sheet_id"]
+        if sheet_pk not in self._viewer_character_ids(request):
             return Response(
-                {"detail": _ERR_NO_CHARACTER},
-                status=status.HTTP_400_BAD_REQUEST,
+                {"detail": _ERR_CHARACTER_NOT_YOURS},
+                status=status.HTTP_403_FORBIDDEN,
             )
+        sheet = get_object_or_404(CharacterSheet, pk=sheet_pk)
         try:
             new_participant = join_encounter(encounter, sheet)
         except ValueError:
@@ -465,6 +459,25 @@ class CombatEncounterViewSet(ModelViewSet):
 
     # --- Helpers ---
 
+    def _viewer_character_ids(self, request: Request) -> set[int]:
+        """Return character_sheet ids the request user currently plays.
+
+        Caches the result on the ``request`` object so multiple callers in
+        the same request (serializer context + ``_get_participant``) share
+        a single roster query instead of duplicating it.
+        """
+        if hasattr(request, "_combat_viewer_character_ids"):
+            return request._combat_viewer_character_ids  # noqa: SLF001
+        if not request.user.is_authenticated:
+            ids: set[int] = set()
+        else:
+            user = cast(AccountDB, request.user)
+            ids = set(RosterEntry.objects.for_account(user).character_ids())
+        # Per-request cache attribute. Namespaced with the combat prefix so
+        # it doesn't collide with any other code stashing state on request.
+        request._combat_viewer_character_ids = ids  # noqa: SLF001
+        return ids
+
     def _serialize_encounter(
         self,
         request: Request,
@@ -493,24 +506,25 @@ class CombatEncounterViewSet(ModelViewSet):
         queries.
         """
         context: dict = {"request": request}
-
-        if not request.user.is_authenticated:
-            context["viewer_character_ids"] = set()
-            context["is_gm"] = False
-            return context
-
-        user = cast(AccountDB, request.user)
-        character_ids = set(
-            RosterEntry.objects.for_account(user).character_ids(),
-        )
-        context["viewer_character_ids"] = character_ids
+        context["viewer_character_ids"] = self._viewer_character_ids(request)
 
         is_gm = False
-        if not request.user.is_staff and encounter.scene:
+        if request.user.is_authenticated and not request.user.is_staff and encounter.scene:
             is_gm = encounter.scene.is_gm(request.user)
-        context["is_gm"] = request.user.is_staff or is_gm
+        context["is_gm"] = bool(request.user.is_authenticated and request.user.is_staff) or is_gm
 
         return context
+
+    def _current_round_action(
+        self,
+        participant: CombatParticipant,
+        encounter: CombatEncounter,
+    ) -> CombatRoundAction | None:
+        """Return the participant's CombatRoundAction for the current round."""
+        return CombatRoundAction.objects.filter(
+            participant=participant,
+            round_number=encounter.round_number,
+        ).first()
 
     def _get_participant(
         self,
@@ -519,14 +533,11 @@ class CombatEncounterViewSet(ModelViewSet):
     ) -> CombatParticipant | None:
         """Get the requesting user's active participant from cached data.
 
-        Uses participants_cached (prefetched on the encounter) and
-        viewer_character_ids (from serializer context or fresh lookup).
-        No DB query if the encounter was loaded via _base_queryset.
+        Walks ``participants_cached`` (prefetched on the encounter) and
+        reads ``viewer_character_ids`` from the per-request cache — no
+        new DB queries when the encounter is warm.
         """
-        user = cast(AccountDB, request.user)
-        character_ids = set(
-            RosterEntry.objects.for_account(user).character_ids(),
-        )
+        character_ids = self._viewer_character_ids(request)
         return next(
             (
                 p

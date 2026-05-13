@@ -233,6 +233,37 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         )
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
 
+    def test_join_requires_character_sheet_id(self) -> None:
+        """POST /join without character_sheet_id returns 400."""
+        # Use a fresh account with no existing participation
+        joiner_account = AccountFactory(username="joiner_no_id")
+        joiner_character = CharacterFactory(db_key="joiner_no_id_char")
+        CharacterSheetFactory(character=joiner_character)
+        RosterTenureFactory(
+            roster_entry__character_sheet__character=joiner_character,
+            player_data__account=joiner_account,
+        )
+        # Encounter must accept a same-room join — easiest: use the scene one,
+        # which IsInEncounterRoom is bypassed for staff... use staff to skip
+        # the room check and isolate the validation behavior.
+        staff = AccountFactory(username="join_check_staff", is_staff=True)
+        client = APIClient()
+        client.force_authenticate(user=staff)
+        response = client.post(f"/api/combat/{self.encounter.pk}/join/")
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+
+    def test_join_rejects_other_users_character(self) -> None:
+        """POST /join with a character the user does not play returns 403."""
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        # Pass the GM's sheet pk — the player doesn't play it.
+        response = client.post(
+            f"/api/combat/{self.encounter.pk}/join/",
+            {"character_sheet_id": self.gm_sheet.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
     def test_flee_marks_participant_fled(self) -> None:
         """Flee endpoint marks the participant as FLED."""
         # Use a separate encounter in DECLARING status for the flee test

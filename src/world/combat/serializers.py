@@ -399,6 +399,17 @@ class AddParticipantSerializer(serializers.Serializer):
     )
 
 
+class JoinEncounterSerializer(serializers.Serializer):
+    """Write serializer for a player self-joining an encounter.
+
+    Requires explicit ``character_sheet_id`` — never auto-selects which
+    of the user's characters joins. The view validates that the chosen
+    sheet belongs to one of the user's active tenures.
+    """
+
+    character_sheet_id = serializers.IntegerField()
+
+
 class AddOpponentSerializer(serializers.Serializer):
     """Write serializer for adding an opponent to an encounter."""
 
