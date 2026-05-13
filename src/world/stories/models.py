@@ -114,6 +114,18 @@ class Story(SharedMemoryModel):
         related_name="stories_created_in_era",
         help_text="The metaplot era in which this story was created. Null = pre-era or ungrouped.",
     )
+    covenant = models.ForeignKey(
+        "covenants.Covenant",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="storylines",
+        help_text=(
+            "For GROUP-scope stories: the covenant this storyline belongs to. "
+            "Informational — not a credit gate. SET_NULL on covenant delete so "
+            "an archived covenant doesn't cascade-delete its stories."
+        ),
+    )
 
     # Ownership and management
     owners = models.ManyToManyField(
@@ -804,6 +816,32 @@ class Beat(SharedMemoryModel):
         null=True,
         blank=True,
         help_text="For AGGREGATE_THRESHOLD predicates — total contribution points required.",
+    )
+
+    # Consequence pools for beat outcomes (nullable; authoring is opt-in).
+    success_consequences = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="success_beats",
+        help_text="ConsequencePool to fire when this beat resolves SUCCESS.",
+    )
+    failure_consequences = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="failure_beats",
+        help_text="ConsequencePool to fire when this beat resolves FAILURE.",
+    )
+    expired_consequences = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="expired_beats",
+        help_text="ConsequencePool to fire when this beat resolves EXPIRED.",
     )
 
     # AGM eligibility flag — Lead GM may expose specific beats to AGM pool.
