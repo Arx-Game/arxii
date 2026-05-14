@@ -60,13 +60,15 @@ per-row decay/growth on modifiers. See
 `docs/plans/2026-05-09-location-stats-design.md` for the full design.
 
 **Key ideas:**
-- Two models — `LocationStatOverride` (rare absolute claims that cut the
-  cascade) and `LocationStatModifier` (common additive contributions that
-  stack and decay)
+- Two models — `LocationValueOverride` (rare absolute claims that cut the
+  cascade) and `LocationValueModifier` (common additive contributions that
+  stack and decay). Each row carries either a stat (`stat_key`, StatKey
+  TextChoices) or a resonance (FK to `magic.Resonance`), gated by `key_type`.
 - Most-specific Override wins; absent any Override, all Modifiers in the
-  chain sum + per-stat default, clamped to bounds
+  chain sum + per-stat default, clamped to bounds (resonance reads start
+  from 0 and are not clamped)
 - `RoomProfile.is_outdoor` controls whether weather-system writes apply
-- One read service: `effective_stat(room, stat_key) -> int`
+- One polymorphic read service: `effective_value(room, *, stat_key=..., resonance=...) -> int`
 - Many other consumer systems (encounter generator, DC modifier, weather,
   magic, events bonuses) plug in over time
 
