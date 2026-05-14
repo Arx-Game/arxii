@@ -12,8 +12,13 @@ import type { components } from '@/generated/api';
 // ---------------------------------------------------------------------------
 
 export type Outfit = components['schemas']['OutfitRead'];
+// POST uses the full write serializer (snapshots current loadout). PUT/PATCH
+// use the rename serializer (only name + description are mutable;
+// character_sheet and wardrobe are write-once). See world.items.serializers
+// for the distinction.
 export type OutfitWriteRequest = components['schemas']['OutfitWriteRequest'];
-export type PatchedOutfitWriteRequest = components['schemas']['PatchedOutfitWriteRequest'];
+export type OutfitRenameRequest = components['schemas']['OutfitRenameRequest'];
+export type PatchedOutfitRenameRequest = components['schemas']['PatchedOutfitRenameRequest'];
 
 export type OutfitSlot = components['schemas']['OutfitSlotRead'];
 export type OutfitSlotWriteRequest = components['schemas']['OutfitSlotWriteRequest'];
