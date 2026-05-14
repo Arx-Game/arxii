@@ -67,13 +67,14 @@ from evennia.accounts.models import AccountDB
 
 from evennia_extensions.models import RoomProfile
 from world.character_sheets.models import CharacterSheet
+from world.locations.constants import RESONANCE_DEFAULT_MAGNITUDE, KeyType, LocationParentType
+from world.locations.models import LocationStatModifier
 from world.magic.exceptions import EndorsementValidationError
 from world.magic.models import (
     CharacterResonance,
     PoseEndorsement,
     Resonance,
     ResonanceGainConfig,
-    RoomAuraProfile,
     RoomResonance,
     SceneEntryEndorsement,
 )
@@ -115,23 +116,40 @@ def get_resonance_gain_config() -> ResonanceGainConfig:
         return cfg
 
 
+ROOM_RESONANCE_TAG_SOURCE = "tag_room_resonance"
+
+
 @transaction.atomic
 def tag_room_resonance(
     room_profile: RoomProfile,
     resonance: Resonance,
-    set_by: AccountDB | None = None,
-) -> RoomResonance:
-    """Tag a room with a resonance. Lazy-creates RoomAuraProfile if missing.
+    set_by: AccountDB | None = None,  # noqa: ARG001 — kept for backwards-compat with old call sites; audit moved into source field
+) -> LocationStatModifier:
+    """Tag a room with a resonance by creating a cascade modifier row.
 
-    Idempotent — returns the existing row unchanged if already tagged.
+    Idempotent — returns the existing row (matched by room_profile +
+    resonance + source) if already tagged. The row uses
+    ``RESONANCE_DEFAULT_MAGNITUDE`` as its value and ``change_per_day=0``
+    (permanent). Staff can re-tune the magnitude via direct cascade-row edits.
+
+    Distinct from staff-authored stacking modifiers because the lookup
+    matches on ``source=ROOM_RESONANCE_TAG_SOURCE`` — multiple unrelated
+    modifier rows on the same (room, resonance) can coexist with different
+    sources.
     """
-    aura, _ = RoomAuraProfile.objects.get_or_create(room_profile=room_profile)
-    tag, _ = RoomResonance.objects.get_or_create(
-        room_aura_profile=aura,
+    row, _ = LocationStatModifier.objects.update_or_create(
+        parent_type=LocationParentType.ROOM,
+        room_profile=room_profile,
+        key_type=KeyType.RESONANCE,
         resonance=resonance,
-        defaults={"set_by": set_by},
+        source=ROOM_RESONANCE_TAG_SOURCE,
+        defaults={
+            "stat_key": "",
+            "value": RESONANCE_DEFAULT_MAGNITUDE,
+            "change_per_day": 0,
+        },
     )
-    return tag
+    return row
 
 
 @transaction.atomic
@@ -139,13 +157,18 @@ def untag_room_resonance(
     room_profile: RoomProfile,
     resonance: Resonance,
 ) -> None:
-    """Remove a resonance tag. No-op if absent."""
-    aura = getattr(room_profile, "room_aura_profile", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor, raises RelatedObjectDoesNotExist if missing
-    if aura is None:
-        return
-    RoomResonance.objects.filter(
-        room_aura_profile=aura,
+    """Remove the tag cascade row for this (room, resonance). No-op if absent.
+
+    Only removes rows whose ``source=ROOM_RESONANCE_TAG_SOURCE``. Other
+    stacking modifiers on the same (room, resonance) with different sources
+    are left alone.
+    """
+    LocationStatModifier.objects.filter(
+        parent_type=LocationParentType.ROOM,
+        room_profile=room_profile,
+        key_type=KeyType.RESONANCE,
         resonance=resonance,
+        source=ROOM_RESONANCE_TAG_SOURCE,
     ).delete()
 
 

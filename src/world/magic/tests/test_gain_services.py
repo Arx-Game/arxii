@@ -4,49 +4,64 @@ from django.test import TestCase
 
 
 class TagRoomResonanceTests(TestCase):
-    def test_creates_aura_profile_if_missing(self) -> None:
+    def test_creates_cascade_row(self) -> None:
         from evennia_extensions.factories import RoomProfileFactory
+        from world.locations.constants import RESONANCE_DEFAULT_MAGNITUDE, KeyType
+        from world.locations.models import LocationStatModifier
         from world.magic.factories import ResonanceFactory
-        from world.magic.models import RoomAuraProfile, RoomResonance
-        from world.magic.services.gain import tag_room_resonance
+        from world.magic.services.gain import ROOM_RESONANCE_TAG_SOURCE, tag_room_resonance
 
         rp = RoomProfileFactory()
         res = ResonanceFactory()
-        self.assertFalse(hasattr(rp, "room_aura_profile") and rp.room_aura_profile is not None)
 
         tag = tag_room_resonance(rp, res)
 
-        self.assertTrue(RoomAuraProfile.objects.filter(room_profile=rp).exists())
-        self.assertIsInstance(tag, RoomResonance)
+        self.assertIsInstance(tag, LocationStatModifier)
         self.assertEqual(tag.resonance, res)
+        self.assertEqual(tag.key_type, KeyType.RESONANCE)
+        self.assertEqual(tag.value, RESONANCE_DEFAULT_MAGNITUDE)
+        self.assertEqual(tag.source, ROOM_RESONANCE_TAG_SOURCE)
+        self.assertEqual(tag.room_profile, rp)
 
     def test_idempotent_on_duplicate(self) -> None:
         from evennia_extensions.factories import RoomProfileFactory
+        from world.locations.models import LocationStatModifier
         from world.magic.factories import ResonanceFactory
-        from world.magic.models import RoomResonance
-        from world.magic.services.gain import tag_room_resonance
+        from world.magic.services.gain import ROOM_RESONANCE_TAG_SOURCE, tag_room_resonance
 
         rp = RoomProfileFactory()
         res = ResonanceFactory()
         t1 = tag_room_resonance(rp, res)
         t2 = tag_room_resonance(rp, res)
         self.assertEqual(t1.pk, t2.pk)
-        self.assertEqual(RoomResonance.objects.count(), 1)
+        self.assertEqual(
+            LocationStatModifier.objects.filter(
+                room_profile=rp, resonance=res, source=ROOM_RESONANCE_TAG_SOURCE
+            ).count(),
+            1,
+        )
 
 
 class UntagRoomResonanceTests(TestCase):
     def test_untag_removes_row(self) -> None:
         from evennia_extensions.factories import RoomProfileFactory
+        from world.locations.models import LocationStatModifier
         from world.magic.factories import ResonanceFactory
-        from world.magic.models import RoomResonance
-        from world.magic.services.gain import tag_room_resonance, untag_room_resonance
+        from world.magic.services.gain import (
+            ROOM_RESONANCE_TAG_SOURCE,
+            tag_room_resonance,
+            untag_room_resonance,
+        )
 
         rp = RoomProfileFactory()
         res = ResonanceFactory()
         tag_room_resonance(rp, res)
-        self.assertEqual(RoomResonance.objects.count(), 1)
+        qs = LocationStatModifier.objects.filter(
+            room_profile=rp, resonance=res, source=ROOM_RESONANCE_TAG_SOURCE
+        )
+        self.assertEqual(qs.count(), 1)
         untag_room_resonance(rp, res)
-        self.assertEqual(RoomResonance.objects.count(), 0)
+        self.assertEqual(qs.count(), 0)
 
     def test_untag_noop_if_absent(self) -> None:
         from evennia_extensions.factories import RoomProfileFactory
