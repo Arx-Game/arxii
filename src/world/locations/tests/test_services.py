@@ -13,7 +13,7 @@ from world.locations.constants import (
     LocationParentType,
     StatKey,
 )
-from world.locations.models import LocationStatModifier, LocationStatOverride
+from world.locations.models import LocationValueModifier, LocationValueOverride
 from world.locations.services import effective_stat, effective_value
 from world.magic.factories import ResonanceFactory
 
@@ -42,7 +42,7 @@ class CascadeDefaultsTests(TestCase):
         ward = AreaFactory(level=AreaLevel.WARD)
         profile = RoomProfileFactory(area=ward)
         # Override well above the clamp range
-        LocationStatOverride.objects.create(
+        LocationValueOverride.objects.create(
             parent_type=LocationParentType.AREA,
             area=ward,
             stat_key=StatKey.CRIME,
@@ -60,13 +60,13 @@ class CascadeDefaultsTests(TestCase):
         ward = AreaFactory(level=AreaLevel.WARD)
         profile = RoomProfileFactory(area=ward)
         # Two modifiers that together exceed the clamp ceiling.
-        LocationStatModifier.objects.create(
+        LocationValueModifier.objects.create(
             parent_type=LocationParentType.AREA,
             area=ward,
             stat_key=StatKey.CRIME,
             value=80,
         )
-        LocationStatModifier.objects.create(
+        LocationValueModifier.objects.create(
             parent_type=LocationParentType.AREA,
             area=ward,
             stat_key=StatKey.CRIME,
@@ -98,13 +98,13 @@ class CascadeOverrideTests(TestCase):
         self.room = self.room_profile.objectdb
 
     def test_room_override_wins_over_area_override(self) -> None:
-        LocationStatOverride.objects.create(
+        LocationValueOverride.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.ward,
             stat_key=StatKey.CRIME,
             value=80,
         )
-        LocationStatOverride.objects.create(
+        LocationValueOverride.objects.create(
             parent_type=LocationParentType.ROOM,
             room_profile=self.room_profile,
             stat_key=StatKey.CRIME,
@@ -113,13 +113,13 @@ class CascadeOverrideTests(TestCase):
         self.assertEqual(effective_stat(self.room, StatKey.CRIME), 0)
 
     def test_more_specific_area_override_wins(self) -> None:
-        LocationStatOverride.objects.create(
+        LocationValueOverride.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.city,
             stat_key=StatKey.CRIME,
             value=30,
         )
-        LocationStatOverride.objects.create(
+        LocationValueOverride.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.ward,
             stat_key=StatKey.CRIME,
@@ -128,13 +128,13 @@ class CascadeOverrideTests(TestCase):
         self.assertEqual(effective_stat(self.room, StatKey.CRIME), 70)
 
     def test_override_anywhere_hides_modifiers(self) -> None:
-        LocationStatOverride.objects.create(
+        LocationValueOverride.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.city,
             stat_key=StatKey.CRIME,
             value=10,
         )
-        LocationStatModifier.objects.create(
+        LocationValueModifier.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.ward,
             stat_key=StatKey.CRIME,
@@ -145,13 +145,13 @@ class CascadeOverrideTests(TestCase):
     def test_room_override_hides_area_modifiers(self) -> None:
         """A room-level Override short-circuits even modifiers stacked
         higher in the chain."""
-        LocationStatModifier.objects.create(
+        LocationValueModifier.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.city,
             stat_key=StatKey.CRIME,
             value=50,
         )
-        LocationStatOverride.objects.create(
+        LocationValueOverride.objects.create(
             parent_type=LocationParentType.ROOM,
             room_profile=self.room_profile,
             stat_key=StatKey.CRIME,
@@ -169,19 +169,19 @@ class CascadeModifierStackingTests(TestCase):
         self.room = self.room_profile.objectdb
 
     def test_modifiers_at_multiple_levels_sum(self) -> None:
-        LocationStatModifier.objects.create(
+        LocationValueModifier.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.region,
             stat_key=StatKey.CRIME,
             value=10,
         )
-        LocationStatModifier.objects.create(
+        LocationValueModifier.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.ward,
             stat_key=StatKey.CRIME,
             value=20,
         )
-        LocationStatModifier.objects.create(
+        LocationValueModifier.objects.create(
             parent_type=LocationParentType.ROOM,
             room_profile=self.room_profile,
             stat_key=StatKey.CRIME,
@@ -192,7 +192,7 @@ class CascadeModifierStackingTests(TestCase):
 
     def test_decayed_modifier_contributes_zero(self) -> None:
         # value 10, decay -1/day, applied 30 days ago → 0
-        LocationStatModifier.objects.create(
+        LocationValueModifier.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.ward,
             stat_key=StatKey.CRIME,
@@ -216,7 +216,7 @@ class EffectiveValueResonanceTests(TestCase):
 
     def test_resonance_modifier_on_city_visible_from_room(self) -> None:
         """A city-level resonance modifier contributes to a room in that city."""
-        LocationStatModifier.objects.create(
+        LocationValueModifier.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.city,
             key_type=KeyType.RESONANCE,
@@ -228,7 +228,7 @@ class EffectiveValueResonanceTests(TestCase):
     def test_room_resonance_override_short_circuits_cascade(self) -> None:
         """A room-level resonance override wipes city-level modifiers for that resonance."""
         # City contributes predari +100
-        LocationStatModifier.objects.create(
+        LocationValueModifier.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.city,
             key_type=KeyType.RESONANCE,
@@ -236,7 +236,7 @@ class EffectiveValueResonanceTests(TestCase):
             value=100,
         )
         # Room overrides copperi to 1000 absolute — does NOT affect predari
-        LocationStatOverride.objects.create(
+        LocationValueOverride.objects.create(
             parent_type=LocationParentType.ROOM,
             room_profile=self.room_profile,
             key_type=KeyType.RESONANCE,
@@ -252,7 +252,7 @@ class EffectiveValueResonanceTests(TestCase):
 
     def test_resonance_not_clamped(self) -> None:
         """Resonance values are not clamped — staff author whatever magnitude."""
-        LocationStatOverride.objects.create(
+        LocationValueOverride.objects.create(
             parent_type=LocationParentType.ROOM,
             room_profile=self.room_profile,
             key_type=KeyType.RESONANCE,
@@ -270,7 +270,7 @@ class EffectiveValueResonanceTests(TestCase):
 
     def test_stat_key_path_still_works(self) -> None:
         """effective_value(room, stat_key=X) matches the legacy effective_stat result."""
-        LocationStatModifier.objects.create(
+        LocationValueModifier.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.city,
             stat_key=StatKey.CRIME,  # defaults to KeyType.STAT

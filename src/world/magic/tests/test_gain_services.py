@@ -7,7 +7,7 @@ class TagRoomResonanceTests(TestCase):
     def test_creates_cascade_row(self) -> None:
         from evennia_extensions.factories import RoomProfileFactory
         from world.locations.constants import RESONANCE_DEFAULT_MAGNITUDE, KeyType
-        from world.locations.models import LocationStatModifier
+        from world.locations.models import LocationValueModifier
         from world.magic.factories import ResonanceFactory
         from world.magic.services.gain import ROOM_RESONANCE_TAG_SOURCE, tag_room_resonance
 
@@ -16,7 +16,7 @@ class TagRoomResonanceTests(TestCase):
 
         tag = tag_room_resonance(rp, res)
 
-        self.assertIsInstance(tag, LocationStatModifier)
+        self.assertIsInstance(tag, LocationValueModifier)
         self.assertEqual(tag.resonance, res)
         self.assertEqual(tag.key_type, KeyType.RESONANCE)
         self.assertEqual(tag.value, RESONANCE_DEFAULT_MAGNITUDE)
@@ -25,7 +25,7 @@ class TagRoomResonanceTests(TestCase):
 
     def test_idempotent_on_duplicate(self) -> None:
         from evennia_extensions.factories import RoomProfileFactory
-        from world.locations.models import LocationStatModifier
+        from world.locations.models import LocationValueModifier
         from world.magic.factories import ResonanceFactory
         from world.magic.services.gain import ROOM_RESONANCE_TAG_SOURCE, tag_room_resonance
 
@@ -35,7 +35,7 @@ class TagRoomResonanceTests(TestCase):
         t2 = tag_room_resonance(rp, res)
         self.assertEqual(t1.pk, t2.pk)
         self.assertEqual(
-            LocationStatModifier.objects.filter(
+            LocationValueModifier.objects.filter(
                 room_profile=rp, resonance=res, source=ROOM_RESONANCE_TAG_SOURCE
             ).count(),
             1,
@@ -45,7 +45,7 @@ class TagRoomResonanceTests(TestCase):
 class UntagRoomResonanceTests(TestCase):
     def test_untag_removes_row(self) -> None:
         from evennia_extensions.factories import RoomProfileFactory
-        from world.locations.models import LocationStatModifier
+        from world.locations.models import LocationValueModifier
         from world.magic.factories import ResonanceFactory
         from world.magic.services.gain import (
             ROOM_RESONANCE_TAG_SOURCE,
@@ -56,7 +56,7 @@ class UntagRoomResonanceTests(TestCase):
         rp = RoomProfileFactory()
         res = ResonanceFactory()
         tag_room_resonance(rp, res)
-        qs = LocationStatModifier.objects.filter(
+        qs = LocationValueModifier.objects.filter(
             room_profile=rp, resonance=res, source=ROOM_RESONANCE_TAG_SOURCE
         )
         self.assertEqual(qs.count(), 1)

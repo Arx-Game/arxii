@@ -6,17 +6,17 @@ from world.areas.factories import AreaFactory
 from world.locations.constants import HolderType, KeyType, LocationParentType, StatKey
 from world.locations.models import (
     LocationOwnership,
-    LocationStatModifier,
-    LocationStatOverride,
     LocationTenancy,
+    LocationValueModifier,
+    LocationValueOverride,
 )
 from world.scenes.factories import PersonaFactory
 from world.societies.factories import OrganizationFactory
 
 
-class LocationStatOverrideFactory(factory.django.DjangoModelFactory):
+class LocationValueOverrideFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = LocationStatOverride
+        model = LocationValueOverride
 
     parent_type = LocationParentType.AREA
     area = factory.SubFactory(AreaFactory)
@@ -39,9 +39,9 @@ class LocationStatOverrideFactory(factory.django.DjangoModelFactory):
         )
 
 
-class LocationStatModifierFactory(factory.django.DjangoModelFactory):
+class LocationValueModifierFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = LocationStatModifier
+        model = LocationValueModifier
 
     parent_type = LocationParentType.AREA
     area = factory.SubFactory(AreaFactory)

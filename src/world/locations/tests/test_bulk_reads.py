@@ -16,11 +16,11 @@ from world.locations.constants import (
 )
 from world.locations.factories import (
     LocationOwnershipFactory,
-    LocationStatModifierFactory,
-    LocationStatOverrideFactory,
     LocationTenancyFactory,
+    LocationValueModifierFactory,
+    LocationValueOverrideFactory,
 )
-from world.locations.models import LocationStatModifier, LocationStatOverride
+from world.locations.models import LocationValueModifier, LocationValueOverride
 from world.locations.services import (
     _bulk_room_profiles_and_ancestors,
     current_tenants,
@@ -134,7 +134,7 @@ class EffectiveStatsForRoomsTests(TestCase):
         ward = AreaFactory(level=AreaLevel.WARD)
         profile = RoomProfileFactory(area=ward)
         room = profile.objectdb
-        LocationStatOverrideFactory(area=ward, stat_key=StatKey.CRIME, value=42)
+        LocationValueOverrideFactory(area=ward, stat_key=StatKey.CRIME, value=42)
 
         bulk_result = effective_stats_for_rooms([room], [StatKey.CRIME])
         singular_result = effective_stat(room, StatKey.CRIME)
@@ -148,7 +148,7 @@ class EffectiveStatsForRoomsTests(TestCase):
         room_a, room_b = profile_a.objectdb, profile_b.objectdb
 
         # Room A has a room-level override; Room B uses the ward default
-        LocationStatOverrideFactory(
+        LocationValueOverrideFactory(
             parent_type=LocationParentType.ROOM,
             area=None,
             room_profile=profile_a,
@@ -178,8 +178,8 @@ class EffectiveStatsForRoomsTests(TestCase):
         ward = AreaFactory(level=AreaLevel.WARD)
         profiles = [RoomProfileFactory(area=ward) for _ in range(3)]
         rooms = [p.objectdb for p in profiles]
-        LocationStatOverrideFactory(area=ward, stat_key=StatKey.CRIME, value=20)
-        LocationStatModifierFactory(area=ward, stat_key=StatKey.NOISE, value=10)
+        LocationValueOverrideFactory(area=ward, stat_key=StatKey.CRIME, value=20)
+        LocationValueModifierFactory(area=ward, stat_key=StatKey.NOISE, value=10)
 
         with self.assertNumQueries(4):
             effective_stats_for_rooms(rooms, [StatKey.CRIME, StatKey.NOISE])
@@ -358,7 +358,7 @@ class EffectiveValuesForRoomsResonanceTests(TestCase):
     def test_resonance_bulk_returns_per_room_dicts(self) -> None:
         """Bulk read returns {room.pk: {resonance: value}} for each room/resonance."""
         # City-level predari modifier — visible from all three rooms
-        LocationStatModifier.objects.create(
+        LocationValueModifier.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.city,
             key_type=KeyType.RESONANCE,
@@ -366,7 +366,7 @@ class EffectiveValuesForRoomsResonanceTests(TestCase):
             value=100,
         )
         # Room-level override on profile_a for copperi
-        LocationStatOverride.objects.create(
+        LocationValueOverride.objects.create(
             parent_type=LocationParentType.ROOM,
             room_profile=self.profile_a,
             key_type=KeyType.RESONANCE,
@@ -394,7 +394,7 @@ class EffectiveValuesForRoomsResonanceTests(TestCase):
     def test_resonance_bulk_query_budget(self) -> None:
         """Resonance bulk read uses 4 queries regardless of room count."""
         rooms = [self.profile_a.objectdb, self.profile_b.objectdb, self.profile_c.objectdb]
-        LocationStatModifier.objects.create(
+        LocationValueModifier.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.city,
             key_type=KeyType.RESONANCE,
@@ -413,7 +413,7 @@ class EffectiveValuesForRoomsResonanceTests(TestCase):
 
     def test_stat_path_still_works_via_effective_values_for_rooms(self) -> None:
         """Stat axis delegates to the existing effective_stats_for_rooms impl."""
-        LocationStatModifier.objects.create(
+        LocationValueModifier.objects.create(
             parent_type=LocationParentType.AREA,
             area=self.city,
             stat_key=StatKey.CRIME,

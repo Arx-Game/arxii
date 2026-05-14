@@ -16,7 +16,7 @@ from core.mixins import DiscriminatorMixin
 from world.locations.constants import HolderType, KeyType, LocationParentType, StatKey
 
 
-class LocationStatOverride(DiscriminatorMixin, SharedMemoryModel):
+class LocationValueOverride(DiscriminatorMixin, SharedMemoryModel):
     """An absolute claim about a stat or resonance at a specific area or room.
 
     Most-specific override in the cascade chain wins. Overrides cut the
@@ -25,7 +25,7 @@ class LocationStatOverride(DiscriminatorMixin, SharedMemoryModel):
 
     Used **rarely** — for warded sanctums, safehouses, magically
     stabilized chambers, or other deliberate "this is the value, period"
-    claims. Most authored values should use ``LocationStatModifier``
+    claims. Most authored values should use ``LocationValueModifier``
     with ``change_per_day=0`` for a permanent additive instead.
 
     Each row carries one axis value: either ``stat_key`` (StatKey enum)
@@ -89,8 +89,8 @@ class LocationStatOverride(DiscriminatorMixin, SharedMemoryModel):
     last_updated = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Location Stat Override"
-        verbose_name_plural = "Location Stat Overrides"
+        verbose_name = "Location Value Override"
+        verbose_name_plural = "Location Value Overrides"
         constraints = [
             # stat-axis uniqueness: one stat-keyed override per (area, stat_key)
             # or (room_profile, stat_key). Scoped to STAT rows via stat_key__gt=""
@@ -137,7 +137,7 @@ class LocationStatOverride(DiscriminatorMixin, SharedMemoryModel):
         return f"Override {key_label}={self.value} @ {target}"
 
 
-class LocationStatModifier(DiscriminatorMixin, SharedMemoryModel):
+class LocationValueModifier(DiscriminatorMixin, SharedMemoryModel):
     """An additive contribution to a stat or resonance at a specific area or room.
 
     Modifiers stack across the cascade chain. The effective value at a
@@ -224,7 +224,7 @@ class LocationStatModifier(DiscriminatorMixin, SharedMemoryModel):
         help_text=(
             "Free-text label for the originating system or event. Use to "
             "bulk-clean rows when the source ends "
-            "(e.g. ``LocationStatModifier.objects.filter("
+            "(e.g. ``LocationValueModifier.objects.filter("
             "source='rebellion_1234').delete()``)."
         ),
     )
@@ -234,8 +234,8 @@ class LocationStatModifier(DiscriminatorMixin, SharedMemoryModel):
     )
 
     class Meta:
-        verbose_name = "Location Stat Modifier"
-        verbose_name_plural = "Location Stat Modifiers"
+        verbose_name = "Location Value Modifier"
+        verbose_name_plural = "Location Value Modifiers"
         indexes = [
             models.Index(fields=["area", "stat_key"]),
             models.Index(fields=["room_profile", "stat_key"]),

@@ -68,7 +68,7 @@ from evennia.accounts.models import AccountDB
 from evennia_extensions.models import RoomProfile
 from world.character_sheets.models import CharacterSheet
 from world.locations.constants import RESONANCE_DEFAULT_MAGNITUDE, KeyType, LocationParentType
-from world.locations.models import LocationStatModifier
+from world.locations.models import LocationValueModifier
 from world.magic.exceptions import EndorsementValidationError
 from world.magic.models import (
     CharacterResonance,
@@ -123,7 +123,7 @@ def tag_room_resonance(
     room_profile: RoomProfile,
     resonance: Resonance,
     set_by: AccountDB | None = None,  # noqa: ARG001 — kept for backwards-compat with old call sites; audit moved into source field
-) -> LocationStatModifier:
+) -> LocationValueModifier:
     """Tag a room with a resonance by creating a cascade modifier row.
 
     Idempotent — returns the existing row (matched by room_profile +
@@ -136,7 +136,7 @@ def tag_room_resonance(
     modifier rows on the same (room, resonance) can coexist with different
     sources.
     """
-    row, _ = LocationStatModifier.objects.update_or_create(
+    row, _ = LocationValueModifier.objects.update_or_create(
         parent_type=LocationParentType.ROOM,
         room_profile=room_profile,
         key_type=KeyType.RESONANCE,
@@ -162,7 +162,7 @@ def untag_room_resonance(
     stacking modifiers on the same (room, resonance) with different sources
     are left alone.
     """
-    LocationStatModifier.objects.filter(
+    LocationValueModifier.objects.filter(
         parent_type=LocationParentType.ROOM,
         room_profile=room_profile,
         key_type=KeyType.RESONANCE,
@@ -197,7 +197,7 @@ def get_residence_resonances(sheet: CharacterSheet) -> set[Resonance]:
     if rp is None:
         return set()
     tagged_ids = set(
-        LocationStatModifier.objects.filter(
+        LocationValueModifier.objects.filter(
             parent_type=LocationParentType.ROOM,
             room_profile=rp,
             key_type=KeyType.RESONANCE,

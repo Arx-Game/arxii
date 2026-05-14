@@ -2,14 +2,14 @@ from django.contrib import admin
 
 from world.locations.models import (
     LocationOwnership,
-    LocationStatModifier,
-    LocationStatOverride,
     LocationTenancy,
+    LocationValueModifier,
+    LocationValueOverride,
 )
 
 
-@admin.register(LocationStatOverride)
-class LocationStatOverrideAdmin(admin.ModelAdmin):
+@admin.register(LocationValueOverride)
+class LocationValueOverrideAdmin(admin.ModelAdmin):
     list_display = ("__str__", "parent_type", "stat_key", "value", "last_updated")
     list_filter = ("parent_type", "stat_key")
     search_fields = ("source",)
@@ -33,8 +33,8 @@ class LocationStatOverrideAdmin(admin.ModelAdmin):
     )
 
 
-@admin.register(LocationStatModifier)
-class LocationStatModifierAdmin(admin.ModelAdmin):
+@admin.register(LocationValueModifier)
+class LocationValueModifierAdmin(admin.ModelAdmin):
     list_display = (
         "__str__",
         "parent_type",

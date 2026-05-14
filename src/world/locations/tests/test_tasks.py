@@ -12,8 +12,8 @@ from world.areas.factories import AreaFactory
 from world.game_clock.task_registry import get_registered_tasks
 from world.game_clock.tasks import register_all_tasks
 from world.locations.constants import StatKey
-from world.locations.factories import LocationStatModifierFactory
-from world.locations.models import LocationStatModifier
+from world.locations.factories import LocationValueModifierFactory
+from world.locations.models import LocationValueModifier
 from world.locations.tasks import decayed_modifier_cleanup_task
 
 
@@ -21,7 +21,7 @@ class DecayedModifierCleanupTaskTests(TestCase):
     def test_deletes_decayed_modifiers(self) -> None:
         area = AreaFactory()
         # Decayed: value=10, -1/day, 30 days ago → current_value=0
-        LocationStatModifierFactory(
+        LocationValueModifierFactory(
             area=area,
             stat_key=StatKey.CRIME,
             value=10,
@@ -29,7 +29,7 @@ class DecayedModifierCleanupTaskTests(TestCase):
             applied_at=timezone.now() - timedelta(days=30),
         )
         # Not decayed: value=20, -1/day, 5 days ago → current_value=15
-        active = LocationStatModifierFactory(
+        active = LocationValueModifierFactory(
             area=area,
             stat_key=StatKey.NOISE,
             value=20,
@@ -39,12 +39,12 @@ class DecayedModifierCleanupTaskTests(TestCase):
 
         decayed_modifier_cleanup_task()
 
-        surviving = list(LocationStatModifier.objects.values_list("pk", flat=True))
+        surviving = list(LocationValueModifier.objects.values_list("pk", flat=True))
         self.assertEqual(surviving, [active.pk])
 
     def test_logs_deleted_count(self) -> None:
         area = AreaFactory()
-        LocationStatModifierFactory(
+        LocationValueModifierFactory(
             area=area,
             stat_key=StatKey.CRIME,
             value=5,
