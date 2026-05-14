@@ -10,6 +10,7 @@ from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.locations.constants import (
     STAT_DEFAULTS,
+    KeyType,
     LocationParentType,
     StatKey,
 )
@@ -19,6 +20,7 @@ from world.locations.factories import (
     LocationStatOverrideFactory,
     LocationTenancyFactory,
 )
+from world.locations.models import LocationStatModifier, LocationStatOverride
 from world.locations.services import (
     _bulk_room_profiles_and_ancestors,
     current_tenants,
@@ -26,8 +28,10 @@ from world.locations.services import (
     effective_owners_for_rooms,
     effective_stat,
     effective_stats_for_rooms,
+    effective_values_for_rooms,
     tenancies_for_rooms,
 )
+from world.magic.factories import ResonanceFactory
 from world.scenes.factories import PersonaFactory
 
 
@@ -337,3 +341,86 @@ class TenanciesForRoomsTests(TestCase):
 
         with self.assertNumQueries(3):
             tenancies_for_rooms(rooms)
+
+
+class EffectiveValuesForRoomsResonanceTests(TestCase):
+    """Bulk-read tests for the resonance axis on effective_values_for_rooms."""
+
+    def setUp(self) -> None:
+        self.city = AreaFactory(level=AreaLevel.CITY)
+        self.ward = AreaFactory(level=AreaLevel.WARD, parent=self.city)
+        self.profile_a = RoomProfileFactory(area=self.ward)
+        self.profile_b = RoomProfileFactory(area=self.ward)
+        self.profile_c = RoomProfileFactory(area=self.city)
+        self.predari = ResonanceFactory(name="Predari")
+        self.copperi = ResonanceFactory(name="Copperi")
+
+    def test_resonance_bulk_returns_per_room_dicts(self) -> None:
+        """Bulk read returns {room.pk: {resonance: value}} for each room/resonance."""
+        # City-level predari modifier — visible from all three rooms
+        LocationStatModifier.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.city,
+            key_type=KeyType.RESONANCE,
+            resonance=self.predari,
+            value=100,
+        )
+        # Room-level override on profile_a for copperi
+        LocationStatOverride.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.profile_a,
+            key_type=KeyType.RESONANCE,
+            resonance=self.copperi,
+            value=1000,
+        )
+        rooms = [self.profile_a.objectdb, self.profile_b.objectdb, self.profile_c.objectdb]
+        result = effective_values_for_rooms(rooms, resonances=[self.predari, self.copperi])
+
+        assert result[self.profile_a.objectdb.pk][self.predari] == 100
+        assert result[self.profile_a.objectdb.pk][self.copperi] == 1000
+        assert result[self.profile_b.objectdb.pk][self.predari] == 100
+        assert result[self.profile_b.objectdb.pk][self.copperi] == 0
+        assert result[self.profile_c.objectdb.pk][self.predari] == 100
+        assert result[self.profile_c.objectdb.pk][self.copperi] == 0
+
+    def test_resonance_bulk_room_without_profile_returns_zero(self) -> None:
+        profile = RoomProfileFactory()
+        room = profile.objectdb
+        profile.delete()
+        room.refresh_from_db()
+        result = effective_values_for_rooms([room], resonances=[self.predari])
+        assert result[room.pk][self.predari] == 0
+
+    def test_resonance_bulk_query_budget(self) -> None:
+        """Resonance bulk read uses 4 queries regardless of room count."""
+        rooms = [self.profile_a.objectdb, self.profile_b.objectdb, self.profile_c.objectdb]
+        LocationStatModifier.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.city,
+            key_type=KeyType.RESONANCE,
+            resonance=self.predari,
+            value=50,
+        )
+        with self.assertNumQueries(4):
+            effective_values_for_rooms(rooms, resonances=[self.predari, self.copperi])
+
+    def test_requires_exactly_one_axis_kwarg(self) -> None:
+        rooms = [self.profile_a.objectdb]
+        with self.assertRaises(ValueError):
+            effective_values_for_rooms(rooms)
+        with self.assertRaises(ValueError):
+            effective_values_for_rooms(rooms, stat_keys=[StatKey.CRIME], resonances=[self.predari])
+
+    def test_stat_path_still_works_via_effective_values_for_rooms(self) -> None:
+        """Stat axis delegates to the existing effective_stats_for_rooms impl."""
+        LocationStatModifier.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.city,
+            stat_key=StatKey.CRIME,
+            value=15,
+        )
+        rooms = [self.profile_a.objectdb]
+        result = effective_values_for_rooms(rooms, stat_keys=[StatKey.CRIME])
+        assert (
+            result[self.profile_a.objectdb.pk][StatKey.CRIME] == 15 + STAT_DEFAULTS[StatKey.CRIME]
+        )
