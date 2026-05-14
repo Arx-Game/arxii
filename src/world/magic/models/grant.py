@@ -97,12 +97,17 @@ class ResonanceGrant(SharedMemoryModel):
             ),
         ]
         constraints = [
-            # ROOM_RESIDENCE: exactly room_aura_profile populated, others null
+            # ROOM_RESIDENCE: source_room_profile populated (or, transitionally,
+            # source_room_aura_profile on legacy rows that pre-date Task 13's
+            # data migration). Task 14 tightens to require source_room_profile only.
             models.CheckConstraint(
                 name="res_grant_residence_shape",
                 check=(
                     Q(source="ROOM_RESIDENCE")
-                    & Q(source_room_aura_profile__isnull=False)
+                    & (
+                        Q(source_room_profile__isnull=False)
+                        | Q(source_room_aura_profile__isnull=False)
+                    )
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)

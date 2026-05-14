@@ -491,8 +491,7 @@ def residence_trickle_tick() -> ResonanceDailyTickSummary:
         sheets_processed += 1
         matched = get_residence_resonances(sheet)
         rp = sheet.current_residence
-        aura = getattr(rp, "room_aura_profile", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor, raises RelatedObjectDoesNotExist if missing
-        if aura is None or not matched:
+        if rp is None or not matched:
             continue
 
         for resonance in matched:
@@ -503,7 +502,7 @@ def residence_trickle_tick() -> ResonanceDailyTickSummary:
                         resonance,
                         cfg.residence_daily_trickle_per_resonance,
                         source=GainSource.ROOM_RESIDENCE,
-                        room_aura_profile=aura,
+                        room_profile=rp,
                     )
                     grants_issued += 1
             except Exception:  # noqa: BLE001, S112 — log + continue to avoid tick poison

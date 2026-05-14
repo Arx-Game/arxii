@@ -269,19 +269,19 @@ class ResonanceGrantListTests(APITestCase):
         self.assertEqual(len(results), 1)
 
     def test_filter_by_source(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
         from world.magic.constants import GainSource
-        from world.magic.factories import RoomAuraProfileFactory
         from world.magic.services.resonance import grant_resonance
 
         account, sheet, resonance = self._account_with_grant()
         # Add a second grant of a different source
-        aura = RoomAuraProfileFactory()
+        rp = RoomProfileFactory()
         grant_resonance(
             sheet,
             resonance,
             1,
             source=GainSource.ROOM_RESIDENCE,
-            room_aura_profile=aura,
+            room_profile=rp,
         )
 
         self.client.force_authenticate(user=account)
