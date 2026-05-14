@@ -363,10 +363,9 @@ def _has_affinity_resonance(room_obj: Any, affinity_name: str) -> bool:
     Resonance tagged on its RoomAuraProfile whose Affinity name matches.
     Returns False if room has no aura profile.
     """
-    profile_data = getattr(room_obj, "db", room_obj)
-    room_profile = getattr(profile_data, "room_profile", None)
-    aura_profile = getattr(room_profile, "room_aura_profile", None)
-    if aura_profile is None:
+    try:
+        aura_profile = room_obj.room_profile.room_aura_profile
+    except ObjectDoesNotExist:
         return False
     return aura_profile.room_resonances.filter(
         resonance__affinity__name=affinity_name,
@@ -403,10 +402,9 @@ def compute_intensity_difficulty(
 
     Reusable across any reactive flow that wants intensity-scaled difficulty.
     """
-    profile_data = getattr(room, "db", room)
-    room_profile = getattr(profile_data, "room_profile", None)
-    aura_profile = getattr(room_profile, "room_aura_profile", None)
-    if aura_profile is None:
+    try:
+        aura_profile = room.room_profile.room_aura_profile
+    except ObjectDoesNotExist:
         return base_difficulty
     count = aura_profile.room_resonances.filter(
         resonance__affinity__name=affinity_name,
@@ -789,15 +787,13 @@ These are quick checks during plan-writing to confirm or fix natural keys / uniq
   expectations (duration, stage progression, etc.). `get_or_create(name="Burning", defaults={...})`
   semantics protect us, but verify defaults are sane.
 - `perform_check` actual signature and where `_forced_outcome` kwarg slots in.
-- **The ObjectDB ↔ RoomProfile ↔ RoomAuraProfile traversal pattern used by both
-  `_has_affinity_resonance` and `compute_intensity_difficulty`.** The spec sketches both as
-  `getattr(room_obj, "db", room_obj).room_profile.room_aura_profile`. Verify against the
-  actual Evennia idiom — RoomProfile may be reached via `obj.db.room_profile`,
-  `obj.room_profile`, a manager, or a different relation entirely depending on how
-  `evennia_extensions` exposes it. If the traversal is wrong, BOTH the filter operator and
-  the helper silently return False / base_difficulty for every room, and the parametrized
-  pipeline tests will all pass with identical difficulty values (silent failure mode that
-  would not surface as a test error). Verify before writing either function.
+- **The ObjectDB ↔ RoomProfile ↔ RoomAuraProfile traversal pattern.** Verified via T1 of
+  the implementation plan: `obj.room_profile.room_aura_profile` is the correct expression
+  (both OneToOne reverses; RoomAuraProfile is optional and raises `RoomAuraProfile.DoesNotExist`
+  / `ObjectDoesNotExist` when not present). Do NOT use `getattr(obj, "db", obj)` or any
+  variation that touches Evennia's `.db` attribute handler — it's project-forbidden
+  infrastructure that this codebase has explicitly replaced with Django models via
+  `evennia_extensions`.
 
 ### Integration shape for brother's eventual Outcomes work
 
