@@ -45,6 +45,16 @@ class ResonanceGrant(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="resonance_grants",
     )
+    # Replacement for source_room_aura_profile during the cascade unification —
+    # writers populate this in Task 11 onward, data migration backfills old rows
+    # in Task 13, source_room_aura_profile is dropped in Task 14.
+    source_room_profile = models.ForeignKey(
+        "evennia_extensions.RoomProfile",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="resonance_grants",
+    )
     source_staff_account = models.ForeignKey(
         "accounts.AccountDB",
         null=True,
@@ -107,6 +117,7 @@ class ResonanceGrant(SharedMemoryModel):
                 check=(
                     Q(source="STAFF_GRANT")
                     & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_room_profile__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)
                     & Q(outfit_item_facet__isnull=True)
@@ -120,6 +131,7 @@ class ResonanceGrant(SharedMemoryModel):
                     Q(source="POSE_ENDORSEMENT")
                     & Q(source_pose_endorsement__isnull=False)
                     & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_room_profile__isnull=True)
                     & Q(source_staff_account__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)
                     & Q(outfit_item_facet__isnull=True)
@@ -133,6 +145,7 @@ class ResonanceGrant(SharedMemoryModel):
                     Q(source="SCENE_ENTRY")
                     & Q(source_scene_entry_endorsement__isnull=False)
                     & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_room_profile__isnull=True)
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
                     & Q(outfit_item_facet__isnull=True)
@@ -146,6 +159,7 @@ class ResonanceGrant(SharedMemoryModel):
                     Q(source="OUTFIT_TRICKLE")
                     & Q(outfit_item_facet__isnull=False)
                     & Q(source_room_aura_profile__isnull=True)
+                    & Q(source_room_profile__isnull=True)
                     & Q(source_staff_account__isnull=True)
                     & Q(source_pose_endorsement__isnull=True)
                     & Q(source_scene_entry_endorsement__isnull=True)
