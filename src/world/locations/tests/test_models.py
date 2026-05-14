@@ -257,6 +257,104 @@ class LocationStatModifierStackingTests(TestCase):
         self.assertIsNone(mod.area)
 
 
+class LocationStatOverrideKeyTypeTests(TestCase):
+    """Validation tests for the key_type discriminator on Override (stat vs resonance)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.room_profile = RoomProfileFactory()
+        cls.area = AreaFactory(level=AreaLevel.WARD)
+
+    def test_locationstatoverride_resonance_key_clean(self) -> None:
+        """A row with key_type=RESONANCE requires resonance and forbids stat_key."""
+        from world.locations.constants import KeyType
+        from world.magic.factories import ResonanceFactory
+
+        resonance = ResonanceFactory()
+        row = LocationStatOverride(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.room_profile,
+            key_type=KeyType.RESONANCE,
+            resonance=resonance,
+            value=1000,
+        )
+        row.full_clean()  # should not raise
+
+    def test_locationstatoverride_resonance_key_requires_resonance(self) -> None:
+        """key_type=RESONANCE with resonance=None fails clean."""
+        from world.locations.constants import KeyType
+
+        row = LocationStatOverride(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.room_profile,
+            key_type=KeyType.RESONANCE,
+            stat_key=StatKey.CRIME,  # wrong field set
+            value=1000,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            row.full_clean()
+        assert "resonance" in ctx.exception.message_dict
+
+    def test_locationstatoverride_stat_key_still_works(self) -> None:
+        """Existing key_type=STAT path continues to work unchanged."""
+        from world.locations.constants import KeyType
+
+        row = LocationStatOverride(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.room_profile,
+            key_type=KeyType.STAT,
+            stat_key=StatKey.CRIME,
+            value=42,
+        )
+        row.full_clean()  # should not raise
+
+    def test_locationstatoverride_unique_per_room_resonance(self) -> None:
+        """Only one override row per (room, resonance) — partial UniqueConstraint."""
+        from world.locations.constants import KeyType
+        from world.magic.factories import ResonanceFactory
+
+        resonance = ResonanceFactory()
+        LocationStatOverride.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.room_profile,
+            key_type=KeyType.RESONANCE,
+            resonance=resonance,
+            value=1000,
+        )
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                LocationStatOverride.objects.create(
+                    parent_type=LocationParentType.ROOM,
+                    room_profile=self.room_profile,
+                    key_type=KeyType.RESONANCE,
+                    resonance=resonance,
+                    value=500,
+                )
+
+    def test_locationstatoverride_multiple_resonances_same_room(self) -> None:
+        """Different resonances on same room are allowed (only same-resonance is unique)."""
+        from world.locations.constants import KeyType
+        from world.magic.factories import ResonanceFactory
+
+        celestial = ResonanceFactory(name="Copperi")
+        abyssal = ResonanceFactory(name="Predari")
+        LocationStatOverride.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.room_profile,
+            key_type=KeyType.RESONANCE,
+            resonance=celestial,
+            value=1000,
+        )
+        # Should NOT raise — different resonance
+        LocationStatOverride.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.room_profile,
+            key_type=KeyType.RESONANCE,
+            resonance=abyssal,
+            value=500,
+        )
+
+
 class LocationStatModifierKeyTypeTests(TestCase):
     """Validation tests for the key_type discriminator (stat vs resonance)."""
 
