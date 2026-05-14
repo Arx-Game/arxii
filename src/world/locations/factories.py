@@ -3,7 +3,7 @@ import factory.django
 
 from evennia_extensions.factories import RoomProfileFactory
 from world.areas.factories import AreaFactory
-from world.locations.constants import HolderType, LocationParentType, StatKey
+from world.locations.constants import HolderType, KeyType, LocationParentType, StatKey
 from world.locations.models import (
     LocationOwnership,
     LocationStatModifier,
@@ -21,7 +21,9 @@ class LocationStatOverrideFactory(factory.django.DjangoModelFactory):
     parent_type = LocationParentType.AREA
     area = factory.SubFactory(AreaFactory)
     room_profile = None
+    key_type = KeyType.STAT
     stat_key = StatKey.CRIME
+    resonance = None
     value = 50
 
     class Params:
@@ -29,6 +31,11 @@ class LocationStatOverrideFactory(factory.django.DjangoModelFactory):
             parent_type=LocationParentType.ROOM,
             area=None,
             room_profile=factory.SubFactory(RoomProfileFactory),
+        )
+        resonance_axis = factory.Trait(
+            key_type=KeyType.RESONANCE,
+            stat_key="",
+            resonance=factory.SubFactory("world.magic.factories.ResonanceFactory"),
         )
 
 
@@ -39,7 +46,9 @@ class LocationStatModifierFactory(factory.django.DjangoModelFactory):
     parent_type = LocationParentType.AREA
     area = factory.SubFactory(AreaFactory)
     room_profile = None
+    key_type = KeyType.STAT
     stat_key = StatKey.CRIME
+    resonance = None
     value = 10
     change_per_day = 0
     source = ""
@@ -49,6 +58,11 @@ class LocationStatModifierFactory(factory.django.DjangoModelFactory):
             parent_type=LocationParentType.ROOM,
             area=None,
             room_profile=factory.SubFactory(RoomProfileFactory),
+        )
+        resonance_axis = factory.Trait(
+            key_type=KeyType.RESONANCE,
+            stat_key="",
+            resonance=factory.SubFactory("world.magic.factories.ResonanceFactory"),
         )
 
 
