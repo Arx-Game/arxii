@@ -80,8 +80,11 @@ The slice is composed of nine units, each with one purpose:
 
 1. `ConditionTemplate.reactive_triggers` M2M to `flows.TriggerDefinition` — auto-install
    plumbing from the original Scope 5.5 spec, finally landed.
-2. `apply_condition()` extension: auto-install Trigger rows from `template.reactive_triggers`,
-   and (separately) auto-increment any bridged StatDefinitions from `ConditionStatRule`.
+2. `apply_condition()` extension + `ConditionTemplateReactiveHandler` cached handler:
+   the handler caches both the template's reactive triggers and its stat rules,
+   evaluated once per template per process. Services never touch related managers
+   directly; they go through `template.reactive_handler`. The extended `apply_condition`
+   uses the handler to auto-install Trigger rows and to auto-increment bridged StatDefinitions.
 3. `achievements.ConditionStatRule` bridge model with `ConditionEventType` discriminator —
    maps condition events to stat increments without coupling ConditionTemplate to
    achievement primitives.
@@ -180,7 +183,73 @@ class ConditionStatRule(SharedMemoryModel):
 
 ## Service Layer Changes
 
-### `apply_condition()` extension (~20 lines added)
+### `ConditionTemplateReactiveHandler` — cached handler
+
+Located at `src/world/conditions/handlers.py` (new file). Provides cached access to the
+template's reactive triggers (from the M2M) and stat rules (from `ConditionStatRule` in
+achievements). Required because per project rule, **services must not call `.filter()` or
+`.all()` on related managers off a SharedMemoryModel directly** — those calls bypass the
+identity-map cache. All cross-system reactive data goes through this handler.
+
+```python
+# src/world/conditions/handlers.py
+from collections import defaultdict
+from django.utils.functional import cached_property
+
+
+class ConditionTemplateReactiveHandler:
+    """Cached accessor for reactive infrastructure attached to a ConditionTemplate.
+
+    Holds:
+    - The template's reactive_triggers M2M evaluated once and stored.
+    - The achievements.ConditionStatRule rows that reference this template,
+      bucketed by event_type, evaluated once and stored.
+
+    Both attributes are @cached_property so the cost is one query each per
+    handler instance. ConditionTemplate is a SharedMemoryModel, so the handler
+    instance is cached on the model via @cached_property and reused across all
+    apply_condition calls for that template in the process lifetime.
+
+    Cache invalidation: not required for the slice — both data sets are seeded
+    at startup and not mutated at runtime. When authoring content evolves (e.g.,
+    a new ConditionStatRule added via admin), staff must restart the server or
+    explicitly evict the handler. Plan-phase task to confirm acceptable.
+    """
+
+    def __init__(self, template):
+        self._template = template
+
+    @cached_property
+    def reactive_trigger_definitions(self) -> list:
+        """List of TriggerDefinitions to install when this template's instances are applied."""
+        return list(self._template.reactive_triggers.all())
+
+    @cached_property
+    def _stat_rules_by_event(self) -> dict:
+        from world.achievements.models import ConditionStatRule  # local import: avoid cycle
+        rules_by_event: dict = defaultdict(list)
+        for rule in ConditionStatRule.objects.filter(
+            condition=self._template,
+        ).select_related("stat"):
+            rules_by_event[rule.event_type].append(rule)
+        return dict(rules_by_event)
+
+    def stat_rules_for_event(self, event_type: str) -> list:
+        """Stat rules to fire for the given event type. Empty list if none."""
+        return self._stat_rules_by_event.get(event_type, [])
+```
+
+`ConditionTemplate` gains one `@cached_property`:
+
+```python
+# in world/conditions/models.py on ConditionTemplate
+@cached_property
+def reactive_handler(self) -> "ConditionTemplateReactiveHandler":
+    from world.conditions.handlers import ConditionTemplateReactiveHandler  # noqa: PLC0415
+    return ConditionTemplateReactiveHandler(self)
+```
+
+### `apply_condition()` extension (~15 lines added)
 
 Located at `src/world/conditions/services.py:558` (existing). The function's parameter for
 the affected character is `target`; the function internally delegates to `_apply_single`
@@ -190,11 +259,16 @@ notify call, gated on `result.success and result.instance is not None`, so that 
 trigger install and stat increment happen only when an instance was actually created and
 after the CONDITION_APPLIED event has propagated.
 
+All cross-system reactive lookups go through `template.reactive_handler` — no direct
+queries on related managers.
+
 ```python
 # After _notify_stories_condition_applied; only when result.success and result.instance is not None:
 
-# Auto-install reactive triggers from the template's M2M.
-trigger_defs = list(template.reactive_triggers.all())
+handler = template.reactive_handler
+
+# Auto-install reactive triggers via the cached handler.
+trigger_defs = handler.reactive_trigger_definitions
 if trigger_defs:
     Trigger.objects.bulk_create([
         Trigger(
@@ -205,12 +279,8 @@ if trigger_defs:
         for td in trigger_defs
     ])
 
-# Auto-increment bridged stats per ConditionStatRule.
-rules = ConditionStatRule.objects.filter(
-    condition=template,
-    event_type=ConditionEventType.GAINED,
-).select_related("stat")
-for rule in rules:
+# Auto-increment bridged stats via the cached handler.
+for rule in handler.stat_rules_for_event(ConditionEventType.GAINED):
     target.sheet_data.stats.increment(rule.stat, amount=rule.increment_amount)
 ```
 
@@ -767,6 +837,12 @@ plan-writer and reviewer can check the implementation against them:
 - **Type annotations + SharedMemoryModel** on every new model. `ConditionStatRule` uses
   SharedMemoryModel for identity-map caching of the rule lookups in the `apply_condition`
   hot path.
+- **No `.filter()` / `.all()` on related managers of SharedMemoryModel.** All cross-system
+  data access in `apply_condition` goes through `template.reactive_handler` — the
+  `ConditionTemplateReactiveHandler` caches both reactive triggers and stat rules. This
+  keeps the identity-map cache intact and avoids redundant queries on the hot path. A
+  dedicated handler test asserts one-query-on-cold, zero-queries-on-warm for both
+  accessors.
 - **Use FilterSets / proper Django patterns.** Not directly applicable to the slice (no new
   endpoints); the principle's nearest expression is "no `request.query_params` access" —
   N/A for backend-only slice.
@@ -794,9 +870,11 @@ For audit trail and future readers:
 
 New / modified files this slice touches:
 
-- `src/world/conditions/models.py` — add `reactive_triggers` M2M
+- `src/world/conditions/models.py` — add `reactive_triggers` M2M + `reactive_handler` cached_property on ConditionTemplate
 - `src/world/conditions/migrations/NNNN_reactive_triggers.py` — new
-- `src/world/conditions/services.py` — extend `apply_condition`
+- `src/world/conditions/handlers.py` — new file, `ConditionTemplateReactiveHandler`
+- `src/world/conditions/services.py` — extend `apply_condition` (uses cached handler)
+- `src/world/conditions/tests/test_handlers.py` — new tests verifying handler caches both triggers and stat rules; one query each on cold path; zero queries on warm path
 - `src/world/achievements/models.py` — add `ConditionStatRule`
 - `src/world/achievements/constants.py` — add `ConditionEventType` TextChoices
 - `src/world/achievements/migrations/NNNN_condition_stat_rule.py` — new
