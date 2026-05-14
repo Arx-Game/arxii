@@ -7,10 +7,17 @@
 ## Why this slice exists
 
 Demonstrate, end-to-end on a fresh clone, that magic-in-stories works: an Abyssal-aligned
-character with a reactive magical scar casts a technique in a Property-tagged location, a
-reactive trigger forces a resist check, the check outcome branches to one of four reaction
-conditions, the story routes accordingly, narrative messages publish, and achievement grants
-fire including first-earner Discovery semantics.
+character with a reactive magical scar casts a technique in a room whose magical aura
+includes Celestial-affinity Resonances, a reactive trigger forces a resist check whose
+difficulty scales with the room's celestial intensity, the check outcome branches to one
+of four reaction conditions, the story routes accordingly, narrative messages publish,
+and achievement grants fire including first-earner Discovery semantics.
+
+Crucially, the slice exercises affinity-based room state from the start — the reactive
+trigger queries the room's `RoomAuraProfile.room_resonances` directly via a new filter
+operator, and check difficulty derives from the count of Celestial-affinity resonances
+tagged on the room. This reflects the actual state model Arx II will use, not a flat
+boolean Property placeholder.
 
 The slice doubles as authored default seed content. Re-running `arx seed dev` will populate
 the rows; the integration test asserts the slice works against that seed.
@@ -22,7 +29,7 @@ shape between magic, conditions, stories, and achievements.
 ## Success criteria
 
 1. `arx test integration_tests.test_magic_story_pipeline` passes on `--no-keepdb` with
-   4 parametrized subtests + 1 explicit second-earner subtest.
+   8 parametrized subtests (4 outcomes × 2 intensity tiers) + 1 explicit second-earner subtest.
 2. Re-running `seed_magic_dev()` on an edited DB preserves edits (idempotency, never overwrites).
 3. Applying the Hallowed Rejection marker condition to a character via the existing
    `apply_condition` service path automatically installs the reactive `Trigger` row with no
@@ -32,6 +39,10 @@ shape between magic, conditions, stories, and achievements.
 5. After the slice lands, granting an achievement on "condition X is gained" requires only
    authoring a `StatDefinition`, an `Achievement`, an `AchievementRequirement`, and a
    `ConditionStatRule` bridge row — no service-layer code changes.
+6. After the slice lands, a reactive flow can query "this room has affinity X" via the
+   filter DSL and scale check difficulty by affinity-tag count via a generic helper service
+   function. Both are reusable for other reactive-content slices and require no further
+   schema or DSL changes.
 
 ## Out of scope
 
@@ -51,12 +62,21 @@ shape between magic, conditions, stories, and achievements.
 - Frontend. Backend-only proof of concept; existing story-feed UI surface displays the
   resulting NarrativeMessages.
 - Story template cloning — slice mutates the seeded Story's `character_sheet` FK at test time.
-- `holy_ground` as a flat Property is a deliberate simplification; the proper affinity-based
-  room state model exists (`RoomAuraProfile` + `RoomResonance` M2M) and is a followup.
+- Dynamic / time-varying room aura state (consecration that wanes with time-of-day,
+  weather-driven aura, ritual-induced temporary attunement). Slice uses static
+  RoomResonance rows on RoomAuraProfile.
+- Multi-affinity rooms exercising more than one affinity simultaneously (a room that's
+  Celestial + Primal, etc.). Slice uses single-affinity tagging (Celestial only) on test rooms.
+- Per-affinity reaction severity authoring (e.g., abyssal-aligned takes 1.5× severity from
+  celestial rooms while primal-aligned takes 0.5×). Slice uses uniform per-tag severity
+  scaling on the test character only.
+- Filter DSL operator generalization beyond `has_affinity_resonance` (e.g., a generic
+  `count_relation_filtered` operator that works for any M2M-with-discriminator pattern).
+  Slice ships one specific operator; generalization is a followup.
 
 ## Architecture
 
-The slice is composed of seven units, each with one purpose:
+The slice is composed of nine units, each with one purpose:
 
 1. `ConditionTemplate.reactive_triggers` M2M to `flows.TriggerDefinition` — auto-install
    plumbing from the original Scope 5.5 spec, finally landed.
@@ -65,16 +85,27 @@ The slice is composed of seven units, each with one purpose:
 3. `achievements.ConditionStatRule` bridge model with `ConditionEventType` discriminator —
    maps condition events to stat increments without coupling ConditionTemplate to
    achievement primitives.
-4. Authored reactive content: marker condition (Hallowed Rejection), 5 reaction
-   conditions (Tempered Against Light, Singed, Burning, Hallowed Burn, Cast Disrupted),
-   1 Property (holy_ground), 1 CheckType (endure_hallowed_ground) + ResultChart with
-   placeholder tuning, 1 FlowDefinition + steps, 1 TriggerDefinition, 1 Room.
-5. Authored achievement content: 3 StatDefinitions, 3 ConditionStatRules, 3 Achievements +
+4. **New filter DSL operator `has_affinity_resonance`** in `flows/filters/evaluator.py`
+   + matching validator entry. Evaluates "does this room (resolved from the path) have at
+   least one Resonance with the named Affinity tagged via RoomAuraProfile?" Reusable for
+   any reactive content keyed on room aura state.
+5. **New helper service function `compute_intensity_difficulty`** in
+   `flows/service_functions/` — returns `base_difficulty + per_resonance_modifier * count`
+   where count is the number of resonances of a named affinity tagged on the given room
+   (0 if no aura profile). Generic helper; reusable for any flow needing intensity-scaled
+   difficulty.
+6. Authored reactive content: 3 Affinity rows (Celestial / Primal / Abyssal), 3
+   Celestial-affinity Resonance rows, 2 Rooms (low and high celestial intensity), marker
+   condition (Hallowed Rejection), 5 reaction conditions, 1 CheckType + ResultChart with
+   placeholder tuning, 1 FlowDefinition + steps, 1 TriggerDefinition.
+7. Authored achievement content: 3 StatDefinitions, 3 ConditionStatRules, 3 Achievements +
    AchievementRequirements (CRITICAL_SUCCESS + SUCCESS + CRITICAL_FAILURE paths; Burning path
    gets no achievement).
-6. Authored story content: 1 Story (CHARACTER scope), 1 Chapter, 4 Episodes, 4 Beats on
+8. Authored story content: 1 Story (CHARACTER scope), 1 Chapter, 4 Episodes, 4 Beats on
    Episode 1, 4 Transitions, 4 TransitionRequiredOutcomes.
-7. Pipeline test + seed orchestrator `seed_starter_magic_story()` wired into `seed_magic_dev()`.
+9. Pipeline test + seed orchestrators: `seed_canonical_affinities()`,
+   `seed_canonical_resonances()`, and `seed_starter_magic_story()` wired into
+   `seed_magic_dev()` in dependency order.
 
 ## Data Model Changes
 
@@ -192,10 +223,11 @@ ConditionInstance deletion — no removal code needed.
 The `_check_achievements` pipeline, Discovery creation, and `on_achievement_earned`
 reactivity hook all fire automatically through `StatHandler.increment`.
 
-### `perform_check()` test-rig hook
+### `perform_check()` test-rig hook + capture
 
-Located at `src/world/checks/services.py:28` (existing). Add one optional keyword and
-a context-managed thread-local for opt-in test override:
+Located at `src/world/checks/services.py:28` (existing). Add one optional keyword for the
+forced outcome and write the call's `difficulty` value to a capture object accessible
+through the context manager:
 
 ```python
 # world/checks/services.py
@@ -207,6 +239,7 @@ def perform_check(
     ...existing...,
     _forced_outcome: CheckOutcome | None = None,  # test only
 ) -> CheckResult:
+    _record_capture(check_type=check_type, difficulty=difficulty)  # no-op outside test ctx
     if _forced_outcome is None:
         _forced_outcome = _read_thread_local_override()
     if _forced_outcome is not None:
@@ -218,19 +251,101 @@ def perform_check(
 ```python
 # world/checks/test_helpers.py — NEW file
 
-@contextmanager
-def force_check_outcome(outcome: CheckOutcome) -> Iterator[None]:
-    """Test-only: forces the NEXT perform_check call to return `outcome`.
+@dataclass
+class CheckCapture:
+    check_type: CheckType | None = None
+    difficulty: int | None = None
 
-    Uses a thread-local. perform_check reads and clears it. NOT a production
-    code path — strictly opt-in via this context manager. Tests run sequentially
-    in one Evennia test process, so thread-local collision is not a concern.
+@contextmanager
+def force_check_outcome(outcome: CheckOutcome) -> Iterator[CheckCapture]:
+    """Test-only: forces the NEXT perform_check call to return `outcome`,
+    and yields a CheckCapture object that records the difficulty / check_type
+    the call was about to use. Tests assert on capture fields to verify
+    intensity-scaled difficulty was computed correctly.
+
+    Uses thread-locals (one for the outcome override, one for the capture).
+    perform_check reads + clears the outcome override; capture is yielded
+    through the manager so the test has direct access.
+
+    NOT a production code path — strictly opt-in via this context manager.
+    Tests run sequentially in one Evennia test process, so thread-local
+    collision is not a concern.
     """
     ...
 ```
 
 This is the single test-only seam. No mocking of `apply_condition`, `evaluate_auto_beats`,
 `_check_achievements`, or any other internal.
+
+### New filter DSL operator `has_affinity_resonance`
+
+Located at `src/flows/filters/evaluator.py` (existing). Add an entry to the operator
+dispatch table:
+
+```python
+OP_HAS_AFFINITY_RESONANCE = "has_affinity_resonance"
+
+# In _apply_operator dispatch table:
+OP_HAS_AFFINITY_RESONANCE: lambda r, v: _has_affinity_resonance(r, v),
+
+def _has_affinity_resonance(room_obj: Any, affinity_name: str) -> bool:
+    """True if room_obj (an ObjectDB / RoomProfile bearer) has at least one
+    Resonance tagged on its RoomAuraProfile whose Affinity name matches.
+    Returns False if room has no aura profile.
+    """
+    profile_data = getattr(room_obj, "db", room_obj)
+    room_profile = getattr(profile_data, "room_profile", None)
+    aura_profile = getattr(room_profile, "room_aura_profile", None)
+    if aura_profile is None:
+        return False
+    return aura_profile.room_resonances.filter(
+        resonance__affinity__name=affinity_name,
+    ).exists()
+```
+
+Plus a matching entry in `src/flows/filters/validator.py` so authored filter JSON
+validates the new operator.
+
+The trigger's filter becomes:
+```json
+{"path": "location", "op": "has_affinity_resonance", "value": "Celestial"}
+```
+
+### New helper service function `compute_intensity_difficulty`
+
+Located at `src/flows/service_functions/affinity.py` (new module — affinity-driven
+helpers for reactive flows). Generic; not Hallowed-Rejection-specific.
+
+```python
+def compute_intensity_difficulty(
+    *,
+    room: ObjectDB,
+    affinity_name: str,
+    base_difficulty: int,
+    per_resonance_modifier: int,
+) -> int:
+    """Compute a difficulty value that scales with a room's affinity intensity.
+
+    Returns `base_difficulty + (count * per_resonance_modifier)` where count
+    is the number of Resonance rows tagged on the room's RoomAuraProfile whose
+    Affinity matches the given name. If the room has no RoomAuraProfile,
+    `count` is 0 and `base_difficulty` is returned.
+
+    Reusable across any reactive flow that wants intensity-scaled difficulty.
+    """
+    profile_data = getattr(room, "db", room)
+    room_profile = getattr(profile_data, "room_profile", None)
+    aura_profile = getattr(room_profile, "room_aura_profile", None)
+    if aura_profile is None:
+        return base_difficulty
+    count = aura_profile.room_resonances.filter(
+        resonance__affinity__name=affinity_name,
+    ).count()
+    return base_difficulty + (count * per_resonance_modifier)
+```
+
+Authored flows call this via `CALL_SERVICE_FUNCTION` and store the result in a flow
+variable to pass as `difficulty` to `perform_check`.
 
 ## Authored Content Inventory
 
@@ -240,56 +355,91 @@ per project seed rule.
 
 ### Magic-side rows
 
+**Canonical affinity/resonance content** (lives in their own seed helpers so other future
+magic content can compose with them without depending on the magic-story seed):
+
 | # | Model | Row | Key fields |
 |---|-------|-----|------------|
-| 1 | `mechanics.Property` | `holy_ground` | category="Environment" or appropriate PropertyCategory |
-| 2 | `checks.CheckType` | `endure_hallowed_ground` | stat=`resolve` (or similar), placeholder difficulty |
-| 3 | `checks.ResultChart` + `ResultChartOutcome` rows | rank → CheckOutcome mapping | placeholder tuning; 4 outcomes mapped |
-| 4 | `conditions.ConditionTemplate` | **Tempered Against Light** | narrative-only reaction (CRITICAL_SUCCESS) |
-| 5 | `conditions.ConditionTemplate` | **Singed** | narrative reaction (SUCCESS) |
-| 6 | `conditions.ConditionTemplate` | **Burning** | reaction (FAILURE) — reuse via `get_or_create(name="Burning")` |
-| 7 | `conditions.ConditionTemplate` | **Hallowed Burn** | severe reaction (CRITICAL_FAILURE) |
-| 8 | `conditions.ConditionTemplate` | **Cast Disrupted** | secondary penalty (CRITICAL_FAILURE only) |
-| 9 | `flows.FlowDefinition` | **Hallowed Rejection reactive flow** | + FlowStepDefinition rows |
-| 10 | `flows.TriggerDefinition` | **Hallowed Rejection — technique used in holy ground** | event_name=TECHNIQUE_USED, base_filter_condition={"location.has_property": "holy_ground"}, FK to #9 |
-| 11 | `conditions.ConditionTemplate` | **Hallowed Rejection** | marker; `reactive_triggers=[#10]` via M2M |
-| 12 | Room (`evennia_extensions.RoomProfile`) | **The Hallowed Threshold** | `holy_ground` Property attached |
+| 1 | `magic.Affinity` | **Celestial** | seeded via `seed_canonical_affinities()` |
+| 2 | `magic.Affinity` | **Primal** | seeded via `seed_canonical_affinities()` |
+| 3 | `magic.Affinity` | **Abyssal** | seeded via `seed_canonical_affinities()` |
+| 4 | `magic.Resonance` | **Light** | affinity=#1 (Celestial); seeded via `seed_canonical_resonances()` |
+| 5 | `magic.Resonance` | **Sanctity** | affinity=#1 (Celestial); seeded via `seed_canonical_resonances()` |
+| 6 | `magic.Resonance` | **Radiance** | affinity=#1 (Celestial); seeded via `seed_canonical_resonances()` |
+
+**Story-specific magic content** (lives in `seed_starter_magic_story()`):
+
+| # | Model | Row | Key fields |
+|---|-------|-----|------------|
+| 7 | `checks.CheckType` | `endure_hallowed_ground` | placeholder difficulty base |
+| 8 | `checks.ResultChart` + `ResultChartOutcome` rows | rank → CheckOutcome mapping | placeholder tuning; 4 outcomes mapped |
+| 9 | `conditions.ConditionTemplate` | **Tempered Against Light** | narrative reaction (CRITICAL_SUCCESS) |
+| 10 | `conditions.ConditionTemplate` | **Singed** | narrative reaction (SUCCESS) |
+| 11 | `conditions.ConditionTemplate` | **Burning** | reaction (FAILURE) — reuse via `get_or_create(name="Burning")` |
+| 12 | `conditions.ConditionTemplate` | **Hallowed Burn** | severe reaction (CRITICAL_FAILURE) |
+| 13 | `conditions.ConditionTemplate` | **Cast Disrupted** | secondary penalty (CRITICAL_FAILURE only) |
+| 14 | `flows.FlowDefinition` | **Hallowed Rejection reactive flow** | + FlowStepDefinition rows below |
+| 15 | `flows.TriggerDefinition` | **Hallowed Rejection — technique used near celestial aura** | event_name=TECHNIQUE_USED, `base_filter_condition={"path": "location", "op": "has_affinity_resonance", "value": "Celestial"}`, FK to #14 |
+| 16 | `conditions.ConditionTemplate` | **Hallowed Rejection** | marker; `reactive_triggers=[#15]` via M2M |
+| 17 | Room (`evennia_extensions.RoomProfile`) | **The Hallowed Threshold (Low)** | low-intensity test room |
+| 18 | `magic.RoomAuraProfile` | for room #17 | OneToOne extension |
+| 19 | `magic.RoomResonance` | aura #18 → resonance #4 (Light) | single tag; intensity=1 |
+| 20 | Room (`evennia_extensions.RoomProfile`) | **The Hallowed Threshold (High)** | high-intensity test room |
+| 21 | `magic.RoomAuraProfile` | for room #20 | OneToOne extension |
+| 22 | `magic.RoomResonance` | aura #21 → resonance #4 (Light) | tag 1 of 3 |
+| 23 | `magic.RoomResonance` | aura #21 → resonance #5 (Sanctity) | tag 2 of 3 |
+| 24 | `magic.RoomResonance` | aura #21 → resonance #6 (Radiance) | tag 3 of 3; intensity=3 |
 | — | Technique | (no new row) | Reuse one cantrip from the 25-cantrip starter catalog (1.8 in Phase 1). Documented in seed code comment. |
 
-### FlowStepDefinition steps for #9
+### FlowStepDefinition steps for #14
 
-Composed from existing FlowActionChoices (no new action choices required):
+Composed from existing FlowActionChoices (no new action choices required). The first
+step computes intensity-scaled difficulty; the second forces a check using it; subsequent
+conditionals branch on the outcome:
 
 ```
-1. CALL_SERVICE_FUNCTION: perform_check(target=caster, check_type=endure_hallowed_ground)
-   → flow variable "check_outcome"
-2. CONDITIONAL on check_outcome == "critical_success":
+1. CALL_SERVICE_FUNCTION: compute_intensity_difficulty(
+       room=event.location,
+       affinity_name="Celestial",
+       base_difficulty=10,
+       per_resonance_modifier=5,
+   ) → flow variable "computed_difficulty"
+2. CALL_SERVICE_FUNCTION: perform_check(
+       target=caster,
+       check_type=endure_hallowed_ground,
+       difficulty=$computed_difficulty,
+   ) → flow variable "check_outcome"
+3. CONDITIONAL on check_outcome == "critical_success":
    → CALL_SERVICE_FUNCTION: apply_condition(target=caster, template="Tempered Against Light")
-3. CONDITIONAL on check_outcome == "success":
+4. CONDITIONAL on check_outcome == "success":
    → CALL_SERVICE_FUNCTION: apply_condition(target=caster, template="Singed")
-4. CONDITIONAL on check_outcome == "failure":
+5. CONDITIONAL on check_outcome == "failure":
    → CALL_SERVICE_FUNCTION: apply_condition(target=caster, template="Burning")
-5. CONDITIONAL on check_outcome == "critical_failure":
+6. CONDITIONAL on check_outcome == "critical_failure":
    → CALL_SERVICE_FUNCTION: apply_condition(target=caster, template="Hallowed Burn")
    → CALL_SERVICE_FUNCTION: apply_condition(target=caster, template="Cast Disrupted")
 ```
+
+Difficulty values are placeholder. For low-intensity room (1 celestial resonance):
+`difficulty = 10 + 1 * 5 = 15`. For high-intensity room (3 celestial resonances):
+`difficulty = 10 + 3 * 5 = 25`. Production tuning is a separate Phase 2 / Section 7 task.
 
 ### Achievement-bridge rows
 
 | # | Model | Row | Key fields |
 |---|-------|-----|------------|
-| 13 | `achievements.StatDefinition` | `conditions.tempered_against_light.gained` | counter slot |
-| 14 | `achievements.StatDefinition` | `conditions.singed.gained` | counter slot |
-| 15 | `achievements.StatDefinition` | `conditions.hallowed_burn.gained` | counter slot |
-| 16 | `achievements.ConditionStatRule` | Tempered (#4) → stat #13 / GAINED / +1 | bridge |
-| 17 | `achievements.ConditionStatRule` | Singed (#5) → stat #14 / GAINED / +1 | bridge |
-| 18 | `achievements.ConditionStatRule` | Hallowed Burn (#7) → stat #15 / GAINED / +1 | bridge |
-| 19 | `achievements.Achievement` | **Hallowed-Hardened** | hidden=True, notification_level=GAMEWIDE |
-| 20 | `achievements.AchievementRequirement` | Hallowed-Hardened on stat #13, threshold=1, GTE | |
-| 21 | `achievements.Achievement` | **Touched by Light** | hidden=True, notification_level=PERSONAL |
-| 22 | `achievements.AchievementRequirement` | Touched by Light on stat #14, threshold=1, GTE | |
-| 23 | `achievements.Achievement` | **Cast Out by the Light** | hidden=True, notification_level=GAMEWIDE |
-| 24 | `achievements.AchievementRequirement` | Cast Out by the Light on stat #15, threshold=1, GTE | |
+| 25 | `achievements.StatDefinition` | `conditions.tempered_against_light.gained` | counter slot |
+| 26 | `achievements.StatDefinition` | `conditions.singed.gained` | counter slot |
+| 27 | `achievements.StatDefinition` | `conditions.hallowed_burn.gained` | counter slot |
+| 28 | `achievements.ConditionStatRule` | Tempered (#9) → stat #25 / GAINED / +1 | bridge |
+| 29 | `achievements.ConditionStatRule` | Singed (#10) → stat #26 / GAINED / +1 | bridge |
+| 30 | `achievements.ConditionStatRule` | Hallowed Burn (#12) → stat #27 / GAINED / +1 | bridge |
+| 31 | `achievements.Achievement` | **Hallowed-Hardened** | hidden=True, notification_level=GAMEWIDE |
+| 32 | `achievements.AchievementRequirement` | Hallowed-Hardened on stat #25, threshold=1, GTE | |
+| 33 | `achievements.Achievement` | **Touched by Light** | hidden=True, notification_level=PERSONAL |
+| 34 | `achievements.AchievementRequirement` | Touched by Light on stat #26, threshold=1, GTE | |
+| 35 | `achievements.Achievement` | **Cast Out by the Light** | hidden=True, notification_level=GAMEWIDE |
+| 36 | `achievements.AchievementRequirement` | Cast Out by the Light on stat #27, threshold=1, GTE | |
 
 Burning intentionally gets no StatDefinition / ConditionStatRule / Achievement — common
 failure mode, not noteworthy enough for an achievement.
@@ -298,21 +448,21 @@ failure mode, not noteworthy enough for an achievement.
 
 | # | Model | Row | Key fields |
 |---|-------|-----|------------|
-| 25 | `stories.Story` | **The Hallowed Threshold** | scope=CHARACTER, character_sheet=null (test populates) |
-| 26 | `stories.Chapter` | **First Trial** | |
-| 27 | `stories.Episode` | **Stepping Into Light** | order=1; source episode |
-| 28 | `stories.Episode` | **Tempered Walk** | order=2; destination (CRITICAL_SUCCESS) |
-| 29 | `stories.Episode` | **Marked Path** | order=3; destination (SUCCESS and FAILURE share) |
-| 30 | `stories.Episode` | **Cast Out** | order=4; destination (CRITICAL_FAILURE) |
-| 31 | `stories.Beat` | Beat-Tempered | episode=#27, CONDITION_HELD #4, player_resolution_text="The light bends around you instead of burning. The wound your blood remembers has hardened to a callus." |
-| 32 | `stories.Beat` | Beat-Singed | episode=#27, CONDITION_HELD #5, player_resolution_text="Light glances along your skin. A faint mark stings where the spell met sanctified air." |
-| 33 | `stories.Beat` | Beat-Burning | episode=#27, CONDITION_HELD #6, player_resolution_text="The ground rejects you. Your skin burns where it meets the consecrated air, and the spell goes wide." |
-| 34 | `stories.Beat` | Beat-Hallowed-Burn | episode=#27, CONDITION_HELD #7, player_resolution_text="The sanctified ground answers the spell with fire. You are flung from the working, burning, and the threads in your hands snap." |
-| 35 | `stories.Transition` | #27 → #28 | order=1, connection_summary="You walked into hallowed ground and walked out unchanged. Some part of you is being remade." |
-| 36 | `stories.Transition` | #27 → #30 | order=2, connection_summary="You broke against the threshold. Whatever was watching turned away. You will not try this again the same way." |
-| 37 | `stories.Transition` | #27 → #29 | order=3, connection_summary="The light marked you. You carry the burn now — and a question about what you are." |
-| 38 | `stories.Transition` | #27 → #29 | order=4, connection_summary="The light marked you. You carry the burn now — and a question about what you are." (same text; routed from Burning beat) |
-| 39 | `stories.TransitionRequiredOutcome` × 4 | one per transition → its beat | required_outcome=SATISFIED |
+| 37 | `stories.Story` | **The Hallowed Threshold** | scope=CHARACTER, character_sheet=null (test populates) |
+| 38 | `stories.Chapter` | **First Trial** | |
+| 39 | `stories.Episode` | **Stepping Into Light** | order=1; source episode |
+| 40 | `stories.Episode` | **Tempered Walk** | order=2; destination (CRITICAL_SUCCESS) |
+| 41 | `stories.Episode` | **Marked Path** | order=3; destination (SUCCESS and FAILURE share) |
+| 42 | `stories.Episode` | **Cast Out** | order=4; destination (CRITICAL_FAILURE) |
+| 43 | `stories.Beat` | Beat-Tempered | episode=#39, CONDITION_HELD #9, player_resolution_text="The light bends around you instead of burning. The wound your blood remembers has hardened to a callus." |
+| 44 | `stories.Beat` | Beat-Singed | episode=#39, CONDITION_HELD #10, player_resolution_text="Light glances along your skin. A faint mark stings where the spell met sanctified air." |
+| 45 | `stories.Beat` | Beat-Burning | episode=#39, CONDITION_HELD #11, player_resolution_text="The ground rejects you. Your skin burns where it meets the consecrated air, and the spell goes wide." |
+| 46 | `stories.Beat` | Beat-Hallowed-Burn | episode=#39, CONDITION_HELD #12, player_resolution_text="The sanctified ground answers the spell with fire. You are flung from the working, burning, and the threads in your hands snap." |
+| 47 | `stories.Transition` | #39 → #40 | order=1, connection_summary="You walked into hallowed ground and walked out unchanged. Some part of you is being remade." |
+| 48 | `stories.Transition` | #39 → #42 | order=2, connection_summary="You broke against the threshold. Whatever was watching turned away. You will not try this again the same way." |
+| 49 | `stories.Transition` | #39 → #41 | order=3, connection_summary="The light marked you. You carry the burn now — and a question about what you are." |
+| 50 | `stories.Transition` | #39 → #41 | order=4, connection_summary="The light marked you. You carry the burn now — and a question about what you are." (same text; routed from Burning beat) |
+| 51 | `stories.TransitionRequiredOutcome` × 4 | one per transition → its beat | required_outcome=SATISFIED |
 
 Zero `EpisodeProgressionRequirement` rows on Episode 1 — the gate is open; routing is
 beat-outcome-driven via TROs.
@@ -321,46 +471,64 @@ beat-outcome-driven via TROs.
 
 ### File: `src/integration_tests/test_magic_story_pipeline.py`
 
-EvenniaTest-derived class. `setUpTestData` invokes `seed_starter_magic_story()` once per
-class (idempotent). Per-test `setUp` builds:
+EvenniaTest-derived class. `setUpTestData` invokes `seed_canonical_affinities()`,
+`seed_canonical_resonances()`, and `seed_starter_magic_story()` once per class
+(all idempotent). Per-test `setUp` builds:
 
 - A factory-generated Abyssal-affinity caster (CharacterSheetFactory + service call to
   apply the seeded Hallowed Rejection marker condition). The application auto-installs
   the reactive Trigger.
-- Caster placed in the seeded **The Hallowed Threshold** room.
-- Story #25's `character_sheet` FK populated to point at this caster (slice-level
+- Caster placed in the seeded room — `The Hallowed Threshold (Low)` or
+  `The Hallowed Threshold (High)` per the parametrized intensity tier.
+- Story #37's `character_sheet` FK populated to point at this caster (slice-level
   mutate-in-place; future "story template cloning" is a separate concern).
 - StoryProgress row created pointing at Episode 1.
 
-### Four parametrized subtests + one explicit second-earner subtest
+### Eight parametrized subtests + one explicit second-earner subtest
+
+The 8 subtests cover 4 outcomes × 2 intensity tiers. Test_id field encodes
+`<intensity>_<outcome>`; intensity selects which room the caster is placed in.
 
 ```python
+LOW_INTENSITY_DIFFICULTY = 15   # base=10 + 1 resonance * 5
+HIGH_INTENSITY_DIFFICULTY = 25  # base=10 + 3 resonances * 5
+
 @parameterized.expand([
-    ("critical_success", CheckOutcome.CRITICAL_SUCCESS, "Tempered Against Light", "Tempered Walk", "Hallowed-Hardened", True),
-    ("success",          CheckOutcome.SUCCESS,           "Singed",                 "Marked Path",   "Touched by Light",  False),
-    ("failure",          CheckOutcome.FAILURE,           "Burning",                "Marked Path",   None,                False),
-    ("critical_failure", CheckOutcome.CRITICAL_FAILURE,  "Hallowed Burn",          "Cast Out",      "Cast Out by the Light", True),
+    # (test_id, intensity, outcome, expected_condition, expected_episode, expected_achievement, expected_discovery, expected_difficulty)
+    ("low_critical_success",  "low",  CheckOutcome.CRITICAL_SUCCESS, "Tempered Against Light", "Tempered Walk", "Hallowed-Hardened",    True,  LOW_INTENSITY_DIFFICULTY),
+    ("low_success",           "low",  CheckOutcome.SUCCESS,           "Singed",                 "Marked Path",   "Touched by Light",     False, LOW_INTENSITY_DIFFICULTY),
+    ("low_failure",           "low",  CheckOutcome.FAILURE,           "Burning",                "Marked Path",   None,                   False, LOW_INTENSITY_DIFFICULTY),
+    ("low_critical_failure",  "low",  CheckOutcome.CRITICAL_FAILURE,  "Hallowed Burn",          "Cast Out",      "Cast Out by the Light", True,  LOW_INTENSITY_DIFFICULTY),
+    ("high_critical_success", "high", CheckOutcome.CRITICAL_SUCCESS, "Tempered Against Light", "Tempered Walk", "Hallowed-Hardened",    True,  HIGH_INTENSITY_DIFFICULTY),
+    ("high_success",          "high", CheckOutcome.SUCCESS,           "Singed",                 "Marked Path",   "Touched by Light",     False, HIGH_INTENSITY_DIFFICULTY),
+    ("high_failure",          "high", CheckOutcome.FAILURE,           "Burning",                "Marked Path",   None,                   False, HIGH_INTENSITY_DIFFICULTY),
+    ("high_critical_failure", "high", CheckOutcome.CRITICAL_FAILURE,  "Hallowed Burn",          "Cast Out",      "Cast Out by the Light", True,  HIGH_INTENSITY_DIFFICULTY),
 ])
 def test_hallowed_threshold(
     self,
-    name: str,
+    test_id: str,
+    intensity: str,
     outcome: CheckOutcome,
     expected_condition: str,
     expected_episode: str,
     expected_achievement: str | None,
     expected_discovery: bool,
+    expected_difficulty: int,
 ):
+    # setUp placed caster in the room matching `intensity`.
     # T0: assert pre-state (Hallowed Rejection present, beats UNSATISFIED, no
     #     reaction conditions, no achievements, StoryProgress at Episode 1)
-    # T1: with force_check_outcome(outcome): use_technique(caster, seeded_cantrip)
-    # T2: assert expected_condition applied (+ Cast Disrupted on CRITICAL_FAILURE)
-    # T3: assert evaluate_auto_beats flips the appropriate Beat, others remain UNSATISFIED;
+    # T1: with force_check_outcome(outcome) as capture:
+    #         use_technique(caster, seeded_cantrip)
+    # T2: assert capture.difficulty == expected_difficulty  # intensity-scaled
+    # T3: assert expected_condition applied (+ Cast Disrupted on CRITICAL_FAILURE)
+    # T4: assert evaluate_auto_beats flips the appropriate Beat, others remain UNSATISFIED;
     #     BeatCompletion ledger row exists for satisfied beat
-    # T4: assert StoryProgress.current_episode.title == expected_episode;
+    # T5: assert StoryProgress.current_episode.title == expected_episode;
     #     EpisodeResolution ledger row exists
-    # T5: assert NarrativeMessage rows exist for both beat_completion (body matches
+    # T6: assert NarrativeMessage rows exist for both beat_completion (body matches
     #     player_resolution_text) and episode_resolution (body matches connection_summary)
-    # T6: when expected_achievement is not None:
+    # T7: when expected_achievement is not None:
     #         assert CharacterAchievement exists for caster + expected_achievement;
     #         assert Discovery row exists;
     #         when expected_discovery: assert CharacterAchievement.discovery FK populated
@@ -370,8 +538,13 @@ def test_hallowed_threshold(
 
 Plus one dedicated method `test_critical_success_when_discovery_already_exists` that
 pre-populates a CharacterAchievement + Discovery for "Hallowed-Hardened" on a different
-character, then runs the CRITICAL_SUCCESS subtest path, asserts the second character's
-CharacterAchievement.discovery is None.
+character, then runs the CRITICAL_SUCCESS path on the low-intensity room, asserts the
+second character's CharacterAchievement.discovery is None.
+
+The capture.difficulty assertion is the key end-to-end demonstration that intensity
+matters: the same forced outcome on different-intensity rooms produces the same routing
+but different computed difficulties, proving the room aura state genuinely feeds into
+check resolution.
 
 ### Test rig hygiene
 
@@ -382,29 +555,53 @@ CharacterAchievement.discovery is None.
 
 ## Seed Orchestration
 
-`seed_starter_magic_story()` lives in `src/integration_tests/game_content/magic.py`.
-Called from existing `seed_magic_dev()` after all current seed phases — last because it
-references one cantrip from the starter catalog (Phase 1 task 1.8).
+Three seed helpers compose to populate the slice's content. The two new shared helpers
+(`seed_canonical_affinities`, `seed_canonical_resonances`) live in
+`src/integration_tests/game_content/magic.py` alongside the existing helpers; the
+story-specific `seed_starter_magic_story()` lives there too.
+
+Call order from `seed_magic_dev()`:
+
+```
+def seed_magic_dev():
+    # ...existing calls (config, rituals, thread_pull, cantrips, etc.)...
+    seed_canonical_affinities()        # NEW: 3 Affinity rows
+    seed_canonical_resonances()        # NEW: 3 Celestial-affinity Resonance rows
+    seed_starter_magic_story()         # NEW: rest of slice content
+```
+
+### Order of operations within `seed_canonical_affinities()`
+
+Three `get_or_create(name=...)` calls. No FKs needed. Idempotent.
+
+### Order of operations within `seed_canonical_resonances()`
+
+Three `get_or_create(name=..., defaults={"affinity": celestial})` calls. FKs to Affinity
+(seeded above). Idempotent. Other future magic content can call this independently to
+ensure the Celestial resonances exist before authoring its own RoomResonances.
 
 ### Order of operations within `seed_starter_magic_story()`
 
 Per FK dependencies:
 
-1. Property + CheckType + ResultChart + 3 StatDefinitions (no FKs into slice content)
+1. CheckType + ResultChart + 3 StatDefinitions (no FKs into slice content)
 2. Five reaction ConditionTemplates (Tempered, Singed, Burning, Hallowed Burn, Cast Disrupted)
 3. Three ConditionStatRule rows (FK to StatDef + ConditionTemplate)
 4. Three Achievements + three AchievementRequirements (FK to StatDef)
-5. FlowDefinition + FlowStepDefinition rows (FK to CheckType + reaction conditions)
+5. FlowDefinition + FlowStepDefinition rows (FK to CheckType + reaction conditions; uses
+   the `has_affinity_resonance` filter + `compute_intensity_difficulty` service function)
 6. TriggerDefinition (FK to FlowDefinition)
 7. Marker ConditionTemplate (Hallowed Rejection) + wire `reactive_triggers` M2M to TriggerDefinition
-8. Room (FK to Property)
+8. Two Rooms (Low and High intensity) + their RoomAuraProfile + their RoomResonance rows
+   (1 RoomResonance for Low, 3 for High)
 9. Story + Chapter + 4 Episodes + 4 Beats + 4 Transitions + 4 TROs
 
 ### Natural keys for `get_or_create`
 
 | Model | Natural key | Source |
 |-------|-------------|--------|
-| `Property` | `(name, category)` | existing unique constraint |
+| `Affinity` | `name` | NaturalKeyMixin |
+| `Resonance` | `name` | NaturalKeyMixin |
 | `CheckType` | `name` | NaturalKeyMixin |
 | `ResultChart` | TBD — verify in plan phase | |
 | `StatDefinition` | `key` | existing unique |
@@ -416,6 +613,8 @@ Per FK dependencies:
 | `FlowStepDefinition` | TBD — likely `(flow, parent, order)` — verify | |
 | `TriggerDefinition` | `name` | existing unique |
 | Room (ObjectDB) | `db_key` | verify acceptable |
+| `RoomAuraProfile` | `room_profile` (primary key OneToOne) | model PK is the FK; idempotent via room_profile lookup |
+| `RoomResonance` | `(room_aura_profile, resonance)` | existing unique constraint |
 | `Story` | `(title, scope)` for nullable character_sheet | verify |
 | `Chapter` | `(story, order)` | existing unique_together |
 | `Episode` | `(chapter, order)` | existing unique_together |
@@ -469,29 +668,42 @@ Mirrors Phase 1 task 1.9's idempotency pattern.
    needs "increment only if X AND Y." Current rows keep firing unconditionally (no requirement
    rows = "fires always").
 
-4. **Affinity-based room state replacing flat `holy_ground` Property.** The proper model
-   already exists: `magic.RoomAuraProfile` (OneToOne to RoomProfile) + `magic.RoomResonance`
-   M2M to `Resonance`, each FK'd to `Affinity` (Celestial / Primal / Abyssal). A "holy" room
-   is one with at least one (or N) Celestial-affinity Resonances tagged. Granularity falls
-   out naturally — more celestial tags = "holier." The reactive trigger filter DSL needs
-   extending to query this (`{"location.has_affinity_count": {"affinity": "celestial", "min": 1}}`).
-   Once that lands, the `holy_ground` Property row can be deprecated (or repurposed for
-   non-magical "consecrated by tradition" semantics). This work is in Tehom's lane —
-   pure magic + flows-filter infrastructure. **Future slices should ship with their own
-   integration tests demonstrating the nuance** (different affinities in a place, severity
-   based on intensity, etc.).
+4. **Dynamic / time-varying room aura state.** Slice uses static RoomResonance rows.
+   Future content may need aura that wanes with time-of-day (consecration at noon, waning
+   at dusk), weather-driven aura (storms attune primal rooms), or ritual-induced temporary
+   attunement. Likely modeled as a new join table layering on top of RoomResonance with
+   `started_at` / `expires_at` fields, plus a query that returns "effective aura at time T."
+   Trigger filter DSL would gain a "now-or-at-time" variant.
 
-5. **Story template cloning service.** Proper "instantiate authored story per character"
+5. **Multi-affinity rooms.** Slice exercises Celestial-only rooms. The reactive content
+   pattern naturally extends to multi-affinity rooms (a room that's both Celestial AND
+   Primal). Authoring is straightforward (more RoomResonance rows of different affinities);
+   the trigger filter DSL already supports AND/OR composition via the existing
+   `{"and": [...]}` / `{"or": [...]}` operators.
+
+6. **Per-affinity reaction severity authoring.** Slice uses one uniform per-tag severity
+   scaling (5 difficulty per Celestial tag). A richer model would let authored content
+   declare: "Abyssal-aligned takes 1.5× difficulty from Celestial rooms; Primal-aligned
+   takes 0.5×." Probably modeled as a small lookup table or a method on Character that
+   returns an affinity-interaction modifier. Not in slice scope.
+
+7. **Filter DSL operator generalization.** Slice ships one specific operator
+   (`has_affinity_resonance`). A generalized `count_relation_filtered` operator that
+   works for any M2M-with-discriminator pattern would let future content express
+   richer queries without one-off operators. Followup work; current operator is the
+   minimum-viable starting point.
+
+8. **Story template cloning service.** Proper "instantiate authored story per character"
    pattern. Slice avoids this by mutate-in-place on the seeded Story row. Cleaner long-term:
    a `clone_story_for_character(template_story, character_sheet)` service that copies the
    full Story → Chapter → Episode × 4 → Beat × 4 → Transition × 4 → TRO × 4 graph for a
    specific character. Brother's domain.
 
-6. **The other 9 Scope 5.5 reactive scenarios.** Hallowed Threshold proves the pattern;
+9. **The other 9 Scope 5.5 reactive scenarios.** Hallowed Threshold proves the pattern;
    remaining scenarios are content-only work.
 
-7. **Production tuning of `endure_hallowed_ground` ResultChart.** Slice ships placeholder
-   rank-to-outcome mapping. Phase 2 task 2F replaces these values when it lands.
+10. **Production tuning of `endure_hallowed_ground` ResultChart.** Slice ships placeholder
+    rank-to-outcome mapping. Phase 2 task 2F replaces these values when it lands.
 
 ### Plan-phase verifications
 
@@ -507,6 +719,15 @@ These are quick checks during plan-writing to confirm or fix natural keys / uniq
   expectations (duration, stage progression, etc.). `get_or_create(name="Burning", defaults={...})`
   semantics protect us, but verify defaults are sane.
 - `perform_check` actual signature and where `_forced_outcome` kwarg slots in.
+- **The ObjectDB ↔ RoomProfile ↔ RoomAuraProfile traversal pattern used by both
+  `_has_affinity_resonance` and `compute_intensity_difficulty`.** The spec sketches both as
+  `getattr(room_obj, "db", room_obj).room_profile.room_aura_profile`. Verify against the
+  actual Evennia idiom — RoomProfile may be reached via `obj.db.room_profile`,
+  `obj.room_profile`, a manager, or a different relation entirely depending on how
+  `evennia_extensions` exposes it. If the traversal is wrong, BOTH the filter operator and
+  the helper silently return False / base_difficulty for every room, and the parametrized
+  pipeline tests will all pass with identical difficulty values (silent failure mode that
+  would not surface as a test error). Verify before writing either function.
 
 ### Integration shape for brother's eventual Outcomes work
 
@@ -580,12 +801,19 @@ New / modified files this slice touches:
 - `src/world/achievements/constants.py` — add `ConditionEventType` TextChoices
 - `src/world/achievements/migrations/NNNN_condition_stat_rule.py` — new
 - `src/world/achievements/factories.py` — add `ConditionStatRuleFactory`
-- `src/world/checks/services.py` — add `_forced_outcome` test-only kwarg + thread-local read
-- `src/world/checks/test_helpers.py` — new file, `force_check_outcome` context manager
+- `src/world/checks/services.py` — add `_forced_outcome` test-only kwarg + thread-local read + capture-write
+- `src/world/checks/test_helpers.py` — new file, `force_check_outcome` context manager + `CheckCapture` dataclass
+- `src/flows/filters/evaluator.py` — add `has_affinity_resonance` operator + handler
+- `src/flows/filters/validator.py` — register new operator
+- `src/flows/filters/errors.py` — extend if new error types needed
+- `src/flows/service_functions/affinity.py` — new module, `compute_intensity_difficulty` helper
 - `src/world/stories/models.py` — add Beat UniqueConstraint (if missing)
 - `src/world/stories/migrations/NNNN_beat_unique_constraint.py` — new if needed
-- `src/integration_tests/game_content/magic.py` — add `seed_starter_magic_story()`
+- `src/integration_tests/game_content/magic.py` — add `seed_canonical_affinities()`, `seed_canonical_resonances()`, `seed_starter_magic_story()`
 - `src/integration_tests/test_magic_story_pipeline.py` — new pipeline test
-- `src/integration_tests/game_content/tests/test_magic_seed.py` — add idempotency test for new seed function
+- `src/integration_tests/game_content/tests/test_magic_seed.py` — add idempotency tests for new seed functions
+- `src/flows/tests/test_filters/test_has_affinity_resonance.py` — unit tests for the new operator
+- `src/flows/tests/test_service_functions/test_affinity.py` — unit tests for `compute_intensity_difficulty`
 - `docs/roadmap/seed-and-integration-tests.md` — update Phase 1 / Phase 2 status notes
-- `docs/roadmap/magic.md` — note authored reference reactive-scar content shipped
+- `docs/roadmap/magic.md` — note authored reference reactive-scar content shipped, plus the
+  affinity-based room state operator landed
