@@ -92,26 +92,27 @@ class RoomResonanceTests(TestCase):
 
 class ResonanceGrantTests(TestCase):
     def test_residence_grant_row_shape(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.constants import GainSource
-        from world.magic.factories import ResonanceFactory, RoomAuraProfileFactory
+        from world.magic.factories import ResonanceFactory
         from world.magic.models import ResonanceGrant
 
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
-        aura = RoomAuraProfileFactory()
+        rp = RoomProfileFactory()
 
         grant = ResonanceGrant.objects.create(
             character_sheet=sheet,
             resonance=res,
             amount=1,
             source=GainSource.ROOM_RESIDENCE,
-            source_room_aura_profile=aura,
+            source_room_profile=rp,
         )
         self.assertEqual(grant.amount, 1)
         self.assertEqual(grant.source, GainSource.ROOM_RESIDENCE)
 
-    def test_residence_grant_requires_aura_profile_fk(self) -> None:
+    def test_residence_grant_requires_room_profile_fk(self) -> None:
         from django.db import IntegrityError
 
         from world.character_sheets.factories import CharacterSheetFactory
@@ -127,7 +128,7 @@ class ResonanceGrantTests(TestCase):
                 resonance=res,
                 amount=1,
                 source=GainSource.ROOM_RESIDENCE,
-                # missing source_room_aura_profile
+                # missing source_room_profile
             )
 
     def test_staff_grant_accepts_null_account(self) -> None:
@@ -226,18 +227,18 @@ class ResonanceGrantPoseEndorsementShapeTests(TestCase):
         """ROOM_RESIDENCE source must NOT have source_pose_endorsement set."""
         from django.db import IntegrityError
 
+        from evennia_extensions.factories import RoomProfileFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.constants import GainSource
         from world.magic.factories import (
             PoseEndorsementFactory,
             ResonanceFactory,
-            RoomAuraProfileFactory,
         )
         from world.magic.models import ResonanceGrant
 
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
-        aura = RoomAuraProfileFactory()
+        rp = RoomProfileFactory()
         endorsement = PoseEndorsementFactory(endorsee_sheet=sheet, resonance=res)
         with self.assertRaises(IntegrityError):
             ResonanceGrant.objects.create(
@@ -245,7 +246,7 @@ class ResonanceGrantPoseEndorsementShapeTests(TestCase):
                 resonance=res,
                 amount=1,
                 source=GainSource.ROOM_RESIDENCE,
-                source_room_aura_profile=aura,
+                source_room_profile=rp,
                 source_pose_endorsement=endorsement,  # forbidden
             )
 
@@ -330,18 +331,18 @@ class ResonanceGrantSceneEntryShapeTests(TestCase):
     def test_residence_rejects_scene_entry_fk(self) -> None:
         from django.db import IntegrityError
 
+        from evennia_extensions.factories import RoomProfileFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.constants import GainSource
         from world.magic.factories import (
             ResonanceFactory,
-            RoomAuraProfileFactory,
             SceneEntryEndorsementFactory,
         )
         from world.magic.models import ResonanceGrant
 
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
-        aura = RoomAuraProfileFactory()
+        rp = RoomProfileFactory()
         endorsement = SceneEntryEndorsementFactory(endorsee_sheet=sheet, resonance=res)
         with self.assertRaises(IntegrityError):
             ResonanceGrant.objects.create(
@@ -349,7 +350,7 @@ class ResonanceGrantSceneEntryShapeTests(TestCase):
                 resonance=res,
                 amount=1,
                 source=GainSource.ROOM_RESIDENCE,
-                source_room_aura_profile=aura,
+                source_room_profile=rp,
                 source_scene_entry_endorsement=endorsement,  # forbidden
             )
 
