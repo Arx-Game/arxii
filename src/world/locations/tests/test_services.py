@@ -9,11 +9,13 @@ from world.areas.factories import AreaFactory
 from world.locations.constants import (
     STAT_CLAMPS,
     STAT_DEFAULTS,
+    KeyType,
     LocationParentType,
     StatKey,
 )
 from world.locations.models import LocationStatModifier, LocationStatOverride
-from world.locations.services import effective_stat
+from world.locations.services import effective_stat, effective_value
+from world.magic.factories import ResonanceFactory
 
 
 class CascadeDefaultsTests(TestCase):
@@ -199,3 +201,82 @@ class CascadeModifierStackingTests(TestCase):
             applied_at=timezone.now() - timedelta(days=30),
         )
         self.assertEqual(effective_stat(self.room, StatKey.CRIME), 0)
+
+
+class EffectiveValueResonanceTests(TestCase):
+    """Tests for the resonance axis on the polymorphic effective_value service."""
+
+    def setUp(self) -> None:
+        self.city = AreaFactory(level=AreaLevel.CITY)
+        self.ward = AreaFactory(level=AreaLevel.WARD, parent=self.city)
+        self.room_profile = RoomProfileFactory(area=self.ward)
+        self.room = self.room_profile.objectdb
+        self.predari = ResonanceFactory(name="Predari")
+        self.copperi = ResonanceFactory(name="Copperi")
+
+    def test_resonance_modifier_on_city_visible_from_room(self) -> None:
+        """A city-level resonance modifier contributes to a room in that city."""
+        LocationStatModifier.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.city,
+            key_type=KeyType.RESONANCE,
+            resonance=self.predari,
+            value=100,
+        )
+        self.assertEqual(effective_value(self.room, resonance=self.predari), 100)
+
+    def test_room_resonance_override_short_circuits_cascade(self) -> None:
+        """A room-level resonance override wipes city-level modifiers for that resonance."""
+        # City contributes predari +100
+        LocationStatModifier.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.city,
+            key_type=KeyType.RESONANCE,
+            resonance=self.predari,
+            value=100,
+        )
+        # Room overrides copperi to 1000 absolute — does NOT affect predari
+        LocationStatOverride.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.room_profile,
+            key_type=KeyType.RESONANCE,
+            resonance=self.copperi,
+            value=1000,
+        )
+        self.assertEqual(effective_value(self.room, resonance=self.predari), 100)
+        self.assertEqual(effective_value(self.room, resonance=self.copperi), 1000)
+
+    def test_resonance_default_is_zero_when_no_rows(self) -> None:
+        """No cascade rows for a resonance returns 0 (no STAT_DEFAULTS equivalent)."""
+        self.assertEqual(effective_value(self.room, resonance=self.predari), 0)
+
+    def test_resonance_not_clamped(self) -> None:
+        """Resonance values are not clamped — staff author whatever magnitude."""
+        LocationStatOverride.objects.create(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.room_profile,
+            key_type=KeyType.RESONANCE,
+            resonance=self.predari,
+            value=99999,
+        )
+        self.assertEqual(effective_value(self.room, resonance=self.predari), 99999)
+
+    def test_requires_exactly_one_axis(self) -> None:
+        """Calling with neither or both axis kwargs raises ValueError."""
+        with self.assertRaises(ValueError):
+            effective_value(self.room)  # neither
+        with self.assertRaises(ValueError):
+            effective_value(self.room, stat_key=StatKey.CRIME, resonance=self.predari)
+
+    def test_stat_key_path_still_works(self) -> None:
+        """effective_value(room, stat_key=X) matches the legacy effective_stat result."""
+        LocationStatModifier.objects.create(
+            parent_type=LocationParentType.AREA,
+            area=self.city,
+            stat_key=StatKey.CRIME,  # defaults to KeyType.STAT
+            value=20,
+        )
+        self.assertEqual(
+            effective_value(self.room, stat_key=StatKey.CRIME),
+            effective_stat(self.room, StatKey.CRIME),
+        )

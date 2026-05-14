@@ -13,6 +13,7 @@ from world.locations.constants import (
     STAT_CLAMPS,
     STAT_DEFAULTS,
     HolderType,
+    KeyType,
     LocationParentType,
     StatKey,
 )
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
 
     from world.areas.models import Area
+    from world.magic.models import Resonance
     from world.scenes.models import Persona
     from world.societies.models import Organization
 
@@ -154,49 +156,76 @@ def _clamp(value: int, stat_key: StatKey) -> int:
     return max(low, min(high, value))
 
 
-def effective_stat(room: DefaultObject, stat_key: StatKey) -> int:
-    """Cascade-resolve a single stat for a room, clamped to per-stat bounds.
+def effective_value(
+    room: DefaultObject,
+    *,
+    stat_key: StatKey | None = None,
+    resonance: Resonance | None = None,
+) -> int:
+    """Cascade-resolve a single axis value (stat or resonance) for a room.
+
+    Exactly one of ``stat_key`` or ``resonance`` must be provided.
+
+    Stats are clamped to STAT_CLAMPS and start from STAT_DEFAULTS.
+    Resonance values are not clamped and default to 0.
 
     Algorithm (2 queries per call: closure walk + override or modifier
     fetch; modifier ``current_value()`` is in-memory math):
       1. Resolve ``room.room_profile`` and its area. If the profile is
-         missing, return ``STAT_DEFAULTS[stat_key]`` clamped.
+         missing, return the axis default (clamped for stats).
       2. Look up the area's ancestors (and itself) via ``AreaClosure``.
-      3. If any ``LocationStatOverride`` exists for the ancestor set or
-         the room_profile and matches ``stat_key``, pick the most-specific
-         (room > deepest area) and return its value, clamped.
+      3. If any ``LocationStatOverride`` for the matching axis exists in
+         the ancestor set or on the room_profile, pick the most-specific
+         (room > deepest area) and return its value (clamped for stats).
       4. Otherwise sum every ``LocationStatModifier.current_value`` for
-         the same scope and ``stat_key``, add ``STAT_DEFAULTS[stat_key]``,
-         clamp, return.
+         the same scope and axis, add the axis default, clamp for stats.
     """
+    if (stat_key is None) == (resonance is None):
+        msg = "Provide exactly one of stat_key or resonance."
+        raise ValueError(msg)
 
-    default = STAT_DEFAULTS.get(stat_key, 0)
+    if stat_key is not None:
+        default = STAT_DEFAULTS.get(stat_key, 0)
+        axis_filter = models.Q(key_type=KeyType.STAT, stat_key=stat_key)
+    else:
+        default = 0
+        axis_filter = models.Q(key_type=KeyType.RESONANCE, resonance=resonance)
+
+    def _maybe_clamp(value: int) -> int:
+        return _clamp(value, stat_key) if stat_key is not None else value
+
     profile, ancestor_ids = _room_profile_and_ancestors(room)
     if profile is None:
-        return _clamp(default, stat_key)
+        return _maybe_clamp(default)
 
     # Step 3: most-specific override wins, modifiers ignored.
     overrides = list(
-        LocationStatOverride.objects.filter(stat_key=stat_key)
+        LocationStatOverride.objects.filter(axis_filter)
         .select_related("area")
         .filter(models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids))
     )
     if overrides:
-        # Specificity: room beats any area; among areas, smaller level wins.
-        # AreaLevel uses smaller numbers for more specific tiers (Building=10
-        # is most specific).
         room_overrides = [o for o in overrides if o.room_profile_id == profile.pk]
         if room_overrides:
-            return _clamp(room_overrides[0].value, stat_key)
+            return _maybe_clamp(room_overrides[0].value)
         chosen = min(overrides, key=lambda o: o.area.level)
-        return _clamp(chosen.value, stat_key)
+        return _maybe_clamp(chosen.value)
 
     # Step 4: sum modifier current_values.
-    modifiers = LocationStatModifier.objects.filter(stat_key=stat_key).filter(
+    modifiers = LocationStatModifier.objects.filter(axis_filter).filter(
         models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids)
     )
     total = default + sum(mod.current_value() for mod in modifiers)
-    return _clamp(total, stat_key)
+    return _maybe_clamp(total)
+
+
+def effective_stat(room: DefaultObject, stat_key: StatKey) -> int:
+    """Cascade-resolve a single stat for a room, clamped to per-stat bounds.
+
+    Thin wrapper around :func:`effective_value`. Prefer the polymorphic
+    ``effective_value(room, stat_key=...)`` in new code.
+    """
+    return effective_value(room, stat_key=stat_key)
 
 
 class _StatCascadeIndex(NamedTuple):
