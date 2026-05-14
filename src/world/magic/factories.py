@@ -1166,21 +1166,6 @@ class CorruptionConfigFactory(factory.django.DjangoModelFactory):
     pk = 1
 
 
-class RoomAuraProfileFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = "magic.RoomAuraProfile"
-
-    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
-
-
-class RoomResonanceFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = "magic.RoomResonance"
-
-    room_aura_profile = factory.SubFactory(RoomAuraProfileFactory)
-    resonance = factory.SubFactory(ResonanceFactory)
-
-
 class PoseEndorsementFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "magic.PoseEndorsement"

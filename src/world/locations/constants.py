@@ -34,9 +34,10 @@ class KeyType(models.TextChoices):
     RESONANCE = "resonance", "Resonance"
 
 
-# Default magnitude when migrating tag-only RoomResonance rows to the cascade.
-# Authors should re-tune per room afterwards. 100 is a starting baseline that
-# sits in the middle of any plausible per-resonance scale.
+# Default magnitude used by tag_room_resonance and any other "tag the room
+# with this resonance" callers. Authors can re-tune per room afterwards via
+# direct LocationStatModifier edits. 100 is a starting baseline that sits in
+# the middle of any plausible per-resonance scale.
 RESONANCE_DEFAULT_MAGNITUDE: int = 100
 
 

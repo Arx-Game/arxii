@@ -197,9 +197,10 @@ class CharacterSheet(SharedMemoryModel):
         related_name="residents",
         help_text=(
             "Character's declared residence. Narrative declaration; mechanical "
-            "resonance trickle fires only if the room also has a RoomAuraProfile "
-            "with matching resonance tags. Deliberately separate from ObjectDB "
-            "db_home (which is a respawn-location concern)."
+            "resonance trickle fires only if the room has a positive cascade-row "
+            "modifier (LocationStatModifier, key_type=resonance) matching one of "
+            "the character's claimed resonances. Deliberately separate from "
+            "ObjectDB db_home (which is a respawn-location concern)."
         ),
     )
 
