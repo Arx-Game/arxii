@@ -75,7 +75,6 @@ from world.magic.models import (
     PoseEndorsement,
     Resonance,
     ResonanceGainConfig,
-    RoomResonance,
     SceneEntryEndorsement,
 )
 from world.magic.types import (
@@ -185,17 +184,25 @@ def set_residence(
 def get_residence_resonances(sheet: CharacterSheet) -> set[Resonance]:
     """Return the set of resonances granting trickle for this character.
 
-    Computes: (sheet.current_residence → RoomAuraProfile → tags)
-              ∩ (sheet.character_resonances — claimed set).
+    Computes: (resonances with a positive room-level cascade row on
+              sheet.current_residence) ∩ (sheet.character_resonances —
+              claimed set).
+
+    Uses a direct cascade-row query (NOT effective_value's full cascade
+    walk) — the trickle gate cares about what the room itself emits,
+    not values inherited from parent areas. Single query for the room's
+    rows; the cascade-resolved magnitude is not needed for this gate.
     """
     rp = sheet.current_residence
     if rp is None:
         return set()
-    aura = getattr(rp, "room_aura_profile", None)  # noqa: GETATTR_LITERAL — OneToOne reverse accessor, raises RelatedObjectDoesNotExist if missing
-    if aura is None:
-        return set()
     tagged_ids = set(
-        RoomResonance.objects.filter(room_aura_profile=aura).values_list("resonance_id", flat=True)
+        LocationStatModifier.objects.filter(
+            parent_type=LocationParentType.ROOM,
+            room_profile=rp,
+            key_type=KeyType.RESONANCE,
+            value__gt=0,
+        ).values_list("resonance_id", flat=True)
     )
     claimed_ids = set(sheet.resonances.values_list("resonance_id", flat=True))
     matched_ids = tagged_ids & claimed_ids
