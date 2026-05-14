@@ -13,7 +13,7 @@ from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin
-from world.locations.constants import HolderType, LocationParentType, StatKey
+from world.locations.constants import HolderType, KeyType, LocationParentType, StatKey
 
 
 class LocationStatOverride(DiscriminatorMixin, SharedMemoryModel):
@@ -86,22 +86,31 @@ class LocationStatOverride(DiscriminatorMixin, SharedMemoryModel):
 
 
 class LocationStatModifier(DiscriminatorMixin, SharedMemoryModel):
-    """An additive contribution to a stat at a specific area or room.
+    """An additive contribution to a stat or resonance at a specific area or room.
 
     Modifiers stack across the cascade chain. The effective value at a
     room is the sum of every modifier's :meth:`current_value` plus the
-    per-stat default, clamped to bounds — provided no override exists in
-    the chain.
+    per-stat default (or 0 for resonance), clamped to stat bounds —
+    provided no override exists in the chain.
 
     Carries its own ``change_per_day`` so consuming systems can model
     decay or growth rates that depend on IC mechanics. Read-time math is
     lazy; rows are not mutated by time passing.
+
+    Each row carries one axis value: either ``stat_key`` (StatKey enum)
+    or ``resonance`` (FK to magic.Resonance), gated by ``key_type``.
     """
 
     DISCRIMINATOR_FIELD = "parent_type"
     DISCRIMINATOR_MAP = {
         LocationParentType.AREA: "area",
         LocationParentType.ROOM: "room_profile",
+    }
+
+    KEY_TYPE_DISCRIMINATOR_FIELD = "key_type"
+    KEY_TYPE_DISCRIMINATOR_MAP = {
+        KeyType.STAT: "stat_key",
+        KeyType.RESONANCE: "resonance",
     }
 
     parent_type = models.CharField(
@@ -123,10 +132,25 @@ class LocationStatModifier(DiscriminatorMixin, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="stat_modifiers",
     )
+    key_type = models.CharField(
+        max_length=10,
+        choices=KeyType.choices,
+        default=KeyType.STAT,
+        help_text="Selects which key field (stat_key or resonance) is active.",
+    )
     stat_key = models.CharField(
         max_length=50,
         choices=StatKey.choices,
         db_index=True,
+        blank=True,
+        default="",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="cascade_modifiers",
     )
     value = models.IntegerField(
         help_text=(
@@ -163,7 +187,21 @@ class LocationStatModifier(DiscriminatorMixin, SharedMemoryModel):
         indexes = [
             models.Index(fields=["area", "stat_key"]),
             models.Index(fields=["room_profile", "stat_key"]),
+            models.Index(fields=["area", "resonance"]),
+            models.Index(fields=["room_profile", "resonance"]),
         ]
+
+    def clean(self) -> None:
+        """Validate BOTH discriminators (parent and key)."""
+        parent_errors = self._validate_discriminator(
+            self.DISCRIMINATOR_FIELD, self.DISCRIMINATOR_MAP
+        )
+        key_errors = self._validate_discriminator(
+            self.KEY_TYPE_DISCRIMINATOR_FIELD, self.KEY_TYPE_DISCRIMINATOR_MAP
+        )
+        errors = {**parent_errors, **key_errors}
+        if errors:
+            raise ValidationError(errors)
 
     def current_value(self, *, now: datetime | None = None) -> int:
         """Return the lazy decay/growth-resolved value.

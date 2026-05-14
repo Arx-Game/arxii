@@ -255,3 +255,54 @@ class LocationStatModifierStackingTests(TestCase):
         )
         self.assertEqual(mod.room_profile, room)
         self.assertIsNone(mod.area)
+
+
+class LocationStatModifierKeyTypeTests(TestCase):
+    """Validation tests for the key_type discriminator (stat vs resonance)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.room_profile = RoomProfileFactory()
+
+    def test_locationstatmodifier_resonance_key_clean(self) -> None:
+        """A row with key_type=RESONANCE requires resonance and forbids stat_key."""
+        from world.locations.constants import KeyType
+        from world.magic.factories import ResonanceFactory
+
+        resonance = ResonanceFactory()
+        row = LocationStatModifier(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.room_profile,
+            key_type=KeyType.RESONANCE,
+            resonance=resonance,
+            value=100,
+        )
+        row.full_clean()  # should not raise
+
+    def test_locationstatmodifier_resonance_key_requires_resonance(self) -> None:
+        """key_type=RESONANCE with resonance=None fails clean."""
+        from world.locations.constants import KeyType
+
+        row = LocationStatModifier(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.room_profile,
+            key_type=KeyType.RESONANCE,
+            stat_key=StatKey.CRIME,  # wrong field set
+            value=100,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            row.full_clean()
+        assert "resonance" in ctx.exception.message_dict
+
+    def test_locationstatmodifier_stat_key_still_works(self) -> None:
+        """Existing key_type=STAT path continues to work unchanged."""
+        from world.locations.constants import KeyType
+
+        row = LocationStatModifier(
+            parent_type=LocationParentType.ROOM,
+            room_profile=self.room_profile,
+            key_type=KeyType.STAT,
+            stat_key=StatKey.CRIME,
+            value=42,
+        )
+        row.full_clean()  # should not raise
