@@ -25,6 +25,9 @@ ALLOWED_MIGRATIONS: set[str] = {
     # Data migration: placeholder PathRitualGrants for accept_soul_tether preserve visibility
     # while CharacterRitualKnowledge gating is in effect (Phase 8).
     "world/magic/migrations/0052_accept_soul_tether_placeholder_grants.py",
+    # Data migration: backfills RoomResonance tag rows into LocationStatModifier
+    # cascade rows during the room-cascade-resonance-unification refactor.
+    "world/magic/migrations/0058_migrate_roomresonance_to_cascade.py",
 }
 
 # Patterns that suggest seed data in migrations
