@@ -14,7 +14,7 @@ from world.locations.constants import (
     StatKey,
 )
 from world.locations.models import LocationValueModifier, LocationValueOverride
-from world.locations.services import effective_stat, effective_value
+from world.locations.services import effective_value
 from world.magic.factories import ResonanceFactory
 
 
@@ -22,7 +22,7 @@ class CascadeDefaultsTests(TestCase):
     def test_returns_default_when_no_rows(self) -> None:
         room = RoomProfileFactory().objectdb
         self.assertEqual(
-            effective_stat(room, StatKey.ORDER),
+            effective_value(room, stat_key=StatKey.ORDER),
             STAT_DEFAULTS[StatKey.ORDER],
         )
 
@@ -34,7 +34,7 @@ class CascadeDefaultsTests(TestCase):
         profile.delete()
         room.refresh_from_db()
         self.assertEqual(
-            effective_stat(room, StatKey.CRIME),
+            effective_value(room, stat_key=StatKey.CRIME),
             STAT_DEFAULTS[StatKey.CRIME],
         )
 
@@ -50,7 +50,7 @@ class CascadeDefaultsTests(TestCase):
         )
         clamp_max = STAT_CLAMPS[StatKey.CRIME][1]
         self.assertEqual(
-            effective_stat(profile.objectdb, StatKey.CRIME),
+            effective_value(profile.objectdb, stat_key=StatKey.CRIME),
             clamp_max,
         )
 
@@ -75,7 +75,7 @@ class CascadeDefaultsTests(TestCase):
         clamp_max = STAT_CLAMPS[StatKey.CRIME][1]
         # 0 default + 80 + 80 = 160, clamps to 100
         self.assertEqual(
-            effective_stat(profile.objectdb, StatKey.CRIME),
+            effective_value(profile.objectdb, stat_key=StatKey.CRIME),
             clamp_max,
         )
 
@@ -85,7 +85,7 @@ class CascadeDefaultsTests(TestCase):
         profile = RoomProfileFactory()  # area defaults to None
         self.assertIsNone(profile.area)
         self.assertEqual(
-            effective_stat(profile.objectdb, StatKey.ORDER),
+            effective_value(profile.objectdb, stat_key=StatKey.ORDER),
             STAT_DEFAULTS[StatKey.ORDER],
         )
 
@@ -110,7 +110,7 @@ class CascadeOverrideTests(TestCase):
             stat_key=StatKey.CRIME,
             value=0,
         )
-        self.assertEqual(effective_stat(self.room, StatKey.CRIME), 0)
+        self.assertEqual(effective_value(self.room, stat_key=StatKey.CRIME), 0)
 
     def test_more_specific_area_override_wins(self) -> None:
         LocationValueOverride.objects.create(
@@ -125,7 +125,7 @@ class CascadeOverrideTests(TestCase):
             stat_key=StatKey.CRIME,
             value=70,
         )
-        self.assertEqual(effective_stat(self.room, StatKey.CRIME), 70)
+        self.assertEqual(effective_value(self.room, stat_key=StatKey.CRIME), 70)
 
     def test_override_anywhere_hides_modifiers(self) -> None:
         LocationValueOverride.objects.create(
@@ -140,7 +140,7 @@ class CascadeOverrideTests(TestCase):
             stat_key=StatKey.CRIME,
             value=50,
         )
-        self.assertEqual(effective_stat(self.room, StatKey.CRIME), 10)
+        self.assertEqual(effective_value(self.room, stat_key=StatKey.CRIME), 10)
 
     def test_room_override_hides_area_modifiers(self) -> None:
         """A room-level Override short-circuits even modifiers stacked
@@ -157,7 +157,7 @@ class CascadeOverrideTests(TestCase):
             stat_key=StatKey.CRIME,
             value=0,
         )
-        self.assertEqual(effective_stat(self.room, StatKey.CRIME), 0)
+        self.assertEqual(effective_value(self.room, stat_key=StatKey.CRIME), 0)
 
 
 class CascadeModifierStackingTests(TestCase):
@@ -188,7 +188,7 @@ class CascadeModifierStackingTests(TestCase):
             value=5,
         )
         # 0 default + 10 + 20 + 5 = 35
-        self.assertEqual(effective_stat(self.room, StatKey.CRIME), 35)
+        self.assertEqual(effective_value(self.room, stat_key=StatKey.CRIME), 35)
 
     def test_decayed_modifier_contributes_zero(self) -> None:
         # value 10, decay -1/day, applied 30 days ago → 0
@@ -200,7 +200,7 @@ class CascadeModifierStackingTests(TestCase):
             change_per_day=-1,
             applied_at=timezone.now() - timedelta(days=30),
         )
-        self.assertEqual(effective_stat(self.room, StatKey.CRIME), 0)
+        self.assertEqual(effective_value(self.room, stat_key=StatKey.CRIME), 0)
 
 
 class EffectiveValueResonanceTests(TestCase):
@@ -278,5 +278,5 @@ class EffectiveValueResonanceTests(TestCase):
         )
         self.assertEqual(
             effective_value(self.room, stat_key=StatKey.CRIME),
-            effective_stat(self.room, StatKey.CRIME),
+            effective_value(self.room, stat_key=StatKey.CRIME),
         )

@@ -26,8 +26,6 @@ from world.locations.services import (
     current_tenants,
     effective_owner,
     effective_owners_for_rooms,
-    effective_stat,
-    effective_stats_for_rooms,
     effective_values_for_rooms,
     tenancies_for_rooms,
 )
@@ -121,13 +119,13 @@ class BulkRoomProfilesAndAncestorsTests(TestCase):
 
 class EffectiveStatsForRoomsTests(TestCase):
     def test_empty_rooms_returns_empty_dict(self) -> None:
-        result = effective_stats_for_rooms([], [StatKey.CRIME])
+        result = effective_values_for_rooms([], stat_keys=[StatKey.CRIME])
         self.assertEqual(result, {})
 
     def test_empty_stat_keys_returns_empty_per_room(self) -> None:
         profile = RoomProfileFactory()
         room = profile.objectdb
-        result = effective_stats_for_rooms([room], [])
+        result = effective_values_for_rooms([room], stat_keys=[])
         self.assertEqual(result, {room.pk: {}})
 
     def test_single_room_matches_singular_helper(self) -> None:
@@ -136,8 +134,8 @@ class EffectiveStatsForRoomsTests(TestCase):
         room = profile.objectdb
         LocationValueOverrideFactory(area=ward, stat_key=StatKey.CRIME, value=42)
 
-        bulk_result = effective_stats_for_rooms([room], [StatKey.CRIME])
-        singular_result = effective_stat(room, StatKey.CRIME)
+        bulk_result = effective_values_for_rooms([room], stat_keys=[StatKey.CRIME])
+        singular_result = effective_value(room, stat_key=StatKey.CRIME)
 
         self.assertEqual(bulk_result[room.pk][StatKey.CRIME], singular_result)
 
@@ -156,12 +154,12 @@ class EffectiveStatsForRoomsTests(TestCase):
             value=80,
         )
 
-        result = effective_stats_for_rooms([room_a, room_b], [StatKey.CRIME])
+        result = effective_values_for_rooms([room_a, room_b], stat_keys=[StatKey.CRIME])
         self.assertEqual(result[room_a.pk][StatKey.CRIME], 80)
         # Room B falls through to default (no override, no modifier)
         self.assertEqual(
             result[room_b.pk][StatKey.CRIME],
-            effective_stat(room_b, StatKey.CRIME),
+            effective_value(room_b, stat_key=StatKey.CRIME),
         )
 
     def test_room_without_profile_falls_through_to_defaults(self) -> None:
@@ -170,7 +168,7 @@ class EffectiveStatsForRoomsTests(TestCase):
         profile.delete()
         room.refresh_from_db()
 
-        result = effective_stats_for_rooms([room], [StatKey.CRIME, StatKey.LIGHTING])
+        result = effective_values_for_rooms([room], stat_keys=[StatKey.CRIME, StatKey.LIGHTING])
         self.assertEqual(result[room.pk][StatKey.CRIME], STAT_DEFAULTS[StatKey.CRIME])
         self.assertEqual(result[room.pk][StatKey.LIGHTING], STAT_DEFAULTS[StatKey.LIGHTING])
 
@@ -182,7 +180,7 @@ class EffectiveStatsForRoomsTests(TestCase):
         LocationValueModifierFactory(area=ward, stat_key=StatKey.NOISE, value=10)
 
         with self.assertNumQueries(4):
-            effective_stats_for_rooms(rooms, [StatKey.CRIME, StatKey.NOISE])
+            effective_values_for_rooms(rooms, stat_keys=[StatKey.CRIME, StatKey.NOISE])
 
 
 class EffectiveOwnersForRoomsTests(TestCase):

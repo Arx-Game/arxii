@@ -219,15 +219,6 @@ def effective_value(
     return _maybe_clamp(total)
 
 
-def effective_stat(room: DefaultObject, stat_key: StatKey) -> int:
-    """Cascade-resolve a single stat for a room, clamped to per-stat bounds.
-
-    Thin wrapper around :func:`effective_value`. Prefer the polymorphic
-    ``effective_value(room, stat_key=...)`` in new code.
-    """
-    return effective_value(room, stat_key=stat_key)
-
-
 class _StatCascadeIndex(NamedTuple):
     """Pre-built lookup indexes for bulk stat resolution.
 
