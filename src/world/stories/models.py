@@ -863,6 +863,13 @@ class Beat(SharedMemoryModel):
 
     class Meta:
         ordering = ["episode", "order"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["episode", "predicate_type", "required_condition_template"],
+                name="unique_beat_per_episode_predicate_template",
+                condition=models.Q(required_condition_template__isnull=False),
+            ),
+        ]
         indexes = [
             models.Index(fields=["episode", "outcome"]),
         ]
