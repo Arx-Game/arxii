@@ -126,11 +126,15 @@ def evaluate_resonance_environment(
    affinity (cast-time); or `caster.aura` dominant affinity (presence-time, `technique=None`).
 2. Determine the place's dominant resonance affinity: over the room's cascade resonance
    rows, the affinity whose summed `effective_value(room, resonance=r)` is largest.
+   Tiebreak on equal sums by `Affinity.name` ascending (deterministic, reproducible tests).
 3. Look up the `AffinityInteraction` row for (working_affinity, place_affinity). Diagonal →
    ALIGNED/AMPLIFY. Off-diagonal → the authored row.
 4. `place_magnitude` = summed `locations.effective_value(room, resonance=r)` over the
    place-affinity resonances.
 5. `caster_alignment` = `caster.aura.<working_affinity>` percentage (0–100) / 100.
+   `CharacterAura` is a OneToOne that may not exist for non-character ObjectDBs (NPCs,
+   constructs). Missing aura → treat `caster_alignment` as 0 (no interaction; inert
+   effect). Documented in the primitive's docstring + an explicit unit test.
 6. `raw = place_magnitude * caster_alignment * interaction.severity_multiplier *
    config.base_coefficient`.
 7. `direction`: start from `interaction.aggressor`. For CORRUPT pairs, compare a
@@ -186,10 +190,26 @@ Access via `get_resonance_environment_config()` (lazy-create pk=1), the establis
 
 The slice ships **cast-time, both poles**, replacing the dead T6/T7/T13e code:
 
-1. **Universal cast subscriber.** A seeded `TriggerDefinition` on `TECHNIQUE_CAST` that is
-   **not** condition-sourced (fires for every caster, no scar). This requires a
-   non-`source_condition` Trigger path — see "Infra addition" below.
-2. **Reactive flow rework.** The seeded FlowDefinition's first step calls
+1. **Universal cast subscriber via a ubiquitous baseline condition (no infra change).**
+   There is no global/non-condition Trigger mechanism in the codebase (verified: even
+   soul tether's `CORRUPTION_ACCRUING` subscriber is a `TriggerDefinition` row installed
+   via a condition's `reactive_triggers` M2M — `source_condition` is always satisfied).
+   Rather than add a global-trigger schema+dispatch path, universality is achieved by a
+   **ubiquitous baseline `ConditionTemplate` "Magically Attuned"** whose
+   `reactive_triggers` M2M holds the resonance-environment `TECHNIQUE_CAST`
+   `TriggerDefinition`. Every magic-capable character receives "Magically Attuned" (granted
+   at CG finalization / first cast — for the slice's pipeline test it is applied in
+   `setUp` exactly as the marker condition is today). The reactive Trigger then
+   auto-installs through the **existing T4/T8/T10 plumbing** with a valid
+   `source_condition`. Scars (Hallowed Rejection etc.) are SEPARATE conditions that
+   **modulate** severity (via `AffinityInteraction` / config), NOT separate trigger
+   installers. Zero schema change; the "Infra addition" section is removed.
+2. **Reactive flow rework.** Event timing: v1 subscribes to **`TECHNIQUE_CAST`**
+   (post-resolve — the environment reacts *after* the working fires; the backfire is the
+   place's response to a completed working). Brother's plan said "pre-cast"; a true
+   `TECHNIQUE_PRE_CAST` variant that could *block or modify* the cast before it resolves
+   is a deferred refinement (it needs cancel/modify-payload semantics out of scope here).
+   The seeded FlowDefinition's first step calls
    `evaluate_resonance_environment(caster, room, technique)`. Branches:
    - inert (magnitude 0) → end (no effect).
    - OPPOSED → `perform_check` at config-derived difficulty → branch by `CheckOutcome`
@@ -216,20 +236,30 @@ The slice ships **cast-time, both poles**, replacing the dead T6/T7/T13e code:
    magnitude, or a primal caster where no authored backfire content exists) + the
    second-earner Discovery test.
 
-### Infra addition: non-condition-sourced triggers
+### No infra change to the Trigger model
 
-`Trigger.source_condition` is currently non-null (scar-installed triggers). The universal
-cast subscriber has no source condition. Minimal addition: make `Trigger.source_condition`
-**nullable**, with a `clean()`/constraint that a Trigger must have *either* a
-`source_condition` *or* be flagged `is_global=True` (seeded, always-installed). The
-trigger handler already walks owners; a global trigger is registered without an owner
-condition. This is a small, well-bounded schema change and is the correct foundation for
-*any* universal reactive behavior (not just this slice).
+The earlier draft proposed making `Trigger.source_condition` nullable + an `is_global`
+flag. **Removed** — verification showed no global-trigger dispatch path exists
+(`TriggerHandler._populate()` filters `Trigger.objects.filter(obj=self.owner)`; `obj` is
+also non-null), so a global trigger would be structurally invisible *and* require
+touching the dispatch path. The ubiquitous-baseline-condition approach (above) achieves
+universality with **zero** Trigger-model change, reusing the proven T4/T8/T10 install path
+and the soul-tether precedent exactly. A true global-trigger mechanism is neither needed
+nor built here.
 
-(Alternative considered: a core hook inside `use_technique` that emits to
-`evaluate_resonance_environment` directly, bypassing the reactive layer. Rejected — it
-would split reactive logic between the flows layer and the cast pipeline, and brother's
-plan explicitly framed this as a *trigger*. Keep it in the reactive layer.)
+### Working-affinity derivation (resolves the multi-affinity gift ambiguity)
+
+A `Gift` has an M2M to `Resonance` (1–2 resonances); two resonances can belong to two
+different `Affinity`s, so "the technique's affinity" is not always single-valued. Rule
+(deterministic, thematically sound): for a cast-time evaluation, collect the distinct
+affinities of `technique.gift.resonances`. For each, look up the `AffinityInteraction`
+row against the place's dominant-resonance affinity. **Select the interaction with the
+highest `severity_multiplier`** (a mixed working is judged by its most-reactive
+component). Tiebreak on equal multipliers by `Affinity.name` ascending (canonical, makes
+tests reproducible). Presence-time (`technique=None`) uses the caster's dominant
+`CharacterAura` affinity instead (no gift). This rule is part of the v1 formula (step 1)
+and is brother-extensible (he may later weight by per-resonance `CharacterResonance`
+balance — the call sites and data don't change).
 
 ## Out of scope — deferred, but the primitive supports them
 
@@ -274,9 +304,16 @@ These are **not** built in the slice. The primitive's shape (the `direction` fie
   config singleton; add the ALIGNED boon ConditionTemplate; the universal cast
   TriggerDefinition + reworked FlowDefinition steps.
 - **Rework test:** `src/integration_tests/test_magic_story_pipeline.py` — recomputed
-  `expected_difficulty`, abyssal-aura caster setup, ALIGNED subtest, short-circuit subtest.
-- **Conditions:** make `Trigger.source_condition` nullable + `is_global` flag + constraint;
-  migration; the trigger handler registers global triggers.
+  `expected_difficulty`, abyssal-aura caster setup, ALIGNED subtest, an inert/short-circuit
+  subtest, and a **CASTER_DOMINANT stub subtest** (strong abyssal caster in a weak primal
+  place → primitive returns `direction=CASTER_DOMINANT`; flow short-circuits as inert; the
+  test asserts the inert short-circuit and stands as the fill-in point for the deferred
+  defilement work).
+- **Conditions:** NO change to the `Trigger` model and NO migration for it (the earlier
+  nullable/is_global idea is removed). The baseline "Magically Attuned"
+  `ConditionTemplate` is authored *seed content* (no schema change) whose
+  `reactive_triggers` M2M holds the cast `TriggerDefinition`; it installs via the
+  existing T4/T8/T10 path. No trigger-handler change.
 - **Docs:** add the magic lore (Abyss corrupts; Celestial too pure; RPS cycle; the 9
   pairs) to `docs/roadmap/magic.md`. Update `docs/roadmap/seed-and-integration-tests.md`.
 
