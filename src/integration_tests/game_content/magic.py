@@ -742,113 +742,173 @@ def _seed_hallowed_achievement_bridge() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Task 13d — _seed_hallowed_rejection_flow_and_trigger()
+# RC3 — _seed_resonance_environment_flow_and_trigger()
+# (formerly Task 13d _seed_hallowed_rejection_flow_and_trigger — reworked)
 # ---------------------------------------------------------------------------
 
+#: Name of the resonance-environment reactive FlowDefinition.
+RESONANCE_ENV_FLOW_NAME: str = "Resonance Environment reactive flow"
 
-def _seed_hallowed_rejection_flow_and_trigger() -> None:
-    """Seed the FlowDefinition + steps + TriggerDefinition for Hallowed Rejection.
+#: Name of the TECHNIQUE_CAST TriggerDefinition for resonance-environment.
+#: RC4's _seed_hallowed_marker_and_rooms() uses this name to wire the trigger
+#: into the "Hallowed Rejection" marker condition (RC4 task scope).
+RESONANCE_ENV_TRIGGER_NAME: str = "Resonance Environment — technique cast"
 
-    Flow shape (executed when TECHNIQUE_CAST fires in a celestial-aura room
-    on a caster bearing the Hallowed Rejection marker condition):
 
-        1. compute_intensity_difficulty(room, "Celestial", base=10, per_res=5) → computed_difficulty
-        2. perform_check(target=caster, check_type=endure_hallowed_ground,
-               target_difficulty=$computed_difficulty) → check_outcome
-        3. if check_outcome == "Critical Success": apply_condition(Tempered Against Light)
-        4. elif check_outcome == "Success": apply_condition(Singed)
-        5. elif check_outcome == "Failure": apply_condition(Burning)
-        6. elif check_outcome == "Critical Failure": apply_condition(Hallowed Burn)
-               + apply_condition(Cast Disrupted)
+def _seed_resonance_environment_flow_and_trigger() -> None:
+    """Seed the FlowDefinition + steps + TriggerDefinition for the resonance-environment flow.
 
-    Flow step parameters shape for CALL_SERVICE_FUNCTION:
-        variable_name = dotted function path (resolved via importlib)
-        parameters = {<kwarg>: <value or "@flow_var_ref">, "result_variable": "<name>"}
+    Flow shape (executed when TECHNIQUE_CAST fires and "Magically Attuned" has
+    installed the trigger on the caster):
 
-    Flow step parameters shape for EVALUATE_EQUALS:
-        variable_name = flow variable name to test
-        parameters = {"value": "<comparison value>"}
-        Children of a conditional run on PASS; next sibling runs on FAIL.
+        Step 1: flow_evaluate_resonance_environment(caster, technique)
+            dict-unpack into: resonance_valence, resonance_kind, resonance_magnitude,
+            resonance_direction, resonance_backfire_difficulty
+
+        Step 2 (EVALUATE_EQUALS resonance_kind == "corrupt"):
+            PASS: END (CORRUPT is uniformly inert/deferred this slice)
+            FAIL: Step 3
+
+        Step 3 (EVALUATE_EQUALS resonance_valence == "aligned"):
+            PASS: flow_apply_condition("Empowered by Resonant Ground")
+            FAIL: Step 4
+
+        Step 4 (EVALUATE_EQUALS resonance_valence == "opposed"):
+            PASS: flow_perform_check("endure_hallowed_ground",
+                      target_difficulty=@resonance_backfire_difficulty)
+                  -> check_outcome
+                  EVALUATE_EQUALS check_outcome branches (T16 chain pattern):
+                    "Critical Success"  -> apply_condition(Tempered Against Light)
+                    "Success"           -> apply_condition(Singed)
+                    "Failure"           -> apply_condition(Burning)
+                    "Critical Failure"  -> apply_condition(Hallowed Burn)
+                                          -> apply_condition(Cast Disrupted) [chained child]
+            FAIL: END (inert)
+
+    Flow step parameters:
+        CALL_SERVICE_FUNCTION: variable_name = dotted path.
+          No result_variable = dict-return auto-unpack to individual flow vars.
+          result_variable = "<name>" for scalar returns.
+        EVALUATE_EQUALS: variable_name = flow var to test;
+          parameters={"value": "<literal>"}; PASS -> first child; FAIL -> next sibling.
 
     Idempotency: if the FlowDefinition already exists, steps are NOT recreated
     (FlowStepDefinition has no natural-key uniqueness). Re-runs leave the
     existing steps in place, preserving any hand-edits.
+
+    TriggerDefinition wired into Magically Attuned.reactive_triggers M2M so that
+    apply_condition("Magically Attuned") auto-installs the cast trigger on the
+    character via T4/T8/T10 ConditionTemplateReactiveHandler path.
     """
     from flows.constants import EventName  # noqa: PLC0415
     from flows.consts import FlowActionChoices  # noqa: PLC0415
     from flows.models.flows import FlowDefinition, FlowStepDefinition  # noqa: PLC0415
     from flows.models.triggers import TriggerDefinition  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
 
     flow, created = FlowDefinition.objects.get_or_create(
-        name="Hallowed Rejection reactive flow",
+        name="Resonance Environment reactive flow",
         defaults={
             "description": (
-                "Reactive flow: when a TECHNIQUE_CAST fires in a Celestial-aura room, "
-                "compute a difficulty from aura intensity, perform an endurance check, "
-                "and apply the appropriate hallowed-ground reaction condition."
+                "Reactive flow: when TECHNIQUE_CAST fires on a 'Magically Attuned' caster, "
+                "evaluate the resonance-environment primitive and branch: CORRUPT -> inert; "
+                "ALIGNED -> apply Empowered boon; OPPOSED (reject/repel) -> endurance check "
+                "-> apply the appropriate hallowed-ground reaction condition."
             ),
         },
     )
 
     if created:
         # ---------------------------------------------------------------
-        # Step 1: compute_intensity_difficulty → stored as computed_difficulty
+        # Step 1: flow_evaluate_resonance_environment (dict-return auto-unpack)
         # ---------------------------------------------------------------
-        # variable_name = dotted path to the service function (resolved via importlib)
-        # parameters:
-        #   room = "@location" (flow variable populated from event.location by T15)
-        #   affinity_name, base_difficulty, per_resonance_modifier = literals
-        #   result_variable = name of the flow variable to store the return value into
-        compute_step = FlowStepDefinition.objects.create(
+        # No result_variable: the engine stores each key of the returned dict
+        # as an individual top-level flow variable:
+        #   resonance_valence, resonance_kind, resonance_magnitude,
+        #   resonance_direction, resonance_backfire_difficulty
+        evaluate_step = FlowStepDefinition.objects.create(
             flow=flow,
             parent=None,
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
-            variable_name="flows.service_functions.affinity.compute_intensity_difficulty_for_character",
+            variable_name=(
+                "flows.service_functions.resonance_environment.flow_evaluate_resonance_environment"
+            ),
             parameters={
-                # @payload.caster walks the TechniqueCastPayload.caster field
-                # (the ObjectDB character). The wrapper reads .location internally,
-                # handling both raw ObjectDB and BaseState-wrapped objects.
-                # The "payload" variable is always populated by emit.py from
-                # the event payload passed to emit_event().
-                "character": "@payload.caster",
-                "affinity_name": "Celestial",
-                "base_difficulty": 10,
-                "per_resonance_modifier": 5,
-                "result_variable": "computed_difficulty",
+                "caster": "@payload.caster",
+                "technique": "@payload.technique",
             },
         )
 
         # ---------------------------------------------------------------
-        # Step 2: flow_perform_check → stored as check_outcome (name string)
+        # Step 2: EVALUATE_EQUALS resonance_kind == "corrupt" -> END
         # ---------------------------------------------------------------
-        # Uses the flow-callable wrapper (flows.service_functions.conditions)
-        # which looks up CheckType by name and returns the outcome name string.
-        # That string is compared against literal outcome names by EVALUATE_EQUALS
-        # in steps 3-6 below.
+        # CORRUPT is uniformly inert/deferred this slice. No children = END on PASS.
+        # FAIL falls through to Step 3 (next sibling).
+        corrupt_branch = FlowStepDefinition.objects.create(
+            flow=flow,
+            parent=evaluate_step,
+            action=FlowActionChoices.EVALUATE_EQUALS,
+            variable_name="resonance_kind",
+            parameters={"value": "corrupt"},
+        )
+
+        # ---------------------------------------------------------------
+        # Step 3: EVALUATE_EQUALS resonance_valence == "aligned"
+        # ---------------------------------------------------------------
+        # Sibling of Step 2 (FAIL from Step 2 -> Step 3).
+        aligned_branch = FlowStepDefinition.objects.create(
+            flow=flow,
+            parent=evaluate_step,
+            action=FlowActionChoices.EVALUATE_EQUALS,
+            variable_name="resonance_valence",
+            parameters={"value": "aligned"},
+        )
+        # Step 3a: apply ALIGNED boon (PASS child of aligned_branch)
+        FlowStepDefinition.objects.create(
+            flow=flow,
+            parent=aligned_branch,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="flows.service_functions.conditions.flow_apply_condition",
+            parameters={
+                "target": "@payload.caster",
+                "condition_name": "Empowered by Resonant Ground",
+            },
+        )
+
+        # ---------------------------------------------------------------
+        # Step 4: EVALUATE_EQUALS resonance_valence == "opposed"
+        # ---------------------------------------------------------------
+        # Sibling of Step 3. FAIL from Step 4 = inert -> END.
+        opposed_branch = FlowStepDefinition.objects.create(
+            flow=flow,
+            parent=evaluate_step,
+            action=FlowActionChoices.EVALUATE_EQUALS,
+            variable_name="resonance_valence",
+            parameters={"value": "opposed"},
+        )
+
+        # Step 4a: flow_perform_check (PASS child of opposed_branch)
+        # target_difficulty = precomputed by the adapter
         perform_step = FlowStepDefinition.objects.create(
             flow=flow,
-            parent=compute_step,
+            parent=opposed_branch,
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
             variable_name="flows.service_functions.conditions.flow_perform_check",
             parameters={
                 "character": "@payload.caster",
                 "check_type_name": "endure_hallowed_ground",
-                "target_difficulty": "@computed_difficulty",
+                "target_difficulty": "@resonance_backfire_difficulty",
                 "result_variable": "check_outcome",
             },
         )
 
         # ---------------------------------------------------------------
-        # Steps 3-6: EVALUATE_EQUALS branches on check_outcome
+        # Steps 4b-4e: EVALUATE_EQUALS branches on check_outcome (T16 chain pattern)
         # ---------------------------------------------------------------
-        # Each conditional is a sibling under perform_step (same parent).
-        # On PASS: first child executes (flow_apply_condition).
-        # On FAIL: next sibling executes (the next conditional).
+        # Siblings under perform_step. PASS -> first child; FAIL -> next sibling.
+        # Multi-condition outcomes chain apply steps parent->child.
         #
-        # check_outcome is the outcome NAME string returned by flow_perform_check.
-        # EVALUATE_EQUALS compares it against the literal outcome name.
-        #
-        # Outcome → condition name(s) mapping:
+        # Outcome name -> condition name(s) mapping:
         outcome_to_conditions: list[tuple[str, list[str]]] = [
             ("Critical Success", ["Tempered Against Light"]),
             ("Success", ["Singed"]),
@@ -863,13 +923,9 @@ def _seed_hallowed_rejection_flow_and_trigger() -> None:
                 variable_name="check_outcome",
                 parameters={"value": outcome_name},
             )
-            # Each flow_apply_condition call is chained as a child of the previous.
-            # The first condition is a child of the conditional (runs on PASS).
-            # Subsequent conditions are children of the previous apply_condition step,
-            # forming a linear chain: conditional → cond1 → cond2 → ...
-            # (The flow executor calls get_next_child after each non-conditional step,
-            # so siblings under a conditional are never visited — chaining is required.)
-            parent_step = conditional
+            # Chain: conditional -> cond1 -> cond2 -> ...
+            # (get_next_child path; siblings under a conditional are never visited)
+            parent_step: FlowStepDefinition = conditional
             for cond_name in condition_names:
                 apply_step = FlowStepDefinition.objects.create(
                     flow=flow,
@@ -883,33 +939,36 @@ def _seed_hallowed_rejection_flow_and_trigger() -> None:
                 )
                 parent_step = apply_step
 
+        # Suppress unused-variable warning; corrupt_branch, aligned_branch, opposed_branch
+        # are created for their side effects (establishing parent=evaluate_step siblings).
+        _ = corrupt_branch
+
     # -----------------------------------------------------------------------
     # TriggerDefinition — idempotent via get_or_create on name.
-    # Fires on TECHNIQUE_CAST events in rooms that have Celestial affinity aura.
-    #
-    # TechniqueCastPayload fields: caster, technique, targets, intensity, result.
-    # The room is not a direct payload field, so we traverse caster.location
-    # (Characters have a .location attribute pointing to their current room).
+    # Fires on every TECHNIQUE_CAST event; the primitive does the gating.
+    # base_filter_condition is empty (always fires when trigger is installed).
     # -----------------------------------------------------------------------
-    TriggerDefinition.objects.get_or_create(
-        name="Hallowed Rejection — technique cast in celestial-aura room",
+    trigger, _ = TriggerDefinition.objects.get_or_create(
+        name="Resonance Environment — technique cast",
         defaults={
             "event_name": EventName.TECHNIQUE_CAST,
-            "base_filter_condition": {
-                "path": "caster.location",
-                "op": "has_affinity_resonance",
-                "value": "Celestial",
-            },
+            "base_filter_condition": {},
             "flow_definition": flow,
             "priority": 10,
             "description": (
-                "Fires the Hallowed Rejection reactive flow when any technique is cast "
-                "in a room whose aura carries Celestial-affinity resonance. "
-                "The flow computes difficulty from aura intensity and applies the "
-                "appropriate hallowed-ground reaction condition based on check outcome."
+                "Fires the resonance-environment reactive flow on every TECHNIQUE_CAST. "
+                "The flow calls evaluate_resonance_environment() to determine valence/kind "
+                "and branches: CORRUPT -> inert; ALIGNED -> Empowered boon; "
+                "OPPOSED (reject/repel) -> endurance check -> reaction condition."
             ),
         },
     )
+
+    # Wire into Magically Attuned.reactive_triggers (idempotent M2M add).
+    # This causes apply_condition("Magically Attuned") to auto-install the cast
+    # trigger on the character via T4/T8/T10 ConditionTemplateReactiveHandler.
+    magically_attuned = ConditionTemplate.objects.get(name="Magically Attuned")
+    magically_attuned.reactive_triggers.add(trigger)
 
 
 # ---------------------------------------------------------------------------
@@ -2134,9 +2193,11 @@ def seed_starter_magic_story() -> None:
       A. _seed_endure_hallowed_ground_check() — CheckType + ResultChart
       B. _seed_hallowed_reaction_conditions() — 5 reaction conditions
       C. _seed_hallowed_achievement_bridge() — stats, rules, achievements
-      D. _seed_hallowed_rejection_flow_and_trigger() — FlowDefinition + steps + Trigger
-      E. _seed_hallowed_marker_and_rooms() — marker condition + 2 rooms with aura
-      F. _seed_hallowed_threshold_story() — Story → Chapter → Episodes → Beats → Transitions → TROs
+     RC1. _seed_resonance_environment_config() — ResonanceEnvironmentConfig singleton
+     RC2. _seed_resonance_environment_conditions() — Magically Attuned + Empowered boon
+      D. _seed_resonance_environment_flow_and_trigger() — FlowDefinition + steps + Trigger
+      E. _seed_hallowed_marker_and_rooms() — marker condition + 2 rooms with aura (RC4)
+      F. _seed_hallowed_threshold_story() — Story + Chapter + Episodes + Beats + Transitions + TROs
 
     All sub-helpers are idempotent (get_or_create at every layer), so the
     orchestrator itself is idempotent. Re-running on an edited DB preserves
@@ -2147,7 +2208,9 @@ def seed_starter_magic_story() -> None:
     _seed_endure_hallowed_ground_check()
     _seed_hallowed_reaction_conditions()
     _seed_hallowed_achievement_bridge()
-    _seed_hallowed_rejection_flow_and_trigger()
+    _seed_resonance_environment_config()
+    _seed_resonance_environment_conditions()
+    _seed_resonance_environment_flow_and_trigger()
     _seed_hallowed_marker_and_rooms()
     _seed_hallowed_threshold_story()
 

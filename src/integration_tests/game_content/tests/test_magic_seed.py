@@ -1219,89 +1219,121 @@ class SeedHallowedAchievementBridgeTests(TestCase):
         )
 
 
-class SeedHallowedRejectionFlowAndTriggerTests(TestCase):
+class SeedResonanceEnvironmentFlowAndTriggerTests(TestCase):
+    """RC3: _seed_resonance_environment_flow_and_trigger() tests.
+
+    Verifies:
+    - FlowDefinition created with expected name.
+    - Step count: 1 evaluate step + 3 branch conditionals (corrupt/aligned/opposed)
+      + 1 perform_check + 4 outcome conditionals + 5 apply_condition steps = 14 total.
+    - TriggerDefinition uses TECHNIQUE_CAST with empty base_filter_condition.
+    - Magically Attuned.reactive_triggers contains the TriggerDefinition.
+    - Idempotent: second call does not duplicate steps.
+    """
+
     @classmethod
     def setUpTestData(cls) -> None:
         from integration_tests.game_content.magic import (
             _seed_endure_hallowed_ground_check,
             _seed_hallowed_reaction_conditions,
+            _seed_resonance_environment_conditions,
         )
 
         _seed_endure_hallowed_ground_check()
         _seed_hallowed_reaction_conditions()
+        _seed_resonance_environment_conditions()
 
     def test_seeds_flow_definition(self) -> None:
         from flows.models.flows import FlowDefinition
         from integration_tests.game_content.magic import (
-            _seed_hallowed_rejection_flow_and_trigger,
+            RESONANCE_ENV_FLOW_NAME,
+            _seed_resonance_environment_flow_and_trigger,
         )
 
-        _seed_hallowed_rejection_flow_and_trigger()
+        _seed_resonance_environment_flow_and_trigger()
         self.assertTrue(
-            FlowDefinition.objects.filter(name="Hallowed Rejection reactive flow").exists(),
+            FlowDefinition.objects.filter(name=RESONANCE_ENV_FLOW_NAME).exists(),
         )
 
-    def test_seeds_flow_steps(self) -> None:
+    def test_seeds_expected_step_count(self) -> None:
+        """Flow should have exactly 14 steps:
+        1 evaluate + 3 branch conditionals (corrupt/aligned/opposed)
+        + 1 apply_condition (ALIGNED boon)
+        + 1 perform_check
+        + 4 outcome conditionals
+        + 4 apply_condition steps (Tempered/Singed/Burning/Hallowed Burn)
+        + 1 apply_condition (Cast Disrupted, chained child of Critical Failure)
+        = 15 total.
+        """
         from flows.models.flows import FlowDefinition, FlowStepDefinition
         from integration_tests.game_content.magic import (
-            _seed_hallowed_rejection_flow_and_trigger,
+            RESONANCE_ENV_FLOW_NAME,
+            _seed_resonance_environment_flow_and_trigger,
         )
 
-        _seed_hallowed_rejection_flow_and_trigger()
-        flow = FlowDefinition.objects.get(name="Hallowed Rejection reactive flow")
-        # Should have at least: 2 CALL_SERVICE_FUNCTION steps (compute_intensity, perform_check)
-        # plus 4 CONDITIONAL branches plus their apply_condition payloads (~ 1 per branch,
-        # plus extra apply_condition for the Cast Disrupted on Critical Failure).
-        # Minimum expected: 2 + 4 + 5 = 11 ish. We just assert > 5 to be flexible.
-        self.assertGreater(FlowStepDefinition.objects.filter(flow=flow).count(), 5)
+        _seed_resonance_environment_flow_and_trigger()
+        flow = FlowDefinition.objects.get(name=RESONANCE_ENV_FLOW_NAME)
+        step_count = FlowStepDefinition.objects.filter(flow=flow).count()
+        # 1 evaluate + 3 branch + 1 aligned boon + 1 perform_check + 4 outcome branches
+        # + 4 single-condition applies + 1 extra (Cast Disrupted chained) = 15
+        self.assertEqual(step_count, 15)
 
-    def test_seeds_trigger_definition(self) -> None:
+    def test_seeds_trigger_definition_technique_cast(self) -> None:
         from flows.constants import EventName
         from flows.models.triggers import TriggerDefinition
         from integration_tests.game_content.magic import (
-            _seed_hallowed_rejection_flow_and_trigger,
+            RESONANCE_ENV_TRIGGER_NAME,
+            _seed_resonance_environment_flow_and_trigger,
         )
 
-        _seed_hallowed_rejection_flow_and_trigger()
-        td = TriggerDefinition.objects.get(
-            name="Hallowed Rejection — technique cast in celestial-aura room",
-        )
+        _seed_resonance_environment_flow_and_trigger()
+        td = TriggerDefinition.objects.get(name=RESONANCE_ENV_TRIGGER_NAME)
         self.assertEqual(td.event_name, EventName.TECHNIQUE_CAST)
-        # Filter traverses caster.location — "location" is not a direct payload field
-        # on TechniqueCastPayload, but caster.location is the room. The validator
-        # allows dotted paths whose first segment is a known payload field.
-        self.assertEqual(
-            td.base_filter_condition,
-            {"path": "caster.location", "op": "has_affinity_resonance", "value": "Celestial"},
-        )
+        # Empty filter: the primitive does the gating, no has_affinity_resonance.
+        self.assertEqual(td.base_filter_condition, {})
 
-    def test_trigger_definition_validates(self) -> None:
-        """validate_filter_schema should pass on the seeded base_filter_condition."""
+    def test_trigger_wired_into_magically_attuned(self) -> None:
+        """Magically Attuned.reactive_triggers must include the resonance-env trigger."""
         from flows.models.triggers import TriggerDefinition
         from integration_tests.game_content.magic import (
-            _seed_hallowed_rejection_flow_and_trigger,
+            RESONANCE_ENV_TRIGGER_NAME,
+            _seed_resonance_environment_flow_and_trigger,
         )
+        from world.conditions.models import ConditionTemplate
 
-        _seed_hallowed_rejection_flow_and_trigger()
-        td = TriggerDefinition.objects.get(
-            name="Hallowed Rejection — technique cast in celestial-aura room",
-        )
-        # full_clean() runs validate_filter_schema. Should not raise.
-        td.full_clean()
+        _seed_resonance_environment_flow_and_trigger()
+        td = TriggerDefinition.objects.get(name=RESONANCE_ENV_TRIGGER_NAME)
+        attuned = ConditionTemplate.objects.get(name="Magically Attuned")
+        self.assertIn(td, attuned.reactive_triggers.all())
 
     def test_idempotent_does_not_duplicate_steps(self) -> None:
         from flows.models.flows import FlowDefinition, FlowStepDefinition
         from integration_tests.game_content.magic import (
-            _seed_hallowed_rejection_flow_and_trigger,
+            RESONANCE_ENV_FLOW_NAME,
+            _seed_resonance_environment_flow_and_trigger,
         )
 
-        _seed_hallowed_rejection_flow_and_trigger()
-        flow = FlowDefinition.objects.get(name="Hallowed Rejection reactive flow")
+        _seed_resonance_environment_flow_and_trigger()
+        flow = FlowDefinition.objects.get(name=RESONANCE_ENV_FLOW_NAME)
         step_count_a = FlowStepDefinition.objects.filter(flow=flow).count()
 
-        _seed_hallowed_rejection_flow_and_trigger()
+        _seed_resonance_environment_flow_and_trigger()
         step_count_b = FlowStepDefinition.objects.filter(flow=flow).count()
         self.assertEqual(step_count_a, step_count_b)
+
+    def test_idempotent_does_not_duplicate_trigger(self) -> None:
+        from flows.models.triggers import TriggerDefinition
+        from integration_tests.game_content.magic import (
+            RESONANCE_ENV_TRIGGER_NAME,
+            _seed_resonance_environment_flow_and_trigger,
+        )
+
+        _seed_resonance_environment_flow_and_trigger()
+        count_a = TriggerDefinition.objects.filter(name=RESONANCE_ENV_TRIGGER_NAME).count()
+        _seed_resonance_environment_flow_and_trigger()
+        count_b = TriggerDefinition.objects.filter(name=RESONANCE_ENV_TRIGGER_NAME).count()
+        self.assertEqual(count_a, 1)
+        self.assertEqual(count_b, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -1315,7 +1347,8 @@ class SeedHallowedMarkerAndRoomsTests(TestCase):
         from integration_tests.game_content.magic import (
             _seed_endure_hallowed_ground_check,
             _seed_hallowed_reaction_conditions,
-            _seed_hallowed_rejection_flow_and_trigger,
+            _seed_resonance_environment_conditions,
+            _seed_resonance_environment_flow_and_trigger,
             seed_canonical_affinities,
             seed_canonical_resonances,
         )
@@ -1324,7 +1357,8 @@ class SeedHallowedMarkerAndRoomsTests(TestCase):
         seed_canonical_resonances()
         _seed_hallowed_reaction_conditions()
         _seed_endure_hallowed_ground_check()
-        _seed_hallowed_rejection_flow_and_trigger()
+        _seed_resonance_environment_conditions()
+        _seed_resonance_environment_flow_and_trigger()
 
     def test_seeds_hallowed_rejection_marker(self):
         from integration_tests.game_content.magic import _seed_hallowed_marker_and_rooms
@@ -1336,16 +1370,16 @@ class SeedHallowedMarkerAndRoomsTests(TestCase):
         )
 
     def test_marker_has_reactive_trigger_attached(self):
-        from integration_tests.game_content.magic import _seed_hallowed_marker_and_rooms
+        from integration_tests.game_content.magic import (
+            RESONANCE_ENV_TRIGGER_NAME,
+            _seed_hallowed_marker_and_rooms,
+        )
         from world.conditions.models import ConditionTemplate
 
         _seed_hallowed_marker_and_rooms()
         marker = ConditionTemplate.objects.get(name="Hallowed Rejection")
         trigger_names = set(marker.reactive_triggers.values_list("name", flat=True))
-        self.assertIn(
-            "Hallowed Rejection — technique cast in celestial-aura room",
-            trigger_names,
-        )
+        self.assertIn(RESONANCE_ENV_TRIGGER_NAME, trigger_names)
 
     def test_seeds_two_rooms_with_aura(self):
         from evennia.objects.models import ObjectDB
