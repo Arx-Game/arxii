@@ -1294,3 +1294,115 @@ class SeedHallowedRejectionFlowAndTriggerTests(TestCase):
         _seed_hallowed_rejection_flow_and_trigger()
         step_count_b = FlowStepDefinition.objects.filter(flow=flow).count()
         self.assertEqual(step_count_a, step_count_b)
+
+
+# ---------------------------------------------------------------------------
+# Task 13e — _seed_hallowed_marker_and_rooms()
+# ---------------------------------------------------------------------------
+
+
+class SeedHallowedMarkerAndRoomsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from integration_tests.game_content.magic import (
+            _seed_endure_hallowed_ground_check,
+            _seed_hallowed_reaction_conditions,
+            _seed_hallowed_rejection_flow_and_trigger,
+            seed_canonical_affinities,
+            seed_canonical_resonances,
+        )
+
+        seed_canonical_affinities()
+        seed_canonical_resonances()
+        _seed_hallowed_reaction_conditions()
+        _seed_endure_hallowed_ground_check()
+        _seed_hallowed_rejection_flow_and_trigger()
+
+    def test_seeds_hallowed_rejection_marker(self):
+        from integration_tests.game_content.magic import _seed_hallowed_marker_and_rooms
+        from world.conditions.models import ConditionTemplate
+
+        _seed_hallowed_marker_and_rooms()
+        self.assertTrue(
+            ConditionTemplate.objects.filter(name="Hallowed Rejection").exists(),
+        )
+
+    def test_marker_has_reactive_trigger_attached(self):
+        from integration_tests.game_content.magic import _seed_hallowed_marker_and_rooms
+        from world.conditions.models import ConditionTemplate
+
+        _seed_hallowed_marker_and_rooms()
+        marker = ConditionTemplate.objects.get(name="Hallowed Rejection")
+        trigger_names = set(marker.reactive_triggers.values_list("name", flat=True))
+        self.assertIn(
+            "Hallowed Rejection — technique cast in celestial-aura room",
+            trigger_names,
+        )
+
+    def test_seeds_two_rooms_with_aura(self):
+        from evennia.objects.models import ObjectDB
+
+        from integration_tests.game_content.magic import _seed_hallowed_marker_and_rooms
+        from world.magic.models.room_aura import RoomAuraProfile
+
+        _seed_hallowed_marker_and_rooms()
+        low = ObjectDB.objects.get(db_key="The Hallowed Threshold (Low)")
+        high = ObjectDB.objects.get(db_key="The Hallowed Threshold (High)")
+        # Both rooms have RoomProfile + RoomAuraProfile.
+        self.assertTrue(hasattr(low, "room_profile"))
+        self.assertTrue(hasattr(high, "room_profile"))
+        self.assertTrue(
+            RoomAuraProfile.objects.filter(room_profile=low.room_profile).exists(),
+        )
+        self.assertTrue(
+            RoomAuraProfile.objects.filter(room_profile=high.room_profile).exists(),
+        )
+
+    def test_low_intensity_room_has_one_celestial_resonance(self):
+        from evennia.objects.models import ObjectDB
+
+        from integration_tests.game_content.magic import _seed_hallowed_marker_and_rooms
+
+        _seed_hallowed_marker_and_rooms()
+        low = ObjectDB.objects.get(db_key="The Hallowed Threshold (Low)")
+        aura = low.room_profile.room_aura_profile
+        celestial_resonances = aura.room_resonances.filter(
+            resonance__affinity__name="Celestial",
+        )
+        self.assertEqual(celestial_resonances.count(), 1)
+        self.assertEqual(celestial_resonances.first().resonance.name, "Light")
+
+    def test_high_intensity_room_has_three_celestial_resonances(self):
+        from evennia.objects.models import ObjectDB
+
+        from integration_tests.game_content.magic import _seed_hallowed_marker_and_rooms
+
+        _seed_hallowed_marker_and_rooms()
+        high = ObjectDB.objects.get(db_key="The Hallowed Threshold (High)")
+        aura = high.room_profile.room_aura_profile
+        celestial_resonances = aura.room_resonances.filter(
+            resonance__affinity__name="Celestial",
+        )
+        names = set(celestial_resonances.values_list("resonance__name", flat=True))
+        self.assertEqual(names, {"Light", "Sanctity", "Radiance"})
+
+    def test_idempotent(self):
+        from evennia.objects.models import ObjectDB
+
+        from integration_tests.game_content.magic import _seed_hallowed_marker_and_rooms
+        from world.conditions.models import ConditionTemplate
+        from world.magic.models.room_aura import RoomResonance
+
+        _seed_hallowed_marker_and_rooms()
+        snapshot = (
+            ObjectDB.objects.filter(db_key__startswith="The Hallowed Threshold").count(),
+            RoomResonance.objects.count(),
+            ConditionTemplate.objects.filter(name="Hallowed Rejection").count(),
+        )
+        _seed_hallowed_marker_and_rooms()
+        post = (
+            ObjectDB.objects.filter(db_key__startswith="The Hallowed Threshold").count(),
+            RoomResonance.objects.count(),
+            ConditionTemplate.objects.filter(name="Hallowed Rejection").count(),
+        )
+        self.assertEqual(snapshot, post)

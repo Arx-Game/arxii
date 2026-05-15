@@ -905,6 +905,108 @@ def _seed_hallowed_rejection_flow_and_trigger() -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Task 13e — _seed_hallowed_marker_and_rooms()
+# ---------------------------------------------------------------------------
+
+
+def _seed_hallowed_marker_and_rooms() -> None:
+    """Seed the Hallowed Rejection marker ConditionTemplate + 2 test rooms.
+
+    The marker condition's reactive_triggers M2M references the TriggerDefinition
+    seeded by _seed_hallowed_rejection_flow_and_trigger(). When the marker is
+    applied to a character (T10's apply_condition extension), a Trigger row is
+    auto-installed and listens for TECHNIQUE_CAST events.
+
+    Two rooms author the intensity tiers used by the pipeline test:
+      - "The Hallowed Threshold (Low)" — 1 Celestial resonance (Light)
+      - "The Hallowed Threshold (High)" — 3 Celestial resonances (Light/Sanctity/Radiance)
+
+    Idempotent via get_or_create on db_key for the rooms, on name for the
+    ConditionTemplate, and on (room_aura_profile, resonance) for RoomResonance.
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+    from evennia.utils import create as evennia_create  # noqa: PLC0415
+
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+    from flows.models.triggers import TriggerDefinition  # noqa: PLC0415
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+    from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
+    from world.magic.models.affinity import Resonance  # noqa: PLC0415
+    from world.magic.models.room_aura import RoomAuraProfile, RoomResonance  # noqa: PLC0415
+
+    # ----- Marker condition -----
+    category, _ = ConditionCategory.objects.get_or_create(
+        name="Magical",
+        defaults={
+            "description": "Magical conditions arising from spellcasting and aura interactions.",
+            "is_negative": True,
+            "display_order": 0,
+        },
+    )
+    marker, _ = ConditionTemplate.objects.get_or_create(
+        name="Hallowed Rejection",
+        defaults={
+            "category": category,
+            "description": (
+                "An Abyssal-aligned soul remembers a wound made by sanctified light. "
+                "Whenever the bearer casts in a celestial-aura room, the rejection "
+                "answers with fire."
+            ),
+            "player_description": "You bear a scar that hates hallowed ground.",
+            "observer_description": "They flinch from sanctified air.",
+            "default_duration_type": DurationType.PERMANENT,
+            "default_duration_value": 0,
+            "is_stackable": False,
+            "max_stacks": 1,
+            "has_progression": False,
+            "can_be_dispelled": False,
+        },
+    )
+    trigger_def = TriggerDefinition.objects.get(
+        name="Hallowed Rejection — technique cast in celestial-aura room",
+    )
+    marker.reactive_triggers.add(trigger_def)  # idempotent — adding existing is no-op
+
+    # ----- Rooms with aura -----
+    light = Resonance.objects.get(name="Light")
+    sanctity = Resonance.objects.get(name="Sanctity")
+    radiance = Resonance.objects.get(name="Radiance")
+
+    for db_key, resonances in [
+        ("The Hallowed Threshold (Low)", [light]),
+        ("The Hallowed Threshold (High)", [light, sanctity, radiance]),
+    ]:
+        # ObjectDB.db_key is not unique in Evennia, so we check for existence
+        # first rather than relying on get_or_create. Use filter().first() to
+        # safely handle the case where no matching room exists yet.
+        existing = ObjectDB.objects.filter(
+            db_key=db_key,
+            db_typeclass_path="typeclasses.rooms.Room",
+        ).first()
+        if existing is not None:
+            room = existing
+        else:
+            # Evennia's create_object fires at_object_creation, which auto-creates
+            # the RoomProfile OneToOne extension for typeclasses.rooms.Room.
+            room = evennia_create.create_object(
+                typeclass="typeclasses.rooms.Room",
+                key=db_key,
+                nohome=True,
+            )
+        # RoomProfile is auto-created by Room.at_object_creation(), so
+        # get_or_create returns the existing row without touching it.
+        profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
+        # Ensure RoomAuraProfile exists.
+        aura, _ = RoomAuraProfile.objects.get_or_create(room_profile=profile)
+        # Wire the resonances — unique constraint prevents duplicates.
+        for res in resonances:
+            RoomResonance.objects.get_or_create(
+                room_aura_profile=aura,
+                resonance=res,
+            )
+
+
 def seed_canonical_affinities() -> None:
     """Seed the 3 canonical magic Affinities (Celestial / Primal / Abyssal).
 
