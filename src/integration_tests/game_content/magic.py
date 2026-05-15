@@ -1269,6 +1269,95 @@ def _seed_resonance_environment_config() -> None:
 
 
 # ---------------------------------------------------------------------------
+# RC2 — _seed_resonance_environment_conditions()
+# ---------------------------------------------------------------------------
+
+
+def _seed_resonance_environment_conditions() -> None:
+    """Seed the baseline and ALIGNED-pole boon ConditionTemplates for resonance-environment.
+
+    Creates two ConditionTemplates in the "Magical" category:
+
+    - "Magically Attuned" — ubiquitous baseline condition present on every
+      magic-capable character. Its reactive_triggers M2M will hold the
+      resonance-environment TECHNIQUE_CAST TriggerDefinition (wired in RC3).
+      Narrative-only: no progression, not stackable, permanent duration.
+
+    - "Empowered by Resonant Ground" — ALIGNED-pole boon applied when a
+      caster uses a technique in a place of power that resonates with their
+      affinity. Narrative: the caster is amplified by aligned resonant ground.
+
+    The OPPOSED-pole reaction conditions (Tempered Against Light / Singed /
+    Burning / Hallowed Burn / Cast Disrupted) are seeded separately by
+    _seed_hallowed_reaction_conditions(); this helper does not touch them.
+
+    Idempotent: get_or_create keyed on name. Staff edits to existing rows
+    are preserved (get_or_create, never update_or_create).
+    """
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+    from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
+
+    category, _ = ConditionCategory.objects.get_or_create(
+        name="Magical",
+        defaults={
+            "description": "Magical conditions arising from spellcasting and aura interactions.",
+            "is_negative": True,
+            "display_order": 0,
+        },
+    )
+
+    ConditionTemplate.objects.get_or_create(
+        name="Magically Attuned",
+        defaults={
+            "category": category,
+            "description": (
+                "The character can sense and channel magic. Places of power react to their "
+                "workings, amplifying or resisting based on the resonance of the ground."
+            ),
+            "player_description": (
+                "You can sense the currents of magic around you. "
+                "Places of power respond to your castings — "
+                "aligned ground amplifies your work; opposed ground pushes back."
+            ),
+            "observer_description": (
+                "There is a faint attunement about them — the air shifts when they work magic."
+            ),
+            "default_duration_type": DurationType.PERMANENT,
+            "default_duration_value": 0,
+            "is_stackable": False,
+            "max_stacks": 1,
+            "has_progression": False,
+            "can_be_dispelled": False,
+        },
+    )
+
+    ConditionTemplate.objects.get_or_create(
+        name="Empowered by Resonant Ground",
+        defaults={
+            "category": category,
+            "description": (
+                "The caster is amplified by a place of power whose resonance aligns with "
+                "their affinity. Their workings carry extra force while the alignment holds."
+            ),
+            "player_description": (
+                "The ground beneath you resonates with your magic. "
+                "Your castings feel sharper, more certain — the place of power is with you."
+            ),
+            "observer_description": (
+                "The air around them hums with concordant energy; "
+                "the place itself seems to lean toward their working."
+            ),
+            "default_duration_type": DurationType.ROUNDS,
+            "default_duration_value": 3,
+            "is_stackable": False,
+            "max_stacks": 1,
+            "has_progression": False,
+            "can_be_dispelled": True,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # Task 1.1 — seed_magic_config()
 # ---------------------------------------------------------------------------
 

@@ -28,6 +28,7 @@ from integration_tests.game_content.magic import (
     RitualSeedResult,
     ThreadPullCatalogResult,
     _seed_affinity_interactions,
+    _seed_resonance_environment_conditions,
     _seed_resonance_environment_config,
     seed_canonical_affinities,
     seed_canonical_resonances,
@@ -1843,3 +1844,79 @@ class SeedResonanceEnvironmentConfigTests(TestCase):
 
         cfg = ResonanceEnvironmentConfig.objects.get()
         self.assertEqual(cfg.pk, 1)
+
+
+class SeedResonanceEnvironmentConditionsTests(TestCase):
+    """RC2: _seed_resonance_environment_conditions() creates baseline + boon ConditionTemplates."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        _seed_resonance_environment_conditions()
+
+    def test_magically_attuned_exists(self) -> None:
+        from world.conditions.models import ConditionTemplate
+
+        self.assertTrue(ConditionTemplate.objects.filter(name="Magically Attuned").exists())
+
+    def test_empowered_by_resonant_ground_exists(self) -> None:
+        from world.conditions.models import ConditionTemplate
+
+        self.assertTrue(
+            ConditionTemplate.objects.filter(name="Empowered by Resonant Ground").exists()
+        )
+
+    def test_both_in_magical_category(self) -> None:
+        from world.conditions.models import ConditionCategory, ConditionTemplate
+
+        category = ConditionCategory.objects.get(name="Magical")
+        attuned = ConditionTemplate.objects.get(name="Magically Attuned")
+        empowered = ConditionTemplate.objects.get(name="Empowered by Resonant Ground")
+        self.assertEqual(attuned.category, category)
+        self.assertEqual(empowered.category, category)
+
+    def test_magically_attuned_is_permanent_and_not_dispellable(self) -> None:
+        from world.conditions.constants import DurationType
+        from world.conditions.models import ConditionTemplate
+
+        attuned = ConditionTemplate.objects.get(name="Magically Attuned")
+        self.assertEqual(attuned.default_duration_type, DurationType.PERMANENT)
+        self.assertFalse(attuned.can_be_dispelled)
+        self.assertFalse(attuned.has_progression)
+
+    def test_empowered_is_dispellable_boon(self) -> None:
+        from world.conditions.constants import DurationType
+        from world.conditions.models import ConditionTemplate
+
+        empowered = ConditionTemplate.objects.get(name="Empowered by Resonant Ground")
+        self.assertEqual(empowered.default_duration_type, DurationType.ROUNDS)
+        self.assertTrue(empowered.can_be_dispelled)
+        self.assertFalse(empowered.has_progression)
+
+    def test_idempotent(self) -> None:
+        from world.conditions.models import ConditionTemplate
+
+        count_before = ConditionTemplate.objects.filter(
+            name__in=["Magically Attuned", "Empowered by Resonant Ground"]
+        ).count()
+        _seed_resonance_environment_conditions()
+        count_after = ConditionTemplate.objects.filter(
+            name__in=["Magically Attuned", "Empowered by Resonant Ground"]
+        ).count()
+        self.assertEqual(count_before, count_after)
+        self.assertEqual(count_after, 2)
+
+    def test_does_not_create_opposed_reaction_conditions(self) -> None:
+        """The helper must not create Tempered/Singed/Burning/Hallowed Burn/Cast Disrupted."""
+        from world.conditions.models import ConditionTemplate
+
+        opposed_names = [
+            "Tempered Against Light",
+            "Singed",
+            "Burning",
+            "Hallowed Burn",
+            "Cast Disrupted",
+        ]
+        self.assertFalse(
+            ConditionTemplate.objects.filter(name__in=opposed_names).exists(),
+            "Opposed reaction conditions must not be created by this helper",
+        )
