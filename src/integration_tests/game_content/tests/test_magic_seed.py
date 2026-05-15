@@ -974,6 +974,47 @@ class SeedCanonicalAffinitiesTests(TestCase):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Task 13a — _seed_endure_hallowed_ground_check()
+# ---------------------------------------------------------------------------
+
+
+class SeedEndureHallowedGroundCheckTests(TestCase):
+    def test_seeds_check_type(self):
+        from integration_tests.game_content.magic import _seed_endure_hallowed_ground_check
+        from world.checks.models import CheckType
+
+        _seed_endure_hallowed_ground_check()
+        self.assertTrue(CheckType.objects.filter(name="endure_hallowed_ground").exists())
+
+    def test_seeds_four_result_chart_outcomes(self):
+        from integration_tests.game_content.magic import _seed_endure_hallowed_ground_check
+        from world.traits.models import ResultChart, ResultChartOutcome
+
+        _seed_endure_hallowed_ground_check()
+        # The slice seeds rank_difference=0 chart with 4 outcomes.
+        chart = ResultChart.objects.get(rank_difference=0)
+        outcomes_for_chart = ResultChartOutcome.objects.filter(chart=chart)
+        outcome_names = {ro.outcome.name for ro in outcomes_for_chart.select_related("outcome")}
+        expected = {"Critical Success", "Success", "Failure", "Critical Failure"}
+        self.assertGreaterEqual(outcome_names, expected)
+
+    def test_idempotent(self):
+        from integration_tests.game_content.magic import _seed_endure_hallowed_ground_check
+        from world.checks.models import CheckType
+        from world.traits.models import ResultChart, ResultChartOutcome
+
+        _seed_endure_hallowed_ground_check()
+        ct_count_a = CheckType.objects.count()
+        rc_count_a = ResultChart.objects.count()
+        rco_count_a = ResultChartOutcome.objects.count()
+
+        _seed_endure_hallowed_ground_check()
+        self.assertEqual(CheckType.objects.count(), ct_count_a)
+        self.assertEqual(ResultChart.objects.count(), rc_count_a)
+        self.assertEqual(ResultChartOutcome.objects.count(), rco_count_a)
+
+
 class SeedCanonicalResonancesTests(TestCase):
     """Task 1.12: seed_canonical_resonances() creates idempotent Celestial Resonance rows."""
 

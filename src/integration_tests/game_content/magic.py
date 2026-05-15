@@ -457,6 +457,89 @@ class MagicContent:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Task 13a — _seed_endure_hallowed_ground_check()
+# ---------------------------------------------------------------------------
+
+
+def _seed_endure_hallowed_ground_check() -> None:
+    """Seed the endure_hallowed_ground CheckType + a placeholder ResultChart.
+
+    Phase 2 task 2F replaces the placeholder tuning with real production
+    values. For this slice, just enough rows exist so perform_check resolves
+    `endure_hallowed_ground` deterministically (the pipeline test uses
+    force_check_outcome to bypass the dice).
+
+    CheckOutcome rows are not migration-seeded; this helper creates them via
+    get_or_create so repeated calls are idempotent.
+    """
+    from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
+    from world.traits.models import CheckOutcome, ResultChart, ResultChartOutcome  # noqa: PLC0415
+
+    # --- Ensure the "Magic" CheckCategory exists (shared with seed_magic_config) ---
+    magic_category, _ = CheckCategory.objects.get_or_create(name="Magic")
+
+    # --- CheckType ---
+    CheckType.objects.get_or_create(
+        name="endure_hallowed_ground",
+        defaults={
+            "category": magic_category,
+            "description": (
+                "Endurance check against the spiritual pressure of hallowed ground. "
+                "Placeholder — tuning replaced in Phase 2 task 2F."
+            ),
+            "is_active": True,
+        },
+    )
+
+    # --- Canonical CheckOutcome rows (not migration-seeded; idempotent) ---
+    canonical_outcomes: dict[str, int] = {
+        "Critical Success": 2,
+        "Success": 1,
+        "Failure": -1,
+        "Critical Failure": -2,
+    }
+    outcome_instances: dict[str, CheckOutcome] = {}
+    for name, success_level in canonical_outcomes.items():
+        outcome, _ = CheckOutcome.objects.get_or_create(
+            name=name,
+            defaults={
+                "success_level": success_level,
+                "description": "",
+                "display_template": "",
+            },
+        )
+        outcome_instances[name] = outcome
+
+    # --- ResultChart (rank_difference=0, baseline placeholder) ---
+    chart, _ = ResultChart.objects.get_or_create(
+        rank_difference=0,
+        defaults={"name": "Even Match (placeholder)"},
+    )
+
+    # --- Four ResultChartOutcome rows ---
+    # Natural key is (chart, min_roll). Ranges are placeholder; Phase 2 replaces.
+    #   1–15  → Critical Failure
+    #   16–50 → Failure
+    #   51–85 → Success
+    #   86–100 → Critical Success
+    outcome_specs: list[tuple[int, int, str]] = [
+        (1, 15, "Critical Failure"),
+        (16, 50, "Failure"),
+        (51, 85, "Success"),
+        (86, 100, "Critical Success"),
+    ]
+    for min_roll, max_roll, outcome_name in outcome_specs:
+        ResultChartOutcome.objects.get_or_create(
+            chart=chart,
+            min_roll=min_roll,
+            defaults={
+                "max_roll": max_roll,
+                "outcome": outcome_instances[outcome_name],
+            },
+        )
+
+
 def seed_canonical_affinities() -> None:
     """Seed the 3 canonical magic Affinities (Celestial / Primal / Abyssal).
 
