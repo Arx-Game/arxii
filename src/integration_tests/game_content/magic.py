@@ -741,6 +741,170 @@ def _seed_hallowed_achievement_bridge() -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Task 13d — _seed_hallowed_rejection_flow_and_trigger()
+# ---------------------------------------------------------------------------
+
+
+def _seed_hallowed_rejection_flow_and_trigger() -> None:
+    """Seed the FlowDefinition + steps + TriggerDefinition for Hallowed Rejection.
+
+    Flow shape (executed when TECHNIQUE_CAST fires in a celestial-aura room
+    on a caster bearing the Hallowed Rejection marker condition):
+
+        1. compute_intensity_difficulty(room, "Celestial", base=10, per_res=5) → computed_difficulty
+        2. perform_check(target=caster, check_type=endure_hallowed_ground,
+               target_difficulty=$computed_difficulty) → check_outcome
+        3. if check_outcome == "Critical Success": apply_condition(Tempered Against Light)
+        4. elif check_outcome == "Success": apply_condition(Singed)
+        5. elif check_outcome == "Failure": apply_condition(Burning)
+        6. elif check_outcome == "Critical Failure": apply_condition(Hallowed Burn)
+               + apply_condition(Cast Disrupted)
+
+    Flow step parameters shape for CALL_SERVICE_FUNCTION:
+        variable_name = dotted function path (resolved via importlib)
+        parameters = {<kwarg>: <value or "@flow_var_ref">, "result_variable": "<name>"}
+
+    Flow step parameters shape for EVALUATE_EQUALS:
+        variable_name = flow variable name to test
+        parameters = {"value": "<comparison value>"}
+        Children of a conditional run on PASS; next sibling runs on FAIL.
+
+    Idempotency: if the FlowDefinition already exists, steps are NOT recreated
+    (FlowStepDefinition has no natural-key uniqueness). Re-runs leave the
+    existing steps in place, preserving any hand-edits.
+    """
+    from flows.constants import EventName  # noqa: PLC0415
+    from flows.consts import FlowActionChoices  # noqa: PLC0415
+    from flows.models.flows import FlowDefinition, FlowStepDefinition  # noqa: PLC0415
+    from flows.models.triggers import TriggerDefinition  # noqa: PLC0415
+
+    flow, created = FlowDefinition.objects.get_or_create(
+        name="Hallowed Rejection reactive flow",
+        defaults={
+            "description": (
+                "Reactive flow: when a TECHNIQUE_CAST fires in a Celestial-aura room, "
+                "compute a difficulty from aura intensity, perform an endurance check, "
+                "and apply the appropriate hallowed-ground reaction condition."
+            ),
+        },
+    )
+
+    if created:
+        # ---------------------------------------------------------------
+        # Step 1: compute_intensity_difficulty → stored as computed_difficulty
+        # ---------------------------------------------------------------
+        # variable_name = dotted path to the service function (resolved via importlib)
+        # parameters:
+        #   room = "@location" (flow variable populated from event.location by T15)
+        #   affinity_name, base_difficulty, per_resonance_modifier = literals
+        #   result_variable = name of the flow variable to store the return value into
+        compute_step = FlowStepDefinition.objects.create(
+            flow=flow,
+            parent=None,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="flows.service_functions.affinity.compute_intensity_difficulty",
+            parameters={
+                # @caster resolves the "caster" flow variable, then .location walks
+                # to the room. The flow variable "caster" is populated from the
+                # TechniqueCastPayload.caster field by the reactive handler (T15).
+                "room": "@caster.location",
+                "affinity_name": "Celestial",
+                "base_difficulty": 10,
+                "per_resonance_modifier": 5,
+                "result_variable": "computed_difficulty",
+            },
+        )
+
+        # ---------------------------------------------------------------
+        # Step 2: perform_check → stored as check_outcome
+        # ---------------------------------------------------------------
+        # Parented to compute_step so it executes immediately after (first child).
+        # "@caster" is the flow variable that T15 seeds from the TECHNIQUE_CAST payload.
+        # check_type is looked up by name at runtime by perform_check.
+        # target_difficulty is a literal here; the reactive handler must set
+        # computed_difficulty into the variable_mapping before executing this step.
+        # For the pipeline test (T15), force_check_outcome bypasses the actual roll
+        # so the exact difficulty value does not matter.
+        perform_step = FlowStepDefinition.objects.create(
+            flow=flow,
+            parent=compute_step,
+            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+            variable_name="world.checks.services.perform_check",
+            parameters={
+                "character": "@caster",
+                "check_type": "endure_hallowed_ground",
+                "target_difficulty": "@computed_difficulty",
+                "result_variable": "check_outcome",
+            },
+        )
+
+        # ---------------------------------------------------------------
+        # Steps 3-6: EVALUATE_EQUALS branches on check_outcome
+        # ---------------------------------------------------------------
+        # Each conditional is a sibling under perform_step (same parent).
+        # On PASS: first child executes (apply_condition).
+        # On FAIL: next sibling executes (the next conditional).
+        #
+        # Outcome → condition name(s) mapping:
+        outcome_to_conditions: list[tuple[str, list[str]]] = [
+            ("Critical Success", ["Tempered Against Light"]),
+            ("Success", ["Singed"]),
+            ("Failure", ["Burning"]),
+            ("Critical Failure", ["Hallowed Burn", "Cast Disrupted"]),
+        ]
+        for outcome_name, condition_names in outcome_to_conditions:
+            conditional = FlowStepDefinition.objects.create(
+                flow=flow,
+                parent=perform_step,
+                action=FlowActionChoices.EVALUATE_EQUALS,
+                variable_name="check_outcome",
+                parameters={"value": outcome_name},
+            )
+            # Each apply_condition call is a child of the conditional (runs on PASS).
+            # When Critical Failure has two conditions, the second apply_condition is
+            # a sibling of the first (both parented to the EVALUATE_EQUALS step).
+            for cond_name in condition_names:
+                FlowStepDefinition.objects.create(
+                    flow=flow,
+                    parent=conditional,
+                    action=FlowActionChoices.CALL_SERVICE_FUNCTION,
+                    variable_name="world.conditions.services.apply_condition",
+                    parameters={
+                        "target": "@caster",
+                        "condition": cond_name,
+                    },
+                )
+
+    # -----------------------------------------------------------------------
+    # TriggerDefinition — idempotent via get_or_create on name.
+    # Fires on TECHNIQUE_CAST events in rooms that have Celestial affinity aura.
+    #
+    # TechniqueCastPayload fields: caster, technique, targets, intensity, result.
+    # The room is not a direct payload field, so we traverse caster.location
+    # (Characters have a .location attribute pointing to their current room).
+    # -----------------------------------------------------------------------
+    TriggerDefinition.objects.get_or_create(
+        name="Hallowed Rejection — technique cast in celestial-aura room",
+        defaults={
+            "event_name": EventName.TECHNIQUE_CAST,
+            "base_filter_condition": {
+                "path": "caster.location",
+                "op": "has_affinity_resonance",
+                "value": "Celestial",
+            },
+            "flow_definition": flow,
+            "priority": 10,
+            "description": (
+                "Fires the Hallowed Rejection reactive flow when any technique is cast "
+                "in a room whose aura carries Celestial-affinity resonance. "
+                "The flow computes difficulty from aura intensity and applies the "
+                "appropriate hallowed-ground reaction condition based on check outcome."
+            ),
+        },
+    )
+
+
 def seed_canonical_affinities() -> None:
     """Seed the 3 canonical magic Affinities (Celestial / Primal / Abyssal).
 

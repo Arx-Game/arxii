@@ -1209,3 +1209,88 @@ class SeedHallowedAchievementBridgeTests(TestCase):
             ),
             snapshot,
         )
+
+
+class SeedHallowedRejectionFlowAndTriggerTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from integration_tests.game_content.magic import (
+            _seed_endure_hallowed_ground_check,
+            _seed_hallowed_reaction_conditions,
+        )
+
+        _seed_endure_hallowed_ground_check()
+        _seed_hallowed_reaction_conditions()
+
+    def test_seeds_flow_definition(self) -> None:
+        from flows.models.flows import FlowDefinition
+        from integration_tests.game_content.magic import (
+            _seed_hallowed_rejection_flow_and_trigger,
+        )
+
+        _seed_hallowed_rejection_flow_and_trigger()
+        self.assertTrue(
+            FlowDefinition.objects.filter(name="Hallowed Rejection reactive flow").exists(),
+        )
+
+    def test_seeds_flow_steps(self) -> None:
+        from flows.models.flows import FlowDefinition, FlowStepDefinition
+        from integration_tests.game_content.magic import (
+            _seed_hallowed_rejection_flow_and_trigger,
+        )
+
+        _seed_hallowed_rejection_flow_and_trigger()
+        flow = FlowDefinition.objects.get(name="Hallowed Rejection reactive flow")
+        # Should have at least: 2 CALL_SERVICE_FUNCTION steps (compute_intensity, perform_check)
+        # plus 4 CONDITIONAL branches plus their apply_condition payloads (~ 1 per branch,
+        # plus extra apply_condition for the Cast Disrupted on Critical Failure).
+        # Minimum expected: 2 + 4 + 5 = 11 ish. We just assert > 5 to be flexible.
+        self.assertGreater(FlowStepDefinition.objects.filter(flow=flow).count(), 5)
+
+    def test_seeds_trigger_definition(self) -> None:
+        from flows.constants import EventName
+        from flows.models.triggers import TriggerDefinition
+        from integration_tests.game_content.magic import (
+            _seed_hallowed_rejection_flow_and_trigger,
+        )
+
+        _seed_hallowed_rejection_flow_and_trigger()
+        td = TriggerDefinition.objects.get(
+            name="Hallowed Rejection — technique cast in celestial-aura room",
+        )
+        self.assertEqual(td.event_name, EventName.TECHNIQUE_CAST)
+        # Filter traverses caster.location — "location" is not a direct payload field
+        # on TechniqueCastPayload, but caster.location is the room. The validator
+        # allows dotted paths whose first segment is a known payload field.
+        self.assertEqual(
+            td.base_filter_condition,
+            {"path": "caster.location", "op": "has_affinity_resonance", "value": "Celestial"},
+        )
+
+    def test_trigger_definition_validates(self) -> None:
+        """validate_filter_schema should pass on the seeded base_filter_condition."""
+        from flows.models.triggers import TriggerDefinition
+        from integration_tests.game_content.magic import (
+            _seed_hallowed_rejection_flow_and_trigger,
+        )
+
+        _seed_hallowed_rejection_flow_and_trigger()
+        td = TriggerDefinition.objects.get(
+            name="Hallowed Rejection — technique cast in celestial-aura room",
+        )
+        # full_clean() runs validate_filter_schema. Should not raise.
+        td.full_clean()
+
+    def test_idempotent_does_not_duplicate_steps(self) -> None:
+        from flows.models.flows import FlowDefinition, FlowStepDefinition
+        from integration_tests.game_content.magic import (
+            _seed_hallowed_rejection_flow_and_trigger,
+        )
+
+        _seed_hallowed_rejection_flow_and_trigger()
+        flow = FlowDefinition.objects.get(name="Hallowed Rejection reactive flow")
+        step_count_a = FlowStepDefinition.objects.filter(flow=flow).count()
+
+        _seed_hallowed_rejection_flow_and_trigger()
+        step_count_b = FlowStepDefinition.objects.filter(flow=flow).count()
+        self.assertEqual(step_count_a, step_count_b)
