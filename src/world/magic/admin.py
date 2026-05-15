@@ -5,6 +5,7 @@ from world.codex.models import TraditionCodexGrant
 from world.magic.audere import AudereThreshold
 from world.magic.models import (
     Affinity,
+    AffinityInteraction,
     AnimaRitualPerformance,
     Cantrip,
     CharacterAnima,
@@ -64,6 +65,20 @@ class ResonanceAdmin(admin.ModelAdmin):
     @admin.display(description="Opposite")
     def get_opposite(self, obj: Resonance) -> str:
         return obj.opposite.name if obj.opposite else "-"
+
+
+@admin.register(AffinityInteraction)
+class AffinityInteractionAdmin(admin.ModelAdmin):
+    list_display = [
+        "source_affinity",
+        "environment_affinity",
+        "valence",
+        "kind",
+        "aggressor",
+        "severity_multiplier",
+    ]
+    list_filter = ["valence", "kind"]
+    raw_id_fields = ["source_affinity", "environment_affinity"]
 
 
 @admin.register(EffectType)
