@@ -1,5 +1,6 @@
 """Tests for seed_magic_config() — Task 1.1, seed_canonical_rituals() — Task 1.2,
-seed_thread_pull_catalog() — Task 1.3, and seed_cantrip_starter_catalog() — Task 1.8.
+seed_thread_pull_catalog() — Task 1.3, seed_cantrip_starter_catalog() — Task 1.8,
+and seed_starter_magic_story() — Task 13g.
 
 Verifies:
 1. All 5 singletons + IntensityTier rows + MishapPoolTier are created with
@@ -14,6 +15,9 @@ Verifies:
 9. Cantrip starter catalog creates 5 styles, 6 effect types, 25 cantrips (Task 1.8).
 10. Cantrip catalog seeding is idempotent (Task 1.8).
 11. Staff edits to Cantrip rows survive a re-run (Task 1.8).
+12. seed_starter_magic_story() composes all 8 phases in dependency order (Task 13g).
+13. Re-running the orchestrator produces no changes (idempotent at slice level) (Task 13g).
+14. Staff edits to seeded rows survive re-runs (Task 13g).
 """
 
 from django.test import TestCase
@@ -1548,3 +1552,119 @@ class SeedHallowedThresholdStoryTests(TestCase):
             TransitionRequiredOutcome.objects.count(),
         )
         self.assertEqual(snapshot, post)
+
+
+class SeedStarterMagicStoryOrchestratorTests(TestCase):
+    """Tests for seed_starter_magic_story() — Task 13g."""
+
+    def test_orchestrator_calls_all_phases(self) -> None:
+        """Verify all representative content from each phase is present after one call."""
+        from flows.models.triggers import TriggerDefinition
+        from integration_tests.game_content.magic import seed_starter_magic_story
+        from world.achievements.models import Achievement
+        from world.checks.models import CheckType
+        from world.conditions.models import ConditionTemplate
+        from world.stories.models import Story
+
+        seed_starter_magic_story()
+
+        # Spot-check that representative content from each phase is present.
+        self.assertTrue(CheckType.objects.filter(name="endure_hallowed_ground").exists())
+        self.assertTrue(ConditionTemplate.objects.filter(name="Hallowed Rejection").exists())
+        self.assertTrue(ConditionTemplate.objects.filter(name="Tempered Against Light").exists())
+        self.assertTrue(Achievement.objects.filter(name="Hallowed-Hardened").exists())
+        self.assertTrue(
+            TriggerDefinition.objects.filter(
+                name="Hallowed Rejection — technique cast in celestial-aura room",
+            ).exists(),
+        )
+        self.assertTrue(Story.objects.filter(title="The Hallowed Threshold").exists())
+
+    def test_orchestrator_idempotent(self) -> None:
+        """Re-running on populated DB is a no-op for all relevant tables."""
+        from flows.models.flows import FlowDefinition, FlowStepDefinition
+        from flows.models.triggers import TriggerDefinition
+        from integration_tests.game_content.magic import seed_starter_magic_story
+        from world.achievements.models import (
+            Achievement,
+            AchievementRequirement,
+            ConditionStatRule,
+            StatDefinition,
+        )
+        from world.checks.models import CheckType
+        from world.conditions.models import ConditionTemplate
+        from world.magic.models.affinity import Affinity, Resonance
+        from world.magic.models.room_aura import RoomAuraProfile, RoomResonance
+        from world.stories.models import (
+            Beat,
+            Chapter,
+            Episode,
+            Story,
+            Transition,
+            TransitionRequiredOutcome,
+        )
+        from world.traits.models import ResultChart
+
+        seed_starter_magic_story()
+        snapshot = {
+            "Affinity": Affinity.objects.count(),
+            "Resonance": Resonance.objects.count(),
+            "CheckType": CheckType.objects.count(),
+            "ResultChart": ResultChart.objects.count(),
+            "ConditionTemplate": ConditionTemplate.objects.count(),
+            "ConditionStatRule": ConditionStatRule.objects.count(),
+            "StatDefinition": StatDefinition.objects.count(),
+            "Achievement": Achievement.objects.count(),
+            "AchievementRequirement": AchievementRequirement.objects.count(),
+            "FlowDefinition": FlowDefinition.objects.count(),
+            "FlowStepDefinition": FlowStepDefinition.objects.count(),
+            "TriggerDefinition": TriggerDefinition.objects.count(),
+            "RoomAuraProfile": RoomAuraProfile.objects.count(),
+            "RoomResonance": RoomResonance.objects.count(),
+            "Story": Story.objects.count(),
+            "Chapter": Chapter.objects.count(),
+            "Episode": Episode.objects.count(),
+            "Beat": Beat.objects.count(),
+            "Transition": Transition.objects.count(),
+            "TransitionRequiredOutcome": TransitionRequiredOutcome.objects.count(),
+        }
+
+        seed_starter_magic_story()
+        # Recompute counts and compare
+        recount = {
+            "Affinity": Affinity.objects.count(),
+            "Resonance": Resonance.objects.count(),
+            "CheckType": CheckType.objects.count(),
+            "ResultChart": ResultChart.objects.count(),
+            "ConditionTemplate": ConditionTemplate.objects.count(),
+            "ConditionStatRule": ConditionStatRule.objects.count(),
+            "StatDefinition": StatDefinition.objects.count(),
+            "Achievement": Achievement.objects.count(),
+            "AchievementRequirement": AchievementRequirement.objects.count(),
+            "FlowDefinition": FlowDefinition.objects.count(),
+            "FlowStepDefinition": FlowStepDefinition.objects.count(),
+            "TriggerDefinition": TriggerDefinition.objects.count(),
+            "RoomAuraProfile": RoomAuraProfile.objects.count(),
+            "RoomResonance": RoomResonance.objects.count(),
+            "Story": Story.objects.count(),
+            "Chapter": Chapter.objects.count(),
+            "Episode": Episode.objects.count(),
+            "Beat": Beat.objects.count(),
+            "Transition": Transition.objects.count(),
+            "TransitionRequiredOutcome": TransitionRequiredOutcome.objects.count(),
+        }
+        self.assertEqual(snapshot, recount)
+
+    def test_orchestrator_preserves_edits(self) -> None:
+        """Editing a seeded row and re-running the orchestrator leaves the edit intact."""
+        from integration_tests.game_content.magic import seed_starter_magic_story
+        from world.conditions.models import ConditionTemplate
+
+        seed_starter_magic_story()
+        marker = ConditionTemplate.objects.get(name="Hallowed Rejection")
+        marker.description = "edited by orchestrator idempotency test"
+        marker.save()
+
+        seed_starter_magic_story()
+        marker.refresh_from_db()
+        self.assertEqual(marker.description, "edited by orchestrator idempotency test")

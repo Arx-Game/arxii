@@ -1970,6 +1970,35 @@ def seed_facet_thread_unlock() -> FacetThreadUnlockResult:
     return FacetThreadUnlockResult(unlock=unlock)
 
 
+def seed_starter_magic_story() -> None:
+    """Seed the entire magic-story pipeline slice content set.
+
+    Composes the per-phase helpers in dependency order:
+
+      0. seed_canonical_affinities() — the 3 magic Affinities
+      0. seed_canonical_resonances() — the 3 Celestial Resonances
+
+      A. _seed_endure_hallowed_ground_check() — CheckType + ResultChart
+      B. _seed_hallowed_reaction_conditions() — 5 reaction conditions
+      C. _seed_hallowed_achievement_bridge() — stats, rules, achievements
+      D. _seed_hallowed_rejection_flow_and_trigger() — FlowDefinition + steps + Trigger
+      E. _seed_hallowed_marker_and_rooms() — marker condition + 2 rooms with aura
+      F. _seed_hallowed_threshold_story() — Story → Chapter → Episodes → Beats → Transitions → TROs
+
+    All sub-helpers are idempotent (get_or_create at every layer), so the
+    orchestrator itself is idempotent. Re-running on an edited DB preserves
+    edits (per project seed rule: never update_or_create).
+    """
+    seed_canonical_affinities()
+    seed_canonical_resonances()
+    _seed_endure_hallowed_ground_check()
+    _seed_hallowed_reaction_conditions()
+    _seed_hallowed_achievement_bridge()
+    _seed_hallowed_rejection_flow_and_trigger()
+    _seed_hallowed_marker_and_rooms()
+    _seed_hallowed_threshold_story()
+
+
 def seed_magic_dev() -> MagicDevSeedResult:
     """Seed the entire magic cluster in one idempotent call.
 
