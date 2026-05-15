@@ -268,6 +268,18 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
         ),
     )
 
+    # === Reactive Triggers ===
+    reactive_triggers = models.ManyToManyField(
+        "flows.TriggerDefinition",
+        blank=True,
+        related_name="installing_templates",
+        help_text=(
+            "TriggerDefinitions installed as Trigger rows on the bearer when an "
+            "instance of this template is applied. Cleanup is automatic via "
+            "Trigger.source_condition CASCADE on ConditionInstance deletion."
+        ),
+    )
+
     # === Aftermath / Decay (Scope 6 §4.1) ===
     parent_condition = models.ForeignKey(
         "self",
