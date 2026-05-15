@@ -12,6 +12,8 @@ attributes of the handler owner.
 
 from typing import Any
 
+from django.core.exceptions import ObjectDoesNotExist
+
 from flows.filters.errors import FilterPathError
 
 SENTINEL = object()
@@ -32,6 +34,7 @@ OP_GE = ">="
 OP_IN = "in"
 OP_CONTAINS = "contains"
 OP_HAS_PROPERTY = "has_property"
+OP_HAS_AFFINITY_RESONANCE = "has_affinity_resonance"
 
 # Filter DSL self-reference token and dotted prefix
 SELF_TOKEN = "self"  # noqa: S105 — DSL token, not a credential
@@ -70,6 +73,26 @@ def _eval_leaf(spec: dict, payload: Any, *, self_ref: Any) -> bool:
     return _apply_operator(op, resolved, value, path)
 
 
+def _has_affinity_resonance(room: object, affinity_name: str) -> bool:
+    """True if the room has at least one Resonance tagged on its RoomAuraProfile
+    whose Affinity matches the named affinity. False if the room has no
+    RoomAuraProfile (non-magical) or no matching resonance.
+
+    V1-verified traversal: ObjectDB -> RoomProfile -> RoomAuraProfile. Both are
+    OneToOne reverses; RoomAuraProfile is optional. Uses clean Django relations
+    only — never touches Evennia's .db attribute handler.
+    """
+    try:
+        aura_profile = room.room_profile.room_aura_profile
+    except (AttributeError, ObjectDoesNotExist):
+        # AttributeError if `room` isn't a typed room ObjectDB (defensive only).
+        # ObjectDoesNotExist if RoomAuraProfile isn't set (non-magical room).
+        return False
+    return aura_profile.room_resonances.filter(
+        resonance__affinity__name=affinity_name,
+    ).exists()
+
+
 def _apply_operator(op: str, resolved: Any, value: Any, path: str) -> bool:
     """Apply comparison operator using dispatch table."""
     operators: dict[str, Any] = {
@@ -81,6 +104,7 @@ def _apply_operator(op: str, resolved: Any, value: Any, path: str) -> bool:
         OP_GE: lambda r, v: r >= v,
         OP_IN: lambda r, v: r in v,
         OP_CONTAINS: lambda r, v: v in r,
+        OP_HAS_AFFINITY_RESONANCE: lambda r, v: _has_affinity_resonance(r, v),
     }
     if op in operators:
         return operators[op](resolved, value)
