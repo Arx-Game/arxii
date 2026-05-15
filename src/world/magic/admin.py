@@ -26,6 +26,7 @@ from world.magic.models import (
     PoseEndorsement,
     Reincarnation,
     Resonance,
+    ResonanceEnvironmentConfig,
     ResonanceGainConfig,
     ResonanceGrant,
     Restriction,
@@ -391,6 +392,27 @@ class ResonanceGainConfigAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
         return not ResonanceGainConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+        return False
+
+
+@admin.register(ResonanceEnvironmentConfig)
+class ResonanceEnvironmentConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for the resonance-environment primitive."""
+
+    list_display = (
+        "pk",
+        "base_coefficient",
+        "caster_power_scalar",
+        "balanced_band",
+        "backfire_base_difficulty",
+        "backfire_difficulty_per_magnitude",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
+        return not ResonanceEnvironmentConfig.objects.exists()
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
         return False

@@ -85,7 +85,7 @@ from world.magic.models.motifs import (
     MotifResonanceAssociation,
 )
 from world.magic.models.reincarnation import Reincarnation
-from world.magic.models.resonance_environment import AffinityInteraction
+from world.magic.models.resonance_environment import AffinityInteraction, ResonanceEnvironmentConfig
 from world.magic.models.ritual_scene_action import RitualSceneActionConfig
 from world.magic.models.rituals import (
     ImbuingProseTemplate,
@@ -191,6 +191,8 @@ __all__ = [
     # reincarnation
     "Reincarnation",
     "Resonance",
+    # resonance-environment config
+    "ResonanceEnvironmentConfig",
     # gain config (Spec C §2.1)
     "ResonanceGainConfig",
     # gain ledger (Spec C §2.4)
