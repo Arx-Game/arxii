@@ -217,8 +217,10 @@ The slice ships **cast-time, both poles**, replacing the dead T6/T7/T13e code:
      content: Tempered/Singed/Burning/Hallowed Burn) — only when `kind` ∈ {REJECT, REPEL}.
    - ALIGNED → apply an authored amplification condition (new: "Empowered by Resonant
      Ground" — a boon ConditionTemplate; magnitude scales it). No check (a boon).
-   - OPPOSED/CORRUPT with CASTER_DOMINANT → **deferred** (defilement); the flow treats it
-     as inert for now (documented).
+   - `kind=CORRUPT` (ANY direction — pair #6 caster→place defilement *and* pair #8
+     place→caster corruption) → **deferred**; the flow treats CORRUPT as inert in this
+     slice regardless of direction (documented). The primitive still returns the correct
+     `direction` so the deferred defilement/corruption work has the signal.
 3. **Both poles authored.** OPPOSED: existing Hallowed Threshold story content (the
    abyssal-caster-in-celestial-place case, pair #4). ALIGNED: a minimal aligned boon
    (abyssal caster in an abyssal place, pair #5) — one boon ConditionTemplate + an
