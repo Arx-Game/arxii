@@ -45,12 +45,14 @@ from integration_tests.game_content.magic import seed_starter_magic_story
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
 from world.conditions.services import apply_condition
+from world.magic.constants import AffinityInteractionKind, ResonanceDirection
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterAuraFactory,
     GiftFactory,
     TechniqueFactory,
 )
+from world.magic.services.resonance_environment import evaluate_resonance_environment
 from world.magic.services.techniques import use_technique
 from world.traits.models import CheckOutcome
 
@@ -502,3 +504,252 @@ class MagicStoryPipelineTests(EvenniaTestCase):
                 CharacterAchievement.objects.filter(character_sheet=self.sheet).exists(),
                 "No CharacterAchievement should be granted on a Failure outcome",
             )
+
+    # -------------------------------------------------------------------------
+    # T8: ALIGNED amplification — boon applied, no check, no story movement
+    # -------------------------------------------------------------------------
+
+    def test_aligned_amplification(self) -> None:
+        """Abyssal caster in Abyssal Sanctum (ALIGNED/AMPLIFY) → Empowered boon, no backfire.
+
+        Abyssal→Abyssal AffinityInteraction: ALIGNED / AMPLIFY / severity=1.00.
+        The flow short-circuits at Step 3 (aligned_branch PASS) and applies
+        "Empowered by Resonant Ground" directly — no perform_check is ever issued.
+
+        Assertions:
+          - "Empowered by Resonant Ground" ConditionInstance on caster.
+          - No reaction conditions (Singed / Burning / Tempered / Hallowed Burn /
+            Cast Disrupted) applied.
+          - StoryProgress still at "Stepping Into Light" (ALIGNED path does not
+            satisfy any hallowed-threshold beat).
+          - force_check_outcome capture records no check was intercepted (the context
+            manager's target_difficulty stays None when no check fires).
+        """
+        self._place_caster_in("aligned")
+
+        from world.conditions.models import ConditionInstance, ConditionTemplate
+
+        empowered_template = ConditionTemplate.objects.get(name="Empowered by Resonant Ground")
+
+        forced_outcome = CheckOutcome.objects.get(name="Success")
+        with force_check_outcome(forced_outcome) as capture:
+            use_technique(
+                character=self.caster,
+                technique=self.technique,
+                resolve_fn=MagicMock(return_value="resolve_result"),
+            )
+
+        # No perform_check was called — the capture should not have been exercised.
+        self.assertIsNone(
+            capture.target_difficulty,
+            "ALIGNED branch must not call perform_check; force_check_outcome should be unused",
+        )
+
+        # "Empowered by Resonant Ground" must have been applied by the flow.
+        self.assertTrue(
+            ConditionInstance.objects.filter(
+                target=self.caster,
+                condition=empowered_template,
+            ).exists(),
+            "'Empowered by Resonant Ground' must be applied to caster in ALIGNED room",
+        )
+
+        # No reaction/backfire conditions should have been applied.
+        reaction_templates = [
+            self.singed_template,
+            self.burning_template,
+            self.tempered_template,
+            self.hallowed_burn_template,
+            self.cast_disrupted_template,
+        ]
+        for tmpl in reaction_templates:
+            self.assertFalse(
+                ConditionInstance.objects.filter(
+                    target=self.caster,
+                    condition=tmpl,
+                ).exists(),
+                f"Reaction condition '{tmpl.name}' must NOT be applied in ALIGNED room",
+            )
+
+        # StoryProgress must remain at "Stepping Into Light" — ALIGNED path does not
+        # satisfy any hallowed-threshold beat, so no episode transition occurs.
+        self.progress.refresh_from_db()
+        self.assertEqual(
+            self.progress.current_episode,
+            self.episode_1,
+            "StoryProgress must remain at 'Stepping Into Light' after ALIGNED cast",
+        )
+
+    # -------------------------------------------------------------------------
+    # T9: Inert short-circuit — untagged room, no interaction → no effect
+    # -------------------------------------------------------------------------
+
+    def test_inert_short_circuit(self) -> None:
+        """Caster in a room with no resonance cascade → primitive returns inert, flow ends.
+
+        The room has no LocationValueModifier rows (key_type=RESONANCE), so
+        _get_room_resonances() returns [] and the primitive returns inert immediately.
+        The flow Step 1 dict-unpacks resonance_valence="" / resonance_kind="";
+        Step 2 CORRUPT check FAILs (kind is ""); Step 3 ALIGNED check FAILs (valence
+        is ""); Step 4 OPPOSED check FAILs (valence is "") → END.
+
+        Assertions:
+          - No ConditionInstance of any kind on caster (not Empowered, not reaction).
+          - StoryProgress still at "Stepping Into Light".
+          - No perform_check called.
+        """
+        from evennia.utils import create as evennia_create
+
+        from evennia_extensions.models import RoomProfile
+
+        # Create a fresh room with no resonance tags.
+        inert_room = evennia_create.create_object(
+            typeclass="typeclasses.rooms.Room",
+            key="Inert Test Room (no resonance)",
+            nohome=True,
+        )
+        # Ensure RoomProfile exists (auto-created by at_object_creation, but confirm).
+        RoomProfile.objects.get_or_create(objectdb=inert_room)
+
+        self.caster.location = inert_room
+        self.caster.save()
+
+        from world.conditions.models import ConditionInstance
+
+        forced_outcome = CheckOutcome.objects.get(name="Success")
+        with force_check_outcome(forced_outcome) as capture:
+            use_technique(
+                character=self.caster,
+                technique=self.technique,
+                resolve_fn=MagicMock(return_value="resolve_result"),
+            )
+
+        # No check was called.
+        self.assertIsNone(
+            capture.target_difficulty,
+            "Inert path must not call perform_check",
+        )
+
+        # No conditions applied by the flow (Magically Attuned was applied in setUp
+        # and must remain the only ConditionInstance on the caster).
+        post_cast_count = ConditionInstance.objects.filter(target=self.caster).count()
+        self.assertEqual(
+            post_cast_count,
+            1,
+            "Only 'Magically Attuned' (applied in setUp) should exist; inert flow adds nothing",
+        )
+
+        # StoryProgress unchanged.
+        self.progress.refresh_from_db()
+        self.assertEqual(
+            self.progress.current_episode,
+            self.episode_1,
+            "StoryProgress must remain at 'Stepping Into Light' after inert cast",
+        )
+
+    # -------------------------------------------------------------------------
+    # T10: CASTER_DOMINANT stub — strong abyssal caster vs weak primal room
+    # -------------------------------------------------------------------------
+
+    def test_caster_dominant_stub(self) -> None:
+        """Strong abyssal caster (aura=100) in weak Primal room (mag=10) → CASTER_DOMINANT CORRUPT.
+
+        Math:
+          caster_strength = 100 * 0.500 = 50.0
+          place_magnitude = 10
+          caster_strength - place_magnitude = 40 > balanced_band(10) → CASTER_DOMINANT
+
+        The seeded AffinityInteraction (Abyssal→Primal): OPPOSED / CORRUPT / aggressor=CASTER.
+        The flow Step 2 (EVALUATE_EQUALS resonance_kind == "corrupt") PASSES → END.
+        No condition is applied; no story movement; no perform_check.
+
+        STUB: when defilement (CASTER_DOMINANT) is built, this caster should degrade
+        the room's primal cascade magnitude and route corruption through CORRUPTION_ACCRUING
+        (see spec deferred §). This test is the fill-in point.
+        """
+        from evennia.utils import create as evennia_create
+
+        from evennia_extensions.models import RoomProfile
+        from world.conditions.models import ConditionInstance
+        from world.magic.models.affinity import Affinity, Resonance
+        from world.magic.services.gain import tag_room_resonance
+        from world.magic.services.resonance_environment import get_resonance_environment_config
+
+        # Build a Primal resonance (Primal affinity is seeded by seed_canonical_affinities).
+        primal_affinity = Affinity.objects.get(name="Primal")
+        primal_resonance, _ = Resonance.objects.get_or_create(
+            name="Decay (pipeline test)",
+            defaults={"affinity": primal_affinity},
+        )
+
+        # Create a room and tag it with Primal resonance at low magnitude = 10.
+        # caster_strength (50) - place_magnitude (10) = 40 > balanced_band (10) → CASTER_DOMINANT.
+        primal_room = evennia_create.create_object(
+            typeclass="typeclasses.rooms.Room",
+            key="Weak Primal Ground (pipeline test)",
+            nohome=True,
+        )
+        primal_profile, _ = RoomProfile.objects.get_or_create(objectdb=primal_room)
+        modifier = tag_room_resonance(primal_profile, primal_resonance)
+        modifier.value = 10
+        modifier.save(update_fields=["value"])
+
+        self.caster.location = primal_room
+        self.caster.save()
+
+        # --- Direct primitive assertion: verify CASTER_DOMINANT before the flow cast ---
+        cfg = get_resonance_environment_config()
+        primitive_result = evaluate_resonance_environment(
+            caster=self.caster, room=primal_room, technique=self.technique
+        )
+        caster_strength = float(Decimal("100.00") * cfg.caster_power_scalar)
+        # caster_strength - place_magnitude = 50.0 - 10 = 40 > balanced_band(10) → CASTER_DOMINANT
+        self.assertGreater(
+            caster_strength - 10,
+            cfg.balanced_band,
+            "Math pre-check: caster_strength - place_magnitude must exceed balanced_band",
+        )
+        self.assertEqual(
+            primitive_result.direction,
+            ResonanceDirection.CASTER_DOMINANT,
+            "evaluate_resonance_environment must return CASTER_DOMINANT "
+            "for strong abyssal vs weak primal",
+        )
+        self.assertEqual(
+            primitive_result.kind,
+            AffinityInteractionKind.CORRUPT,
+            "evaluate_resonance_environment must return kind=CORRUPT "
+            "for Abyssal→Primal interaction",
+        )
+
+        # --- Flow cast: CORRUPT branch → inert (no condition, no story movement) ---
+        forced_outcome = CheckOutcome.objects.get(name="Success")
+        with force_check_outcome(forced_outcome) as capture:
+            use_technique(
+                character=self.caster,
+                technique=self.technique,
+                resolve_fn=MagicMock(return_value="resolve_result"),
+            )
+
+        # CORRUPT is uniformly inert this slice — no perform_check.
+        self.assertIsNone(
+            capture.target_difficulty,
+            "CASTER_DOMINANT CORRUPT must not call perform_check (flow ends at Step 2)",
+        )
+
+        # No conditions applied by the flow (Magically Attuned was applied in setUp
+        # and must remain the only ConditionInstance on the caster).
+        post_cast_count = ConditionInstance.objects.filter(target=self.caster).count()
+        self.assertEqual(
+            post_cast_count,
+            1,
+            "Only 'Magically Attuned' (from setUp) should exist after CASTER_DOMINANT CORRUPT cast",
+        )
+
+        # StoryProgress unchanged.
+        self.progress.refresh_from_db()
+        self.assertEqual(
+            self.progress.current_episode,
+            self.episode_1,
+            "StoryProgress must remain at 'Stepping Into Light' after CASTER_DOMINANT CORRUPT cast",
+        )
