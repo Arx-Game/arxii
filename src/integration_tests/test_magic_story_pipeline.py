@@ -753,3 +753,122 @@ class MagicStoryPipelineTests(EvenniaTestCase):
             self.episode_1,
             "StoryProgress must remain at 'Stepping Into Light' after CASTER_DOMINANT CORRUPT cast",
         )
+
+    # -------------------------------------------------------------------------
+    # T11: Second-earner Discovery semantics
+    # -------------------------------------------------------------------------
+
+    def test_critical_success_second_earner_is_not_discoverer(self) -> None:
+        """Discovery semantics: the first character to earn Hallowed-Hardened
+        is the discoverer; a subsequent earner gets CharacterAchievement but
+        is NOT the discoverer.
+
+        Confirmed from world/achievements/services.py grant_achievement():
+          - is_first_discovery = not CharacterAchievement.objects.filter(
+                achievement=achievement).exists()
+          - If first: Discovery.objects.create(achievement=achievement) →
+            CharacterAchievement.objects.get_or_create(..., defaults={"discovery": discovery})
+          - If second+: discovery=None → get_or_create defaults={"discovery": None}
+          - Result: second earner's CharacterAchievement.discovery is None.
+
+        Story-routing simplification: the achievement is granted via the
+        condition→stat bridge (ConditionStatRule increments
+        "conditions.tempered_against_light.gained" when Tempered Against
+        Light is applied; _check_achievements then calls grant_achievement).
+        This is independent of Story beat progression. Neither the first nor
+        the second caster requires a StoryProgress for the Discovery assertion
+        to be valid. The seeded StoryProgress for self.caster (from setUp)
+        is present but its beat evaluation is incidental — we do not assert
+        story state in this test.
+        """
+        from world.achievements.models import Achievement, CharacterAchievement, Discovery
+
+        hallowed_hardened = Achievement.objects.get(name="Hallowed-Hardened")
+        crit_success = CheckOutcome.objects.get(name="Critical Success")
+
+        # ------------------------------------------------------------------
+        # First caster: self.caster from setUp — already has Magically Attuned,
+        # Abyssal aura, technique, anima, and is in the low room.
+        # Cast → Critical Success → Tempered Against Light applied → stat
+        # incremented → Hallowed-Hardened granted → Discovery created.
+        # ------------------------------------------------------------------
+        with force_check_outcome(crit_success):
+            use_technique(
+                character=self.caster,
+                technique=self.technique,
+                resolve_fn=MagicMock(return_value="resolve_result"),
+            )
+
+        first_ca = CharacterAchievement.objects.get(
+            character_sheet=self.sheet,
+            achievement=hallowed_hardened,
+        )
+        self.assertIsNotNone(
+            first_ca.discovery,
+            "First earner's CharacterAchievement.discovery must point at the Discovery row",
+        )
+        discovery = Discovery.objects.get(achievement=hallowed_hardened)
+        self.assertEqual(
+            first_ca.discovery,
+            discovery,
+            "First earner's discovery FK must reference the one Discovery row",
+        )
+
+        # ------------------------------------------------------------------
+        # Second caster: independent CharacterSheet + Abyssal aura + Anima +
+        # Magically Attuned + same technique (self.technique is shared) in
+        # the low room.  No StoryProgress — story routing is not required for
+        # the Discovery assertion (see docstring).
+        # ------------------------------------------------------------------
+        second_sheet = CharacterSheetFactory()
+        second_caster = second_sheet.character
+
+        CharacterAuraFactory(
+            character=second_caster,
+            celestial=Decimal("0.00"),
+            primal=Decimal("0.00"),
+            abyssal=Decimal("100.00"),
+        )
+        CharacterAnimaFactory(character=second_caster, current=20, maximum=20)
+
+        second_caster.location = self.low_room
+        second_caster.save()
+
+        result = apply_condition(
+            target=second_caster,
+            condition=self.magically_attuned,
+        )
+        self.assertTrue(
+            result.success,
+            f"Magically Attuned must apply to second caster; got: {result.message}",
+        )
+
+        with force_check_outcome(crit_success):
+            use_technique(
+                character=second_caster,
+                technique=self.technique,
+                resolve_fn=MagicMock(return_value="resolve_result"),
+            )
+
+        # ------------------------------------------------------------------
+        # Discovery assertions
+        # ------------------------------------------------------------------
+        # Exactly one Discovery row — no second Discovery was created.
+        self.assertEqual(
+            Discovery.objects.filter(achievement=hallowed_hardened).count(),
+            1,
+            "Only one Discovery row should exist for Hallowed-Hardened after two earners",
+        )
+
+        # Second caster earned the achievement.
+        second_ca = CharacterAchievement.objects.get(
+            character_sheet=second_sheet,
+            achievement=hallowed_hardened,
+        )
+
+        # Second earner is NOT the discoverer: grant_achievement passes
+        # defaults={"discovery": None} when is_first_discovery is False.
+        self.assertIsNone(
+            second_ca.discovery,
+            "Second earner's CharacterAchievement.discovery must be None (not a co-discoverer)",
+        )
