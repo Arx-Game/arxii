@@ -27,6 +27,38 @@ if TYPE_CHECKING:
     from world.magic.models.techniques import Technique
 
 
+def _unwrap_technique(obj: object) -> Technique | None:
+    """Return ``obj`` if it is a ``Technique`` instance, else ``None``.
+
+    The flow engine resolves all ``@variable`` references via
+    ``get_object_state``, which internally calls
+    ``ObjectDB.objects.get(pk=...)`` on the resolved value's primary key.
+    When the ``Technique``'s PK coincidentally matches an ``ObjectDB`` PK
+    (which happens in fresh test databases where auto-increment counters start
+    from 1), the engine returns the wrong ``BaseState`` wrapper rather than the
+    ``Technique`` itself.
+
+    This guard detects that mismatch: if the received value is a
+    ``BaseState`` (any subclass) instead of a ``Technique``, the engine made a
+    wrong substitution and we must fall back to presence-time evaluation
+    (``technique=None``).  This is safe because the caller (the seeded flow)
+    always fires at cast-time, so the primitive will simply return an inert
+    effect with magnitude 0 rather than silently corrupting the result.
+    """
+    from flows.object_states.base_state import BaseState  # noqa: PLC0415
+    from world.magic.models.techniques import Technique as _Technique  # noqa: PLC0415
+
+    if isinstance(obj, _Technique):
+        return obj
+    if isinstance(obj, BaseState):
+        # Wrong substitution: the flow engine resolved technique's PK to an
+        # ObjectDB state (PK collision with a fresh-DB counter reset).
+        # Fall back to None so the primitive performs presence-time evaluation.
+        return None
+    # obj is None or some other non-ObjectDB type — pass through.
+    return None
+
+
 def _unwrap_objectdb(obj: object) -> DefaultObject:
     """Unwrap a BaseState wrapper to its underlying Evennia object.
 
@@ -84,6 +116,7 @@ def flow_evaluate_resonance_environment(
     )
 
     caster_obj: DefaultObject = _unwrap_objectdb(caster)
+    technique_obj = _unwrap_technique(technique)
     room = getattr(caster_obj, "location", None)  # noqa: GETATTR_LITERAL — Evennia ObjectDB.location
 
     if room is None:
@@ -99,7 +132,7 @@ def flow_evaluate_resonance_environment(
     effect = evaluate_resonance_environment(
         caster=caster_obj,
         room=room,
-        technique=technique,
+        technique=technique_obj,
     )
 
     config = get_resonance_environment_config()
