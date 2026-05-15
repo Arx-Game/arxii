@@ -344,8 +344,10 @@ What was built:
   (character A endorses pose by character B; 8-check precondition gate), `SceneEntryEndorsement`
   (immediate flat grant on room entry, captures persona snapshot), `ResonanceGrant` (typed-FK
   audit ledger keyed on source: POSE_ENDORSEMENT, SCENE_ENTRY, RESIDENCE_TRICKLE, OUTFIT_TRICKLE;
-  discriminator pattern ensures atomic grant journaling), `RoomAuraProfile` (FK to RoomProfile;
-  one-to-one), `RoomResonance` (through-M2M from `RoomAuraProfile` to `ResidualResonance`).
+  discriminator pattern ensures atomic grant journaling). Room resonance data lives in the
+  locations cascade as `LocationValueModifier` rows with `key_type=RESONANCE` (the former
+  `RoomAuraProfile` / `RoomResonance` tag models were retired during the cascade unification
+  refactor — see docs/plans/2026-05-14-room-cascade-resonance-unification.md).
 - **Services:** `grant_resonance(..., source=GainSource.X, typed_fk_kwargs)` — typed-FK signature
   with atomic ledger write; `create_pose_endorsement` — 8 preconditions (not self/alt/whisper/
   private/claimed/duplicate/active-engagement/masqueraded); `create_scene_entry_endorsement`
@@ -361,7 +363,7 @@ What was built:
   `ResonanceGrantViewSet` (read-only, user-scoped with staff bypass for audit);
   `CharacterSheet` serializer exposes `current_residence` FK.
 - **Admin:** `ResonanceGainConfig` singleton admin (has_add_permission False when row exists);
-  `RoomAuraProfile` with inline `RoomResonance`; read-only ledger admin for `ResonanceGrant`;
+  read-only ledger admin for `ResonanceGrant`;
   read-only admins for endorsements; staff-grant admin action on `CharacterResonance`.
 - **Scheduler:** `magic.resonance_daily` (24h interval); `magic.resonance_weekly_settlement`
   (7d interval, settable day via config).

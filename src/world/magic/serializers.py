@@ -1405,7 +1405,7 @@ class ResonanceGrantSerializer(serializers.ModelSerializer):
             "amount",
             "source",
             "granted_at",
-            "source_room_aura_profile",
+            "source_room_profile",
             "source_staff_account",
             "source_pose_endorsement",
             "source_scene_entry_endorsement",

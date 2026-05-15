@@ -62,19 +62,33 @@ class CharacterEquipmentHandlerTests(TestCase):
 
 
 class CharacterCarriedItemsHandlerTests(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
+    # NOTE: Per-test setUp (NOT setUpTestData) because ``obj.location = owner_obj``
+    # below side-effects ``cls.character`` with an Evennia ``contents`` DbHolder
+    # cache. Django's setUpTestData wraps class attrs in a deepcopy descriptor;
+    # DbHolder isn't deepcopyable, so per-test access to ``self.character``
+    # would raise ``copy.Error: un(deep)copyable object of type DbHolder``
+    # whenever other tests have warmed the Evennia identity map (notably the
+    # combat suite). Keeping the data per-test is slower but the only path
+    # that's safe under the full regression's cross-app test order.
+    def setUp(self) -> None:
         from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
         from world.items.factories import (
             ItemInstanceFactory,
             ItemTemplateFactory,
             QualityTierFactory,
         )
+        from world.items.models import ItemInstance
 
-        cls.character = CharacterFactory(db_key="CarriedHandlerChar")
-        cls.other_character = CharacterFactory(db_key="OtherCarriedChar")
-        cls.template = ItemTemplateFactory(name="CarriedHandlerTpl")
-        cls.quality = QualityTierFactory(name="CarriedHandlerQ", color_hex="#abcdef")
+        # Cross-app pollution guard. When other apps' tests have populated
+        # the SharedMemoryModel identity map with ItemInstance rows whose
+        # pks may collide with ours, a fresh handler read would pull in
+        # stale Python instances. Flushing forces fresh materialization.
+        ItemInstance.flush_instance_cache()
+
+        self.character = CharacterFactory(db_key="CarriedHandlerChar")
+        self.other_character = CharacterFactory(db_key="OtherCarriedChar")
+        self.template = ItemTemplateFactory(name="CarriedHandlerTpl")
+        self.quality = QualityTierFactory(name="CarriedHandlerQ", color_hex="#abcdef")
 
         def _item_on(owner_obj, key: str):
             obj = ObjectDBFactory(
@@ -84,31 +98,14 @@ class CharacterCarriedItemsHandlerTests(TestCase):
             obj.location = owner_obj
             obj.save()
             return ItemInstanceFactory(
-                template=cls.template,
-                quality_tier=cls.quality,
+                template=self.template,
+                quality_tier=self.quality,
                 game_object=obj,
             )
 
-        cls.mine_a = _item_on(cls.character, "MineA")
-        cls.mine_b = _item_on(cls.character, "MineB")
-        cls.theirs = _item_on(cls.other_character, "Theirs")
-
-    def setUp(self) -> None:
-        # Cross-app test pollution guard. The ``flush_instance_cache()``
-        # is the one doing the real work — when other apps' tests have
-        # populated the SharedMemoryModel identity map with ItemInstance
-        # rows whose pks may collide with ours, a fresh handler read
-        # would otherwise pull in those stale Python instances. Flushing
-        # the model cache forces the next queryset to materialize new
-        # instances from fresh rows. The handler ``invalidate()`` calls
-        # are belt-and-suspenders: they reset ``_cached`` so even if
-        # something repopulated the handler between flush and read,
-        # it'd still re-fetch.
-        from world.items.models import ItemInstance
-
-        ItemInstance.flush_instance_cache()
-        self.character.carried_items.invalidate()
-        self.other_character.carried_items.invalidate()
+        self.mine_a = _item_on(self.character, "MineA")
+        self.mine_b = _item_on(self.character, "MineB")
+        self.theirs = _item_on(self.other_character, "Theirs")
 
     def test_returns_only_items_carried_by_character(self) -> None:
         items = list(self.character.carried_items)

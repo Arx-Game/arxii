@@ -13,11 +13,11 @@ from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin
-from world.locations.constants import HolderType, LocationParentType, StatKey
+from world.locations.constants import HolderType, KeyType, LocationParentType, StatKey
 
 
-class LocationStatOverride(DiscriminatorMixin, SharedMemoryModel):
-    """An absolute claim about a stat at a specific area or room.
+class LocationValueOverride(DiscriminatorMixin, SharedMemoryModel):
+    """An absolute claim about a stat or resonance at a specific area or room.
 
     Most-specific override in the cascade chain wins. Overrides cut the
     cascade entirely: when any override exists at any level above (or
@@ -25,14 +25,23 @@ class LocationStatOverride(DiscriminatorMixin, SharedMemoryModel):
 
     Used **rarely** — for warded sanctums, safehouses, magically
     stabilized chambers, or other deliberate "this is the value, period"
-    claims. Most authored values should use ``LocationStatModifier``
+    claims. Most authored values should use ``LocationValueModifier``
     with ``change_per_day=0`` for a permanent additive instead.
+
+    Each row carries one axis value: either ``stat_key`` (StatKey enum)
+    or ``resonance`` (FK to magic.Resonance), gated by ``key_type``.
     """
 
     DISCRIMINATOR_FIELD = "parent_type"
     DISCRIMINATOR_MAP = {
         LocationParentType.AREA: "area",
         LocationParentType.ROOM: "room_profile",
+    }
+
+    KEY_TYPE_DISCRIMINATOR_FIELD = "key_type"
+    KEY_TYPE_DISCRIMINATOR_MAP = {
+        KeyType.STAT: "stat_key",
+        KeyType.RESONANCE: "resonance",
     }
 
     parent_type = models.CharField(
@@ -54,10 +63,25 @@ class LocationStatOverride(DiscriminatorMixin, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="stat_overrides",
     )
+    key_type = models.CharField(
+        max_length=10,
+        choices=KeyType.choices,
+        default=KeyType.STAT,
+        help_text="Selects which key field (stat_key or resonance) is active.",
+    )
     stat_key = models.CharField(
         max_length=50,
         choices=StatKey.choices,
         db_index=True,
+        blank=True,
+        default="",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="cascade_overrides",
     )
     value = models.IntegerField(
         help_text=("The absolute value asserted at this level. Final read clamps to STAT_CLAMPS."),
@@ -65,43 +89,80 @@ class LocationStatOverride(DiscriminatorMixin, SharedMemoryModel):
     last_updated = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Location Stat Override"
-        verbose_name_plural = "Location Stat Overrides"
+        verbose_name = "Location Value Override"
+        verbose_name_plural = "Location Value Overrides"
         constraints = [
+            # stat-axis uniqueness: one stat-keyed override per (area, stat_key)
+            # or (room_profile, stat_key). Scoped to STAT rows via stat_key__gt=""
+            # so RESONANCE rows (which have stat_key="") don't collide.
             models.UniqueConstraint(
                 fields=["area", "stat_key"],
-                condition=models.Q(area__isnull=False),
+                condition=models.Q(area__isnull=False) & ~models.Q(stat_key=""),
                 name="unique_override_per_area_stat",
             ),
             models.UniqueConstraint(
                 fields=["room_profile", "stat_key"],
-                condition=models.Q(room_profile__isnull=False),
+                condition=models.Q(room_profile__isnull=False) & ~models.Q(stat_key=""),
                 name="unique_override_per_room_stat",
+            ),
+            # resonance-axis uniqueness: one resonance-keyed override per
+            # (area, resonance) or (room_profile, resonance).
+            models.UniqueConstraint(
+                fields=["area", "resonance"],
+                condition=models.Q(area__isnull=False) & models.Q(resonance__isnull=False),
+                name="unique_override_per_area_resonance",
+            ),
+            models.UniqueConstraint(
+                fields=["room_profile", "resonance"],
+                condition=models.Q(room_profile__isnull=False) & models.Q(resonance__isnull=False),
+                name="unique_override_per_room_resonance",
             ),
         ]
 
+    def clean(self) -> None:
+        """Validate BOTH discriminators (parent and key)."""
+        parent_errors = self._validate_discriminator(
+            self.DISCRIMINATOR_FIELD, self.DISCRIMINATOR_MAP
+        )
+        key_errors = self._validate_discriminator(
+            self.KEY_TYPE_DISCRIMINATOR_FIELD, self.KEY_TYPE_DISCRIMINATOR_MAP
+        )
+        errors = {**parent_errors, **key_errors}
+        if errors:
+            raise ValidationError(errors)
+
     def __str__(self) -> str:
         target = self.get_active_target_name()
-        return f"Override {self.stat_key}={self.value} @ {target}"
+        key_label = self.stat_key if self.key_type == KeyType.STAT else f"res:{self.resonance_id}"
+        return f"Override {key_label}={self.value} @ {target}"
 
 
-class LocationStatModifier(DiscriminatorMixin, SharedMemoryModel):
-    """An additive contribution to a stat at a specific area or room.
+class LocationValueModifier(DiscriminatorMixin, SharedMemoryModel):
+    """An additive contribution to a stat or resonance at a specific area or room.
 
     Modifiers stack across the cascade chain. The effective value at a
     room is the sum of every modifier's :meth:`current_value` plus the
-    per-stat default, clamped to bounds — provided no override exists in
-    the chain.
+    per-stat default (or 0 for resonance), clamped to stat bounds —
+    provided no override exists in the chain.
 
     Carries its own ``change_per_day`` so consuming systems can model
     decay or growth rates that depend on IC mechanics. Read-time math is
     lazy; rows are not mutated by time passing.
+
+    Each row carries one axis value: either ``stat_key`` (StatKey enum)
+    or ``resonance`` (FK to magic.Resonance), gated by ``key_type``.
     """
 
     DISCRIMINATOR_FIELD = "parent_type"
     DISCRIMINATOR_MAP = {
         LocationParentType.AREA: "area",
         LocationParentType.ROOM: "room_profile",
+    }
+
+    KEY_TYPE_DISCRIMINATOR_FIELD = "key_type"
+    KEY_TYPE_DISCRIMINATOR_MAP = {
+        KeyType.STAT: "stat_key",
+        KeyType.RESONANCE: "resonance",
     }
 
     parent_type = models.CharField(
@@ -123,10 +184,25 @@ class LocationStatModifier(DiscriminatorMixin, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="stat_modifiers",
     )
+    key_type = models.CharField(
+        max_length=10,
+        choices=KeyType.choices,
+        default=KeyType.STAT,
+        help_text="Selects which key field (stat_key or resonance) is active.",
+    )
     stat_key = models.CharField(
         max_length=50,
         choices=StatKey.choices,
         db_index=True,
+        blank=True,
+        default="",
+    )
+    resonance = models.ForeignKey(
+        "magic.Resonance",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="cascade_modifiers",
     )
     value = models.IntegerField(
         help_text=(
@@ -148,7 +224,7 @@ class LocationStatModifier(DiscriminatorMixin, SharedMemoryModel):
         help_text=(
             "Free-text label for the originating system or event. Use to "
             "bulk-clean rows when the source ends "
-            "(e.g. ``LocationStatModifier.objects.filter("
+            "(e.g. ``LocationValueModifier.objects.filter("
             "source='rebellion_1234').delete()``)."
         ),
     )
@@ -158,12 +234,26 @@ class LocationStatModifier(DiscriminatorMixin, SharedMemoryModel):
     )
 
     class Meta:
-        verbose_name = "Location Stat Modifier"
-        verbose_name_plural = "Location Stat Modifiers"
+        verbose_name = "Location Value Modifier"
+        verbose_name_plural = "Location Value Modifiers"
         indexes = [
             models.Index(fields=["area", "stat_key"]),
             models.Index(fields=["room_profile", "stat_key"]),
+            models.Index(fields=["area", "resonance"]),
+            models.Index(fields=["room_profile", "resonance"]),
         ]
+
+    def clean(self) -> None:
+        """Validate BOTH discriminators (parent and key)."""
+        parent_errors = self._validate_discriminator(
+            self.DISCRIMINATOR_FIELD, self.DISCRIMINATOR_MAP
+        )
+        key_errors = self._validate_discriminator(
+            self.KEY_TYPE_DISCRIMINATOR_FIELD, self.KEY_TYPE_DISCRIMINATOR_MAP
+        )
+        errors = {**parent_errors, **key_errors}
+        if errors:
+            raise ValidationError(errors)
 
     def current_value(self, *, now: datetime | None = None) -> int:
         """Return the lazy decay/growth-resolved value.

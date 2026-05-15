@@ -91,7 +91,6 @@ from world.magic.models.rituals import (
     Ritual,
     RitualComponentRequirement,
 )
-from world.magic.models.room_aura import RoomAuraProfile, RoomResonance
 from world.magic.models.sessions import (
     RitualSession,
     RitualSessionParticipant,
@@ -203,9 +202,6 @@ __all__ = [
     "RitualSession",
     "RitualSessionParticipant",
     "RitualSessionReference",
-    # room aura (Spec C §2.5, §2.6)
-    "RoomAuraProfile",
-    "RoomResonance",
     # endorsement (Spec C §2.3)
     "SceneEntryEndorsement",
     # soul tether (Spec B §14.1, §15.1)
