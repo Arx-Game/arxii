@@ -2208,16 +2208,18 @@ def seed_starter_magic_story() -> None:
 
     Composes the per-phase helpers in dependency order:
 
-      0. seed_canonical_affinities() — the 3 magic Affinities
-      0. seed_canonical_resonances() — Celestial (Light/Sanctity/Radiance) + Abyssal (Dissolution)
-
-      A. _seed_endure_hallowed_ground_check() — CheckType + ResultChart
-      B. _seed_hallowed_reaction_conditions() — 5 reaction conditions
-      C. _seed_hallowed_achievement_bridge() — stats, rules, achievements
+      1. seed_canonical_affinities() — the 3 magic Affinities
+      2. seed_canonical_resonances() — Celestial (Light/Sanctity/Radiance) + Abyssal (Dissolution)
+     RC1. _seed_affinity_interactions() — 9 directed AffinityInteraction rows (needs affinities)
      RC1. _seed_resonance_environment_config() — ResonanceEnvironmentConfig singleton
+      B. _seed_hallowed_reaction_conditions() — 5 OPPOSED reaction conditions
+      C. _seed_hallowed_achievement_bridge() — stats, rules, achievements
+                                                (needs reaction conditions)
      RC2. _seed_resonance_environment_conditions() — Magically Attuned + Empowered boon
-      D. _seed_resonance_environment_flow_and_trigger() — FlowDefinition + steps + Trigger
-     RC4. _seed_resonance_environment_rooms() — Hallowed Rejection flavor + 3 cascade rooms
+      A. _seed_endure_hallowed_ground_check() — CheckType + ResultChart (needed by flow)
+     RC3. _seed_resonance_environment_flow_and_trigger() — FlowDefinition + steps + Trigger
+                                                           (needs conditions + check type)
+     RC4. _seed_resonance_environment_rooms() — 3 cascade rooms (needs resonances)
       F. _seed_hallowed_threshold_story() — Story + Chapter + Episodes + Beats + Transitions + TROs
 
     All sub-helpers are idempotent (get_or_create at every layer), so the
@@ -2226,11 +2228,12 @@ def seed_starter_magic_story() -> None:
     """
     seed_canonical_affinities()
     seed_canonical_resonances()
-    _seed_endure_hallowed_ground_check()
+    _seed_affinity_interactions()
+    _seed_resonance_environment_config()
     _seed_hallowed_reaction_conditions()
     _seed_hallowed_achievement_bridge()
-    _seed_resonance_environment_config()
     _seed_resonance_environment_conditions()
+    _seed_endure_hallowed_ground_check()
     _seed_resonance_environment_flow_and_trigger()
     _seed_resonance_environment_rooms()
     _seed_hallowed_threshold_story()

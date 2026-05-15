@@ -1624,25 +1624,52 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
 
     def test_orchestrator_calls_all_phases(self) -> None:
         """Verify all representative content from each phase is present after one call."""
+        from evennia.objects.models import ObjectDB
+
         from flows.models.triggers import TriggerDefinition
         from integration_tests.game_content.magic import seed_starter_magic_story
         from world.achievements.models import Achievement
         from world.checks.models import CheckType
         from world.conditions.models import ConditionTemplate
+        from world.magic.models.resonance_environment import (
+            AffinityInteraction,
+            ResonanceEnvironmentConfig,
+        )
         from world.stories.models import Story
 
         seed_starter_magic_story()
 
         # Spot-check that representative content from each phase is present.
-        self.assertTrue(CheckType.objects.filter(name="endure_hallowed_ground").exists())
+        # Phase RC1: 9 directed AffinityInteraction rows + config singleton
+        self.assertEqual(AffinityInteraction.objects.count(), 9)
+        self.assertIsNotNone(ResonanceEnvironmentConfig.objects.filter(pk=1).first())
+        # Phase B: OPPOSED reaction conditions
         self.assertTrue(ConditionTemplate.objects.filter(name="Hallowed Rejection").exists())
         self.assertTrue(ConditionTemplate.objects.filter(name="Tempered Against Light").exists())
+        # Phase C: achievement bridge
         self.assertTrue(Achievement.objects.filter(name="Hallowed-Hardened").exists())
+        # Phase RC2: Magically Attuned baseline condition
+        self.assertTrue(ConditionTemplate.objects.filter(name="Magically Attuned").exists())
+        # Phase A: endure_hallowed_ground check type
+        self.assertTrue(CheckType.objects.filter(name="endure_hallowed_ground").exists())
+        # Phase RC3: cast trigger
         self.assertTrue(
             TriggerDefinition.objects.filter(
                 name="Resonance Environment — technique cast",
             ).exists(),
         )
+        # Phase RC4: 3 cascade rooms
+        self.assertEqual(
+            ObjectDB.objects.filter(
+                db_key__in=[
+                    "The Hallowed Threshold (Low)",
+                    "The Hallowed Threshold (High)",
+                    "The Resonant Sanctum (Aligned)",
+                ],
+            ).count(),
+            3,
+        )
+        # Phase F: story
         self.assertTrue(Story.objects.filter(title="The Hallowed Threshold").exists())
 
     def test_orchestrator_idempotent(self) -> None:
@@ -1660,6 +1687,10 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         from world.conditions.models import ConditionTemplate
         from world.locations.models import LocationValueModifier
         from world.magic.models.affinity import Affinity, Resonance
+        from world.magic.models.resonance_environment import (
+            AffinityInteraction,
+            ResonanceEnvironmentConfig,
+        )
         from world.stories.models import (
             Beat,
             Chapter,
@@ -1674,6 +1705,8 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         snapshot = {
             "Affinity": Affinity.objects.count(),
             "Resonance": Resonance.objects.count(),
+            "AffinityInteraction": AffinityInteraction.objects.count(),
+            "ResonanceEnvironmentConfig": ResonanceEnvironmentConfig.objects.count(),
             "CheckType": CheckType.objects.count(),
             "ResultChart": ResultChart.objects.count(),
             "ConditionTemplate": ConditionTemplate.objects.count(),
@@ -1698,6 +1731,8 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         recount = {
             "Affinity": Affinity.objects.count(),
             "Resonance": Resonance.objects.count(),
+            "AffinityInteraction": AffinityInteraction.objects.count(),
+            "ResonanceEnvironmentConfig": ResonanceEnvironmentConfig.objects.count(),
             "CheckType": CheckType.objects.count(),
             "ResultChart": ResultChart.objects.count(),
             "ConditionTemplate": ConditionTemplate.objects.count(),
