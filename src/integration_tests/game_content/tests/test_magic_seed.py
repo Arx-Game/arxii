@@ -1406,3 +1406,145 @@ class SeedHallowedMarkerAndRoomsTests(TestCase):
             ConditionTemplate.objects.filter(name="Hallowed Rejection").count(),
         )
         self.assertEqual(snapshot, post)
+
+
+# ---------------------------------------------------------------------------
+# Task 13f — _seed_hallowed_threshold_story()
+# ---------------------------------------------------------------------------
+
+
+class SeedHallowedThresholdStoryTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
+
+        _seed_hallowed_reaction_conditions()
+
+    def test_seeds_story(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.constants import StoryScope
+        from world.stories.models import Story
+
+        _seed_hallowed_threshold_story()
+        story = Story.objects.get(title="The Hallowed Threshold")
+        self.assertEqual(story.scope, StoryScope.CHARACTER)
+        self.assertIsNone(story.character_sheet)  # template, not per-playthrough
+
+    def test_seeds_chapter_and_four_episodes(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.models import Chapter, Episode
+
+        _seed_hallowed_threshold_story()
+        chapter = Chapter.objects.get(title="First Trial")
+        episode_titles = set(
+            Episode.objects.filter(chapter=chapter).values_list("title", flat=True),
+        )
+        self.assertEqual(
+            episode_titles,
+            {"Stepping Into Light", "Tempered Walk", "Marked Path", "Cast Out"},
+        )
+
+    def test_seeds_four_beats_on_source_episode(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.constants import BeatPredicateType
+        from world.stories.models import Beat, Episode
+
+        _seed_hallowed_threshold_story()
+        source = Episode.objects.get(title="Stepping Into Light")
+        beats = Beat.objects.filter(
+            episode=source,
+            predicate_type=BeatPredicateType.CONDITION_HELD,
+        )
+        beat_condition_names = set(
+            beats.values_list("required_condition_template__name", flat=True),
+        )
+        self.assertEqual(
+            beat_condition_names,
+            {"Tempered Against Light", "Singed", "Burning", "Hallowed Burn"},
+        )
+
+    def test_seeds_four_transitions(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.models import Episode, Transition
+
+        _seed_hallowed_threshold_story()
+        source = Episode.objects.get(title="Stepping Into Light")
+        transitions = Transition.objects.filter(source_episode=source)
+        self.assertEqual(transitions.count(), 4)
+        target_titles = {t.target_episode.title for t in transitions if t.target_episode}
+        self.assertEqual(target_titles, {"Tempered Walk", "Marked Path", "Cast Out"})
+        # Two transitions both target Marked Path (Singed + Burning routes).
+        marked_path_transitions = transitions.filter(target_episode__title="Marked Path")
+        self.assertEqual(marked_path_transitions.count(), 2)
+
+    def test_seeds_four_transition_required_outcomes(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.models import (
+            Episode,
+            Transition,
+            TransitionRequiredOutcome,
+        )
+
+        _seed_hallowed_threshold_story()
+        source = Episode.objects.get(title="Stepping Into Light")
+        for transition in Transition.objects.filter(source_episode=source):
+            tros = TransitionRequiredOutcome.objects.filter(transition=transition)
+            self.assertEqual(
+                tros.count(),
+                1,
+                f"Transition {transition.target_episode} expects exactly 1 TRO",
+            )
+
+    def test_zero_episode_progression_requirements_on_source(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.models import Episode, EpisodeProgressionRequirement
+
+        _seed_hallowed_threshold_story()
+        source = Episode.objects.get(title="Stepping Into Light")
+        self.assertEqual(
+            EpisodeProgressionRequirement.objects.filter(episode=source).count(),
+            0,
+        )
+
+    def test_beats_have_authored_player_resolution_text(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.models import Beat, Episode
+
+        _seed_hallowed_threshold_story()
+        source = Episode.objects.get(title="Stepping Into Light")
+        for beat in Beat.objects.filter(episode=source):
+            self.assertTrue(
+                beat.player_resolution_text,
+                f"Beat for {beat.required_condition_template.name} missing player_resolution_text",
+            )
+
+    def test_idempotent(self):
+        from integration_tests.game_content.magic import _seed_hallowed_threshold_story
+        from world.stories.models import (
+            Beat,
+            Chapter,
+            Episode,
+            Story,
+            Transition,
+            TransitionRequiredOutcome,
+        )
+
+        _seed_hallowed_threshold_story()
+        snapshot = (
+            Story.objects.count(),
+            Chapter.objects.count(),
+            Episode.objects.count(),
+            Beat.objects.count(),
+            Transition.objects.count(),
+            TransitionRequiredOutcome.objects.count(),
+        )
+        _seed_hallowed_threshold_story()
+        post = (
+            Story.objects.count(),
+            Chapter.objects.count(),
+            Episode.objects.count(),
+            Beat.objects.count(),
+            Transition.objects.count(),
+            TransitionRequiredOutcome.objects.count(),
+        )
+        self.assertEqual(snapshot, post)

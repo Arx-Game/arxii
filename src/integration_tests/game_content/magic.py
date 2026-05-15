@@ -1007,6 +1007,172 @@ def _seed_hallowed_marker_and_rooms() -> None:
             )
 
 
+# ---------------------------------------------------------------------------
+# Task 13f — _seed_hallowed_threshold_story()
+# ---------------------------------------------------------------------------
+
+
+def _seed_hallowed_threshold_story() -> None:
+    """Seed the Hallowed Threshold Story DAG.
+
+    Structure:
+      Story "The Hallowed Threshold" (CHARACTER scope, no character_sheet — template)
+        Chapter "First Trial" (order=1)
+          Episode "Stepping Into Light" (order=1, source)
+            Beat-Tempered: CONDITION_HELD Tempered Against Light
+            Beat-Singed: CONDITION_HELD Singed
+            Beat-Burning: CONDITION_HELD Burning
+            Beat-Hallowed-Burn: CONDITION_HELD Hallowed Burn
+          Episode "Tempered Walk" (order=2, destination)
+          Episode "Marked Path" (order=3, destination, shared SUCCESS+FAILURE)
+          Episode "Cast Out" (order=4, destination)
+
+      Transitions out of Stepping Into Light (in order):
+        1 → Tempered Walk (TRO: Beat-Tempered SUCCESS)
+        2 → Cast Out (TRO: Beat-Hallowed-Burn SUCCESS)
+        3 → Marked Path (TRO: Beat-Singed SUCCESS)
+        4 → Marked Path (TRO: Beat-Burning SUCCESS)
+
+    ZERO EpisodeProgressionRequirement rows — gate is open; routing depends
+    purely on which beat the reactive flow satisfies.
+
+    Idempotent via get_or_create throughout. Re-running on a populated DB is a
+    no-op; staff edits to existing rows are preserved.
+    """
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.stories.constants import (  # noqa: PLC0415
+        BeatOutcome,
+        BeatPredicateType,
+        StoryScope,
+    )
+    from world.stories.models import (  # noqa: PLC0415
+        Beat,
+        Chapter,
+        Episode,
+        Story,
+        Transition,
+        TransitionRequiredOutcome,
+    )
+    from world.stories.types import StoryPrivacy, StoryStatus  # noqa: PLC0415
+
+    # --- Story (CHARACTER scope, no character_sheet — used as a template;
+    #     the pipeline test wires character_sheet at runtime per playthrough) ---
+    story, _ = Story.objects.get_or_create(
+        title="The Hallowed Threshold",
+        defaults={
+            "description": (
+                "A threshold of sanctified light. Abyssal-aligned casters who attempt "
+                "to work magic here will find the ground remembers them."
+            ),
+            "scope": StoryScope.CHARACTER,
+            "character_sheet": None,
+            "status": StoryStatus.INACTIVE,
+            "privacy": StoryPrivacy.PUBLIC,
+        },
+    )
+
+    # --- Chapter ---
+    chapter, _ = Chapter.objects.get_or_create(
+        story=story,
+        order=1,
+        defaults={"title": "First Trial"},
+    )
+
+    # --- Episodes ---
+    episodes_by_title: dict[str, Episode] = {}
+    for ep_title, ep_order in [
+        ("Stepping Into Light", 1),
+        ("Tempered Walk", 2),
+        ("Marked Path", 3),
+        ("Cast Out", 4),
+    ]:
+        ep, _ = Episode.objects.get_or_create(
+            chapter=chapter,
+            order=ep_order,
+            defaults={"title": ep_title},
+        )
+        episodes_by_title[ep_title] = ep
+
+    source = episodes_by_title["Stepping Into Light"]
+
+    # --- Beats on source episode ---
+    beat_specs: list[tuple[str, str]] = [
+        (
+            "Tempered Against Light",
+            "The light bends around you instead of burning. The wound your blood "
+            "remembers has hardened to a callus.",
+        ),
+        (
+            "Singed",
+            "Light glances along your skin. A faint mark stings where the spell "
+            "met sanctified air.",
+        ),
+        (
+            "Burning",
+            "The ground rejects you. Your skin burns where it meets the "
+            "consecrated air, and the spell goes wide.",
+        ),
+        (
+            "Hallowed Burn",
+            "The sanctified ground answers the spell with fire. You are flung "
+            "from the working, burning, and the threads in your hands snap.",
+        ),
+    ]
+    beats_by_condition_name: dict[str, Beat] = {}
+    for cond_name, player_resolution_text in beat_specs:
+        condition = ConditionTemplate.objects.get(name=cond_name)
+        beat, _ = Beat.objects.get_or_create(
+            episode=source,
+            predicate_type=BeatPredicateType.CONDITION_HELD,
+            required_condition_template=condition,
+            defaults={
+                "internal_description": (
+                    f"Beat satisfied when character gains the '{cond_name}' condition "
+                    "as a result of the hallowed-ground endurance check."
+                ),
+                "player_resolution_text": player_resolution_text,
+            },
+        )
+        beats_by_condition_name[cond_name] = beat
+
+    # --- Transitions out of source episode ---
+    marked_summary = (
+        "The light marked you. You carry the burn now — and a question about what you are."
+    )
+    transition_specs: list[tuple[int, str, str, str]] = [
+        (
+            1,
+            "Tempered Walk",
+            "Tempered Against Light",
+            "You walked into hallowed ground and walked out unchanged. "
+            "Some part of you is being remade.",
+        ),
+        (
+            2,
+            "Cast Out",
+            "Hallowed Burn",
+            "You broke against the threshold. Whatever was watching turned away. "
+            "You will not try this again the same way.",
+        ),
+        (3, "Marked Path", "Singed", marked_summary),
+        (4, "Marked Path", "Burning", marked_summary),
+    ]
+    for order, target_title, beat_cond_name, connection_summary in transition_specs:
+        target = episodes_by_title[target_title]
+        transition, _ = Transition.objects.get_or_create(
+            source_episode=source,
+            target_episode=target,
+            order=order,
+            defaults={"connection_summary": connection_summary},
+        )
+        beat = beats_by_condition_name[beat_cond_name]
+        TransitionRequiredOutcome.objects.get_or_create(
+            transition=transition,
+            beat=beat,
+            defaults={"required_outcome": BeatOutcome.SUCCESS},
+        )
+
+
 def seed_canonical_affinities() -> None:
     """Seed the 3 canonical magic Affinities (Celestial / Primal / Abyssal).
 
