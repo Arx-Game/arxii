@@ -26,6 +26,7 @@ from world.locations.services import (
     current_tenants,
     effective_owner,
     effective_owners_for_rooms,
+    effective_value,
     effective_values_for_rooms,
     tenancies_for_rooms,
 )
