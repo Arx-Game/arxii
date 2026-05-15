@@ -152,3 +152,26 @@ path_stage × 20 = ceiling. At stage 1, hard max = 20 (well above path cap of 10
 At stage 6, hard max = 120 (well above path cap of 60). Prevents runaway at the
 extreme tail of lifetime accumulation.
 """
+
+
+class ResonanceValence(models.TextChoices):
+    ALIGNED = "aligned", "Aligned (amplifies)"
+    OPPOSED = "opposed", "Opposed"
+
+
+class ResonanceDirection(models.TextChoices):
+    ENVIRONMENT_DOMINANT = "environment", "Environment affects the caster/working"
+    CASTER_DOMINANT = "caster", "Caster affects the place (defilement)"
+    BALANCED = "balanced", "Mutual backlash"
+
+
+class AffinityInteractionKind(models.TextChoices):
+    AMPLIFY = "amplify", "Amplify"
+    REJECT = "reject", "Reject"
+    REPEL = "repel", "Repel"
+    CORRUPT = "corrupt", "Corrupt"
+
+
+class AffinityInteractionAggressor(models.TextChoices):
+    ENVIRONMENT = "environment", "Environment"
+    CASTER = "caster", "Caster"
