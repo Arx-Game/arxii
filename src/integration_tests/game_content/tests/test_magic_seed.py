@@ -32,6 +32,7 @@ from integration_tests.game_content.magic import (
     seed_canonical_rituals,
     seed_cantrip_starter_catalog,
     seed_magic_config,
+    seed_magic_dev,
     seed_thread_pull_catalog,
 )
 
@@ -1668,3 +1669,55 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         seed_starter_magic_story()
         marker.refresh_from_db()
         self.assertEqual(marker.description, "edited by orchestrator idempotency test")
+
+
+class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
+    """Verify that seed_magic_dev() includes the magic-story slice content."""
+
+    def test_seed_magic_dev_includes_starter_magic_story_content(self) -> None:
+        """seed_magic_dev() should seed Hallowed Rejection + Hallowed Threshold content."""
+        from flows.models.triggers import TriggerDefinition
+        from world.conditions.models import ConditionTemplate
+        from world.stories.models import Story
+
+        seed_magic_dev()
+
+        # Spot-check that the magic-story slice content is now seeded too.
+        self.assertTrue(
+            ConditionTemplate.objects.filter(name="Hallowed Rejection").exists(),
+            "seed_magic_dev() must include Hallowed Rejection condition",
+        )
+        self.assertTrue(
+            TriggerDefinition.objects.filter(
+                name="Hallowed Rejection — technique cast in celestial-aura room",
+            ).exists(),
+            "seed_magic_dev() must include Hallowed Rejection trigger",
+        )
+        self.assertTrue(
+            Story.objects.filter(title="The Hallowed Threshold").exists(),
+            "seed_magic_dev() must include Hallowed Threshold story",
+        )
+
+    def test_seed_magic_dev_remains_idempotent_with_story_slice(self) -> None:
+        """Re-running seed_magic_dev() produces stable counts after wiring slice."""
+        from world.conditions.models import ConditionTemplate
+        from world.stories.models import Story
+
+        seed_magic_dev()
+        first_condition_count = ConditionTemplate.objects.count()
+        first_story_count = Story.objects.count()
+
+        seed_magic_dev()
+        second_condition_count = ConditionTemplate.objects.count()
+        second_story_count = Story.objects.count()
+
+        self.assertEqual(
+            first_condition_count,
+            second_condition_count,
+            "Condition counts must be stable across seed_magic_dev() runs",
+        )
+        self.assertEqual(
+            first_story_count,
+            second_story_count,
+            "Story counts must be stable across seed_magic_dev() runs",
+        )

@@ -2016,6 +2016,8 @@ def seed_magic_dev() -> MagicDevSeedResult:
     6. ``MagicContent.create_all()`` — 6 social action Techniques + 6
        ActionEnhancements
     7. ``seed_facet_thread_unlock()`` — single global FACET ThreadWeavingUnlock
+    8. ``seed_starter_magic_story()`` — magic-story pipeline slice (Affinities,
+       Resonances, Hallowed Rejection conditions + triggers, Hallowed Threshold story)
 
     All writes are idempotent (get_or_create throughout). Re-running on a
     populated database is a no-op; staff edits to existing rows are preserved.
@@ -2032,6 +2034,7 @@ def seed_magic_dev() -> MagicDevSeedResult:
     author_reference_corruption_content()
     magic_content = MagicContent.create_all()
     facet_thread_unlock = seed_facet_thread_unlock()
+    seed_starter_magic_story()
 
     return MagicDevSeedResult(
         config=config,
