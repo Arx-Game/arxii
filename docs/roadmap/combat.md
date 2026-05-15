@@ -3,6 +3,23 @@
 **Status:** in-progress
 **Depends on:** Traits, Skills, Magic, Conditions, Mechanics, Relationships (for combo attacks)
 
+## Reserved terminology: "clash"
+
+**"Clash" is a reserved term for a specific planned combat feature and MUST NOT be
+used to name any other concept anywhere in the codebase** (function names, variables,
+model names, design docs, comments). The reserved meaning: an opposed/contested
+combat mechanic where two combatants pour magical energy into overpowering each
+other (the "beam struggle" trope) — each side escalates effort to make their side
+win and strike the opponent (a clash of wills).
+
+For unrelated opposing-resonance / environmental-rejection concepts (e.g. casting an
+opposing-affinity technique in a hostile-aura room) use **"backfire"** (the term used
+in `docs/plans/2026-05-14-room-cascade-resonance-unification.md` for the deferred
+"technique pre-cast backfire trigger"), or "rejection" / "dissonance" / "backlash".
+Never "clash". When naming a new mechanic, ask: does this involve two sides
+contesting magical energy to overpower each other in combat? If not, it is not a
+"clash".
+
 ## Overview
 Combat is always Players vs. the Bad Guys — no PVP killing. Three distinct combat modes serve different scales and narrative purposes, all designed to create heroic moments and reward teamwork over solo power.
 
