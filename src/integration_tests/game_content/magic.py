@@ -470,6 +470,24 @@ def seed_canonical_affinities() -> None:
         Affinity.objects.get_or_create(name=name)
 
 
+def seed_canonical_resonances() -> None:
+    """Seed 3 Celestial-affinity Resonances (Light / Sanctity / Radiance).
+
+    Depends on seed_canonical_affinities(). Idempotent via get_or_create.
+    Used by the Hallowed Threshold rooms in the magic-story slice for
+    room-aura intensity tagging — and reusable for any future magical
+    content that wants ready-to-attach Celestial resonances.
+    """
+    from world.magic.models.affinity import Affinity, Resonance  # noqa: PLC0415
+
+    celestial = Affinity.objects.get(name="Celestial")
+    for name in ("Light", "Sanctity", "Radiance"):
+        Resonance.objects.get_or_create(
+            name=name,
+            defaults={"affinity": celestial},
+        )
+
+
 # ---------------------------------------------------------------------------
 # Task 1.1 — seed_magic_config()
 # ---------------------------------------------------------------------------

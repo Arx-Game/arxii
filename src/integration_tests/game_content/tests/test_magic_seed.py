@@ -24,6 +24,7 @@ from integration_tests.game_content.magic import (
     RitualSeedResult,
     ThreadPullCatalogResult,
     seed_canonical_affinities,
+    seed_canonical_resonances,
     seed_canonical_rituals,
     seed_cantrip_starter_catalog,
     seed_magic_config,
@@ -966,3 +967,44 @@ class SeedCanonicalAffinitiesTests(TestCase):
         seed_canonical_affinities()
         celestial.refresh_from_db()
         self.assertEqual(getattr(celestial, editable_field), "edited by t11 test")
+
+
+# ---------------------------------------------------------------------------
+# Task 1.12 — seed_canonical_resonances()
+# ---------------------------------------------------------------------------
+
+
+class SeedCanonicalResonancesTests(TestCase):
+    """Task 1.12: seed_canonical_resonances() creates idempotent Celestial Resonance rows."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_canonical_affinities()
+
+    def test_seeds_three_celestial_resonances(self) -> None:
+        seed_canonical_resonances()
+        from world.magic.models.affinity import Affinity, Resonance
+
+        celestial = Affinity.objects.get(name="Celestial")
+        names = set(
+            Resonance.objects.filter(affinity=celestial).values_list("name", flat=True),
+        )
+        self.assertGreaterEqual(names, {"Light", "Sanctity", "Radiance"})
+
+    def test_idempotent(self) -> None:
+        seed_canonical_resonances()
+        from world.magic.models.affinity import Resonance
+
+        count_a = Resonance.objects.count()
+        seed_canonical_resonances()
+        count_b = Resonance.objects.count()
+        self.assertEqual(count_a, count_b)
+
+    def test_resonances_have_celestial_affinity(self) -> None:
+        seed_canonical_resonances()
+        from world.magic.models.affinity import Affinity, Resonance
+
+        celestial = Affinity.objects.get(name="Celestial")
+        for name in ("Light", "Sanctity", "Radiance"):
+            res = Resonance.objects.get(name=name)
+            self.assertEqual(res.affinity, celestial)
