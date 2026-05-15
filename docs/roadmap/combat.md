@@ -20,6 +20,17 @@ Never "clash". When naming a new mechanic, ask: does this involve two sides
 contesting magical energy to overpower each other in combat? If not, it is not a
 "clash".
 
+**When the clash-of-wills feature IS built, reuse the resonance-environment work — do
+not reinvent it.** `docs/superpowers/specs/2026-05-15-resonance-environment-interaction-design.md`
+already models directed, asymmetric affinity opposition as authored `AffinityInteraction`
+rows (the RPS cycle: Primal > Celestial > Abyssal > Primal, with per-pair `valence` /
+`kind` / `severity_multiplier`). A combat clash between opposed-affinity casters
+(Abyssal vs Celestial, Primal vs Abyssal, etc.) is the *caster-vs-caster* analogue of
+the *caster-vs-place* interaction: it should consume the same `AffinityInteraction`
+matrix and the same valence/severity concepts (and likely the `ResonanceEnvironmentConfig`
+tuning surface) rather than authoring a parallel opposition table. The clash feature adds
+the contested-escalation mechanic on top; the affinity-opposition substrate is shared.
+
 ## Overview
 Combat is always Players vs. the Bad Guys — no PVP killing. Three distinct combat modes serve different scales and narrative purposes, all designed to create heroic moments and reward teamwork over solo power.
 

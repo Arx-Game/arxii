@@ -324,6 +324,17 @@ These are **not** built in the slice. The primitive's shape (the `direction` fie
 - **Docs:** add the magic lore (Abyss corrupts; Celestial too pure; RPS cycle; the 9
   pairs) to `docs/roadmap/magic.md`. Update `docs/roadmap/seed-and-integration-tests.md`.
 
+## Future consumer: the combat clash-of-wills feature
+
+The `AffinityInteraction` matrix + valence/kind/severity concepts model directed,
+asymmetric affinity opposition generically. The planned combat **clash** feature
+(opposed-affinity casters contesting magical energy — see `docs/roadmap/combat.md`) is
+the *caster-vs-caster* analogue of this *caster-vs-place* interaction. When clash is
+built it MUST consume the same `AffinityInteraction` rows and (likely)
+`ResonanceEnvironmentConfig` tuning rather than author a parallel opposition table — the
+affinity-opposition substrate is shared; clash only adds the contested-escalation
+mechanic on top. This spec's data model is designed to be that shared substrate.
+
 ## Design principles honored
 
 - No "clash" terminology anywhere (combat-reserved).
