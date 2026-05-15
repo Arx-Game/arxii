@@ -283,7 +283,13 @@ These are **not** built in the slice. The primitive's shape (the `direction` fie
      "contains the damage they would do to the world" social-responsibility layer for
      free. Whoever builds defilement routes corruption through the interceptable event,
      never writing corruption directly.
-3. **Brother's richer formula.** Steps 5–7 of the v1 formula are deliberately simple.
+3. **"Magically Attuned" grant mechanism.** The slice's pipeline test applies the
+   baseline condition directly in `setUp` (exactly as it applies the marker today).
+   Granting "Magically Attuned" automatically at CG finalization / first cast for all
+   magic-capable characters is **deferred** — not in slice scope. The slice only needs
+   the ConditionTemplate authored + its `reactive_triggers` M2M wired; the production
+   grant path is a follow-on.
+4. **Brother's richer formula.** Steps 5–7 of the v1 formula are deliberately simple.
    Brother's deferred follow-up enriches the primitive's body (e.g. technique-resonance
    opposition weighting, multi-resonance places, consequence-pool routing). Call sites,
    `AffinityInteraction` data, `ResonanceEnvironmentConfig`, and authored content do not
@@ -305,7 +311,8 @@ These are **not** built in the slice. The primitive's shape (the `direction` fie
   TriggerDefinition + reworked FlowDefinition steps.
 - **Rework test:** `src/integration_tests/test_magic_story_pipeline.py` — recomputed
   `expected_difficulty`, abyssal-aura caster setup, ALIGNED subtest, an inert/short-circuit
-  subtest, and a **CASTER_DOMINANT stub subtest** (strong abyssal caster in a weak primal
+  subtest, an explicit **missing-`CharacterAura` → inert unit test** for the primitive, and
+  a **CASTER_DOMINANT stub subtest** (strong abyssal caster in a weak primal
   place → primitive returns `direction=CASTER_DOMINANT`; flow short-circuits as inert; the
   test asserts the inert short-circuit and stands as the fill-in point for the deferred
   defilement work).
