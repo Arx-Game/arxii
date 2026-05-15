@@ -863,14 +863,17 @@ def _seed_hallowed_rejection_flow_and_trigger() -> None:
                 variable_name="check_outcome",
                 parameters={"value": outcome_name},
             )
-            # Each flow_apply_condition call is a child of the conditional (runs on PASS).
-            # Uses the flow-callable wrapper which looks up ConditionTemplate by name.
-            # When Critical Failure has two conditions, the second is a sibling of
-            # the first (both parented to the EVALUATE_EQUALS step).
+            # Each flow_apply_condition call is chained as a child of the previous.
+            # The first condition is a child of the conditional (runs on PASS).
+            # Subsequent conditions are children of the previous apply_condition step,
+            # forming a linear chain: conditional → cond1 → cond2 → ...
+            # (The flow executor calls get_next_child after each non-conditional step,
+            # so siblings under a conditional are never visited — chaining is required.)
+            parent_step = conditional
             for cond_name in condition_names:
-                FlowStepDefinition.objects.create(
+                apply_step = FlowStepDefinition.objects.create(
                     flow=flow,
-                    parent=conditional,
+                    parent=parent_step,
                     action=FlowActionChoices.CALL_SERVICE_FUNCTION,
                     variable_name="flows.service_functions.conditions.flow_apply_condition",
                     parameters={
@@ -878,6 +881,7 @@ def _seed_hallowed_rejection_flow_and_trigger() -> None:
                         "condition_name": cond_name,
                     },
                 )
+                parent_step = apply_step
 
     # -----------------------------------------------------------------------
     # TriggerDefinition — idempotent via get_or_create on name.
