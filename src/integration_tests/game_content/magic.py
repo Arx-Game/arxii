@@ -637,6 +637,110 @@ def _seed_hallowed_reaction_conditions() -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Task 13c — _seed_hallowed_achievement_bridge()
+# ---------------------------------------------------------------------------
+
+_HALLOWED_ACHIEVEMENT_BRIDGE_SPECS: list[dict[str, object]] = [
+    {
+        "condition_name": "Tempered Against Light",
+        "stat_key": "conditions.tempered_against_light.gained",
+        "stat_name": "Tempered Against Light Gained",
+        "achievement_name": "Hallowed-Hardened",
+        "achievement_description": (
+            "Walked into hallowed ground unscathed. The wound your blood "
+            "remembers has hardened to a callus."
+        ),
+        "notification_level": "gamewide",
+    },
+    {
+        "condition_name": "Singed",
+        "stat_key": "conditions.singed.gained",
+        "stat_name": "Singed Gained",
+        "achievement_name": "Touched by Light",
+        "achievement_description": "Light glanced your skin. You carry a faint mark.",
+        "notification_level": "personal",
+    },
+    {
+        "condition_name": "Hallowed Burn",
+        "stat_key": "conditions.hallowed_burn.gained",
+        "stat_name": "Hallowed Burn Gained",
+        "achievement_name": "Cast Out by the Light",
+        "achievement_description": (
+            "Broken against the threshold. Sanctified ground answered the spell with fire."
+        ),
+        "notification_level": "gamewide",
+    },
+]
+
+
+def _seed_hallowed_achievement_bridge() -> None:
+    """Seed the achievement bridge for the Hallowed Threshold pipeline.
+
+    For Tempered Against Light / Singed / Hallowed Burn (3 of the 4 reaction
+    outcomes — Burning is common-failure, not noteworthy enough for an
+    achievement), creates:
+
+        StatDefinition → ConditionStatRule → Achievement → AchievementRequirement
+
+    Discoveries fire automatically via the existing achievements engine when
+    the first character earns each Achievement.
+
+    Depends on _seed_hallowed_reaction_conditions() having run first to
+    create the ConditionTemplate rows we reference.
+    """
+    from django.utils.text import slugify  # noqa: PLC0415
+
+    from world.achievements.constants import (  # noqa: PLC0415
+        ComparisonType,
+        ConditionEventType,
+    )
+    from world.achievements.models import (  # noqa: PLC0415
+        Achievement,
+        AchievementRequirement,
+        ConditionStatRule,
+        StatDefinition,
+    )
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+
+    for spec in _HALLOWED_ACHIEVEMENT_BRIDGE_SPECS:
+        condition = ConditionTemplate.objects.get(name=spec["condition_name"])
+        stat, _ = StatDefinition.objects.get_or_create(
+            key=spec["stat_key"],
+            defaults={
+                "name": spec["stat_name"],
+                "description": (
+                    f"Count of times this character has gained {spec['condition_name']}."
+                ),
+            },
+        )
+        ConditionStatRule.objects.get_or_create(
+            stat=stat,
+            condition=condition,
+            event_type=ConditionEventType.GAINED,
+            defaults={"increment_amount": 1},
+        )
+        notification_level = spec["notification_level"]
+        achievement, _ = Achievement.objects.get_or_create(
+            name=spec["achievement_name"],
+            defaults={
+                "slug": slugify(spec["achievement_name"]),
+                "description": spec["achievement_description"],
+                "hidden": True,
+                "notification_level": notification_level,
+                "is_active": True,
+            },
+        )
+        # Key on (achievement, stat, threshold, comparison) to stay idempotent
+        # without requiring a DB-level unique constraint on AchievementRequirement.
+        AchievementRequirement.objects.get_or_create(
+            achievement=achievement,
+            stat=stat,
+            threshold=1,
+            comparison=ComparisonType.GTE,
+        )
+
+
 def seed_canonical_affinities() -> None:
     """Seed the 3 canonical magic Affinities (Celestial / Primal / Abyssal).
 

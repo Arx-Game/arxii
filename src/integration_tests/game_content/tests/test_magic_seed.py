@@ -1102,3 +1102,110 @@ class SeedHallowedReactionConditionsTests(TestCase):
             ConditionTemplate.objects.get(name="Burning").pk,
             pre_existing.pk,
         )
+
+
+# ---------------------------------------------------------------------------
+# Task 13c — _seed_hallowed_achievement_bridge()
+# ---------------------------------------------------------------------------
+
+
+class SeedHallowedAchievementBridgeTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
+
+        _seed_hallowed_reaction_conditions()
+
+    def test_seeds_three_stat_definitions(self):
+        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
+        from world.achievements.models import StatDefinition
+
+        _seed_hallowed_achievement_bridge()
+        keys = set(StatDefinition.objects.values_list("key", flat=True))
+        expected = {
+            "conditions.tempered_against_light.gained",
+            "conditions.singed.gained",
+            "conditions.hallowed_burn.gained",
+        }
+        self.assertGreaterEqual(keys, expected)
+
+    def test_seeds_three_condition_stat_rules(self):
+        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
+        from world.achievements.constants import ConditionEventType
+        from world.achievements.models import ConditionStatRule
+
+        _seed_hallowed_achievement_bridge()
+        # Each rule links one of the 3 reaction conditions to its corresponding stat.
+        rules = ConditionStatRule.objects.filter(event_type=ConditionEventType.GAINED)
+        rule_pairs = {
+            (r.condition.name, r.stat.key) for r in rules.select_related("condition", "stat")
+        }
+        expected = {
+            ("Tempered Against Light", "conditions.tempered_against_light.gained"),
+            ("Singed", "conditions.singed.gained"),
+            ("Hallowed Burn", "conditions.hallowed_burn.gained"),
+        }
+        self.assertGreaterEqual(rule_pairs, expected)
+
+    def test_seeds_three_achievements(self):
+        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
+        from world.achievements.models import Achievement
+
+        _seed_hallowed_achievement_bridge()
+        names = set(Achievement.objects.values_list("name", flat=True))
+        expected = {"Hallowed-Hardened", "Touched by Light", "Cast Out by the Light"}
+        self.assertGreaterEqual(names, expected)
+
+    def test_seeds_three_achievement_requirements(self):
+        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
+        from world.achievements.models import Achievement, AchievementRequirement
+
+        _seed_hallowed_achievement_bridge()
+        for ach_name, stat_key in (
+            ("Hallowed-Hardened", "conditions.tempered_against_light.gained"),
+            ("Touched by Light", "conditions.singed.gained"),
+            ("Cast Out by the Light", "conditions.hallowed_burn.gained"),
+        ):
+            ach = Achievement.objects.get(name=ach_name)
+            reqs = AchievementRequirement.objects.filter(
+                achievement=ach,
+                stat__key=stat_key,
+            )
+            self.assertEqual(reqs.count(), 1)
+            self.assertEqual(reqs.first().threshold, 1)
+
+    def test_burning_has_no_stat_or_achievement(self):
+        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
+        from world.achievements.models import StatDefinition
+
+        _seed_hallowed_achievement_bridge()
+        self.assertFalse(
+            StatDefinition.objects.filter(key="conditions.burning.gained").exists(),
+        )
+
+    def test_idempotent(self):
+        from integration_tests.game_content.magic import _seed_hallowed_achievement_bridge
+        from world.achievements.models import (
+            Achievement,
+            AchievementRequirement,
+            ConditionStatRule,
+            StatDefinition,
+        )
+
+        _seed_hallowed_achievement_bridge()
+        snapshot = (
+            StatDefinition.objects.count(),
+            ConditionStatRule.objects.count(),
+            Achievement.objects.count(),
+            AchievementRequirement.objects.count(),
+        )
+        _seed_hallowed_achievement_bridge()
+        self.assertEqual(
+            (
+                StatDefinition.objects.count(),
+                ConditionStatRule.objects.count(),
+                Achievement.objects.count(),
+                AchievementRequirement.objects.count(),
+            ),
+            snapshot,
+        )
