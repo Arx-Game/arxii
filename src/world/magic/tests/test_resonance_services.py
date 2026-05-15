@@ -62,7 +62,7 @@ class GrantResonanceTests(TestCase):
         self.assertEqual(grant.amount, 5)
         self.assertEqual(grant.source, GainSource.STAFF_GRANT)
 
-    def test_residence_grant_requires_aura_profile(self) -> None:
+    def test_residence_grant_requires_room_profile(self) -> None:
         from world.magic.constants import GainSource
 
         sheet = CharacterSheetFactory()
@@ -71,19 +71,19 @@ class GrantResonanceTests(TestCase):
             grant_resonance(sheet, res, 1, source=GainSource.ROOM_RESIDENCE)
 
     def test_residence_grant_happy_path(self) -> None:
+        from evennia_extensions.factories import RoomProfileFactory
         from world.magic.constants import GainSource
-        from world.magic.factories import RoomAuraProfileFactory
         from world.magic.models import ResonanceGrant
 
         sheet = CharacterSheetFactory()
         res = ResonanceFactory()
-        aura = RoomAuraProfileFactory()
+        rp = RoomProfileFactory()
         cr = grant_resonance(
             sheet,
             res,
             2,
             source=GainSource.ROOM_RESIDENCE,
-            room_aura_profile=aura,
+            room_profile=rp,
         )
         self.assertEqual(cr.balance, 2)
         self.assertEqual(ResonanceGrant.objects.filter(character_sheet=sheet).count(), 1)

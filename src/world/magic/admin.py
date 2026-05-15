@@ -31,8 +31,6 @@ from world.magic.models import (
     Ritual,
     RitualComponentRequirement,
     RitualSceneActionConfig,
-    RoomAuraProfile,
-    RoomResonance,
     SceneEntryEndorsement,
     SoulfrayConfig,
     Technique,
@@ -546,23 +544,6 @@ class ThreadWeavingTeachingOfferAdmin(admin.ModelAdmin):
     readonly_fields = ["created_at"]
 
 
-class RoomResonanceInline(admin.TabularInline):
-    model = RoomResonance
-    fields = ("resonance", "set_by", "set_at")
-    readonly_fields = ("set_at",)
-    extra = 0
-
-
-@admin.register(RoomAuraProfile)
-class RoomAuraProfileAdmin(admin.ModelAdmin):
-    list_display = ("room_profile", "tag_count")
-    inlines = [RoomResonanceInline]
-
-    @admin.display(description="Tags")
-    def tag_count(self, obj: RoomAuraProfile) -> int:
-        return obj.room_resonances.count()
-
-
 @admin.register(ResonanceGrant)
 class ResonanceGrantAdmin(admin.ModelAdmin):
     list_display = (
@@ -581,7 +562,7 @@ class ResonanceGrantAdmin(admin.ModelAdmin):
         "amount",
         "source",
         "granted_at",
-        "source_room_aura_profile",
+        "source_room_profile",
         "source_staff_account",
         "source_pose_endorsement",
         "source_scene_entry_endorsement",

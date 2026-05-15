@@ -13,14 +13,15 @@ from world.locations.constants import (
     STAT_CLAMPS,
     STAT_DEFAULTS,
     HolderType,
+    KeyType,
     LocationParentType,
     StatKey,
 )
 from world.locations.models import (
     LocationOwnership,
-    LocationStatModifier,
-    LocationStatOverride,
     LocationTenancy,
+    LocationValueModifier,
+    LocationValueOverride,
 )
 from world.societies.models import OrganizationMembership
 
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
     from evennia.objects.objects import DefaultObject
 
     from world.areas.models import Area
+    from world.magic.models import Resonance
     from world.scenes.models import Persona
     from world.societies.models import Organization
 
@@ -154,49 +156,67 @@ def _clamp(value: int, stat_key: StatKey) -> int:
     return max(low, min(high, value))
 
 
-def effective_stat(room: DefaultObject, stat_key: StatKey) -> int:
-    """Cascade-resolve a single stat for a room, clamped to per-stat bounds.
+def effective_value(
+    room: DefaultObject,
+    *,
+    stat_key: StatKey | None = None,
+    resonance: Resonance | None = None,
+) -> int:
+    """Cascade-resolve a single axis value (stat or resonance) for a room.
+
+    Exactly one of ``stat_key`` or ``resonance`` must be provided.
+
+    Stats are clamped to STAT_CLAMPS and start from STAT_DEFAULTS.
+    Resonance values are not clamped and default to 0.
 
     Algorithm (2 queries per call: closure walk + override or modifier
     fetch; modifier ``current_value()`` is in-memory math):
       1. Resolve ``room.room_profile`` and its area. If the profile is
-         missing, return ``STAT_DEFAULTS[stat_key]`` clamped.
+         missing, return the axis default (clamped for stats).
       2. Look up the area's ancestors (and itself) via ``AreaClosure``.
-      3. If any ``LocationStatOverride`` exists for the ancestor set or
-         the room_profile and matches ``stat_key``, pick the most-specific
-         (room > deepest area) and return its value, clamped.
-      4. Otherwise sum every ``LocationStatModifier.current_value`` for
-         the same scope and ``stat_key``, add ``STAT_DEFAULTS[stat_key]``,
-         clamp, return.
+      3. If any ``LocationValueOverride`` for the matching axis exists in
+         the ancestor set or on the room_profile, pick the most-specific
+         (room > deepest area) and return its value (clamped for stats).
+      4. Otherwise sum every ``LocationValueModifier.current_value`` for
+         the same scope and axis, add the axis default, clamp for stats.
     """
+    if (stat_key is None) == (resonance is None):
+        msg = "Provide exactly one of stat_key or resonance."
+        raise ValueError(msg)
 
-    default = STAT_DEFAULTS.get(stat_key, 0)
+    if stat_key is not None:
+        default = STAT_DEFAULTS.get(stat_key, 0)
+        axis_filter = models.Q(key_type=KeyType.STAT, stat_key=stat_key)
+    else:
+        default = 0
+        axis_filter = models.Q(key_type=KeyType.RESONANCE, resonance=resonance)
+
+    def _maybe_clamp(value: int) -> int:
+        return _clamp(value, stat_key) if stat_key is not None else value
+
     profile, ancestor_ids = _room_profile_and_ancestors(room)
     if profile is None:
-        return _clamp(default, stat_key)
+        return _maybe_clamp(default)
 
     # Step 3: most-specific override wins, modifiers ignored.
     overrides = list(
-        LocationStatOverride.objects.filter(stat_key=stat_key)
+        LocationValueOverride.objects.filter(axis_filter)
         .select_related("area")
         .filter(models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids))
     )
     if overrides:
-        # Specificity: room beats any area; among areas, smaller level wins.
-        # AreaLevel uses smaller numbers for more specific tiers (Building=10
-        # is most specific).
         room_overrides = [o for o in overrides if o.room_profile_id == profile.pk]
         if room_overrides:
-            return _clamp(room_overrides[0].value, stat_key)
+            return _maybe_clamp(room_overrides[0].value)
         chosen = min(overrides, key=lambda o: o.area.level)
-        return _clamp(chosen.value, stat_key)
+        return _maybe_clamp(chosen.value)
 
     # Step 4: sum modifier current_values.
-    modifiers = LocationStatModifier.objects.filter(stat_key=stat_key).filter(
+    modifiers = LocationValueModifier.objects.filter(axis_filter).filter(
         models.Q(room_profile=profile) | models.Q(area_id__in=ancestor_ids)
     )
     total = default + sum(mod.current_value() for mod in modifiers)
-    return _clamp(total, stat_key)
+    return _maybe_clamp(total)
 
 
 class _StatCascadeIndex(NamedTuple):
@@ -207,27 +227,27 @@ class _StatCascadeIndex(NamedTuple):
     every (room, stat_key) pair in the pass.
     """
 
-    overrides_by_profile: dict[int, dict[str, LocationStatOverride]]
-    overrides_by_area: dict[int, dict[str, LocationStatOverride]]
-    modifiers_by_profile: dict[int, dict[str, list[LocationStatModifier]]]
-    modifiers_by_area: dict[int, dict[str, list[LocationStatModifier]]]
+    overrides_by_profile: dict[int, dict[str, LocationValueOverride]]
+    overrides_by_area: dict[int, dict[str, LocationValueOverride]]
+    modifiers_by_profile: dict[int, dict[str, list[LocationValueModifier]]]
+    modifiers_by_area: dict[int, dict[str, list[LocationValueModifier]]]
 
 
 def _build_stat_cascade_index(
-    overrides: list[LocationStatOverride],
-    modifiers: list[LocationStatModifier],
+    overrides: list[LocationValueOverride],
+    modifiers: list[LocationValueModifier],
 ) -> _StatCascadeIndex:
     """Build profile/area-keyed lookup indexes for stat overrides + modifiers."""
-    overrides_by_profile: dict[int, dict[str, LocationStatOverride]] = {}
-    overrides_by_area: dict[int, dict[str, LocationStatOverride]] = {}
+    overrides_by_profile: dict[int, dict[str, LocationValueOverride]] = {}
+    overrides_by_area: dict[int, dict[str, LocationValueOverride]] = {}
     for o in overrides:
         if o.room_profile_id is not None:
             overrides_by_profile.setdefault(o.room_profile_id, {})[o.stat_key] = o
         elif o.area_id is not None:
             overrides_by_area.setdefault(o.area_id, {})[o.stat_key] = o
 
-    modifiers_by_profile: dict[int, dict[str, list[LocationStatModifier]]] = {}
-    modifiers_by_area: dict[int, dict[str, list[LocationStatModifier]]] = {}
+    modifiers_by_profile: dict[int, dict[str, list[LocationValueModifier]]] = {}
+    modifiers_by_area: dict[int, dict[str, list[LocationValueModifier]]] = {}
     for m in modifiers:
         if m.room_profile_id is not None:
             modifiers_by_profile.setdefault(m.room_profile_id, {}).setdefault(
@@ -279,6 +299,160 @@ def _resolve_stat_for_profile(
     return _clamp(total, stat_key)
 
 
+class _ResonanceCascadeIndex(NamedTuple):
+    """Pre-built lookup indexes for bulk resonance resolution.
+
+    Mirrors _StatCascadeIndex but keyed by resonance.pk (int) instead of
+    stat_key (str). Resonance rows always have ``key_type=RESONANCE`` and
+    ``resonance_id`` set; stat-keyed rows are filtered out at fetch time.
+    """
+
+    overrides_by_profile: dict[int, dict[int, LocationValueOverride]]
+    overrides_by_area: dict[int, dict[int, LocationValueOverride]]
+    modifiers_by_profile: dict[int, dict[int, list[LocationValueModifier]]]
+    modifiers_by_area: dict[int, dict[int, list[LocationValueModifier]]]
+
+
+def _build_resonance_cascade_index(
+    overrides: list[LocationValueOverride],
+    modifiers: list[LocationValueModifier],
+) -> _ResonanceCascadeIndex:
+    """Build profile/area-keyed lookup indexes for resonance rows."""
+    overrides_by_profile: dict[int, dict[int, LocationValueOverride]] = {}
+    overrides_by_area: dict[int, dict[int, LocationValueOverride]] = {}
+    for o in overrides:
+        if o.resonance_id is None:
+            continue
+        if o.room_profile_id is not None:
+            overrides_by_profile.setdefault(o.room_profile_id, {})[o.resonance_id] = o
+        elif o.area_id is not None:
+            overrides_by_area.setdefault(o.area_id, {})[o.resonance_id] = o
+
+    modifiers_by_profile: dict[int, dict[int, list[LocationValueModifier]]] = {}
+    modifiers_by_area: dict[int, dict[int, list[LocationValueModifier]]] = {}
+    for m in modifiers:
+        if m.resonance_id is None:
+            continue
+        if m.room_profile_id is not None:
+            modifiers_by_profile.setdefault(m.room_profile_id, {}).setdefault(
+                m.resonance_id, []
+            ).append(m)
+        elif m.area_id is not None:
+            modifiers_by_area.setdefault(m.area_id, {}).setdefault(m.resonance_id, []).append(m)
+
+    return _ResonanceCascadeIndex(
+        overrides_by_profile=overrides_by_profile,
+        overrides_by_area=overrides_by_area,
+        modifiers_by_profile=modifiers_by_profile,
+        modifiers_by_area=modifiers_by_area,
+    )
+
+
+def _resolve_resonance_for_profile(
+    profile: RoomProfile,
+    resonance_id: int,
+    ancestor_ids: list[int],
+    index: _ResonanceCascadeIndex,
+) -> int:
+    """Resolve one (profile, resonance_id) from a pre-built index.
+
+    Mirrors the singular ``effective_value`` resonance path: most-specific
+    override wins (room beats deepest area); otherwise sum modifier
+    current_values across the chain plus 0 default. No clamping.
+    """
+    room_override = index.overrides_by_profile.get(profile.pk, {}).get(resonance_id)
+    if room_override is not None:
+        return room_override.value
+    area_overrides_raw = [
+        index.overrides_by_area.get(area_id, {}).get(resonance_id) for area_id in ancestor_ids
+    ]
+    area_overrides = [o for o in area_overrides_raw if o is not None]
+    if area_overrides:
+        chosen = min(area_overrides, key=lambda o: o.area.level)
+        return chosen.value
+
+    total = 0  # resonance default
+    for m in index.modifiers_by_profile.get(profile.pk, {}).get(resonance_id, []):
+        total += m.current_value()
+    for area_id in ancestor_ids:
+        for m in index.modifiers_by_area.get(area_id, {}).get(resonance_id, []):
+            total += m.current_value()
+    return total
+
+
+def effective_values_for_rooms(
+    rooms: Iterable[DefaultObject],
+    *,
+    stat_keys: Iterable[StatKey] | None = None,
+    resonances: Iterable[Resonance] | None = None,
+) -> dict[int, dict[StatKey | Resonance, int]]:
+    """Bulk-resolve cascade values across many rooms for one axis.
+
+    Exactly one of ``stat_keys`` or ``resonances`` must be provided.
+
+    Stat-keyed reads delegate to :func:`effective_stats_for_rooms`.
+    Resonance reads share the same 4-query budget: profiles + closure
+    + overrides + modifiers, independent of room count.
+
+    Returns: ``{room.pk: {axis_key: int}}`` where axis_key is StatKey or
+    Resonance depending on which kwarg was passed. Rooms without a
+    RoomProfile fall through to STAT_DEFAULTS (clamped) for stats and
+    0 for resonances.
+    """
+    if (stat_keys is None) == (resonances is None):
+        msg = "Provide exactly one of stat_keys or resonances."
+        raise ValueError(msg)
+
+    if stat_keys is not None:
+        return effective_stats_for_rooms(rooms, stat_keys)  # type: ignore[return-value]
+
+    rooms_list = list(rooms)
+    resonances_list = list(resonances) if resonances is not None else []
+    if not rooms_list:
+        return {}
+    if not resonances_list:
+        return {room.pk: {} for room in rooms_list}
+
+    resonance_ids = [r.pk for r in resonances_list]
+    resonance_by_id = {r.pk: r for r in resonances_list}
+
+    room_to_profile, profile_to_ancestor_ids, all_ancestor_ids = _bulk_room_profiles_and_ancestors(
+        rooms_list
+    )
+    profile_pks = {p.pk for p in room_to_profile.values()}
+
+    overrides = list(
+        LocationValueOverride.objects.filter(
+            key_type=KeyType.RESONANCE,
+            resonance_id__in=resonance_ids,
+        )
+        .select_related("area")
+        .filter(models.Q(room_profile_id__in=profile_pks) | models.Q(area_id__in=all_ancestor_ids))
+    )
+    modifiers = list(
+        LocationValueModifier.objects.filter(
+            key_type=KeyType.RESONANCE,
+            resonance_id__in=resonance_ids,
+        ).filter(models.Q(room_profile_id__in=profile_pks) | models.Q(area_id__in=all_ancestor_ids))
+    )
+    index = _build_resonance_cascade_index(overrides, modifiers)
+
+    result: dict[int, dict[StatKey | Resonance, int]] = {}
+    for room in rooms_list:
+        profile = room_to_profile.get(room.pk)
+        if profile is None:
+            result[room.pk] = dict.fromkeys(resonances_list, 0)
+            continue
+        ancestor_ids = profile_to_ancestor_ids.get(profile.pk, [])
+        result[room.pk] = {
+            resonance_by_id[r_id]: _resolve_resonance_for_profile(
+                profile, r_id, ancestor_ids, index
+            )
+            for r_id in resonance_ids
+        }
+    return result
+
+
 def effective_stats_for_rooms(
     rooms: Iterable[DefaultObject],
     stat_keys: Iterable[StatKey],
@@ -288,9 +462,9 @@ def effective_stats_for_rooms(
     Returns: {room.pk: {stat_key: int}}.
 
     One AreaClosure walk for the union of all ancestor area ids (via
-    _bulk_room_profiles_and_ancestors), one fetch of LocationStatOverride
+    _bulk_room_profiles_and_ancestors), one fetch of LocationValueOverride
     for those ids + room_profiles + stat_keys, one fetch of
-    LocationStatModifier for the same scope, then resolves per room in
+    LocationValueModifier for the same scope, then resolves per room in
     Python.
 
     Rooms with no RoomProfile fall through to STAT_DEFAULTS[stat_key]
@@ -314,12 +488,12 @@ def effective_stats_for_rooms(
     # Bulk fetch overrides matching the union of (room_profiles, ancestor_ids).
     profile_pks = {p.pk for p in room_to_profile.values()}
     overrides = list(
-        LocationStatOverride.objects.filter(stat_key__in=stat_keys_list)
+        LocationValueOverride.objects.filter(stat_key__in=stat_keys_list)
         .select_related("area")
         .filter(models.Q(room_profile_id__in=profile_pks) | models.Q(area_id__in=all_ancestor_ids))
     )
     modifiers = list(
-        LocationStatModifier.objects.filter(stat_key__in=stat_keys_list).filter(
+        LocationValueModifier.objects.filter(stat_key__in=stat_keys_list).filter(
             models.Q(room_profile_id__in=profile_pks) | models.Q(area_id__in=all_ancestor_ids)
         )
     )
@@ -739,7 +913,7 @@ def tenancy_history_for(
 
 
 def cleanup_decayed_modifiers(now: datetime | None = None) -> int:
-    """Delete LocationStatModifier rows whose current_value() has
+    """Delete LocationValueModifier rows whose current_value() has
     decayed to zero.
 
     Iterates rows with non-zero change_per_day (zero-rate rows never
@@ -762,8 +936,8 @@ def cleanup_decayed_modifiers(now: datetime | None = None) -> int:
     high-frequency invocation.
     """
     with transaction.atomic():
-        candidates = LocationStatModifier.objects.exclude(change_per_day=0).select_for_update()
+        candidates = LocationValueModifier.objects.exclude(change_per_day=0).select_for_update()
         to_delete_ids: list[int] = [row.pk for row in candidates if row.current_value(now=now) == 0]
         if to_delete_ids:
-            LocationStatModifier.objects.filter(pk__in=to_delete_ids).delete()
+            LocationValueModifier.objects.filter(pk__in=to_delete_ids).delete()
         return len(to_delete_ids)
