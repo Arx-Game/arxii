@@ -750,8 +750,8 @@ def _seed_hallowed_achievement_bridge() -> None:
 RESONANCE_ENV_FLOW_NAME: str = "Resonance Environment reactive flow"
 
 #: Name of the TECHNIQUE_CAST TriggerDefinition for resonance-environment.
-#: RC4's _seed_hallowed_marker_and_rooms() uses this name to wire the trigger
-#: into the "Hallowed Rejection" marker condition (RC4 task scope).
+#: RC3 wired this trigger into "Magically Attuned".reactive_triggers — that
+#: is the cast trigger installer; not the "Hallowed Rejection" marker.
 RESONANCE_ENV_TRIGGER_NAME: str = "Resonance Environment — technique cast"
 
 
@@ -972,36 +972,54 @@ def _seed_resonance_environment_flow_and_trigger() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Task 13e — _seed_hallowed_marker_and_rooms()
+# Task RC4 — _seed_resonance_environment_rooms()
 # ---------------------------------------------------------------------------
 
+#: Cascade magnitude for the Low celestial room.
+_CELESTIAL_LOW_MAGNITUDE: int = 10
 
-def _seed_hallowed_marker_and_rooms() -> None:
-    """Seed the Hallowed Rejection marker ConditionTemplate + 2 test rooms.
+#: Cascade magnitude for the High celestial room.
+_CELESTIAL_HIGH_MAGNITUDE: int = 80
 
-    The marker condition's reactive_triggers M2M references the TriggerDefinition
-    seeded by _seed_hallowed_rejection_flow_and_trigger(). When the marker is
-    applied to a character (T10's apply_condition extension), a Trigger row is
-    auto-installed and listens for TECHNIQUE_CAST events.
+#: Cascade magnitude for the Abyssal aligned-pole room.
+_ABYSSAL_ALIGNED_MAGNITUDE: int = 60
 
-    Two rooms author the intensity tiers used by the pipeline test:
-      - "The Hallowed Threshold (Low)" — 1 Celestial resonance (Light)
-      - "The Hallowed Threshold (High)" — 3 Celestial resonances (Light/Sanctity/Radiance)
 
-    Idempotent via get_or_create on db_key for the rooms, on name for the
-    ConditionTemplate, and on (room_aura_profile, resonance) for RoomResonance.
+def _seed_resonance_environment_rooms() -> None:
+    """Seed three cascade-resonance rooms for the resonance-environment pipeline.
+
+    Replaces the deleted RoomAuraProfile/RoomResonance approach. Room resonance
+    magnitudes now live as LocationValueModifier rows (key_type=RESONANCE),
+    created via tag_room_resonance and then magnitude-tuned to the desired level.
+
+    The "Hallowed Rejection" marker ConditionTemplate is also seeded here as
+    flavor content wired in RC3 via the "Magically Attuned" ubiquitous condition.
+    This helper does NOT re-wire any trigger M2Ms — RC3's
+    _seed_resonance_environment_flow_and_trigger() already attached the cast
+    TriggerDefinition to "Magically Attuned".reactive_triggers.
+
+    Three rooms:
+      - "The Hallowed Threshold (Low)"   — Celestial / Light, magnitude=10
+      - "The Hallowed Threshold (High)"  — Celestial / Light, magnitude=80
+      - "The Resonant Sanctum (Aligned)" — Abyssal / Dissolution, magnitude=60
+
+    Idempotent at every layer:
+      - rooms: filter().first() + create_object(nohome=True) when absent
+      - RoomProfile: get_or_create
+      - LocationValueModifier: tag_room_resonance uses update_or_create keyed on
+        (room_profile, resonance, source) then we set .value + .save() to tune
+        magnitude — re-runs restore the desired value.
     """
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
     from evennia.utils import create as evennia_create  # noqa: PLC0415
 
     from evennia_extensions.models import RoomProfile  # noqa: PLC0415
-    from flows.models.triggers import TriggerDefinition  # noqa: PLC0415
     from world.conditions.constants import DurationType  # noqa: PLC0415
     from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
     from world.magic.models.affinity import Resonance  # noqa: PLC0415
-    from world.magic.models.room_aura import RoomAuraProfile, RoomResonance  # noqa: PLC0415
+    from world.magic.services.gain import tag_room_resonance  # noqa: PLC0415
 
-    # ----- Marker condition -----
+    # ----- Hallowed Rejection marker (flavor condition for the story) -----
     category, _ = ConditionCategory.objects.get_or_create(
         name="Magical",
         defaults={
@@ -1010,7 +1028,7 @@ def _seed_hallowed_marker_and_rooms() -> None:
             "display_order": 0,
         },
     )
-    marker, _ = ConditionTemplate.objects.get_or_create(
+    ConditionTemplate.objects.get_or_create(
         name="Hallowed Rejection",
         defaults={
             "category": category,
@@ -1029,23 +1047,19 @@ def _seed_hallowed_marker_and_rooms() -> None:
             "can_be_dispelled": False,
         },
     )
-    trigger_def = TriggerDefinition.objects.get(
-        name="Hallowed Rejection — technique cast in celestial-aura room",
-    )
-    marker.reactive_triggers.add(trigger_def)  # idempotent — adding existing is no-op
 
-    # ----- Rooms with aura -----
+    # ----- Rooms with cascade resonance -----
     light = Resonance.objects.get(name="Light")
-    sanctity = Resonance.objects.get(name="Sanctity")
-    radiance = Resonance.objects.get(name="Radiance")
+    dissolution = Resonance.objects.get(name="Dissolution")
 
-    for db_key, resonances in [
-        ("The Hallowed Threshold (Low)", [light]),
-        ("The Hallowed Threshold (High)", [light, sanctity, radiance]),
-    ]:
-        # ObjectDB.db_key is not unique in Evennia, so we check for existence
-        # first rather than relying on get_or_create. Use filter().first() to
-        # safely handle the case where no matching room exists yet.
+    room_specs: list[tuple[str, Resonance, int]] = [
+        ("The Hallowed Threshold (Low)", light, _CELESTIAL_LOW_MAGNITUDE),
+        ("The Hallowed Threshold (High)", light, _CELESTIAL_HIGH_MAGNITUDE),
+        ("The Resonant Sanctum (Aligned)", dissolution, _ABYSSAL_ALIGNED_MAGNITUDE),
+    ]
+
+    for db_key, resonance, magnitude in room_specs:
+        # ObjectDB.db_key is not unique in Evennia — use filter().first() for idempotency.
         existing = ObjectDB.objects.filter(
             db_key=db_key,
             db_typeclass_path="typeclasses.rooms.Room",
@@ -1060,17 +1074,14 @@ def _seed_hallowed_marker_and_rooms() -> None:
                 key=db_key,
                 nohome=True,
             )
-        # RoomProfile is auto-created by Room.at_object_creation(), so
-        # get_or_create returns the existing row without touching it.
+        # RoomProfile is auto-created by Room.at_object_creation().
         profile, _ = RoomProfile.objects.get_or_create(objectdb=room)
-        # Ensure RoomAuraProfile exists.
-        aura, _ = RoomAuraProfile.objects.get_or_create(room_profile=profile)
-        # Wire the resonances — unique constraint prevents duplicates.
-        for res in resonances:
-            RoomResonance.objects.get_or_create(
-                room_aura_profile=aura,
-                resonance=res,
-            )
+        # Tag the room with the resonance (update_or_create, idempotent).
+        # Returns the LocationValueModifier row; tune value to the desired magnitude.
+        modifier = tag_room_resonance(profile, resonance)
+        if modifier.value != magnitude:
+            modifier.value = magnitude
+            modifier.save(update_fields=["value"])
 
 
 # ---------------------------------------------------------------------------
@@ -1253,12 +1264,16 @@ def seed_canonical_affinities() -> None:
 
 
 def seed_canonical_resonances() -> None:
-    """Seed 3 Celestial-affinity Resonances (Light / Sanctity / Radiance).
+    """Seed canonical Resonances for the magic-story slice.
+
+    Celestial: Light / Sanctity / Radiance
+    Abyssal: Dissolution
 
     Depends on seed_canonical_affinities(). Idempotent via get_or_create.
-    Used by the Hallowed Threshold rooms in the magic-story slice for
-    room-aura intensity tagging — and reusable for any future magical
-    content that wants ready-to-attach Celestial resonances.
+    The Celestial resonances are used by Hallowed Threshold room cascade rows.
+    Dissolution (Abyssal) is used by the Resonant Sanctum room for the
+    ALIGNED-pole amplification subtest (an Abyssal caster casting in an Abyssal
+    resonance room gets the boon).
     """
     from world.magic.models.affinity import Affinity, Resonance  # noqa: PLC0415
 
@@ -1268,6 +1283,12 @@ def seed_canonical_resonances() -> None:
             name=name,
             defaults={"affinity": celestial},
         )
+
+    abyssal = Affinity.objects.get(name="Abyssal")
+    Resonance.objects.get_or_create(
+        name="Dissolution",
+        defaults={"affinity": abyssal},
+    )
 
 
 # Task RC1 — directed RPS affinity interaction matrix
@@ -2188,7 +2209,7 @@ def seed_starter_magic_story() -> None:
     Composes the per-phase helpers in dependency order:
 
       0. seed_canonical_affinities() — the 3 magic Affinities
-      0. seed_canonical_resonances() — the 3 Celestial Resonances
+      0. seed_canonical_resonances() — Celestial (Light/Sanctity/Radiance) + Abyssal (Dissolution)
 
       A. _seed_endure_hallowed_ground_check() — CheckType + ResultChart
       B. _seed_hallowed_reaction_conditions() — 5 reaction conditions
@@ -2196,7 +2217,7 @@ def seed_starter_magic_story() -> None:
      RC1. _seed_resonance_environment_config() — ResonanceEnvironmentConfig singleton
      RC2. _seed_resonance_environment_conditions() — Magically Attuned + Empowered boon
       D. _seed_resonance_environment_flow_and_trigger() — FlowDefinition + steps + Trigger
-      E. _seed_hallowed_marker_and_rooms() — marker condition + 2 rooms with aura (RC4)
+     RC4. _seed_resonance_environment_rooms() — Hallowed Rejection flavor + 3 cascade rooms
       F. _seed_hallowed_threshold_story() — Story + Chapter + Episodes + Beats + Transitions + TROs
 
     All sub-helpers are idempotent (get_or_create at every layer), so the
@@ -2211,7 +2232,7 @@ def seed_starter_magic_story() -> None:
     _seed_resonance_environment_config()
     _seed_resonance_environment_conditions()
     _seed_resonance_environment_flow_and_trigger()
-    _seed_hallowed_marker_and_rooms()
+    _seed_resonance_environment_rooms()
     _seed_hallowed_threshold_story()
 
 

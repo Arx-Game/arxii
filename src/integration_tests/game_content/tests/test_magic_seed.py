@@ -1337,11 +1337,11 @@ class SeedResonanceEnvironmentFlowAndTriggerTests(TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Task 13e — _seed_hallowed_marker_and_rooms()
+# RC4 — _seed_resonance_environment_rooms()
 # ---------------------------------------------------------------------------
 
 
-class SeedHallowedMarkerAndRoomsTests(TestCase):
+class SeedResonanceEnvironmentRoomsTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         from integration_tests.game_content.magic import (
@@ -1360,93 +1360,120 @@ class SeedHallowedMarkerAndRoomsTests(TestCase):
         _seed_resonance_environment_conditions()
         _seed_resonance_environment_flow_and_trigger()
 
-    def test_seeds_hallowed_rejection_marker(self):
-        from integration_tests.game_content.magic import _seed_hallowed_marker_and_rooms
+    def test_seeds_hallowed_rejection_flavor_condition(self):
+        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
         from world.conditions.models import ConditionTemplate
 
-        _seed_hallowed_marker_and_rooms()
+        _seed_resonance_environment_rooms()
         self.assertTrue(
             ConditionTemplate.objects.filter(name="Hallowed Rejection").exists(),
         )
 
-    def test_marker_has_reactive_trigger_attached(self):
-        from integration_tests.game_content.magic import (
-            RESONANCE_ENV_TRIGGER_NAME,
-            _seed_hallowed_marker_and_rooms,
-        )
-        from world.conditions.models import ConditionTemplate
-
-        _seed_hallowed_marker_and_rooms()
-        marker = ConditionTemplate.objects.get(name="Hallowed Rejection")
-        trigger_names = set(marker.reactive_triggers.values_list("name", flat=True))
-        self.assertIn(RESONANCE_ENV_TRIGGER_NAME, trigger_names)
-
-    def test_seeds_two_rooms_with_aura(self):
+    def test_seeds_three_rooms(self):
         from evennia.objects.models import ObjectDB
 
-        from integration_tests.game_content.magic import _seed_hallowed_marker_and_rooms
-        from world.magic.models.room_aura import RoomAuraProfile
+        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
 
-        _seed_hallowed_marker_and_rooms()
-        low = ObjectDB.objects.get(db_key="The Hallowed Threshold (Low)")
-        high = ObjectDB.objects.get(db_key="The Hallowed Threshold (High)")
-        # Both rooms have RoomProfile + RoomAuraProfile.
-        self.assertTrue(hasattr(low, "room_profile"))
-        self.assertTrue(hasattr(high, "room_profile"))
+        _seed_resonance_environment_rooms()
         self.assertTrue(
-            RoomAuraProfile.objects.filter(room_profile=low.room_profile).exists(),
+            ObjectDB.objects.filter(db_key="The Hallowed Threshold (Low)").exists(),
         )
         self.assertTrue(
-            RoomAuraProfile.objects.filter(room_profile=high.room_profile).exists(),
+            ObjectDB.objects.filter(db_key="The Hallowed Threshold (High)").exists(),
+        )
+        self.assertTrue(
+            ObjectDB.objects.filter(db_key="The Resonant Sanctum (Aligned)").exists(),
         )
 
-    def test_low_intensity_room_has_one_celestial_resonance(self):
+    def test_low_room_cascade_magnitude(self):
+        """The Low celestial room resolves to magnitude 10 via effective_value."""
         from evennia.objects.models import ObjectDB
 
-        from integration_tests.game_content.magic import _seed_hallowed_marker_and_rooms
+        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
+        from world.locations.services import effective_value
+        from world.magic.models.affinity import Resonance
 
-        _seed_hallowed_marker_and_rooms()
+        _seed_resonance_environment_rooms()
         low = ObjectDB.objects.get(db_key="The Hallowed Threshold (Low)")
-        aura = low.room_profile.room_aura_profile
-        celestial_resonances = aura.room_resonances.filter(
-            resonance__affinity__name="Celestial",
-        )
-        self.assertEqual(celestial_resonances.count(), 1)
-        self.assertEqual(celestial_resonances.first().resonance.name, "Light")
+        light = Resonance.objects.get(name="Light")
+        self.assertEqual(effective_value(low, resonance=light), 10)
 
-    def test_high_intensity_room_has_three_celestial_resonances(self):
+    def test_high_room_cascade_magnitude(self):
+        """The High celestial room resolves to magnitude 80 via effective_value."""
         from evennia.objects.models import ObjectDB
 
-        from integration_tests.game_content.magic import _seed_hallowed_marker_and_rooms
+        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
+        from world.locations.services import effective_value
+        from world.magic.models.affinity import Resonance
 
-        _seed_hallowed_marker_and_rooms()
+        _seed_resonance_environment_rooms()
         high = ObjectDB.objects.get(db_key="The Hallowed Threshold (High)")
-        aura = high.room_profile.room_aura_profile
-        celestial_resonances = aura.room_resonances.filter(
-            resonance__affinity__name="Celestial",
-        )
-        names = set(celestial_resonances.values_list("resonance__name", flat=True))
-        self.assertEqual(names, {"Light", "Sanctity", "Radiance"})
+        light = Resonance.objects.get(name="Light")
+        self.assertEqual(effective_value(high, resonance=light), 80)
+
+    def test_aligned_sanctum_cascade_magnitude(self):
+        """The Abyssal aligned room resolves to magnitude 60 via effective_value."""
+        from evennia.objects.models import ObjectDB
+
+        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
+        from world.locations.services import effective_value
+        from world.magic.models.affinity import Resonance
+
+        _seed_resonance_environment_rooms()
+        sanctum = ObjectDB.objects.get(db_key="The Resonant Sanctum (Aligned)")
+        dissolution = Resonance.objects.get(name="Dissolution")
+        self.assertEqual(effective_value(sanctum, resonance=dissolution), 60)
 
     def test_idempotent(self):
+        """Re-running _seed_resonance_environment_rooms() produces stable counts/values."""
         from evennia.objects.models import ObjectDB
 
-        from integration_tests.game_content.magic import _seed_hallowed_marker_and_rooms
+        from integration_tests.game_content.magic import _seed_resonance_environment_rooms
         from world.conditions.models import ConditionTemplate
-        from world.magic.models.room_aura import RoomResonance
+        from world.locations.models import LocationValueModifier
+        from world.locations.services import effective_value
+        from world.magic.models.affinity import Resonance
 
-        _seed_hallowed_marker_and_rooms()
-        snapshot = (
-            ObjectDB.objects.filter(db_key__startswith="The Hallowed Threshold").count(),
-            RoomResonance.objects.count(),
-            ConditionTemplate.objects.filter(name="Hallowed Rejection").count(),
-        )
-        _seed_hallowed_marker_and_rooms()
-        post = (
-            ObjectDB.objects.filter(db_key__startswith="The Hallowed Threshold").count(),
-            RoomResonance.objects.count(),
-            ConditionTemplate.objects.filter(name="Hallowed Rejection").count(),
-        )
+        _seed_resonance_environment_rooms()
+        light = Resonance.objects.get(name="Light")
+        dissolution = Resonance.objects.get(name="Dissolution")
+        low = ObjectDB.objects.get(db_key="The Hallowed Threshold (Low)")
+        high = ObjectDB.objects.get(db_key="The Hallowed Threshold (High)")
+        sanctum = ObjectDB.objects.get(db_key="The Resonant Sanctum (Aligned)")
+        snapshot = {
+            "rooms": ObjectDB.objects.filter(
+                db_key__in=[
+                    "The Hallowed Threshold (Low)",
+                    "The Hallowed Threshold (High)",
+                    "The Resonant Sanctum (Aligned)",
+                ]
+            ).count(),
+            "modifiers": LocationValueModifier.objects.count(),
+            "hallowed_rejection": ConditionTemplate.objects.filter(
+                name="Hallowed Rejection"
+            ).count(),
+            "low_magnitude": effective_value(low, resonance=light),
+            "high_magnitude": effective_value(high, resonance=light),
+            "sanctum_magnitude": effective_value(sanctum, resonance=dissolution),
+        }
+
+        _seed_resonance_environment_rooms()
+        post = {
+            "rooms": ObjectDB.objects.filter(
+                db_key__in=[
+                    "The Hallowed Threshold (Low)",
+                    "The Hallowed Threshold (High)",
+                    "The Resonant Sanctum (Aligned)",
+                ]
+            ).count(),
+            "modifiers": LocationValueModifier.objects.count(),
+            "hallowed_rejection": ConditionTemplate.objects.filter(
+                name="Hallowed Rejection"
+            ).count(),
+            "low_magnitude": effective_value(low, resonance=light),
+            "high_magnitude": effective_value(high, resonance=light),
+            "sanctum_magnitude": effective_value(sanctum, resonance=dissolution),
+        }
         self.assertEqual(snapshot, post)
 
 
@@ -1613,7 +1640,7 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         self.assertTrue(Achievement.objects.filter(name="Hallowed-Hardened").exists())
         self.assertTrue(
             TriggerDefinition.objects.filter(
-                name="Hallowed Rejection — technique cast in celestial-aura room",
+                name="Resonance Environment — technique cast",
             ).exists(),
         )
         self.assertTrue(Story.objects.filter(title="The Hallowed Threshold").exists())
@@ -1631,8 +1658,8 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         )
         from world.checks.models import CheckType
         from world.conditions.models import ConditionTemplate
+        from world.locations.models import LocationValueModifier
         from world.magic.models.affinity import Affinity, Resonance
-        from world.magic.models.room_aura import RoomAuraProfile, RoomResonance
         from world.stories.models import (
             Beat,
             Chapter,
@@ -1657,8 +1684,7 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
             "FlowDefinition": FlowDefinition.objects.count(),
             "FlowStepDefinition": FlowStepDefinition.objects.count(),
             "TriggerDefinition": TriggerDefinition.objects.count(),
-            "RoomAuraProfile": RoomAuraProfile.objects.count(),
-            "RoomResonance": RoomResonance.objects.count(),
+            "LocationValueModifier": LocationValueModifier.objects.count(),
             "Story": Story.objects.count(),
             "Chapter": Chapter.objects.count(),
             "Episode": Episode.objects.count(),
@@ -1682,8 +1708,7 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
             "FlowDefinition": FlowDefinition.objects.count(),
             "FlowStepDefinition": FlowStepDefinition.objects.count(),
             "TriggerDefinition": TriggerDefinition.objects.count(),
-            "RoomAuraProfile": RoomAuraProfile.objects.count(),
-            "RoomResonance": RoomResonance.objects.count(),
+            "LocationValueModifier": LocationValueModifier.objects.count(),
             "Story": Story.objects.count(),
             "Chapter": Chapter.objects.count(),
             "Episode": Episode.objects.count(),
@@ -1726,9 +1751,9 @@ class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
         )
         self.assertTrue(
             TriggerDefinition.objects.filter(
-                name="Hallowed Rejection — technique cast in celestial-aura room",
+                name="Resonance Environment — technique cast",
             ).exists(),
-            "seed_magic_dev() must include Hallowed Rejection trigger",
+            "seed_magic_dev() must include resonance-environment cast trigger",
         )
         self.assertTrue(
             Story.objects.filter(title="The Hallowed Threshold").exists(),
