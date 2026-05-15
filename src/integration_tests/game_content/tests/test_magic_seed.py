@@ -27,6 +27,8 @@ from integration_tests.game_content.magic import (
     MagicConfigResult,
     RitualSeedResult,
     ThreadPullCatalogResult,
+    _seed_affinity_interactions,
+    _seed_resonance_environment_config,
     seed_canonical_affinities,
     seed_canonical_resonances,
     seed_canonical_rituals,
@@ -1721,3 +1723,123 @@ class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
             second_story_count,
             "Story counts must be stable across seed_magic_dev() runs",
         )
+
+
+# ---------------------------------------------------------------------------
+# RC1 — _seed_affinity_interactions() + _seed_resonance_environment_config()
+# ---------------------------------------------------------------------------
+
+# The 9 directed pairs from the spec, keyed (source_name, env_name).
+_EXPECTED_INTERACTIONS: list[tuple[str, str, str, str, str, str]] = [
+    # (source_name, env_name, valence, kind, aggressor, severity_multiplier)
+    ("Celestial", "Celestial", "aligned", "amplify", "environment", "1.00"),
+    ("Celestial", "Abyssal", "opposed", "reject", "environment", "1.00"),
+    ("Celestial", "Primal", "opposed", "repel", "environment", "0.30"),
+    ("Abyssal", "Celestial", "opposed", "reject", "environment", "1.00"),
+    ("Abyssal", "Abyssal", "aligned", "amplify", "environment", "1.00"),
+    ("Abyssal", "Primal", "opposed", "corrupt", "caster", "1.00"),
+    ("Primal", "Celestial", "opposed", "reject", "environment", "1.00"),
+    ("Primal", "Abyssal", "opposed", "corrupt", "environment", "1.00"),
+    ("Primal", "Primal", "aligned", "amplify", "environment", "1.00"),
+]
+
+
+class SeedAffinityInteractionsTests(TestCase):
+    """RC1: _seed_affinity_interactions() creates the 9 directed AffinityInteraction rows."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        seed_canonical_affinities()
+        _seed_affinity_interactions()
+
+    def test_exactly_nine_rows_exist(self) -> None:
+        from world.magic.models.resonance_environment import AffinityInteraction
+
+        self.assertEqual(AffinityInteraction.objects.count(), 9)
+
+    def test_each_row_has_correct_valence_kind_aggressor_multiplier(self) -> None:
+        from decimal import Decimal
+
+        from world.magic.models.affinity import Affinity
+        from world.magic.models.resonance_environment import AffinityInteraction
+
+        for src_name, env_name, valence, kind, aggressor, mult_str in _EXPECTED_INTERACTIONS:
+            with self.subTest(source=src_name, env=env_name):
+                src = Affinity.objects.get(name=src_name)
+                env = Affinity.objects.get(name=env_name)
+                row = AffinityInteraction.objects.get(
+                    source_affinity=src,
+                    environment_affinity=env,
+                )
+                self.assertEqual(row.valence, valence, f"{src_name}->{env_name} valence")
+                self.assertEqual(row.kind, kind, f"{src_name}->{env_name} kind")
+                self.assertEqual(row.aggressor, aggressor, f"{src_name}->{env_name} aggressor")
+                self.assertEqual(
+                    row.severity_multiplier,
+                    Decimal(mult_str),
+                    f"{src_name}->{env_name} severity_multiplier",
+                )
+
+    def test_idempotent(self) -> None:
+        from world.magic.models.resonance_environment import AffinityInteraction
+
+        count_before = AffinityInteraction.objects.count()
+        _seed_affinity_interactions()
+        self.assertEqual(AffinityInteraction.objects.count(), count_before)
+
+    def test_idempotent_preserves_values(self) -> None:
+        """Second call must not overwrite existing rows (get_or_create semantics)."""
+        from decimal import Decimal
+
+        from world.magic.models.affinity import Affinity
+        from world.magic.models.resonance_environment import AffinityInteraction
+
+        # Simulate a staff edit via bulk update (bypasses identity map).
+        celestial = Affinity.objects.get(name="Celestial")
+        primal = Affinity.objects.get(name="Primal")
+        AffinityInteraction.objects.filter(
+            source_affinity=celestial,
+            environment_affinity=primal,
+        ).update(severity_multiplier=Decimal("0.99"))
+
+        _seed_affinity_interactions()
+
+        db_val = (
+            AffinityInteraction.objects.filter(
+                source_affinity=celestial,
+                environment_affinity=primal,
+            )
+            .values("severity_multiplier")
+            .get()
+        )
+        self.assertEqual(
+            db_val["severity_multiplier"],
+            Decimal("0.99"),
+            "_seed_affinity_interactions() must not overwrite existing rows",
+        )
+
+
+class SeedResonanceEnvironmentConfigTests(TestCase):
+    """RC1: _seed_resonance_environment_config() creates the pk=1 singleton."""
+
+    def test_creates_singleton(self) -> None:
+        from world.magic.models.resonance_environment import ResonanceEnvironmentConfig
+
+        _seed_resonance_environment_config()
+        self.assertEqual(ResonanceEnvironmentConfig.objects.count(), 1)
+        cfg = ResonanceEnvironmentConfig.objects.get(pk=1)
+        self.assertIsNotNone(cfg)
+
+    def test_idempotent(self) -> None:
+        from world.magic.models.resonance_environment import ResonanceEnvironmentConfig
+
+        _seed_resonance_environment_config()
+        _seed_resonance_environment_config()
+        self.assertEqual(ResonanceEnvironmentConfig.objects.count(), 1)
+
+    def test_singleton_pk_is_one(self) -> None:
+        _seed_resonance_environment_config()
+        from world.magic.models.resonance_environment import ResonanceEnvironmentConfig
+
+        cfg = ResonanceEnvironmentConfig.objects.get()
+        self.assertEqual(cfg.pk, 1)

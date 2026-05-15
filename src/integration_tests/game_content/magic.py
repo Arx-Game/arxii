@@ -1211,6 +1211,63 @@ def seed_canonical_resonances() -> None:
         )
 
 
+# Task RC1 — directed RPS affinity interaction matrix
+# (source_name, env_name, valence, kind, aggressor, severity_multiplier)
+_AFFINITY_INTERACTION_ROWS: list[tuple[str, str, str, str, str, str]] = [
+    ("Celestial", "Celestial", "aligned", "amplify", "environment", "1.00"),
+    ("Celestial", "Abyssal", "opposed", "reject", "environment", "1.00"),
+    ("Celestial", "Primal", "opposed", "repel", "environment", "0.30"),
+    ("Abyssal", "Celestial", "opposed", "reject", "environment", "1.00"),
+    ("Abyssal", "Abyssal", "aligned", "amplify", "environment", "1.00"),
+    ("Abyssal", "Primal", "opposed", "corrupt", "caster", "1.00"),
+    ("Primal", "Celestial", "opposed", "reject", "environment", "1.00"),
+    ("Primal", "Abyssal", "opposed", "corrupt", "environment", "1.00"),
+    ("Primal", "Primal", "aligned", "amplify", "environment", "1.00"),
+]
+
+
+def _seed_affinity_interactions() -> None:
+    """Seed the 9 directed AffinityInteraction rows (caster affinity → place affinity).
+
+    Depends on seed_canonical_affinities() (Celestial / Primal / Abyssal must exist).
+    Idempotent: get_or_create keyed on (source_affinity, environment_affinity).
+    Staff edits to valence/kind/aggressor/severity_multiplier are preserved.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.magic.models.affinity import Affinity  # noqa: PLC0415
+    from world.magic.models.resonance_environment import AffinityInteraction  # noqa: PLC0415
+
+    canonical_names = ("Celestial", "Primal", "Abyssal")
+    affinity_cache: dict[str, Affinity] = {
+        obj.name: obj for obj in Affinity.objects.filter(name__in=canonical_names)
+    }
+    for src_name, env_name, valence, kind, aggressor, mult_str in _AFFINITY_INTERACTION_ROWS:
+        AffinityInteraction.objects.get_or_create(
+            source_affinity=affinity_cache[src_name],
+            environment_affinity=affinity_cache[env_name],
+            defaults={
+                "valence": valence,
+                "kind": kind,
+                "aggressor": aggressor,
+                "severity_multiplier": Decimal(mult_str),
+            },
+        )
+
+
+def _seed_resonance_environment_config() -> None:
+    """Seed (lazy-create) the ResonanceEnvironmentConfig singleton (pk=1).
+
+    Delegates to get_resonance_environment_config() which is idempotent by
+    construction — it uses get_or_create(pk=1) internally.
+    """
+    from world.magic.services.resonance_environment import (  # noqa: PLC0415
+        get_resonance_environment_config,
+    )
+
+    get_resonance_environment_config()
+
+
 # ---------------------------------------------------------------------------
 # Task 1.1 — seed_magic_config()
 # ---------------------------------------------------------------------------
