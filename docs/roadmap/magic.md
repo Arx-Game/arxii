@@ -1013,6 +1013,119 @@ Interim status notes:
   covenant entity / formation ritual / lifecycle still post-MVP. See
   `docs/roadmap/covenants.md` for the full picture.
 
+## Resonance-Environment Interaction
+
+**Status: SHIPPED (branch `magic-story-slice-spec`, cast-time both poles)**
+**Spec:** `docs/superpowers/specs/2026-05-15-resonance-environment-interaction-design.md`
+
+### Lore
+
+- **The Abyss corrupts.** Abyssal magic infects and corrupts the worldly — both primal *casters*
+  and primal *places*. It is the aggressor toward the Primal.
+- **The Celestial is too pure for the world.** It does not corrupt; it is repelled by worldly
+  things and only ever gets rejected or pushed out when away from celestial places. Celestial
+  places reject all worldly magic.
+- **Rock-paper-scissors, not symmetric opposition.** Primal beats Celestial beats Abyssal beats
+  Primal. Each interaction is a *directed* relationship — asymmetric per ordered
+  (caster-affinity, place-affinity) pair. No off-diagonal NEUTRAL cells: every pairing interacts.
+
+### The 9 directed AffinityInteraction pairs
+
+Stated as "**caster affinity** casting in **place affinity** → outcome." These are authored
+`AffinityInteraction` rows (staff-tunable data, not hard-coded logic).
+
+| # | Caster | Place | Valence | Kind | Default aggressor | Severity |
+|---|--------|-------|---------|------|-------------------|----------|
+| 1 | Celestial | Celestial | ALIGNED | AMPLIFY | environment (boon to caster) | 1.0 |
+| 2 | Celestial | Abyssal | OPPOSED | REJECT | environment (harms working) | strong (1.0) |
+| 3 | Celestial | Primal | OPPOSED | REPEL | environment (harms working) | mild (0.3) |
+| 4 | Abyssal | Celestial | OPPOSED | REJECT | environment (harms working) — *Hallowed Rejection* | strong (1.0) |
+| 5 | Abyssal | Abyssal | ALIGNED | AMPLIFY | environment (boon to caster) | 1.0 |
+| 6 | Abyssal | Primal | OPPOSED | CORRUPT | **caster** (caster defiles the place) | strong (1.0) |
+| 7 | Primal | Celestial | OPPOSED | REJECT | environment (harms working) | strong (1.0) |
+| 8 | Primal | Abyssal | OPPOSED | CORRUPT | environment (place corrupts the caster) | strong (1.0) |
+| 9 | Primal | Primal | ALIGNED | AMPLIFY | environment (boon to caster) | 1.0 |
+
+Asymmetries: Abyssal corrupts Primal in both arrangements (#6 defiles a primal place; #8 a
+primal caster is corrupted by an abyssal place). Celestial only ever gets rejected or repelled
+away from non-celestial places and never corrupts. Celestial places reject all worldly magic.
+
+### Three-layer architecture
+
+| Layer | What | Form |
+|---|---|---|
+| **Mechanism** | `evaluate_resonance_environment()` | core service in `world/magic/services/resonance_environment.py` — peer of `accrue_corruption` |
+| **Tuning** | 9 `AffinityInteraction` rows + scalar coefficients | `AffinityInteraction` model (seeded, admin-editable) + `ResonanceEnvironmentConfig` singleton |
+| **Content** | authored conditions that react | data-driven: ConditionTemplate + reactive TriggerDefinition + FlowDefinition |
+
+The primitive is a core magic-physics mechanism. Authored content stays data-driven and
+calls into it — honors "no service functions for authored content."
+
+### What shipped (cast-time, both poles)
+
+- **`evaluate_resonance_environment(caster, room, technique)`** primitive in
+  `world/magic/services/resonance_environment.py`. Returns a frozen `ResonanceEnvironmentEffect`
+  dataclass (valence, kind, direction, magnitude, affinities). Magnitude 0 → inert short-circuit.
+- **9 `AffinityInteraction` rows** + `ResonanceEnvironmentConfig` singleton seeded in
+  `integration_tests/game_content/magic.py`.
+- **Universal cast subscriber** via the ubiquitous **"Magically Attuned"** baseline
+  `ConditionTemplate` (no Trigger-model schema change; uses the existing
+  `ConditionTemplate.reactive_triggers` M2M + T4/T8/T10 install path, mirroring the
+  Soul Tether precedent). Every magic-capable character receives this condition.
+- **OPPOSED backfire** — the existing Hallowed Threshold story content (Hallowed Rejection
+  scar, pairs #4/#7: abyssal/primal caster in a celestial place) is now driven by the
+  primitive. The flow calls `evaluate_resonance_environment`, branches on OPPOSED, runs
+  `perform_check` at config-derived difficulty, and applies authored Tempered/Singed/
+  Burning/Hallowed Burn conditions by `CheckOutcome`.
+- **ALIGNED amplification boon** — new "Empowered by Resonant Ground" `ConditionTemplate`.
+  When the primitive returns ALIGNED, the flow applies the boon (scaled by magnitude;
+  no check — a boon).
+- **Pipeline test** — 12 subtests: 4 OPPOSED outcomes × 2 place-intensity tiers, the
+  ALIGNED boon subtest, an inert short-circuit subtest, a CASTER_DOMINANT stub subtest
+  (primitive returns the correct direction; flow treats as inert, standing as the
+  fill-in point for deferred defilement), a missing-`CharacterAura` inert unit test,
+  and the second-earner Discovery test.
+- **Event timing: `TECHNIQUE_CAST`** (post-resolve — the environment reacts after the
+  working fires). A true `TECHNIQUE_PRE_CAST` block/modify variant is deferred.
+
+### What's deferred (primitive already supports it — additive, not re-architecture)
+
+1. **Presence-escalation** — characters with heavy opposing scars are affected on mere
+   *entry* (`MOVED`), not only on cast. Delivered as a scar-gated MOVED `TriggerDefinition`
+   via the existing `ConditionTemplate.reactive_triggers` M2M. `evaluate_resonance_environment`
+   already accepts `technique=None` for presence-time evaluation. Cheap follow-on.
+2. **Defilement (CASTER_DOMINANT)** — when a strong opposing caster overpowers a weak place,
+   the caster degrades the place's cascade resonance (writes down its `effective_value`).
+   The primitive already returns `direction=CASTER_DOMINANT`; the deferred work authors the
+   defilement effect. **Soul-tether integration lever (must be preserved):** defilement's
+   caster→world corruption MUST be emitted through the existing interceptable
+   `CORRUPTION_ACCRUING` event (the one `soul_tether_redirect_handler` already subscribes
+   to) — then a Sinner's Hollow can absorb world-defilement corruption with zero new wiring.
+   Whoever builds defilement routes corruption through the interceptable event, never writes
+   corruption directly.
+3. **"Magically Attuned" production grant** — the slice's pipeline test applies the baseline
+   condition directly in `setUp`. Granting it automatically at CG finalization / first cast
+   is a follow-on; the ConditionTemplate and `reactive_triggers` M2M are fully authored.
+4. **Brother's richer formula** — steps 5–7 of the v1 formula are deliberately simple. His
+   follow-up enriches the primitive's body (technique-resonance opposition weighting,
+   multi-resonance place weighting). Call sites, `AffinityInteraction` data,
+   `ResonanceEnvironmentConfig`, and authored content do not change.
+5. **`TECHNIQUE_PRE_CAST` block/modify variant** — a true pre-cast intercept that could
+   block or modify the cast before it resolves needs cancel/modify-payload semantics out
+   of scope here. Concretizes the "technique pre-cast backfire trigger" deferred in
+   `docs/plans/2026-05-14-room-cascade-resonance-unification.md`.
+
+### Cross-reference: combat clash-of-wills
+
+The planned combat **clash** feature (opposed-affinity casters contesting magical energy —
+see `docs/roadmap/combat.md`) is the caster-vs-caster analogue of this caster-vs-place
+interaction. When built, it MUST reuse the same `AffinityInteraction` rows and
+`ResonanceEnvironmentConfig` tuning rather than author a parallel opposition table — the
+affinity-opposition substrate is shared; clash only adds the contested-escalation mechanic
+on top.
+
+---
+
 ## Notes
 
 ### Cross-reference: Aspect Focus & Path Evolution
