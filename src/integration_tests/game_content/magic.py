@@ -540,6 +540,103 @@ def _seed_endure_hallowed_ground_check() -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Task 13b — _seed_hallowed_reaction_conditions()
+# ---------------------------------------------------------------------------
+
+_HALLOWED_REACTION_SPECS: list[dict[str, str]] = [
+    {
+        "name": "Tempered Against Light",
+        "description": (
+            "The caster's flesh remembers an old burn; they walk hallowed ground unscathed."
+        ),
+        "player_description": (
+            "You walked into the light and walked out unchanged. Some part of you is being remade."
+        ),
+        "observer_description": "Their skin barely flickers in the consecrated air.",
+    },
+    {
+        "name": "Singed",
+        "description": "A faint mark of celestial rejection.",
+        "player_description": (
+            "Light glances along your skin. A faint mark stings where the spell met sanctified air."
+        ),
+        "observer_description": "A pale brand glows briefly on their skin.",
+    },
+    {
+        "name": "Burning",
+        "description": "Sanctified flame on Abyssal flesh.",
+        "player_description": "Your skin burns where it meets the consecrated air.",
+        "observer_description": "They smolder, marked by light they cannot bear.",
+    },
+    {
+        "name": "Hallowed Burn",
+        "description": "A grievous, self-rebuking mark from sanctified ground.",
+        "player_description": (
+            "The sanctified ground answers the spell with fire. "
+            "You are flung from the working, burning."
+        ),
+        "observer_description": (
+            "They are flung from their spell, burning where the light touched them."
+        ),
+    },
+    {
+        "name": "Cast Disrupted",
+        "description": "The casting failed mid-working; threads in the caster's hands snap.",
+        "player_description": (
+            "The threads in your hands snap. Whatever you were weaving has come undone."
+        ),
+        "observer_description": "The spell goes wide and collapses around them.",
+    },
+]
+
+
+def _seed_hallowed_reaction_conditions() -> None:
+    """Seed the 5 reaction conditions for the Hallowed Threshold pipeline.
+
+    These conditions are applied on different check outcomes when an
+    Abyssal-aligned caster uses a technique in a Celestial-aura room:
+      Critical Success -> Tempered Against Light
+      Success          -> Singed
+      Failure          -> Burning
+      Critical Failure -> Hallowed Burn + Cast Disrupted
+
+    Burning may already exist (factory-created in some tests); get_or_create
+    reuses an existing row with the same name.
+
+    All writes use get_or_create so re-running on a populated DB is a no-op.
+    """
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+    from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
+
+    # Ensure a "Magical" category exists. Reuse if already present.
+    category, _ = ConditionCategory.objects.get_or_create(
+        name="Magical",
+        defaults={
+            "description": "Magical conditions arising from spellcasting and aura interactions.",
+            "is_negative": True,
+            "display_order": 0,
+        },
+    )
+
+    for spec in _HALLOWED_REACTION_SPECS:
+        ConditionTemplate.objects.get_or_create(
+            name=spec["name"],
+            defaults={
+                "category": category,
+                "description": spec["description"],
+                "player_description": spec["player_description"],
+                "observer_description": spec["observer_description"],
+                "default_duration_type": DurationType.ROUNDS,
+                "default_duration_value": 3,
+                "is_stackable": False,
+                "max_stacks": 1,
+                "has_progression": False,
+                "can_be_dispelled": True,
+            },
+        )
+
+
 def seed_canonical_affinities() -> None:
     """Seed the 3 canonical magic Affinities (Celestial / Primal / Abyssal).
 

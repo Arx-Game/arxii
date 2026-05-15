@@ -1049,3 +1049,56 @@ class SeedCanonicalResonancesTests(TestCase):
         for name in ("Light", "Sanctity", "Radiance"):
             res = Resonance.objects.get(name=name)
             self.assertEqual(res.affinity, celestial)
+
+
+# ---------------------------------------------------------------------------
+# Task 13b — _seed_hallowed_reaction_conditions()
+# ---------------------------------------------------------------------------
+
+
+class SeedHallowedReactionConditionsTests(TestCase):
+    def test_seeds_five_reaction_conditions(self):
+        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
+        from world.conditions.models import ConditionTemplate
+
+        _seed_hallowed_reaction_conditions()
+        names = set(ConditionTemplate.objects.values_list("name", flat=True))
+        expected = {
+            "Tempered Against Light",
+            "Singed",
+            "Burning",
+            "Hallowed Burn",
+            "Cast Disrupted",
+        }
+        self.assertGreaterEqual(names, expected)
+
+    def test_idempotent(self):
+        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
+        from world.conditions.models import ConditionTemplate
+
+        _seed_hallowed_reaction_conditions()
+        count_a = ConditionTemplate.objects.count()
+        _seed_hallowed_reaction_conditions()
+        count_b = ConditionTemplate.objects.count()
+        self.assertEqual(count_a, count_b)
+
+    def test_burning_reuses_existing_factory_template(self):
+        """If a Burning template already exists (factory-created), get_or_create reuses it."""
+        from integration_tests.game_content.magic import _seed_hallowed_reaction_conditions
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.conditions.models import ConditionTemplate
+
+        # Pre-create a Burning template (mimics factory test setup).
+        pre_existing = ConditionTemplateFactory(name="Burning")
+
+        _seed_hallowed_reaction_conditions()
+
+        # Same row, not a duplicate.
+        self.assertEqual(
+            ConditionTemplate.objects.filter(name="Burning").count(),
+            1,
+        )
+        self.assertEqual(
+            ConditionTemplate.objects.get(name="Burning").pk,
+            pre_existing.pk,
+        )
