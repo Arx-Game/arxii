@@ -8,7 +8,10 @@ interact with damage types, and interact with other conditions.
 Design doc: docs/plans/2026-01-25-conditions-models-design.md
 """
 
+from __future__ import annotations
+
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from django.db import models
 from django.db.models import Q
@@ -25,6 +28,9 @@ from world.conditions.constants import (
     TreatmentTargetKind,
 )
 from world.conditions.types import AdvancementResistFailureKind
+
+if TYPE_CHECKING:
+    from world.conditions.handlers import ConditionTemplateReactiveHandler
 
 # =============================================================================
 # Lookup Tables (SharedMemoryModel - cached, rarely change)
@@ -60,7 +66,7 @@ class ConditionCategory(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
     @cached_property
-    def cached_conditions(self) -> list["ConditionTemplate"]:
+    def cached_conditions(self) -> list[ConditionTemplate]:
         """Fallback for Prefetch(..., to_attr='cached_conditions').
 
         When prefetched, Django populates this directly. When accessed without
@@ -322,13 +328,19 @@ class ConditionTemplate(NaturalKeyMixin, SharedMemoryModel):
         return self.name
 
     @cached_property
-    def cached_stages(self) -> list["ConditionStage"]:
+    def cached_stages(self) -> list[ConditionStage]:
         """Fallback for Prefetch(..., to_attr='cached_stages').
 
         When prefetched, Django populates this directly. When accessed without
         prefetch, falls back to a fresh query.
         """
         return list(self.stages.all())
+
+    @cached_property
+    def reactive_handler(self) -> ConditionTemplateReactiveHandler:
+        from world.conditions.handlers import ConditionTemplateReactiveHandler  # noqa: PLC0415
+
+        return ConditionTemplateReactiveHandler(self)
 
 
 class ConditionStage(NaturalKeyMixin, SharedMemoryModel):
@@ -512,7 +524,7 @@ class ConditionOrStageEffect(models.Model):
             ),
         ]
 
-    def get_condition_template(self) -> "ConditionTemplate":
+    def get_condition_template(self) -> ConditionTemplate:
         """Get the associated condition template."""
         if self.condition:
             return self.condition
