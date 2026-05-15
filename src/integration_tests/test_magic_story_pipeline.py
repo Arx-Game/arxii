@@ -39,6 +39,7 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 from evennia.utils.test_resources import EvenniaTestCase
+from parameterized import parameterized
 
 from integration_tests.game_content.magic import seed_starter_magic_story
 from world.character_sheets.factories import CharacterSheetFactory
@@ -178,20 +179,103 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         self.caster.save()
 
     # -------------------------------------------------------------------------
-    # test_low_opposed_success: RD1 one end-to-end subtest
+    # T0-T7: parametrized across all 8 outcome × intensity combinations
     # -------------------------------------------------------------------------
 
-    def test_low_opposed_success(self) -> None:
-        """Abyssal caster in Celestial-mag-10 room, forced Success.
+    @parameterized.expand(
+        [
+            (
+                "low_critical_success",
+                "low",
+                "Critical Success",
+                "Tempered Against Light",
+                "Tempered Walk",
+                "Hallowed-Hardened",
+                35,
+            ),
+            (
+                "low_success",
+                "low",
+                "Success",
+                "Singed",
+                "Marked Path",
+                "Touched by Light",
+                35,
+            ),
+            (
+                "low_failure",
+                "low",
+                "Failure",
+                "Burning",
+                "Marked Path",
+                None,
+                35,
+            ),
+            (
+                "low_critical_failure",
+                "low",
+                "Critical Failure",
+                "Hallowed Burn",
+                "Cast Out",
+                "Cast Out by the Light",
+                35,
+            ),
+            (
+                "high_critical_success",
+                "high",
+                "Critical Success",
+                "Tempered Against Light",
+                "Tempered Walk",
+                "Hallowed-Hardened",
+                70,
+            ),
+            (
+                "high_success",
+                "high",
+                "Success",
+                "Singed",
+                "Marked Path",
+                "Touched by Light",
+                70,
+            ),
+            (
+                "high_failure",
+                "high",
+                "Failure",
+                "Burning",
+                "Marked Path",
+                None,
+                70,
+            ),
+            (
+                "high_critical_failure",
+                "high",
+                "Critical Failure",
+                "Hallowed Burn",
+                "Cast Out",
+                "Cast Out by the Light",
+                70,
+            ),
+        ]
+    )
+    def test_opposed_matrix(  # noqa: PLR0913 — parametrized test; one arg per scenario column
+        self,
+        test_id: str,  # noqa: ARG002 — used by parameterized for method name generation
+        intensity: str,
+        outcome_name: str,
+        expected_condition: str,
+        expected_episode: str,
+        expected_achievement: str | None,
+        expected_difficulty: int,
+    ) -> None:
+        """Cast technique → resonance check → condition → beat → story → achievement.
 
-        Expected pipeline:
-          TECHNIQUE_CAST fires → resonance-environment trigger runs →
-          primitive returns OPPOSED/REJECT magnitude=10 →
-          perform_check difficulty=35 → forced Success →
-          "Singed" condition applied → Beat-Singed SUCCESS →
-          StoryProgress → "Marked Path" → NarrativeMessages → "Touched by Light".
+        Parametrized across 4 CheckOutcomes × 2 intensity tiers = 8 subtests.
+
+        Low room (celestial mag 10):  backfire_difficulty = 30 + round(10 × 0.5) = 35
+        High room (celestial mag 80): backfire_difficulty = 30 + round(80 × 0.5) = 70
         """
-        self._place_caster_in("low")
+        self._place_caster_in(intensity)
 
         # ------------------------------------------------------------------
         # T0: Pre-state assertions
@@ -227,9 +311,14 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         self.assertEqual(self.progress.current_episode, self.episode_1)
 
         # ------------------------------------------------------------------
-        # T1: Cast inside force_check_outcome("Success")
+        # T1: Cast inside force_check_outcome(outcome)
+        #
+        # The force_check_outcome context manager intercepts the NEXT
+        # perform_check call (which happens inside the reactive flow after
+        # TECHNIQUE_CAST fires) and returns a synthetic CheckResult.
+        # The capture object records check_type + target_difficulty.
         # ------------------------------------------------------------------
-        forced_outcome = CheckOutcome.objects.get(name="Success")
+        forced_outcome = CheckOutcome.objects.get(name=outcome_name)
         with force_check_outcome(forced_outcome) as capture:
             use_technique(
                 character=self.caster,
@@ -240,57 +329,79 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         # ------------------------------------------------------------------
         # T2: Difficulty assertion
         #
-        # Low room Celestial cascade magnitude = 10.
-        # caster_alignment = 100/100 = 1.0.
-        # AffinityInteraction severity = 1.00; base_coefficient = 1.000.
-        # raw = 10 * 1.0 * 1.00 * 1.000 = 10.0 → magnitude = round(10.0) = 10.
-        # backfire = 30 + round(10 * 0.500) = 30 + 5 = 35.
+        # caster_alignment = aura.abyssal / 100 = 100/100 = 1.0
+        # AffinityInteraction(Abyssal→Celestial): OPPOSED, severity=1.00
+        # base_coefficient=1.000; backfire_base=30; per_magnitude=0.500
+        #
+        # Low room:  celestial magnitude 10 → 30 + round(10×0.5) = 35
+        # High room: celestial magnitude 80 → 30 + round(80×0.5) = 70
         # ------------------------------------------------------------------
         self.assertEqual(
             capture.target_difficulty,
-            35,
-            f"Expected difficulty=35 for Low Celestial room, got {capture.target_difficulty}",
+            expected_difficulty,
+            f"Expected difficulty={expected_difficulty} for {intensity} intensity room, "
+            f"got {capture.target_difficulty}",
         )
 
         # ------------------------------------------------------------------
-        # T3: "Singed" condition applied to caster
+        # T3: Expected reaction condition applied to caster
+        #
+        # The reactive flow's EVALUATE_EQUALS branch for the outcome fires
+        # flow_apply_condition(target=caster, condition_name=<expected_condition>).
+        # That calls apply_condition which creates a ConditionInstance.
+        #
+        # For Critical Failure: also assert "Cast Disrupted" was applied.
         # ------------------------------------------------------------------
-        from world.conditions.models import ConditionInstance
+        from world.conditions.models import ConditionInstance, ConditionTemplate
 
+        expected_cond_template = ConditionTemplate.objects.get(name=expected_condition)
         self.assertTrue(
             ConditionInstance.objects.filter(
                 target=self.caster,
-                condition=self.singed_template,
+                condition=expected_cond_template,
             ).exists(),
-            "'Singed' condition must be applied to caster after 'Success'",
+            f"'{expected_condition}' condition must be applied to caster after '{outcome_name}'",
         )
 
+        if outcome_name == "Critical Failure":
+            self.assertTrue(
+                ConditionInstance.objects.filter(
+                    target=self.caster,
+                    condition=self.cast_disrupted_template,
+                ).exists(),
+                "Cast Disrupted must also be applied to caster on Critical Failure",
+            )
+
         # ------------------------------------------------------------------
-        # T4: Beat for "Singed" flipped to SUCCESS; others still UNSATISFIED
+        # T4: Expected beat flipped to SUCCESS; others still UNSATISFIED
+        #
+        # apply_condition internally calls _notify_stories_condition_applied
+        # → on_condition_applied → on_character_state_changed
+        # → evaluate_auto_beats(progress).
         # ------------------------------------------------------------------
         from world.stories.models import BeatCompletion
 
-        beat_singed = Beat.objects.get(
+        beat_for_outcome = Beat.objects.get(
             episode=self.episode_1,
-            required_condition_template=self.singed_template,
+            required_condition_template=expected_cond_template,
         )
-        beat_singed.refresh_from_db()
+        beat_for_outcome.refresh_from_db()
         self.assertEqual(
-            beat_singed.outcome,
+            beat_for_outcome.outcome,
             BeatOutcome.SUCCESS,
-            "Beat for 'Singed' must be flipped to SUCCESS after condition applied",
+            f"Beat for '{expected_condition}' must be flipped to SUCCESS after condition applied",
         )
         self.assertTrue(
             BeatCompletion.objects.filter(
-                beat=beat_singed,
+                beat=beat_for_outcome,
                 character_sheet=self.sheet,
             ).exists(),
-            "BeatCompletion ledger row must exist for beat 'Singed'",
+            f"BeatCompletion ledger row must exist for beat '{expected_condition}'",
         )
 
         # All other beats in episode 1 must remain UNSATISFIED.
         for beat in Beat.objects.filter(episode=self.episode_1).exclude(
-            required_condition_template=self.singed_template,
+            required_condition_template=expected_cond_template,
         ):
             beat.refresh_from_db()
             self.assertEqual(
@@ -300,7 +411,10 @@ class MagicStoryPipelineTests(EvenniaTestCase):
             )
 
         # ------------------------------------------------------------------
-        # T5: StoryProgress advances to "Marked Path"
+        # T5: StoryProgress advances to expected destination episode
+        #
+        # resolve_episode selects the unique eligible transition (AUTO mode)
+        # and advances progress to the appropriate destination.
         # ------------------------------------------------------------------
         from world.stories.models import Episode, EpisodeResolution
         from world.stories.services.episodes import resolve_episode
@@ -311,12 +425,12 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         self.progress.refresh_from_db()
         destination = Episode.objects.get(
             chapter__story=self.story,
-            title="Marked Path",
+            title=expected_episode,
         )
         self.assertEqual(
             self.progress.current_episode,
             destination,
-            "StoryProgress must advance to 'Marked Path' after episode resolution",
+            f"StoryProgress must advance to '{expected_episode}' after episode resolution",
         )
 
         self.assertTrue(
@@ -329,11 +443,15 @@ class MagicStoryPipelineTests(EvenniaTestCase):
 
         # ------------------------------------------------------------------
         # T6: NarrativeMessage rows for beat completion and episode resolution
+        #
+        # notify_beat_completion and notify_episode_resolution both create
+        # NarrativeMessage rows with related_beat_completion /
+        # related_episode_resolution FKs.
         # ------------------------------------------------------------------
         from world.narrative.models import NarrativeMessage
 
         beat_completion = BeatCompletion.objects.get(
-            beat=beat_singed,
+            beat=beat_for_outcome,
             character_sheet=self.sheet,
         )
         beat_msgs = NarrativeMessage.objects.filter(
@@ -357,19 +475,30 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         )
 
         # ------------------------------------------------------------------
-        # T7: "Touched by Light" achievement granted
+        # T7: Achievement assertions
+        #
+        # If expected_achievement is not None: CharacterAchievement granted;
+        # Discovery row exists (first earner in this fresh per-test state).
+        # If expected_achievement is None (Failure path): no CharacterAchievement
+        # should have been granted.
         # ------------------------------------------------------------------
         from world.achievements.models import Achievement, CharacterAchievement, Discovery
 
-        achievement = Achievement.objects.get(name="Touched by Light")
-        self.assertTrue(
-            CharacterAchievement.objects.filter(
-                character_sheet=self.sheet,
-                achievement=achievement,
-            ).exists(),
-            "'Touched by Light' CharacterAchievement must be granted",
-        )
-        self.assertTrue(
-            Discovery.objects.filter(achievement=achievement).exists(),
-            "Discovery row must exist for first earner of 'Touched by Light'",
-        )
+        if expected_achievement is not None:
+            achievement = Achievement.objects.get(name=expected_achievement)
+            self.assertTrue(
+                CharacterAchievement.objects.filter(
+                    character_sheet=self.sheet,
+                    achievement=achievement,
+                ).exists(),
+                f"'{expected_achievement}' CharacterAchievement must be granted",
+            )
+            self.assertTrue(
+                Discovery.objects.filter(achievement=achievement).exists(),
+                f"Discovery row must exist for first earner of '{expected_achievement}'",
+            )
+        else:
+            self.assertFalse(
+                CharacterAchievement.objects.filter(character_sheet=self.sheet).exists(),
+                "No CharacterAchievement should be granted on a Failure outcome",
+            )
