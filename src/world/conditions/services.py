@@ -739,7 +739,7 @@ def _install_reactive_side_effects(
     # Auto-install reactive triggers via the cached handler.
     trigger_defs = handler.reactive_trigger_definitions
     if trigger_defs:
-        Trigger.objects.bulk_create(
+        created_triggers = Trigger.objects.bulk_create(
             [
                 Trigger(
                     trigger_definition=td,
@@ -749,6 +749,13 @@ def _install_reactive_side_effects(
                 for td in trigger_defs
             ]
         )
+        # Notify the target's in-memory TriggerHandler so the new rows are
+        # visible to the NEXT emit_event dispatch (bulk_create bypasses
+        # save(), so on_trigger_added is not called automatically).
+        trigger_handler = getattr(target, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+        if trigger_handler is not None:
+            for new_trigger in created_triggers:
+                trigger_handler.on_trigger_added(new_trigger)
 
     # Auto-increment bridged stats via the cached handler.
     try:

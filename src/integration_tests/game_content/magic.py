@@ -803,12 +803,14 @@ def _seed_hallowed_rejection_flow_and_trigger() -> None:
             flow=flow,
             parent=None,
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
-            variable_name="flows.service_functions.affinity.compute_intensity_difficulty",
+            variable_name="flows.service_functions.affinity.compute_intensity_difficulty_for_character",
             parameters={
-                # @caster resolves the "caster" flow variable, then .location walks
-                # to the room. The flow variable "caster" is populated from the
-                # TechniqueCastPayload.caster field by the reactive handler (T15).
-                "room": "@caster.location",
+                # @payload.caster walks the TechniqueCastPayload.caster field
+                # (the ObjectDB character). The wrapper reads .location internally,
+                # handling both raw ObjectDB and BaseState-wrapped objects.
+                # The "payload" variable is always populated by emit.py from
+                # the event payload passed to emit_event().
+                "character": "@payload.caster",
                 "affinity_name": "Celestial",
                 "base_difficulty": 10,
                 "per_resonance_modifier": 5,
@@ -817,23 +819,20 @@ def _seed_hallowed_rejection_flow_and_trigger() -> None:
         )
 
         # ---------------------------------------------------------------
-        # Step 2: perform_check → stored as check_outcome
+        # Step 2: flow_perform_check → stored as check_outcome (name string)
         # ---------------------------------------------------------------
-        # Parented to compute_step so it executes immediately after (first child).
-        # "@caster" is the flow variable that T15 seeds from the TECHNIQUE_CAST payload.
-        # check_type is looked up by name at runtime by perform_check.
-        # target_difficulty is a literal here; the reactive handler must set
-        # computed_difficulty into the variable_mapping before executing this step.
-        # For the pipeline test (T15), force_check_outcome bypasses the actual roll
-        # so the exact difficulty value does not matter.
+        # Uses the flow-callable wrapper (flows.service_functions.conditions)
+        # which looks up CheckType by name and returns the outcome name string.
+        # That string is compared against literal outcome names by EVALUATE_EQUALS
+        # in steps 3-6 below.
         perform_step = FlowStepDefinition.objects.create(
             flow=flow,
             parent=compute_step,
             action=FlowActionChoices.CALL_SERVICE_FUNCTION,
-            variable_name="world.checks.services.perform_check",
+            variable_name="flows.service_functions.conditions.flow_perform_check",
             parameters={
-                "character": "@caster",
-                "check_type": "endure_hallowed_ground",
+                "character": "@payload.caster",
+                "check_type_name": "endure_hallowed_ground",
                 "target_difficulty": "@computed_difficulty",
                 "result_variable": "check_outcome",
             },
@@ -843,8 +842,11 @@ def _seed_hallowed_rejection_flow_and_trigger() -> None:
         # Steps 3-6: EVALUATE_EQUALS branches on check_outcome
         # ---------------------------------------------------------------
         # Each conditional is a sibling under perform_step (same parent).
-        # On PASS: first child executes (apply_condition).
+        # On PASS: first child executes (flow_apply_condition).
         # On FAIL: next sibling executes (the next conditional).
+        #
+        # check_outcome is the outcome NAME string returned by flow_perform_check.
+        # EVALUATE_EQUALS compares it against the literal outcome name.
         #
         # Outcome → condition name(s) mapping:
         outcome_to_conditions: list[tuple[str, list[str]]] = [
@@ -861,18 +863,19 @@ def _seed_hallowed_rejection_flow_and_trigger() -> None:
                 variable_name="check_outcome",
                 parameters={"value": outcome_name},
             )
-            # Each apply_condition call is a child of the conditional (runs on PASS).
-            # When Critical Failure has two conditions, the second apply_condition is
-            # a sibling of the first (both parented to the EVALUATE_EQUALS step).
+            # Each flow_apply_condition call is a child of the conditional (runs on PASS).
+            # Uses the flow-callable wrapper which looks up ConditionTemplate by name.
+            # When Critical Failure has two conditions, the second is a sibling of
+            # the first (both parented to the EVALUATE_EQUALS step).
             for cond_name in condition_names:
                 FlowStepDefinition.objects.create(
                     flow=flow,
                     parent=conditional,
                     action=FlowActionChoices.CALL_SERVICE_FUNCTION,
-                    variable_name="world.conditions.services.apply_condition",
+                    variable_name="flows.service_functions.conditions.flow_apply_condition",
                     parameters={
-                        "target": "@caster",
-                        "condition": cond_name,
+                        "target": "@payload.caster",
+                        "condition_name": cond_name,
                     },
                 )
 

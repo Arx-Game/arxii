@@ -13,6 +13,46 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
 
+def compute_intensity_difficulty_for_character(
+    *,
+    character: ObjectDB,
+    affinity_name: str,
+    base_difficulty: int,
+    per_resonance_modifier: int,
+) -> int:
+    """Compute check difficulty from the character's current location's aura.
+
+    Flow-callable wrapper around ``compute_intensity_difficulty`` that accepts
+    a character (or BaseState wrapping one) rather than a raw room, so that
+    the flow execution layer can pass ``@payload.caster`` directly without
+    needing to unwrap the ObjectDB from a BaseState.
+
+    Args:
+        character: The casting character. May be a raw ObjectDB or a BaseState
+            wrapping one — both expose ``.location`` via Django or typeclass.
+        affinity_name: Name of the Affinity to count tagged resonances of.
+        base_difficulty: Baseline difficulty when count is 0.
+        per_resonance_modifier: Difficulty added per matched resonance.
+
+    Returns:
+        Computed difficulty value (int). Returns ``base_difficulty`` when
+        the character has no location or the room has no aura.
+    """
+    # Unwrap BaseState → underlying ObjectDB if character is a BaseState wrapper.
+    raw_character = getattr(character, "obj", character)  # noqa: GETATTR_LITERAL — BaseState.obj holds the ObjectDB
+    room = getattr(raw_character, "location", None)  # noqa: GETATTR_LITERAL — ObjectDB location attribute
+    if room is None:
+        return base_difficulty
+    # Walk room through its own BaseState wrapper if present.
+    raw_room = getattr(room, "obj", room)  # noqa: GETATTR_LITERAL — defensive unwrap
+    return compute_intensity_difficulty(
+        room=raw_room,
+        affinity_name=affinity_name,
+        base_difficulty=base_difficulty,
+        per_resonance_modifier=per_resonance_modifier,
+    )
+
+
 def compute_intensity_difficulty(
     *,
     room: ObjectDB,
