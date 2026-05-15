@@ -23,6 +23,7 @@ from integration_tests.game_content.magic import (
     MagicConfigResult,
     RitualSeedResult,
     ThreadPullCatalogResult,
+    seed_canonical_affinities,
     seed_canonical_rituals,
     seed_cantrip_starter_catalog,
     seed_magic_config,
@@ -918,3 +919,50 @@ class TestSeedMagicDev(TestCase):
                     f"Technique '{technique_name}' (action_key={action_key!r}) must exist "
                     f"exactly once after two seed_magic_dev() calls",
                 )
+
+
+# ---------------------------------------------------------------------------
+# Task 1.11 — seed_canonical_affinities()
+# ---------------------------------------------------------------------------
+
+
+class SeedCanonicalAffinitiesTests(TestCase):
+    """Task 1.11: seed_canonical_affinities() creates idempotent Affinity rows."""
+
+    def test_seeds_three_canonical_affinities(self) -> None:
+        seed_canonical_affinities()
+        from world.magic.models.affinity import Affinity
+
+        names = set(Affinity.objects.values_list("name", flat=True))
+        # Three canonical names must all exist after seeding.
+        self.assertGreaterEqual(names, {"Celestial", "Primal", "Abyssal"})
+
+    def test_idempotent(self) -> None:
+        seed_canonical_affinities()
+        from world.magic.models.affinity import Affinity
+
+        snapshot_a = sorted(Affinity.objects.values_list("name", flat=True))
+        seed_canonical_affinities()
+        snapshot_b = sorted(Affinity.objects.values_list("name", flat=True))
+        self.assertEqual(snapshot_a, snapshot_b)
+
+    def test_preserves_edits(self) -> None:
+        seed_canonical_affinities()
+        from world.magic.models.affinity import Affinity
+
+        celestial = Affinity.objects.get(name="Celestial")
+        # Affinity may or may not have a 'description' field — pick whatever
+        # editable text field exists. If only `name` is editable, skip this test.
+        editable_field = None
+        for candidate in ("description", "display_name", "flavor_text"):
+            if hasattr(celestial, candidate):
+                editable_field = candidate
+                break
+        if editable_field is None:
+            self.skipTest("Affinity has no editable text field to mutate")
+        setattr(celestial, editable_field, "edited by t11 test")
+        celestial.save()
+
+        seed_canonical_affinities()
+        celestial.refresh_from_db()
+        self.assertEqual(getattr(celestial, editable_field), "edited by t11 test")

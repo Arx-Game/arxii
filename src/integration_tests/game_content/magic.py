@@ -453,6 +453,24 @@ class MagicContent:
 
 
 # ---------------------------------------------------------------------------
+# Task 1.11 — seed_canonical_affinities()
+# ---------------------------------------------------------------------------
+
+
+def seed_canonical_affinities() -> None:
+    """Seed the 3 canonical magic Affinities (Celestial / Primal / Abyssal).
+
+    Idempotent. Re-running on a populated DB is a no-op for these rows.
+    Other magic content (resonances, room aura, etc.) can depend on these
+    existing — call this before any seed that references Affinity FKs.
+    """
+    from world.magic.models.affinity import Affinity  # noqa: PLC0415
+
+    for name in ("Celestial", "Primal", "Abyssal"):
+        Affinity.objects.get_or_create(name=name)
+
+
+# ---------------------------------------------------------------------------
 # Task 1.1 — seed_magic_config()
 # ---------------------------------------------------------------------------
 
