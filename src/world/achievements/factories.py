@@ -1,12 +1,18 @@
 import factory
 from factory import django as factory_django
 
-from world.achievements.constants import ComparisonType, NotificationLevel, RewardType
+from world.achievements.constants import (
+    ComparisonType,
+    ConditionEventType,
+    NotificationLevel,
+    RewardType,
+)
 from world.achievements.models import (
     Achievement,
     AchievementRequirement,
     AchievementReward,
     CharacterAchievement,
+    ConditionStatRule,
     Discovery,
     RewardDefinition,
     StatDefinition,
@@ -91,3 +97,15 @@ class AchievementRewardFactory(factory_django.DjangoModelFactory):
     achievement = factory.SubFactory(AchievementFactory)
     reward = factory.SubFactory(RewardDefinitionFactory)
     reward_value = ""
+
+
+class ConditionStatRuleFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = ConditionStatRule
+
+    stat = factory.SubFactory(StatDefinitionFactory)
+    condition = factory.SubFactory(
+        "world.conditions.factories.ConditionTemplateFactory",
+    )
+    event_type = ConditionEventType.GAINED
+    increment_amount = 1

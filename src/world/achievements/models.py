@@ -10,7 +10,12 @@ from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.achievements.constants import ComparisonType, NotificationLevel, RewardType
+from world.achievements.constants import (
+    ComparisonType,
+    ConditionEventType,
+    NotificationLevel,
+    RewardType,
+)
 
 
 class StatDefinition(SharedMemoryModel):
@@ -341,3 +346,44 @@ class AchievementReward(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.achievement.name}: {self.reward.name}"
+
+
+class ConditionStatRule(SharedMemoryModel):
+    """Rule mapping a ConditionTemplate event to a StatDefinition increment.
+
+    When the named event occurs to an instance of `condition` on a character,
+    `stat` is incremented by `increment_amount` for that character. The
+    achievements engine then evaluates requirements via the existing
+    StatHandler.increment pipeline.
+
+    Lives in achievements/ because achievements own the rule set; conditions
+    know nothing about this table. Decoupling per the bridge-table pattern:
+    producer (conditions) is unaware of consumer (achievements) concerns.
+    """
+
+    stat = models.ForeignKey(
+        StatDefinition,
+        on_delete=models.CASCADE,
+        related_name="condition_rules",
+    )
+    condition = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.CASCADE,
+        related_name="stat_rules_for",
+    )
+    event_type = models.CharField(
+        max_length=32,
+        choices=ConditionEventType.choices,
+    )
+    increment_amount = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["stat", "condition", "event_type"],
+                name="unique_condition_stat_rule",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.condition.name} {self.event_type} → {self.stat.key}"

@@ -5,6 +5,7 @@ from world.codex.models import TraditionCodexGrant
 from world.magic.audere import AudereThreshold
 from world.magic.models import (
     Affinity,
+    AffinityInteraction,
     AnimaRitualPerformance,
     Cantrip,
     CharacterAnima,
@@ -25,6 +26,7 @@ from world.magic.models import (
     PoseEndorsement,
     Reincarnation,
     Resonance,
+    ResonanceEnvironmentConfig,
     ResonanceGainConfig,
     ResonanceGrant,
     Restriction,
@@ -64,6 +66,20 @@ class ResonanceAdmin(admin.ModelAdmin):
     @admin.display(description="Opposite")
     def get_opposite(self, obj: Resonance) -> str:
         return obj.opposite.name if obj.opposite else "-"
+
+
+@admin.register(AffinityInteraction)
+class AffinityInteractionAdmin(admin.ModelAdmin):
+    list_display = [
+        "source_affinity",
+        "environment_affinity",
+        "valence",
+        "kind",
+        "aggressor",
+        "severity_multiplier",
+    ]
+    list_filter = ["valence", "kind"]
+    raw_id_fields = ["source_affinity", "environment_affinity"]
 
 
 @admin.register(EffectType)
@@ -376,6 +392,27 @@ class ResonanceGainConfigAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
         return not ResonanceGainConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
+        return False
+
+
+@admin.register(ResonanceEnvironmentConfig)
+class ResonanceEnvironmentConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for the resonance-environment primitive."""
+
+    list_display = (
+        "pk",
+        "base_coefficient",
+        "caster_power_scalar",
+        "balanced_band",
+        "backfire_base_difficulty",
+        "backfire_difficulty_per_magnitude",
+        "updated_at",
+    )
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002 — Django admin convention
+        return not ResonanceEnvironmentConfig.objects.exists()
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002 — Django admin convention
         return False

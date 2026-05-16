@@ -15,6 +15,7 @@ from datetime import timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Q, QuerySet, Sum
 from django.db.models.functions import Coalesce
@@ -28,6 +29,8 @@ from flows.events.payloads import (
     ConditionRemovedPayload,
     ConditionStageChangedPayload,
 )
+from flows.models.triggers import Trigger
+from world.achievements.constants import ConditionEventType
 from world.checks.models import CheckType
 from world.checks.services import perform_check
 from world.conditions.constants import (
@@ -623,6 +626,7 @@ def apply_condition(  # noqa: PLR0913
 
     if result.success and result.instance is not None:
         _notify_stories_condition_applied(target, result.instance)
+        _install_reactive_side_effects(target, condition, result.instance)
 
     return result
 
@@ -712,6 +716,55 @@ def bulk_apply_conditions(
         _invalidate_condition_handler_if_character(target)
 
     return results
+
+
+def _install_reactive_side_effects(
+    target: "ObjectDB",
+    condition: ConditionTemplate,
+    instance: ConditionInstance,
+) -> None:
+    """Auto-install reactive triggers and increment bridged stats after apply.
+
+    Both lookups go through the cached handler — never touches
+    template.reactive_triggers.all() or ConditionStatRule.objects.filter() directly.
+
+    Trigger.obj FK accepts ObjectDB directly; source_condition ensures
+    CASCADE cleanup when the ConditionInstance is removed.
+
+    Stat increments are guarded: non-character targets (rooms, items)
+    lack sheet_data and raise DoesNotExist — the increment loop is skipped.
+    """
+    handler = condition.reactive_handler
+
+    # Auto-install reactive triggers via the cached handler.
+    trigger_defs = handler.reactive_trigger_definitions
+    if trigger_defs:
+        created_triggers = Trigger.objects.bulk_create(
+            [
+                Trigger(
+                    trigger_definition=td,
+                    obj=target,
+                    source_condition=instance,
+                )
+                for td in trigger_defs
+            ]
+        )
+        # Notify the target's in-memory TriggerHandler so the new rows are
+        # visible to the NEXT emit_event dispatch (bulk_create bypasses
+        # save(), so on_trigger_added is not called automatically).
+        trigger_handler = getattr(target, "trigger_handler", None)  # noqa: GETATTR_LITERAL
+        if trigger_handler is not None:
+            for new_trigger in created_triggers:
+                trigger_handler.on_trigger_added(new_trigger)
+
+    # Auto-increment bridged stats via the cached handler.
+    try:
+        sheet_data = target.sheet_data
+    except ObjectDoesNotExist:
+        sheet_data = None
+    if sheet_data is not None:
+        for rule in handler.stat_rules_for_event(ConditionEventType.GAINED):
+            sheet_data.stats.increment(rule.stat, amount=rule.increment_amount)
 
 
 def _notify_stories_condition_applied(
