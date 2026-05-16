@@ -7,7 +7,10 @@ exception still propagates — but progress.status must now be set to
 RESTING / WAITING_FOR_GM as a side effect before the raise.
 """
 
+from datetime import timedelta
+
 from django.test import TestCase
+from django.utils import timezone
 
 from world.stories.constants import (
     BeatOutcome,
@@ -26,6 +29,7 @@ from world.stories.factories import (
     TransitionFactory,
     TransitionRequiredOutcomeFactory,
 )
+from world.stories.models import StoryProgress
 from world.stories.services.episodes import resolve_episode
 
 
@@ -155,3 +159,41 @@ class FrontierWiringTests(TestCase):
         progress.refresh_from_db()
         self.assertEqual(progress.current_episode, target)
         self.assertEqual(progress.status, ProgressStatus.ACTIVE)
+
+    def test_repeated_terminal_resolve_does_not_restamp_last_advanced_at(self):
+        """C1 regression: a parked terminal frontier must not reset the
+        staleness clock on repeated resolve attempts.
+
+        resolve_episode raises NoEligibleTransitionError at a terminal
+        episode and routes through resolve_frontier as a side effect. The
+        first call sets the frontier status; subsequent calls must be
+        idempotent — last_advanced_at must NOT be re-stamped, otherwise
+        days_waiting / stale_stories detection never accrues.
+        """
+        story = StoryFactory(scope=StoryScope.CHARACTER)
+        chapter = ChapterFactory(story=story, maturity=StoryMaturity.PLOT)
+        ep = EpisodeFactory(
+            chapter=chapter,
+            maturity=StoryMaturity.PLOT,
+            resting_conclusion="It ends here.",
+            is_ending=True,
+        )
+        progress = StoryProgressFactory(story=story, current_episode=ep)
+
+        with self.assertRaises(NoEligibleTransitionError):
+            resolve_episode(progress=progress)
+        progress.refresh_from_db()
+        self.assertEqual(progress.status, ProgressStatus.RESTING)
+
+        # Force the staleness clock well into the past so the assertion is
+        # meaningful even within a single fast test run.
+        old = timezone.now() - timedelta(days=30)
+        StoryProgress.objects.filter(pk=progress.pk).update(last_advanced_at=old)
+        progress.refresh_from_db()
+        first = progress.last_advanced_at
+
+        with self.assertRaises(NoEligibleTransitionError):
+            resolve_episode(progress=progress)
+        progress.refresh_from_db()
+        self.assertEqual(progress.status, ProgressStatus.RESTING)
+        self.assertEqual(progress.last_advanced_at, first)

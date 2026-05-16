@@ -73,6 +73,22 @@ class BeatRiskGateTests(APITestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
 
+    def test_non_staff_patch_unrelated_field_on_risk_high_beat_is_gated(self):
+        # Intentional behavior lock-in: a non-staff owner cannot PATCH ANY
+        # field of a staff-authored risk>0 beat — the snapshot-merge carries
+        # the stored risk=5 through, so merged["risk"]>0 and not is_staff
+        # trips the gate even though `risk` was not sent. This 400 is
+        # deliberate, not a bug.
+        beat_id = self._create_beat(5)
+        self.client.force_authenticate(user=self.player)
+        resp = self.client.patch(
+            reverse("beat-detail", kwargs={"pk": beat_id}),
+            {"internal_description": "edited"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("risk", resp.data)
+
     def test_staff_patch_raising_risk_is_allowed(self):
         beat_id = self._create_beat(0)
         self.client.force_authenticate(user=self.staff)

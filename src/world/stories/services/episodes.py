@@ -121,8 +121,10 @@ def resolve_episode(
     with transaction.atomic():
         resolution = EpisodeResolution.objects.create(**resolution_kwargs)
         advance_progress_to_episode(progress, selected.target_episode)
-
-    _reconcile_status_after_advance(progress)
+        # Reconcile status inside the same atomic block as the advance it
+        # reconciles: if this save failed post-commit the advance would be
+        # durably committed but the status left stale.
+        _reconcile_status_after_advance(progress)
 
     # Narrative notification — fans out a NarrativeMessage per recipient.
     from world.stories.services.narrative import notify_episode_resolution  # noqa: PLC0415
