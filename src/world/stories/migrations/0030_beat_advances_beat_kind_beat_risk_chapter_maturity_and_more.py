@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("stories", "0028_alter_story_scope"),
+        ("stories", "0029_alter_story_scope"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

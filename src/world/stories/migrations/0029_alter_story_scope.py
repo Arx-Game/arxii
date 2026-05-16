@@ -7,7 +7,7 @@ class Migration(migrations.Migration):
     dependencies = [
         (
             "stories",
-            "0027_beat_expired_consequences_beat_failure_consequences_and_more",
+            "0028_beat_unique_beat_per_episode_predicate_template",
         ),
     ]
 
