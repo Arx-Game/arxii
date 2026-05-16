@@ -1185,7 +1185,7 @@ git -C C:/Users/apost/PycharmProjects/arxii commit -m "docs(stories): document a
    `echo "yes" | uv run arx test world.stories world.gm world.character_sheets`
    Expected: all PASS. (Add `world.covenants` if the `Story.covenant` interplay surfaces anything.)
 3. `ruff check src/world/stories` and `ruff format --check src/world/stories` — clean.
-4. If everything passes, the backbone is complete and runnable end-to-end: a story can be authored (Pitch→Outline→Plot per node, non-linear), assigned a scope, run, and a player walked to a frontier that classifies correctly as WAITING_FOR_GM or RESTING, with every richer beat resolving via the existing GM-mark path.
+4. If everything passes, the backbone **engine** is complete and runnable end-to-end **at the service layer**: via service functions/shell a story can be authored (Pitch→Outline→Plot per node, non-linear), promoted, assigned a scope, run, and a player walked to a frontier that classifies correctly as WAITING_FOR_GM or RESTING, with every richer beat resolving via the existing GM-mark path. **The product-facing authoring surface for the new fields (`maturity`/`resting_conclusion`/`is_ending` serializers, the maturity-promotion endpoint, the scope-assignment/create-progress flow, the §5 StoryAuthorPage reshape) is a sequenced follow-up — see Out of scope #7. Staff/GM cannot yet author + run a story through any interface; only the engine + seams ship here.**
 5. Final commit if any lint/regression fixes were needed:
 
 ```bash
@@ -1205,6 +1205,8 @@ Do **not** build these here; each is its own later brainstorm:
 4. GM leveling / the real trust→risk ladder (replaces the staff/non-staff check with no schema change) + request-to-exceed escalation + per-category trust.
 5. Covenant entity (the `Story.covenant` FK already exists as the seam).
 6. Per-DAG-reachability "infant content ahead" detection (current frontier heuristic is story-wide "any immature node remains"); active push-ping to the GM account (current mechanism is dashboard surfacing with staleness age).
+7. **Authoring API/UI surface for the backbone fields** (final-review I-1): `EpisodeCreateSerializer`/`EpisodeDetailSerializer` do not expose `maturity`/`resting_conclusion`/`is_ending`; `promote_episode_maturity` (and Chapter/Story maturity) have no endpoint; scope-assignment has no cohesive create-progress API. The runtime engine + seams ship; the staff/GM authoring surface the design's success criterion implies (and the §5 StoryAuthorPage reshape) is its own follow-up.
+8. **Pitch-text storage + maturity-gated player visibility** (final-review I-2): no `pitch` prose field exists on Story/Chapter/Episode (only the `StoryMaturity.PITCH` enum rung); no serializer/log path suppresses below-PLOT node prose from players. Runtime structurally prevents players reaching immature episodes (no data leak today), but the design's explicit per-node pitch box + "never player-visible" gate are unbuilt — bundle with the authoring-API follow-up (#7).
 
 ## Notes / decisions baked into this plan
 

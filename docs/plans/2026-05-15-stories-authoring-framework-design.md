@@ -368,6 +368,11 @@ skeleton revisited later.
 - The request-to-exceed-tier escalation flow (decide with GM leveling).
 - Covenant ↔ group-story association semantics (decide with the covenant
   entity).
+- Pitch-prose storage: a dedicated `pitch` field per node vs. reusing
+  `description`/`summary` — decide with the authoring-API follow-up
+  (discovered follow-ups #6/#7). The half-built option (a `pitch` field with
+  no API to write it and no maturity-visibility gate to enforce it) is
+  intentionally **not** shipped now.
 
 ---
 
@@ -404,3 +409,24 @@ sections above are unchanged; this records what shifted or was newly noticed.
    `None` target, status reconciliation is intentionally skipped (a
    null-target transition is its own frontier concern). Out of scope for the
    backbone; documented follow-up.
+6. **No product authoring API for the new fields (final holistic review,
+   I-1).** `maturity`, `resting_conclusion`, and `is_ending` exist in
+   models/services/tests but in **no serializer/view/url**;
+   `promote_episode_maturity` (and Chapter/Story maturity promotion) have no
+   endpoint; scope assignment has no cohesive create-progress API. The
+   backbone delivers a correct runtime engine + seams that is runnable
+   end-to-end **at the service layer**, but the success criterion's
+   "staff/GM author + run a story" is reachable only via service functions,
+   not through any interface. The authoring API + the §5 StoryAuthorPage
+   reshape are a sequenced follow-up (own brainstorm). The engineering that
+   shipped is sound and additive; this is a scope-honesty correction, not a
+   defect.
+7. **No pitch-text storage; no maturity-gated player visibility (final
+   holistic review, I-2).** §4/§5 describe a per-node "pitch prose box" that
+   is "never player-visible." Only the `StoryMaturity.PITCH` enum rung was
+   built — there is **no `pitch` field** on Story/Chapter/Episode, and no
+   serializer/`serialize_story_log` path suppresses a below-PLOT node's prose
+   from players. (The runtime frontier structurally prevents players from
+   *reaching* immature episodes, so there is no current data leak.) The pitch
+   box + visibility gate are deferred and bundled with the authoring-API
+   follow-up (#6).
