@@ -19,6 +19,7 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryGMOffer,
+    StoryNote,
     StoryParticipation,
     TableBulletinPost,
     TableBulletinReply,
@@ -508,3 +509,13 @@ class TableBulletinReplyFilter(django_filters.FilterSet):
     class Meta:
         model = TableBulletinReply
         fields = ["post", "author_persona"]
+
+
+class StoryNoteFilter(django_filters.FilterSet):
+    """Filter for StoryNote — by parent story (exact)."""
+
+    story = django_filters.NumberFilter(field_name="story_id")
+
+    class Meta:
+        model = StoryNote
+        fields = ["story"]

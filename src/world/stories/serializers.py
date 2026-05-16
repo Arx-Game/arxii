@@ -36,6 +36,7 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryGMOffer,
+    StoryNote,
     StoryParticipation,
     StoryProgress,
     StoryTrustRequirement,
@@ -1883,3 +1884,36 @@ class UpdateBulletinReplyInputSerializer(serializers.Serializer):
     """
 
     body = serializers.CharField()
+
+
+# ---------------------------------------------------------------------------
+# StoryNote serializer (append-only OOC authorial memory)
+# ---------------------------------------------------------------------------
+
+
+class StoryNoteSerializer(serializers.ModelSerializer):
+    """List + create serializer for StoryNote (append-only, GM/staff/owner only).
+
+    ``author_account`` is set from the requesting account (Evennia AccountDB)
+    in ``create()`` — it is never accepted from client input.
+    """
+
+    story = serializers.PrimaryKeyRelatedField(queryset=Story.objects.all())
+
+    class Meta:
+        model = StoryNote
+        fields = ["id", "story", "author_account", "body", "created_at"]
+        read_only_fields = ["id", "author_account", "created_at"]
+
+    def validate_body(self, value: str) -> str:
+        """Reject blank/whitespace-only note bodies."""
+        if not value.strip():
+            msg = "Note body cannot be blank."
+            raise serializers.ValidationError(msg)
+        return value
+
+    def create(self, validated_data: dict[str, Any]) -> StoryNote:
+        """Stamp author_account from the requesting account before saving."""
+        request = self.context["request"]
+        validated_data["author_account"] = request.user
+        return cast(Any, StoryNote).objects.create(**validated_data)

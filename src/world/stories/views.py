@@ -8,7 +8,7 @@ from django.db.models import Count, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
-from rest_framework import filters, permissions, status, viewsets
+from rest_framework import filters, mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.request import Request
@@ -39,6 +39,7 @@ from world.stories.filters import (
     StoryFeedbackFilter,
     StoryFilter,
     StoryGMOfferFilter,
+    StoryNoteFilter,
     StoryParticipationFilter,
     TableBulletinPostFilter,
     TableBulletinReplyFilter,
@@ -61,6 +62,7 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryGMOffer,
+    StoryNote,
     StoryParticipation,
     StoryProgress,
     TableBulletinPost,
@@ -75,6 +77,7 @@ from world.stories.pagination import (
 )
 from world.stories.permissions import (
     VIEWER_ROLE_NO_ACCESS,
+    CanAccessStoryNotes,
     CanAuthorBulletinPost,
     CanDetachStoryFromTable,
     CanMarkBeat,
@@ -152,6 +155,7 @@ from world.stories.serializers import (
     StoryGMOfferSerializer,
     StoryListSerializer,
     StoryLogSerializer,
+    StoryNoteSerializer,
     StoryParticipationSerializer,
     TableBulletinPostSerializer,
     TableBulletinReplySerializer,
@@ -2035,6 +2039,37 @@ class StaffWorkloadView(APIView):
                 "counts_by_scope": counts_by_scope,
             }
         )
+
+
+# ---------------------------------------------------------------------------
+# StoryNote ViewSet (append-only OOC authorial memory)
+# ---------------------------------------------------------------------------
+
+
+class StoryNoteViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Append-only StoryNote API — list, retrieve, and create only.
+
+    StoryNote is OOC authorial memory: never plain-player-visible, and never
+    editable or deletable. Omitting the update/destroy mixins makes PATCH and
+    DELETE return 405. Access is gated by CanAccessStoryNotes (staff, story
+    owner, or active/Lead GM of the story).
+    """
+
+    queryset = (
+        StoryNote.objects.select_related("story", "author_account").all().order_by("-created_at")
+    )
+    serializer_class = StoryNoteSerializer
+    permission_classes = [permissions.IsAuthenticated, CanAccessStoryNotes]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = StoryNoteFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["created_at"]
+    ordering = ["-created_at"]
 
 
 # ---------------------------------------------------------------------------
