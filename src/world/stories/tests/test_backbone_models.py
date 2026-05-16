@@ -45,3 +45,10 @@ class BackboneModelDefaultsTests(TestCase):
         self.assertEqual(note.story, story)
         self.assertIsNotNone(note.created_at)
         self.assertIsNone(note.author_account)
+
+    def test_story_note_factory(self):
+        from world.stories.factories import StoryNoteFactory
+
+        note = StoryNoteFactory()
+        self.assertTrue(note.body)
+        self.assertIsNotNone(note.story_id)
