@@ -106,6 +106,16 @@ Hold that and code-rollback is always sufficient. By operation class:
 ### 4.7 DNS
 Linode DNS managed as code in the same OpenTofu codebase. Arx II uses its **own new domain** (exact string is an implementation parameter, TBD; not a design blocker). Prod record carries a low TTL; `tofu apply` updates instance + A record atomically on rebuild. The ephemeral stage box uses a raw IP (no DNS). Arx I's existing domain is untouched by this sub-project.
 
+### 4.8 Credentials & blast-radius model
+
+**Credential boundary.** The Linode API token (`tofu` provider auth) lives **only** as a GitHub Actions secret bound to the gated `prod` GitHub Environment (required reviewers + branch restriction); injected solely into the deploy job, never the build/test job, never on any developer machine. No human or local agent holds a prod-capable token, so a local/errant process has no credential to reach Linode at all. *Honest limit:* Linode tokens scope by resource **type**, not instance — a token that can create prod can destroy it; the guarantee comes from *where the token lives and what may invoke it*, not token scoping. Third-party Actions pinned by SHA; workflow-file changes require review (prevents a slipped-in secret-exfil step).
+
+**Blast-radius boundary (structural, not a flag).** Prod and ephemeral-stage are **separate root modules with separate state backends, separate state keys, and separate credential scope**. `tofu destroy` only affects the state it is pointed at; the ephemeral-stage execution context contains *no prod state and no prod credentials*, so it **cannot enumerate or destroy prod by construction**. Prod's stateful resources (instance, volume, bucket) additionally carry `lifecycle { prevent_destroy = true }`. **No CI/automation path runs `tofu destroy` against prod state** — destroying prod is by design only a deliberate, manual, separately-authenticated, out-of-band human action; there is nothing automated to misfire.
+
+**Ephemeral teardown targeting.** Each stage box uses a per-run-unique state key; the stage root module provisions only stage resources (no data sources reaching prod). The trap/`finally` teardown (§4.6) runs `tofu destroy` in the stage module against that per-run state and refuses unless resources are tagged `env=ephemeral-stage` — belt-and-suspenders over the state isolation. A stage run erroring mid-way still cannot target prod.
+
+**Threat model (honest).** The above defends decisively against *accidents and errant automation/agents* (the stated threat) because state+credential isolation is a true structural boundary. It is **not** a defense against an authorized human who edits the code to remove `prevent_destroy`/guards and pushes it through review — the correct, accepted threat model here is guarding misfires, not authorized intentional destruction.
+
 ## 5. Data & Control Flow
 
 - **Deploy:** tag → CI build/test/artifact → approval gate → Ansible (migrate with expand/contract + dry-run → unpack release → repoint `current` → `evennia reload`) → health gate → success or auto code-rollback.
@@ -163,10 +173,13 @@ This sub-project is a hard prerequisite for the Arx I legacy relocation (sub-pro
 5. Grafana shows idmapper cache size/slope, reactor lag, and per-subsystem timing; an induced reactor stall is visible; flows-vs-scripts cost is readable from real data.
 6. Killing the box triggers the off-box heartbeat alert.
 7. `tofu apply` from a backup yields a restored clone usable as ephemeral stage; scripted teardown leaves nothing running.
+8. The ephemeral-stage execution context provably has no prod state and no prod credentials; an attempted `tofu destroy` there cannot reference any prod resource. Teardown refuses to run unless resources are tagged `env=ephemeral-stage`.
+9. `prevent_destroy` on prod stateful resources blocks an accidental/automated destroy; no pipeline or script path invokes `tofu destroy` against prod state. The Linode token exists only as a gated GitHub Environment secret and on no developer machine.
 
 ## 12. Honest Risks & Accepted Tradeoffs
 
 - **Single box, thin safety nets** — accepted for cost (Arx I parity). Mitigations: ephemeral on-demand stage, off-box heartbeat, MemoryMax isolation.
+- **Prod-destruction guards stop misfires, not authorized humans** — state/credential isolation + `prevent_destroy` + no-destroy-automation defend against accidents and errant agents (the real threat), not against an authorized operator who deletes the guards in a reviewed PR. Accepted threat model (§4.8).
 - **Migration discipline is the sole DB safety net** — no always-on staging means expand/contract + dry-run is mandatory, enforced in CI, not a convention.
 - **Nightly `pg_dump` ⇒ RPO ~24h** on full-box loss — accepted; WAL archiving is a named, deferred lever.
 - **Co-resident monitoring blind spot** — Grafana dies with the box; mitigated (not eliminated) by the off-box heartbeat.
