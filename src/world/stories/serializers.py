@@ -822,6 +822,9 @@ class BeatSerializer(serializers.ModelSerializer):
             "player_hint",
             "player_resolution_text",
             "order",
+            "kind",
+            "advances",
+            "risk",
             # Predicate config fields
             "required_level",
             "required_achievement",
@@ -896,6 +899,9 @@ class BeatSerializer(serializers.ModelSerializer):
                 "referenced_chapter",
                 "referenced_episode",
                 "required_points",
+                "kind",
+                "advances",
+                "risk",
                 "agm_eligible",
                 "deadline",
             ]:
@@ -906,6 +912,21 @@ class BeatSerializer(serializers.ModelSerializer):
             temp.clean()
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.message_dict) from exc
+
+        request = self.context.get("request")
+        merged_risk = merged.get("risk", 0) or 0
+        user = request.user if request is not None else None
+        # user.is_staff is safe on AccountDB and AnonymousUser; bool() guards None.
+        is_staff = bool(user is not None and user.is_staff)
+        if merged_risk > 0 and not is_staff:
+            raise serializers.ValidationError(
+                {
+                    "risk": (
+                        "Only staff may author beats above risk 0. "
+                        "Higher risk tiers unlock with GM trust level."
+                    )
+                }
+            )
         return attrs
 
 
