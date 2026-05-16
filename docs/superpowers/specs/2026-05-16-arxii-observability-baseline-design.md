@@ -116,6 +116,17 @@ Linode DNS managed as code in the same OpenTofu codebase. Arx II uses its **own 
 
 **Threat model (honest).** The above defends decisively against *accidents and errant automation/agents* (the stated threat) because state+credential isolation is a true structural boundary. It is **not** a defense against an authorized human who edits the code to remove `prevent_destroy`/guards and pushes it through review — the correct, accepted threat model here is guarding misfires, not authorized intentional destruction.
 
+### 4.9 Backup access & immutability
+
+Devs need prod DB backups on local machines (local instances, realistic integration tests); they — and any local agent — must **never** be able to delete or corrupt the Linode-side backups. Achievable because object access and resource management are *different credential systems*:
+
+- **Two credential classes, never mixed.** The Linode API token (resource-level — instances/volumes/buckets; can delete a whole bucket) is CI-only per §4.8, never on dev machines. Object Storage access keys (S3-compatible, object-level) are a separate system; devs only ever receive these.
+- **Dev reader keys: read-only, backups-bucket-scoped, per-developer, revocable.** A read-only S3 key can `Get`/`List` but structurally cannot `Put`/`Delete` — a local errant agent can at worst *download*, never delete/overwrite, and cannot reach any other bucket or any Linode resource.
+- **Writer key is CI-only.** Only the backup job holds a read-write key on the backups bucket; producer and consumers use different credentials with different rights.
+- **Immutability backstop (defends even a mis-scoped/compromised key, including the API token).** Backups bucket has **versioning enabled** and **Object Lock with a retention window ≥ the backup-retention horizon** — in-retention backups cannot be deleted or overwritten by anyone. Pruning past the horizon is a server-side bucket lifecycle policy (IaC-managed), never a client-key capability.
+- **Honest residual (named, not solved here).** A read-only key still permits downloading prod data to a laptop — intended for local/integration use, but PII/secret sprawl. Levers, deferred by default for cost: per-dev revocable keys + access logging now; an anonymized/scrubbed dump variant for integration tests if/when data sensitivity warrants.
+- *Implementation-verify:* exact Linode limited-access-key granularity and Object-Lock-at-bucket-creation behavior to be confirmed against current Linode Object Storage capabilities during planning.
+
 ## 5. Data & Control Flow
 
 - **Deploy:** tag → CI build/test/artifact → approval gate → Ansible (migrate with expand/contract + dry-run → unpack release → repoint `current` → `evennia reload`) → health gate → success or auto code-rollback.
@@ -175,11 +186,13 @@ This sub-project is a hard prerequisite for the Arx I legacy relocation (sub-pro
 7. `tofu apply` from a backup yields a restored clone usable as ephemeral stage; scripted teardown leaves nothing running.
 8. The ephemeral-stage execution context provably has no prod state and no prod credentials; an attempted `tofu destroy` there cannot reference any prod resource. Teardown refuses to run unless resources are tagged `env=ephemeral-stage`.
 9. `prevent_destroy` on prod stateful resources blocks an accidental/automated destroy; no pipeline or script path invokes `tofu destroy` against prod state. The Linode token exists only as a gated GitHub Environment secret and on no developer machine.
+10. A per-dev read-only Object Storage key can download backups but provably cannot delete/overwrite them or reach any other bucket or Linode resource; Object Lock prevents deletion of in-retention backups even via a read-write key or the Linode API token.
 
 ## 12. Honest Risks & Accepted Tradeoffs
 
 - **Single box, thin safety nets** — accepted for cost (Arx I parity). Mitigations: ephemeral on-demand stage, off-box heartbeat, MemoryMax isolation.
 - **Prod-destruction guards stop misfires, not authorized humans** — state/credential isolation + `prevent_destroy` + no-destroy-automation defend against accidents and errant agents (the real threat), not against an authorized operator who deletes the guards in a reviewed PR. Accepted threat model (§4.8).
+- **Prod data on dev laptops** — read-only backup access (intended for local instances / integration tests) means prod DB dumps reach dev machines; PII/secret sprawl is an accepted residual, with per-dev revocable keys + access logging as the near-term control and a scrubbed/anonymized dump pipeline as a deferred lever (§4.9).
 - **Migration discipline is the sole DB safety net** — no always-on staging means expand/contract + dry-run is mandatory, enforced in CI, not a convention.
 - **Nightly `pg_dump` ⇒ RPO ~24h** on full-box loss — accepted; WAL archiving is a named, deferred lever.
 - **Co-resident monitoring blind spot** — Grafana dies with the box; mitigated (not eliminated) by the off-box heartbeat.
