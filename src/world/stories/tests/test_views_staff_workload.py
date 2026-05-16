@@ -24,7 +24,12 @@ from core_management.test_utils import suppress_permission_errors
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.gm.factories import GMProfileFactory, GMTableFactory
-from world.stories.constants import AssistantClaimStatus, SessionRequestStatus, StoryScope
+from world.stories.constants import (
+    AssistantClaimStatus,
+    ProgressStatus,
+    SessionRequestStatus,
+    StoryScope,
+)
 from world.stories.factories import (
     AssistantGMClaimFactory,
     BeatFactory,
@@ -78,6 +83,7 @@ class StaffWorkloadResponseShapeTest(APITestCase):
         for key in [
             "per_gm_queue_depth",
             "stale_stories",
+            "stories_waiting_for_gm",
             "stories_at_frontier",
             "pending_agm_claims_count",
             "open_session_requests_count",
@@ -143,6 +149,62 @@ class StaffWorkloadStaleStoriesTest(APITestCase):
         for field in ["story_id", "story_title", "last_advanced_at", "days_stale"]:
             assert field in entry, f"Missing field: {field}"
         assert entry["days_stale"] >= STALE_STORY_DAYS
+
+
+class StaffWorkloadWaitingForGMTest(APITestCase):
+    """WAITING_FOR_GM progress is surfaced with age regardless of staleness."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+
+        cls.sheet = CharacterSheetFactory()
+        cls.story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=cls.sheet)
+        # Fresh (not stale) but waiting on the GM — still a dropped ball.
+        cls.waiting_progress = StoryProgressFactory(
+            story=cls.story,
+            character_sheet=cls.sheet,
+            is_active=True,
+            status=ProgressStatus.WAITING_FOR_GM,
+        )
+
+        cls.active_sheet = CharacterSheetFactory()
+        cls.active_story = StoryFactory(
+            scope=StoryScope.CHARACTER, character_sheet=cls.active_sheet
+        )
+        cls.active_progress = StoryProgressFactory(
+            story=cls.active_story,
+            character_sheet=cls.active_sheet,
+            is_active=True,
+            status=ProgressStatus.ACTIVE,
+        )
+
+    def test_waiting_story_appears(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(STAFF_WORKLOAD_URL)
+        waiting = response.data["stories_waiting_for_gm"]
+        ids = [w["story_id"] for w in waiting]
+        assert self.story.pk in ids
+
+    def test_active_story_not_in_waiting(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(STAFF_WORKLOAD_URL)
+        waiting = response.data["stories_waiting_for_gm"]
+        ids = [w["story_id"] for w in waiting]
+        assert self.active_story.pk not in ids
+
+    def test_waiting_entry_shape_exposes_age(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(STAFF_WORKLOAD_URL)
+        waiting = response.data["stories_waiting_for_gm"]
+        matching = [w for w in waiting if w["story_id"] == self.story.pk]
+        assert len(matching) >= 1
+        entry = matching[0]
+        for field in ["story_id", "story_title", "scope", "last_advanced_at", "days_waiting"]:
+            assert field in entry, f"Missing field: {field}"
+        assert entry["last_advanced_at"] is not None
+        assert isinstance(entry["days_waiting"], int)
+        assert entry["days_waiting"] >= 0
 
 
 class StaffWorkloadFrontierTest(APITestCase):

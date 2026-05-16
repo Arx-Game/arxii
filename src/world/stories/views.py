@@ -1638,14 +1638,23 @@ def _serialize_eligible_transitions(transitions: list) -> list[dict[str, Any]]:
     return [{"transition_id": t.pk, "mode": t.mode} for t in transitions]
 
 
-def _build_gm_queue_for_story(
+def _build_gm_queue_for_story(  # noqa: PLR0913 — accumulator-passing helper; one list arg per queue section, adding a dataclass wrapper for 6 lists would be a larger, riskier refactor than this additive change warrants
     gm_profile: Any,
     story: Story,
     episodes_ready: list,
     pending_claims: list,
     assigned_requests: list,
+    waiting_for_gm: list,
 ) -> None:
-    """Populate GM queue lists from a single story, dispatching on scope."""
+    """Populate GM queue lists from a single story, dispatching on scope.
+
+    waiting_for_gm collects active progress rows parked at
+    ProgressStatus.WAITING_FOR_GM (the story trail is blocked on the GM
+    authoring/advancing it). These have no eligible transitions yet, so the
+    episodes_ready branch skips them — surfacing them here with
+    last_advanced_at makes a dropped ball visible.
+    """
+    from world.stories.constants import ProgressStatus  # noqa: PLC0415
     from world.stories.exceptions import ProgressionRequirementNotMetError  # noqa: PLC0415
     from world.stories.services.transitions import get_eligible_transitions  # noqa: PLC0415
 
@@ -1676,7 +1685,27 @@ def _build_gm_queue_for_story(
             )
             progress_type = StoryScope.GLOBAL
 
+    now = timezone.now()
     for progress in progress_qs:
+        if progress.status == ProgressStatus.WAITING_FOR_GM:
+            waiting_for_gm.append(
+                {
+                    "story_id": story.pk,
+                    "story_title": story.title,
+                    "scope": story.scope,
+                    "progress_type": progress_type,
+                    "progress_id": progress.pk,
+                    "episode_id": progress.current_episode_id,
+                    "episode_title": (
+                        progress.current_episode.title
+                        if progress.current_episode is not None
+                        else None
+                    ),
+                    "last_advanced_at": progress.last_advanced_at,
+                    "days_waiting": (now - progress.last_advanced_at).days,
+                }
+            )
+            continue
         if progress.current_episode is None:
             continue
         try:
@@ -1763,6 +1792,7 @@ class GMQueueView(APIView):
         episodes_ready: list[dict[str, Any]] = []
         pending_claims: list[dict[str, Any]] = []
         assigned_requests: list[dict[str, Any]] = []
+        waiting_for_gm: list[dict[str, Any]] = []
 
         # Stories where this GMProfile is Lead GM (via primary_table.gm).
         lead_stories = Story.objects.filter(
@@ -1777,6 +1807,7 @@ class GMQueueView(APIView):
                 episodes_ready,
                 pending_claims,
                 assigned_requests,
+                waiting_for_gm,
             )
 
         return Response(
@@ -1784,6 +1815,7 @@ class GMQueueView(APIView):
                 "episodes_ready_to_run": episodes_ready,
                 "pending_agm_claims": pending_claims,
                 "assigned_session_requests": assigned_requests,
+                "waiting_for_gm": waiting_for_gm,
             }
         )
 
@@ -1821,6 +1853,7 @@ class StaffWorkloadView(APIView):
     def get(self, request: Request) -> Response:
         """Return cross-story workload metrics for staff."""
         from world.gm.models import GMProfile  # noqa: PLC0415
+        from world.stories.constants import ProgressStatus  # noqa: PLC0415
         from world.stories.exceptions import ProgressionRequirementNotMetError  # noqa: PLC0415
         from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
         from world.stories.services.transitions import get_eligible_transitions  # noqa: PLC0415
@@ -1906,6 +1939,45 @@ class StaffWorkloadView(APIView):
             for row in stale_qs
         ]
 
+        # --- stories waiting on a GM (any age — a fresh dropped ball is
+        # still a dropped ball; staleness is reported separately above) ---
+        waiting_qs = (
+            list(
+                StoryProgress.objects.filter(
+                    is_active=True,
+                    status=ProgressStatus.WAITING_FOR_GM,
+                )
+                .select_related("story")
+                .values("story__id", "story__title", "story__scope", "last_advanced_at")
+            )
+            + list(
+                GroupStoryProgress.objects.filter(
+                    is_active=True,
+                    status=ProgressStatus.WAITING_FOR_GM,
+                )
+                .select_related("story")
+                .values("story__id", "story__title", "story__scope", "last_advanced_at")
+            )
+            + list(
+                GlobalStoryProgress.objects.filter(
+                    is_active=True,
+                    status=ProgressStatus.WAITING_FOR_GM,
+                )
+                .select_related("story")
+                .values("story__id", "story__title", "story__scope", "last_advanced_at")
+            )
+        )
+        stories_waiting_for_gm: list[dict[str, Any]] = [
+            {
+                "story_id": row["story__id"],
+                "story_title": row["story__title"],
+                "scope": row["story__scope"],
+                "last_advanced_at": row["last_advanced_at"],
+                "days_waiting": (now - row["last_advanced_at"]).days,
+            }
+            for row in waiting_qs
+        ]
+
         # --- stories at frontier (current_episode is None but active) ---
         frontier_char = list(
             StoryProgress.objects.filter(
@@ -1956,6 +2028,7 @@ class StaffWorkloadView(APIView):
             {
                 "per_gm_queue_depth": per_gm_queue,
                 "stale_stories": stale_stories,
+                "stories_waiting_for_gm": stories_waiting_for_gm,
                 "stories_at_frontier": stories_at_frontier,
                 "pending_agm_claims_count": pending_agm_count,
                 "open_session_requests_count": open_session_req_count,

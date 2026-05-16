@@ -4,11 +4,16 @@ Public API:
     compute_story_status(progress) — returns a StoryStatusSummary dataclass
         describing where a story currently stands. Callers render their own
         labels; the service does not return human-readable strings.
+    compute_story_status_line(progress) — returns the deliberately-ambiguous
+        player-facing one-liner for a story's dashboard. Player copy never
+        implies finality at a rest/pause (no "over"/"done"/"complete"/"the
+        end"); it is reassuring at WAITING_FOR_GM. GM/staff dashboards use the
+        structured status + last_advanced_at instead of this string.
 """
 
 from __future__ import annotations
 
-from world.stories.constants import SessionRequestStatus, StoryEpisodeStatus
+from world.stories.constants import ProgressStatus, SessionRequestStatus, StoryEpisodeStatus
 from world.stories.exceptions import ProgressionRequirementNotMetError
 from world.stories.models import Episode
 from world.stories.types import AnyStoryProgress, StoryStatusSummary
@@ -137,3 +142,26 @@ def compute_story_status(progress: AnyStoryProgress) -> StoryStatusSummary:
         scheduled_event_id=None,
         scheduled_real_time=None,
     )
+
+
+def compute_story_status_line(progress: AnyStoryProgress) -> str:
+    """Return the player-facing one-liner for a story's dashboard.
+
+    Branches on progress.status FIRST — before any logic that assumes an
+    ACTIVE pointer with eligible transitions. The copy is deliberately
+    ambiguous at a pause/rest so it never implies the story is finished
+    (no "over"/"done"/"complete"/"the end"), and reassuring at
+    WAITING_FOR_GM so a player knows their GM has the ball.
+    """
+    if progress.status == ProgressStatus.WAITING_FOR_GM:
+        return "The trail goes quiet — your GM has been notified. More to come."
+    if progress.status == ProgressStatus.RESTING:
+        return "The story rests here for now."
+    if progress.status == ProgressStatus.COMPLETED:
+        return "This story has reached its conclusion."
+
+    # ACTIVE — describe the current position from the structured summary.
+    summary = compute_story_status(progress)
+    if summary.episode_title is None:
+        return "Your story is being prepared. Check back soon."
+    return f"Currently in “{summary.episode_title}.” The story continues."
