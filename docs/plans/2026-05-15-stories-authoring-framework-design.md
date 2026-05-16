@@ -368,3 +368,39 @@ skeleton revisited later.
 - The request-to-exceed-tier escalation flow (decide with GM leveling).
 - Covenant ↔ group-story association semantics (decide with the covenant
   entity).
+
+---
+
+## Backbone implementation — discovered follow-ups (2026-05-16)
+
+Items surfaced while implementing Tasks 1–10 of the backbone. Existing
+sections above are unchanged; this records what shifted or was newly noticed.
+
+1. **`compute_story_status_line` did not previously exist.** The plan and
+   `docs/systems/stories.md` referred to it as an existing dashboards helper;
+   it was actually *created* in this backbone (alongside the structured
+   `compute_story_status`). Resolved — noted here for accuracy, and the
+   systems doc has been corrected to reflect it as backbone-added.
+2. **staff-workload + gm-queue scans are globally unbounded.** The new
+   WAITING_FOR_GM surfacing in `GMQueueView` (`waiting_for_gm`) and
+   `StaffWorkloadView` (`stories_waiting_for_gm`) mirrors the pre-existing,
+   already-accepted MVP pattern of the stale-story and frontier scans (no
+   pagination/caching). Bounding/caching all of these together is a future
+   cleanup tracked with the existing stale/frontier scan cleanup, not a new
+   regression introduced here.
+3. **`_build_gm_queue_for_story` carries 6 list accumulators**
+   (`# noqa: PLR0913`). Threading one list per queue section was the
+   smallest additive change; collapsing the accumulators into an
+   `@dataclass` is a clean, self-contained refactor best done as its own
+   separate commit (no behavior change), deferred.
+4. **Frontier "infant content ahead" is a story-wide heuristic.**
+   `frontier._story_has_immature_content` treats *any* Episode in the story
+   still below PLOT as "the author intends more" → WAITING_FOR_GM. A
+   per-DAG-reachability refinement (only count episodes actually reachable
+   from the current pointer) is deferred — reaffirming the existing design
+   note, not a new decision.
+5. **Null-target ("authoring frontier") transitions are left untouched by
+   `_reconcile_status_after_advance`.** When `resolve_episode` advances to a
+   `None` target, status reconciliation is intentionally skipped (a
+   null-target transition is its own frontier concern). Out of scope for the
+   backbone; documented follow-up.
