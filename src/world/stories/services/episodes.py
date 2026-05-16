@@ -33,7 +33,13 @@ def resolve_episode(
     Algorithm:
         1. Call get_eligible_transitions(progress).
            - If ProgressionRequirementNotMetError is raised, it propagates to the caller.
-        2. If empty → raise NoEligibleTransitionError.
+        2. If empty → raise NoEligibleTransitionError. Side effect: if the
+           current episode has NO outbound transitions at all (a genuine
+           authoring frontier), route through resolve_frontier first
+           (status → WAITING_FOR_GM / RESTING). If outbound transitions
+           exist but none are routable yet (a transient routing block — the
+           next step is authored, just not unlocked), status stays ACTIVE
+           and only the exception is raised.
         3. If chosen_transition is provided:
                - Must be in the eligible set, else raise NoEligibleTransitionError.
                - Use that transition.
@@ -47,21 +53,32 @@ def resolve_episode(
                   - GROUP     → gm_table
                   - GLOBAL    → both null
                b. Advance progress.current_episode to transition.target_episode (may be None).
+           Then reconcile status: a non-PLOT target routes through
+           resolve_frontier (not runnable yet); a PLOT target restores
+           ACTIVE if a stale frontier status was set; a None target is
+           left untouched (documented follow-up).
         6. Return the EpisodeResolution instance.
     """
     # get_eligible_transitions raises ProgressionRequirementNotMetError when a
     # progression gate is unmet — that propagates here untouched (the player is
     # *blocked*, status stays ACTIVE). Reaching the line below means the
-    # exception did NOT fire, so an empty list is the genuine frontier pause
-    # (no outbound transitions authored ahead): route through resolve_frontier
-    # to land in RESTING / WAITING_FOR_GM, then re-raise so the existing
-    # NoEligibleTransitionError contract (view try/except, callers) is intact.
+    # exception did NOT fire, so an empty list is one of two cases (see below).
     eligible = get_eligible_transitions(progress)
 
     if not eligible:
+        # An empty eligible list is NOT necessarily a frontier:
+        # get_eligible_transitions also returns [] when outbound transitions
+        # exist but no routing predicate is satisfied yet (a transient block,
+        # player mid-episode — NOT an authoring frontier). Only treat the
+        # genuine "no onward edges authored at all" case as a frontier and
+        # route through resolve_frontier (RESTING / WAITING_FOR_GM). In the
+        # routing-block case, status stays ACTIVE. Either way, re-raise so the
+        # NoEligibleTransitionError contract (view try/except, callers) is
+        # intact.
         from world.stories.services.frontier import resolve_frontier  # noqa: PLC0415
 
-        resolve_frontier(progress)
+        if not progress.current_episode.outbound_transitions.exists():
+            resolve_frontier(progress)
         msg = f"No eligible transitions from episode {progress.current_episode_id!r}."
         raise NoEligibleTransitionError(msg)
 
@@ -105,18 +122,7 @@ def resolve_episode(
         resolution = EpisodeResolution.objects.create(**resolution_kwargs)
         advance_progress_to_episode(progress, selected.target_episode)
 
-    # A real transition fired, but the episode we landed on is still being
-    # authored (PITCH/OUTLINE) — the player cannot actually run it yet, so
-    # route through the frontier (WAITING_FOR_GM / RESTING) rather than
-    # leaving status ACTIVE. Only fires for a non-None below-PLOT target; a
-    # genuine PLOT target leaves status ACTIVE (story is really moving on).
-    if (
-        progress.current_episode is not None
-        and progress.current_episode.maturity != StoryMaturity.PLOT
-    ):
-        from world.stories.services.frontier import resolve_frontier  # noqa: PLC0415
-
-        resolve_frontier(progress)
+    _reconcile_status_after_advance(progress)
 
     # Narrative notification — fans out a NarrativeMessage per recipient.
     from world.stories.services.narrative import notify_episode_resolution  # noqa: PLC0415
@@ -131,3 +137,31 @@ def resolve_episode(
     on_story_advanced(progress.story)
 
     return resolution
+
+
+def _reconcile_status_after_advance(progress: AnyStoryProgress) -> None:
+    """Reconcile progress.status after a successful episode advance.
+
+    - target exists but is still being authored (PITCH/OUTLINE): the player
+      cannot run it yet — route through the frontier (WAITING_FOR_GM /
+      RESTING) rather than leaving status ACTIVE.
+    - target exists and is PLOT: the story is genuinely moving on, so clear
+      any stale frontier status left from an earlier pause. The != ACTIVE
+      guard avoids a spurious write / last_advanced_at bump on a normal
+      advance that was already ACTIVE.
+    - target is None (null-target frontier): left untouched here (documented
+      follow-up — out of scope).
+    """
+    if progress.current_episode is None:
+        return
+
+    from world.stories.constants import ProgressStatus  # noqa: PLC0415
+    from world.stories.services.frontier import (  # noqa: PLC0415
+        resolve_frontier,
+        set_progress_status,
+    )
+
+    if progress.current_episode.maturity != StoryMaturity.PLOT:
+        resolve_frontier(progress)
+    elif progress.status != ProgressStatus.ACTIVE:
+        set_progress_status(progress, ProgressStatus.ACTIVE)
