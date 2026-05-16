@@ -72,7 +72,7 @@ In-process exporter exposing Prometheus metrics on `/metrics`. Lives in Arx II s
 - **Reload-not-restart:** code-only releases apply via `evennia reload` (the Portal keeps players connected — Evennia's two-process model). Hard restart only for dependency, Portal, or settings changes.
 
 ### 4.5 CI/CD (GitHub Actions)
-- Trigger on git tag (`v*`). Build + test, publish a reproducible artifact (deps resolved in CI, not on the box at deploy time).
+- Trigger **only** on a release tag matching `v*-release` (e.g. `v1.2.3-release`) — a deliberate, explicit "this tag deploys" marker so an arbitrary `v`-prefixed tag (e.g. `very-cool-tag`, or even a bare `v1.2.3`) cannot accidentally deploy to prod. Build + test, publish a reproducible artifact (deps resolved in CI, not on the box at deploy time).
 - **Approval gate:** a GitHub Environments "approve" button (not SSH) before prod.
 - CI invokes the Ansible playbook; it does not contain the deploy logic. Deploy logic is runnable independent of GitHub.
 - **Post-reload health gate:** reads §4.2 metrics (reactor lag, error rate); failure → automatic code-rollback (symlink to previous release).
@@ -135,7 +135,7 @@ This sub-project is a hard prerequisite for the Arx I legacy relocation (sub-pro
 ## 11. Acceptance Criteria
 
 1. `tofu apply` + `ansible-playbook site.yml` from zero produces a working Arx II box (Postgres, Caddy TLS, game process under systemd) with no manual steps.
-2. A git tag triggers CI → gated → deploy via `evennia reload` with connected players not dropped for a code-only change.
+2. A tag matching `v*-release` triggers CI → gated → deploy via `evennia reload` with connected players not dropped for a code-only change; a non-matching tag (e.g. `v1.2.3` or `very-cool-tag`) triggers **no** deploy.
 3. A deliberately non-backward-compatible migration fails the CI gate.
 4. A simulated bad release auto-rolls-back on the health gate.
 5. Grafana shows idmapper cache size/slope, reactor lag, and per-subsystem timing; an induced reactor stall is visible; flows-vs-scripts cost is readable from real data.
