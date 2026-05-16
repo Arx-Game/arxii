@@ -6,7 +6,7 @@
 
 ## 1. Context & Motivation
 
-Arx II is a web-first, mobile-friendly narrative roleplaying platform built on a personal Evennia fork. The realistic concurrent-player scale is **genuinely unknown** — the predecessor (Arx I) peaked ~300 with zero advertising, and the team must be prepared for substantially more.
+Arx II is a web-first, mobile-friendly narrative roleplaying platform built on Evennia, consumed as a pinned git dependency. **No Evennia source changes have been made, and whether Arx II ever needs to fork Evennia is an open question** — initial research suggests not in the near term. The realistic concurrent-player scale is **genuinely unknown** — the predecessor (Arx I) peaked ~300 with zero advertising, and the team must be prepared for substantially more.
 
 Through design analysis we established:
 
@@ -24,7 +24,7 @@ A reproducible single-host production environment with: Postgres, supervised pro
 ### Explicit non-goals (deferred behind the metrics this produces)
 - No Arx II boundary hardening (Actions/Flows off `ObjectDB`/`msg()`).
 - No scene-sharding, no stateless gateway, no Rust components.
-- **Zero Evennia-core changes.** The Evennia fork stays a pinned upstream dependency. The observability exporter is Arx II code that *reads* Evennia internals; it does not modify them.
+- **Zero Evennia-core changes.** Evennia is consumed as an unmodified, pinned upstream dependency; no fork (carrying patches) exists today and this sub-project introduces none. Whether scaling work *ever* requires Evennia-core changes is explicitly deferred behind the metrics this produces. The observability exporter is Arx II code that *reads* Evennia internals; it does not modify them.
 
 ## 3. Architecture Overview
 
