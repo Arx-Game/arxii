@@ -82,6 +82,24 @@ In-process exporter exposing Prometheus metrics on `/metrics`. Lives in Arx II s
   - *Recommended escalation (named, optional — deferred by default for cost/solo):* a CI job that runs the **previous release's** smoke tests against a DB migrated to the new head — the only *empirical* proof of old-code/new-schema compatibility. The gold standard if classifier+marker discipline ever proves insufficient.
   Together these are the **sole DB safety net**; auto-rollback can revert code, never data.
 
+### 4.5.1 Rollback model (operational — the actual mechanics)
+
+**Schema changes do NOT block automated releases.** The common case — additive migrations (new model/field/index, nullable or defaulted) — is *not* flagged, needs *no* marker, and ships through the normal automated tag→deploy pipeline with zero ceremony. A required marker is a one-line comment written *when authoring the migration*, reviewed in the same PR, and carried through the *same* automated pipeline — it is not a manual deploy step. CI blocks only a migration that is *unsafe as written* (an unmarked destructive op) — on a single prod box with no staging that is precisely the latent data-loss bug you want stopped, not friction. The discipline below is authoring-time; the release stays automated.
+
+There is **no schema rollback**. Rollback = code-only (repoint `current` → `evennia reload`); schema only ever moves forward. Safety is an invariant, not migration reversal:
+
+> **Invariant:** at every instant the live schema is compatible with *both* the current code release and the immediately-previous one.
+
+Hold that and code-rollback is always sufficient. By operation class:
+
+- **Additive (add column/table/index):** nullable or DB-default; ship migration with or before the code; old code ignores it. Mark `expand`. Trivial — genuinely solved.
+- **Destructive (drop column/table):** split across **two** releases. Release N: code stops using it, *no drop*. Release N+1: migration drops it — the only rollback target (N) already doesn't need it. The destructive migration always ships *one release later* than the code change that freed it; `# release-safety: contract — superseded by vN` asserts exactly this and the reviewer's job is to verify the rollback target doesn't use it. (This temporal split is the entire trick — the answer the question "how do we roll back a schema change" never reaches because the real answer is "restructure so you never need to.")
+- **Rename / add NOT NULL / type change:** parallel-change across releases (add new → backfill → dual-write → switch reads → drop old) **or** an accepted brief scheduled maintenance window. For a solo/cost-bound project a short window for a rare rename is a legitimate, cheaper choice than building dual-write machinery — stated explicitly, not pretended away.
+- **Data migrations (`RunPython`):** forward-only, idempotent; reverse is **not** the safety net. Safety = the apply-against-restored-prod dry-run (catch pre-prod) + the backup (restore, accepting RPO, if it reaches prod). A bad data migration is prevented or restored-from, never "rolled back".
+- **`evennia reload` overlap:** old and new code run concurrently for seconds during reload, so the migration must also be compatible with the *still-running old code* — run the (expand-only) migration, *then* reload; never ship a contract migration old code still needs.
+
+**Irreducible backstop:** a catastrophic data migration that reaches prod is recovered only by restore-from-backup at the accepted ~24h RPO (§12). No free lunch — any process claiming schema changes are freely reversible is wrong.
+
 ### 4.6 Ephemeral staging
 `tofu apply` a stage box from the latest backup → scripted sanity tests → on success promote → `tofu destroy`. Wrapped so teardown runs even on failure (trap/`finally`) — a failed test cannot leave a box running. Cost: Linode bills hourly capped monthly; a 30–60 min run is pennies. Billing stops on **delete, not power-off** — `tofu destroy` enforces this. A Linode billing alert is a cheap backstop.
 
