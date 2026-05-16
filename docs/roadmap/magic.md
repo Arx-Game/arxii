@@ -1115,6 +1115,30 @@ calls into it — honors "no service functions for authored content."
    of scope here. Concretizes the "technique pre-cast backfire trigger" deferred in
    `docs/plans/2026-05-14-room-cascade-resonance-unification.md`.
 
+### Recommended next steps (priority order)
+
+The deferred items above, ordered by recommended sequence with rationale and ownership:
+
+1. **"Magically Attuned" production grant** *(Tehom; small)* — highest priority because
+   without it the universal interaction only fires in the pipeline test's `setUp`, never in
+   real gameplay. Hook the baseline-condition grant into CG finalization / first cast. This
+   is the gap between "provably works in test" and "works in the game."
+2. **Presence-escalation** *(Tehom/brother; cheap)* — reuses the existing
+   `reactive_triggers` M2M and the primitive's `technique=None` path; mostly authored
+   content (a scar-gated MOVED trigger + the escalation condition). Adds the
+   "heavily-scarred characters harmed on entry" experience.
+3. **Defilement (CASTER_DOMINANT)** *(brother-led; medium)* — the high-narrative-value
+   payoff that ties into soul tether. Must route caster→world corruption through the
+   existing `CORRUPTION_ACCRUING` event so the Sinner's Hollow absorbs world-defilement
+   (the social-responsibility layer). The `test_caster_dominant_stub` pipeline test is the
+   fill-in point.
+4. **Brother's richer formula** *(brother; no urgency)* — enriches the primitive body
+   (technique-resonance opposition weighting, multi-resonance places). v1 is functional;
+   do when brother prioritizes. Zero change to call sites / data / authored content.
+5. **`TECHNIQUE_PRE_CAST` block/modify variant** *(largest; lowest urgency)* — needs
+   cancel/modify-payload semantics. Post-resolve backfire is sufficient for the core
+   experience; defer until a concrete need.
+
 ### Cross-reference: combat clash-of-wills
 
 The planned combat **clash** feature (opposed-affinity casters contesting magical energy —
