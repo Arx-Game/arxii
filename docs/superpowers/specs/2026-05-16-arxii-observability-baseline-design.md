@@ -72,11 +72,15 @@ In-process exporter exposing Prometheus metrics on `/metrics`. Lives in Arx II s
 - **Reload-not-restart:** code-only releases apply via `evennia reload` (the Portal keeps players connected — Evennia's two-process model). Hard restart only for dependency, Portal, or settings changes.
 
 ### 4.5 CI/CD (GitHub Actions)
-- Trigger **only** on a release tag matching `v*-release` (e.g. `v1.2.3-release`) — a deliberate, explicit "this tag deploys" marker so an arbitrary `v`-prefixed tag (e.g. `very-cool-tag`, or even a bare `v1.2.3`) cannot accidentally deploy to prod. Build + test, publish a reproducible artifact (deps resolved in CI, not on the box at deploy time).
+- Trigger **only** on a semver release tag. GitHub Actions tag filter (glob) `v[0-9]*.[0-9]*.[0-9]*-release`; CI's first step then strict-regex-validates the tag against `^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-release$` and hard-fails before doing anything if malformed. Net: only a deliberate, semver-shaped `vMAJOR.MINOR.PATCH-release` (e.g. `v1.2.3-release`) deploys — `very-cool-tag`, a bare `v1.2.3`, and a non-semver `v1.2-release` all trigger nothing. Build + test, publish a reproducible artifact (deps resolved in CI, not on the box at deploy time).
 - **Approval gate:** a GitHub Environments "approve" button (not SSH) before prod.
 - CI invokes the Ansible playbook; it does not contain the deploy logic. Deploy logic is runnable independent of GitHub.
 - **Post-reload health gate:** reads §4.2 metrics (reactor lag, error rate); failure → automatic code-rollback (symlink to previous release).
-- **Hard migration CI gate (load-bearing because single-box / no staging):** the build fails if a migration is not backward-compatible (expand/contract). A deploy step dry-runs migrations against a fresh restore of the prod DB *before* touching the live one. This is the **sole DB safety net**; auto-rollback can revert code, never data.
+- **Migration safety gates (load-bearing because single-box / no staging).** Explicitly **not** a reversibility check: Django schema migrations are reversible by default, and an intentionally-irreversible data migration (`RunPython` with no reverse, by design) is legitimate and must **never** be flagged. Reversibility is the wrong property — the binding constraint is that after migrating, the **previous code release must still run against the new schema**, because auto-rollback reverts *code, never schema*, and `evennia reload` briefly overlaps old and new code. Two complementary checks plus an optional escalation:
+  1. **Expand/contract classifier (forces an explicit decision; does not pretend to auto-judge).** CI parses the migration's operations and flags the runtime-incompatible classes: `RemoveField`, `DeleteModel`, `RenameField`/`RenameModel`, `AlterField` that narrows type or adds `NOT NULL` without a default, and opaque `RunSQL`/`RunPython`. A flagged migration **fails CI unless it carries an explicit marker** (e.g. `# release-safety: expand` or `# release-safety: contract — old code gone since vX.Y.Z`) acknowledging which expand/contract phase it is. Rationale: "is this backward-compatible?" is undecidable in general (`RunSQL`/`RunPython` are opaque), so the gate's job is to force the expand/contract decision to be *declared and reviewed*, not to compute a verdict it can't.
+  2. **Apply-against-real-data dry-run.** The migration runs against a fresh restore of the prod DB *before* the live DB is touched — catches execution failures (e.g. `NOT NULL` on existing rows, a bad `RunPython`) that only surface on real data. Complementary to (1): proves it *applies*, not that old code survives it.
+  - *Recommended escalation (named, optional — deferred by default for cost/solo):* a CI job that runs the **previous release's** smoke tests against a DB migrated to the new head — the only *empirical* proof of old-code/new-schema compatibility. The gold standard if classifier+marker discipline ever proves insufficient.
+  Together these are the **sole DB safety net**; auto-rollback can revert code, never data.
 
 ### 4.6 Ephemeral staging
 `tofu apply` a stage box from the latest backup → scripted sanity tests → on success promote → `tofu destroy`. Wrapped so teardown runs even on failure (trap/`finally`) — a failed test cannot leave a box running. Cost: Linode bills hourly capped monthly; a 30–60 min run is pennies. Billing stops on **delete, not power-off** — `tofu destroy` enforces this. A Linode billing alert is a cheap backstop.
@@ -103,7 +107,7 @@ Linode DNS managed as code in the same OpenTofu codebase. Arx II uses its **own 
 
 ## 7. Testing Strategy
 
-- CI runs the existing arxii test suite + a migration-compatibility lint on every tagged build.
+- CI runs the existing arxii test suite + the §4.5 expand/contract classifier on every tagged build.
 - Migration dry-run executes against a fresh restore of the prod DB before any prod migration.
 - Ephemeral stage runs scripted smoke/sanity tests against a backup-restored environment before promotion.
 - The observability layer itself is partly the production correctness test: the post-deploy health gate is metrics-driven.
@@ -135,8 +139,8 @@ This sub-project is a hard prerequisite for the Arx I legacy relocation (sub-pro
 ## 11. Acceptance Criteria
 
 1. `tofu apply` + `ansible-playbook site.yml` from zero produces a working Arx II box (Postgres, Caddy TLS, game process under systemd) with no manual steps.
-2. A tag matching `v*-release` triggers CI → gated → deploy via `evennia reload` with connected players not dropped for a code-only change; a non-matching tag (e.g. `v1.2.3` or `very-cool-tag`) triggers **no** deploy.
-3. A deliberately non-backward-compatible migration fails the CI gate.
+2. A semver release tag (`v1.2.3-release`) triggers CI → gated → deploy via `evennia reload` with connected players not dropped for a code-only change; `very-cool-tag`, bare `v1.2.3`, and non-semver `v1.2-release` trigger **no** deploy.
+3. A migration with an unmarked destructive op (e.g. `RemoveField`) fails the CI classifier; the same migration with an explicit `# release-safety:` marker passes; an intentionally-irreversible data migration (no reverse, by design) is **not** flagged.
 4. A simulated bad release auto-rolls-back on the health gate.
 5. Grafana shows idmapper cache size/slope, reactor lag, and per-subsystem timing; an induced reactor stall is visible; flows-vs-scripts cost is readable from real data.
 6. Killing the box triggers the off-box heartbeat alert.
