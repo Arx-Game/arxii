@@ -1213,45 +1213,26 @@ class CanAccessStoryNotes(permissions.BasePermission):
 
     Notes are OOC authorial memory — never plain-player-visible.
 
-    - List/create: the target story is resolved from the ``story`` query param
-      (list) or ``story`` in request data (create). Access requires staff, a
-      story owner, or an active/Lead GM of that story.
-    - Object level: the same rule applied to ``obj.story``.
+    Canonical three-layer pattern:
 
-    Resolution of the story PK is done here only to gate access; FK existence
-    and validation are the serializer's responsibility (Layer 2).
+    - Layer 1 (this class, ``has_permission``): authenticated-only. The
+      target story is NOT resolved from request data/query params here — that
+      param-sniffing is non-canonical for this app.
+    - Layer 1 object scope (``has_object_permission``): the access predicate
+      applied to ``obj.story`` (staff, story owner, active GM, or Lead GM of
+      the story's primary table). This governs retrieve correctly without any
+      ``?story=`` param.
+    - Layer 2 (serializer ``validate_story``): create-scope check.
+    - List scope: ``StoryNoteViewSet.get_queryset`` (defense-in-depth).
     """
 
     message = "Only staff, the story owner, or an active GM may access these notes."
 
     def has_permission(self, request: Request, view: APIView) -> bool:
-        """Resolve the target story from request and check access."""
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if request.user.is_staff:
-            return True
-
-        if request.method in permissions.SAFE_METHODS:
-            story_pk = request.query_params.get("story")
-        else:
-            story_pk = request.data.get("story")
-
-        if story_pk is None:
-            # No story scope supplied — object-level / serializer handles the
-            # rest; deny here so non-staff cannot enumerate all notes.
-            return False
-
-        story = cast(Any, Story).objects.filter(pk=story_pk).first()
-        if story is None:
-            # Unknown story: let the serializer surface the 400; nothing to leak.
-            return False
-        return _user_can_access_story_notes(request.user, story)
+        """Authenticated check; object-level / queryset enforce full scope."""
+        return bool(request.user and request.user.is_authenticated)
 
     def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
-        """Apply the same access rule to the note's story."""
-        if not request.user.is_authenticated:
-            return False
-        if request.user.is_staff:
-            return True
+        """Apply the access rule to the note's story (governs retrieve)."""
         story_note = cast(StoryNote, obj)
         return _user_can_access_story_notes(request.user, story_note.story)

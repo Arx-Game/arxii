@@ -1905,6 +1905,23 @@ class StoryNoteSerializer(serializers.ModelSerializer):
         fields = ["id", "story", "author_account", "body", "created_at"]
         read_only_fields = ["id", "author_account", "created_at"]
 
+    def validate_story(self, story: Story) -> Story:
+        """Create-scope (Layer 2): requester must be able to access the story.
+
+        Mirrors the object-level access predicate used by the permission
+        class and queryset (staff, story owner, active GM, or Lead GM of the
+        story's primary table).
+        """
+        from world.stories.permissions import (  # noqa: PLC0415
+            _user_can_access_story_notes,
+        )
+
+        user = self.context["request"].user
+        if not _user_can_access_story_notes(user, story):
+            msg = "Only staff, the story owner, or an active GM may add notes to this story."
+            raise serializers.ValidationError(msg)
+        return story
+
     def validate_body(self, value: str) -> str:
         """Reject blank/whitespace-only note bodies."""
         if not value.strip():

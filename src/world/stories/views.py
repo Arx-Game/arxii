@@ -2071,6 +2071,39 @@ class StoryNoteViewSet(
     ordering_fields = ["created_at"]
     ordering = ["-created_at"]
 
+    def get_queryset(self) -> QuerySet[StoryNote]:
+        """Scope the queryset to notes the requesting user may access.
+
+        Defense-in-depth mirroring AggregateBeatContributionViewSet /
+        TableBulletinPostViewSet: staff see all; everyone else is scoped to
+        stories they own, actively GM, or Lead-GM via the primary table.
+        The optional ``story`` filterset further-narrows this safe queryset.
+        """
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return qs
+
+        # Stories the user owns (account M2M) — mirrors StoryViewSet owned_q
+        # (views.py:294 ``models.Q(owners=user)``) with a story__ prefix.
+        access_q = models.Q(story__owners=user)
+
+        # Active GM / Lead GM of the story's primary table — mirrors
+        # AssistantGMClaimViewSet (views.py:923 ``models.Q(assistant_gm=gm_profile)``)
+        # and StoryViewSet gm_q (views.py:291 ``models.Q(primary_table__gm=gm_profile)``)
+        # with a story__ prefix.
+        try:
+            gm_profile = user.gm_profile
+            access_q |= models.Q(story__active_gms=gm_profile) | models.Q(
+                story__primary_table__gm=gm_profile
+            )
+        except GMProfile.DoesNotExist:
+            pass
+
+        return qs.filter(access_q).distinct()
+
 
 # ---------------------------------------------------------------------------
 # Wave 10: TableBulletin ViewSets
