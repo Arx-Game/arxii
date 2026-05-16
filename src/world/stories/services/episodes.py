@@ -11,7 +11,7 @@ from typing import Any
 from django.db import transaction
 
 from world.gm.models import GMProfile
-from world.stories.constants import StoryScope, TransitionMode
+from world.stories.constants import StoryMaturity, StoryScope, TransitionMode
 from world.stories.exceptions import AmbiguousTransitionError, NoEligibleTransitionError
 from world.stories.models import EpisodeResolution, Era, Transition
 from world.stories.services.progress import advance_progress_to_episode
@@ -49,9 +49,19 @@ def resolve_episode(
                b. Advance progress.current_episode to transition.target_episode (may be None).
         6. Return the EpisodeResolution instance.
     """
+    # get_eligible_transitions raises ProgressionRequirementNotMetError when a
+    # progression gate is unmet — that propagates here untouched (the player is
+    # *blocked*, status stays ACTIVE). Reaching the line below means the
+    # exception did NOT fire, so an empty list is the genuine frontier pause
+    # (no outbound transitions authored ahead): route through resolve_frontier
+    # to land in RESTING / WAITING_FOR_GM, then re-raise so the existing
+    # NoEligibleTransitionError contract (view try/except, callers) is intact.
     eligible = get_eligible_transitions(progress)
 
     if not eligible:
+        from world.stories.services.frontier import resolve_frontier  # noqa: PLC0415
+
+        resolve_frontier(progress)
         msg = f"No eligible transitions from episode {progress.current_episode_id!r}."
         raise NoEligibleTransitionError(msg)
 
@@ -94,6 +104,19 @@ def resolve_episode(
     with transaction.atomic():
         resolution = EpisodeResolution.objects.create(**resolution_kwargs)
         advance_progress_to_episode(progress, selected.target_episode)
+
+    # A real transition fired, but the episode we landed on is still being
+    # authored (PITCH/OUTLINE) — the player cannot actually run it yet, so
+    # route through the frontier (WAITING_FOR_GM / RESTING) rather than
+    # leaving status ACTIVE. Only fires for a non-None below-PLOT target; a
+    # genuine PLOT target leaves status ACTIVE (story is really moving on).
+    if (
+        progress.current_episode is not None
+        and progress.current_episode.maturity != StoryMaturity.PLOT
+    ):
+        from world.stories.services.frontier import resolve_frontier  # noqa: PLC0415
+
+        resolve_frontier(progress)
 
     # Narrative notification — fans out a NarrativeMessage per recipient.
     from world.stories.services.narrative import notify_episode_resolution  # noqa: PLC0415
