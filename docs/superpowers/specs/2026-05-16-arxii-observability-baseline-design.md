@@ -52,7 +52,7 @@ GitHub Actions: tag -> build/test artifact -> approval gate -> playbook -> healt
 - **Backups:** nightly `pg_dump` to Linode Object Storage.
 
 ### 4.2 Observability (the actual point of this sub-project)
-In-process exporter exposing Prometheus metrics on `/metrics`. Lives in Arx II source (`src/…`), not the Evennia fork.
+In-process exporter exposing Prometheus metrics on `/metrics`. Lives in Arx II source (`src/…`); it *reads* Evennia internals but does not modify Evennia-core.
 
 - **idmapper cache gauge:** walk every `SharedMemoryModel` subclass; report `len(__instance_cache__)` and a `pympler.asizeof` byte estimate per model. Converts the unbounded-memory fear into a graphed slope + threshold.
 - **Reactor-loop lag:** a fixed-interval `LoopingCall` measuring scheduled-vs-actual delta. The single most important "is the one process keeping up" signal; directly measures head-of-line blocking.
