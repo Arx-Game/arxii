@@ -269,6 +269,37 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - Normally non-lethal PC vs PC sparring with pose integration
 - Special variant: lethal 1v1 PC vs significant NPC (only symmetrical combat mode)
 
+### Clash of Wills (future — needs a design pass; NOT yet specced)
+
+**Status: undesigned planned feature.** The "clash" is the contested-power standoff
+in combat — two sides pouring magical energy (or locked swords / a struggle of wills)
+into overpowering each other, each escalating effort to win the exchange (the
+"beam-struggle" trope). Its *meaning and terminology reservation* are fixed (see
+"## Reserved terminology: 'clash'" at the top of this file); what does NOT exist is
+any mechanical design, spec, or implementation. This entry exists so the feature is
+tracked, not lost — it surfaced during the resonance-environment work (the 2026-05-16
+universal-path slice deliberately used "backfire" and avoided "clash" so this term
+stays free).
+
+When prioritized, it gets its own design spec. Hard constraints already known:
+
+- **Reuse the affinity-opposition substrate — do not author a parallel table.** The
+  shipped resonance-environment work models directed, asymmetric affinity opposition
+  as authored `AffinityInteraction` rows (the RPS cycle, per-pair `valence` / `kind` /
+  `severity_multiplier`) plus the `ResonanceEnvironmentConfig` tuning singleton and the
+  generic consequence-pool resolution pipeline. A combat clash between opposed-affinity
+  casters is the *caster-vs-caster* analogue of the *caster-vs-place* interaction: it
+  consumes the same `AffinityInteraction` matrix + tuning, adding only the
+  contested-escalation mechanic on top. See `docs/superpowers/specs/2026-05-16-resonance-environment-universal-path-design.md`
+  (shipped) and the magic roadmap's "Resonance-Environment Interaction → Cross-reference:
+  combat clash-of-wills".
+- It is the only *symmetrical* magical exchange (both sides exerting/escalating), unlike
+  the caster-vs-place asymmetry — the design must define the escalation/commit loop and
+  resolution (who wins, at what cost) without re-deriving the opposition data.
+
+**Owner:** core combat + magic substrate (shared); needs a dedicated brainstorm/spec
+before any implementation.
+
 ### Shared Future Work (combat-adjacent)
 - **Combat REST API** — endpoints for encounter lifecycle, action declaration, combo upgrade, round resolution
 - **Combat UI** — web-first interface for all combat modes (declaration panel, resolution display, combo prompts)

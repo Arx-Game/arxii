@@ -1143,10 +1143,10 @@ Cast Disrupted `ConditionTemplate`s.
    → correctly a scar-gated MOVED `TriggerDefinition` via `ConditionTemplate.reactive_triggers`
    M2M (the legitimate flow/trigger use). `evaluate_resonance_environment(technique=None)`
    already serves this; the ALIGNED universal presence path added here does not subsume it.
-3. **Defilement (CASTER_DOMINANT)** — when a strong opposing caster overpowers a weak place,
-   the caster degrades the place's cascade resonance. The primitive already returns
-   `direction=CASTER_DOMINANT`; the cast service treats CORRUPT as inert at the fill-in
-   point. **Soul-tether integration lever (must be preserved):** defilement's caster→world
+3. **Defilement (CASTER_DOMINANT)** *(core magic — Tehom's domain, not brother's)* — when a
+   strong opposing caster overpowers a weak place, the caster degrades the place's cascade
+   resonance. The primitive already returns `direction=CASTER_DOMINANT`; the cast service
+   treats CORRUPT as inert at the fill-in point. **Soul-tether integration lever (must be preserved):** defilement's caster→world
    corruption MUST be emitted through the existing interceptable `CORRUPTION_ACCRUING` event
    (the one `soul_tether_redirect_handler` already subscribes to) — then a Sinner's Hollow
    can absorb world-defilement corruption with zero new wiring.
@@ -1154,9 +1154,12 @@ Cast Disrupted `ConditionTemplate`s.
    follow-up enriches the primitive body (technique-resonance opposition weighting,
    multi-resonance place weighting). Call sites, `AffinityInteraction` data,
    `ResonanceEnvironmentConfig`, the consequence pools, and the boon-tier rows do not change.
-5. **`TECHNIQUE_PRE_CAST` block/modify variant** — a true pre-cast intercept that could
-   block or modify the cast before it resolves needs cancel/modify-payload semantics. Post-
-   resolve backfire is sufficient for the core experience; defer until a concrete need.
+5. **`TECHNIQUE_PRE_CAST` block/modify variant** *(fundamental — core reactive capability)*
+   — a true pre-cast intercept that can block or modify the cast before it resolves; needs
+   cancel/modify-payload semantics in the reactive layer. v1's post-resolve backfire is a
+   deliberate scoping simplification (environment reacts *after* the working fires), **not**
+   a substitute for the environment being able to stop/alter a cast. This is foundational
+   capability work, not an indefinite deferral.
 
 ### Recommended next steps (priority order)
 
@@ -1167,17 +1170,23 @@ The deferred items above, ordered by recommended sequence with rationale and own
    `evaluate_resonance_environment(technique=None)` and `ConditionTemplate.reactive_triggers`
    M2M. The ALIGNED universal presence path already works; this adds the OPPOSED side for
    heavily-scarred characters.
-2. **Defilement (CASTER_DOMINANT)** *(brother-led; medium)* — the high-narrative-value
-   payoff that ties into soul tether. Must route caster→world corruption through the
-   existing `CORRUPTION_ACCRUING` event so the Sinner's Hollow absorbs world-defilement
-   (the social-responsibility layer). The `test_caster_dominant_stub` pipeline test is the
-   fill-in point.
-3. **Brother's richer formula** *(brother; no urgency)* — enriches the primitive body
+2. **`TECHNIQUE_PRE_CAST` block/modify variant** *(Tehom/core; fundamental)* — a true
+   pre-cast intercept that can **block or modify** a working *before* it resolves. This
+   is a foundational reactive-layer capability, **not** a nice-to-have: v1's post-resolve
+   backfire (the environment reacts *after* the working fires) was a deliberate scoping
+   simplification, never a substitute for the environment being able to stop or alter a
+   cast. Needs cancel / modify-payload semantics in the reactive layer. Sequence as core
+   capability work, not "defer until a concrete need."
+3. **Defilement (CASTER_DOMINANT)** *(Tehom/core; medium — magic-physics + soul-tether)*
+   — **our system, not brother's.** When a strong opposing caster overpowers a weak place,
+   the caster degrades the place's cascade resonance. High narrative value; ties into soul
+   tether. Must route caster→world corruption through the existing `CORRUPTION_ACCRUING`
+   event so a Sinner's Hollow absorbs world-defilement (the social-responsibility layer).
+   The `test_caster_dominant_stub` pipeline test is the fill-in point.
+4. **Brother's richer formula** *(brother; no urgency)* — enriches the primitive body
    (technique-resonance opposition weighting, multi-resonance places). v1 is functional;
-   do when brother prioritizes. Zero change to call sites / data / authored content.
-4. **`TECHNIQUE_PRE_CAST` block/modify variant** *(largest; lowest urgency)* — needs
-   cancel/modify-payload semantics. Post-resolve backfire is sufficient for the core
-   experience; defer until a concrete need.
+   do when brother prioritizes. Zero change to call sites / data / authored content. (This
+   one *is* genuinely brother's — the per-resonance weighting is his deferred follow-up.)
 
 ### Cross-reference: combat clash-of-wills
 
