@@ -8,9 +8,15 @@ ResonanceEnvironmentConfig is the staff-tunable scalar singleton (pk=1) that
 controls the numeric shape of severity calculations and backfire difficulty.
 """
 
-from decimal import Decimal
+from __future__ import annotations
 
+from decimal import Decimal
+from typing import TYPE_CHECKING
+
+from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils.functional import cached_property
+from evennia.utils.idmapper.manager import SharedMemoryManager
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.magic.constants import (
@@ -18,6 +24,68 @@ from world.magic.constants import (
     AffinityInteractionKind,
     ResonanceValence,
 )
+
+if TYPE_CHECKING:
+    from world.conditions.models import ConditionTemplate
+    from world.magic.models.affinity import Affinity
+
+# Sentinel used by AffinityInteractionManager.interaction_for to distinguish
+# "key absent from cache" from "key present with None value".
+_MISSING: object = object()
+
+
+class AffinityInteractionManager(SharedMemoryManager):
+    """Manager for AffinityInteraction with a cached lookup over the fixed 9-row table.
+
+    Test-isolation: the cross-process cache is stored as a class-level dict
+    ``_interaction_cache`` (``None`` until first loaded). Call
+    ``clear_cache()`` in test ``setUp`` to discard stale state so each test
+    begins with a cold cache.
+    """
+
+    _interaction_cache: dict[tuple[int, int], AffinityInteraction | None] | None = None
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """Discard the cached interaction table. Must be called in test setUp."""
+        cls._interaction_cache = None
+
+    def _load_cache(self) -> dict[tuple[int, int], AffinityInteraction | None]:
+        """Load all AffinityInteraction rows into the class-level cache dict.
+
+        Subsequent calls return the already-populated dict without issuing
+        any SQL.
+        """
+        if AffinityInteractionManager._interaction_cache is None:
+            rows = list(self.select_related("source_affinity", "environment_affinity").all())
+            AffinityInteractionManager._interaction_cache = {
+                (row.source_affinity_id, row.environment_affinity_id): row for row in rows
+            }
+        return AffinityInteractionManager._interaction_cache
+
+    def interaction_for(
+        self,
+        source_affinity: Affinity,
+        environment_affinity: Affinity,
+    ) -> AffinityInteraction | None:
+        """Return the AffinityInteraction row for (source, environment), or None.
+
+        All 9 (or fewer) rows are loaded on the first call and cached for
+        the process lifetime. Subsequent calls are O(1) dict lookups with
+        zero SQL queries.
+
+        Call ``AffinityInteraction.objects.clear_cache()`` in test setUp to
+        reset between tests.
+        """
+        cache = self._load_cache()
+        key = (source_affinity.pk, environment_affinity.pk)
+        # Use a module-level sentinel so None can be cached for unknown pairs.
+        result = cache.get(key, _MISSING)
+        if result is _MISSING:
+            # Pair not in the table at all — cache a None sentinel.
+            cache[key] = None
+            return None
+        return result  # type: ignore[return-value]
 
 
 class AffinityInteraction(SharedMemoryModel):
@@ -66,6 +134,19 @@ class AffinityInteraction(SharedMemoryModel):
         default=Decimal("1.00"),
         help_text="Scales the interaction's effect magnitude.",
     )
+    consequence_pool = models.ForeignKey(
+        "actions.ConsequencePool",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="resonance_interactions",
+        help_text=(
+            "OPPOSED backfire pool for this pairing. Null = inert "
+            "(CORRUPT-deferred pairs, or pairings with no authored content yet)."
+        ),
+    )
+
+    objects = AffinityInteractionManager()
 
     class Meta:
         constraints = [
@@ -74,6 +155,16 @@ class AffinityInteraction(SharedMemoryModel):
                 name="unique_affinity_interaction_pair",
             )
         ]
+
+    @cached_property
+    def cached_alignment_boon_tiers(self) -> list[ResonanceAlignmentBoonTier]:
+        """Cached list of all ResonanceAlignmentBoonTier rows for this interaction.
+
+        Per-instance cache via ``cached_property`` — naturally isolated between
+        instances and between test cases (each test creates fresh instances).
+        Repeated access on the same instance issues zero SQL after the first call.
+        """
+        return list(self.alignment_boon_tiers.order_by("min_magnitude").all())
 
     def __str__(self) -> str:
         return (
@@ -179,3 +270,97 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"ResonanceEnvironmentConfig(pk={self.pk})"
+
+
+class ResonanceAlignmentBoonTierManager(SharedMemoryManager):
+    """Manager for ResonanceAlignmentBoonTier with a cached distinct-template set.
+
+    Test-isolation: the cross-process cache is stored as a class-level
+    ``_templates_cache`` attribute (``None`` until first loaded). Call
+    ``clear_cache()`` in test ``setUp`` to discard stale state so each test
+    begins with a cold cache.
+    """
+
+    _templates_cache: frozenset[ConditionTemplate] | None = None
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """Discard the cached template set. Must be called in test setUp."""
+        cls._templates_cache = None
+
+    def boon_condition_templates(self) -> frozenset[ConditionTemplate]:
+        """Return the distinct set of ConditionTemplate instances referenced by all boon tiers.
+
+        Loaded on the first call and cached for the process lifetime. Subsequent
+        calls are zero SQL queries. Call ``clear_cache()`` in test setUp to reset.
+        """
+        if ResonanceAlignmentBoonTierManager._templates_cache is None:
+            rows = list(self.select_related("condition_template").all())
+            ResonanceAlignmentBoonTierManager._templates_cache = frozenset(
+                row.condition_template for row in rows
+            )
+        return ResonanceAlignmentBoonTierManager._templates_cache
+
+
+class ResonanceAlignmentBoonTier(SharedMemoryModel):
+    """Authored: which named buff ConditionTemplate an ALIGNED pairing grants
+    at or above a magnitude threshold. Few rows, staff-tunable.
+
+    affinity_interaction — must reference an ALIGNED (diagonal) interaction row.
+    min_magnitude        — applies when evaluated magnitude >= this value.
+                           Highest matching tier wins (selection done in Python).
+    condition_template   — the named, player-visible buff applied while present.
+
+    Unique per (affinity_interaction, min_magnitude) pair.
+    """
+
+    objects = ResonanceAlignmentBoonTierManager()
+
+    affinity_interaction = models.ForeignKey(
+        "magic.AffinityInteraction",
+        on_delete=models.CASCADE,
+        related_name="alignment_boon_tiers",
+        help_text="Must reference an ALIGNED (diagonal) interaction row.",
+    )
+    min_magnitude = models.PositiveIntegerField(
+        help_text=(
+            "Applies when evaluated magnitude >= this value. "
+            "Highest matching tier wins (selection done in Python)."
+        ),
+    )
+    condition_template = models.ForeignKey(
+        "conditions.ConditionTemplate",
+        on_delete=models.PROTECT,
+        related_name="resonance_alignment_tiers",
+        help_text="The named, player-visible buff applied while present.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["affinity_interaction", "min_magnitude"],
+                name="unique_alignment_boon_tier_threshold",
+            ),
+        ]
+
+    def clean(self) -> None:
+        super().clean()
+        if (
+            self.affinity_interaction_id is not None
+            and self.affinity_interaction.valence != ResonanceValence.ALIGNED
+        ):
+            raise ValidationError(
+                {
+                    "affinity_interaction": (
+                        "ResonanceAlignmentBoonTier requires an ALIGNED interaction row; "
+                        f"got valence='{self.affinity_interaction.valence}'."
+                    )
+                }
+            )
+
+    def __str__(self) -> str:
+        return (
+            f"BoonTier({self.affinity_interaction_id}, "
+            f"min={self.min_magnitude}, "
+            f"condition={self.condition_template_id})"
+        )
