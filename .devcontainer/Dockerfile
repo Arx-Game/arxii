@@ -6,7 +6,7 @@ FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 # init-firewall.sh; build-essential for any source wheels.
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
  && apt-get install -y --no-install-recommends \
-      iptables ipset dnsutils git curl ca-certificates build-essential sudo \
+      iptables ipset dnsutils jq git curl ca-certificates build-essential sudo \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --chown=root:root .devcontainer/init-firewall.sh /usr/local/bin/init-firewall.sh

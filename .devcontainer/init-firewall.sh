@@ -8,46 +8,29 @@
 #
 # Adapted from the upstream Anthropic reference:
 #   https://raw.githubusercontent.com/anthropics/claude-code/main/.devcontainer/init-firewall.sh
-# Structure preserved; allowlist replaced; GitHub-meta/jq/aggregate path
-# replaced with plain dig resolution (all GitHub hosts are in the allowlist
-# by name); Docker compose-bridge rule added; verification softened so a
-# temporary DNS hiccup does not make container startup fail.
+# Structure preserved; allowlist replaced; IP-range gathering uses the same
+# "fetch published ranges before lockdown" philosophy as the upstream reference,
+# extended to cover all four logical destination groups.
 
 set -euo pipefail
 IFS=$'\n\t'
 
 # ---------------------------------------------------------------------------
-# 1. Capture Docker internal DNS NAT rules BEFORE flushing anything.
-#    Docker injects PREROUTING/OUTPUT rules that redirect DNS to 127.0.0.11.
-#    If we flush without saving these we break container-internal DNS.
-# ---------------------------------------------------------------------------
-DOCKER_DNS_RULES=$(iptables-save -t nat | grep "127\.0\.0\.11" || true)
-
-# ---------------------------------------------------------------------------
-# 2. Flush all existing rules and destroy existing ipsets.
+# 1. Flush the filter (and mangle) tables and destroy existing ipsets.
+#    We do NOT touch the nat table: Docker injects PREROUTING/OUTPUT rules
+#    into nat that redirect DNS to the embedded resolver (127.0.0.11).
+#    Flushing nat breaks container-internal DNS and cannot be safely restored
+#    via iptables-save/xargs.  Leaving nat untouched means Docker's DNS keeps
+#    working across every container restart.
 # ---------------------------------------------------------------------------
 iptables -F
 iptables -X
-iptables -t nat -F
-iptables -t nat -X
 iptables -t mangle -F
 iptables -t mangle -X
 ipset destroy allowed-domains 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
-# 3. Restore ONLY the internal Docker DNS NAT rules we captured above.
-# ---------------------------------------------------------------------------
-if [ -n "$DOCKER_DNS_RULES" ]; then
-    echo "Restoring Docker DNS rules..."
-    iptables -t nat -N DOCKER_OUTPUT 2>/dev/null || true
-    iptables -t nat -N DOCKER_POSTROUTING 2>/dev/null || true
-    echo "$DOCKER_DNS_RULES" | xargs -L 1 iptables -t nat
-else
-    echo "No Docker DNS rules to restore."
-fi
-
-# ---------------------------------------------------------------------------
-# 4. Baseline ACCEPT rules (must come before default-deny policies).
+# 2. Baseline ACCEPT rules (must come before default-deny policies).
 # ---------------------------------------------------------------------------
 
 # Loopback — always unrestricted.
@@ -55,8 +38,11 @@ iptables -A INPUT  -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
 
 # DNS — needed to resolve the allowlist domains below.
+# Both UDP (standard) and TCP (fallback for large responses, e.g. CDN TXT/A sets).
 iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
 iptables -A INPUT  -p udp --sport 53 -j ACCEPT
+iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
+iptables -A INPUT  -p tcp --sport 53 -m state --state ESTABLISHED -j ACCEPT
 
 # SSH — allows git-over-SSH and inbound responses.
 iptables -A OUTPUT -p tcp --dport 22 -j ACCEPT
@@ -70,12 +56,44 @@ iptables -A INPUT  -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT
 iptables -A OUTPUT -d 172.16.0.0/12 -j ACCEPT
 
 # ---------------------------------------------------------------------------
-# 5. Build the ipset of allowed egress destinations.
+# 3. Build the ipset of allowed egress destinations.
 #    hash:net supports both single IPs (/32) and CIDR prefixes.
+#
+# IP-range data is gathered HERE — before the default-deny OUTPUT policy is
+# applied — while the chain still defaults to ACCEPT.  If any required fetch
+# or resolve fails (zero entries returned), we exit 1 immediately, before the
+# policy flip.  Fail-closed during setup: the container retains its default
+# ACCEPT policy and is never locked out of its own dependencies.
+#
+# Four logical destination groups, each resolved robustly for its delivery
+# infrastructure:
+#
+#   a) Small/stable hosts (Anthropic API, Sentry, Statsig, PyPI index) —
+#      resolved via dig A records; these hosts have small, stable IP sets.
+#
+#   b) GitHub — resolved via the official GitHub meta API, which publishes
+#      the full set of CIDRs used by git, api, web, and packages endpoints.
+#      Covers github.com, api.github.com, codeload.github.com, and
+#      objects.githubusercontent.com (GitHub's CDN) robustly.
+#
+#   c) Fastly published ranges — covers objects.githubusercontent.com
+#      (GitHub's Fastly CDN) and files.pythonhosted.org (PyPI file downloads,
+#      also Fastly-backed).  Fastly serves from a large rotating pool;
+#      a one-shot dig resolves only one of many edge nodes.
+#
+#   d) Cloudflare published ranges — covers registry.npmjs.org, which sits
+#      behind Cloudflare and rotates IPs aggressively.
+#
+# Sources b–d use -exist so duplicate CIDRs across ranges don't error.
 # ---------------------------------------------------------------------------
 ipset create allowed-domains hash:net
 
-# Resolve each domain and add all returned A-record IPs to the ipset.
+# Loose validation: accept IPv4 address optionally followed by /NN prefix.
+is_valid_ipv4_cidr() {
+    [[ "$1" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$ ]]
+}
+
+# ---- a) Small/stable hosts via dig ----
 resolve_and_add() {
     local domain="$1"
     echo "Resolving ${domain}..."
@@ -85,54 +103,101 @@ resolve_and_add() {
         echo "ERROR: Failed to resolve ${domain}"
         exit 1
     fi
+    local count=0
     while read -r ip; do
-        if [[ ! "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        if ! is_valid_ipv4_cidr "$ip"; then
             echo "ERROR: Invalid IP for ${domain}: ${ip}"
             exit 1
         fi
         echo "  Adding ${ip} for ${domain}"
-        ipset add allowed-domains "$ip" 2>/dev/null || true  # ignore duplicates
+        ipset add allowed-domains "${ip}" -exist
+        count=$((count + 1))
     done <<< "$ips"
+    echo "  Resolved ${count} address(es) for ${domain}"
 }
 
-# ---- Allowlist (EXACT — do not add or remove entries) ----
-#
-# Claude Code runtime / telemetry
 resolve_and_add "api.anthropic.com"
 resolve_and_add "sentry.io"
 resolve_and_add "statsig.anthropic.com"
 resolve_and_add "statsig.com"
-#
-# Git operations + TehomCD/evennia dependency
-resolve_and_add "github.com"
-resolve_and_add "api.github.com"
-resolve_and_add "codeload.github.com"
-resolve_and_add "objects.githubusercontent.com"
-#
-# uv / pip
 resolve_and_add "pypi.org"
-resolve_and_add "files.pythonhosted.org"
-#
-# pnpm
-resolve_and_add "registry.npmjs.org"
 
-# ---------------------------------------------------------------------------
-# 6. Detect the host network and allow traffic to it.
-#    (Allows the container to talk back to the Docker host itself.)
-# ---------------------------------------------------------------------------
-HOST_IP=$(ip route | grep default | cut -d" " -f3)
-if [ -z "$HOST_IP" ]; then
-    echo "ERROR: Failed to detect host IP via default route"
+# ---- b) GitHub meta API (git + api + web + packages CIDRs) ----
+echo "Fetching GitHub IP ranges via meta API..."
+GITHUB_META=$(curl -sf https://api.github.com/meta)
+if [ -z "$GITHUB_META" ]; then
+    echo "ERROR: Failed to fetch https://api.github.com/meta"
     exit 1
 fi
-HOST_NETWORK=$(echo "$HOST_IP" | sed "s/\.[0-9]*$/.0\/24/")
-echo "Host network detected as: ${HOST_NETWORK}"
-iptables -A INPUT  -s "$HOST_NETWORK" -j ACCEPT
-iptables -A OUTPUT -d "$HOST_NETWORK" -j ACCEPT
+GITHUB_COUNT=0
+while read -r cidr; do
+    if is_valid_ipv4_cidr "$cidr"; then
+        echo "  Adding GitHub CIDR: ${cidr}"
+        ipset add allowed-domains "$cidr" -exist
+        GITHUB_COUNT=$((GITHUB_COUNT + 1))
+    fi
+done < <(echo "$GITHUB_META" | jq -r '(.git[], .api[], .web[], .packages[]) | select(test("^[0-9]"))')
+if [ "$GITHUB_COUNT" -eq 0 ]; then
+    echo "ERROR: GitHub meta API returned zero IPv4 CIDRs"
+    exit 1
+fi
+echo "  Added ${GITHUB_COUNT} GitHub CIDRs."
+
+# ---- c) Fastly published ranges (objects.githubusercontent.com + files.pythonhosted.org) ----
+echo "Fetching Fastly IP ranges..."
+FASTLY_LIST=$(curl -sf https://api.fastly.com/public-ip-list)
+if [ -z "$FASTLY_LIST" ]; then
+    echo "ERROR: Failed to fetch https://api.fastly.com/public-ip-list"
+    exit 1
+fi
+FASTLY_COUNT=0
+while read -r cidr; do
+    if is_valid_ipv4_cidr "$cidr"; then
+        echo "  Adding Fastly CIDR: ${cidr}"
+        ipset add allowed-domains "$cidr" -exist
+        FASTLY_COUNT=$((FASTLY_COUNT + 1))
+    fi
+done < <(echo "$FASTLY_LIST" | jq -r '.addresses[]')
+if [ "$FASTLY_COUNT" -eq 0 ]; then
+    echo "ERROR: Fastly IP list returned zero IPv4 CIDRs"
+    exit 1
+fi
+echo "  Added ${FASTLY_COUNT} Fastly CIDRs."
+
+# ---- d) Cloudflare published ranges (registry.npmjs.org) ----
+echo "Fetching Cloudflare IPv4 ranges..."
+CF_LIST=$(curl -sf https://www.cloudflare.com/ips-v4)
+if [ -z "$CF_LIST" ]; then
+    echo "ERROR: Failed to fetch https://www.cloudflare.com/ips-v4"
+    exit 1
+fi
+CF_COUNT=0
+while read -r cidr; do
+    cidr="${cidr//[$'\r']}"   # strip any Windows-style CR
+    [ -z "$cidr" ] && continue
+    if is_valid_ipv4_cidr "$cidr"; then
+        echo "  Adding Cloudflare CIDR: ${cidr}"
+        ipset add allowed-domains "$cidr" -exist
+        CF_COUNT=$((CF_COUNT + 1))
+    fi
+done <<< "$CF_LIST"
+if [ "$CF_COUNT" -eq 0 ]; then
+    echo "ERROR: Cloudflare ips-v4 returned zero IPv4 CIDRs"
+    exit 1
+fi
+echo "  Added ${CF_COUNT} Cloudflare CIDRs."
 
 # ---------------------------------------------------------------------------
-# 7. Default-deny policies and final ACCEPT/REJECT rules.
-#    Order matters: ESTABLISHED before ipset-match before final REJECT.
+# 4. Default-deny policies and final ACCEPT/REJECT rules.
+#
+#    ACCEPT-rule ordering: ESTABLISHED/RELATED first, then ipset-match, then
+#    final REJECT.  The ordering matters only relative to the REJECT at the
+#    end of the OUTPUT chain — earlier ACCEPTs short-circuit it.
+#
+#    NOTE: flipping OUTPUT to DROP here intentionally drops any in-flight
+#    connections that were open during the setup phase above.  That is the
+#    expected behaviour for a security tool applied on container restart;
+#    callers should reconnect after firewall initialization completes.
 # ---------------------------------------------------------------------------
 iptables -P INPUT   DROP
 iptables -P FORWARD DROP
@@ -151,7 +216,7 @@ iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited
 echo "Firewall configuration complete."
 
 # ---------------------------------------------------------------------------
-# 8. Verification.
+# 5. Verification.
 #
 # We assert the key invariants:
 #   (a) A host that is NOT on the allowlist cannot be reached.
