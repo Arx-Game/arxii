@@ -3255,6 +3255,30 @@ export interface paths {
     patch: operations['episodes_partial_update'];
     trace?: never;
   };
+  '/api/episodes/{id}/promote/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/episodes/{id}/promote/ — set the episode's authoring maturity.
+     *
+     *     Lead GM or staff posts {target} (a StoryMaturity value). The PLOT-gate
+     *     (resting_conclusion + outbound transition / is_ending) is enforced in
+     *     PromoteEpisodeInputSerializer.validate(), so a violation is a 400.
+     *     Lateral moves and demotions are unvalidated by design.
+     */
+    post: operations['episodes_promote_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/episodes/{id}/resolve/': {
     parameters: {
       query?: never;
@@ -8777,6 +8801,39 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/stories/{id}/assign-to-scope/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/stories/{id}/assign-to-scope/ — lift a story out of UNASSIGNED.
+     *
+     *     Lead GM (story.primary_table.gm) or staff picks the scope and the
+     *     matching target; this sets ``Story.scope`` and creates the
+     *     scope-appropriate progress record so the story can run:
+     *
+     *     - CHARACTER: sets ``story.character_sheet`` and creates StoryProgress
+     *     - GROUP: creates GroupStoryProgress for the given gm_table
+     *     - GLOBAL: creates the GlobalStoryProgress singleton
+     *
+     *     The scope <-> target invariant is enforced by
+     *     AssignStoryInputSerializer.validate(), so an invalid combination is a
+     *     400 (no scope change, no progress row). Because scope is set before
+     *     the create_*_progress call, StoryNotAssignedError cannot fire — no
+     *     try/except is needed.
+     */
+    post: operations['stories_assign_to_scope_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/stories/{id}/assign-to-table/': {
     parameters: {
       query?: never;
@@ -9226,6 +9283,62 @@ export interface paths {
      *     No body required. Returns 200 with the updated StoryGMOffer.
      */
     post: operations['story_gm_offers_withdraw_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/story-notes/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Append-only StoryNote API — list, retrieve, and create only.
+     *
+     *     StoryNote is OOC authorial memory: never plain-player-visible, and never
+     *     editable or deletable. Omitting the update/destroy mixins makes PATCH and
+     *     DELETE return 405. Access is gated by CanAccessStoryNotes (staff, story
+     *     owner, or active/Lead GM of the story).
+     */
+    get: operations['story_notes_list'];
+    put?: never;
+    /**
+     * @description Append-only StoryNote API — list, retrieve, and create only.
+     *
+     *     StoryNote is OOC authorial memory: never plain-player-visible, and never
+     *     editable or deletable. Omitting the update/destroy mixins makes PATCH and
+     *     DELETE return 405. Access is gated by CanAccessStoryNotes (staff, story
+     *     owner, or active/Lead GM of the story).
+     */
+    post: operations['story_notes_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/story-notes/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Append-only StoryNote API — list, retrieve, and create only.
+     *
+     *     StoryNote is OOC authorial memory: never plain-player-visible, and never
+     *     editable or deletable. Omitting the update/destroy mixins makes PATCH and
+     *     DELETE return 405. Access is gated by CanAccessStoryNotes (staff, story
+     *     owner, or active/Lead GM of the story).
+     */
+    get: operations['story_notes_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -9927,6 +10040,11 @@ export interface components {
       /** @description Shown in story log after beat completes. */
       player_resolution_text?: string;
       order?: number;
+      kind?: components['schemas']['KindEnum'];
+      /** @description False = Tangent: recorded for history, never gates a transition. */
+      advances?: boolean;
+      /** @description Plain risk number. Meaning/names assigned later with the consequence work. Authoring trust-gated in the serializer. */
+      risk?: number;
       /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
       required_level?: number | null;
       /** @description For ACHIEVEMENT_HELD predicates. */
@@ -10004,6 +10122,11 @@ export interface components {
       /** @description Shown in story log after beat completes. */
       player_resolution_text?: string;
       order?: number;
+      kind?: components['schemas']['KindEnum'];
+      /** @description False = Tangent: recorded for history, never gates a transition. */
+      advances?: boolean;
+      /** @description Plain risk number. Meaning/names assigned later with the consequence work. Authoring trust-gated in the serializer. */
+      risk?: number;
       /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
       required_level?: number | null;
       /** @description For ACHIEVEMENT_HELD predicates. */
@@ -10363,6 +10486,7 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of what happened in this chapter */
       summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
       /** @description Key consequences that affect future chapters */
       consequences?: string;
       /** Format: date-time */
@@ -10380,6 +10504,7 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of what happened in this chapter */
       summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
       /** @description Key consequences that affect future chapters */
       consequences?: string;
       /** Format: date-time */
@@ -11475,6 +11600,11 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of this episode's plot beats */
       summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
+      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
+      resting_conclusion?: string;
+      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
+      is_ending?: boolean;
       /** @description What consequences lead to the next episode */
       consequences?: string;
       /** Format: date-time */
@@ -11492,6 +11622,11 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of this episode's plot beats */
       summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
+      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
+      resting_conclusion?: string;
+      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
+      is_ending?: boolean;
       /** @description What consequences lead to the next episode */
       consequences?: string;
       /** Format: date-time */
@@ -12659,6 +12794,21 @@ export interface components {
       readonly is_craftable: boolean;
       readonly image_url: string;
     };
+    /**
+     * @description * `situation` - Situation
+     *     * `encounter` - Encounter
+     *     * `task` - Task
+     *     * `requirement` - Requirement
+     * @enum {string}
+     */
+    KindEnum: 'situation' | 'encounter' | 'task' | 'requirement';
+    /**
+     * @description * `pitch` - Pitch
+     *     * `outline` - Outline
+     *     * `plot` - Plot
+     * @enum {string}
+     */
+    MaturityEnum: 'pitch' | 'outline' | 'plot';
     /**
      * @description * `photo` - Photo
      *     * `portrait` - Character Portrait
@@ -13835,6 +13985,21 @@ export interface components {
       previous?: string | null;
       results?: components['schemas']['StoryList'][];
     };
+    PaginatedStoryNoteList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['StoryNote'][];
+    };
     PaginatedStoryParticipationList: {
       /** @example 123 */
       count?: number;
@@ -14042,6 +14207,11 @@ export interface components {
       /** @description Shown in story log after beat completes. */
       player_resolution_text?: string;
       order?: number;
+      kind?: components['schemas']['KindEnum'];
+      /** @description False = Tangent: recorded for history, never gates a transition. */
+      advances?: boolean;
+      /** @description Plain risk number. Meaning/names assigned later with the consequence work. Authoring trust-gated in the serializer. */
+      risk?: number;
       /** @description For CHARACTER_LEVEL_AT_LEAST predicates. */
       required_level?: number | null;
       /** @description For ACHIEVEMENT_HELD predicates. */
@@ -14097,6 +14267,7 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of what happened in this chapter */
       summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
       /** @description Key consequences that affect future chapters */
       consequences?: string;
       /** Format: date-time */
@@ -14210,6 +14381,11 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of this episode's plot beats */
       summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
+      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
+      resting_conclusion?: string;
+      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
+      is_ending?: boolean;
       /** @description What consequences lead to the next episode */
       consequences?: string;
       /** Format: date-time */
@@ -14448,12 +14624,16 @@ export interface components {
     PatchedStoryDetailRequest: {
       title?: string;
       description?: string;
+      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
+      summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
       status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
       /**
        * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
        *
-       *     * `character` - Character
+       *     * `unassigned` - Unassigned
+       *     * `character` - Personal
        *     * `group` - Group
        *     * `global` - Global
        */
@@ -15483,7 +15663,7 @@ export interface components {
       readonly source: components['schemas']['SourceEnum'];
       /** Format: date-time */
       readonly granted_at: string;
-      readonly source_room_aura_profile: number | null;
+      readonly source_room_profile: number | null;
       readonly source_staff_account: number | null;
       readonly source_pose_endorsement: number | null;
       readonly source_scene_entry_endorsement: number | null;
@@ -15967,12 +16147,13 @@ export interface components {
       action: components['schemas']['ActionEnum'];
     };
     /**
-     * @description * `character` - Character
+     * @description * `unassigned` - Unassigned
+     *     * `character` - Personal
      *     * `group` - Group
      *     * `global` - Global
      * @enum {string}
      */
-    ScopeEnum: 'character' | 'group' | 'global';
+    ScopeEnum: 'unassigned' | 'character' | 'group' | 'global';
     /** @description Read-only serializer for SessionRequest records. */
     SessionRequest: {
       readonly id: number;
@@ -16307,11 +16488,14 @@ export interface components {
     StoryCreate: {
       title: string;
       description: string;
+      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
+      summary?: string;
       privacy?: components['schemas']['PrivacyEnum'];
       /**
        * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
        *
-       *     * `character` - Character
+       *     * `unassigned` - Unassigned
+       *     * `character` - Personal
        *     * `group` - Group
        *     * `global` - Global
        */
@@ -16321,11 +16505,14 @@ export interface components {
     StoryCreateRequest: {
       title: string;
       description: string;
+      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
+      summary?: string;
       privacy?: components['schemas']['PrivacyEnum'];
       /**
        * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
        *
-       *     * `character` - Character
+       *     * `unassigned` - Unassigned
+       *     * `character` - Personal
        *     * `group` - Group
        *     * `global` - Global
        */
@@ -16336,12 +16523,16 @@ export interface components {
       readonly id: number;
       title: string;
       description: string;
+      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
+      summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
       status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
       /**
        * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
        *
-       *     * `character` - Character
+       *     * `unassigned` - Unassigned
+       *     * `character` - Personal
        *     * `group` - Group
        *     * `global` - Global
        */
@@ -16366,12 +16557,16 @@ export interface components {
     StoryDetailRequest: {
       title: string;
       description: string;
+      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
+      summary?: string;
+      maturity?: components['schemas']['MaturityEnum'];
       status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
       /**
        * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
        *
-       *     * `character` - Character
+       *     * `unassigned` - Unassigned
+       *     * `character` - Personal
        *     * `group` - Group
        *     * `global` - Global
        */
@@ -16453,7 +16648,8 @@ export interface components {
       /**
        * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
        *
-       *     * `character` - Character
+       *     * `unassigned` - Unassigned
+       *     * `character` - Personal
        *     * `group` - Group
        *     * `global` - Global
        */
@@ -16465,6 +16661,30 @@ export interface components {
       readonly created_at: string;
       /** Format: date-time */
       readonly updated_at: string;
+    };
+    /**
+     * @description List + create serializer for StoryNote (append-only, GM/staff/owner only).
+     *
+     *     ``author_account`` is set from the requesting account (Evennia AccountDB)
+     *     in ``create()`` — it is never accepted from client input.
+     */
+    StoryNote: {
+      readonly id: number;
+      story: number;
+      readonly author_account: number | null;
+      body: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description List + create serializer for StoryNote (append-only, GM/staff/owner only).
+     *
+     *     ``author_account`` is set from the requesting account (Evennia AccountDB)
+     *     in ``create()`` — it is never accepted from client input.
+     */
+    StoryNoteRequest: {
+      story: number;
+      body: string;
     };
     /** @description Serializer for story participation */
     StoryParticipation: {
@@ -21429,6 +21649,32 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedEpisodeDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['EpisodeDetail'];
+        };
+      };
+    };
+  };
+  episodes_promote_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this episode. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EpisodeDetailRequest'];
       };
     };
     responses: {
@@ -29457,11 +29703,12 @@ export interface operations {
         /**
          * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
          *
-         *     * `character` - Character
+         *     * `unassigned` - Unassigned
+         *     * `character` - Personal
          *     * `group` - Group
          *     * `global` - Global
          */
-        scope?: 'character' | 'global' | 'group';
+        scope?: 'character' | 'global' | 'group' | 'unassigned';
         /** @description A search term. */
         search?: string;
         status?: string;
@@ -29601,6 +29848,32 @@ export interface operations {
     };
   };
   stories_apply_to_participate_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryDetailRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryDetail'];
+        };
+      };
+    };
+  };
+  stories_assign_to_scope_create: {
     parameters: {
       query?: never;
       header?: never;
@@ -30176,6 +30449,78 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['StoryGMOffer'];
+        };
+      };
+    };
+  };
+  story_notes_list: {
+    parameters: {
+      query?: {
+        /** @description Which field to use when ordering the results. */
+        ordering?: string;
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+        story?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedStoryNoteList'];
+        };
+      };
+    };
+  };
+  story_notes_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StoryNoteRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryNote'];
+        };
+      };
+    };
+  };
+  story_notes_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this story note. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['StoryNote'];
         };
       };
     };
