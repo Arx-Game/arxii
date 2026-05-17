@@ -142,6 +142,7 @@ from world.stories.serializers import (
     MarkBeatInputSerializer,
     OfferStoryToGMInputSerializer,
     PlayerTrustSerializer,
+    PromoteEpisodeInputSerializer,
     RejectClaimInputSerializer,
     RequestClaimInputSerializer,
     ResolveEpisodeInputSerializer,
@@ -669,6 +670,34 @@ class EpisodeViewSet(viewsets.ModelViewSet):
 
         return Response(
             EpisodeResolutionSerializer(resolution).data, status=status.HTTP_201_CREATED
+        )
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="promote",
+        permission_classes=[IsLeadGMOnStoryOrStaff],
+    )
+    def promote(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/episodes/{id}/promote/ — set the episode's authoring maturity.
+
+        Lead GM or staff posts {target} (a StoryMaturity value). The PLOT-gate
+        (resting_conclusion + outbound transition / is_ending) is enforced in
+        PromoteEpisodeInputSerializer.validate(), so a violation is a 400.
+        Lateral moves and demotions are unvalidated by design.
+        """
+        from world.stories.services.maturity import (  # noqa: PLC0415
+            promote_episode_maturity,
+        )
+
+        episode = self.get_object()
+        ser = PromoteEpisodeInputSerializer(data=request.data, context={"episode": episode})
+        ser.is_valid(raise_exception=True)
+
+        promote_episode_maturity(episode, ser.validated_data["target"])
+
+        return Response(
+            EpisodeDetailSerializer(episode, context=self.get_serializer_context()).data
         )
 
 

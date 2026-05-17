@@ -18,6 +18,7 @@ from world.stories.constants import (
     StoryScope,
     TransitionMode,
 )
+from world.stories.exceptions import MaturityPromotionError
 from world.stories.models import (
     AggregateBeatContribution,
     AssistantGMClaim,
@@ -1204,6 +1205,42 @@ def _resolve_progress(episode: "Episode", progress_id: int | None) -> "AnyStoryP
             case _:
                 return None
     return get_active_progress_for_story(story)
+
+
+class PromoteEpisodeInputSerializer(serializers.Serializer):
+    """Input for POST /api/episodes/{id}/promote/.
+
+    Context required:
+        episode (Episode): the episode whose maturity is changing.
+
+    Validates (Layer 2): mirrors ``promote_episode_maturity``'s PLOT-gate so a
+    violation surfaces as a 400, not a service-raised 500. The gate only fires
+    on an upward move *to* PLOT; lateral moves and demotions are never gated
+    (non-linear sketchpad). The gate requires a non-empty resting_conclusion
+    AND (an outbound transition OR is_ending).
+    """
+
+    _RANK = {
+        StoryMaturity.PITCH: 0,
+        StoryMaturity.OUTLINE: 1,
+        StoryMaturity.PLOT: 2,
+    }
+
+    target = serializers.ChoiceField(choices=StoryMaturity.choices)
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        episode: Episode = self.context["episode"]
+        target: str = attrs["target"]
+
+        current_rank = self._RANK[StoryMaturity(episode.maturity)]
+        is_promotion = self._RANK[StoryMaturity(target)] > current_rank
+        if target == StoryMaturity.PLOT and is_promotion:
+            has_outbound = episode.outbound_transitions.exists()
+            ready = bool(episode.resting_conclusion.strip()) and (has_outbound or episode.is_ending)
+            if not ready:
+                msg = MaturityPromotionError().user_message
+                raise serializers.ValidationError({"target": msg})
+        return attrs
 
 
 class ResolveEpisodeInputSerializer(serializers.Serializer):
