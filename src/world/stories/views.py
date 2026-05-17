@@ -2140,66 +2140,237 @@ class ExpireOverdueBeatsView(APIView):
         return Response({"expired_count": expired_count}, status=status.HTTP_200_OK)
 
 
+@dataclass
+class _StaffPerGMInputs:
+    """Pre-batched lookups for the staff-workload per-GM queue depth.
+
+    Every map is built by exactly one query (or zero when empty), so the
+    per-GM / per-story assembly that consumes them issues no queries
+    regardless of how many GMs or stories exist. Mirrors the batching
+    pattern C1 introduced for the GM queue.
+    """
+
+    lead_stories_by_gm: dict[int, list[Story]]
+    first_active_progress_by_story: dict[int, Any]
+    progression_reqs_by_episode: dict[int, list[Any]]
+    transitions_by_episode: dict[int, list[Transition]]
+    pending_claims_by_gm: dict[int, int]
+
+
+def _first_active_progress_by_story(
+    lead_stories: list[Story],
+) -> dict[int, Any]:
+    """First active progress per story, mirroring get_active_progress_for_story.
+
+    The old per-GM loop called ``get_active_progress_for_story(story)`` once
+    per story, which dispatches on scope and returns the first active
+    progress (``.first()`` for CHARACTER/GROUP, the OneToOne for GLOBAL,
+    ``None`` for UNASSIGNED/other). This reproduces that exactly with three
+    batched queries (one per progress model) instead of one query per story.
+
+    The previous ``.first()`` had no ``Meta.ordering``, so which row it
+    returned was DB-incidental; ``order_by("pk")`` here deterministically
+    stabilises that (same stabilisation C1 applied for the GM queue). No
+    staff-workload test asserts which progress row is selected — only the
+    integer ``episodes_ready`` count — so the produced response is unchanged.
+    """
+    by_story: dict[int, Any] = {}
+
+    char_ids = [s.pk for s in lead_stories if s.scope == StoryScope.CHARACTER]
+    if char_ids:
+        for progress in (
+            StoryProgress.objects.filter(story_id__in=char_ids, is_active=True)
+            .select_related("current_episode")
+            .order_by("pk")
+        ):
+            by_story.setdefault(progress.story_id, progress)
+
+    group_ids = [s.pk for s in lead_stories if s.scope == StoryScope.GROUP]
+    if group_ids:
+        for progress in (
+            GroupStoryProgress.objects.filter(story_id__in=group_ids, is_active=True)
+            .select_related("current_episode")
+            .order_by("pk")
+        ):
+            by_story.setdefault(progress.story_id, progress)
+
+    global_ids = [s.pk for s in lead_stories if s.scope == StoryScope.GLOBAL]
+    if global_ids:
+        # GLOBAL is a OneToOne (story.global_progress). The old code returned
+        # it regardless of is_active; preserve that (no is_active filter).
+        for progress in GlobalStoryProgress.objects.filter(story_id__in=global_ids).select_related(
+            "current_episode"
+        ):
+            by_story.setdefault(progress.story_id, progress)
+
+    # UNASSIGNED / any other scope → no progress (old code returned None).
+    return by_story
+
+
+def _build_staff_per_gm_inputs() -> _StaffPerGMInputs:
+    """Run the batched query pass for the staff-workload per-GM section.
+
+    Replaces the per-GM / per-story lookups the old nested loop issued
+    (``Story.objects.filter`` per GM, ``get_active_progress_for_story`` per
+    story, ``get_eligible_transitions`` per story, ``AssistantGMClaim.count``
+    per GM) with a small constant number of batched queries independent of
+    the number of GMs and stories.
+    """
+    # All active lead stories for every qualifying GM, in one query. The old
+    # outer query filtered GMs on ``tables__primary_stories__isnull=False``;
+    # an active lead story implies such a table, so iterating active lead
+    # stories yields exactly the same GM set with the same per-GM story set
+    # (the old inner ``Story.objects.filter(primary_table__gm=gm,
+    # status="active")``).
+    lead_stories_by_gm: dict[int, list[Story]] = defaultdict(list)
+    for story in (
+        Story.objects.filter(
+            primary_table__gm__isnull=False,
+            status="active",
+        )
+        .select_related("primary_table")
+        .order_by("pk")
+    ):
+        lead_stories_by_gm[story.primary_table.gm_id].append(story)
+
+    all_lead_stories = [s for stories in lead_stories_by_gm.values() for s in stories]
+
+    first_active_progress_by_story = _first_active_progress_by_story(all_lead_stories)
+
+    # Episodes that need eligibility evaluation (skip null/frontier — the old
+    # code skipped those before calling get_eligible_transitions).
+    candidate_episode_ids = sorted(
+        {
+            progress.current_episode_id
+            for progress in first_active_progress_by_story.values()
+            if progress.current_episode_id is not None
+        }
+    )
+
+    _expire_overdue_beats_for_episodes(candidate_episode_ids)
+
+    progression_reqs_by_episode: dict[int, list[Any]] = defaultdict(list)
+    transitions_by_episode: dict[int, list[Transition]] = defaultdict(list)
+    if candidate_episode_ids:
+        for req in EpisodeProgressionRequirement.objects.filter(
+            episode_id__in=candidate_episode_ids
+        ).select_related("beat"):
+            progression_reqs_by_episode[req.episode_id].append(req)
+
+        routing_prefetch = Prefetch(
+            "required_outcomes",
+            queryset=TransitionRequiredOutcome.objects.select_related("beat"),
+            to_attr="cached_required_outcomes",
+        )
+        for transition in (
+            Transition.objects.filter(source_episode_id__in=candidate_episode_ids)
+            .prefetch_related(routing_prefetch)
+            .order_by("order", "pk")
+        ):
+            transitions_by_episode[transition.source_episode_id].append(transition)
+
+    # Pending AGM claims grouped by lead GM, in one query (replaces the old
+    # per-GM ``.count()``). Mirrors the old join
+    # ``beat__episode__chapter__story__primary_table__gm=gm``.
+    pending_claims_by_gm: dict[int, int] = defaultdict(int)
+    for row in (
+        AssistantGMClaim.objects.filter(
+            status=AssistantClaimStatus.REQUESTED,
+            beat__episode__chapter__story__primary_table__gm__isnull=False,
+        )
+        .values("beat__episode__chapter__story__primary_table__gm")
+        .annotate(count=Count("pk"))
+    ):
+        pending_claims_by_gm[row["beat__episode__chapter__story__primary_table__gm"]] = row["count"]
+
+    return _StaffPerGMInputs(
+        lead_stories_by_gm=lead_stories_by_gm,
+        first_active_progress_by_story=first_active_progress_by_story,
+        progression_reqs_by_episode=progression_reqs_by_episode,
+        transitions_by_episode=transitions_by_episode,
+        pending_claims_by_gm=pending_claims_by_gm,
+    )
+
+
+def _collect_per_gm_queue_depth() -> list[dict[str, Any]]:
+    """Assemble the per-GM queue depth section from batched inputs.
+
+    Iterates GMs that lead at least one active story (same set as the old
+    ``GMProfile.objects.filter(tables__primary_stories__isnull=False)``),
+    counting episodes whose first active progress has eligible transitions.
+    Byte-identical output to the old nested loop: same per-GM dict keys,
+    same ``episodes_ready`` count, same ``pending_claims`` count. GM
+    iteration order is by ``GMProfile.pk`` (the old code iterated a
+    ``GMProfile`` queryset with no ``Meta.ordering`` — DB-incidental order,
+    deterministically stabilised here; no test asserts per-GM ordering).
+    """
+    from world.gm.models import GMProfile  # noqa: PLC0415
+    from world.stories.exceptions import ProgressionRequirementNotMetError  # noqa: PLC0415
+
+    inputs = _build_staff_per_gm_inputs()
+
+    gm_ids = sorted(inputs.lead_stories_by_gm.keys())
+    if not gm_ids:
+        return []
+
+    # One query for the GM rows we surface (account preloaded for username).
+    gm_by_id = {
+        gm.pk: gm for gm in GMProfile.objects.filter(pk__in=gm_ids).select_related("account")
+    }
+
+    per_gm_queue: list[dict[str, Any]] = []
+    for gm_id in gm_ids:
+        gm = gm_by_id.get(gm_id)
+        if gm is None:
+            continue
+        episodes_ready_count = 0
+        for story in inputs.lead_stories_by_gm[gm_id]:
+            progress = inputs.first_active_progress_by_story.get(story.pk)
+            if progress is None or progress.current_episode is None:
+                continue
+            try:
+                eligible = _eligible_transitions_from_prefetched(
+                    progress,
+                    inputs.progression_reqs_by_episode,
+                    inputs.transitions_by_episode,
+                )
+            except ProgressionRequirementNotMetError:
+                continue
+            if eligible:
+                episodes_ready_count += 1
+
+        per_gm_queue.append(
+            {
+                "gm_profile_id": gm.pk,
+                "gm_name": gm.account.username,
+                "episodes_ready": episodes_ready_count,
+                "pending_claims": inputs.pending_claims_by_gm.get(gm_id, 0),
+            }
+        )
+    return per_gm_queue
+
+
 class StaffWorkloadView(APIView):
     """GET /api/stories/staff-workload/
 
     Staff-only cross-story metrics: per-GM queue depth, stale stories,
     stories at the authoring frontier, and aggregate counts.
 
-    Performance: queries are straightforward for MVP. Consider caching
-    the per-GM queue depth if the GMProfile/story count grows large.
+    Performance: the per-GM queue depth is computed with a constant number
+    of batched queries (see ``_collect_per_gm_queue_depth``) independent of
+    the number of GMs/stories/progress rows. The stale / waiting-for-GM /
+    frontier sections are genuine wire aggregations — one ``.values()`` scan
+    per progress model (a fixed three queries each), not per-row queries.
     """
 
     permission_classes = [permissions.IsAdminUser]
 
     def get(self, request: Request) -> Response:
         """Return cross-story workload metrics for staff."""
-        from world.gm.models import GMProfile  # noqa: PLC0415
         from world.stories.constants import ProgressStatus  # noqa: PLC0415
-        from world.stories.exceptions import ProgressionRequirementNotMetError  # noqa: PLC0415
-        from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
-        from world.stories.services.transitions import get_eligible_transitions  # noqa: PLC0415
 
-        # --- per-GM queue depth ---
-        gm_profiles = (
-            GMProfile.objects.select_related("account")
-            .filter(
-                tables__primary_stories__isnull=False,
-            )
-            .distinct()
-        )
-
-        per_gm_queue: list[dict[str, Any]] = []
-        for gm in gm_profiles:
-            lead_stories = Story.objects.filter(
-                primary_table__gm=gm,
-                status="active",
-            )
-            episodes_ready_count = 0
-            for story in lead_stories:
-                progress = get_active_progress_for_story(story)
-                if progress is None or progress.current_episode is None:
-                    continue
-                try:
-                    eligible = get_eligible_transitions(progress)
-                except ProgressionRequirementNotMetError:
-                    continue
-                if eligible:
-                    episodes_ready_count += 1
-
-            pending_claims_count = AssistantGMClaim.objects.filter(
-                beat__episode__chapter__story__primary_table__gm=gm,
-                status=AssistantClaimStatus.REQUESTED,
-            ).count()
-
-            per_gm_queue.append(
-                {
-                    "gm_profile_id": gm.pk,
-                    "gm_name": gm.account.username,
-                    "episodes_ready": episodes_ready_count,
-                    "pending_claims": pending_claims_count,
-                }
-            )
+        # --- per-GM queue depth (bounded: see _collect_per_gm_queue_depth) ---
+        per_gm_queue = _collect_per_gm_queue_depth()
 
         # --- stale stories ---
         cutoff = timezone.now() - timezone.timedelta(days=STALE_STORY_DAYS)

@@ -43,6 +43,13 @@ from world.stories.services.dashboards import STALE_STORY_DAYS
 
 STAFF_WORKLOAD_URL = reverse("stories-staff-workload")
 
+# Exact query count the bounded implementation issues regardless of how many
+# GMs / stories / progress rows exist. The unbounded implementation scaled
+# linearly (29 queries at N=3, 38 at N=6 — exactly 3 queries per GM); the
+# bounded one issues a flat constant: verified identical (26) at N=6 and
+# N=12 with episode-bearing rows that exercise the eligibility batch path.
+BOUNDED_QUERY_COUNT = 26
+
 
 class StaffWorkloadAuthTest(APITestCase):
     """Authentication and staff permission gate."""
@@ -330,3 +337,113 @@ class StaffWorkloadPerGMQueueTest(APITestCase):
             assert field in entry, f"Missing field: {field}"
         assert isinstance(entry["episodes_ready"], int)
         assert isinstance(entry["pending_claims"], int)
+
+
+def _episode_for(story) -> object:
+    """Create a chapter+episode under ``story`` and return the episode."""
+    chapter = ChapterFactory(story=story, order=1)
+    return EpisodeFactory(chapter=chapter, order=1)
+
+
+def _build_workload_rows(n: int) -> list:
+    """Populate every staff-workload bucket with exactly ``n`` distinct rows.
+
+    Returns the created GMProfile instances. Per iteration:
+
+    - a lead story whose active progress sits on a real episode → drives the
+      per-GM queue scan *and* the heavier eligibility batch path;
+    - a stale row (old ``last_advanced_at``) on an episode;
+    - a waiting-for-GM row on an episode;
+    - a frontier row (``current_episode=None``).
+
+    Lead/stale/waiting progress carry an episode so they do NOT also fall
+    into the frontier bucket — keeping each bucket's length exactly ``n`` so
+    a dropped-rows regression is caught precisely.
+    """
+    gm_profiles = []
+    stale_time = timezone.now() - timedelta(days=STALE_STORY_DAYS + 1)
+    for _ in range(n):
+        gm_account = AccountFactory()
+        gm_profile = GMProfileFactory(account=gm_account)
+        gm_table = GMTableFactory(gm=gm_profile)
+
+        # Lead story + active progress on a real episode → per-GM queue scan
+        # plus the progression-req / transition eligibility batch path.
+        lead_sheet = CharacterSheetFactory()
+        lead_story = StoryFactory(
+            scope=StoryScope.CHARACTER,
+            character_sheet=lead_sheet,
+            primary_table=gm_table,
+        )
+        StoryProgressFactory(
+            story=lead_story,
+            character_sheet=lead_sheet,
+            current_episode=_episode_for(lead_story),
+            is_active=True,
+        )
+        gm_profiles.append(gm_profile)
+
+        # Stale row (on an episode so it is not also a frontier row).
+        stale_sheet = CharacterSheetFactory()
+        stale_story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=stale_sheet)
+        stale_progress = StoryProgressFactory(
+            story=stale_story,
+            character_sheet=stale_sheet,
+            current_episode=_episode_for(stale_story),
+            is_active=True,
+        )
+        StoryProgressFactory._meta.model.objects.filter(pk=stale_progress.pk).update(
+            last_advanced_at=stale_time
+        )
+
+        # Waiting-for-GM row (on an episode so it is not also a frontier row).
+        waiting_sheet = CharacterSheetFactory()
+        waiting_story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=waiting_sheet)
+        StoryProgressFactory(
+            story=waiting_story,
+            character_sheet=waiting_sheet,
+            current_episode=_episode_for(waiting_story),
+            is_active=True,
+            status=ProgressStatus.WAITING_FOR_GM,
+        )
+
+        # Frontier row (current_episode=None).
+        frontier_sheet = CharacterSheetFactory()
+        frontier_story = StoryFactory(scope=StoryScope.CHARACTER, character_sheet=frontier_sheet)
+        StoryProgressFactory(
+            story=frontier_story,
+            character_sheet=frontier_sheet,
+            current_episode=None,
+            is_active=True,
+        )
+    return gm_profiles
+
+
+class StaffWorkloadQueryBoundTest(APITestCase):
+    """The view must issue a constant number of queries independent of N."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+
+    def test_staff_workload_query_count_is_bounded(self):
+        # Before the bounding refactor this scan was O(N): N=3 → 29 queries,
+        # N=6 → 38 (exactly 3 extra queries per GM). After the refactor the
+        # count is a constant independent of N (verified by bumping N here).
+        gm_profiles = _build_workload_rows(6)
+        self.client.force_authenticate(user=self.staff)
+        with self.assertNumQueries(BOUNDED_QUERY_COUNT):
+            resp = self.client.get(STAFF_WORKLOAD_URL)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+        # Content invariant: dropped-rows regression guard. Every bucket that
+        # scales with N must contain exactly our 6 freshly-built rows (other
+        # suites run in isolation, so these are the only rows present).
+        data = resp.data
+        per_gm_ids = {e["gm_profile_id"] for e in data["per_gm_queue_depth"]}
+        for gm in gm_profiles:
+            assert gm.pk in per_gm_ids
+        assert len(data["per_gm_queue_depth"]) == 6
+        assert len(data["stale_stories"]) == 6
+        assert len(data["stories_waiting_for_gm"]) == 6
+        assert len(data["stories_at_frontier"]) == 6
