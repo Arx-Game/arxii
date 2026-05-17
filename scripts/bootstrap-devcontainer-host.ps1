@@ -3,9 +3,10 @@
   Bootstraps the Windows host for the arxii devcontainer sandbox.
   Idempotent + detection-first: safe to re-run. Does NOT reboot or self-elevate;
   it reports what needs an admin shell / reboot / interactive Docker Desktop step.
+  Exit code: 0 = host ready; 1 = action required (admin shell and/or reboot).
 #>
 [CmdletBinding()]
-param([switch]$AssumeYes)
+param()
 
 $ErrorActionPreference = 'Stop'
 function Info($m){ Write-Host "[bootstrap] $m" }
@@ -21,11 +22,15 @@ if (-not $wsl) {
   Warn "That installs WSL2 + Ubuntu and requires a REBOOT, then re-run this script."
   $needsAdmin = $true; $needsReboot = $true
 } else {
-  $status = (wsl --status) 2>&1 | Out-String
-  if ($status -match 'Default Version:\s*2' -or $status -match '2') {
+  # Prefer the per-distro VERSION column from `wsl -l -v`; fall back to the
+  # global default version. Never match a bare digit (false positives).
+  $verbose = (wsl -l -v) 2>&1 | Out-String
+  $hasV2Distro = $verbose -split "`n" | Where-Object { $_ -match '\s2\s*$' }
+  $defaultV2 = ((wsl --status) 2>&1 | Out-String) -match 'Default Version:\s*2'
+  if ($hasV2Distro -or $defaultV2) {
     Info "WSL2 present."
   } else {
-    Warn "WSL present but default not v2. Run (admin):  wsl --set-default-version 2"
+    Warn "WSL present but no v2 distro / default not v2. Run (admin):  wsl --set-default-version 2"
     $needsAdmin = $true
   }
   $distros = (wsl -l -q) 2>&1 | Out-String
@@ -49,7 +54,7 @@ if (-not $docker) {
   }
 } else {
   try { docker version --format '{{.Server.Version}}' | Out-Null; Info "Docker engine reachable." }
-  catch { Warn "docker present but engine not reachable — start Docker Desktop and enable WSL integration." }
+  catch { Warn "docker present but engine not reachable - start Docker Desktop and enable WSL integration." }
 }
 
 # 3. devcontainer CLI ---------------------------------------------------
@@ -59,8 +64,8 @@ if (-not $dc) {
     Info "Installing @devcontainers/cli globally..."
     npm install -g @devcontainers/cli
   } else {
-    Warn "npm not found on host. Install Node (you already have it via mise) or run:"
-    Warn "  npm install -g @devcontainers/cli"
+    Warn "npm not found. Install Node.js for Windows from https://nodejs.org then re-run,"
+    Warn "or run:  npm install -g @devcontainers/cli"
   }
 } else { Info "devcontainer CLI present." }
 
@@ -68,6 +73,9 @@ if (-not $dc) {
 Info "--- Summary ---"
 if ($needsAdmin)  { Warn "ACTION: re-run the flagged commands in an ADMINISTRATOR PowerShell." }
 if ($needsReboot) { Warn "ACTION: REBOOT, then re-run this script to verify." }
-if (-not $needsAdmin -and -not $needsReboot) {
-  Info "Host looks ready. Next:  just dc-up   then   just dc-shell"
+if ($needsAdmin -or $needsReboot) {
+  Warn "Host not ready yet - resolve the actions above and re-run."
+  exit 1
 }
+Info "Host looks ready. Next:  just dc-up   then   just dc-shell"
+exit 0
