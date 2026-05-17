@@ -36,6 +36,7 @@ import type { Story, StoryList } from '../types';
 import { ScopeBadge } from '../components/ScopeBadge';
 import { ScopeAssignDialog } from '../components/ScopeAssignDialog';
 import { StoryFormDialog } from '../components/StoryFormDialog';
+import { GMNotesPanel } from '../components/GMNotesPanel';
 import { StoryAuthorTree } from '../components/StoryAuthorTree';
 import { EpisodeDAG } from '../components/EpisodeDAG';
 import { EpisodeFormDialog } from '../components/EpisodeFormDialog';
@@ -226,6 +227,9 @@ function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
           <TabsTrigger value="dag" data-testid="tab-dag">
             DAG
           </TabsTrigger>
+          <TabsTrigger value="gm-notes" data-testid="tab-gm-notes">
+            GM Notes
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="tree">
@@ -250,6 +254,10 @@ function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
             editMode={dagEditMode}
             onConnectEpisodes={handleConnectEpisodes}
           />
+        </TabsContent>
+
+        <TabsContent value="gm-notes">
+          <GMNotesPanel storyId={story.id} />
         </TabsContent>
       </Tabs>
 
