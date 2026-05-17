@@ -101,6 +101,8 @@ export type BeatKind = NonNullable<Beat['kind']>;
 export type StoryScope = NonNullable<Story['scope']>;
 export type StoryStatus = NonNullable<Story['status']>;
 export type StoryPrivacy = NonNullable<Story['privacy']>;
+/** Shared maturity enum (pitch / outline / plot) for Story, Chapter, Episode. */
+export type Maturity = NonNullable<components['schemas']['MaturityEnum']>;
 export type AssistantClaimStatus = NonNullable<AssistantGMClaim['status']>;
 export type SessionRequestStatus = NonNullable<SessionRequest['status']>;
 
@@ -323,6 +325,8 @@ export type ReferencedMilestoneType = NonNullable<
 export interface StoryCreateBody {
   title: string;
   description: string;
+  /** Player-facing "The Story So Far" recap (GM-maintained). */
+  summary?: string;
   privacy?: StoryPrivacy;
   scope?: StoryScope;
 }
@@ -331,6 +335,8 @@ export interface ChapterCreateBody {
   story: number;
   title: string;
   description?: string;
+  /** Player-facing "The Story So Far" recap (GM-maintained). */
+  summary?: string;
   order?: number;
   is_active?: boolean;
 }
@@ -339,6 +345,12 @@ export interface EpisodeCreateBody {
   chapter: number;
   title: string;
   description?: string;
+  /** Player-facing "The Story So Far" recap (GM-maintained). */
+  summary?: string;
+  /** Player-facing text shown when progress RESTS at this episode. */
+  resting_conclusion?: string;
+  /** Explicit "this is an ending" marker. */
+  is_ending?: boolean;
   order?: number;
 }
 
