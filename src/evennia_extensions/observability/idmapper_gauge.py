@@ -69,17 +69,31 @@ def snapshot() -> dict[str, tuple[int, int]]:
     inspection are silently skipped so that one misbehaving class cannot
     interrupt the whole snapshot.
 
+    In Evennia, proxy models share the exact same ``__instance_cache__`` dict
+    object as their concrete base class.  To avoid double-counting shared
+    caches (which would inflate aggregate memory metrics), each physical cache
+    dict is counted **exactly once** — identified by object identity
+    (``id(cache)``).  The first class encountered that owns the cache wins the
+    label; subsequent classes referencing the same dict are skipped.  Empty
+    caches are excluded before the dedupe check so they do not consume a seen
+    id.
+
     Returns:
         A ``dict`` mapping ``"<app_label>.<ClassName>"`` →
         ``(instance_count, approx_bytes)``.  Both integers are non-negative.
     """
     result: dict[str, tuple[int, int]] = {}
+    seen_cache_ids: set[int] = set()
     for cls in _iter_subclasses():
         try:
             cache = cls.__instance_cache__
             count = len(cache)
             if count == 0:
                 continue
+            cid = id(cache)
+            if cid in seen_cache_ids:
+                continue
+            seen_cache_ids.add(cid)
             approx_bytes = _asizeof(cache)
             result[_label(cls)] = (count, int(approx_bytes))
         except Exception:  # noqa: BLE001,S112

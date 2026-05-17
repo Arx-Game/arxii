@@ -114,6 +114,32 @@ class FakeCachedModelTests(TestCase):
 
         self.assertNotIn("fake_app.NoCacheModel", result)
 
+    def test_shared_cache_counted_once(self) -> None:
+        """Two classes sharing the same __instance_cache__ object are counted exactly once."""
+        from evennia_extensions.observability.idmapper_gauge import snapshot
+
+        shared = {1: object(), 2: object()}
+        stub_a = self._make_stub("ModelA", "fake_app", shared)
+        stub_b = self._make_stub("ModelB", "fake_app", shared)
+
+        # Both stubs expose the exact same dict object (same id).
+        assert stub_a.__instance_cache__ is stub_b.__instance_cache__
+
+        with patch(
+            "evennia_extensions.observability.idmapper_gauge._iter_subclasses",
+            return_value=[stub_a, stub_b],
+        ):
+            result = snapshot()
+
+        present = [lbl for lbl in ("fake_app.ModelA", "fake_app.ModelB") if lbl in result]
+        self.assertEqual(
+            len(present),
+            1,
+            msg=f"Expected exactly one label in result, got {list(result.keys())!r}",
+        )
+        count, _ = result[present[0]]
+        self.assertEqual(count, 2)
+
     def test_class_with_asizeof_error_is_skipped(self) -> None:
         """A class whose __instance_cache__ causes asizeof to raise is skipped cleanly."""
         from evennia_extensions.observability.idmapper_gauge import snapshot
