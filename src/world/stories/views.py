@@ -8,7 +8,7 @@ from django.db.models import Count, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
-from rest_framework import filters, permissions, status, viewsets
+from rest_framework import filters, mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.request import Request
@@ -39,6 +39,7 @@ from world.stories.filters import (
     StoryFeedbackFilter,
     StoryFilter,
     StoryGMOfferFilter,
+    StoryNoteFilter,
     StoryParticipationFilter,
     TableBulletinPostFilter,
     TableBulletinReplyFilter,
@@ -61,6 +62,7 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryGMOffer,
+    StoryNote,
     StoryParticipation,
     StoryProgress,
     TableBulletinPost,
@@ -75,6 +77,7 @@ from world.stories.pagination import (
 )
 from world.stories.permissions import (
     VIEWER_ROLE_NO_ACCESS,
+    CanAccessStoryNotes,
     CanAuthorBulletinPost,
     CanDetachStoryFromTable,
     CanMarkBeat,
@@ -152,6 +155,7 @@ from world.stories.serializers import (
     StoryGMOfferSerializer,
     StoryListSerializer,
     StoryLogSerializer,
+    StoryNoteSerializer,
     StoryParticipationSerializer,
     TableBulletinPostSerializer,
     TableBulletinReplySerializer,
@@ -1638,14 +1642,23 @@ def _serialize_eligible_transitions(transitions: list) -> list[dict[str, Any]]:
     return [{"transition_id": t.pk, "mode": t.mode} for t in transitions]
 
 
-def _build_gm_queue_for_story(
+def _build_gm_queue_for_story(  # noqa: PLR0913 — accumulator-passing helper; one list arg per queue section, adding a dataclass wrapper for 6 lists would be a larger, riskier refactor than this additive change warrants
     gm_profile: Any,
     story: Story,
     episodes_ready: list,
     pending_claims: list,
     assigned_requests: list,
+    waiting_for_gm: list,
 ) -> None:
-    """Populate GM queue lists from a single story, dispatching on scope."""
+    """Populate GM queue lists from a single story, dispatching on scope.
+
+    waiting_for_gm collects active progress rows parked at
+    ProgressStatus.WAITING_FOR_GM (the story trail is blocked on the GM
+    authoring/advancing it). These have no eligible transitions yet, so the
+    episodes_ready branch skips them — surfacing them here with
+    last_advanced_at makes a dropped ball visible.
+    """
+    from world.stories.constants import ProgressStatus  # noqa: PLC0415
     from world.stories.exceptions import ProgressionRequirementNotMetError  # noqa: PLC0415
     from world.stories.services.transitions import get_eligible_transitions  # noqa: PLC0415
 
@@ -1676,7 +1689,27 @@ def _build_gm_queue_for_story(
             )
             progress_type = StoryScope.GLOBAL
 
+    now = timezone.now()
     for progress in progress_qs:
+        if progress.status == ProgressStatus.WAITING_FOR_GM:
+            waiting_for_gm.append(
+                {
+                    "story_id": story.pk,
+                    "story_title": story.title,
+                    "scope": story.scope,
+                    "progress_type": progress_type,
+                    "progress_id": progress.pk,
+                    "episode_id": progress.current_episode_id,
+                    "episode_title": (
+                        progress.current_episode.title
+                        if progress.current_episode is not None
+                        else None
+                    ),
+                    "last_advanced_at": progress.last_advanced_at,
+                    "days_waiting": (now - progress.last_advanced_at).days,
+                }
+            )
+            continue
         if progress.current_episode is None:
             continue
         try:
@@ -1763,6 +1796,7 @@ class GMQueueView(APIView):
         episodes_ready: list[dict[str, Any]] = []
         pending_claims: list[dict[str, Any]] = []
         assigned_requests: list[dict[str, Any]] = []
+        waiting_for_gm: list[dict[str, Any]] = []
 
         # Stories where this GMProfile is Lead GM (via primary_table.gm).
         lead_stories = Story.objects.filter(
@@ -1777,6 +1811,7 @@ class GMQueueView(APIView):
                 episodes_ready,
                 pending_claims,
                 assigned_requests,
+                waiting_for_gm,
             )
 
         return Response(
@@ -1784,6 +1819,7 @@ class GMQueueView(APIView):
                 "episodes_ready_to_run": episodes_ready,
                 "pending_agm_claims": pending_claims,
                 "assigned_session_requests": assigned_requests,
+                "waiting_for_gm": waiting_for_gm,
             }
         )
 
@@ -1821,6 +1857,7 @@ class StaffWorkloadView(APIView):
     def get(self, request: Request) -> Response:
         """Return cross-story workload metrics for staff."""
         from world.gm.models import GMProfile  # noqa: PLC0415
+        from world.stories.constants import ProgressStatus  # noqa: PLC0415
         from world.stories.exceptions import ProgressionRequirementNotMetError  # noqa: PLC0415
         from world.stories.services.progress import get_active_progress_for_story  # noqa: PLC0415
         from world.stories.services.transitions import get_eligible_transitions  # noqa: PLC0415
@@ -1906,6 +1943,45 @@ class StaffWorkloadView(APIView):
             for row in stale_qs
         ]
 
+        # --- stories waiting on a GM (any age — a fresh dropped ball is
+        # still a dropped ball; staleness is reported separately above) ---
+        waiting_qs = (
+            list(
+                StoryProgress.objects.filter(
+                    is_active=True,
+                    status=ProgressStatus.WAITING_FOR_GM,
+                )
+                .select_related("story")
+                .values("story__id", "story__title", "story__scope", "last_advanced_at")
+            )
+            + list(
+                GroupStoryProgress.objects.filter(
+                    is_active=True,
+                    status=ProgressStatus.WAITING_FOR_GM,
+                )
+                .select_related("story")
+                .values("story__id", "story__title", "story__scope", "last_advanced_at")
+            )
+            + list(
+                GlobalStoryProgress.objects.filter(
+                    is_active=True,
+                    status=ProgressStatus.WAITING_FOR_GM,
+                )
+                .select_related("story")
+                .values("story__id", "story__title", "story__scope", "last_advanced_at")
+            )
+        )
+        stories_waiting_for_gm: list[dict[str, Any]] = [
+            {
+                "story_id": row["story__id"],
+                "story_title": row["story__title"],
+                "scope": row["story__scope"],
+                "last_advanced_at": row["last_advanced_at"],
+                "days_waiting": (now - row["last_advanced_at"]).days,
+            }
+            for row in waiting_qs
+        ]
+
         # --- stories at frontier (current_episode is None but active) ---
         frontier_char = list(
             StoryProgress.objects.filter(
@@ -1956,12 +2032,77 @@ class StaffWorkloadView(APIView):
             {
                 "per_gm_queue_depth": per_gm_queue,
                 "stale_stories": stale_stories,
+                "stories_waiting_for_gm": stories_waiting_for_gm,
                 "stories_at_frontier": stories_at_frontier,
                 "pending_agm_claims_count": pending_agm_count,
                 "open_session_requests_count": open_session_req_count,
                 "counts_by_scope": counts_by_scope,
             }
         )
+
+
+# ---------------------------------------------------------------------------
+# StoryNote ViewSet (append-only OOC authorial memory)
+# ---------------------------------------------------------------------------
+
+
+class StoryNoteViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Append-only StoryNote API — list, retrieve, and create only.
+
+    StoryNote is OOC authorial memory: never plain-player-visible, and never
+    editable or deletable. Omitting the update/destroy mixins makes PATCH and
+    DELETE return 405. Access is gated by CanAccessStoryNotes (staff, story
+    owner, or active/Lead GM of the story).
+    """
+
+    queryset = (
+        StoryNote.objects.select_related("story", "author_account").all().order_by("-created_at")
+    )
+    serializer_class = StoryNoteSerializer
+    permission_classes = [permissions.IsAuthenticated, CanAccessStoryNotes]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_class = StoryNoteFilter
+    pagination_class = StandardResultsSetPagination
+    ordering_fields = ["created_at"]
+    ordering = ["-created_at"]
+
+    def get_queryset(self) -> QuerySet[StoryNote]:
+        """Scope the queryset to notes the requesting user may access.
+
+        Defense-in-depth mirroring AggregateBeatContributionViewSet /
+        TableBulletinPostViewSet: staff see all; everyone else is scoped to
+        stories they own, actively GM, or Lead-GM via the primary table.
+        The optional ``story`` filterset further-narrows this safe queryset.
+        """
+        from world.gm.models import GMProfile  # noqa: PLC0415
+
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return qs
+
+        # Stories the user owns (account M2M) — mirrors StoryViewSet owned_q
+        # (views.py:294 ``models.Q(owners=user)``) with a story__ prefix.
+        access_q = models.Q(story__owners=user)
+
+        # Active GM / Lead GM of the story's primary table — mirrors
+        # AssistantGMClaimViewSet (views.py:923 ``models.Q(assistant_gm=gm_profile)``)
+        # and StoryViewSet gm_q (views.py:291 ``models.Q(primary_table__gm=gm_profile)``)
+        # with a story__ prefix.
+        try:
+            gm_profile = user.gm_profile
+            access_q |= models.Q(story__active_gms=gm_profile) | models.Q(
+                story__primary_table__gm=gm_profile
+            )
+        except GMProfile.DoesNotExist:
+            pass
+
+        return qs.filter(access_q).distinct()
 
 
 # ---------------------------------------------------------------------------

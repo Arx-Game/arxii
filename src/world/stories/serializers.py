@@ -36,6 +36,7 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryGMOffer,
+    StoryNote,
     StoryParticipation,
     StoryProgress,
     StoryTrustRequirement,
@@ -822,6 +823,9 @@ class BeatSerializer(serializers.ModelSerializer):
             "player_hint",
             "player_resolution_text",
             "order",
+            "kind",
+            "advances",
+            "risk",
             # Predicate config fields
             "required_level",
             "required_achievement",
@@ -896,6 +900,9 @@ class BeatSerializer(serializers.ModelSerializer):
                 "referenced_chapter",
                 "referenced_episode",
                 "required_points",
+                "kind",
+                "advances",
+                "risk",
                 "agm_eligible",
                 "deadline",
             ]:
@@ -906,6 +913,21 @@ class BeatSerializer(serializers.ModelSerializer):
             temp.clean()
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.message_dict) from exc
+
+        request = self.context.get("request")
+        merged_risk = merged.get("risk", 0) or 0
+        user = request.user if request is not None else None
+        # user.is_staff is safe on AccountDB and AnonymousUser; bool() guards None.
+        is_staff = bool(user is not None and user.is_staff)
+        if merged_risk > 0 and not is_staff:
+            raise serializers.ValidationError(
+                {
+                    "risk": (
+                        "Only staff may author beats above risk 0. "
+                        "Higher risk tiers unlock with GM trust level."
+                    )
+                }
+            )
         return attrs
 
 
@@ -1862,3 +1884,53 @@ class UpdateBulletinReplyInputSerializer(serializers.Serializer):
     """
 
     body = serializers.CharField()
+
+
+# ---------------------------------------------------------------------------
+# StoryNote serializer (append-only OOC authorial memory)
+# ---------------------------------------------------------------------------
+
+
+class StoryNoteSerializer(serializers.ModelSerializer):
+    """List + create serializer for StoryNote (append-only, GM/staff/owner only).
+
+    ``author_account`` is set from the requesting account (Evennia AccountDB)
+    in ``create()`` — it is never accepted from client input.
+    """
+
+    story = serializers.PrimaryKeyRelatedField(queryset=Story.objects.all())
+
+    class Meta:
+        model = StoryNote
+        fields = ["id", "story", "author_account", "body", "created_at"]
+        read_only_fields = ["id", "author_account", "created_at"]
+
+    def validate_story(self, story: Story) -> Story:
+        """Create-scope (Layer 2): requester must be able to access the story.
+
+        Mirrors the object-level access predicate used by the permission
+        class and queryset (staff, story owner, active GM, or Lead GM of the
+        story's primary table).
+        """
+        from world.stories.permissions import (  # noqa: PLC0415
+            _user_can_access_story_notes,
+        )
+
+        user = self.context["request"].user
+        if not _user_can_access_story_notes(user, story):
+            msg = "Only staff, the story owner, or an active GM may add notes to this story."
+            raise serializers.ValidationError(msg)
+        return story
+
+    def validate_body(self, value: str) -> str:
+        """Reject blank/whitespace-only note bodies."""
+        if not value.strip():
+            msg = "Note body cannot be blank."
+            raise serializers.ValidationError(msg)
+        return value
+
+    def create(self, validated_data: dict[str, Any]) -> StoryNote:
+        """Stamp author_account from the requesting account before saving."""
+        request = self.context["request"]
+        validated_data["author_account"] = request.user
+        return cast(Any, StoryNote).objects.create(**validated_data)

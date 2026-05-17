@@ -21,6 +21,7 @@ from world.gm.factories import GMProfileFactory, GMTableFactory
 from world.stories.constants import (
     AssistantClaimStatus,
     BeatPredicateType,
+    ProgressStatus,
     SessionRequestStatus,
     StoryScope,
     TransitionMode,
@@ -161,6 +162,74 @@ class GMQueueEpisodesReadyTest(APITestCase):
         assert len(transitions) >= 1
         assert "transition_id" in transitions[0]
         assert "mode" in transitions[0]
+
+
+class GMQueueWaitingForGMTest(APITestCase):
+    """Progress parked at WAITING_FOR_GM surfaces with its staleness age."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account, cls.profile, cls.table = _make_lead_gm()
+
+        cls.char_sheet = CharacterSheetFactory()
+        cls.story = StoryFactory(
+            scope=StoryScope.CHARACTER,
+            character_sheet=cls.char_sheet,
+            primary_table=cls.table,
+        )
+        cls.chapter = ChapterFactory(story=cls.story, order=1)
+        cls.episode = EpisodeFactory(chapter=cls.chapter, order=1)
+        cls.progress = StoryProgressFactory(
+            story=cls.story,
+            character_sheet=cls.char_sheet,
+            current_episode=cls.episode,
+            status=ProgressStatus.WAITING_FOR_GM,
+        )
+
+    def test_waiting_progress_appears_with_age(self):
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(GM_QUEUE_URL)
+        assert response.status_code == status.HTTP_200_OK
+        waiting = response.data["waiting_for_gm"]
+        matching = [w for w in waiting if w["progress_id"] == self.progress.pk]
+        assert len(matching) == 1, "WAITING_FOR_GM progress missing from GM queue"
+        entry = matching[0]
+        for field in [
+            "story_id",
+            "story_title",
+            "scope",
+            "progress_type",
+            "progress_id",
+            "episode_id",
+            "episode_title",
+            "last_advanced_at",
+            "days_waiting",
+        ]:
+            assert field in entry, f"Missing field: {field}"
+        assert entry["last_advanced_at"] is not None
+        assert isinstance(entry["days_waiting"], int)
+        assert entry["days_waiting"] >= 0
+
+    def test_active_progress_not_in_waiting_list(self):
+        """An ACTIVE progress (default) must not appear in waiting_for_gm."""
+        other_sheet = CharacterSheetFactory()
+        other_story = StoryFactory(
+            scope=StoryScope.CHARACTER,
+            character_sheet=other_sheet,
+            primary_table=self.table,
+        )
+        other_ep = EpisodeFactory(chapter=ChapterFactory(story=other_story, order=1), order=1)
+        active_progress = StoryProgressFactory(
+            story=other_story,
+            character_sheet=other_sheet,
+            current_episode=other_ep,
+            status=ProgressStatus.ACTIVE,
+        )
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get(GM_QUEUE_URL)
+        waiting_ids = [w["progress_id"] for w in response.data["waiting_for_gm"]]
+        assert active_progress.pk not in waiting_ids
+        active_progress.delete()
 
 
 class GMQueuePendingClaimsTest(APITestCase):

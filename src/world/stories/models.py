@@ -7,12 +7,15 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from world.stories.constants import (
     AssistantClaimStatus,
+    BeatKind,
     BeatOutcome,
     BeatPredicateType,
     BeatVisibility,
     EraStatus,
+    ProgressStatus,
     SessionRequestStatus,
     StoryGMOfferStatus,
+    StoryMaturity,
     StoryMilestoneType,
     StoryScope,
     TransitionMode,
@@ -92,11 +95,16 @@ class Story(SharedMemoryModel):
     scope = models.CharField(
         max_length=20,
         choices=StoryScope.choices,
-        default=StoryScope.CHARACTER,
+        default=StoryScope.UNASSIGNED,
         help_text=(
             "Whether this story belongs to one character (CHARACTER), "
             "a covenant/group (GROUP), or the whole metaplot (GLOBAL)."
         ),
+    )
+    maturity = models.CharField(
+        max_length=10,
+        choices=StoryMaturity.choices,
+        default=StoryMaturity.PITCH,
     )
     character_sheet = models.ForeignKey(
         "character_sheets.CharacterSheet",
@@ -297,6 +305,11 @@ class Chapter(SharedMemoryModel):
 
     # Chapter progression
     is_active = models.BooleanField(default=False)
+    maturity = models.CharField(
+        max_length=10,
+        choices=StoryMaturity.choices,
+        default=StoryMaturity.PITCH,
+    )
     completed_at = models.DateTimeField(null=True, blank=True)
 
     # Narrative tracking
@@ -335,6 +348,23 @@ class Episode(SharedMemoryModel):
 
     # Episode status
     is_active = models.BooleanField(default=False)
+    maturity = models.CharField(
+        max_length=10,
+        choices=StoryMaturity.choices,
+        default=StoryMaturity.PITCH,
+    )
+    resting_conclusion = models.TextField(
+        blank=True,
+        help_text=(
+            "Player-facing text shown when progress RESTS at this episode "
+            "(no chosen transition). Required before PLOT promotion."
+        ),
+    )
+    is_ending = models.BooleanField(
+        default=False,
+        help_text="Explicit 'this is an ending' marker; satisfies PLOT "
+        "promotion when there is no outbound transition.",
+    )
     completed_at = models.DateTimeField(null=True, blank=True)
 
     # Narrative connection tracking
@@ -858,6 +888,20 @@ class Beat(SharedMemoryModel):
     )
 
     order = models.PositiveIntegerField(default=0)
+    kind = models.CharField(
+        max_length=12,
+        choices=BeatKind.choices,
+        default=BeatKind.TASK,
+    )
+    advances = models.BooleanField(
+        default=True,
+        help_text="False = Tangent: recorded for history, never gates a transition.",
+    )
+    risk = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Plain risk number. Meaning/names assigned later with the "
+        "consequence work. Authoring trust-gated in the serializer.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1271,6 +1315,11 @@ class GroupStoryProgress(SharedMemoryModel):
     started_at = models.DateTimeField(auto_now_add=True)
     last_advanced_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
+    status = models.CharField(
+        max_length=16,
+        choices=ProgressStatus.choices,
+        default=ProgressStatus.ACTIVE,
+    )
 
     class Meta:
         constraints = [
@@ -1322,6 +1371,11 @@ class GlobalStoryProgress(SharedMemoryModel):
     started_at = models.DateTimeField(auto_now_add=True)
     last_advanced_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
+    status = models.CharField(
+        max_length=16,
+        choices=ProgressStatus.choices,
+        default=ProgressStatus.ACTIVE,
+    )
 
     class Meta:
         indexes = [
@@ -1366,6 +1420,11 @@ class StoryProgress(SharedMemoryModel):
     started_at = models.DateTimeField(auto_now_add=True)
     last_advanced_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
+    status = models.CharField(
+        max_length=16,
+        choices=ProgressStatus.choices,
+        default=ProgressStatus.ACTIVE,
+    )
 
     class Meta:
         constraints = [
@@ -1402,6 +1461,29 @@ class StoryProgress(SharedMemoryModel):
         episode_title = self.current_episode.title if self.current_episode else "(frontier)"
         char_label = self.character_sheet.character.db_key if self.character_sheet_id else "?"
         return f"StoryProgress({char_label} in {self.story.title} @ {episode_title})"
+
+
+class StoryNote(SharedMemoryModel):
+    """Append-only OOC authorial memory attached to a Story.
+
+    General story notes + future-idea seeds. Distinct from per-node pitch
+    text. Never player-visible. Not promotable — purely informational for
+    the next author. No edit/delete in the API.
+    """
+
+    story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="notes")
+    author_account = models.ForeignKey(
+        "accounts.AccountDB",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:
+        return f"StoryNote(story={self.story_id}, at={self.created_at})"
 
 
 class AssistantGMClaim(SharedMemoryModel):

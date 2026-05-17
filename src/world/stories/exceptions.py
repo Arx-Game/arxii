@@ -52,6 +52,25 @@ class StoryGMOfferError(StoryError):
     _SAFE_MESSAGE = "This story-GM offer cannot be processed in its current state."
 
 
+class StoryNotAssignedError(StoryError):
+    """Raised when creating progress against an UNASSIGNED-scope story."""
+
+    _SAFE_MESSAGE = (
+        "This story has no scope assigned yet and cannot be run. "
+        "Assign it to a character, group, or global scope first."
+    )
+
+
+class MaturityPromotionError(StoryError):
+    """Raised when a node fails its maturity-promotion validation."""
+
+    _SAFE_MESSAGE = (
+        "This episode is not ready to be promoted to Plot. It needs a "
+        "resting conclusion and either an outbound transition or an "
+        "explicit ending."
+    )
+
+
 class EraAdvanceError(StoryError):
     """Raised when an era lifecycle transition is not permitted."""
 

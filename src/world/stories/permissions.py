@@ -10,7 +10,13 @@ from rest_framework.views import APIView
 
 from world.gm.models import GMProfile, GMTable
 from world.stories.constants import AssistantClaimStatus, StoryScope
-from world.stories.models import AssistantGMClaim, Story, StoryParticipation, TableBulletinPost
+from world.stories.models import (
+    AssistantGMClaim,
+    Story,
+    StoryNote,
+    StoryParticipation,
+    TableBulletinPost,
+)
 from world.stories.types import AnyStoryProgress, StoryPrivacy
 
 
@@ -1166,3 +1172,67 @@ class CanReplyToBulletinPost(permissions.BasePermission):
     def has_permission(self, request: Request, view: APIView) -> bool:
         """Authenticated check; serializer enforces read access + allow_replies."""
         return bool(request.user and request.user.is_authenticated)
+
+
+# ---------------------------------------------------------------------------
+# StoryNote permission class (append-only OOC authorial memory)
+# ---------------------------------------------------------------------------
+
+
+def _user_can_access_story_notes(
+    user: AbstractBaseUser | AnonymousUser,
+    story: Story,
+) -> bool:
+    """Return True if ``user`` may read/append notes on ``story``.
+
+    Allowed: staff, a story owner, an active GM of the story, or the Lead GM
+    of the story's primary table. Mirrors the owner/Lead-GM resolution used by
+    classify_story_log_viewer_role and IsStoryOwnerOrStaff.
+    """
+    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
+        return False
+    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
+        return True
+
+    # Story owner.
+    if story.owners.filter(id=user.id).exists():
+        return True
+
+    # Active GM of the story, or Lead GM of its primary table.
+    try:
+        gm_profile = user.gm_profile
+    except GMProfile.DoesNotExist:
+        return False
+    if story.active_gms.filter(pk=gm_profile.pk).exists():
+        return True
+    return bool(story.primary_table_id is not None and story.primary_table.gm_id == gm_profile.pk)
+
+
+class CanAccessStoryNotes(permissions.BasePermission):
+    """Read/append access to StoryNote records.
+
+    Notes are OOC authorial memory — never plain-player-visible.
+
+    Canonical three-layer pattern:
+
+    - Layer 1 (this class, ``has_permission``): authenticated-only. The
+      target story is NOT resolved from request data/query params here — that
+      param-sniffing is non-canonical for this app.
+    - Layer 1 object scope (``has_object_permission``): the access predicate
+      applied to ``obj.story`` (staff, story owner, active GM, or Lead GM of
+      the story's primary table). This governs retrieve correctly without any
+      ``?story=`` param.
+    - Layer 2 (serializer ``validate_story``): create-scope check.
+    - List scope: ``StoryNoteViewSet.get_queryset`` (defense-in-depth).
+    """
+
+    message = "Only staff, the story owner, or an active GM may access these notes."
+
+    def has_permission(self, request: Request, view: APIView) -> bool:
+        """Authenticated check; object-level / queryset enforce full scope."""
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
+        """Apply the access rule to the note's story (governs retrieve)."""
+        story_note = cast(StoryNote, obj)
+        return _user_can_access_story_notes(request.user, story_note.story)

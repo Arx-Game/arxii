@@ -78,8 +78,12 @@ def create_character_progress(
     required achievement when the story is created. Without the snapshot,
     the beat would stay UNSATISFIED until some unrelated trigger fires.
     """
+    from world.stories.exceptions import StoryNotAssignedError  # noqa: PLC0415
     from world.stories.models import StoryProgress  # noqa: PLC0415
     from world.stories.services.beats import evaluate_auto_beats  # noqa: PLC0415
+
+    if story.scope == StoryScope.UNASSIGNED:
+        raise StoryNotAssignedError
 
     progress = StoryProgress.objects.create(
         story=story,
@@ -102,8 +106,12 @@ def create_group_progress(
     matches where a group member already satisfies the beat when the group
     story is created (with Wave 5 ANY-member evaluation).
     """
+    from world.stories.exceptions import StoryNotAssignedError  # noqa: PLC0415
     from world.stories.models import GroupStoryProgress  # noqa: PLC0415
     from world.stories.services.beats import evaluate_auto_beats  # noqa: PLC0415
+
+    if story.scope == StoryScope.UNASSIGNED:
+        raise StoryNotAssignedError
 
     progress = GroupStoryProgress.objects.create(
         story=story,
@@ -120,8 +128,12 @@ def create_global_progress(
     current_episode: Episode | None = None,
 ) -> GlobalStoryProgress:
     """Create a GlobalStoryProgress singleton and immediately evaluate auto-beats."""
+    from world.stories.exceptions import StoryNotAssignedError  # noqa: PLC0415
     from world.stories.models import GlobalStoryProgress  # noqa: PLC0415
     from world.stories.services.beats import evaluate_auto_beats  # noqa: PLC0415
+
+    if story.scope == StoryScope.UNASSIGNED:
+        raise StoryNotAssignedError
 
     progress = GlobalStoryProgress.objects.create(
         story=story,

@@ -8,9 +8,41 @@ class EraStatus(models.TextChoices):
 
 
 class StoryScope(models.TextChoices):
-    CHARACTER = "character", "Character"
+    UNASSIGNED = "unassigned", "Unassigned"
+    CHARACTER = "character", "Personal"
     GROUP = "group", "Group"
     GLOBAL = "global", "Global"
+
+
+class StoryMaturity(models.TextChoices):
+    """Authoring-completeness of a Story / Chapter / Episode node.
+
+    Orthogonal to runtime StoryStatus. Per-node and fully independent — no
+    cross-node ordering, parent/child, or DAG-reachability constraint.
+    """
+
+    PITCH = "pitch", "Pitch"
+    OUTLINE = "outline", "Outline"
+    PLOT = "plot", "Plot"
+
+
+class BeatKind(models.TextChoices):
+    """What a beat *is*. Resolution still flows through predicate_type."""
+
+    SITUATION = "situation", "Situation"
+    ENCOUNTER = "encounter", "Encounter"
+    TASK = "task", "Task"
+    REQUIREMENT = "requirement", "Requirement"
+
+
+class ProgressStatus(models.TextChoices):
+    """Finer-grained pointer state. is_active stays True for ACTIVE /
+    WAITING_FOR_GM / RESTING; only COMPLETED sets is_active False."""
+
+    ACTIVE = "active", "Active"
+    WAITING_FOR_GM = "waiting_for_gm", "Waiting for GM"
+    RESTING = "resting", "Resting"
+    COMPLETED = "completed", "Completed"
 
 
 class BeatPredicateType(models.TextChoices):

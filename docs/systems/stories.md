@@ -5,7 +5,7 @@ Structured narrative campaign management: task-gated episode progression, multi-
 **Phase 3 complete.** All backend models, services, reactivity hooks, and API endpoints are implemented. Phase 4 is the React frontend (including the narrative message UI).
 
 **Source:** `src/world/stories/`
-**API Base:** `/api/stories/`, `/api/chapters/`, `/api/episodes/`, `/api/beats/`, `/api/transitions/`, `/api/story-progress/`, `/api/group-story-progress/`, `/api/global-story-progress/`, `/api/aggregate-beat-contributions/`, `/api/assistant-gm-claims/`, `/api/session-requests/`
+**API Base:** `/api/stories/`, `/api/chapters/`, `/api/episodes/`, `/api/beats/`, `/api/transitions/`, `/api/story-progress/`, `/api/group-story-progress/`, `/api/global-story-progress/`, `/api/aggregate-beat-contributions/`, `/api/assistant-gm-claims/`, `/api/session-requests/`, `/api/story-notes/`
 
 ---
 
@@ -15,7 +15,16 @@ Structured narrative campaign management: task-gated episode progression, multi-
 # constants.py
 from world.stories.constants import (
     EraStatus,              # UPCOMING, ACTIVE, CONCLUDED
-    StoryScope,             # CHARACTER, GROUP, GLOBAL
+    StoryScope,             # UNASSIGNED (new default), CHARACTER, GROUP, GLOBAL
+    StoryMaturity,          # PITCH, OUTLINE, PLOT — authoring-completeness of a
+                            # Story / Chapter / Episode node; orthogonal to runtime
+                            # StoryStatus, per-node, no cross-node ordering constraint
+    BeatKind,               # SITUATION, ENCOUNTER, TASK (default), REQUIREMENT —
+                            # what a beat *is*; resolution still flows through
+                            # predicate_type
+    ProgressStatus,         # ACTIVE, WAITING_FOR_GM, RESTING, COMPLETED — finer
+                            # pointer state; is_active stays True for ACTIVE /
+                            # WAITING_FOR_GM / RESTING; only COMPLETED clears is_active
     BeatPredicateType,      # GM_MARKED, CHARACTER_LEVEL_AT_LEAST, ACHIEVEMENT_HELD,
                             # CONDITION_HELD, CODEX_ENTRY_UNLOCKED, STORY_AT_MILESTONE,
                             # AGGREGATE_THRESHOLD
@@ -86,9 +95,11 @@ Top-level campaign container.
 | `title`, `description` | CharField / TextField | |
 | `status` | StoryStatus | ACTIVE, INACTIVE, COMPLETED, CANCELLED |
 | `privacy` | StoryPrivacy | PUBLIC, PRIVATE, INVITE_ONLY |
-| `scope` | StoryScope | CHARACTER / GROUP / GLOBAL |
+| `scope` | StoryScope | UNASSIGNED (default) / CHARACTER / GROUP / GLOBAL — `create_*_progress` rejects UNASSIGNED stories |
+| `maturity` | StoryMaturity | PITCH (default) / OUTLINE / PLOT — authoring completeness |
 | `character_sheet` | FK → character_sheets.CharacterSheet (nullable) | For CHARACTER-scope stories |
 | `created_in_era` | FK → stories.Era (nullable) | |
+| `covenant` | FK → covenants.Covenant (nullable) | For GROUP-scope stories; informational, not a credit gate |
 | `owners` | M2M → accounts.AccountDB | |
 | `active_gms` | M2M → gm.GMProfile | |
 | `primary_table` | FK → gm.GMTable (nullable) | Lead GM's table; used for AGM claim permission check |
@@ -106,6 +117,7 @@ Major arc within a story.
 | `title`, `description` | CharField / TextField | |
 | `order` | PositiveIntegerField | Unique per story |
 | `is_active` | BooleanField | |
+| `maturity` | StoryMaturity | PITCH (default) / OUTLINE / PLOT — authoring completeness |
 | `summary`, `consequences` | TextField | |
 
 ---
@@ -120,6 +132,9 @@ Node in the episode DAG. Transitions are the edges.
 | `title`, `description` | CharField / TextField | |
 | `order` | PositiveIntegerField | Unique per chapter |
 | `is_active` | BooleanField | |
+| `maturity` | StoryMaturity | PITCH (default) / OUTLINE / PLOT — promotion to PLOT gated by `promote_episode_maturity` |
+| `resting_conclusion` | TextField | Player-facing text shown when progress RESTS here; required before PLOT promotion |
+| `is_ending` | BooleanField | Explicit "this is an ending" marker; satisfies PLOT promotion when there is no outbound transition |
 | `summary`, `consequences` | TextField | |
 
 `episode.outbound_transitions` — reverse from Transition.source_episode.
@@ -187,6 +202,9 @@ Boolean predicate attached to an episode. Flat discriminator model — all confi
 | `deadline` | DateTimeField (nullable) | Expiry triggers EXPIRED outcome via `expire_overdue_beats` |
 | `agm_eligible` | BooleanField | True = AGM may claim this beat |
 | `order` | PositiveIntegerField | |
+| `kind` | BeatKind | SITUATION / ENCOUNTER / TASK (default) / REQUIREMENT — what the beat *is*; resolution still flows through `predicate_type` |
+| `advances` | BooleanField | Default True; False = Tangent (recorded for history, never gates a transition) |
+| `risk` | PositiveSmallIntegerField | Default 0; plain risk number (meaning assigned later with consequence work). Authoring trust-gated in `BeatSerializer` — only staff may author `risk > 0` |
 
 **Per-predicate config fields (exactly one set should be non-null per predicate type):**
 
@@ -307,7 +325,8 @@ Per-character pointer into a CHARACTER-scope story's episode DAG.
 | `story` | FK → Story | `related_name="progress_records"` |
 | `character_sheet` | FK → CharacterSheet | Must equal `story.character_sheet` (clean() enforced) |
 | `current_episode` | FK → Episode (nullable) | Null = not started or frontier |
-| `is_active` | BooleanField | |
+| `is_active` | BooleanField | Stays True for ACTIVE / WAITING_FOR_GM / RESTING; only COMPLETED clears it |
+| `status` | ProgressStatus | ACTIVE (default) / WAITING_FOR_GM / RESTING / COMPLETED — set by `set_progress_status` / `resolve_frontier` |
 | `started_at` | DateTimeField (auto_now_add) | |
 | `last_advanced_at` | DateTimeField (auto_now) | Updated on each advance |
 
@@ -324,7 +343,8 @@ Per-GMTable pointer into a GROUP-scope story's episode DAG. The whole table shar
 | `story` | FK → Story | `related_name="group_progress_records"` |
 | `gm_table` | FK → gm.GMTable | |
 | `current_episode` | FK → Episode (nullable) | |
-| `is_active` | BooleanField | |
+| `is_active` | BooleanField | Stays True for ACTIVE / WAITING_FOR_GM / RESTING; only COMPLETED clears it |
+| `status` | ProgressStatus | ACTIVE (default) / WAITING_FOR_GM / RESTING / COMPLETED |
 | `started_at` | DateTimeField (auto_now_add) | |
 | `last_advanced_at` | DateTimeField (auto_now) | |
 
@@ -340,9 +360,25 @@ Singleton pointer per GLOBAL-scope story.
 |-------|------|-------|
 | `story` | OneToOneField → Story | `related_name="global_progress"` |
 | `current_episode` | FK → Episode (nullable) | |
-| `is_active` | BooleanField | |
+| `is_active` | BooleanField | Stays True for ACTIVE / WAITING_FOR_GM / RESTING; only COMPLETED clears it |
+| `status` | ProgressStatus | ACTIVE (default) / WAITING_FOR_GM / RESTING / COMPLETED |
 | `started_at` | DateTimeField (auto_now_add) | |
 | `last_advanced_at` | DateTimeField (auto_now) | |
+
+---
+
+### StoryNote
+
+Append-only OOC authorial memory attached to a Story — general story notes and future-idea seeds. Distinct from per-node pitch text. **Never player-visible.** Not promotable; purely informational for the next author. No edit/delete in the API (the ViewSet omits the update/destroy mixins → PATCH/PUT/DELETE return 405).
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `story` | FK → Story | `related_name="notes"` |
+| `author_account` | FK → accounts.AccountDB (nullable, SET_NULL) | Stamped from the requesting account in the serializer; never accepted from client input |
+| `body` | TextField | Note content (blank/whitespace-only rejected by serializer) |
+| `created_at` | DateTimeField (auto_now_add) | |
+
+No `Meta.ordering` on the model; the ViewSet queryset orders `-created_at`. Access is gated by `CanAccessStoryNotes` (staff, story owner, active GM, or Lead GM of the story's primary table).
 
 ---
 
@@ -369,7 +405,8 @@ All services in `src/world/stories/services/`.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `resolve_episode` | `(*, progress, chosen_transition=None, gm_notes="", resolved_by=None) -> EpisodeResolution` | Selects/validates transition, creates EpisodeResolution, advances progress; raises `NoEligibleTransitionError` or `AmbiguousTransitionError` on bad state |
+| `resolve_episode` | `(*, progress, chosen_transition=None, gm_notes="", resolved_by=None) -> EpisodeResolution` | Selects/validates transition, creates EpisodeResolution, advances progress; raises `NoEligibleTransitionError` or `AmbiguousTransitionError` on bad state. Now reconciles progress.status after advancing (`_reconcile_status_after_advance`): a non-PLOT target routes through `resolve_frontier` (WAITING_FOR_GM / RESTING), a PLOT target clears a stale frontier status back to ACTIVE, a None target is left untouched. Distinguishes a genuine authoring frontier (current episode has *no* outbound transitions → `resolve_frontier`) from a transient routing block (outbound transitions exist but none routable yet → status stays ACTIVE) before re-raising `NoEligibleTransitionError` |
+| `_reconcile_status_after_advance` | `(progress: AnyStoryProgress) -> None` | Internal; called by `resolve_episode` after the atomic advance — see above |
 
 ### progress.py
 
@@ -377,9 +414,26 @@ All services in `src/world/stories/services/`.
 |----------|-----------|-------------|
 | `get_active_progress_for_story` | `(story: Story) -> AnyStoryProgress \| None` | Dispatches on scope: CHARACTER → first active StoryProgress; GROUP → first active GroupStoryProgress; GLOBAL → global_progress OneToOne accessor |
 | `advance_progress_to_episode` | `(progress, target_episode) -> None` | Updates `current_episode` and auto-stamps `last_advanced_at` |
-| `create_character_progress` | `(*, story, character_sheet, current_episode=None) -> StoryProgress` | Creates progress + immediately `evaluate_auto_beats` to catch retroactive matches (Phase 3) |
-| `create_group_progress` | `(*, story, gm_table, current_episode=None) -> GroupStoryProgress` | GROUP equivalent of `create_character_progress` |
-| `create_global_progress` | `(*, story, current_episode=None) -> GlobalStoryProgress` | GLOBAL equivalent |
+| `create_character_progress` | `(*, story, character_sheet, current_episode=None) -> StoryProgress` | Creates progress + immediately `evaluate_auto_beats` to catch retroactive matches (Phase 3). Raises `StoryNotAssignedError` if `story.scope == UNASSIGNED` |
+| `create_group_progress` | `(*, story, gm_table, current_episode=None) -> GroupStoryProgress` | GROUP equivalent of `create_character_progress`; same UNASSIGNED guard |
+| `create_global_progress` | `(*, story, current_episode=None) -> GlobalStoryProgress` | GLOBAL equivalent; same UNASSIGNED guard |
+
+### frontier.py
+
+When a player cannot advance, decide whether the story is WAITING_FOR_GM (immature content remains — the author intends more) or RESTING (nothing authored remains — deliberately ambiguous, never COMPLETED).
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `set_progress_status` | `(progress: AnyStoryProgress, status: ProgressStatus) -> None` | Sets `status` on any progress type; COMPLETED also clears `is_active`, every other status keeps `is_active` True. Saves `status`, `is_active`, `last_advanced_at` |
+| `resolve_frontier` | `(progress: AnyStoryProgress) -> None` | Sets WAITING_FOR_GM (any Episode in the story still PITCH/OUTLINE) or RESTING (all PLOT). Never sets COMPLETED — only an explicit staff/owner action does that. Caller must only invoke when the player genuinely cannot advance. The immature-content check is a story-wide heuristic ("any Episode below PLOT"); per-DAG-reachability refinement is a documented follow-up |
+
+### maturity.py
+
+Maturity-promotion validation. Forward promotion is gated by minimal per-node content rules; lateral moves and demotion are always allowed (non-linear sketchpad).
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `promote_episode_maturity` | `(episode: Episode, target: StoryMaturity) -> Episode` | Sets `episode.maturity` to `target`. Promotion *to PLOT* requires a non-empty `resting_conclusion` AND either an outbound transition or `is_ending`; otherwise raises `MaturityPromotionError`. Returns the saved episode |
 
 ### reactivity.py (Phase 3)
 
@@ -443,7 +497,8 @@ Called from all three BeatCompletion creation sites (`_evaluate_and_record_beat`
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `compute_story_status_line` | `(progress: AnyStoryProgress) -> str` | Returns a human-readable one-liner for the player dashboard |
+| `compute_story_status` | `(progress: AnyStoryProgress) -> StoryStatusSummary` | Structured status summary (StoryEpisodeStatus + position + scheduling info); callers render their own labels. The service returns no human-readable strings |
+| `compute_story_status_line` | `(progress: AnyStoryProgress) -> str` | **Added in the authoring backbone** (it did not exist before — earlier doc/plan references to it were aspirational). Player-facing one-liner for the dashboard. Branches on `progress.status` FIRST: WAITING_FOR_GM / RESTING / COMPLETED return deliberately-ambiguous copy that never implies finality at a pause/rest and is reassuring at WAITING_FOR_GM; ACTIVE describes the current position from `compute_story_status`. GM/staff dashboards use the structured status + `last_advanced_at`, not this string |
 
 ---
 
@@ -460,6 +515,8 @@ from world.stories.exceptions import (
     ClaimStateTransitionError,          # Claim not in expected state for transition
     ClaimApprovalPermissionError,       # Approver is not Lead GM or staff
     SessionRequestNotOpenError,         # Session request not in expected state
+    StoryNotAssignedError,              # create_*_progress against an UNASSIGNED-scope story
+    MaturityPromotionError,             # Episode failed PLOT-promotion validation
 )
 ```
 
@@ -475,8 +532,8 @@ Never pass `str(exc)` to API responses — use `exc.user_message`.
 |--------|-----|------------|-------------|
 | GET | `/api/stories/{pk}/log/` | Participant or staff | Story log with visibility filtering |
 | GET | `/api/stories/my-active/` | Authenticated | Player's active CHARACTER-scope stories |
-| GET | `/api/stories/gm-queue/` | GMProfile required | Lead GM's episodes-ready-to-run dashboard |
-| GET | `/api/stories/staff-workload/` | Staff | All active stories across all tables |
+| GET | `/api/stories/gm-queue/` | GMProfile required | Lead GM's episodes-ready-to-run dashboard. Response now also includes a `waiting_for_gm` key: active progress rows parked at `ProgressStatus.WAITING_FOR_GM` (no eligible transition yet — a dropped ball), each with `last_advanced_at` + `days_waiting` |
+| GET | `/api/stories/staff-workload/` | Staff | All active stories across all tables. Response now also includes a `stories_waiting_for_gm` key (WAITING_FOR_GM progress across all three scopes, any age, with `days_waiting`) alongside the existing `stale_stories` / `stories_at_frontier` scans |
 | POST | `/api/stories/{pk}/resolve-episode/` | Story owner or staff | Fire `resolve_episode`; body: `{chosen_transition?}` |
 | POST | `/api/stories/expire-beats/` | Staff | Trigger `expire_overdue_beats` |
 
@@ -518,6 +575,7 @@ All ViewSets support standard REST verbs (GET list/detail, POST create, PATCH/PU
 | AggregateBeatContributionViewSet | `/api/aggregate-beat-contributions/` | Read-only |
 | AssistantGMClaimViewSet | `/api/assistant-gm-claims/` | Read-only (AGM creates via custom action) |
 | SessionRequestViewSet | `/api/session-requests/` | Read-only |
+| StoryNoteViewSet | `/api/story-notes/` | **Append-only** (list + retrieve + create only; PATCH/PUT/DELETE → 405). Access gated by `CanAccessStoryNotes`: staff, story owner, active GM, or Lead GM of the story's primary table. `?story=<id>` filter (`StoryNoteFilter`). `author_account` stamped server-side. OOC authorial memory — never plain-player-visible |
 
 ---
 

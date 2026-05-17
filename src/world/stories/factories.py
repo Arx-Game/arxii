@@ -33,6 +33,7 @@ from world.stories.models import (
     Story,
     StoryFeedback,
     StoryGMOffer,
+    StoryNote,
     StoryParticipation,
     StoryProgress,
     TableBulletinPost,
@@ -109,6 +110,17 @@ class PrivateStoryFactory(StoryFactory):
     """Factory for creating private stories"""
 
     privacy = StoryPrivacy.PRIVATE
+
+
+class StoryNoteFactory(factory_django.DjangoModelFactory):
+    """Factory for StoryNote append records."""
+
+    class Meta:
+        model = StoryNote
+
+    story = factory.SubFactory(StoryFactory)
+    author_account = None
+    body = factory.Faker("paragraph", nb_sentences=2)
 
 
 class StoryParticipationFactory(factory_django.DjangoModelFactory):
