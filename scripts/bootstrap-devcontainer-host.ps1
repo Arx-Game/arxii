@@ -24,7 +24,7 @@ if (-not $wsl) {
 } else {
   # Prefer the per-distro VERSION column from `wsl -l -v`; fall back to the
   # global default version. Never match a bare digit (false positives).
-  $verbose = (wsl -l -v) 2>&1 | Out-String
+  $verbose = ((wsl -l -v) 2>&1 | Out-String) -replace '\x00',''
   $hasV2Distro = $verbose -split "`n" | Where-Object { $_ -match '\s2\s*$' }
   $defaultV2 = ((wsl --status) 2>&1 | Out-String) -match 'Default Version:\s*2'
   if ($hasV2Distro -or $defaultV2) {
