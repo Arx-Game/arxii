@@ -111,7 +111,7 @@ const story: Story = {
 
 const chapter: ChapterList = {
   id: 10,
-  story: 1,
+  story: '1',
   title: 'Act I',
   order: 1,
   is_active: true,
@@ -122,10 +122,10 @@ const chapter: ChapterList = {
 
 const episode: EpisodeList = {
   id: 100,
-  chapter: 10,
+  chapter: '10',
   title: 'The Reckoning',
   order: 1,
-  beats_count: 2,
+  scenes_count: 2,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
 } as EpisodeList;
