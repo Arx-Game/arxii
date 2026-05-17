@@ -40,6 +40,7 @@ from world.stories.factories import (
     StoryProgressFactory,
 )
 from world.stories.services.dashboards import STALE_STORY_DAYS
+from world.stories.types import StoryStatus
 
 STAFF_WORKLOAD_URL = reverse("stories-staff-workload")
 
@@ -337,6 +338,80 @@ class StaffWorkloadPerGMQueueTest(APITestCase):
             assert field in entry, f"Missing field: {field}"
         assert isinstance(entry["episodes_ready"], int)
         assert isinstance(entry["pending_claims"], int)
+
+
+class StaffWorkloadPerGMStatusAgnosticMembershipTest(APITestCase):
+    """per_gm_queue_depth membership is status-agnostic (pre-C2 behavior).
+
+    A GM whose only primary story is NON-active (INACTIVE — the model
+    default — / COMPLETED / CANCELLED) must still appear in
+    per_gm_queue_depth (with episodes_ready=0 and any status-agnostic
+    pending AGM claims), exactly as the pre-C2 implementation emitted via
+    ``GMProfile.objects.filter(tables__primary_stories__isnull=False)``.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = AccountFactory(is_staff=True)
+
+        # GM whose only primary story is INACTIVE, with a REQUESTED claim.
+        cls.inactive_gm_account = AccountFactory()
+        cls.inactive_gm = GMProfileFactory(account=cls.inactive_gm_account)
+        cls.inactive_table = GMTableFactory(gm=cls.inactive_gm)
+        cls.inactive_sheet = CharacterSheetFactory()
+        cls.inactive_story = StoryFactory(
+            scope=StoryScope.CHARACTER,
+            character_sheet=cls.inactive_sheet,
+            primary_table=cls.inactive_table,
+            status=StoryStatus.INACTIVE,
+        )
+        cls.inactive_chapter = ChapterFactory(story=cls.inactive_story, order=1)
+        cls.inactive_episode = EpisodeFactory(chapter=cls.inactive_chapter, order=1)
+        cls.inactive_beat = BeatFactory(episode=cls.inactive_episode, agm_eligible=True)
+        cls.inactive_claim = AssistantGMClaimFactory(
+            beat=cls.inactive_beat,
+            status=AssistantClaimStatus.REQUESTED,
+        )
+
+        # GM whose only primary story is COMPLETED, with no claim.
+        cls.completed_gm_account = AccountFactory()
+        cls.completed_gm = GMProfileFactory(account=cls.completed_gm_account)
+        cls.completed_table = GMTableFactory(gm=cls.completed_gm)
+        cls.completed_sheet = CharacterSheetFactory()
+        cls.completed_story = StoryFactory(
+            scope=StoryScope.CHARACTER,
+            character_sheet=cls.completed_sheet,
+            primary_table=cls.completed_table,
+            status=StoryStatus.COMPLETED,
+        )
+
+    def test_per_gm_includes_gm_with_only_inactive_primary_story_and_pending_claim(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(STAFF_WORKLOAD_URL)
+        assert response.status_code == status.HTTP_200_OK
+        queue = response.data["per_gm_queue_depth"]
+        matching = [e for e in queue if e["gm_profile_id"] == self.inactive_gm.pk]
+        assert len(matching) == 1, (
+            "GM with only an INACTIVE primary story must still appear in "
+            "per_gm_queue_depth (status-agnostic membership, pre-C2 behavior)."
+        )
+        entry = matching[0]
+        assert entry["episodes_ready"] == 0
+        assert entry["pending_claims"] >= 1
+
+    def test_per_gm_includes_gm_with_only_completed_primary_story(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(STAFF_WORKLOAD_URL)
+        assert response.status_code == status.HTTP_200_OK
+        queue = response.data["per_gm_queue_depth"]
+        matching = [e for e in queue if e["gm_profile_id"] == self.completed_gm.pk]
+        assert len(matching) == 1, (
+            "GM with only a COMPLETED primary story must still appear in "
+            "per_gm_queue_depth (status-agnostic membership, pre-C2 behavior)."
+        )
+        entry = matching[0]
+        assert entry["episodes_ready"] == 0
+        assert entry["pending_claims"] == 0
 
 
 def _episode_for(story) -> object:

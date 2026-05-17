@@ -2295,28 +2295,43 @@ def _build_staff_per_gm_inputs() -> _StaffPerGMInputs:
 def _collect_per_gm_queue_depth() -> list[dict[str, Any]]:
     """Assemble the per-GM queue depth section from batched inputs.
 
-    Iterates GMs that lead at least one active story (same set as the old
-    ``GMProfile.objects.filter(tables__primary_stories__isnull=False)``),
-    counting episodes whose first active progress has eligible transitions.
-    Byte-identical output to the old nested loop: same per-GM dict keys,
-    same ``episodes_ready`` count, same ``pending_claims`` count. GM
-    iteration order is by ``GMProfile.pk`` (the old code iterated a
-    ``GMProfile`` queryset with no ``Meta.ordering`` — DB-incidental order,
-    deterministically stabilised here; no test asserts per-GM ordering).
+    Iterates the *status-agnostic* GM membership set — exactly the pre-C2
+    ``GMProfile.objects.filter(tables__primary_stories__isnull=False).distinct()``
+    (``Story.primary_table`` reverse = ``primary_stories``; ``GMTable.gm``
+    reverse = ``tables``; NO ``status`` filter). A GM whose only primary
+    story is non-active (INACTIVE — the model default — / COMPLETED /
+    CANCELLED) was emitted by the pre-C2 code with ``episodes_ready=0`` and
+    any (status-agnostic) ``pending_claims``; the C2 bounding refactor
+    narrowed this to GMs with an *active* lead story and silently dropped
+    those GMs. Restoring the wide membership set here makes the output
+    byte-identical to pre-C2 again: same per-GM dict keys in the same
+    order, same ``episodes_ready`` count, same ``pending_claims`` count.
+    The per-GM arithmetic is unchanged (active lead stories still drive
+    ``episodes_ready``; ``pending_claims_by_gm`` is already
+    status-agnostic). GM iteration order is by ``GMProfile.pk`` (the old
+    code iterated a ``GMProfile`` queryset with no ``Meta.ordering`` —
+    DB-incidental; deterministically stabilised here; no test asserts
+    per-GM ordering). Still O(1) queries: the membership set + account
+    preload is exactly one extra query independent of N.
     """
     from world.gm.models import GMProfile  # noqa: PLC0415
     from world.stories.exceptions import ProgressionRequirementNotMetError  # noqa: PLC0415
 
     inputs = _build_staff_per_gm_inputs()
 
-    gm_ids = sorted(inputs.lead_stories_by_gm.keys())
+    # Status-agnostic GM membership set, verbatim pre-C2 derivation (one
+    # query; account preloaded for username). Widening this filter to the
+    # status-agnostic set — rather than restricting to the active-lead-story
+    # GM ids — is the entire fix; the per-GM arithmetic below is untouched.
+    gm_by_id = {
+        gm.pk: gm
+        for gm in GMProfile.objects.select_related("account")
+        .filter(tables__primary_stories__isnull=False)
+        .distinct()
+    }
+    gm_ids = sorted(gm_by_id.keys())
     if not gm_ids:
         return []
-
-    # One query for the GM rows we surface (account preloaded for username).
-    gm_by_id = {
-        gm.pk: gm for gm in GMProfile.objects.filter(pk__in=gm_ids).select_related("account")
-    }
 
     per_gm_queue: list[dict[str, Any]] = []
     for gm_id in gm_ids:
@@ -2324,7 +2339,7 @@ def _collect_per_gm_queue_depth() -> list[dict[str, Any]]:
         if gm is None:
             continue
         episodes_ready_count = 0
-        for story in inputs.lead_stories_by_gm[gm_id]:
+        for story in inputs.lead_stories_by_gm.get(gm_id, []):
             progress = inputs.first_active_progress_by_story.get(story.pk)
             if progress is None or progress.current_episode is None:
                 continue
