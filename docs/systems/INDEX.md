@@ -32,6 +32,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`
   - **Combat-side Spec A surface (in `world/combat`):** `CombatPull`,
     `CombatPullResolvedEffect`
+  - **Resonance-environment interaction (2026-05-16):** `AffinityInteraction` (9-row
+    tuning table; gains `consequence_pool` FK), `ResonanceEnvironmentConfig` (singleton),
+    `ResonanceAlignmentBoonTier` (authored ALIGNED boon tiers per affinity/magnitude band)
 - **Handlers:**
   - `character.threads` (`CharacterThreadHandler`) — cached thread list,
     `passive_vital_bonuses(vital_target)` for tier-0 VITAL_BONUS
@@ -57,6 +60,13 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `compute_path_cap(character_sheet) -> int`, `compute_effective_cap(thread) -> int`
   - VITAL_BONUS routing: `recompute_max_health_with_threads(character_sheet) -> int`,
     `apply_damage_reduction_from_threads(character, damage_amount) -> int`
+  - Resonance-environment (2026-05-16): `magical_profile(character_sheet) -> CharacterAura | None`
+    (derived magic-capability gate; None = Quiescent);
+    `resonance_environment_for_cast(*, caster_sheet, room_profile, technique)` (OPPOSED
+    backfire, called as "Step 10" in the technique-use orchestrator);
+    `refresh_resonance_alignment(*, character_sheet)` / `clear_resonance_alignment(*,
+    character_sheet)` (ALIGNED presence buff, wired to `Character.at_post_move` /
+    `at_pre_move` / `at_post_unpuppet`)
   - Outfit trickle (Spec D PR1): `outfit_daily_trickle_for_character(sheet) -> int` —
     issues `ResonanceGrant` rows (source=OUTFIT_TRICKLE, `outfit_item_facet` typed FK)
     for each worn item with matching facets; `resonance_daily_tick()` now calls this
@@ -148,8 +158,12 @@ Persistent states that modify capabilities, checks, and resistances with stage p
 
 - **Models:** `ConditionCategory`, `ConditionTemplate`, `ConditionStage`, `ConditionInstance`, `ConditionCapabilityEffect`, `ConditionCheckModifier`, `ConditionResistanceModifier`, `ConditionDamageOverTime`, `ConditionDamageInteraction`, `ConditionConditionInteraction`
 - **Lookup Tables:** `CapabilityType`, `CheckType`, `DamageType`
+- **Handlers:** `obj.conditions` (`ConditionHandler` / `CharacterConditionHandler` in
+  `world/conditions/handlers.py`, installed as `@cached_property` on `ObjectParent`).
+  `CharacterConditionHandler.active` mirrors `get_active_conditions`. `.invalidate()`
+  wired into all `world/conditions/services.py` mutation sites.
 - **Key Functions:** `apply_condition()`, `remove_condition()`, `get_capability_status()`, `get_check_modifier()`, `get_resistance_modifier()`, `process_round_start()`, `process_round_end()`, `process_damage_interactions()`
-- **Integrates with:** combat (DoT, capability blocking), magic (power sources), progression (interactions)
+- **Integrates with:** combat (DoT, capability blocking), magic (power sources, resonance-environment boon/injury application), progression (interactions)
 - **Source:** `src/world/conditions/`
 - **Details:** [conditions.md](conditions.md)
 ### Species

@@ -200,6 +200,32 @@ now say "Mage Scars."
 | `AnimaRitualPerformance` | Historical record of ritual performances |
 | `Reincarnation` | Tracks character reincarnation events |
 
+### Resonance-Environment Interaction (universal path — 2026-05-16)
+
+**Design:** `docs/superpowers/specs/2026-05-16-resonance-environment-universal-path-design.md`
+
+| Model | Purpose | Key Fields |
+|-------|---------|------------|
+| `AffinityInteraction` | 9 directed (caster, place) affinity pairing rows; tuning table | `source_affinity` FK, `environment_affinity` FK, `valence` (ALIGNED/OPPOSED), `kind` (AMPLIFY/REJECT/REPEL/CORRUPT), `severity`, `consequence_pool` FK (nullable — OPPOSED backfire pool) |
+| `ResonanceEnvironmentConfig` | Singleton with scalar tuning coefficients | `backfire_base_difficulty`, `backfire_difficulty_per_magnitude` |
+| `ResonanceAlignmentBoonTier` | Authored: which buff `ConditionTemplate` an ALIGNED pairing grants at or above a magnitude band | `affinity_interaction` FK (must be ALIGNED diagonal row), `min_magnitude`, `condition_template` FK. `UniqueConstraint(affinity_interaction, min_magnitude)`. `clean()` validates ALIGNED valence. Tier selection is Python `max()` over `interaction.cached_alignment_boon_tiers` — no `Meta.ordering` |
+
+`AffinityInteraction.consequence_pool` (added migration `magic/0064`) is a nullable FK to
+`actions.ConsequencePool`. `None` = inert (CORRUPT-deferred or no authored content yet).
+The pool's `Consequence` rows carry `ConsequenceEffect(effect_type=APPLY_CONDITION)` entries
+mapping `CheckOutcome` tiers to the existing Tempered Against Light / Singed / Burning /
+Hallowed Burn / Cast Disrupted `ConditionTemplate`s.
+
+Cached accessors (never query directly):
+- `AffinityInteraction.objects.interaction_for(source, environment)` — loads all 9 rows into
+  an in-memory map once; primitive carries the resolved row out as `effect.interaction`.
+- `AffinityInteraction.cached_alignment_boon_tiers` — `cached_property` returning
+  `list(self.alignment_boon_tiers.all())`.
+- `ResonanceAlignmentBoonTier.objects.boon_condition_templates()` — cached set of distinct
+  boon `ConditionTemplate`s; used by the movement service's clear step.
+- `ConsequencePool.cached_consequences` — `cached_property` returning the resolved
+  `Consequence` list; the OPPOSED service reads this, never `pool.entries.filter(...)`.
+
 ---
 
 ## Key Methods and Properties
@@ -266,6 +292,49 @@ technique.intensity  # Base power stat
 technique.control    # Base safety/precision stat
 technique.anima_cost # Base anima cost to activate
 ```
+
+### Resonance-Environment Services
+
+All three live in `world/magic/services/resonance_environment.py`.
+
+```python
+from world.magic.services.resonance_environment import (
+    magical_profile,
+    resonance_environment_for_cast,
+    refresh_resonance_alignment,
+    clear_resonance_alignment,
+)
+
+# Magic-capability gate — derived, never asserted or stored.
+# Returns CharacterAura if the sheet's character has one (every finalized PC);
+# returns None if Quiescent (NPC, not-yet-finalized character).
+aura = magical_profile(character_sheet)   # CharacterAura | None
+
+# OPPOSED backfire — called from the technique-use orchestrator ("Step 10",
+# world/magic/services/techniques.py) immediately after accrue_corruption_for_cast.
+# Gated by magical_profile. Resolves consequence pool → select_consequence_from_result
+# → apply_resolution. Emits no event, runs no flow.
+resonance_environment_for_cast(
+    caster_sheet=sheet,     # CharacterSheet (extension model, not ObjectDB)
+    room_profile=profile,   # RoomProfile (evennia_extensions)
+    technique=technique,    # Technique | None
+)
+
+# ALIGNED presence buff — called from Character.at_post_move.
+# Idempotently clears any prior alignment buff, evaluates presence-time resonance,
+# and applies the highest matching ResonanceAlignmentBoonTier buff ConditionTemplate.
+refresh_resonance_alignment(character_sheet=sheet)
+
+# Explicit clear — called from at_pre_move(destination=None) and at_post_unpuppet.
+clear_resonance_alignment(character_sheet=sheet)
+```
+
+**Integration points:**
+- **Cast pipeline:** `resonance_environment_for_cast` is "Step 10" in
+  `world/magic/services/techniques.py`, sibling of `accrue_corruption_for_cast`.
+- **Movement pipeline:** `refresh_resonance_alignment` / `clear_resonance_alignment` are
+  wired in `typeclasses/characters.py` via `Character.at_post_move`, `at_pre_move`, and
+  `at_post_unpuppet`.
 
 ---
 

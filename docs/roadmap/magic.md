@@ -1015,8 +1015,10 @@ Interim status notes:
 
 ## Resonance-Environment Interaction
 
-**Status: SHIPPED (branch `magic-story-slice-spec`, cast-time both poles)**
-**Spec:** `docs/superpowers/specs/2026-05-15-resonance-environment-interaction-design.md`
+**Status: SHIPPED (universal path redesign on branch `resonance-environment-universal-path`)**
+**Specs:**
+- `docs/superpowers/specs/2026-05-15-resonance-environment-interaction-design.md` (original slice — primitive, AffinityInteraction, authored injury conditions)
+- `docs/superpowers/specs/2026-05-16-resonance-environment-universal-path-design.md` (universal-path redesign — supersedes the Magically-Attuned subscriber approach)
 
 ### Lore
 
@@ -1054,88 +1056,126 @@ away from non-celestial places and never corrupts. Celestial places reject all w
 
 | Layer | What | Form |
 |---|---|---|
-| **Mechanism** | `evaluate_resonance_environment()` | core service in `world/magic/services/resonance_environment.py` — peer of `accrue_corruption` |
-| **Tuning** | 9 `AffinityInteraction` rows + scalar coefficients | `AffinityInteraction` model (seeded, admin-editable) + `ResonanceEnvironmentConfig` singleton |
-| **Content** | authored conditions that react | data-driven: ConditionTemplate + reactive TriggerDefinition + FlowDefinition |
+| **Mechanism** | `evaluate_resonance_environment()` primitive + two core services | `world/magic/services/resonance_environment.py` — peers of `accrue_corruption_for_cast` |
+| **Tuning** | 9 `AffinityInteraction` rows + scalar coefficients + authored pools/tiers | `AffinityInteraction` model + `ResonanceEnvironmentConfig` singleton + `AffinityInteraction.consequence_pool` FK + `ResonanceAlignmentBoonTier` rows |
+| **Content** | authored injury conditions (OPPOSED) + named buff conditions (ALIGNED) | existing Tempered/Singed/Burning/Hallowed Burn/Cast Disrupted templates selected by consequence pool; new named boon `ConditionTemplate`s per affinity/magnitude band |
 
-The primitive is a core magic-physics mechanism. Authored content stays data-driven and
-calls into it — honors "no service functions for authored content."
+The primitive is a core magic-physics mechanism. Universal magic-physics is a core service,
+not a flow or trigger. Authored content (consequence pools, boon tiers) is data — staff-tunable
+rows on the existing `AffinityInteraction` table, not code changes.
 
-### What shipped (cast-time, both poles)
+### What shipped
 
-- **`evaluate_resonance_environment(caster, room, technique)`** primitive in
-  `world/magic/services/resonance_environment.py`. Returns a frozen `ResonanceEnvironmentEffect`
-  dataclass (valence, kind, direction, magnitude, affinities). Magnitude 0 → inert short-circuit.
-- **9 `AffinityInteraction` rows** + `ResonanceEnvironmentConfig` singleton seeded in
-  `integration_tests/game_content/magic.py`.
-- **Universal cast subscriber** via the ubiquitous **"Magically Attuned"** baseline
-  `ConditionTemplate` (no Trigger-model schema change; uses the existing
-  `ConditionTemplate.reactive_triggers` M2M + T4/T8/T10 install path, mirroring the
-  Soul Tether precedent). Every magic-capable character receives this condition.
-- **OPPOSED backfire** — the existing Hallowed Threshold story content (Hallowed Rejection
-  scar, pairs #4/#7: abyssal/primal caster in a celestial place) is now driven by the
-  primitive. The flow calls `evaluate_resonance_environment`, branches on OPPOSED, runs
-  `perform_check` at config-derived difficulty, and applies authored Tempered/Singed/
-  Burning/Hallowed Burn conditions by `CheckOutcome`.
-- **ALIGNED amplification boon** — new "Empowered by Resonant Ground" `ConditionTemplate`.
-  When the primitive returns ALIGNED, the flow applies the boon (scaled by magnitude;
-  no check — a boon).
-- **Pipeline test** — 12 subtests: 4 OPPOSED outcomes × 2 place-intensity tiers, the
-  ALIGNED boon subtest, an inert short-circuit subtest, a CASTER_DOMINANT stub subtest
-  (primitive returns the correct direction; flow treats as inert, standing as the
-  fill-in point for deferred defilement), a missing-`CharacterAura` inert unit test,
-  and the second-earner Discovery test.
-- **Event timing: `TECHNIQUE_CAST`** (post-resolve — the environment reacts after the
-  working fires). A true `TECHNIQUE_PRE_CAST` block/modify variant is deferred.
+**The anti-pattern removed:** the 2026-05-15 slice used a "Magically Attuned" baseline
+`ConditionTemplate` on every magic-capable PC to subscribe them to a `TriggerDefinition`/
+`FlowDefinition` pair. This is wrong by construction — a `ConditionInstance` row on every PC
+encodes a universal fact (this character is magical) that is already derivable from whether
+a `CharacterAura` exists. A flow/trigger is for authored, sequenced content and genuine
+per-entity exceptions; it must not model a baseline process that applies to all casters.
+The 2026-05-16 redesign removes the marker condition, trigger, flow, and the seeding of all
+three. The pipeline test no longer applies any condition in `setUp` — it exercises the
+production path directly.
+
+**What replaced it:**
+
+- **`magical_profile(character_sheet) -> CharacterAura | None`** — derived predicate in
+  `world/magic/services/resonance_environment.py`. Returns the character's `CharacterAura`
+  or `None` (Quiescent). Magic-capability is derived from the aura's existence, never
+  asserted or stored. No grant mechanism, no backfill, no idempotency guard needed.
+- **`ResonanceEnvironmentEffect` result shape** — extended with two fields:
+  `interaction: AffinityInteraction | None` (the resolved row, carried out of the primitive
+  so no service re-queries it) and `backfire_difficulty: int` (relocated from the deleted
+  flow adapter into the primitive).
+- **`resonance_environment_for_cast(*, caster_sheet, room_profile, technique)`** — OPPOSED
+  backfire service. Called from the technique-use orchestrator
+  (`world/magic/services/techniques.py`, "Step 10") immediately after
+  `accrue_corruption_for_cast`. Gated by `magical_profile`. Resolves the OPPOSED consequence
+  via `select_consequence_from_result` over `AffinityInteraction.consequence_pool` (a new
+  nullable FK, migration `magic/0064`) at config-derived `backfire_difficulty`. Emits no
+  event, runs no flow.
+- **`refresh_resonance_alignment(*, character_sheet) -> None`** — ALIGNED presence-buff
+  service. Called from `Character.at_post_move` on arrival. Idempotently clears any prior
+  alignment buff (using `ResonanceAlignmentBoonTier.objects.boon_condition_templates()` cached
+  set), evaluates `evaluate_resonance_environment(technique=None)`, and applies the named buff
+  `ConditionTemplate` for the highest matching `ResonanceAlignmentBoonTier` band via Python
+  `max()` over `interaction.cached_alignment_boon_tiers`. Also called from
+  `Character.at_pre_move(destination=None)` and `Character.at_post_unpuppet` for clean
+  teardown.
+- **`clear_resonance_alignment(*, character_sheet) -> None`** — explicit-clear variant
+  (step-1 logic extracted); called on departure and logout.
+- **`ResonanceAlignmentBoonTier`** — new authored model (migration `magic/0064`). FK to
+  `AffinityInteraction` (must be ALIGNED diagonal row) + `min_magnitude` + FK to
+  `ConditionTemplate`. `UniqueConstraint` on `(affinity_interaction, min_magnitude)`.
+  `clean()` validates the interaction is ALIGNED. No `Meta.ordering` — selection is Python
+  `max()` over a cached list.
+- **`obj.conditions` cached handler** (`ConditionHandler` / `CharacterConditionHandler` in
+  `world/conditions/handlers.py`, installed as `@cached_property` on `ObjectParent`).
+  `CharacterConditionHandler.active` mirrors `get_active_conditions`. `.invalidate()` wired
+  into all `world/conditions/services.py` mutation sites. The movement service's clear step
+  intersects the character's already-cached condition instances against the cached boon
+  template set — no per-move query.
+- **Seed rework** — `integration_tests/game_content/magic.py` drops the Magically-Attuned
+  condition, universal trigger, and universal flow seeding; seeds OPPOSED `ConsequencePool` +
+  `Consequence` + `ConsequenceEffect` rows for the celestial-place pairs (#4/#7) and ALIGNED
+  `ResonanceAlignmentBoonTier` rows with named buff `ConditionTemplate`s for the abyssal/
+  abyssal pair (#5).
+- **Pipeline test rework** — `setUp` applies no condition. The test exercises the real
+  production path: OPPOSED subtests cast in the celestial cascade room and assert the correct
+  injury `ConditionInstance` per `CheckOutcome` tier; ALIGNED subtests move the caster into
+  the abyssal-aligned room and assert the named buff is applied, cleared on departure, and
+  swapped on affinity-change.
+
+**Retained unchanged:** the `evaluate_resonance_environment` primitive logic, the 9
+`AffinityInteraction` rows, `ResonanceEnvironmentConfig`, the `endure_hallowed_ground`
+`CheckType`/`ResultChart`, and the Tempered Against Light / Singed / Burning / Hallowed Burn /
+Cast Disrupted `ConditionTemplate`s.
 
 ### What's deferred (primitive already supports it — additive, not re-architecture)
 
-1. **Presence-escalation** — characters with heavy opposing scars are affected on mere
-   *entry* (`MOVED`), not only on cast. Delivered as a scar-gated MOVED `TriggerDefinition`
-   via the existing `ConditionTemplate.reactive_triggers` M2M. `evaluate_resonance_environment`
-   already accepts `technique=None` for presence-time evaluation. Cheap follow-on.
-2. **Defilement (CASTER_DOMINANT)** — when a strong opposing caster overpowers a weak place,
-   the caster degrades the place's cascade resonance (writes down its `effective_value`).
-   The primitive already returns `direction=CASTER_DOMINANT`; the deferred work authors the
-   defilement effect. **Soul-tether integration lever (must be preserved):** defilement's
-   caster→world corruption MUST be emitted through the existing interceptable
-   `CORRUPTION_ACCRUING` event (the one `soul_tether_redirect_handler` already subscribes
-   to) — then a Sinner's Hollow can absorb world-defilement corruption with zero new wiring.
-   Whoever builds defilement routes corruption through the interceptable event, never writes
-   corruption directly.
-3. **"Magically Attuned" production grant** — the slice's pipeline test applies the baseline
-   condition directly in `setUp`. Granting it automatically at CG finalization / first cast
-   is a follow-on; the ConditionTemplate and `reactive_triggers` M2M are fully authored.
+1. **~~"Magically Attuned" production grant~~** — **SUPERSEDED/REMOVED.** This deferred item
+   from the 2026-05-15 spec is not implemented as a grant; the entire marker-condition
+   approach was replaced by the derived `magical_profile` predicate (see
+   `docs/superpowers/specs/2026-05-16-resonance-environment-universal-path-design.md`). No
+   grant is needed: magic-capability is derived from `CharacterAura` presence, which is
+   created unconditionally at CG finalization by `finalize_magic_data()`.
+2. **Presence-escalation for scarred characters** — characters with heavy opposing scars
+   harmed on mere *entry* (`MOVED`), not only on cast. This is a genuine per-entity exception
+   → correctly a scar-gated MOVED `TriggerDefinition` via `ConditionTemplate.reactive_triggers`
+   M2M (the legitimate flow/trigger use). `evaluate_resonance_environment(technique=None)`
+   already serves this; the ALIGNED universal presence path added here does not subsume it.
+3. **Defilement (CASTER_DOMINANT)** — when a strong opposing caster overpowers a weak place,
+   the caster degrades the place's cascade resonance. The primitive already returns
+   `direction=CASTER_DOMINANT`; the cast service treats CORRUPT as inert at the fill-in
+   point. **Soul-tether integration lever (must be preserved):** defilement's caster→world
+   corruption MUST be emitted through the existing interceptable `CORRUPTION_ACCRUING` event
+   (the one `soul_tether_redirect_handler` already subscribes to) — then a Sinner's Hollow
+   can absorb world-defilement corruption with zero new wiring.
 4. **Brother's richer formula** — steps 5–7 of the v1 formula are deliberately simple. His
-   follow-up enriches the primitive's body (technique-resonance opposition weighting,
+   follow-up enriches the primitive body (technique-resonance opposition weighting,
    multi-resonance place weighting). Call sites, `AffinityInteraction` data,
-   `ResonanceEnvironmentConfig`, and authored content do not change.
+   `ResonanceEnvironmentConfig`, the consequence pools, and the boon-tier rows do not change.
 5. **`TECHNIQUE_PRE_CAST` block/modify variant** — a true pre-cast intercept that could
-   block or modify the cast before it resolves needs cancel/modify-payload semantics out
-   of scope here. Concretizes the "technique pre-cast backfire trigger" deferred in
-   `docs/plans/2026-05-14-room-cascade-resonance-unification.md`.
+   block or modify the cast before it resolves needs cancel/modify-payload semantics. Post-
+   resolve backfire is sufficient for the core experience; defer until a concrete need.
 
 ### Recommended next steps (priority order)
 
 The deferred items above, ordered by recommended sequence with rationale and ownership:
 
-1. **"Magically Attuned" production grant** *(Tehom; small)* — highest priority because
-   without it the universal interaction only fires in the pipeline test's `setUp`, never in
-   real gameplay. Hook the baseline-condition grant into CG finalization / first cast. This
-   is the gap between "provably works in test" and "works in the game."
-2. **Presence-escalation** *(Tehom/brother; cheap)* — reuses the existing
-   `reactive_triggers` M2M and the primitive's `technique=None` path; mostly authored
-   content (a scar-gated MOVED trigger + the escalation condition). Adds the
-   "heavily-scarred characters harmed on entry" experience.
-3. **Defilement (CASTER_DOMINANT)** *(brother-led; medium)* — the high-narrative-value
+1. **Presence-escalation for scarred characters** *(Tehom/brother; cheap)* — authored scar-
+   gated MOVED trigger + an escalation condition (e.g., "Hallowed Agony on entry"). Reuses
+   `evaluate_resonance_environment(technique=None)` and `ConditionTemplate.reactive_triggers`
+   M2M. The ALIGNED universal presence path already works; this adds the OPPOSED side for
+   heavily-scarred characters.
+2. **Defilement (CASTER_DOMINANT)** *(brother-led; medium)* — the high-narrative-value
    payoff that ties into soul tether. Must route caster→world corruption through the
    existing `CORRUPTION_ACCRUING` event so the Sinner's Hollow absorbs world-defilement
    (the social-responsibility layer). The `test_caster_dominant_stub` pipeline test is the
    fill-in point.
-4. **Brother's richer formula** *(brother; no urgency)* — enriches the primitive body
+3. **Brother's richer formula** *(brother; no urgency)* — enriches the primitive body
    (technique-resonance opposition weighting, multi-resonance places). v1 is functional;
    do when brother prioritizes. Zero change to call sites / data / authored content.
-5. **`TECHNIQUE_PRE_CAST` block/modify variant** *(largest; lowest urgency)* — needs
+4. **`TECHNIQUE_PRE_CAST` block/modify variant** *(largest; lowest urgency)* — needs
    cancel/modify-payload semantics. Post-resolve backfire is sufficient for the core
    experience; defer until a concrete need.
 
