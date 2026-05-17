@@ -37,6 +37,7 @@ import { ScopeBadge } from '../components/ScopeBadge';
 import { ScopeAssignDialog } from '../components/ScopeAssignDialog';
 import { StoryFormDialog } from '../components/StoryFormDialog';
 import { GMNotesPanel } from '../components/GMNotesPanel';
+import { ProgressStateBanner } from '../components/ProgressStateBanner';
 import { StoryAuthorTree } from '../components/StoryAuthorTree';
 import { EpisodeDAG } from '../components/EpisodeDAG';
 import { EpisodeFormDialog } from '../components/EpisodeFormDialog';
@@ -217,6 +218,9 @@ function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
           </AlertDialog>
         </div>
       </div>
+
+      {/* Inline progress-state context — always visible regardless of tab */}
+      <ProgressStateBanner storyId={story.id} scope={story.scope ?? 'unassigned'} />
 
       {/* Tree / DAG tabs */}
       <Tabs defaultValue="tree" data-testid="author-view-tabs">

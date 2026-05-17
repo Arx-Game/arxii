@@ -36,6 +36,12 @@ vi.mock('../api', () => ({
   listEpisodes: vi.fn().mockResolvedValue({ count: 0, results: [], next: null, previous: null }),
   listBeats: vi.fn().mockResolvedValue({ count: 0, results: [], next: null, previous: null }),
   listTransitions: vi.fn().mockResolvedValue({ count: 0, results: [], next: null, previous: null }),
+  // The selected-story pane renders <ProgressStateBanner> (Task F1), which
+  // calls useMyActiveStories → api.getMyActiveStories. Stub it so the banner
+  // sits in its loading state (these tests do not assert banner content).
+  getMyActiveStories: vi
+    .fn()
+    .mockResolvedValue({ character_stories: [], group_stories: [], global_stories: [] }),
 }));
 
 vi.mock('sonner', () => ({
