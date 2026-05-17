@@ -578,3 +578,33 @@ along the way. None block the branch; each is additive future cleanup.
   comment at the create serializers noting this is a deliberate exception,
   so a future "non-staff create with someone else's draft" change does not
   silently open cross-account GM-text disclosure.
+
+### Final-gate review additions (2026-05-17 — verdict SHIP; non-blocking)
+
+The independent pre-PR gate review returned **SHIP** (I-A/I-B verified
+correct end-to-end against DRF wire internals + both consumers + the tests;
+no new Critical/Important; migration/CI safe). Two non-blocking ledger
+items it recommended:
+
+- **M-2 scope widened (precision).** After the I-B fix the create
+  serializers also echo `summary` (Story/Chapter/Episode) and
+  `resting_conclusion`/`is_ending` (Episode), not just `description`. The
+  M-2 safety reasoning is unchanged and covers these: Story-create is
+  staff-only; Chapter/Episode-create echoes only the requester's own
+  just-submitted input (no third-party GM text). The deferred M-2 security
+  comment should name `summary`/`resting_conclusion`/`is_ending` alongside
+  `description`.
+
+- **M-3 (follow-up, not fixed) — latent `.join` mistype.**
+  `ScopeAssignDialog.tsx` (~L148-149) types `body.character_sheet` /
+  `body.gm_table` as `string[]` and calls `.join(' ')`, but the backend's
+  manual scope/target combo errors emit **bare strings** on the wire
+  (`{"character_sheet": "CHARACTER scope requires..."}`); `.join` on a
+  string would `TypeError` inside the `.then()`. The path is **unreachable
+  from the dialog** — the client-side `isValid` mirror blocks submitting a
+  combo the server invariant would reject; the only reachable assign 400s
+  (re-assign guard `{"scope": ...}` bare string; DRF invalid-PK list
+  errors) are handled correctly. Worst case via a non-dialog client: the
+  `.catch()` degrades to a generic message — no crash, no leak. Fix the
+  mistype (`Array.isArray` guard, as the `scope` key already does) when the
+  M-2/error-handling family is next touched.
