@@ -42,6 +42,15 @@ vi.mock('../api', () => ({
   getMyActiveStories: vi
     .fn()
     .mockResolvedValue({ character_stories: [], group_stories: [], global_stories: [] }),
+  // The Tree tab's <StoryAuthorTree> (Task F2 run-control) does a local
+  // throwOnError:false query against api.getGMQueue to find episodes ready
+  // to resolve. Stub it with an empty queue so no Resolve triggers render
+  // (these tests do not assert run-control content).
+  getGMQueue: vi.fn().mockResolvedValue({
+    episodes_ready_to_run: [],
+    pending_agm_claims: [],
+    assigned_session_requests: [],
+  }),
 }));
 
 vi.mock('sonner', () => ({
