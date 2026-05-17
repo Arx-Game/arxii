@@ -1717,7 +1717,25 @@ class AssignStoryInputSerializer(serializers.Serializer):
     )
 
     def validate(self, attrs: Any) -> Any:  # type: ignore[override]
-        """Enforce the scope <-> target invariant."""
+        """Enforce the scope <-> target invariant.
+
+        Precondition: the target story must currently be UNASSIGNED. The
+        assign contract is "lift a story OUT of UNASSIGNED"; re-assigning an
+        already-scoped story would either 500 (duplicate progress record) or
+        silently corrupt data (scope change with a stale character_sheet and
+        an orphan progress row), so it is rejected as invalid input here.
+        """
+        story = self.context["story"]
+        if story.scope != StoryScope.UNASSIGNED:
+            msg = "This story is already assigned to a scope and cannot be re-assigned."
+            raise serializers.ValidationError({"scope": msg})
+
+        self._validate_scope_target_invariant(attrs)
+        return attrs
+
+    @staticmethod
+    def _validate_scope_target_invariant(attrs: Any) -> None:
+        """Enforce the scope <-> target invariant (CHARACTER/GROUP/GLOBAL)."""
         scope = attrs["scope"]
         character_sheet = attrs.get("character_sheet")
         gm_table = attrs.get("gm_table")
@@ -1743,8 +1761,6 @@ class AssignStoryInputSerializer(serializers.Serializer):
             if gm_table is not None:
                 msg = "GLOBAL scope does not accept a gm_table."
                 raise serializers.ValidationError({"gm_table": msg})
-
-        return attrs
 
 
 # ---------------------------------------------------------------------------

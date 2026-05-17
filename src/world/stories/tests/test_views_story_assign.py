@@ -197,3 +197,82 @@ class StoryAssignViewSetTest(APITestCase):
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
         self._assert_unchanged(story)
+
+    # ------------------------------------------------------------------
+    # Re-assignment of an already-assigned story -> 400, state unchanged
+    #
+    # The assign contract is "lift a story OUT of UNASSIGNED". A story whose
+    # scope is no longer UNASSIGNED must not be re-assigned: doing so either
+    # 500s (duplicate progress IntegrityError) or, worse, silently commits
+    # contradictory progress records (CHARACTER -> GROUP). The Layer-2 guard
+    # in AssignStoryInputSerializer.validate() rejects any non-UNASSIGNED
+    # target with 400 and no state change.
+    # ------------------------------------------------------------------
+
+    def test_reassign_character_to_character_rejected(self):
+        """A CHARACTER story re-assigned to CHARACTER is 400, not a 500."""
+        story = self._make_story()
+        self.client.force_authenticate(user=self.lead_gm_account)
+
+        first = self._post(
+            story,
+            {"scope": "character", "character_sheet": self.character_sheet.pk},
+        )
+        assert first.status_code == status.HTTP_200_OK, first.data
+
+        response = self._post(
+            story,
+            {"scope": "character", "character_sheet": self.character_sheet.pk},
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        story.refresh_from_db()
+        assert story.scope == StoryScope.CHARACTER
+        assert story.character_sheet_id == self.character_sheet.pk
+        assert StoryProgress.objects.filter(story=story).count() == 1
+        assert not GroupStoryProgress.objects.filter(story=story).exists()
+        assert not GlobalStoryProgress.objects.filter(story=story).exists()
+
+    def test_reassign_global_to_global_rejected(self):
+        """A GLOBAL story re-assigned to GLOBAL is 400, not a 500."""
+        story = self._make_story()
+        self.client.force_authenticate(user=self.lead_gm_account)
+
+        first = self._post(story, {"scope": "global"})
+        assert first.status_code == status.HTTP_200_OK, first.data
+
+        response = self._post(story, {"scope": "global"})
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        story.refresh_from_db()
+        assert story.scope == StoryScope.GLOBAL
+        assert GlobalStoryProgress.objects.filter(story=story).count() == 1
+        assert not StoryProgress.objects.filter(story=story).exists()
+        assert not GroupStoryProgress.objects.filter(story=story).exists()
+
+    def test_reassign_character_to_group_rejected(self):
+        """A CHARACTER story re-assigned to GROUP is cleanly rejected (400).
+
+        This is the silent-corruption case: pre-fix it returned 200 with a
+        stale ``character_sheet``, an orphan StoryProgress, AND a new
+        GroupStoryProgress. The Layer-2 guard rejects it with 400 and the
+        story keeps exactly its original CHARACTER state.
+        """
+        story = self._make_story()
+        self.client.force_authenticate(user=self.lead_gm_account)
+
+        first = self._post(
+            story,
+            {"scope": "character", "character_sheet": self.character_sheet.pk},
+        )
+        assert first.status_code == status.HTTP_200_OK, first.data
+
+        response = self._post(story, {"scope": "group", "gm_table": self.gm_table.pk})
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST, response.data
+        story.refresh_from_db()
+        assert story.scope == StoryScope.CHARACTER
+        assert story.character_sheet_id == self.character_sheet.pk
+        assert not GroupStoryProgress.objects.filter(story=story).exists()
+        assert not GlobalStoryProgress.objects.filter(story=story).exists()
+        assert StoryProgress.objects.filter(story=story).count() == 1

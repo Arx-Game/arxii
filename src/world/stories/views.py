@@ -492,7 +492,7 @@ class StoryViewSet(viewsets.ModelViewSet):
         )
 
         story = self.get_object()
-        ser = AssignStoryInputSerializer(data=request.data)
+        ser = AssignStoryInputSerializer(data=request.data, context={"story": story})
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
         scope = data["scope"]
