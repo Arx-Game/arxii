@@ -30,6 +30,14 @@ class ReactorLagProbe:
     the difference between when the tick *actually* fired (reported by ``now``)
     and when it was *scheduled* to fire.
 
+    The expected fire time is tracked on a **fixed LoopingCall cadence**
+    (start + N * interval) rather than relative to the actual fire time.
+    This is critical: LoopingCall anchors its schedule to the start time and
+    does NOT reset after a late tick.  Tracking the baseline relative to the
+    actual fire time (``actual + interval``) would overshoot LoopingCall's
+    true next fire time after any stall, causing the subsequent recovery tick
+    to report a negative lag and corrupt alerting thresholds.
+
     Both the time source and the Twisted reactor clock are injectable so that
     unit tests can drive the probe deterministically using
     :class:`~twisted.internet.task.Clock` without touching the real reactor or
@@ -86,13 +94,20 @@ class ReactorLagProbe:
         """Record the lag for the current tick.
 
         Computes ``now() - expected_fire_time`` and stores the result in
-        ``_lag``.  Advances ``_next_expected`` by one interval so that
-        subsequent ticks are measured against the correct baseline.
+        ``_lag``.  Advances ``_next_expected`` by a **fixed interval** (not
+        relative to the actual fire time) to stay aligned with LoopingCall's
+        start-anchored cadence.
+
+        Using ``actual + interval`` instead would overshoot after any late
+        tick: LoopingCall's next scheduled time would still be
+        ``start + N * interval``, but ``_next_expected`` would be ahead of it,
+        making the immediately-following on-time tick appear to have negative
+        lag and corrupting alerting.
         """
         actual = self._now()
         if self._next_expected is not None:
             self._lag = actual - self._next_expected
-        self._next_expected = actual + self._interval
+            self._next_expected += self._interval
 
     def start(self) -> None:
         """Start the periodic lag measurement.
