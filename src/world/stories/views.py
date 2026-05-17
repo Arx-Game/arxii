@@ -1,10 +1,12 @@
+from collections import defaultdict
+from dataclasses import dataclass, field
 from http import HTTPMethod
 from typing import Any, cast
 
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import AnonymousUser
 from django.db import models, transaction
-from django.db.models import Count, QuerySet
+from django.db.models import Count, Prefetch, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from evennia.accounts.models import AccountDB
@@ -1722,137 +1724,372 @@ def _serialize_eligible_transitions(transitions: list) -> list[dict[str, Any]]:
     return [{"transition_id": t.pk, "mode": t.mode} for t in transitions]
 
 
-def _build_gm_queue_for_story(  # noqa: PLR0913 — accumulator-passing helper; one list arg per queue section, adding a dataclass wrapper for 6 lists would be a larger, riskier refactor than this additive change warrants
-    gm_profile: Any,
-    story: Story,
-    episodes_ready: list,
-    pending_claims: list,
-    assigned_requests: list,
-    waiting_for_gm: list,
-) -> None:
-    """Populate GM queue lists from a single story, dispatching on scope.
+@dataclass
+class GMQueueBuckets:
+    """Accumulator for the four GMQueue response sections.
 
-    waiting_for_gm collects active progress rows parked at
-    ProgressStatus.WAITING_FOR_GM (the story trail is blocked on the GM
-    authoring/advancing it). These have no eligible transitions yet, so the
-    episodes_ready branch skips them — surfacing them here with
-    last_advanced_at makes a dropped ball visible.
+    Replaces the six positional list parameters formerly threaded through
+    ``_build_gm_queue_for_story``. The field names map 1:1 onto the response
+    keys assembled by :class:`GMQueueView`, so the produced JSON is unchanged.
+    """
+
+    episodes_ready: list[dict[str, Any]] = field(default_factory=list)
+    pending_claims: list[dict[str, Any]] = field(default_factory=list)
+    assigned_requests: list[dict[str, Any]] = field(default_factory=list)
+    waiting_for_gm: list[dict[str, Any]] = field(default_factory=list)
+
+
+def _eligible_transitions_from_prefetched(
+    progress: Any,
+    progression_reqs_by_episode: dict[int, list[Any]],
+    transitions_by_episode: dict[int, list[Transition]],
+) -> list[Transition]:
+    """In-memory equivalent of ``get_eligible_transitions`` over prefetched data.
+
+    Mirrors ``world.stories.services.transitions.get_eligible_transitions``
+    exactly — same ProgressionRequirementNotMetError semantics, same routing
+    predicate (empty required-outcome set is satisfied), same ``order, pk``
+    ordering — but consumes maps built from a single batched query pass so it
+    issues zero queries per progress. Overdue-beat expiry is performed once,
+    in bulk, by the caller before this is invoked (the SharedMemoryModel
+    identity map means the in-memory Beat objects walked here already reflect
+    any expiry .save()).
+    """
+    from world.stories.exceptions import ProgressionRequirementNotMetError  # noqa: PLC0415
+
+    episode = progress.current_episode
+    if episode is None:
+        return []
+
+    # Step 1: every EpisodeProgressionRequirement must be met (else raise).
+    for req in progression_reqs_by_episode.get(episode.pk, []):
+        if req.beat.outcome != req.required_outcome:
+            raise ProgressionRequirementNotMetError
+
+    # Step 2: keep transitions whose routing requirements are all satisfied.
+    # cached_required_outcomes was populated via Prefetch(to_attr=...).
+    eligible: list[Transition] = []
+    for transition in transitions_by_episode.get(episode.pk, []):
+        routing = transition.cached_required_outcomes
+        if all(r.beat.outcome == r.required_outcome for r in routing):
+            eligible.append(transition)
+    return eligible
+
+
+def _expire_overdue_beats_for_episodes(episode_ids: list[int]) -> None:
+    """Bulk-detect and expire overdue UNSATISFIED beats across all episodes.
+
+    One query for the whole candidate set (replaces the per-episode SELECT
+    that ``get_eligible_transitions`` issued in a loop). Each overdue beat is
+    saved individually so the SharedMemoryModel identity-map cache is updated
+    in place — a bulk .update() would leave stale Python objects and break the
+    subsequent FK walks. The number of saves is bounded by the count of
+    actually-overdue beats (data-dependent, typically zero), not by story
+    count, so the query bound is preserved.
+    """
+    if not episode_ids:
+        return
+
+    from world.stories.constants import BeatOutcome  # noqa: PLC0415
+
+    now = timezone.now()
+    overdue = Beat.objects.filter(
+        episode_id__in=episode_ids,
+        outcome=BeatOutcome.UNSATISFIED,
+        deadline__isnull=False,
+        deadline__lt=now,
+    )
+    for beat in overdue:
+        beat.outcome = BeatOutcome.EXPIRED
+        beat.save(update_fields=["outcome", "updated_at"])
+
+
+def _group_progress_by_story(
+    manager: Any,
+    story_ids: list[int],
+) -> dict[int, list[Any]]:
+    """One batched active-progress query for a scope, grouped by story_id.
+
+    ``order_by("pk")`` makes the per-story order deterministic; the old code
+    relied on unspecified DB order and no test asserts progress ordering, so
+    the produced set is unchanged.
+    """
+    by_story: dict[int, list[Any]] = defaultdict(list)
+    if not story_ids:
+        return by_story
+    qs = (
+        manager.filter(story_id__in=story_ids, is_active=True)
+        .select_related("current_episode__chapter")
+        .order_by("pk")
+    )
+    for progress in qs:
+        by_story[progress.story_id].append(progress)
+    return by_story
+
+
+def _collect_active_progress(
+    lead_stories: list[Story],
+) -> list[tuple[Story, str, Any]]:
+    """Return (story, progress_type, progress) tuples for all active progress.
+
+    Active progress is fetched in three batched queries (one per scope, over
+    all candidate stories at once) instead of one query per story. The result
+    is then assembled story-by-story in ``lead_stories`` order so the bucket
+    append order is identical to the old per-story loop.
+    """
+    by_scope = {
+        StoryScope.CHARACTER: _group_progress_by_story(
+            StoryProgress.objects,
+            [s.pk for s in lead_stories if s.scope == StoryScope.CHARACTER],
+        ),
+        StoryScope.GROUP: _group_progress_by_story(
+            GroupStoryProgress.objects,
+            [s.pk for s in lead_stories if s.scope == StoryScope.GROUP],
+        ),
+        StoryScope.GLOBAL: _group_progress_by_story(
+            GlobalStoryProgress.objects,
+            [s.pk for s in lead_stories if s.scope not in (StoryScope.CHARACTER, StoryScope.GROUP)],
+        ),
+    }
+
+    rows: list[tuple[Story, str, Any]] = []
+    for story in lead_stories:
+        if story.scope == StoryScope.CHARACTER:
+            scope = StoryScope.CHARACTER
+        elif story.scope == StoryScope.GROUP:
+            scope = StoryScope.GROUP
+        else:
+            scope = StoryScope.GLOBAL
+        rows.extend((story, scope, progress) for progress in by_scope[scope].get(story.pk, []))
+    return rows
+
+
+@dataclass
+class _GMQueueInputs:
+    """Pre-batched lookups consumed by the in-memory bucket assembly.
+
+    Every map is built by exactly one query (or zero when empty), so the
+    assembly loop that consumes them issues no queries regardless of how
+    many stories the GM leads.
+    """
+
+    progress_rows: list[tuple[Story, str, Any]]
+    progression_reqs_by_episode: dict[int, list[Any]]
+    transitions_by_episode: dict[int, list[Transition]]
+    open_request_id_by_episode: dict[int, int]
+    claims_by_story: dict[int, list[Any]]
+    assigned_by_story: dict[int, list[Any]]
+
+
+def _build_gm_queue_inputs(
+    gm_profile: Any,
+    lead_stories: list[Story],
+) -> _GMQueueInputs:
+    """Run the batched query pass for the GM's lead stories.
+
+    Replaces the per-story lookups the old loop issued (eligibility inputs,
+    open session requests, pending claims, assigned requests) with one
+    query each over the whole candidate set.
+    """
+    from world.stories.constants import ProgressStatus  # noqa: PLC0415
+
+    story_ids = [s.pk for s in lead_stories]
+    progress_rows = _collect_active_progress(lead_stories)
+
+    # Episodes that need eligibility evaluation (skip WAITING_FOR_GM and
+    # frontier/null current_episode — those never reach the eligibility path).
+    candidate_episode_ids = sorted(
+        {
+            progress.current_episode_id
+            for _story, _ptype, progress in progress_rows
+            if progress.status != ProgressStatus.WAITING_FOR_GM
+            and progress.current_episode_id is not None
+        }
+    )
+
+    _expire_overdue_beats_for_episodes(candidate_episode_ids)
+
+    progression_reqs_by_episode: dict[int, list[Any]] = defaultdict(list)
+    transitions_by_episode: dict[int, list[Transition]] = defaultdict(list)
+    open_request_id_by_episode: dict[int, int] = {}
+    if candidate_episode_ids:
+        for req in EpisodeProgressionRequirement.objects.filter(
+            episode_id__in=candidate_episode_ids
+        ).select_related("beat"):
+            progression_reqs_by_episode[req.episode_id].append(req)
+
+        routing_prefetch = Prefetch(
+            "required_outcomes",
+            queryset=TransitionRequiredOutcome.objects.select_related("beat"),
+            to_attr="cached_required_outcomes",
+        )
+        for transition in (
+            Transition.objects.filter(source_episode_id__in=candidate_episode_ids)
+            .prefetch_related(routing_prefetch)
+            .order_by("order", "pk")
+        ):
+            transitions_by_episode[transition.source_episode_id].append(transition)
+
+        # Mirror the old .first() (lowest pk OPEN request per episode):
+        # iterate ascending pk and keep the first seen per episode.
+        for sr in SessionRequest.objects.filter(
+            episode_id__in=candidate_episode_ids,
+            status=SessionRequestStatus.OPEN,
+        ).order_by("pk"):
+            open_request_id_by_episode.setdefault(sr.episode_id, sr.pk)
+
+    claims_by_story: dict[int, list[Any]] = defaultdict(list)
+    for claim in AssistantGMClaim.objects.filter(
+        beat__episode__chapter__story_id__in=story_ids,
+        status=AssistantClaimStatus.REQUESTED,
+    ).select_related("beat", "beat__episode__chapter", "assistant_gm__account"):
+        claims_by_story[claim.beat.episode.chapter.story_id].append(claim)
+
+    assigned_by_story: dict[int, list[Any]] = defaultdict(list)
+    for sr in SessionRequest.objects.filter(
+        episode__chapter__story_id__in=story_ids,
+        assigned_gm=gm_profile,
+        status__in=[SessionRequestStatus.OPEN, SessionRequestStatus.SCHEDULED],
+    ).select_related("episode__chapter"):
+        assigned_by_story[sr.episode.chapter.story_id].append(sr)
+
+    return _GMQueueInputs(
+        progress_rows=progress_rows,
+        progression_reqs_by_episode=progression_reqs_by_episode,
+        transitions_by_episode=transitions_by_episode,
+        open_request_id_by_episode=open_request_id_by_episode,
+        claims_by_story=claims_by_story,
+        assigned_by_story=assigned_by_story,
+    )
+
+
+def _append_progress_row(
+    buckets: GMQueueBuckets,
+    row: tuple[Story, str, Any],
+    inputs: _GMQueueInputs,
+    now: Any,
+) -> None:
+    """Assemble one (story, progress_type, progress) row.
+
+    Mirrors the old per-progress branch exactly: WAITING_FOR_GM rows surface
+    in waiting_for_gm; null/frontier and ineligible rows are skipped;
+    ProgressionRequirementNotMetError skips silently.
     """
     from world.stories.constants import ProgressStatus  # noqa: PLC0415
     from world.stories.exceptions import ProgressionRequirementNotMetError  # noqa: PLC0415
-    from world.stories.services.transitions import get_eligible_transitions  # noqa: PLC0415
 
-    # Collect all active progress records for this story (may be multiple for GROUP).
-    match story.scope:
-        case StoryScope.CHARACTER:
-            progress_qs: QuerySet[Any] = story.progress_records.filter(
-                is_active=True
-            ).select_related(
-                "current_episode__chapter",
-            )
-            progress_type = StoryScope.CHARACTER
-        case StoryScope.GROUP:
-            progress_qs = story.group_progress_records.filter(is_active=True).select_related(
-                "current_episode__chapter",
-            )
-            progress_type = StoryScope.GROUP
-        case _:
-            # GLOBAL scope: singleton progress record.
-            try:
-                global_progress = story.global_progress
-            except GlobalStoryProgress.DoesNotExist:
-                global_progress = None
-            progress_qs = (
-                [global_progress]
-                if global_progress is not None and global_progress.is_active
-                else []
-            )
-            progress_type = StoryScope.GLOBAL
+    story, progress_type, progress = row
 
-    now = timezone.now()
-    for progress in progress_qs:
-        if progress.status == ProgressStatus.WAITING_FOR_GM:
-            waiting_for_gm.append(
-                {
-                    "story_id": story.pk,
-                    "story_title": story.title,
-                    "scope": story.scope,
-                    "progress_type": progress_type,
-                    "progress_id": progress.pk,
-                    "episode_id": progress.current_episode_id,
-                    "episode_title": (
-                        progress.current_episode.title
-                        if progress.current_episode is not None
-                        else None
-                    ),
-                    "last_advanced_at": progress.last_advanced_at,
-                    "days_waiting": (now - progress.last_advanced_at).days,
-                }
-            )
-            continue
-        if progress.current_episode is None:
-            continue
-        try:
-            eligible = get_eligible_transitions(progress)
-        except ProgressionRequirementNotMetError:
-            continue
-        if not eligible:
-            continue
-
-        episode = progress.current_episode
-        open_req = SessionRequest.objects.filter(
-            episode=episode,
-            status=SessionRequestStatus.OPEN,
-        ).first()
-
-        episodes_ready.append(
+    if progress.status == ProgressStatus.WAITING_FOR_GM:
+        buckets.waiting_for_gm.append(
             {
                 "story_id": story.pk,
                 "story_title": story.title,
                 "scope": story.scope,
-                "episode_id": episode.pk,
-                "episode_title": episode.title,
                 "progress_type": progress_type,
                 "progress_id": progress.pk,
-                "eligible_transitions": _serialize_eligible_transitions(eligible),
-                "open_session_request_id": open_req.pk if open_req else None,
+                "episode_id": progress.current_episode_id,
+                "episode_title": (
+                    progress.current_episode.title if progress.current_episode is not None else None
+                ),
+                "last_advanced_at": progress.last_advanced_at,
+                "days_waiting": (now - progress.last_advanced_at).days,
+            }
+        )
+        return
+    if progress.current_episode is None:
+        return
+    try:
+        eligible = _eligible_transitions_from_prefetched(
+            progress,
+            inputs.progression_reqs_by_episode,
+            inputs.transitions_by_episode,
+        )
+    except ProgressionRequirementNotMetError:
+        return
+    if not eligible:
+        return
+
+    episode = progress.current_episode
+    buckets.episodes_ready.append(
+        {
+            "story_id": story.pk,
+            "story_title": story.title,
+            "scope": story.scope,
+            "episode_id": episode.pk,
+            "episode_title": episode.title,
+            "progress_type": progress_type,
+            "progress_id": progress.pk,
+            "eligible_transitions": _serialize_eligible_transitions(eligible),
+            "open_session_request_id": inputs.open_request_id_by_episode.get(episode.pk),
+        }
+    )
+
+
+def _append_story_claims_and_requests(
+    buckets: GMQueueBuckets,
+    story: Story,
+    inputs: _GMQueueInputs,
+) -> None:
+    """Append a story's pending AGM claims and assigned requests."""
+    for claim in inputs.claims_by_story.get(story.pk, []):
+        buckets.pending_claims.append(
+            {
+                "claim_id": claim.pk,
+                "beat_id": claim.beat_id,
+                "beat_internal_description": claim.beat.internal_description,
+                "story_title": story.title,
+                "assistant_gm_id": claim.assistant_gm_id,
+                "requested_at": claim.requested_at,
+            }
+        )
+    for sr in inputs.assigned_by_story.get(story.pk, []):
+        buckets.assigned_requests.append(
+            {
+                "session_request_id": sr.pk,
+                "episode_id": sr.episode_id,
+                "episode_title": sr.episode.title,
+                "story_title": story.title,
+                "status": sr.status,
+                "event_id": sr.event_id,
             }
         )
 
-    # AGM claims on this story that are pending approval.
-    story_claims = AssistantGMClaim.objects.filter(
-        beat__episode__chapter__story=story,
-        status=AssistantClaimStatus.REQUESTED,
-    ).select_related("beat", "assistant_gm__account")
-    pending_claims.extend(
-        {
-            "claim_id": claim.pk,
-            "beat_id": claim.beat_id,
-            "beat_internal_description": claim.beat.internal_description,
-            "story_title": story.title,
-            "assistant_gm_id": claim.assistant_gm_id,
-            "requested_at": claim.requested_at,
-        }
-        for claim in story_claims
-    )
 
-    # SessionRequests assigned to this GM on this story.
-    story_assigned = SessionRequest.objects.filter(
-        episode__chapter__story=story,
-        assigned_gm=gm_profile,
-        status__in=[SessionRequestStatus.OPEN, SessionRequestStatus.SCHEDULED],
-    ).select_related("episode__chapter")
-    assigned_requests.extend(
-        {
-            "session_request_id": sr.pk,
-            "episode_id": sr.episode_id,
-            "episode_title": sr.episode.title,
-            "story_title": story.title,
-            "status": sr.status,
-            "event_id": sr.event_id,
-        }
-        for sr in story_assigned
+def _collect_gm_queue(gm_profile: Any) -> GMQueueBuckets:
+    """Build the GM queue with a bounded number of queries.
+
+    The previous implementation looped over the GM's stories and issued ~8
+    queries per story (violating CLAUDE.md "No Queries in Loops"). This hoists
+    every per-story lookup into a batched pass keyed on the candidate stories'
+    episodes, so the total query count is a small constant independent of how
+    many stories the GM leads. The produced buckets are byte-identical to the
+    old loop's output (response shape/keys/values/order unchanged).
+    """
+    buckets = GMQueueBuckets()
+
+    # Stories where this GMProfile is Lead GM (via primary_table.gm).
+    lead_stories = list(
+        Story.objects.filter(
+            primary_table__gm=gm_profile,
+            status="active",
+        ).distinct()
     )
+    if not lead_stories:
+        return buckets
+
+    inputs = _build_gm_queue_inputs(gm_profile, lead_stories)
+    now = timezone.now()
+
+    # Assemble buckets entirely from in-memory maps (zero queries).
+    for row in inputs.progress_rows:
+        _append_progress_row(buckets, row, inputs, now)
+
+    # AGM claims and assigned requests, story-by-story (same append order).
+    for story in lead_stories:
+        _append_story_claims_and_requests(buckets, story, inputs)
+
+    return buckets
 
 
 class GMQueueView(APIView):
@@ -1873,33 +2110,14 @@ class GMQueueView(APIView):
         except GMProfile.DoesNotExist:
             gm_profile = None
 
-        episodes_ready: list[dict[str, Any]] = []
-        pending_claims: list[dict[str, Any]] = []
-        assigned_requests: list[dict[str, Any]] = []
-        waiting_for_gm: list[dict[str, Any]] = []
-
-        # Stories where this GMProfile is Lead GM (via primary_table.gm).
-        lead_stories = Story.objects.filter(
-            primary_table__gm=gm_profile,
-            status="active",
-        ).distinct()
-
-        for story in lead_stories:
-            _build_gm_queue_for_story(
-                gm_profile,
-                story,
-                episodes_ready,
-                pending_claims,
-                assigned_requests,
-                waiting_for_gm,
-            )
+        buckets = _collect_gm_queue(gm_profile)
 
         return Response(
             {
-                "episodes_ready_to_run": episodes_ready,
-                "pending_agm_claims": pending_claims,
-                "assigned_session_requests": assigned_requests,
-                "waiting_for_gm": waiting_for_gm,
+                "episodes_ready_to_run": buckets.episodes_ready,
+                "pending_agm_claims": buckets.pending_claims,
+                "assigned_session_requests": buckets.assigned_requests,
+                "waiting_for_gm": buckets.waiting_for_gm,
             }
         )
 

@@ -346,3 +346,61 @@ class GMQueueAssignedSessionRequestsTest(APITestCase):
         req_ids = [r["session_request_id"] for r in assigned]
         assert other_req.pk not in req_ids
         other_req.delete()
+
+
+def _make_ready_story(table):
+    """Create a CHARACTER-scope story that surfaces in episodes_ready_to_run.
+
+    Mirrors GMQueueEpisodesReadyTest.setUpTestData: a story whose primary
+    table is the given table, with a current episode that has an eligible
+    AUTO transition (no routing requirements) and an ACTIVE progress record.
+    Returns the Story.
+    """
+    char_sheet = CharacterSheetFactory()
+    story = StoryFactory(
+        scope=StoryScope.CHARACTER,
+        character_sheet=char_sheet,
+        primary_table=table,
+    )
+    chapter = ChapterFactory(story=story, order=1)
+    episode = EpisodeFactory(chapter=chapter, order=1)
+    next_ep = EpisodeFactory(chapter=chapter, order=2)
+    TransitionFactory(
+        source_episode=episode,
+        target_episode=next_ep,
+        mode=TransitionMode.AUTO,
+    )
+    StoryProgressFactory(
+        story=story,
+        character_sheet=char_sheet,
+        current_episode=episode,
+    )
+    return story
+
+
+class GMQueueQueryBoundTest(APITestCase):
+    """The gm-queue endpoint's query count must not scale with story count.
+
+    CLAUDE.md "No Queries in Loops": GMQueueView loops over the GM's stories,
+    so the total query count must be a constant independent of N stories.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account, cls.profile, cls.table = _make_lead_gm()
+        # N = 6 distinct ready stories for this one Lead GM / table.
+        for _ in range(6):
+            _make_ready_story(cls.table)
+
+    def test_gm_queue_query_count_is_bounded(self):
+        self.client.force_authenticate(user=self.account)
+        # Constant bound, independent of the number of stories. Pre-refactor the
+        # implementation issued queries per-story (N=3 -> 32, N=6 -> 56: ~8/story);
+        # post-refactor it is a fixed batched count (N=6 -> 16, N=12 -> 16:
+        # verified N-independent). 16 is the constant the bounded implementation
+        # hits; this test failed pre-refactor (56 > 16) and passes after.
+        with self.assertNumQueries(16):
+            resp = self.client.get(GM_QUEUE_URL)
+        self.assertEqual(resp.status_code, 200)
+        # Sanity: all 6 ready stories surfaced (behavior preserved).
+        self.assertEqual(len(resp.data["episodes_ready_to_run"]), 6)
