@@ -34,6 +34,7 @@ import { listStories, getStory } from '../api';
 import { storiesKeys, useDeleteStory } from '../queries';
 import type { Story, StoryList } from '../types';
 import { ScopeBadge } from '../components/ScopeBadge';
+import { ScopeAssignDialog } from '../components/ScopeAssignDialog';
 import { StoryFormDialog } from '../components/StoryFormDialog';
 import { StoryAuthorTree } from '../components/StoryAuthorTree';
 import { EpisodeDAG } from '../components/EpisodeDAG';
@@ -157,7 +158,14 @@ function StoryMainPane({ story, onEdited, onDeleted }: StoryMainPaneProps) {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-semibold">{story.title}</h2>
-            <ScopeBadge scope={story.scope ?? 'character'} />
+            {story.scope === 'unassigned' || !story.scope ? (
+              // Unassigned: offer the scope-assign control. The server forbids
+              // re-assigning an already-scoped story, so assigned stories show
+              // only the read-only scope badge below (no trigger).
+              <ScopeAssignDialog storyId={story.id} />
+            ) : (
+              <ScopeBadge scope={story.scope} />
+            )}
           </div>
           {story.description && (
             <p className="mt-1 text-sm text-muted-foreground">{story.description}</p>
