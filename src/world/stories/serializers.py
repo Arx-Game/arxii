@@ -14,6 +14,7 @@ from world.stories.constants import (
     BeatPredicateType,
     SessionRequestStatus,
     StoryGMOfferStatus,
+    StoryMaturity,
     StoryScope,
     TransitionMode,
 )
@@ -122,6 +123,48 @@ class StoryListSerializer(serializers.ModelSerializer):
         ]
 
 
+def _gm_text_gate(
+    serializer: serializers.ModelSerializer,
+    data: dict[str, Any],
+    story: Story,
+    node_maturity: str,
+) -> dict[str, Any]:
+    """Strip GM-only authoring text from ``data`` for player-tier viewers.
+
+    Security contract (Task A3): for any viewer whose story-log role is NOT
+    ``staff`` or ``lead_gm`` (player / no_access / no request in context), the
+    serialized Story/Chapter/Episode MUST NOT expose ``description`` or
+    ``consequences``, and ``summary`` MUST be ``""`` while ``node_maturity``
+    is PITCH. Staff and Lead GM see the full representation. When there is no
+    request in context we default to the most-restrictive (player) treatment
+    so GM text never leaks by default.
+
+    ``classify_story_log_viewer_role`` is imported locally to match this
+    module's existing convention for importing from ``world.stories.permissions``
+    (see ``BeatSerializer.get_can_mark``); a top-level import would also work
+    but the file consistently defers permissions imports.
+    """
+    from world.stories.permissions import (  # noqa: PLC0415
+        VIEWER_ROLE_LEAD_GM,
+        VIEWER_ROLE_NO_ACCESS,
+        VIEWER_ROLE_STAFF,
+        classify_story_log_viewer_role,
+    )
+
+    request = serializer.context.get("request")
+    user = request.user if request is not None else None
+    role = (
+        classify_story_log_viewer_role(user, story) if user is not None else VIEWER_ROLE_NO_ACCESS
+    )
+    if role not in (VIEWER_ROLE_STAFF, VIEWER_ROLE_LEAD_GM):
+        data.pop("description", None)
+        # consequences is absent on the Story serializer — pop default is safe.
+        data.pop("consequences", None)
+        if node_maturity == StoryMaturity.PITCH:
+            data["summary"] = ""
+    return data
+
+
 class StoryDetailSerializer(serializers.ModelSerializer):
     """Full serializer for story detail views"""
 
@@ -170,6 +213,11 @@ class StoryDetailSerializer(serializers.ModelSerializer):
     def get_trust_requirements(self, obj):
         """Get trust requirements for this story"""
         return obj.get_trust_requirements_summary()
+
+    def to_representation(self, instance: Story) -> dict[str, Any]:
+        """Gate GM-only authoring text for player-tier viewers (Task A3)."""
+        data = super().to_representation(instance)
+        return _gm_text_gate(self, data, instance, str(instance.maturity))
 
 
 class StoryCreateSerializer(serializers.ModelSerializer):
@@ -266,6 +314,11 @@ class ChapterDetailSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+    def to_representation(self, instance: Chapter) -> dict[str, Any]:
+        """Gate GM-only authoring text for player-tier viewers (Task A3)."""
+        data = super().to_representation(instance)
+        return _gm_text_gate(self, data, instance.story, str(instance.maturity))
+
 
 class ChapterCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating chapters"""
@@ -344,6 +397,11 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
+
+    def to_representation(self, instance: Episode) -> dict[str, Any]:
+        """Gate GM-only authoring text for player-tier viewers (Task A3)."""
+        data = super().to_representation(instance)
+        return _gm_text_gate(self, data, instance.chapter.story, str(instance.maturity))
 
 
 class EpisodeCreateSerializer(serializers.ModelSerializer):
