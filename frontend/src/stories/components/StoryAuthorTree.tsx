@@ -279,14 +279,30 @@ function EpisodeRowAuthor({ episode, storyId, resolveEntry }: EpisodeRowProps) {
         </button>
         <div className="flex items-center gap-1 pr-1">
           {resolveEntry && <ResolveEpisodeDialog entry={resolveEntry} />}
+          {/*
+            Nimble in-session quick-add (F3): one-click affordances that open
+            the EXISTING create dialogs preset to this episode. "+ Beat" opens
+            BeatFormDialog in CREATE mode (no `beat` prop) with
+            episodeId=episode.id; "+ Branch" opens TransitionFormDialog with
+            sourceEpisodeId=episode.id, target left to the author. The graft is
+            valid immediately (backbone no-reachability rule) — no backend, no
+            new forms. Both reuse the already-mounted dialogs below.
+          */}
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 w-6 p-0"
+            className="h-6 gap-1 px-2 text-xs text-muted-foreground"
             onClick={() => setAddBeatOpen(true)}
-            aria-label="Add Beat"
           >
-            <Plus className="h-3 w-3" />
+            <Plus className="h-3 w-3" /> Beat
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-2 text-xs text-muted-foreground"
+            onClick={() => setAddTransitionOpen(true)}
+          >
+            <Plus className="h-3 w-3" /> Branch
           </Button>
           <Button
             variant="ghost"
