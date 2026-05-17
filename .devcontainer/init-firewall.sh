@@ -90,7 +90,7 @@ ipset create allowed-domains hash:net
 
 # Loose validation: accept IPv4 address optionally followed by /NN prefix.
 is_valid_ipv4_cidr() {
-    [[ "$1" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(/[0-9]{1,2})?$ ]]
+    [[ "$1" =~ ^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(/(3[0-2]|[12]?[0-9]))?$ ]]
 }
 
 # ---- a) Small/stable hosts via dig ----
@@ -98,7 +98,7 @@ resolve_and_add() {
     local domain="$1"
     echo "Resolving ${domain}..."
     local ips
-    ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
+    ips=$(dig +noall +answer +time=5 +tries=2 A "$domain" | awk '$4 == "A" {print $5}')
     if [ -z "$ips" ]; then
         echo "ERROR: Failed to resolve ${domain}"
         exit 1
@@ -124,7 +124,7 @@ resolve_and_add "pypi.org"
 
 # ---- b) GitHub meta API (git + api + web + packages CIDRs) ----
 echo "Fetching GitHub IP ranges via meta API..."
-GITHUB_META=$(curl -sf https://api.github.com/meta)
+GITHUB_META=$(curl -sf --connect-timeout 15 --max-time 30 https://api.github.com/meta)
 if [ -z "$GITHUB_META" ]; then
     echo "ERROR: Failed to fetch https://api.github.com/meta"
     exit 1
@@ -137,15 +137,15 @@ while read -r cidr; do
         GITHUB_COUNT=$((GITHUB_COUNT + 1))
     fi
 done < <(echo "$GITHUB_META" | jq -r '(.git[], .api[], .web[], .packages[]) | select(test("^[0-9]"))')
-if [ "$GITHUB_COUNT" -eq 0 ]; then
-    echo "ERROR: GitHub meta API returned zero IPv4 CIDRs"
+if [ "$GITHUB_COUNT" -lt 10 ]; then
+    echo "ERROR: GitHub meta API returned only ${GITHUB_COUNT} IPv4 CIDRs (minimum 10); aborting" >&2
     exit 1
 fi
 echo "  Added ${GITHUB_COUNT} GitHub CIDRs."
 
 # ---- c) Fastly published ranges (objects.githubusercontent.com + files.pythonhosted.org) ----
 echo "Fetching Fastly IP ranges..."
-FASTLY_LIST=$(curl -sf https://api.fastly.com/public-ip-list)
+FASTLY_LIST=$(curl -sf --connect-timeout 15 --max-time 30 https://api.fastly.com/public-ip-list)
 if [ -z "$FASTLY_LIST" ]; then
     echo "ERROR: Failed to fetch https://api.fastly.com/public-ip-list"
     exit 1
@@ -158,15 +158,15 @@ while read -r cidr; do
         FASTLY_COUNT=$((FASTLY_COUNT + 1))
     fi
 done < <(echo "$FASTLY_LIST" | jq -r '.addresses[]')
-if [ "$FASTLY_COUNT" -eq 0 ]; then
-    echo "ERROR: Fastly IP list returned zero IPv4 CIDRs"
+if [ "$FASTLY_COUNT" -lt 5 ]; then
+    echo "ERROR: Fastly IP list returned only ${FASTLY_COUNT} IPv4 CIDRs (minimum 5); aborting" >&2
     exit 1
 fi
 echo "  Added ${FASTLY_COUNT} Fastly CIDRs."
 
 # ---- d) Cloudflare published ranges (registry.npmjs.org) ----
 echo "Fetching Cloudflare IPv4 ranges..."
-CF_LIST=$(curl -sf https://www.cloudflare.com/ips-v4)
+CF_LIST=$(curl -sf --connect-timeout 15 --max-time 30 https://www.cloudflare.com/ips-v4)
 if [ -z "$CF_LIST" ]; then
     echo "ERROR: Failed to fetch https://www.cloudflare.com/ips-v4"
     exit 1
@@ -181,8 +181,8 @@ while read -r cidr; do
         CF_COUNT=$((CF_COUNT + 1))
     fi
 done <<< "$CF_LIST"
-if [ "$CF_COUNT" -eq 0 ]; then
-    echo "ERROR: Cloudflare ips-v4 returned zero IPv4 CIDRs"
+if [ "$CF_COUNT" -lt 5 ]; then
+    echo "ERROR: Cloudflare ips-v4 returned only ${CF_COUNT} IPv4 CIDRs (minimum 5); aborting" >&2
     exit 1
 fi
 echo "  Added ${CF_COUNT} Cloudflare CIDRs."
