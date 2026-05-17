@@ -1,8 +1,11 @@
 /**
  * EpisodeFormDialog — create or edit an Episode within a Chapter.
  *
- * Fields: title, description, order.
- * Also embeds ProgressionRequirementsEditor for existing episodes (Task 9.4).
+ * Fields: title, description (internal GM), summary ("The Story So Far",
+ * player-facing), resting_conclusion (player-facing), is_ending, order.
+ * On edit, the current maturity is shown read-only (promotion is a separate
+ * control). Also embeds ProgressionRequirementsEditor for existing episodes
+ * (Task 9.4).
  */
 
 import { useState } from 'react';
@@ -19,8 +22,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useCreateEpisode, useUpdateEpisode } from '../queries';
-import type { Episode } from '../types';
+import type { Episode, Maturity } from '../types';
 import { ProgressionRequirementsEditor } from './ProgressionRequirementsEditor';
+import { PromoteMaturityButton } from './PromoteMaturityButton';
 
 // ---------------------------------------------------------------------------
 // DRF error shapes
@@ -29,6 +33,9 @@ import { ProgressionRequirementsEditor } from './ProgressionRequirementsEditor';
 interface DRFFieldErrors {
   title?: string[];
   description?: string[];
+  summary?: string[];
+  resting_conclusion?: string[];
+  is_ending?: string[];
   order?: string[];
   chapter?: string[];
   non_field_errors?: string[];
@@ -44,6 +51,10 @@ export interface EpisodeLike {
   id: number;
   title: string;
   description?: string;
+  summary?: string;
+  resting_conclusion?: string;
+  is_ending?: boolean;
+  maturity?: Maturity;
   order: number;
 }
 
@@ -53,6 +64,11 @@ interface EpisodeFormDialogProps {
   chapterId: number;
   /** When provided, dialog operates in edit mode. */
   episode?: EpisodeLike;
+  /**
+   * Owning story id. When provided (edit mode), enables the maturity
+   * promotion control beside the read-only maturity indicator.
+   */
+  storyId?: number;
   onSuccess?: (episode: Episode) => void;
 }
 
@@ -65,12 +81,16 @@ export function EpisodeFormDialog({
   onOpenChange,
   chapterId,
   episode,
+  storyId,
   onSuccess,
 }: EpisodeFormDialogProps) {
   const isEdit = episode !== undefined;
 
   const [title, setTitle] = useState(episode?.title ?? '');
   const [description, setDescription] = useState(episode?.description ?? '');
+  const [summary, setSummary] = useState(episode?.summary ?? '');
+  const [restingConclusion, setRestingConclusion] = useState(episode?.resting_conclusion ?? '');
+  const [isEnding, setIsEnding] = useState<boolean>(episode?.is_ending ?? false);
   const [order, setOrder] = useState<string>(
     episode?.order !== undefined ? String(episode.order) : ''
   );
@@ -83,6 +103,9 @@ export function EpisodeFormDialog({
   function resetForm() {
     setTitle(episode?.title ?? '');
     setDescription(episode?.description ?? '');
+    setSummary(episode?.summary ?? '');
+    setRestingConclusion(episode?.resting_conclusion ?? '');
+    setIsEnding(episode?.is_ending ?? false);
     setOrder(episode?.order !== undefined ? String(episode.order) : '');
     setFieldErrors({});
   }
@@ -116,6 +139,9 @@ export function EpisodeFormDialog({
       chapter: chapterId,
       title: title.trim(),
       description: description.trim() || undefined,
+      summary: summary.trim() || undefined,
+      resting_conclusion: restingConclusion.trim() || undefined,
+      is_ending: isEnding,
       order: order !== '' ? Number(order) : undefined,
     };
 
@@ -181,18 +207,92 @@ export function EpisodeFormDialog({
               )}
             </div>
 
-            {/* Description */}
+            {/* Maturity (read-only, edit mode only) + promotion control (Task E3) */}
+            {isEdit && episode?.maturity && (
+              <div className="flex flex-wrap items-center gap-2">
+                <div
+                  data-testid="episode-maturity-indicator"
+                  className="inline-flex w-fit items-center rounded-md border bg-muted px-2 py-1 text-xs text-muted-foreground"
+                >
+                  Maturity: <span className="ml-1 font-medium capitalize">{episode.maturity}</span>
+                </div>
+                {storyId !== undefined && (
+                  <PromoteMaturityButton
+                    episode={{ id: episode.id, maturity: episode.maturity }}
+                    storyId={storyId}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Internal GM Description */}
             <div className="space-y-1.5">
-              <Label htmlFor="episode-description">Description</Label>
+              <Label htmlFor="episode-description">Internal GM Description</Label>
               <Textarea
                 id="episode-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Episode description…"
+                placeholder="GM-only notes about this episode…"
                 rows={2}
               />
+              <p className="text-xs text-muted-foreground">Not shown to players.</p>
               {fieldErrors.description && (
                 <p className="text-xs text-destructive">{fieldErrors.description.join(' ')}</p>
+              )}
+            </div>
+
+            {/* The Story So Far (player-facing summary) */}
+            <div className="space-y-1.5">
+              <Label htmlFor="episode-summary">The Story So Far</Label>
+              <Textarea
+                id="episode-summary"
+                value={summary}
+                onChange={(e) => setSummary(e.target.value)}
+                placeholder="What players know so far…"
+                rows={2}
+              />
+              <p className="text-xs text-muted-foreground">
+                Player-facing recap — keep this current as the story advances.
+              </p>
+              {fieldErrors.summary && (
+                <p className="text-xs text-destructive">{fieldErrors.summary.join(' ')}</p>
+              )}
+            </div>
+
+            {/* Resting conclusion (player-facing) */}
+            <div className="space-y-1.5">
+              <Label htmlFor="episode-resting-conclusion">Resting conclusion (player-facing)</Label>
+              <Textarea
+                id="episode-resting-conclusion"
+                value={restingConclusion}
+                onChange={(e) => setRestingConclusion(e.target.value)}
+                placeholder="How the story reads if it rests here…"
+                rows={2}
+              />
+              <p className="text-xs text-muted-foreground">
+                Shown to players if the story rests here.
+              </p>
+              {fieldErrors.resting_conclusion && (
+                <p className="text-xs text-destructive">
+                  {fieldErrors.resting_conclusion.join(' ')}
+                </p>
+              )}
+            </div>
+
+            {/* Is ending */}
+            <div className="space-y-1.5">
+              <label className="flex cursor-pointer items-center gap-3 rounded-md border p-3">
+                <input
+                  type="checkbox"
+                  checked={isEnding}
+                  onChange={(e) => setIsEnding(e.target.checked)}
+                  className="h-4 w-4"
+                  id="episode-is-ending"
+                />
+                <span className="text-sm">This is an ending</span>
+              </label>
+              {fieldErrors.is_ending && (
+                <p className="text-xs text-destructive">{fieldErrors.is_ending.join(' ')}</p>
               )}
             </div>
 

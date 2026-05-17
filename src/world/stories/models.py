@@ -82,6 +82,14 @@ class Story(SharedMemoryModel):
 
     title = models.CharField(max_length=200)
     description = models.TextField()
+    summary = models.TextField(
+        blank=True,
+        help_text=(
+            "Player-facing 'The Story So Far' — GM-maintained running recap "
+            "of what has happened and what may lie ahead. Surfaced to players "
+            "via the role-gated story log, maturity-gated. NOT auto-generated."
+        ),
+    )
     status = models.CharField(
         max_length=20,
         choices=StoryStatus.choices,

@@ -6,6 +6,7 @@
  */
 
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ChevronDown, ChevronRight, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -29,12 +30,23 @@ import {
   useDeleteEpisode,
   useDeleteBeat,
   useDeleteTransition,
+  storiesKeys,
 } from '../queries';
-import type { ChapterList, EpisodeList, Beat, Transition, Story } from '../types';
+import { getGMQueue } from '../api';
+import type {
+  ChapterList,
+  EpisodeList,
+  Beat,
+  Transition,
+  Story,
+  GMQueueEpisodeEntry,
+} from '../types';
 import { ChapterFormDialog } from './ChapterFormDialog';
 import { EpisodeFormDialog } from './EpisodeFormDialog';
 import { BeatFormDialog } from './BeatFormDialog';
 import { TransitionFormDialog } from './TransitionFormDialog';
+import { MarkBeatDialog } from './MarkBeatDialog';
+import { ResolveEpisodeDialog } from './ResolveEpisodeDialog';
 
 // ---------------------------------------------------------------------------
 // Delete confirm helper
@@ -152,6 +164,15 @@ function BeatRowAuthor({ beat }: BeatRowAuthorProps) {
   const [editOpen, setEditOpen] = useState(false);
   const deleteMutation = useDeleteBeat();
 
+  // Run-control (F2): GM-marked beats expose the existing MarkBeatDialog
+  // "Mark" trigger so the GM can drive the beat from the author page mid-
+  // session. Gated EXACTLY as BeatRow self-gates it — GM_MARKED predicate,
+  // not already resolved, and the server-computed can_mark permission flag.
+  const isGmMarked = beat.predicate_type === 'gm_marked';
+  const outcome = beat.outcome ?? 'unsatisfied';
+  const isResolved = outcome === 'success' || outcome === 'failure' || outcome === 'expired';
+  const canMark = isGmMarked && !isResolved && beat.can_mark;
+
   function handleDelete() {
     deleteMutation.mutate(beat.id, {
       onSuccess: () => toast.success('Beat deleted'),
@@ -172,6 +193,7 @@ function BeatRowAuthor({ beat }: BeatRowAuthorProps) {
         <span className="ml-1 text-muted-foreground">({beat.predicate_type})</span>
       </span>
       <div className="flex items-center gap-1">
+        {canMark && <MarkBeatDialog beat={beat} />}
         <Button
           variant="ghost"
           size="sm"
@@ -200,9 +222,19 @@ function BeatRowAuthor({ beat }: BeatRowAuthorProps) {
 interface EpisodeRowProps {
   episode: EpisodeList;
   storyId: number;
+  /**
+   * Run-control (F2): the matching GM-queue entry for this episode, when it
+   * is ready to resolve. ResolveEpisodeDialog needs a full
+   * GMQueueEpisodeEntry (progress_id + eligible_transitions) which the
+   * author tree's EpisodeList shape does NOT carry — so we reuse the real
+   * GM-queue entry (mirroring EpisodeReadyCard / GMQueuePage), no adapter
+   * and no fabricated data. Undefined when the episode is not ready to
+   * resolve → no Resolve trigger (correct gating).
+   */
+  resolveEntry?: GMQueueEpisodeEntry;
 }
 
-function EpisodeRowAuthor({ episode, storyId }: EpisodeRowProps) {
+function EpisodeRowAuthor({ episode, storyId, resolveEntry }: EpisodeRowProps) {
   const [expanded, setExpanded] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [addBeatOpen, setAddBeatOpen] = useState(false);
@@ -246,14 +278,31 @@ function EpisodeRowAuthor({ episode, storyId }: EpisodeRowProps) {
           )}
         </button>
         <div className="flex items-center gap-1 pr-1">
+          {resolveEntry && <ResolveEpisodeDialog entry={resolveEntry} />}
+          {/*
+            Nimble in-session quick-add (F3): one-click affordances that open
+            the EXISTING create dialogs preset to this episode. "+ Beat" opens
+            BeatFormDialog in CREATE mode (no `beat` prop) with
+            episodeId=episode.id; "+ Branch" opens TransitionFormDialog with
+            sourceEpisodeId=episode.id, target left to the author. The graft is
+            valid immediately (backbone no-reachability rule) — no backend, no
+            new forms. Both reuse the already-mounted dialogs below.
+          */}
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 w-6 p-0"
+            className="h-6 gap-1 px-2 text-xs text-muted-foreground"
             onClick={() => setAddBeatOpen(true)}
-            aria-label="Add Beat"
           >
-            <Plus className="h-3 w-3" />
+            <Plus className="h-3 w-3" /> Beat
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-2 text-xs text-muted-foreground"
+            onClick={() => setAddTransitionOpen(true)}
+          >
+            <Plus className="h-3 w-3" /> Branch
           </Button>
           <Button
             variant="ghost"
@@ -312,6 +361,7 @@ function EpisodeRowAuthor({ episode, storyId }: EpisodeRowProps) {
         onOpenChange={setEditOpen}
         chapterId={episode.chapter as unknown as number}
         episode={episode}
+        storyId={storyId}
       />
       <BeatFormDialog open={addBeatOpen} onOpenChange={setAddBeatOpen} episodeId={episode.id} />
       <TransitionFormDialog
@@ -331,9 +381,11 @@ function EpisodeRowAuthor({ episode, storyId }: EpisodeRowProps) {
 interface ChapterRowProps {
   chapter: ChapterList;
   storyId: number;
+  /** episode_id → GM-queue entry, for the Resolve run-control trigger (F2). */
+  resolveEntries: Map<number, GMQueueEpisodeEntry>;
 }
 
-function ChapterRow({ chapter, storyId }: ChapterRowProps) {
+function ChapterRow({ chapter, storyId, resolveEntries }: ChapterRowProps) {
   const [expanded, setExpanded] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [addEpisodeOpen, setAddEpisodeOpen] = useState(false);
@@ -397,7 +449,14 @@ function ChapterRow({ chapter, storyId }: ChapterRowProps) {
           {episodes.length === 0 ? (
             <li className="py-1 pl-4 text-xs italic text-muted-foreground">No episodes yet.</li>
           ) : (
-            episodes.map((ep) => <EpisodeRowAuthor key={ep.id} episode={ep} storyId={storyId} />)
+            episodes.map((ep) => (
+              <EpisodeRowAuthor
+                key={ep.id}
+                episode={ep}
+                storyId={storyId}
+                resolveEntry={resolveEntries.get(ep.id)}
+              />
+            ))
           )}
         </ul>
       )}
@@ -434,6 +493,27 @@ export function StoryAuthorTree({ story }: StoryAuthorTreeProps) {
   const { data: chaptersData } = useChapterList({ story: story.id, page_size: 100 });
   const chapters = chaptersData?.results ?? [];
 
+  // Run-control (F2): the GM queue is the existing source of episodes that
+  // are ready to resolve, with the full GMQueueEpisodeEntry that
+  // ResolveEpisodeDialog requires (progress_id + eligible_transitions). Use
+  // a LOCAL query with throwOnError:false (the same pattern GMQueuePage and
+  // StoryAuthorPage use for permission-gated dashboard reads) — a 403 for a
+  // non-GM viewer or any other error simply yields no resolve entries (no
+  // Resolve triggers) instead of blowing the page error boundary. Index
+  // this story's ready episodes by episode_id; an episode absent from the
+  // queue gets no Resolve trigger (it isn't ready to resolve).
+  const { data: gmQueueData } = useQuery({
+    queryKey: storiesKeys.gmQueue(),
+    queryFn: getGMQueue,
+    throwOnError: false,
+    retry: false,
+  });
+  const resolveEntries = new Map<number, GMQueueEpisodeEntry>(
+    (gmQueueData?.episodes_ready_to_run ?? [])
+      .filter((e) => e.story_id === story.id)
+      .map((e) => [e.episode_id, e])
+  );
+
   return (
     <div data-testid="story-author-tree">
       {chapters.length === 0 ? (
@@ -441,7 +521,12 @@ export function StoryAuthorTree({ story }: StoryAuthorTreeProps) {
       ) : (
         <ul className="space-y-0.5">
           {chapters.map((ch) => (
-            <ChapterRow key={ch.id} chapter={ch} storyId={story.id} />
+            <ChapterRow
+              key={ch.id}
+              chapter={ch}
+              storyId={story.id}
+              resolveEntries={resolveEntries}
+            />
           ))}
         </ul>
       )}

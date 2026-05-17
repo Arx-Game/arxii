@@ -148,6 +148,7 @@
   - treatments <- conditions.TreatmentTemplate
   - treatment_backlash_source <- conditions.TreatmentTemplate
   - consequence_effects <- checks.ConsequenceEffect
+  - stat_rules_for <- achievements.ConditionStatRule
   - threat_pool_entries <- combat.ThreatPoolEntry
 
 ### ConditionStage
@@ -327,6 +328,7 @@
   - flow_definition -> flows.FlowDefinition [FK]
 **Pointed to by:**
   - trigger_set <- flows.Trigger
+  - installing_templates <- conditions.ConditionTemplate
 
 ### Trigger
 **Foreign Keys:**
@@ -823,6 +825,7 @@
   - treatments <- conditions.TreatmentTemplate
   - treatment_backlash_source <- conditions.TreatmentTemplate
   - consequence_effects <- checks.ConsequenceEffect
+  - stat_rules_for <- achievements.ConditionStatRule
   - threat_pool_entries <- combat.ThreatPoolEntry
 
 ### ConditionStage
@@ -925,7 +928,7 @@
 - `decay_all_conditions_tick() -> world.conditions.types.DecayTickSummary — Scheduler entry point. Decays all opt-in conditions by one tick.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult — Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `emit_event(event_name: str, payload: Any, location: Any, *, parent_stack: flows.flow_stack.FlowStack | None = None) -> flows.flow_stack.FlowStack — Dispatch ``event_name`` to every handler in ``location`` + contents.`
-- `field(*, default=<dataclasses._MISSING_TYPE object at 0x0000028812A06270>, default_factory=<dataclasses._MISSING_TYPE object at 0x0000028812A06270>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x0000028812A06270>) — Return an object to identify dataclass fields.`
+- `field(*, default=<dataclasses._MISSING_TYPE object at 0x000001ACFEF86120>, default_factory=<dataclasses._MISSING_TYPE object at 0x000001ACFEF86120>, init=True, repr=True, hash=None, compare=True, metadata=None, kw_only=<dataclasses._MISSING_TYPE object at 0x000001ACFEF86120>) — Return an object to identify dataclass fields.`
 - `get_active_conditions(target: 'ObjectDB', *, category: 'ConditionCategory | None' = None, condition: world.conditions.models.ConditionTemplate | None = None, include_suppressed: bool = False) -> django.db.models.query.QuerySet — Get active condition instances on a target.`
 - `get_aggro_priority(target: 'ObjectDB') -> int — Get the total aggro priority from all conditions.`
 - `get_all_capability_values(target: 'ObjectDB') -> dict[int, int] — Get all capability values for a character.`
@@ -1098,6 +1101,8 @@
   - alteration_templates <- magic.MagicalAlterationTemplate
   - pending_alteration_origins <- magic.PendingAlteration
   - character_totals <- magic.CharacterAffinityTotal
+  - interactions_as_source <- magic.AffinityInteraction
+  - interactions_as_environment <- magic.AffinityInteraction
 
 ### Resonance
 **Foreign Keys:**
@@ -1394,6 +1399,15 @@
 **Foreign Keys:**
   - character -> character_sheets.CharacterSheet [FK]
   - gift -> magic.Gift [OneToOne]
+
+### AffinityInteraction
+**Foreign Keys:**
+  - source_affinity -> magic.Affinity [FK]
+  - environment_affinity -> magic.Affinity [FK]
+
+### ResonanceEnvironmentConfig
+**Foreign Keys:**
+  - updated_by -> accounts.AccountDB [FK] (nullable)
 
 ### RitualSceneActionConfig
 **Foreign Keys:**
@@ -2424,13 +2438,13 @@
 
 ### Service Functions
 - `apply_weekly_rust(trained_skills: 'dict[int, set[int]]') -> 'None' — Apply weekly rust to all untrained skills.`
-- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x0000028814A9DA60>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
+- `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object at 0x000001AC8190C390>, _path_levels: 'dict[int, int] | None' = None) -> 'int' — Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' — Create a new training allocation for a character.`
 - `get_relationship_tier(character_a: evennia.objects.models.ObjectDB, character_b: evennia.objects.models.ObjectDB) -> int — Get the relationship tier between two characters.`
 - `process_weekly_training() -> 'dict[int, set[int]]' — Process all training allocations for the weekly tick.`
 - `remove_training_allocation(allocation: 'TrainingAllocation') -> 'None' — Delete a training allocation.`
 - `run_weekly_skill_cron() -> 'None' — Run the full weekly skill development cycle.`
-- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x0000028814A9DA60>) -> 'TrainingAllocation' — Update an existing training allocation.`
+- `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object at 0x000001AC8190C390>) -> 'TrainingAllocation' — Update an existing training allocation.`
 
 
 ## world.societies

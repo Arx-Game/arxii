@@ -386,18 +386,24 @@ sections above are unchanged; this records what shifted or was newly noticed.
    it was actually *created* in this backbone (alongside the structured
    `compute_story_status`). Resolved — noted here for accuracy, and the
    systems doc has been corrected to reflect it as backbone-added.
-2. **staff-workload + gm-queue scans are globally unbounded.** The new
-   WAITING_FOR_GM surfacing in `GMQueueView` (`waiting_for_gm`) and
-   `StaffWorkloadView` (`stories_waiting_for_gm`) mirrors the pre-existing,
-   already-accepted MVP pattern of the stale-story and frontier scans (no
-   pagination/caching). Bounding/caching all of these together is a future
-   cleanup tracked with the existing stale/frontier scan cleanup, not a new
-   regression introduced here.
+2. **staff-workload + gm-queue scans are globally unbounded.**
+   **RESOLVED by the stories-authoring-api-ui branch (Tasks C1/C2).**
+   `_collect_gm_queue` (GMQueueView) and `_collect_per_gm_queue_depth` /
+   `_build_staff_per_gm_inputs` (StaffWorkloadView) now hoist every per-story
+   lookup into a batched pass, so the total query count is a small constant
+   independent of the number of GMs/stories/progress rows. Locked by
+   `assertNumQueries` in `tests/test_views_gm_queue.py` and
+   `tests/test_views_staff_workload.py`. The status-agnostic per-GM
+   membership set was preserved/restored (a GM whose only primary story is
+   non-active still appears) — the C2 bounding briefly narrowed it and the
+   fix commit restored the verbatim pre-C2 derivation. Response
+   shape/keys/values/order unchanged.
 3. **`_build_gm_queue_for_story` carries 6 list accumulators**
-   (`# noqa: PLR0913`). Threading one list per queue section was the
-   smallest additive change; collapsing the accumulators into an
-   `@dataclass` is a clean, self-contained refactor best done as its own
-   separate commit (no behavior change), deferred.
+   (`# noqa: PLR0913`). **RESOLVED by the stories-authoring-api-ui branch
+   (Task C1).** The list accumulators were collapsed into the
+   `GMQueueBuckets` / `_GMQueueInputs` dataclasses as part of the same
+   bounding refactor (no behavior change). The analogous staff-workload pass
+   uses the `_StaffPerGMInputs` dataclass.
 4. **Frontier "infant content ahead" is a story-wide heuristic.**
    `frontier._story_has_immature_content` treats *any* Episode in the story
    still below PLOT as "the author intends more" → WAITING_FOR_GM. A
@@ -421,6 +427,21 @@ sections above are unchanged; this records what shifted or was newly noticed.
    reshape are a sequenced follow-up (own brainstorm). The engineering that
    shipped is sound and additive; this is a scope-honesty correction, not a
    defect.
+
+   **RESOLVED by the stories-authoring-api-ui branch (with I-A/I-B fixed —
+   see the discovered-follow-ups section below).** The authoring +
+   run-control API and minimal UI shipped: `maturity` / `resting_conclusion`
+   / `is_ending` / `summary` are exposed on the Story/Chapter/Episode detail
+   serializers; `POST /api/episodes/{id}/promote/` and
+   `POST /api/stories/{id}/assign-to-scope/` provide the maturity-promotion
+   and scope-assignment (create-progress) APIs; the `StoryAuthorPage`
+   reshape landed (`BeatFormDialog` kind/advances/risk, `ScopeAssignDialog`,
+   `PromoteMaturityButton`, GM Notes panel, inline `ProgressStateBanner`,
+   author-page run-control + nimble +Beat/+Branch). Staff/GM can now author
+   and run a story through the interface, not just service functions. With
+   the I-A fix (promote/assign 400 messages now reach the UI) and the I-B
+   fix (Episode/Chapter create no longer silently drops authoring fields),
+   the success criterion now holds end-to-end through the interface.
 7. **No pitch-text storage; no maturity-gated player visibility (final
    holistic review, I-2).** §4/§5 describe a per-node "pitch prose box" that
    is "never player-visible." Only the `StoryMaturity.PITCH` enum rung was
@@ -430,3 +451,160 @@ sections above are unchanged; this records what shifted or was newly noticed.
    *reaching* immature episodes, so there is no current data leak.) The pitch
    box + visibility gate are deferred and bundled with the authoring-API
    follow-up (#6).
+
+   **RESOLVED by the stories-authoring-api-ui branch.** Implemented via the
+   `description` (GM) / `summary` ("The Story So Far", player) split plus the
+   role-gated `to_representation` on the three Detail serializers (shared
+   `_gm_text_gate` helper: strips `description`/`consequences` and blanks
+   `summary` while `maturity == PITCH` for non-privileged viewers;
+   default-deny when no request in context) and the still-in-place
+   per-beat gating in `serialize_story_log`. A dedicated `pitch` field was
+   **deliberately NOT added** — per the validated design, `description` *is*
+   the GM pitch and `summary` *is* the player recap (resolves the §11
+   "pitch-prose storage" deferred decision toward reuse, not a new field).
+
+---
+
+## stories-authoring-api-ui — discovered follow-ups (2026-05-17)
+
+Items surfaced while implementing the authoring API/UI branch (Tasks A1–G1).
+Existing sections above are unchanged; this records NOT-yet-done items found
+along the way. None block the branch; each is additive future cleanup.
+
+- **(a) Shared maturity-gate predicate.** The PLOT-promotion gate (non-empty
+  `resting_conclusion` AND (an outbound transition OR `is_ending`), only on an
+  upward move *to* PLOT) is duplicated between
+  `services/maturity.py::promote_episode_maturity` and
+  `PromoteEpisodeInputSerializer.validate()`. They are equivalent today, but
+  the duplication is a future-drift risk. Follow-up: extract a single shared
+  predicate used by both (DRY).
+
+- **(b) Misleading `episode` variable + dead branch in
+  `IsLeadGMOnStoryOrStaff`.** In
+  `permissions.IsLeadGMOnStoryOrStaff.has_object_permission` the non-Story
+  branch does `episode = getattr(obj, "chapter", None)` — the variable named
+  `episode` actually holds a **Chapter** (an Episode's `.chapter`). The
+  `if episode is None:` branch is effectively dead for the Episode/Chapter
+  objects this permission guards (an Episode always has `.chapter`; the
+  `None` path's "obj is an Episode; it has a chapter attribute" comment
+  contradicts the guard it sits under). Follow-up: rename the variable to
+  `chapter` and remove the dead `if episode is None` branch (behavior-neutral
+  clarity fix).
+
+- **(c) `_collect_gm_queue` docstring wording.** The docstring claims the
+  bounded buckets are "byte-identical" to the old loop's output. That
+  overstates it: the result is **set-identical**, and intra-GROUP progress
+  is now deterministically pk-ordered (`order_by("pk")`) where the old
+  `.first()` returned an unspecified DB order. Follow-up: soften the
+  docstring to "set-identical; intra-GROUP progress now deterministically
+  pk-ordered (was unspecified DB order)" (same correction already written
+  prose-style in `_first_active_progress_by_story` /
+  `_collect_per_gm_queue_depth`; `_collect_gm_queue` still says
+  "byte-identical").
+
+- **(d) Pre-existing tech debt: raw `status="active"` string literal.**
+  `_collect_gm_queue` and `_build_staff_per_gm_inputs`
+  (`Story.objects.filter(..., status="active")`) compare against a raw
+  string literal instead of `StoryStatus.ACTIVE`, violating CLAUDE.md's
+  constants-over-literals rule. Pre-existing (not introduced by this
+  branch); track and fix opportunistically alongside the next stories
+  views change.
+
+- **(e) `ProgressStatus` is not exposed to the frontend.** The backbone's
+  `ProgressStatus` (ACTIVE / WAITING_FOR_GM / RESTING / COMPLETED) is on the
+  Progress models and drives `compute_story_status_line`, but it is **not on
+  any serializer or dashboard payload**. The F1 `ProgressStateBanner`
+  therefore reflects "Waiting for GM" via the dashboard's
+  `StoryEpisodeStatus` `on_hold` proxy rather than the true
+  `ProgressStatus`, so the banner cannot distinguish actual
+  WAITING_FOR_GM vs. RESTING. Follow-up: expose `ProgressStatus` on a
+  progress serializer or the dashboard payload so the banner (and any
+  future FE) reflects the real pointer state. This is the honest
+  scope-gap for this branch — analogous to the original I-1/I-2
+  scope-honesty corrections: the UI ships and works, but it reads a proxy,
+  not the authoritative status field.
+
+### Final holistic review — cross-task seam defects (2026-05-17)
+
+- **I-A — FIXED in this branch.** `api.promoteEpisode` and `api.assignStory`
+  in `frontend/src/stories/api.ts` previously threw a plain `Error` without
+  `.response` on a non-ok response, while `PromoteMaturityButton` and
+  `ScopeAssignDialog` surface the server message via `'response' in err →
+  response.json()`. That branch was DEAD at runtime, so the GM never saw the
+  `MaturityPromotionError.user_message` (PLOT-gate) or the "This story is
+  already assigned to a scope and cannot be re-assigned." (re-assign 400)
+  message — only the generic literal. Both functions now attach the failed
+  `Response` to the thrown error exactly as `saveTransitionWithOutcomes`
+  does; the components were left unchanged (their `'response' in err`
+  handling was already correct — the fix makes the contract real). A
+  real-contract Vitest in `queries.authoring.test.tsx` drives the REAL
+  `promoteEpisode`/`assignStory` through a mocked 400 and asserts the thrown
+  error carries `.response` whose `.json()` yields the server body.
+  **Pre-existing twin (NOT fixed here):** `api.markBeat` /
+  `MarkBeatDialog` has the identical un-attached-`.response` pattern, but
+  that is PRE-EXISTING backbone code (out of this branch's scope).
+  Follow-up: fix `markBeat` to attach `.response` the same way so the
+  `MarkBeatDialog` error surface works.
+
+- **I-B — FIXED in this branch.** `EpisodeCreateSerializer.Meta.fields` and
+  `ChapterCreateSerializer.Meta.fields` did not expose
+  `summary`/`resting_conclusion`/`is_ending`, so the E2
+  `EpisodeFormDialog`/`ChapterFormDialog` submitted those on CREATE and DRF
+  silently ignored the undeclared keys → silent data loss (the FE
+  `EpisodeCreateBody`/`ChapterCreateBody` types overclaimed the contract).
+  `EpisodeCreateSerializer` now exposes `summary`/`resting_conclusion`/
+  `is_ending`; `ChapterCreateSerializer` now exposes `summary`
+  (`StoryCreateSerializer` already exposed `summary` from A2 — verified, no
+  change). These are existing model fields → no migration. `maturity` was
+  deliberately NOT added to the create serializers (maturity defaults
+  server-side; promotion is the dedicated `POST /api/episodes/{id}/promote/`
+  endpoint). A backend round-trip `APITestCase` in
+  `test_serializers_authoring_fields.py` asserts create persists the fields
+  (fails before the change, passes after).
+
+- **M-1 (follow-up, not fixed).** A non-staff Story *owner* who is not the
+  primary_table lead GM cannot read back their own GM
+  `description`/`consequences` via the detail endpoint after PATCH — the
+  `_gm_text_gate` strips it for non-privileged roles including owners. This
+  is friction, not a leak (the owner's own text is hidden from the owner).
+  Consider treating story owners as a privileged role for their own
+  stories' GM text.
+
+- **M-2 (follow-up, not fixed).** `StoryCreateSerializer` /
+  `ChapterCreateSerializer` / `EpisodeCreateSerializer` echo `description`
+  ungated (A3 gates only the Detail serializers). Currently safe: Story
+  create is staff-only, and Chapter/Episode create echo only the
+  requester's own just-submitted text. Follow-up: add an explicit security
+  comment at the create serializers noting this is a deliberate exception,
+  so a future "non-staff create with someone else's draft" change does not
+  silently open cross-account GM-text disclosure.
+
+### Final-gate review additions (2026-05-17 — verdict SHIP; non-blocking)
+
+The independent pre-PR gate review returned **SHIP** (I-A/I-B verified
+correct end-to-end against DRF wire internals + both consumers + the tests;
+no new Critical/Important; migration/CI safe). Two non-blocking ledger
+items it recommended:
+
+- **M-2 scope widened (precision).** After the I-B fix the create
+  serializers also echo `summary` (Story/Chapter/Episode) and
+  `resting_conclusion`/`is_ending` (Episode), not just `description`. The
+  M-2 safety reasoning is unchanged and covers these: Story-create is
+  staff-only; Chapter/Episode-create echoes only the requester's own
+  just-submitted input (no third-party GM text). The deferred M-2 security
+  comment should name `summary`/`resting_conclusion`/`is_ending` alongside
+  `description`.
+
+- **M-3 (follow-up, not fixed) — latent `.join` mistype.**
+  `ScopeAssignDialog.tsx` (~L148-149) types `body.character_sheet` /
+  `body.gm_table` as `string[]` and calls `.join(' ')`, but the backend's
+  manual scope/target combo errors emit **bare strings** on the wire
+  (`{"character_sheet": "CHARACTER scope requires..."}`); `.join` on a
+  string would `TypeError` inside the `.then()`. The path is **unreachable
+  from the dialog** — the client-side `isValid` mirror blocks submitting a
+  combo the server invariant would reject; the only reachable assign 400s
+  (re-assign guard `{"scope": ...}` bare string; DRF invalid-PK list
+  errors) are handled correctly. Worst case via a non-dialog client: the
+  `.catch()` degrades to a generic message — no crash, no leak. Fix the
+  mistype (`Array.isArray` guard, as the `scope` key already does) when the
+  M-2/error-handling family is next touched.

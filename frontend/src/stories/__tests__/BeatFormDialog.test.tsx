@@ -34,6 +34,34 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
+// Mock the auth/account selector hook the component uses to determine
+// whether the current user is staff (controls the risk control's disabled
+// state). Mirrors the @/store/hooks mocking pattern used elsewhere
+// (e.g. SceneDetailPage.test.tsx).
+const accountState: { is_staff: boolean } = { is_staff: false };
+
+vi.mock('@/store/hooks', () => ({
+  useAppSelector: vi.fn((selector: (state: unknown) => unknown) =>
+    selector({
+      game: { active: null },
+      auth: {
+        account: {
+          id: 1,
+          username: 'testuser',
+          is_staff: accountState.is_staff,
+          available_characters: [],
+        },
+      },
+    })
+  ),
+  useAccount: vi.fn(() => ({
+    id: 1,
+    username: 'testuser',
+    is_staff: accountState.is_staff,
+    available_characters: [],
+  })),
+}));
+
 import * as queries from '../queries';
 import { toast } from 'sonner';
 
@@ -106,6 +134,7 @@ const defaultProps = {
 describe('BeatFormDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    accountState.is_staff = false;
   });
 
   it('renders Create Beat dialog', () => {
@@ -355,5 +384,164 @@ describe('BeatFormDialog', () => {
     const descInput = screen.getByLabelText(/internal description/i);
     expect((descInput as HTMLInputElement).value).toBe('Must be at least level 7');
     expect(screen.getByLabelText(/required level/i)).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // Task E1 — kind / advances / risk controls
+  // -------------------------------------------------------------------------
+
+  it('renders kind / advances / risk controls with correct defaults', () => {
+    setupMocks();
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    // Kind select — defaults to "task" per backbone model default
+    const kindSelect = screen.getByLabelText(/^kind$/i) as HTMLSelectElement;
+    expect(kindSelect).toBeInTheDocument();
+    expect(kindSelect.value).toBe('task');
+    expect(within(kindSelect).getByRole('option', { name: /situation/i })).toBeInTheDocument();
+    expect(within(kindSelect).getByRole('option', { name: /encounter/i })).toBeInTheDocument();
+    expect(within(kindSelect).getByRole('option', { name: /task/i })).toBeInTheDocument();
+    expect(within(kindSelect).getByRole('option', { name: /requirement/i })).toBeInTheDocument();
+
+    // Advances toggle — default checked (true)
+    const advancesInput = screen.getByLabelText(/advances the plot/i) as HTMLInputElement;
+    expect(advancesInput).toBeInTheDocument();
+    expect(advancesInput).toBeChecked();
+    expect(
+      screen.getByText(/off = tangent: recorded for history, never gates a transition/i)
+    ).toBeInTheDocument();
+
+    // Risk numeric input — default 0
+    const riskInput = screen.getByLabelText(/^risk$/i) as HTMLInputElement;
+    expect(riskInput).toBeInTheDocument();
+    expect(riskInput.value).toBe('0');
+    expect(riskInput).toHaveAttribute('type', 'number');
+    expect(riskInput).toHaveAttribute('min', '0');
+    expect(screen.getByText(/only staff may set risk above 0/i)).toBeInTheDocument();
+  });
+
+  it('disables the risk input for non-staff users', () => {
+    accountState.is_staff = false;
+    setupMocks();
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    const riskInput = screen.getByLabelText(/^risk$/i) as HTMLInputElement;
+    expect(riskInput).toBeDisabled();
+  });
+
+  it('enables the risk input for staff users', () => {
+    accountState.is_staff = true;
+    setupMocks();
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    const riskInput = screen.getByLabelText(/^risk$/i) as HTMLInputElement;
+    expect(riskInput).toBeEnabled();
+  });
+
+  it('includes kind / advances / risk in the create submit body', async () => {
+    const user = userEvent.setup();
+    const createMock = setupMocks();
+
+    createMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 102 });
+    });
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    const descInput = screen.getByLabelText(/internal description/i);
+    await user.type(descInput, 'Beat with metadata');
+
+    // Change kind to encounter
+    await user.selectOptions(screen.getByLabelText(/^kind$/i), 'encounter');
+
+    // Toggle advances off (default true → false)
+    await user.click(screen.getByLabelText(/advances the plot/i));
+
+    await user.click(screen.getByRole('button', { name: /create beat/i }));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          kind: 'encounter',
+          advances: false,
+          risk: 0,
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('lets staff set risk and submits the value', async () => {
+    accountState.is_staff = true;
+    const user = userEvent.setup();
+    const createMock = setupMocks();
+
+    createMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onSuccess?: (data: unknown) => void };
+      cb.onSuccess?.({ id: 103 });
+    });
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} />);
+
+    const descInput = screen.getByLabelText(/internal description/i);
+    await user.type(descInput, 'Risky beat');
+
+    const riskInput = screen.getByLabelText(/^risk$/i);
+    await user.clear(riskInput);
+    await user.type(riskInput, '3');
+
+    await user.click(screen.getByRole('button', { name: /create beat/i }));
+
+    await waitFor(() => {
+      expect(createMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          risk: 3,
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('prefills kind / advances / risk from an existing beat on edit', () => {
+    setupMocks();
+    const existingBeat = {
+      id: 6,
+      episode: 42,
+      predicate_type: 'gm_marked' as const,
+      kind: 'requirement' as const,
+      advances: false,
+      risk: 5,
+      outcome: 'unsatisfied' as const,
+      visibility: 'hinted' as const,
+      internal_description: 'A requirement beat',
+      player_hint: '',
+      player_resolution_text: undefined,
+      order: 2,
+      agm_eligible: false,
+      deadline: null,
+      required_level: null,
+      required_achievement: null,
+      required_condition_template: null,
+      required_codex_entry: null,
+      referenced_story: null,
+      referenced_milestone_type: undefined,
+      referenced_chapter: null,
+      referenced_episode: null,
+      required_points: null,
+      episode_title: 'Test Episode',
+      chapter_title: 'Chapter 1',
+      story_id: 1,
+      story_title: 'Test Story',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+      can_mark: false,
+    };
+
+    renderWithProviders(<BeatFormDialog {...defaultProps} beat={existingBeat} />);
+
+    expect((screen.getByLabelText(/^kind$/i) as HTMLSelectElement).value).toBe('requirement');
+    expect(screen.getByLabelText(/advances the plot/i)).not.toBeChecked();
+    expect((screen.getByLabelText(/^risk$/i) as HTMLInputElement).value).toBe('5');
   });
 });

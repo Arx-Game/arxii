@@ -14,9 +14,11 @@ from world.stories.constants import (
     BeatPredicateType,
     SessionRequestStatus,
     StoryGMOfferStatus,
+    StoryMaturity,
     StoryScope,
     TransitionMode,
 )
+from world.stories.exceptions import MaturityPromotionError
 from world.stories.models import (
     AggregateBeatContribution,
     AssistantGMClaim,
@@ -122,6 +124,57 @@ class StoryListSerializer(serializers.ModelSerializer):
         ]
 
 
+def _gm_text_gate(
+    serializer: serializers.ModelSerializer,
+    data: dict[str, object],
+    story: Story,
+    node_maturity: str,
+) -> dict[str, object]:
+    """Strip GM-only authoring text from ``data`` for player-tier viewers.
+
+    ``data`` is typed ``dict[str, object]`` rather than a ``TypedDict``: it is
+    the output of ``ModelSerializer.to_representation`` for *three different*
+    serializers (Story / Chapter / Episode detail), each with a distinct
+    ``Meta.fields`` set. No single closed ``TypedDict`` correctly types all
+    three, and three hand-maintained TypedDicts mirroring DRF ``Meta.fields``
+    would be the brittle denormalisation CLAUDE.md forbids. ``dict[str,
+    object]`` is the precise, non-``Any`` type for "an open string-keyed map
+    of already-serialised field values, from which GM-only keys are removed."
+
+    Security contract (Task A3): for any viewer whose story-log role is NOT
+    ``staff`` or ``lead_gm`` (player / no_access / no request in context), the
+    serialized Story/Chapter/Episode MUST NOT expose ``description`` or
+    ``consequences``, and ``summary`` MUST be ``""`` while ``node_maturity``
+    is PITCH. Staff and Lead GM see the full representation. When there is no
+    request in context we default to the most-restrictive (player) treatment
+    so GM text never leaks by default.
+
+    ``classify_story_log_viewer_role`` is imported locally to match this
+    module's existing convention for importing from ``world.stories.permissions``
+    (see ``BeatSerializer.get_can_mark``); a top-level import would also work
+    but the file consistently defers permissions imports.
+    """
+    from world.stories.permissions import (  # noqa: PLC0415
+        VIEWER_ROLE_LEAD_GM,
+        VIEWER_ROLE_NO_ACCESS,
+        VIEWER_ROLE_STAFF,
+        classify_story_log_viewer_role,
+    )
+
+    request = serializer.context.get("request")
+    user = request.user if request is not None else None
+    role = (
+        classify_story_log_viewer_role(user, story) if user is not None else VIEWER_ROLE_NO_ACCESS
+    )
+    if role not in (VIEWER_ROLE_STAFF, VIEWER_ROLE_LEAD_GM):
+        data.pop("description", None)
+        # consequences is absent on the Story serializer — pop default is safe.
+        data.pop("consequences", None)
+        if node_maturity == StoryMaturity.PITCH:
+            data["summary"] = ""
+    return data
+
+
 class StoryDetailSerializer(serializers.ModelSerializer):
     """Full serializer for story detail views"""
 
@@ -138,6 +191,8 @@ class StoryDetailSerializer(serializers.ModelSerializer):
             "id",
             "title",
             "description",
+            "summary",
+            "maturity",
             "status",
             "privacy",
             "scope",
@@ -169,6 +224,11 @@ class StoryDetailSerializer(serializers.ModelSerializer):
         """Get trust requirements for this story"""
         return obj.get_trust_requirements_summary()
 
+    def to_representation(self, instance: Story) -> dict[str, object]:
+        """Gate GM-only authoring text for player-tier viewers (Task A3)."""
+        data = super().to_representation(instance)
+        return _gm_text_gate(self, data, instance, str(instance.maturity))
+
 
 class StoryCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating stories"""
@@ -178,6 +238,7 @@ class StoryCreateSerializer(serializers.ModelSerializer):
         fields = [
             "title",
             "description",
+            "summary",
             "privacy",
             "scope",
         ]
@@ -256,11 +317,17 @@ class ChapterDetailSerializer(serializers.ModelSerializer):
             "order",
             "is_active",
             "summary",
+            "maturity",
             "consequences",
             "completed_at",
             "created_at",
             "updated_at",
         ]
+
+    def to_representation(self, instance: Chapter) -> dict[str, object]:
+        """Gate GM-only authoring text for player-tier viewers (Task A3)."""
+        data = super().to_representation(instance)
+        return _gm_text_gate(self, data, instance.story, str(instance.maturity))
 
 
 class ChapterCreateSerializer(serializers.ModelSerializer):
@@ -270,7 +337,7 @@ class ChapterCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Chapter
-        fields = ["story", "title", "description", "order"]
+        fields = ["story", "title", "description", "summary", "order"]
 
     def validate_title(self, value):
         """Validate chapter title"""
@@ -332,11 +399,19 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             "order",
             "is_active",
             "summary",
+            "maturity",
+            "resting_conclusion",
+            "is_ending",
             "consequences",
             "completed_at",
             "created_at",
             "updated_at",
         ]
+
+    def to_representation(self, instance: Episode) -> dict[str, object]:
+        """Gate GM-only authoring text for player-tier viewers (Task A3)."""
+        data = super().to_representation(instance)
+        return _gm_text_gate(self, data, instance.chapter.story, str(instance.maturity))
 
 
 class EpisodeCreateSerializer(serializers.ModelSerializer):
@@ -350,6 +425,9 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
             "chapter",
             "title",
             "description",
+            "summary",
+            "resting_conclusion",
+            "is_ending",
             "order",
         ]
 
@@ -1141,6 +1219,42 @@ def _resolve_progress(episode: "Episode", progress_id: int | None) -> "AnyStoryP
     return get_active_progress_for_story(story)
 
 
+class PromoteEpisodeInputSerializer(serializers.Serializer):
+    """Input for POST /api/episodes/{id}/promote/.
+
+    Context required:
+        episode (Episode): the episode whose maturity is changing.
+
+    Validates (Layer 2): mirrors ``promote_episode_maturity``'s PLOT-gate so a
+    violation surfaces as a 400, not a service-raised 500. The gate only fires
+    on an upward move *to* PLOT; lateral moves and demotions are never gated
+    (non-linear sketchpad). The gate requires a non-empty resting_conclusion
+    AND (an outbound transition OR is_ending).
+    """
+
+    _RANK = {
+        StoryMaturity.PITCH: 0,
+        StoryMaturity.OUTLINE: 1,
+        StoryMaturity.PLOT: 2,
+    }
+
+    target = serializers.ChoiceField(choices=StoryMaturity.choices)
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        episode: Episode = self.context["episode"]
+        target: str = attrs["target"]
+
+        current_rank = self._RANK[StoryMaturity(episode.maturity)]
+        is_promotion = self._RANK[StoryMaturity(target)] > current_rank
+        if target == StoryMaturity.PLOT and is_promotion:
+            has_outbound = episode.outbound_transitions.exists()
+            ready = bool(episode.resting_conclusion.strip()) and (has_outbound or episode.is_ending)
+            if not ready:
+                msg = MaturityPromotionError().user_message
+                raise serializers.ValidationError({"target": msg})
+        return attrs
+
+
 class ResolveEpisodeInputSerializer(serializers.Serializer):
     """Input for POST /api/episodes/{id}/resolve/.
 
@@ -1582,6 +1696,83 @@ class AssignStoryToTableInputSerializer(serializers.Serializer):
             msg = "You can only assign stories to your own table."
             raise serializers.ValidationError(msg)
         return table
+
+
+class AssignStoryInputSerializer(serializers.Serializer):
+    """Input for POST /api/stories/{id}/assign-to-scope/ (Task B2).
+
+    Lifts a Story out of UNASSIGNED scope: picks the scope and the matching
+    target so a progress record can be created.
+
+    Layer 2 invariant — scope <-> target:
+        - CHARACTER requires ``character_sheet`` and forbids ``gm_table``.
+        - GROUP requires ``gm_table`` and forbids ``character_sheet``.
+        - GLOBAL forbids both targets.
+        - UNASSIGNED is not an acceptable input scope (you cannot assign a
+          story *to* unassigned); the ChoiceField excludes it so it 400s.
+    """
+
+    scope = serializers.ChoiceField(
+        choices=[
+            (choice.value, choice.label) for choice in StoryScope if choice != StoryScope.UNASSIGNED
+        ],
+    )
+    character_sheet = serializers.PrimaryKeyRelatedField(
+        queryset=CharacterSheet.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    gm_table = serializers.PrimaryKeyRelatedField(
+        queryset=GMTable.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        """Enforce the scope <-> target invariant.
+
+        Precondition: the target story must currently be UNASSIGNED. The
+        assign contract is "lift a story OUT of UNASSIGNED"; re-assigning an
+        already-scoped story would either 500 (duplicate progress record) or
+        silently corrupt data (scope change with a stale character_sheet and
+        an orphan progress row), so it is rejected as invalid input here.
+        """
+        story = self.context["story"]
+        if story.scope != StoryScope.UNASSIGNED:
+            msg = "This story is already assigned to a scope and cannot be re-assigned."
+            raise serializers.ValidationError({"scope": msg})
+
+        self._validate_scope_target_invariant(attrs)
+        return attrs
+
+    @staticmethod
+    def _validate_scope_target_invariant(attrs: Any) -> None:
+        """Enforce the scope <-> target invariant (CHARACTER/GROUP/GLOBAL)."""
+        scope = attrs["scope"]
+        character_sheet = attrs.get("character_sheet")
+        gm_table = attrs.get("gm_table")
+
+        if scope == StoryScope.CHARACTER:
+            if character_sheet is None:
+                msg = "CHARACTER scope requires a character_sheet."
+                raise serializers.ValidationError({"character_sheet": msg})
+            if gm_table is not None:
+                msg = "CHARACTER scope does not accept a gm_table."
+                raise serializers.ValidationError({"gm_table": msg})
+        elif scope == StoryScope.GROUP:
+            if gm_table is None:
+                msg = "GROUP scope requires a gm_table."
+                raise serializers.ValidationError({"gm_table": msg})
+            if character_sheet is not None:
+                msg = "GROUP scope does not accept a character_sheet."
+                raise serializers.ValidationError({"character_sheet": msg})
+        elif scope == StoryScope.GLOBAL:
+            if character_sheet is not None:
+                msg = "GLOBAL scope does not accept a character_sheet."
+                raise serializers.ValidationError({"character_sheet": msg})
+            if gm_table is not None:
+                msg = "GLOBAL scope does not accept a gm_table."
+                raise serializers.ValidationError({"gm_table": msg})
 
 
 # ---------------------------------------------------------------------------
