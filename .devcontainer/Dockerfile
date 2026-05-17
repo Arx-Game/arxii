@@ -9,6 +9,9 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
       iptables ipset dnsutils git curl ca-certificates build-essential sudo \
  && rm -rf /var/lib/apt/lists/*
 
+COPY --chown=root:root .devcontainer/init-firewall.sh /usr/local/bin/init-firewall.sh
+RUN chmod 0755 /usr/local/bin/init-firewall.sh
+
 # The base image ships a non-root "vscode" user. Allow it to run the
 # firewall script (and only that) without a password prompt.
 RUN echo 'vscode ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh' \
