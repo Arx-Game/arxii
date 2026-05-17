@@ -312,6 +312,7 @@ function EpisodeRowAuthor({ episode, storyId }: EpisodeRowProps) {
         onOpenChange={setEditOpen}
         chapterId={episode.chapter as unknown as number}
         episode={episode}
+        storyId={storyId}
       />
       <BeatFormDialog open={addBeatOpen} onOpenChange={setAddBeatOpen} episodeId={episode.id} />
       <TransitionFormDialog

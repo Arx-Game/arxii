@@ -24,6 +24,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useCreateEpisode, useUpdateEpisode } from '../queries';
 import type { Episode, Maturity } from '../types';
 import { ProgressionRequirementsEditor } from './ProgressionRequirementsEditor';
+import { PromoteMaturityButton } from './PromoteMaturityButton';
 
 // ---------------------------------------------------------------------------
 // DRF error shapes
@@ -63,6 +64,11 @@ interface EpisodeFormDialogProps {
   chapterId: number;
   /** When provided, dialog operates in edit mode. */
   episode?: EpisodeLike;
+  /**
+   * Owning story id. When provided (edit mode), enables the maturity
+   * promotion control beside the read-only maturity indicator.
+   */
+  storyId?: number;
   onSuccess?: (episode: Episode) => void;
 }
 
@@ -75,6 +81,7 @@ export function EpisodeFormDialog({
   onOpenChange,
   chapterId,
   episode,
+  storyId,
   onSuccess,
 }: EpisodeFormDialogProps) {
   const isEdit = episode !== undefined;
@@ -200,13 +207,21 @@ export function EpisodeFormDialog({
               )}
             </div>
 
-            {/* Maturity (read-only, edit mode only) */}
+            {/* Maturity (read-only, edit mode only) + promotion control (Task E3) */}
             {isEdit && episode?.maturity && (
-              <div
-                data-testid="episode-maturity-indicator"
-                className="inline-flex w-fit items-center rounded-md border bg-muted px-2 py-1 text-xs text-muted-foreground"
-              >
-                Maturity: <span className="ml-1 font-medium capitalize">{episode.maturity}</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <div
+                  data-testid="episode-maturity-indicator"
+                  className="inline-flex w-fit items-center rounded-md border bg-muted px-2 py-1 text-xs text-muted-foreground"
+                >
+                  Maturity: <span className="ml-1 font-medium capitalize">{episode.maturity}</span>
+                </div>
+                {storyId !== undefined && (
+                  <PromoteMaturityButton
+                    episode={{ id: episode.id, maturity: episode.maturity }}
+                    storyId={storyId}
+                  />
+                )}
               </div>
             )}
 
