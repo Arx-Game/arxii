@@ -4,6 +4,8 @@ Structured narrative campaign management: task-gated episode progression, multi-
 
 **Phase 3 complete.** All backend models, services, reactivity hooks, and API endpoints are implemented. Phase 4 is the React frontend (including the narrative message UI).
 
+**Authoring backbone + authoring API/UI shipped.** The non-linear maturity sketchpad (per-node `maturity`, `StoryScope.UNASSIGNED`, `Episode.resting_conclusion`/`is_ending`, `Beat.kind`/`advances`/`risk`, the WAITING_FOR_GM/RESTING frontier, the per-story `StoryNote` ledger) and the authoring/run-control API + minimal UI are in: `Story.summary` ("The Story So Far"), the GM↔player visibility contract, `POST /api/episodes/{id}/promote/`, `POST /api/stories/{id}/assign-to-scope/`, query-bounded `gm-queue`/`staff-workload`, and the `StoryAuthorPage` run-control surface (promote/assign dialogs, GM Notes panel, inline progress-state banner, nimble +Beat/+Branch). See the Visibility Contract and API sections below.
+
 **Source:** `src/world/stories/`
 **API Base:** `/api/stories/`, `/api/chapters/`, `/api/episodes/`, `/api/beats/`, `/api/transitions/`, `/api/story-progress/`, `/api/group-story-progress/`, `/api/global-story-progress/`, `/api/aggregate-beat-contributions/`, `/api/assistant-gm-claims/`, `/api/session-requests/`, `/api/story-notes/`
 
@@ -92,7 +94,8 @@ Top-level campaign container.
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `title`, `description` | CharField / TextField | |
+| `title`, `description` | CharField / TextField | `description` = GM-facing pitch/internal authoring text (GM-only — see Visibility Contract) |
+| `summary` | TextField (blank) | Player-facing "The Story So Far" — GM-maintained running recap; surfaced to players via the role-gated detail serializers, PITCH-blanked. NOT auto-generated. Added in `0031_story_summary` |
 | `status` | StoryStatus | ACTIVE, INACTIVE, COMPLETED, CANCELLED |
 | `privacy` | StoryPrivacy | PUBLIC, PRIVATE, INVITE_ONLY |
 | `scope` | StoryScope | UNASSIGNED (default) / CHARACTER / GROUP / GLOBAL — `create_*_progress` rejects UNASSIGNED stories |
@@ -104,6 +107,51 @@ Top-level campaign container.
 | `active_gms` | M2M → gm.GMProfile | |
 | `primary_table` | FK → gm.GMTable (nullable) | Lead GM's table; used for AGM claim permission check |
 | `required_trust_categories` | M2M through StoryTrustRequirement | |
+
+---
+
+### GM ↔ Player Visibility Contract
+
+Authoring text on Story / Chapter / Episode is split into a **GM-only** lens and
+a **player-facing** lens, enforced server-side in two independent places.
+
+**The split:**
+
+| Field | Audience | Notes |
+|-------|----------|-------|
+| `description` | GM/staff only | The internal authoring "pitch"/intent text. Stripped from the serialized payload for any non-privileged viewer |
+| `consequences` (Chapter, Episode) | GM/staff only | Stripped from the serialized payload for any non-privileged viewer (absent on the Story serializer — the pop is a safe no-op there) |
+| `summary` | Player-facing | "The Story So Far" running recap. Visible to players, **but blanked to `""` while the node's `maturity == PITCH`** so an unfinished node leaks nothing |
+
+There is **no dedicated `pitch` field** — by design: `description` *is* the GM
+pitch, `summary` *is* the player recap. (Resolves design follow-up I-2.)
+
+**Enforcement point 1 — detail serializers.** `StoryDetailSerializer`,
+`ChapterDetailSerializer`, and `EpisodeDetailSerializer` each override
+`to_representation()` to call the shared `_gm_text_gate(serializer, data, story,
+node_maturity)` helper (in `serializers.py`). The helper resolves the viewer's
+story-log role via `classify_story_log_viewer_role(user, story)`. If the role is
+**not** `VIEWER_ROLE_STAFF` or `VIEWER_ROLE_LEAD_GM` (i.e. player, no_access, or
+**no request in context**), it pops `description`/`consequences` and blanks
+`summary` when `node_maturity == PITCH`. **Default-deny:** with no request/user
+in context the most-restrictive (player) treatment is applied, so GM text never
+leaks by default (locked by tests; see `test_views_*` default-deny coverage).
+The Chapter gate is keyed on `instance.story`; the Episode gate on
+`instance.chapter.story`.
+
+**Enforcement point 2 — `serialize_story_log`.** Independently, the per-beat
+story log (`services/story_log.py::serialize_story_log`) gates GM-only beat
+internals: `visible_internal_description` (from `beat.internal_description`) and
+`visible_gm_notes` / `visible_internal_notes` (from completion/resolution
+`gm_notes`) are populated **only** for privileged roles
+(`_PRIVILEGED_ROLES = {VIEWER_ROLE_LEAD_GM, VIEWER_ROLE_STAFF}`); players get
+`None`. Players also have SECRET-beat `player_hint` suppressed and the log
+scoped to their own character's completions/resolutions. `no_access` → empty
+list.
+
+The two enforcement points are deliberately separate: serializer
+`to_representation` guards node-level authoring prose; `serialize_story_log`
+guards per-beat/per-resolution narrative internals.
 
 ---
 
@@ -433,7 +481,7 @@ Maturity-promotion validation. Forward promotion is gated by minimal per-node co
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `promote_episode_maturity` | `(episode: Episode, target: StoryMaturity) -> Episode` | Sets `episode.maturity` to `target`. Promotion *to PLOT* requires a non-empty `resting_conclusion` AND either an outbound transition or `is_ending`; otherwise raises `MaturityPromotionError`. Returns the saved episode |
+| `promote_episode_maturity` | `(episode: Episode, target: StoryMaturity) -> Episode` | Sets `episode.maturity` to `target`. Promotion *to PLOT* requires a non-empty `resting_conclusion` AND either an outbound transition or `is_ending`; otherwise raises `MaturityPromotionError`. Returns the saved episode. **Exposed via `POST /api/episodes/{id}/promote/`**, whose `PromoteEpisodeInputSerializer.validate()` mirrors this exact PLOT-gate so the violation is a 400 (not a service-raised 500). *Note: the gate predicate is currently duplicated between this service and the serializer — extracting a shared predicate is a recorded follow-up* |
 
 ### reactivity.py (Phase 3)
 
@@ -532,10 +580,17 @@ Never pass `str(exc)` to API responses — use `exc.user_message`.
 |--------|-----|------------|-------------|
 | GET | `/api/stories/{pk}/log/` | Participant or staff | Story log with visibility filtering |
 | GET | `/api/stories/my-active/` | Authenticated | Player's active CHARACTER-scope stories |
-| GET | `/api/stories/gm-queue/` | GMProfile required | Lead GM's episodes-ready-to-run dashboard. Response now also includes a `waiting_for_gm` key: active progress rows parked at `ProgressStatus.WAITING_FOR_GM` (no eligible transition yet — a dropped ball), each with `last_advanced_at` + `days_waiting` |
-| GET | `/api/stories/staff-workload/` | Staff | All active stories across all tables. Response now also includes a `stories_waiting_for_gm` key (WAITING_FOR_GM progress across all three scopes, any age, with `days_waiting`) alongside the existing `stale_stories` / `stories_at_frontier` scans |
+| GET | `/api/stories/gm-queue/` | GMProfile required | Lead GM's episodes-ready-to-run dashboard. Response includes `episodes_ready_to_run`, `pending_agm_claims`, `assigned_session_requests`, and `waiting_for_gm` (active progress rows parked at `ProgressStatus.WAITING_FOR_GM` — no eligible transition yet, a dropped ball — each with `last_advanced_at` + `days_waiting`). **Query-bounded** (follow-up #2/#3 resolved): `_collect_gm_queue` hoists every per-story lookup into a batched pass keyed on candidate episodes via the `GMQueueBuckets` / `_GMQueueInputs` dataclasses, so total query count is a small constant independent of how many stories the GM leads. Locked by `assertNumQueries` in `tests/test_views_gm_queue.py`. Response shape/values/order unchanged from the pre-bounding loop |
+| GET | `/api/stories/staff-workload/` | Staff | Cross-story metrics: per-GM queue depth, `stale_stories`, `stories_at_frontier`, and `stories_waiting_for_gm` (WAITING_FOR_GM progress across all three scopes, any age, with `days_waiting`). **Query-bounded** (follow-up #2 resolved): per-GM queue depth assembled from batched inputs via the `_StaffPerGMInputs` dataclass (one query per map, zero per-GM/per-story queries); the stale / waiting / frontier sections are one `.values()` scan per progress model (fixed three queries each), not per-row. Locked by `assertNumQueries` in `tests/test_views_staff_workload.py`. **Per-GM membership is status-agnostic**: the per-GM section iterates the full `GMProfile.objects.filter(tables__primary_stories__isnull=False).distinct()` set (a GM whose only primary story is non-active still appears with `episodes_ready=0` + their status-agnostic `pending_claims`) — preserved/restored after the C2 bounding refactor briefly narrowed it to active-lead-story GMs |
 | POST | `/api/stories/{pk}/resolve-episode/` | Story owner or staff | Fire `resolve_episode`; body: `{chosen_transition?}` |
 | POST | `/api/stories/expire-beats/` | Staff | Trigger `expire_overdue_beats` |
+| POST | `/api/stories/{pk}/assign-to-scope/` | Lead GM of `story.primary_table` or staff (`IsLeadGMOnStoryOrStaff`) | Lift a story out of UNASSIGNED. Body: `{scope, character_sheet?, gm_table?}`. Sets `Story.scope` and creates the scope-appropriate progress record atomically (CHARACTER → also sets `story.character_sheet` + `create_character_progress`; GROUP → `create_group_progress`; GLOBAL → `create_global_progress`). Returns the updated `StoryDetailSerializer`. **400 if the story is not currently UNASSIGNED** (re-assignment is rejected by `AssignStoryInputSerializer.validate()` — would otherwise 500 on a duplicate progress row or silently corrupt scope). **400 on a scope↔target invariant violation** (CHARACTER requires `character_sheet` and forbids `gm_table`; GROUP requires `gm_table` and forbids `character_sheet`; GLOBAL forbids both; UNASSIGNED is not an accepted input scope — excluded from the ChoiceField) |
+
+### Episode Custom Actions
+
+| Method | URL | Permission | Description |
+|--------|-----|------------|-------------|
+| POST | `/api/episodes/{pk}/promote/` | Lead GM of `story.primary_table` or staff (`IsLeadGMOnStoryOrStaff`) | Set the episode's authoring maturity. Body: `{target}` (a `StoryMaturity` value). Calls `promote_episode_maturity`; returns the updated `EpisodeDetailSerializer`. The **PLOT-gate** is mirrored in `PromoteEpisodeInputSerializer.validate()` so a violation surfaces as a clean **400** (`MaturityPromotionError().user_message`) instead of a service-raised 500. The gate fires **only** on an upward move *to* PLOT (lateral moves and demotions are unvalidated by design — non-linear sketchpad); it requires a non-empty `resting_conclusion` AND (≥ 1 outbound transition OR `is_ending`) |
 
 ### Beat Actions
 
