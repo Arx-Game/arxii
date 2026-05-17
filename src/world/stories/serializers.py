@@ -126,11 +126,20 @@ class StoryListSerializer(serializers.ModelSerializer):
 
 def _gm_text_gate(
     serializer: serializers.ModelSerializer,
-    data: dict[str, Any],
+    data: dict[str, object],
     story: Story,
     node_maturity: str,
-) -> dict[str, Any]:
+) -> dict[str, object]:
     """Strip GM-only authoring text from ``data`` for player-tier viewers.
+
+    ``data`` is typed ``dict[str, object]`` rather than a ``TypedDict``: it is
+    the output of ``ModelSerializer.to_representation`` for *three different*
+    serializers (Story / Chapter / Episode detail), each with a distinct
+    ``Meta.fields`` set. No single closed ``TypedDict`` correctly types all
+    three, and three hand-maintained TypedDicts mirroring DRF ``Meta.fields``
+    would be the brittle denormalisation CLAUDE.md forbids. ``dict[str,
+    object]`` is the precise, non-``Any`` type for "an open string-keyed map
+    of already-serialised field values, from which GM-only keys are removed."
 
     Security contract (Task A3): for any viewer whose story-log role is NOT
     ``staff`` or ``lead_gm`` (player / no_access / no request in context), the
@@ -215,7 +224,7 @@ class StoryDetailSerializer(serializers.ModelSerializer):
         """Get trust requirements for this story"""
         return obj.get_trust_requirements_summary()
 
-    def to_representation(self, instance: Story) -> dict[str, Any]:
+    def to_representation(self, instance: Story) -> dict[str, object]:
         """Gate GM-only authoring text for player-tier viewers (Task A3)."""
         data = super().to_representation(instance)
         return _gm_text_gate(self, data, instance, str(instance.maturity))
@@ -315,7 +324,7 @@ class ChapterDetailSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
-    def to_representation(self, instance: Chapter) -> dict[str, Any]:
+    def to_representation(self, instance: Chapter) -> dict[str, object]:
         """Gate GM-only authoring text for player-tier viewers (Task A3)."""
         data = super().to_representation(instance)
         return _gm_text_gate(self, data, instance.story, str(instance.maturity))
@@ -399,7 +408,7 @@ class EpisodeDetailSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
-    def to_representation(self, instance: Episode) -> dict[str, Any]:
+    def to_representation(self, instance: Episode) -> dict[str, object]:
         """Gate GM-only authoring text for player-tier viewers (Task A3)."""
         data = super().to_representation(instance)
         return _gm_text_gate(self, data, instance.chapter.story, str(instance.maturity))
