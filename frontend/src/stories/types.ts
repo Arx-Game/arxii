@@ -252,6 +252,33 @@ export interface MarkBeatBody {
   progress_id?: number | null;
 }
 
+// Episode maturity promotion (B1). The generated requestBody for
+// episodes_promote_create is the full EpisodeDetailRequest because
+// spectacular cannot introspect the action's actual body — same known
+// pattern as ResolveEpisodeBody. The body is a single MaturityEnum target.
+export type EpisodeMaturity = NonNullable<components['schemas']['MaturityEnum']>;
+
+export interface PromoteEpisodeBody {
+  target: EpisodeMaturity;
+}
+
+// Story scope assignment (B2). assign-to-scope lifts a story out of
+// UNASSIGNED. Like promote, the generated requestBody is the full
+// StoryDetailRequest; the real action body is the scope + an optional
+// owning FK depending on scope.
+export type AssignableStoryScope = 'character' | 'group' | 'global';
+
+export interface AssignStoryBody {
+  scope: AssignableStoryScope;
+  character_sheet?: number;
+  gm_table?: number;
+}
+
+// StoryNote — OOC authorial memory (append-only). Both shapes are in the
+// generated schema; aliased here for cleaner imports within the module.
+export type StoryNote = components['schemas']['StoryNote'];
+export type StoryNoteRequest = components['schemas']['StoryNoteRequest'];
+
 export interface ContributeBeatBody {
   character_sheet: number;
   points: number;

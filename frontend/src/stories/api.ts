@@ -18,6 +18,7 @@ import { apiFetch } from '@/evennia_replacements/api';
 import type {
   AggregateBeatContribution,
   ApproveClaimBody,
+  AssignStoryBody,
   AssistantGMClaim,
   Beat,
   BeatCompletion,
@@ -43,6 +44,7 @@ import type {
   MyActiveStoriesResponse,
   OfferStoryToGMBody,
   PaginatedResponse,
+  PromoteEpisodeBody,
   RejectClaimBody,
   RequestClaimBody,
   RespondToOfferBody,
@@ -54,6 +56,8 @@ import type {
   StoryGMOffer,
   StoryList,
   StoryLogResponse,
+  StoryNote,
+  StoryNoteRequest,
   Transition,
   TransitionRequiredOutcome,
 } from './types';
@@ -468,6 +472,24 @@ export async function resolveEpisode(
 }
 
 /**
+ * POST /api/episodes/{id}/promote/
+ * Body: { target: "pitch" | "outline" | "plot" } (a MaturityEnum value).
+ * Returns 200 with the updated Episode (EpisodeDetail shape).
+ */
+export async function promoteEpisode(
+  episodeId: number,
+  body: PromoteEpisodeBody
+): Promise<Episode> {
+  const res = await apiFetch(`/api/episodes/${episodeId}/promote/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to promote episode');
+  return res.json() as Promise<Episode>;
+}
+
+/**
  * POST /api/beats/{id}/mark/
  * Returns 201 BeatCompletion on success.
  */
@@ -807,6 +829,24 @@ export async function deleteTransitionRequiredOutcome(id: number): Promise<void>
 // ---------------------------------------------------------------------------
 
 /**
+ * POST /api/stories/{id}/assign-to-scope/
+ * Body: { scope: "character" | "group" | "global", character_sheet?: number,
+ *         gm_table?: number }
+ * Lifts a story out of UNASSIGNED. Returns 200 with the updated Story.
+ * Re-assigning an already-assigned story is rejected by the backend with 400;
+ * the caller surfaces that error — no special handling here.
+ */
+export async function assignStory(storyId: number, body: AssignStoryBody): Promise<Story> {
+  const res = await apiFetch(`/api/stories/${storyId}/assign-to-scope/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to assign story to scope');
+  return res.json() as Promise<Story>;
+}
+
+/**
  * POST /api/stories/{id}/detach-from-table/
  * Clears story.primary_table. Returns 200 with updated Story.
  */
@@ -1084,4 +1124,46 @@ export async function archiveEra(id: number): Promise<Era> {
     throw new Error(body.detail ?? `Failed to archive era ${id}`);
   }
   return res.json() as Promise<Era>;
+}
+
+// ---------------------------------------------------------------------------
+// StoryNote — OOC authorial memory (append-only; list + create only)
+// ---------------------------------------------------------------------------
+
+export interface ListStoryNotesParams {
+  story?: number;
+  ordering?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/**
+ * GET /api/story-notes/?story=<id>
+ * Append-only OOC authorial notes. Access is gated server-side by
+ * CanAccessStoryNotes (staff, story owner, or active/Lead GM of the story).
+ */
+export async function listStoryNotes(
+  params?: ListStoryNotesParams
+): Promise<PaginatedResponse<StoryNote>> {
+  const qs = buildQueryString(
+    (params as Record<string, string | number | boolean | undefined>) ?? {}
+  );
+  const res = await apiFetch(`/api/story-notes/${qs}`);
+  if (!res.ok) throw new Error('Failed to load story notes');
+  return res.json() as Promise<PaginatedResponse<StoryNote>>;
+}
+
+/**
+ * POST /api/story-notes/
+ * Body: { story: number, body: string }. author_account is set server-side.
+ * Returns 201 with the created StoryNote.
+ */
+export async function createStoryNote(body: StoryNoteRequest): Promise<StoryNote> {
+  const res = await apiFetch('/api/story-notes/', {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('Failed to create story note');
+  return res.json() as Promise<StoryNote>;
 }
