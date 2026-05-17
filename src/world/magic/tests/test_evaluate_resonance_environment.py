@@ -12,6 +12,10 @@ Note on aura field lookup: CharacterAura has exactly three fields (celestial, pr
 abyssal). For cast-time, the working affinity's name is lowercased to index into
 the aura. Tests that check magnitude must use canonical affinity names matching
 these fields.
+
+Cache isolation: every test class uses ResonanceCacheIsolationMixin so
+AffinityInteractionManager's process-lived cache is cleared between tests.
+This prevents negative-cached entries from poisoning subsequent test classes.
 """
 
 from decimal import Decimal
@@ -39,6 +43,7 @@ from world.magic.services.resonance_environment import (
     evaluate_resonance_environment,
     get_resonance_environment_config,
 )
+from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 
 
 def _set_room_resonance_value(room_profile, resonance, value: int) -> None:
@@ -52,7 +57,7 @@ def _set_room_resonance_value(room_profile, resonance, value: int) -> None:
     mod.save(update_fields=["value"])
 
 
-class AlignedPairTest(TestCase):
+class AlignedPairTest(ResonanceCacheIsolationMixin, TestCase):
     """ALIGNED pair → valence ALIGNED, kind AMPLIFY, direction ENVIRONMENT_DOMINANT, magnitude>0."""
 
     def test_aligned_pair(self) -> None:
@@ -97,9 +102,13 @@ class AlignedPairTest(TestCase):
         self.assertEqual(result.magnitude, expected)
         self.assertEqual(result.source_affinity, celestial)
         self.assertEqual(result.environment_affinity, celestial)
+        # T4: interaction is the resolved AffinityInteraction; ALIGNED → backfire_difficulty=0
+        self.assertIsNotNone(result.interaction)
+        self.assertEqual(result.interaction.valence, ResonanceValence.ALIGNED)
+        self.assertEqual(result.backfire_difficulty, 0)
 
 
-class OpposedRejectTest(TestCase):
+class OpposedRejectTest(ResonanceCacheIsolationMixin, TestCase):
     """Abyssal-caster / Celestial-place REJECT: OPPOSED, ENVIRONMENT_DOMINANT."""
 
     def test_opposed_reject(self) -> None:
@@ -145,9 +154,16 @@ class OpposedRejectTest(TestCase):
         self.assertEqual(result.magnitude, expected)
         self.assertEqual(result.source_affinity, abyssal)
         self.assertEqual(result.environment_affinity, celestial)
+        # T4: interaction is the resolved AffinityInteraction; OPPOSED → backfire_difficulty>0
+        self.assertIsNotNone(result.interaction)
+        self.assertEqual(result.interaction.kind, AffinityInteractionKind.REJECT)
+        expected_backfire = cfg.backfire_base_difficulty + round(
+            result.magnitude * float(cfg.backfire_difficulty_per_magnitude)
+        )
+        self.assertEqual(result.backfire_difficulty, expected_backfire)
 
 
-class SmallerSeverityTest(TestCase):
+class SmallerSeverityTest(ResonanceCacheIsolationMixin, TestCase):
     """REPEL (severity 0.3) → smaller magnitude than REJECT (severity 1.0) at equal inputs."""
 
     def test_repel_smaller_than_reject(self) -> None:
@@ -223,7 +239,7 @@ class SmallerSeverityTest(TestCase):
         self.assertEqual(result_reject.kind, AffinityInteractionKind.REJECT)
 
 
-class CorruptDirectionTest(TestCase):
+class CorruptDirectionTest(ResonanceCacheIsolationMixin, TestCase):
     """CORRUPT pair direction test: caster vs place strength comparison."""
 
     def _make_corrupt_setup(self):
@@ -277,6 +293,13 @@ class CorruptDirectionTest(TestCase):
         self.assertEqual(result.direction, ResonanceDirection.CASTER_DOMINANT)
         self.assertEqual(result.kind, AffinityInteractionKind.CORRUPT)
         self.assertGreater(result.magnitude, 0)
+        # T4: CORRUPT is OPPOSED valence → backfire_difficulty > 0; interaction is resolved
+        self.assertIsNotNone(result.interaction)
+        self.assertEqual(result.interaction.kind, AffinityInteractionKind.CORRUPT)
+        expected_backfire = cfg.backfire_base_difficulty + round(
+            result.magnitude * float(cfg.backfire_difficulty_per_magnitude)
+        )
+        self.assertEqual(result.backfire_difficulty, expected_backfire)
 
     def test_corrupt_weak_caster_vs_strong_place_is_environment_dominant(self) -> None:
         """Weak abyssal caster (strength 15) vs strong primal place (80): ENVIRONMENT_DOMINANT."""
@@ -308,6 +331,12 @@ class CorruptDirectionTest(TestCase):
         self.assertEqual(result.direction, ResonanceDirection.ENVIRONMENT_DOMINANT)
         self.assertEqual(result.kind, AffinityInteractionKind.CORRUPT)
         self.assertGreater(result.magnitude, 0)
+        # T4: CORRUPT is OPPOSED valence → backfire_difficulty > 0; interaction is resolved
+        self.assertIsNotNone(result.interaction)
+        expected_backfire = cfg.backfire_base_difficulty + round(
+            result.magnitude * float(cfg.backfire_difficulty_per_magnitude)
+        )
+        self.assertEqual(result.backfire_difficulty, expected_backfire)
 
     def test_corrupt_within_balanced_band_is_balanced(self) -> None:
         """Within balanced_band → BALANCED direction.
@@ -343,9 +372,15 @@ class CorruptDirectionTest(TestCase):
         self.assertEqual(result.direction, ResonanceDirection.BALANCED)
         self.assertEqual(result.kind, AffinityInteractionKind.CORRUPT)
         self.assertGreater(result.magnitude, 0)
+        # T4: CORRUPT is OPPOSED valence → backfire_difficulty > 0; interaction is resolved
+        self.assertIsNotNone(result.interaction)
+        expected_backfire = cfg.backfire_base_difficulty + round(
+            result.magnitude * float(cfg.backfire_difficulty_per_magnitude)
+        )
+        self.assertEqual(result.backfire_difficulty, expected_backfire)
 
 
-class MissingAuraTest(TestCase):
+class MissingAuraTest(ResonanceCacheIsolationMixin, TestCase):
     """Missing CharacterAura → inert effect (valence="", magnitude=0)."""
 
     def test_missing_aura_returns_inert_cast_time(self) -> None:
@@ -380,9 +415,12 @@ class MissingAuraTest(TestCase):
         self.assertEqual(result.magnitude, 0)
         self.assertIsNone(result.source_affinity)
         self.assertIsNone(result.environment_affinity)
+        # T4: inert result → interaction=None, backfire_difficulty=0
+        self.assertIsNone(result.interaction)
+        self.assertEqual(result.backfire_difficulty, 0)
 
 
-class MultiAffinityGiftTest(TestCase):
+class MultiAffinityGiftTest(ResonanceCacheIsolationMixin, TestCase):
     """Multi-affinity gift: highest severity_multiplier wins; tiebreak by Affinity.name."""
 
     def test_highest_severity_chosen(self) -> None:
@@ -442,6 +480,13 @@ class MultiAffinityGiftTest(TestCase):
         cfg = get_resonance_environment_config()
         expected = round(30 * Decimal("0.70") * Decimal("1.00") * cfg.base_coefficient)
         self.assertEqual(result.magnitude, expected)
+        # T4: OPPOSED REJECT → interaction is resolved; backfire_difficulty > 0
+        self.assertIsNotNone(result.interaction)
+        self.assertEqual(result.interaction.kind, AffinityInteractionKind.REJECT)
+        expected_backfire = cfg.backfire_base_difficulty + round(
+            result.magnitude * float(cfg.backfire_difficulty_per_magnitude)
+        )
+        self.assertEqual(result.backfire_difficulty, expected_backfire)
 
     def test_equal_severity_tiebreak_by_affinity_name(self) -> None:
         """Equal severity_multiplier → tiebreak by Affinity.name ascending.
@@ -501,7 +546,7 @@ class MultiAffinityGiftTest(TestCase):
         self.assertEqual(result.source_affinity, abyssal_aff)
 
 
-class PlaceDominantAffinityTiebreakTest(TestCase):
+class PlaceDominantAffinityTiebreakTest(ResonanceCacheIsolationMixin, TestCase):
     """Equal summed effective_value → place affinity by Affinity.name ascending."""
 
     def test_place_affinity_tiebreak_by_name(self) -> None:
@@ -565,7 +610,7 @@ class PlaceDominantAffinityTiebreakTest(TestCase):
         self.assertEqual(result.kind, AffinityInteractionKind.REJECT)
 
 
-class InertCasesTest(TestCase):
+class InertCasesTest(ResonanceCacheIsolationMixin, TestCase):
     """No resonances or no AffinityInteraction row → inert effect."""
 
     def test_no_cascade_resonances_returns_inert(self) -> None:
@@ -593,6 +638,9 @@ class InertCasesTest(TestCase):
 
         self.assertEqual(result.valence, "")
         self.assertEqual(result.magnitude, 0)
+        # T4: inert → interaction=None, backfire_difficulty=0
+        self.assertIsNone(result.interaction)
+        self.assertEqual(result.backfire_difficulty, 0)
 
     def test_no_affinity_interaction_row_returns_inert(self) -> None:
         """Room has resonance but no AffinityInteraction row authored → inert."""
@@ -623,6 +671,9 @@ class InertCasesTest(TestCase):
 
         self.assertEqual(result.valence, "")
         self.assertEqual(result.magnitude, 0)
+        # T4: inert → interaction=None, backfire_difficulty=0
+        self.assertIsNone(result.interaction)
+        self.assertEqual(result.backfire_difficulty, 0)
 
     def test_zero_magnitude_result_is_inert(self) -> None:
         """round(raw) == 0 → inert (valence="")."""
@@ -662,9 +713,12 @@ class InertCasesTest(TestCase):
         # raw = 1 * 0.01 * 0.30 * 1.000 = 0.003 → round = 0 → inert
         self.assertEqual(result.magnitude, 0)
         self.assertEqual(result.valence, "")
+        # T4: zero-magnitude inert → interaction=None, backfire_difficulty=0
+        self.assertIsNone(result.interaction)
+        self.assertEqual(result.backfire_difficulty, 0)
 
 
-class PresenceTimeTest(TestCase):
+class PresenceTimeTest(ResonanceCacheIsolationMixin, TestCase):
     """Presence-time (technique=None) → caster aura dominant affinity used, no gift."""
 
     def test_presence_time_uses_aura_dominant_affinity(self) -> None:
@@ -703,6 +757,13 @@ class PresenceTimeTest(TestCase):
         self.assertEqual(result.environment_affinity, celestial)
         expected = round(40 * Decimal("0.70") * Decimal("1.00") * cfg.base_coefficient)
         self.assertEqual(result.magnitude, expected)
+        # T4: OPPOSED → interaction is resolved; backfire_difficulty uses formula
+        self.assertIsNotNone(result.interaction)
+        self.assertEqual(result.interaction.kind, AffinityInteractionKind.REJECT)
+        expected_backfire = cfg.backfire_base_difficulty + round(
+            result.magnitude * float(cfg.backfire_difficulty_per_magnitude)
+        )
+        self.assertEqual(result.backfire_difficulty, expected_backfire)
 
     def test_presence_time_missing_aura_returns_inert(self) -> None:
         """technique=None + no CharacterAura → inert."""
@@ -729,3 +790,6 @@ class PresenceTimeTest(TestCase):
 
         self.assertEqual(result.valence, "")
         self.assertEqual(result.magnitude, 0)
+        # T4: inert → interaction=None, backfire_difficulty=0
+        self.assertIsNone(result.interaction)
+        self.assertEqual(result.backfire_difficulty, 0)

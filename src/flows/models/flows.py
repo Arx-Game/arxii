@@ -406,8 +406,8 @@ class FlowStepDefinition(SharedMemoryModel):
             flow_execution.set_variable(result_var, result)
         elif result_var is None and isinstance(result, dict):
             # Dict-return auto-unpack: store each key as an individual flow variable.
-            # Used by adapters that return multiple scalar values for subsequent
-            # EVALUATE_EQUALS conditional steps (e.g., flow_evaluate_resonance_environment).
+            # Used by service functions that return multiple scalar values for subsequent
+            # EVALUATE_EQUALS conditional steps.
             for var_key, var_val in result.items():
                 flow_execution.set_variable(str(var_key), var_val)
         return flow_execution.get_next_child(self)

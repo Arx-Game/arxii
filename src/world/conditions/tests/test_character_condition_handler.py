@@ -111,7 +111,11 @@ class CharacterConditionHandlerTests(EvenniaTestCase):
         char.conditions.invalidate()  # Direct mutation bypasses Task 3 invalidation
         self.assertEqual(char.conditions.resistance_modifier(fire), 0)
 
-    def test_skips_resolved_instances(self):
+    def test_resolved_instances_are_still_active(self):
+        # T7a: aligned to get_active_conditions; resolved/suppressed-expired now active.
+        # resolved_at is NOT a gate in the canonical filter — resolved conditions remain
+        # visible to the handler (and contribute resistance modifiers) just like
+        # get_active_conditions. The previous resolved_at__isnull=True clause was wrong.
         from django.utils import timezone
 
         from world.conditions.factories import (
@@ -131,7 +135,8 @@ class CharacterConditionHandlerTests(EvenniaTestCase):
         instance.resolved_at = timezone.now()
         instance.save(update_fields=["resolved_at"])
         char.conditions.invalidate()
-        self.assertEqual(char.conditions.resistance_modifier(fire), 0)
+        # resolved_at does not exclude the condition — parity with get_active_conditions
+        self.assertEqual(char.conditions.resistance_modifier(fire), 10)
 
     def test_stage_level_modifier_when_at_that_stage(self):
         from world.conditions.factories import (
