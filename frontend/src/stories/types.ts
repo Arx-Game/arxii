@@ -97,6 +97,7 @@ export interface BeatCompletion {
 export type BeatPredicateType = NonNullable<Beat['predicate_type']>;
 export type BeatOutcome = NonNullable<Beat['outcome']>;
 export type BeatVisibility = NonNullable<Beat['visibility']>;
+export type BeatKind = NonNullable<Beat['kind']>;
 export type StoryScope = NonNullable<Story['scope']>;
 export type StoryStatus = NonNullable<Story['status']>;
 export type StoryPrivacy = NonNullable<Story['privacy']>;
@@ -359,6 +360,9 @@ export interface BeatCreateBody {
   player_hint?: string;
   player_resolution_text?: string;
   order?: number;
+  kind?: BeatKind;
+  advances?: boolean;
+  risk?: number;
   agm_eligible?: boolean;
   deadline?: string | null;
 
