@@ -28,7 +28,6 @@ from integration_tests.game_content.magic import (
     RitualSeedResult,
     ThreadPullCatalogResult,
     _seed_affinity_interactions,
-    _seed_resonance_environment_conditions,
     _seed_resonance_environment_config,
     seed_canonical_affinities,
     seed_canonical_resonances,
@@ -36,6 +35,7 @@ from integration_tests.game_content.magic import (
     seed_cantrip_starter_catalog,
     seed_magic_config,
     seed_magic_dev,
+    seed_starter_magic_story,
     seed_thread_pull_catalog,
 )
 
@@ -1219,123 +1219,6 @@ class SeedHallowedAchievementBridgeTests(TestCase):
         )
 
 
-class SeedResonanceEnvironmentFlowAndTriggerTests(TestCase):
-    """RC3: _seed_resonance_environment_flow_and_trigger() tests.
-
-    Verifies:
-    - FlowDefinition created with expected name.
-    - Step count: 1 evaluate step + 3 branch conditionals (corrupt/aligned/opposed)
-      + 1 perform_check + 4 outcome conditionals + 5 apply_condition steps = 14 total.
-    - TriggerDefinition uses TECHNIQUE_CAST with empty base_filter_condition.
-    - Magically Attuned.reactive_triggers contains the TriggerDefinition.
-    - Idempotent: second call does not duplicate steps.
-    """
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        from integration_tests.game_content.magic import (
-            _seed_endure_hallowed_ground_check,
-            _seed_hallowed_reaction_conditions,
-            _seed_resonance_environment_conditions,
-        )
-
-        _seed_endure_hallowed_ground_check()
-        _seed_hallowed_reaction_conditions()
-        _seed_resonance_environment_conditions()
-
-    def test_seeds_flow_definition(self) -> None:
-        from flows.models.flows import FlowDefinition
-        from integration_tests.game_content.magic import (
-            RESONANCE_ENV_FLOW_NAME,
-            _seed_resonance_environment_flow_and_trigger,
-        )
-
-        _seed_resonance_environment_flow_and_trigger()
-        self.assertTrue(
-            FlowDefinition.objects.filter(name=RESONANCE_ENV_FLOW_NAME).exists(),
-        )
-
-    def test_seeds_expected_step_count(self) -> None:
-        """Flow should have exactly 14 steps:
-        1 evaluate + 3 branch conditionals (corrupt/aligned/opposed)
-        + 1 apply_condition (ALIGNED boon)
-        + 1 perform_check
-        + 4 outcome conditionals
-        + 4 apply_condition steps (Tempered/Singed/Burning/Hallowed Burn)
-        + 1 apply_condition (Cast Disrupted, chained child of Critical Failure)
-        = 15 total.
-        """
-        from flows.models.flows import FlowDefinition, FlowStepDefinition
-        from integration_tests.game_content.magic import (
-            RESONANCE_ENV_FLOW_NAME,
-            _seed_resonance_environment_flow_and_trigger,
-        )
-
-        _seed_resonance_environment_flow_and_trigger()
-        flow = FlowDefinition.objects.get(name=RESONANCE_ENV_FLOW_NAME)
-        step_count = FlowStepDefinition.objects.filter(flow=flow).count()
-        # 1 evaluate + 3 branch + 1 aligned boon + 1 perform_check + 4 outcome branches
-        # + 4 single-condition applies + 1 extra (Cast Disrupted chained) = 15
-        self.assertEqual(step_count, 15)
-
-    def test_seeds_trigger_definition_technique_cast(self) -> None:
-        from flows.constants import EventName
-        from flows.models.triggers import TriggerDefinition
-        from integration_tests.game_content.magic import (
-            RESONANCE_ENV_TRIGGER_NAME,
-            _seed_resonance_environment_flow_and_trigger,
-        )
-
-        _seed_resonance_environment_flow_and_trigger()
-        td = TriggerDefinition.objects.get(name=RESONANCE_ENV_TRIGGER_NAME)
-        self.assertEqual(td.event_name, EventName.TECHNIQUE_CAST)
-        # Empty filter: the primitive does the gating, no has_affinity_resonance.
-        self.assertEqual(td.base_filter_condition, {})
-
-    def test_trigger_wired_into_magically_attuned(self) -> None:
-        """Magically Attuned.reactive_triggers must include the resonance-env trigger."""
-        from flows.models.triggers import TriggerDefinition
-        from integration_tests.game_content.magic import (
-            RESONANCE_ENV_TRIGGER_NAME,
-            _seed_resonance_environment_flow_and_trigger,
-        )
-        from world.conditions.models import ConditionTemplate
-
-        _seed_resonance_environment_flow_and_trigger()
-        td = TriggerDefinition.objects.get(name=RESONANCE_ENV_TRIGGER_NAME)
-        attuned = ConditionTemplate.objects.get(name="Magically Attuned")
-        self.assertIn(td, attuned.reactive_triggers.all())
-
-    def test_idempotent_does_not_duplicate_steps(self) -> None:
-        from flows.models.flows import FlowDefinition, FlowStepDefinition
-        from integration_tests.game_content.magic import (
-            RESONANCE_ENV_FLOW_NAME,
-            _seed_resonance_environment_flow_and_trigger,
-        )
-
-        _seed_resonance_environment_flow_and_trigger()
-        flow = FlowDefinition.objects.get(name=RESONANCE_ENV_FLOW_NAME)
-        step_count_a = FlowStepDefinition.objects.filter(flow=flow).count()
-
-        _seed_resonance_environment_flow_and_trigger()
-        step_count_b = FlowStepDefinition.objects.filter(flow=flow).count()
-        self.assertEqual(step_count_a, step_count_b)
-
-    def test_idempotent_does_not_duplicate_trigger(self) -> None:
-        from flows.models.triggers import TriggerDefinition
-        from integration_tests.game_content.magic import (
-            RESONANCE_ENV_TRIGGER_NAME,
-            _seed_resonance_environment_flow_and_trigger,
-        )
-
-        _seed_resonance_environment_flow_and_trigger()
-        count_a = TriggerDefinition.objects.filter(name=RESONANCE_ENV_TRIGGER_NAME).count()
-        _seed_resonance_environment_flow_and_trigger()
-        count_b = TriggerDefinition.objects.filter(name=RESONANCE_ENV_TRIGGER_NAME).count()
-        self.assertEqual(count_a, 1)
-        self.assertEqual(count_b, 1)
-
-
 # ---------------------------------------------------------------------------
 # RC4 — _seed_resonance_environment_rooms()
 # ---------------------------------------------------------------------------
@@ -1347,8 +1230,6 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
         from integration_tests.game_content.magic import (
             _seed_endure_hallowed_ground_check,
             _seed_hallowed_reaction_conditions,
-            _seed_resonance_environment_conditions,
-            _seed_resonance_environment_flow_and_trigger,
             seed_canonical_affinities,
             seed_canonical_resonances,
         )
@@ -1357,8 +1238,6 @@ class SeedResonanceEnvironmentRoomsTests(TestCase):
         seed_canonical_resonances()
         _seed_hallowed_reaction_conditions()
         _seed_endure_hallowed_ground_check()
-        _seed_resonance_environment_conditions()
-        _seed_resonance_environment_flow_and_trigger()
 
     def test_seeds_hallowed_rejection_flavor_condition(self):
         from integration_tests.game_content.magic import _seed_resonance_environment_rooms
@@ -1626,13 +1505,12 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         """Verify all representative content from each phase is present after one call."""
         from evennia.objects.models import ObjectDB
 
-        from flows.models.triggers import TriggerDefinition
-        from integration_tests.game_content.magic import seed_starter_magic_story
         from world.achievements.models import Achievement
         from world.checks.models import CheckType
         from world.conditions.models import ConditionTemplate
         from world.magic.models.resonance_environment import (
             AffinityInteraction,
+            ResonanceAlignmentBoonTier,
             ResonanceEnvironmentConfig,
         )
         from world.stories.models import Story
@@ -1648,15 +1526,39 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         self.assertTrue(ConditionTemplate.objects.filter(name="Tempered Against Light").exists())
         # Phase C: achievement bridge
         self.assertTrue(Achievement.objects.filter(name="Hallowed-Hardened").exists())
-        # Phase RC2: Magically Attuned baseline condition
-        self.assertTrue(ConditionTemplate.objects.filter(name="Magically Attuned").exists())
         # Phase A: endure_hallowed_ground check type
         self.assertTrue(CheckType.objects.filter(name="endure_hallowed_ground").exists())
-        # Phase RC3: cast trigger
-        self.assertTrue(
-            TriggerDefinition.objects.filter(
-                name="Resonance Environment — technique cast",
-            ).exists(),
+        # T12: OPPOSED pairs #4 and #7 have consequence pools wired
+        from world.magic.models.affinity import Affinity
+
+        abyssal = Affinity.objects.get(name="Abyssal")
+        celestial = Affinity.objects.get(name="Celestial")
+        primal = Affinity.objects.get(name="Primal")
+        pair4 = AffinityInteraction.objects.get(
+            source_affinity=abyssal, environment_affinity=celestial
+        )
+        pair7 = AffinityInteraction.objects.get(
+            source_affinity=primal, environment_affinity=celestial
+        )
+        self.assertIsNotNone(pair4.consequence_pool_id, "Pair #4 must have a consequence_pool")
+        self.assertIsNotNone(pair7.consequence_pool_id, "Pair #7 must have a consequence_pool")
+        # T13: ALIGNED pair #5 has ≥2 ResonanceAlignmentBoonTier rows
+        pair5 = AffinityInteraction.objects.get(
+            source_affinity=abyssal, environment_affinity=abyssal
+        )
+        self.assertGreaterEqual(
+            ResonanceAlignmentBoonTier.objects.filter(affinity_interaction=pair5).count(),
+            2,
+            "Pair #5 (ALIGNED Abyssal) must have ≥2 boon tiers",
+        )
+        # Removal assertions: old artifact templates must NOT exist
+        self.assertFalse(
+            ConditionTemplate.objects.filter(name="Magically Attuned").exists(),
+            "Magically Attuned must not exist — removed in resonance core-service rework",
+        )
+        self.assertFalse(
+            ConditionTemplate.objects.filter(name="Empowered by Resonant Ground").exists(),
+            "Empowered by Resonant Ground must not exist — removed in core-service rework",
         )
         # Phase RC4: 3 cascade rooms
         self.assertEqual(
@@ -1672,11 +1574,25 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         # Phase F: story
         self.assertTrue(Story.objects.filter(title="The Hallowed Threshold").exists())
 
+    def test_no_universal_resonance_flow_or_trigger_seeded(self) -> None:
+        """After the master seed, no universal resonance FlowDefinition or TriggerDefinition
+        exists — those were removed by the core-service rework (T11)."""
+        from flows.models.flows import FlowDefinition
+        from flows.models.triggers import TriggerDefinition
+
+        seed_starter_magic_story()
+
+        self.assertFalse(
+            FlowDefinition.objects.filter(name__icontains="resonance environment").exists(),
+            "Universal resonance FlowDefinition must not exist after T11 removal",
+        )
+        self.assertFalse(
+            TriggerDefinition.objects.filter(name__icontains="resonance environment").exists(),
+            "Universal resonance TriggerDefinition must not exist after T11 removal",
+        )
+
     def test_orchestrator_idempotent(self) -> None:
         """Re-running on populated DB is a no-op for all relevant tables."""
-        from flows.models.flows import FlowDefinition, FlowStepDefinition
-        from flows.models.triggers import TriggerDefinition
-        from integration_tests.game_content.magic import seed_starter_magic_story
         from world.achievements.models import (
             Achievement,
             AchievementRequirement,
@@ -1689,6 +1605,7 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
         from world.magic.models.affinity import Affinity, Resonance
         from world.magic.models.resonance_environment import (
             AffinityInteraction,
+            ResonanceAlignmentBoonTier,
             ResonanceEnvironmentConfig,
         )
         from world.stories.models import (
@@ -1714,9 +1631,7 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
             "StatDefinition": StatDefinition.objects.count(),
             "Achievement": Achievement.objects.count(),
             "AchievementRequirement": AchievementRequirement.objects.count(),
-            "FlowDefinition": FlowDefinition.objects.count(),
-            "FlowStepDefinition": FlowStepDefinition.objects.count(),
-            "TriggerDefinition": TriggerDefinition.objects.count(),
+            "ResonanceAlignmentBoonTier": ResonanceAlignmentBoonTier.objects.count(),
             "LocationValueModifier": LocationValueModifier.objects.count(),
             "Story": Story.objects.count(),
             "Chapter": Chapter.objects.count(),
@@ -1740,9 +1655,7 @@ class SeedStarterMagicStoryOrchestratorTests(TestCase):
             "StatDefinition": StatDefinition.objects.count(),
             "Achievement": Achievement.objects.count(),
             "AchievementRequirement": AchievementRequirement.objects.count(),
-            "FlowDefinition": FlowDefinition.objects.count(),
-            "FlowStepDefinition": FlowStepDefinition.objects.count(),
-            "TriggerDefinition": TriggerDefinition.objects.count(),
+            "ResonanceAlignmentBoonTier": ResonanceAlignmentBoonTier.objects.count(),
             "LocationValueModifier": LocationValueModifier.objects.count(),
             "Story": Story.objects.count(),
             "Chapter": Chapter.objects.count(),
@@ -1773,8 +1686,11 @@ class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
 
     def test_seed_magic_dev_includes_starter_magic_story_content(self) -> None:
         """seed_magic_dev() should seed Hallowed Rejection + Hallowed Threshold content."""
-        from flows.models.triggers import TriggerDefinition
         from world.conditions.models import ConditionTemplate
+        from world.magic.models.resonance_environment import (
+            AffinityInteraction,
+            ResonanceAlignmentBoonTier,
+        )
         from world.stories.models import Story
 
         seed_magic_dev()
@@ -1785,14 +1701,29 @@ class TestSeedMagicDevIncludesStarterMagicStory(TestCase):
             "seed_magic_dev() must include Hallowed Rejection condition",
         )
         self.assertTrue(
-            TriggerDefinition.objects.filter(
-                name="Resonance Environment — technique cast",
-            ).exists(),
-            "seed_magic_dev() must include resonance-environment cast trigger",
-        )
-        self.assertTrue(
             Story.objects.filter(title="The Hallowed Threshold").exists(),
             "seed_magic_dev() must include Hallowed Threshold story",
+        )
+        # T12: OPPOSED consequence pools wired for pairs #4 and #7
+        from world.magic.models.affinity import Affinity
+
+        abyssal = Affinity.objects.get(name="Abyssal")
+        celestial = Affinity.objects.get(name="Celestial")
+        pair4 = AffinityInteraction.objects.get(
+            source_affinity=abyssal, environment_affinity=celestial
+        )
+        self.assertIsNotNone(
+            pair4.consequence_pool_id,
+            "seed_magic_dev() must wire consequence_pool for OPPOSED pair #4",
+        )
+        # T13: ALIGNED boon tiers seeded for pair #5
+        pair5 = AffinityInteraction.objects.get(
+            source_affinity=abyssal, environment_affinity=abyssal
+        )
+        self.assertGreaterEqual(
+            ResonanceAlignmentBoonTier.objects.filter(affinity_interaction=pair5).count(),
+            2,
+            "seed_magic_dev() must seed ≥2 boon tiers for ALIGNED Abyssal pair",
         )
 
     def test_seed_magic_dev_remains_idempotent_with_story_slice(self) -> None:
@@ -1938,79 +1869,3 @@ class SeedResonanceEnvironmentConfigTests(TestCase):
 
         cfg = ResonanceEnvironmentConfig.objects.get()
         self.assertEqual(cfg.pk, 1)
-
-
-class SeedResonanceEnvironmentConditionsTests(TestCase):
-    """RC2: _seed_resonance_environment_conditions() creates baseline + boon ConditionTemplates."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        _seed_resonance_environment_conditions()
-
-    def test_magically_attuned_exists(self) -> None:
-        from world.conditions.models import ConditionTemplate
-
-        self.assertTrue(ConditionTemplate.objects.filter(name="Magically Attuned").exists())
-
-    def test_empowered_by_resonant_ground_exists(self) -> None:
-        from world.conditions.models import ConditionTemplate
-
-        self.assertTrue(
-            ConditionTemplate.objects.filter(name="Empowered by Resonant Ground").exists()
-        )
-
-    def test_both_in_magical_category(self) -> None:
-        from world.conditions.models import ConditionCategory, ConditionTemplate
-
-        category = ConditionCategory.objects.get(name="Magical")
-        attuned = ConditionTemplate.objects.get(name="Magically Attuned")
-        empowered = ConditionTemplate.objects.get(name="Empowered by Resonant Ground")
-        self.assertEqual(attuned.category, category)
-        self.assertEqual(empowered.category, category)
-
-    def test_magically_attuned_is_permanent_and_not_dispellable(self) -> None:
-        from world.conditions.constants import DurationType
-        from world.conditions.models import ConditionTemplate
-
-        attuned = ConditionTemplate.objects.get(name="Magically Attuned")
-        self.assertEqual(attuned.default_duration_type, DurationType.PERMANENT)
-        self.assertFalse(attuned.can_be_dispelled)
-        self.assertFalse(attuned.has_progression)
-
-    def test_empowered_is_dispellable_boon(self) -> None:
-        from world.conditions.constants import DurationType
-        from world.conditions.models import ConditionTemplate
-
-        empowered = ConditionTemplate.objects.get(name="Empowered by Resonant Ground")
-        self.assertEqual(empowered.default_duration_type, DurationType.ROUNDS)
-        self.assertTrue(empowered.can_be_dispelled)
-        self.assertFalse(empowered.has_progression)
-
-    def test_idempotent(self) -> None:
-        from world.conditions.models import ConditionTemplate
-
-        count_before = ConditionTemplate.objects.filter(
-            name__in=["Magically Attuned", "Empowered by Resonant Ground"]
-        ).count()
-        _seed_resonance_environment_conditions()
-        count_after = ConditionTemplate.objects.filter(
-            name__in=["Magically Attuned", "Empowered by Resonant Ground"]
-        ).count()
-        self.assertEqual(count_before, count_after)
-        self.assertEqual(count_after, 2)
-
-    def test_does_not_create_opposed_reaction_conditions(self) -> None:
-        """The helper must not create Tempered/Singed/Burning/Hallowed Burn/Cast Disrupted."""
-        from world.conditions.models import ConditionTemplate
-
-        opposed_names = [
-            "Tempered Against Light",
-            "Singed",
-            "Burning",
-            "Hallowed Burn",
-            "Cast Disrupted",
-        ]
-        self.assertFalse(
-            ConditionTemplate.objects.filter(name__in=opposed_names).exists(),
-            "Opposed reaction conditions must not be created by this helper",
-        )

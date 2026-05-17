@@ -8,6 +8,8 @@ creation commands.
 
 """
 
+import contextlib
+
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
 from django.utils.functional import cached_property
@@ -20,6 +22,10 @@ from flows.events.payloads import AttackLandedPayload, MovePreDepartPayload
 from flows.object_states.character_state import CharacterState
 from flows.service_functions.serializers import build_room_state_payload
 from typeclasses.mixins import ObjectParent
+from world.magic.services.resonance_environment import (
+    clear_resonance_alignment,
+    refresh_resonance_alignment,
+)
 from world.roster.models import RosterEntry
 
 
@@ -235,12 +241,18 @@ class Character(ObjectParent, DefaultCharacter):
         """Handle actions after moving to a new location.
 
         Sends updated room state to the frontend after movement.
+        Reconciles the presence-tied resonance-alignment buff for the new location.
         """
         # Call parent method to handle trigger registration
         super().at_post_move(source_location, move_type=move_type, **kwargs)
 
         # Send room state to frontend
         self.send_room_state()
+
+        # Reconcile presence-tied ALIGNED resonance buff for arrival location.
+        # Guard mirrors at_post_puppet: some Character-typeclass objects have no sheet.
+        with contextlib.suppress(RosterEntry.DoesNotExist, ObjectDoesNotExist):
+            refresh_resonance_alignment(character_sheet=self.sheet_data)
 
     def at_attacked(self, attacker, weapon, damage_result, action) -> None:
         """Called by combat after damage calc, before damage apply.
@@ -273,6 +285,12 @@ class Character(ObjectParent, DefaultCharacter):
         result = super().at_pre_move(destination, move_type=move_type, **kwargs)
         if result is False:
             return False  # Evennia-side cancel; skip emission
+        # departure-to-no-room: explicit clear so the buff doesn't linger on a
+        # character with no location (normal room→room transit is reconciled by
+        # at_post_move on the destination side; only this special case needs clearing here).
+        if destination is None:
+            with contextlib.suppress(RosterEntry.DoesNotExist, ObjectDoesNotExist):
+                clear_resonance_alignment(character_sheet=self.sheet_data)
         if origin is None:
             return True  # No location to dispatch from; allow the move.
         payload = MovePreDepartPayload(
@@ -302,3 +320,7 @@ class Character(ObjectParent, DefaultCharacter):
         target = [session] if session else self.sessions.all()
         for sess in target:
             sess.msg(commands=([], {}))
+
+        # Clear presence-tied resonance buff on logout; character is no longer present.
+        with contextlib.suppress(RosterEntry.DoesNotExist, ObjectDoesNotExist):
+            clear_resonance_alignment(character_sheet=self.sheet_data)

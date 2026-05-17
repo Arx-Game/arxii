@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
     from actions.base import Action
     from actions.models import ActionEnhancement
+    from actions.models.consequence_pools import ConsequencePoolEntry
     from flows.scene_data_manager import SceneDataManager
     from world.checks.models import Consequence
     from world.checks.types import CheckResult
@@ -152,6 +153,20 @@ class WeightedConsequence:
     @property
     def pk(self) -> int | None:
         return self.consequence.pk
+
+
+def _entry_to_weighted(entry: ConsequencePoolEntry) -> WeightedConsequence:
+    """Convert a single ConsequencePoolEntry to a WeightedConsequence.
+
+    Uses weight_override when set; falls back to the consequence's own weight.
+    """
+    consequence = entry.consequence
+    weight_override = entry.weight_override
+    return WeightedConsequence(
+        consequence=consequence,
+        weight=weight_override if weight_override is not None else consequence.weight,
+        character_loss=consequence.character_loss,
+    )
 
 
 @dataclass

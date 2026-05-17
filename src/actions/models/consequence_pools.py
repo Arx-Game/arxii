@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from actions.types import WeightedConsequence, _entry_to_weighted
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 
 
@@ -41,6 +43,45 @@ class ConsequencePool(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    @cached_property
+    def cached_consequences(self) -> list[WeightedConsequence]:
+        """Resolved WeightedConsequences for this pool. Supports Prefetch(to_attr=).
+
+        Returns elements compatible with select_consequence() — each exposes
+        .outcome_tier, .weight, .label, and .character_loss.
+
+        For pools without a parent: returns own non-excluded entries as
+        WeightedConsequence objects (effective weight = weight_override or
+        consequence.weight).
+        For child pools: merges parent entries with child entries, honoring
+        child exclusions (removes the parent row) and child overrides (replaces
+        the parent row's weight with the child's weight_override).
+        Single-depth inheritance only — callers must not chain parent lookups.
+        """
+        own_entries = list(self.entries.select_related("consequence"))
+
+        if self.parent_id is None:
+            return [_entry_to_weighted(e) for e in own_entries if not e.is_excluded]
+
+        parent_entries = list(self.parent.entries.select_related("consequence"))
+
+        # Build an ordered dict keyed by consequence_id so child rows can
+        # override or remove parent rows while preserving insertion order.
+        merged: dict[int, WeightedConsequence] = {}
+        for entry in parent_entries:
+            if not entry.is_excluded:
+                merged[entry.consequence_id] = _entry_to_weighted(entry)
+
+        for entry in own_entries:
+            cid = entry.consequence_id
+            if entry.is_excluded:
+                merged.pop(cid, None)
+            else:
+                # Child entry overrides or re-lists the parent's consequence
+                merged[cid] = _entry_to_weighted(entry)
+
+        return list(merged.values())
 
     def clean(self) -> None:
         super().clean()

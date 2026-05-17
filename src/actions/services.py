@@ -10,6 +10,7 @@ from actions.types import (
     SceneActionResult,
     StepResult,
     WeightedConsequence,
+    _entry_to_weighted,
 )
 from world.checks.consequence_resolution import (
     apply_resolution,
@@ -70,17 +71,6 @@ def _entries_to_weighted(
 ) -> list[WeightedConsequence]:
     """Convert pool entries to WeightedConsequence list, skipping excluded."""
     return [_entry_to_weighted(e) for e in entries if not e.is_excluded]
-
-
-def _entry_to_weighted(entry: ConsequencePoolEntry) -> WeightedConsequence:
-    """Convert a single ConsequencePoolEntry to WeightedConsequence."""
-    consequence = entry.consequence
-    weight_override = entry.weight_override
-    return WeightedConsequence(
-        consequence=consequence,
-        weight=weight_override if weight_override is not None else consequence.weight,
-        character_loss=consequence.character_loss,
-    )
 
 
 # ---------------------------------------------------------------------------

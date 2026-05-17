@@ -1,33 +1,62 @@
 """End-to-end pipeline test for the magic-story slice.
 
-Validates: Abyssal-aura caster uses an Abyssal-affinity technique in a
-Celestial-cascade room → TECHNIQUE_CAST fires → "Magically Attuned" reactive
-trigger runs → flow_evaluate_resonance_environment returns OPPOSED/REJECT →
-perform_check at computed backfire difficulty → condition applied → beat
-satisfies → story progresses → narrative messages published → achievement
-granted.
+Validates the REAL production path introduced by the 2026-05-16 resonance-environment
+universal-path spec:
 
-Cascade math for the Low room (test_low_opposed_success):
+OPPOSED path (no flow/trigger):
+  Abyssal-aura caster uses an Abyssal-affinity technique in a Celestial cascade room
+  → use_technique orchestrator Step 10 calls resonance_environment_for_cast(...)
+  → OPPOSED REJECT interaction → endure_hallowed_ground check at backfire_difficulty
+  → select_consequence_from_result over the seeded ConsequencePool
+  → apply_resolution applies the per-CheckOutcome injury ConditionTemplate(s)
+  → condition applied → beat satisfies → story progresses → achievement granted.
+
+ALIGNED path (presence-tied, movement hook):
+  Abyssal caster moves into Abyssal-cascade room
+  → at_post_move fires refresh_resonance_alignment(character_sheet=sheet_data)
+  → ALIGNED AMPLIFY interaction → band-selected boon ConditionTemplate applied.
+  Move out → buff cleared. No check, no story movement.
+
+Quiescent path:
+  CharacterSheet with no CharacterAura → resonance_environment_for_cast and
+  refresh_resonance_alignment return inert immediately (magical_profile returns None).
+
+CORRUPT stub:
+  Strong abyssal caster in weak primal room → primitive returns CASTER_DOMINANT/CORRUPT
+  → cast service treats it as inert (no condition applied), direction still computed.
+
+Discovery semantics:
+  First earner of Hallowed-Hardened gets a Discovery row; second earner does not.
+
+Cascade math for the Low celestial room (magnitude=10):
   AffinityInteraction(Abyssal→Celestial): OPPOSED, REJECT, severity=1.00
-  place_magnitude = effective_value(low_room, Light resonance) = 10
   caster_alignment = aura.abyssal / 100 = 100/100 = 1.0
   raw = 10 * 1.0 * 1.00 * base_coefficient(1.000) = 10.0
   magnitude = round(10.0) = 10
   backfire_difficulty = 30 + round(10 * 0.500) = 35
 
+Cascade math for the High celestial room (magnitude=80):
+  magnitude = 80 (same affinity/severity/alignment)
+  backfire_difficulty = 30 + round(80 * 0.500) = 70
+
+ALIGNED room (Abyssal/Dissolution, magnitude=60):
+  60 >= HIGH band threshold (min_magnitude=40) → "Abyssal Resonance — Deep Attunement"
+
 Test data dependencies (seeded by seed_starter_magic_story):
-- ConditionTemplate "Magically Attuned" (ubiquitous baseline; its
-  reactive_triggers M2M holds the TECHNIQUE_CAST TriggerDefinition)
 - ConditionTemplate "Singed", "Burning", "Tempered Against Light",
   "Hallowed Burn", "Cast Disrupted"
-- TriggerDefinition "Resonance Environment — technique cast"
-- FlowDefinition "Resonance Environment reactive flow"
-- Room "The Hallowed Threshold (Low)" — Celestial cascade magnitude 10
-- Room "The Hallowed Threshold (High)" — Celestial cascade magnitude 80
+- ConditionTemplate "Abyssal Resonance — Minor Attunement" (min_magnitude=1)
+- ConditionTemplate "Abyssal Resonance — Deep Attunement" (min_magnitude=40)
+- ResonanceAlignmentBoonTier rows on pair #5 (Abyssal→Abyssal)
+- Room "The Hallowed Threshold (Low)"   — Celestial cascade magnitude 10
+- Room "The Hallowed Threshold (High)"  — Celestial cascade magnitude 80
 - Room "The Resonant Sanctum (Aligned)" — Abyssal cascade magnitude 60
-- AffinityInteraction (Abyssal→Celestial) OPPOSED/REJECT/severity=1.00
+- AffinityInteraction (Abyssal→Celestial) OPPOSED/REJECT/severity=1.00  (pair #4)
+- AffinityInteraction (Abyssal→Abyssal)  ALIGNED/AMPLIFY/severity=1.00  (pair #5)
+- AffinityInteraction (Abyssal→Primal)   OPPOSED/CORRUPT/aggressor=caster (pair #6)
 - ResonanceEnvironmentConfig (base_coefficient=1.000, caster_power_scalar=0.500,
-  backfire_base_difficulty=30, backfire_difficulty_per_magnitude=0.500)
+  backfire_base_difficulty=30, backfire_difficulty_per_magnitude=0.500, balanced_band=10)
+- ConsequencePool for pair #4 with 4 Consequence rows keyed by CheckOutcome
 - Story "The Hallowed Threshold" with Chapter/Episodes/Beats/Transitions/TROs
 - Achievements "Hallowed-Hardened", "Touched by Light", "Cast Out by the Light"
 - CheckOutcomes "Critical Success", "Success", "Failure", "Critical Failure"
@@ -44,7 +73,7 @@ from parameterized import parameterized
 from integration_tests.game_content.magic import seed_starter_magic_story
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.test_helpers import force_check_outcome
-from world.conditions.services import apply_condition
+from world.conditions.models import ConditionInstance
 from world.magic.constants import AffinityInteractionKind, ResonanceDirection
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -52,14 +81,25 @@ from world.magic.factories import (
     GiftFactory,
     TechniqueFactory,
 )
+from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
 from world.magic.services.resonance_environment import evaluate_resonance_environment
 from world.magic.services.techniques import use_technique
+from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.traits.models import CheckOutcome
 
 
-class MagicStoryPipelineTests(EvenniaTestCase):
-    """Full pipeline: Abyssal caster + Abyssal technique + Magically Attuned
-    trigger → OPPOSED resonance check → condition → beat → story → achievement."""
+class MagicStoryPipelineTests(ResonanceCacheIsolationMixin, EvenniaTestCase):
+    """Full pipeline: Abyssal caster + Abyssal technique → OPPOSED resonance backfire
+    via Step 10 in use_technique orchestrator → condition → beat → story → achievement.
+
+    Cache-sensitive rows (AffinityInteraction, ResonanceAlignmentBoonTier) are
+    created by seed_starter_magic_story() inside setUpTestData. Because
+    ResonanceCacheIsolationMixin.setUp() clears the manager caches BEFORE super().setUp(),
+    and setUpTestData runs once per class (before any setUp call), the cache is cleared
+    fresh before each test — which forces a real DB load on first access. This is the
+    correct isolation pattern: setUpTestData populates the DB, setUp clears the cache,
+    the test re-warms from clean state.
+    """
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -72,32 +112,54 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         from world.magic.models.affinity import Resonance
         from world.stories.models import Story
 
-        cls.magically_attuned = ConditionTemplate.objects.get(name="Magically Attuned")
+        # Store PKs only for Evennia ObjectDB instances — they carry a DbHolder which is
+        # not deepcopy-safe (Django's setUpTestData wraps class attrs in deepcopy when
+        # accessed from instance methods). Re-fetching by PK in setUp avoids the error.
+        # SharedMemoryModel instances (ConditionTemplate, Resonance, Story) are copyable.
         cls.singed_template = ConditionTemplate.objects.get(name="Singed")
         cls.tempered_template = ConditionTemplate.objects.get(name="Tempered Against Light")
         cls.burning_template = ConditionTemplate.objects.get(name="Burning")
         cls.hallowed_burn_template = ConditionTemplate.objects.get(name="Hallowed Burn")
         cls.cast_disrupted_template = ConditionTemplate.objects.get(name="Cast Disrupted")
 
-        # Low room: Celestial cascade magnitude 10
-        # backfire_difficulty = 30 + round(10 * 0.5) = 35
-        cls.low_room = ObjectDB.objects.filter(
-            db_key="The Hallowed Threshold (Low)",
-            db_typeclass_path="typeclasses.rooms.Room",
-        ).first()
+        # ALIGNED boon templates seeded by T13
+        cls.minor_attunement_template = ConditionTemplate.objects.get(
+            name="Abyssal Resonance — Minor Attunement"
+        )
+        cls.deep_attunement_template = ConditionTemplate.objects.get(
+            name="Abyssal Resonance — Deep Attunement"
+        )
 
-        # High room: Celestial cascade magnitude 80
-        # backfire_difficulty = 30 + round(80 * 0.5) = 70
-        cls.high_room = ObjectDB.objects.filter(
-            db_key="The Hallowed Threshold (High)",
-            db_typeclass_path="typeclasses.rooms.Room",
-        ).first()
+        # Store PKs for Evennia ObjectDB rooms — re-fetched in setUp to avoid DbHolder deepcopy.
+        # Low room: Celestial cascade magnitude 10  → backfire_difficulty = 35
+        cls.low_room_pk = (
+            ObjectDB.objects.filter(
+                db_key="The Hallowed Threshold (Low)",
+                db_typeclass_path="typeclasses.rooms.Room",
+            )
+            .values_list("pk", flat=True)
+            .first()
+        )
 
-        # Aligned room: Abyssal cascade magnitude 60 (for ALIGNED boon tests)
-        cls.aligned_room = ObjectDB.objects.filter(
-            db_key="The Resonant Sanctum (Aligned)",
-            db_typeclass_path="typeclasses.rooms.Room",
-        ).first()
+        # High room: Celestial cascade magnitude 80 → backfire_difficulty = 70
+        cls.high_room_pk = (
+            ObjectDB.objects.filter(
+                db_key="The Hallowed Threshold (High)",
+                db_typeclass_path="typeclasses.rooms.Room",
+            )
+            .values_list("pk", flat=True)
+            .first()
+        )
+
+        # Aligned room: Abyssal cascade magnitude 60 → Deep Attunement (min_magnitude=40)
+        cls.aligned_room_pk = (
+            ObjectDB.objects.filter(
+                db_key="The Resonant Sanctum (Aligned)",
+                db_typeclass_path="typeclasses.rooms.Room",
+            )
+            .values_list("pk", flat=True)
+            .first()
+        )
 
         cls.story = Story.objects.get(title="The Hallowed Threshold")
 
@@ -105,7 +167,16 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         cls.dissolution_resonance = Resonance.objects.get(name="Dissolution")
 
     def setUp(self) -> None:
-        super().setUp()
+        super().setUp()  # ResonanceCacheIsolationMixin.setUp() clears caches first
+
+        from evennia.objects.models import ObjectDB
+
+        # Re-fetch Evennia ObjectDB rooms by PK to get live instances (not deepcopy wrappers).
+        # The DbHolder on ObjectDB instances is not deepcopy-safe; storing PKs in
+        # setUpTestData and re-fetching here avoids the Django TestCase deepcopy error.
+        self.low_room = ObjectDB.objects.get(pk=self.low_room_pk)
+        self.high_room = ObjectDB.objects.get(pk=self.high_room_pk)
+        self.aligned_room = ObjectDB.objects.get(pk=self.aligned_room_pk)
 
         # Build an Abyssal-aura caster.  CharacterSheetFactory creates an
         # ObjectDB character + CharacterSheet + PRIMARY Persona in one shot.
@@ -139,22 +210,11 @@ class MagicStoryPipelineTests(EvenniaTestCase):
             anima_cost=1,
         )
 
-        # Apply "Magically Attuned" to the caster.
-        # This installs the TECHNIQUE_CAST TriggerDefinition as a Trigger on
-        # the caster via the T8/T10 ConditionTemplateReactiveHandler path.
-        # Place the caster in the low room first so apply_condition has a valid
-        # location (it fires CONDITION_PRE_APPLY against target's location).
+        # Place caster in the low room by default (most OPPOSED subtests start here).
+        # No apply_condition("Magically Attuned") — that baseline condition is deleted.
+        # The production path is gated on CharacterAura presence alone (magical_profile).
         self.caster.location = self.low_room
         self.caster.save()
-
-        result = apply_condition(
-            target=self.caster,
-            condition=self.magically_attuned,
-        )
-        self.assertTrue(
-            result.success,
-            f"Magically Attuned must apply cleanly; got: {result.message}",
-        )
 
         # Populate StoryProgress pointing at Episode 1.
         from world.stories.models import Episode, StoryProgress
@@ -179,6 +239,20 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         }
         self.caster.location = room_map[intensity]
         self.caster.save()
+
+    def _boon_condition_template_pks(self) -> set[int]:
+        """Return PKs of all seeded resonance-alignment boon templates."""
+        return {t.pk for t in ResonanceAlignmentBoonTier.objects.boon_condition_templates()}
+
+    def _boon_instances_on_caster(self) -> list[ConditionInstance]:
+        """Return ConditionInstance rows on caster whose template is a boon template."""
+        boon_pks = self._boon_condition_template_pks()
+        return list(
+            ConditionInstance.objects.filter(
+                target=self.caster,
+                condition__pk__in=boon_pks,
+            )
+        )
 
     # -------------------------------------------------------------------------
     # T0-T7: parametrized across all 8 outcome × intensity combinations
@@ -270,28 +344,35 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         expected_achievement: str | None,
         expected_difficulty: int,
     ) -> None:
-        """Cast technique → resonance check → condition → beat → story → achievement.
+        """Cast technique → resonance backfire (REAL Step 10 path) → condition → beat → story.
+
+        Also asserts achievement when expected_achievement is not None.
 
         Parametrized across 4 CheckOutcomes × 2 intensity tiers = 8 subtests.
 
         Low room (celestial mag 10):  backfire_difficulty = 30 + round(10 × 0.5) = 35
         High room (celestial mag 80): backfire_difficulty = 30 + round(80 × 0.5) = 70
+
+        The caster has an Abyssal CharacterAura and an Abyssal Technique.
+        use_technique orchestrator Step 10 calls resonance_environment_for_cast,
+        which runs an OPPOSED check (endure_hallowed_ground) against the seeded pool
+        and applies the correct injury ConditionTemplate per CheckOutcome outcome.
+        No flow, no trigger, no "Magically Attuned" — this is the production path.
         """
         self._place_caster_in(intensity)
 
         # ------------------------------------------------------------------
         # T0: Pre-state assertions
         # ------------------------------------------------------------------
-        from flows.models.triggers import Trigger
         from world.achievements.models import CharacterAchievement
         from world.stories.constants import BeatOutcome
         from world.stories.models import Beat
 
-        # Magically Attuned should have auto-installed exactly 1 reactive Trigger.
+        # No reaction conditions exist yet (Magically Attuned was removed).
         self.assertEqual(
-            Trigger.objects.filter(obj=self.caster).count(),
-            1,
-            "Magically Attuned should have auto-installed exactly 1 reactive Trigger",
+            ConditionInstance.objects.filter(target=self.caster).count(),
+            0,
+            "No ConditionInstances should exist on caster before cast",
         )
 
         # All beats in Episode 1 should be UNSATISFIED before the cast.
@@ -315,10 +396,9 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         # ------------------------------------------------------------------
         # T1: Cast inside force_check_outcome(outcome)
         #
-        # The force_check_outcome context manager intercepts the NEXT
-        # perform_check call (which happens inside the reactive flow after
-        # TECHNIQUE_CAST fires) and returns a synthetic CheckResult.
-        # The capture object records check_type + target_difficulty.
+        # force_check_outcome intercepts the NEXT perform_check call, which
+        # happens inside resonance_environment_for_cast (Step 10 of orchestrator).
+        # The capture records check_type + target_difficulty.
         # ------------------------------------------------------------------
         forced_outcome = CheckOutcome.objects.get(name=outcome_name)
         with force_check_outcome(forced_outcome) as capture:
@@ -346,15 +426,15 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         )
 
         # ------------------------------------------------------------------
-        # T3: Expected reaction condition applied to caster
+        # T3: Expected reaction condition applied to caster via Step 10
         #
-        # The reactive flow's EVALUATE_EQUALS branch for the outcome fires
-        # flow_apply_condition(target=caster, condition_name=<expected_condition>).
-        # That calls apply_condition which creates a ConditionInstance.
+        # resonance_environment_for_cast → select_consequence_from_result
+        # over the seeded ConsequencePool → apply_resolution applies the
+        # APPLY_CONDITION effect targeting the caster.
         #
         # For Critical Failure: also assert "Cast Disrupted" was applied.
         # ------------------------------------------------------------------
-        from world.conditions.models import ConditionInstance, ConditionTemplate
+        from world.conditions.models import ConditionTemplate
 
         expected_cond_template = ConditionTemplate.objects.get(name=expected_condition)
         self.assertTrue(
@@ -414,9 +494,6 @@ class MagicStoryPipelineTests(EvenniaTestCase):
 
         # ------------------------------------------------------------------
         # T5: StoryProgress advances to expected destination episode
-        #
-        # resolve_episode selects the unique eligible transition (AUTO mode)
-        # and advances progress to the appropriate destination.
         # ------------------------------------------------------------------
         from world.stories.models import Episode, EpisodeResolution
         from world.stories.services.episodes import resolve_episode
@@ -445,10 +522,6 @@ class MagicStoryPipelineTests(EvenniaTestCase):
 
         # ------------------------------------------------------------------
         # T6: NarrativeMessage rows for beat completion and episode resolution
-        #
-        # notify_beat_completion and notify_episode_resolution both create
-        # NarrativeMessage rows with related_beat_completion /
-        # related_episode_resolution FKs.
         # ------------------------------------------------------------------
         from world.narrative.models import NarrativeMessage
 
@@ -478,11 +551,6 @@ class MagicStoryPipelineTests(EvenniaTestCase):
 
         # ------------------------------------------------------------------
         # T7: Achievement assertions
-        #
-        # If expected_achievement is not None: CharacterAchievement granted;
-        # Discovery row exists (first earner in this fresh per-test state).
-        # If expected_achievement is None (Failure path): no CharacterAchievement
-        # should have been granted.
         # ------------------------------------------------------------------
         from world.achievements.models import Achievement, CharacterAchievement, Discovery
 
@@ -506,55 +574,54 @@ class MagicStoryPipelineTests(EvenniaTestCase):
             )
 
     # -------------------------------------------------------------------------
-    # T8: ALIGNED amplification — boon applied, no check, no story movement
+    # T8: ALIGNED amplification — real movement, boon applied, no check, no story movement
     # -------------------------------------------------------------------------
 
     def test_aligned_amplification(self) -> None:
-        """Abyssal caster in Abyssal Sanctum (ALIGNED/AMPLIFY) → Empowered boon, no backfire.
+        """Abyssal caster moves into Abyssal Sanctum (ALIGNED/AMPLIFY) → boon applied.
 
-        Abyssal→Abyssal AffinityInteraction: ALIGNED / AMPLIFY / severity=1.00.
-        The flow short-circuits at Step 3 (aligned_branch PASS) and applies
-        "Empowered by Resonant Ground" directly — no perform_check is ever issued.
+        Uses the REAL movement hook (at_post_move) rather than a direct service call.
+        magnitude=60 ≥ HIGH band threshold (min_magnitude=40) → "Abyssal Resonance —
+        Deep Attunement" is selected. No perform_check is ever issued (ALIGNED path does
+        not trigger backfire). StoryProgress remains at "Stepping Into Light" — ALIGNED
+        does not satisfy any hallowed-threshold beat.
 
         Assertions:
-          - "Empowered by Resonant Ground" ConditionInstance on caster.
-          - No reaction conditions (Singed / Burning / Tempered / Hallowed Burn /
-            Cast Disrupted) applied.
-          - StoryProgress still at "Stepping Into Light" (ALIGNED path does not
-            satisfy any hallowed-threshold beat).
-          - force_check_outcome capture records no check was intercepted (the context
-            manager's target_difficulty stays None when no check fires).
+          - "Abyssal Resonance — Deep Attunement" ConditionInstance on caster.
+          - Exactly one boon ConditionInstance (no stacking).
+          - No OPPOSED reaction conditions applied.
+          - StoryProgress still at "Stepping Into Light".
+          - force_check_outcome capture records no check was intercepted.
         """
-        self._place_caster_in("aligned")
-
-        from world.conditions.models import ConditionInstance, ConditionTemplate
-
-        empowered_template = ConditionTemplate.objects.get(name="Empowered by Resonant Ground")
+        # Place caster in aligned room and fire at_post_move (real hook).
+        self.caster.db_location = self.aligned_room
+        self.caster.save(update_fields=["db_location"])
 
         forced_outcome = CheckOutcome.objects.get(name="Success")
         with force_check_outcome(forced_outcome) as capture:
-            use_technique(
-                character=self.caster,
-                technique=self.technique,
-                resolve_fn=MagicMock(return_value="resolve_result"),
-            )
+            self.caster.at_post_move(source_location=self.low_room)
 
-        # No perform_check was called — the capture should not have been exercised.
+        # No perform_check was called.
         self.assertIsNone(
             capture.target_difficulty,
-            "ALIGNED branch must not call perform_check; force_check_outcome should be unused",
+            "ALIGNED path must not call perform_check; force_check_outcome should be unused",
         )
 
-        # "Empowered by Resonant Ground" must have been applied by the flow.
-        self.assertTrue(
-            ConditionInstance.objects.filter(
-                target=self.caster,
-                condition=empowered_template,
-            ).exists(),
-            "'Empowered by Resonant Ground' must be applied to caster in ALIGNED room",
+        # "Abyssal Resonance — Deep Attunement" (band = HIGH, min_magnitude=40,
+        # seeded Abyssal Sanctum magnitude=60 ≥ 40) must be applied.
+        boon_instances = self._boon_instances_on_caster()
+        self.assertEqual(
+            len(boon_instances),
+            1,
+            "Expected exactly one boon ConditionInstance after at_post_move into aligned room",
+        )
+        self.assertEqual(
+            boon_instances[0].condition_id,
+            self.deep_attunement_template.pk,
+            "Expected 'Abyssal Resonance — Deep Attunement' (HIGH band, magnitude 60 ≥ 40)",
         )
 
-        # No reaction/backfire conditions should have been applied.
+        # No OPPOSED reaction conditions should have been applied.
         reaction_templates = [
             self.singed_template,
             self.burning_template,
@@ -571,13 +638,62 @@ class MagicStoryPipelineTests(EvenniaTestCase):
                 f"Reaction condition '{tmpl.name}' must NOT be applied in ALIGNED room",
             )
 
-        # StoryProgress must remain at "Stepping Into Light" — ALIGNED path does not
-        # satisfy any hallowed-threshold beat, so no episode transition occurs.
+        # StoryProgress must remain at "Stepping Into Light".
         self.progress.refresh_from_db()
         self.assertEqual(
             self.progress.current_episode,
             self.episode_1,
-            "StoryProgress must remain at 'Stepping Into Light' after ALIGNED cast",
+            "StoryProgress must remain at 'Stepping Into Light' after ALIGNED move",
+        )
+
+    def test_aligned_move_out_removes_buff(self) -> None:
+        """Moving OUT of the aligned room clears the boon (at_post_move into non-aligned room).
+
+        Step 1: move INTO aligned room → Deep Attunement buff applied.
+        Step 2: move INTO non-aligned (low celestial) room → buff cleared by refresh.
+
+        No check, no story movement on either step.
+        """
+
+        # Step 1: apply buff by firing at_post_move into the aligned room.
+        self.caster.db_location = self.aligned_room
+        self.caster.save(update_fields=["db_location"])
+        self.caster.at_post_move(source_location=self.low_room)
+
+        boon_instances = self._boon_instances_on_caster()
+        self.assertEqual(len(boon_instances), 1, "Expected buff after move into aligned room")
+        self.assertEqual(boon_instances[0].condition_id, self.deep_attunement_template.pk)
+
+        # Step 2: move to the non-aligned (Celestial) low room → buff removed.
+        self.caster.db_location = self.low_room
+        self.caster.save(update_fields=["db_location"])
+        self.caster.at_post_move(source_location=self.aligned_room)
+
+        boon_instances_after = self._boon_instances_on_caster()
+        self.assertEqual(
+            len(boon_instances_after),
+            0,
+            "Expected boon removed after at_post_move into non-aligned (celestial) room",
+        )
+
+    def test_aligned_no_stacking_on_double_move(self) -> None:
+        """Two consecutive at_post_move calls into the same aligned room → exactly one buff.
+
+        Idempotency guarantee: refresh_resonance_alignment clears then re-applies,
+        so calling it twice must not create two ConditionInstances.
+        """
+        self.caster.db_location = self.aligned_room
+        self.caster.save(update_fields=["db_location"])
+
+        self.caster.at_post_move(source_location=self.low_room)
+        self.caster.at_post_move(source_location=self.aligned_room)  # second fire
+
+        boon_instances = self._boon_instances_on_caster()
+        self.assertEqual(
+            len(boon_instances),
+            1,
+            "Expected exactly one boon ConditionInstance after two at_post_move calls "
+            "(no stacking)",
         )
 
     # -------------------------------------------------------------------------
@@ -585,16 +701,14 @@ class MagicStoryPipelineTests(EvenniaTestCase):
     # -------------------------------------------------------------------------
 
     def test_inert_short_circuit(self) -> None:
-        """Caster in a room with no resonance cascade → primitive returns inert, flow ends.
+        """Caster in a room with no resonance cascade → primitive returns inert, no effect.
 
         The room has no LocationValueModifier rows (key_type=RESONANCE), so
-        _get_room_resonances() returns [] and the primitive returns inert immediately.
-        The flow Step 1 dict-unpacks resonance_valence="" / resonance_kind="";
-        Step 2 CORRUPT check FAILs (kind is ""); Step 3 ALIGNED check FAILs (valence
-        is ""); Step 4 OPPOSED check FAILs (valence is "") → END.
+        evaluate_resonance_environment returns inert immediately.
+        resonance_environment_for_cast returns inert — no condition applied.
 
         Assertions:
-          - No ConditionInstance of any kind on caster (not Empowered, not reaction).
+          - No ConditionInstance of any kind on caster.
           - StoryProgress still at "Stepping Into Light".
           - No perform_check called.
         """
@@ -614,8 +728,6 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         self.caster.location = inert_room
         self.caster.save()
 
-        from world.conditions.models import ConditionInstance
-
         forced_outcome = CheckOutcome.objects.get(name="Success")
         with force_check_outcome(forced_outcome) as capture:
             use_technique(
@@ -624,19 +736,18 @@ class MagicStoryPipelineTests(EvenniaTestCase):
                 resolve_fn=MagicMock(return_value="resolve_result"),
             )
 
-        # No check was called.
+        # No check was called — inert path short-circuits before perform_check.
         self.assertIsNone(
             capture.target_difficulty,
             "Inert path must not call perform_check",
         )
 
-        # No conditions applied by the flow (Magically Attuned was applied in setUp
-        # and must remain the only ConditionInstance on the caster).
+        # No conditions applied (no Magically Attuned either — that was removed).
         post_cast_count = ConditionInstance.objects.filter(target=self.caster).count()
         self.assertEqual(
             post_cast_count,
-            1,
-            "Only 'Magically Attuned' (applied in setUp) should exist; inert flow adds nothing",
+            0,
+            "No ConditionInstances should exist after inert cast in untagged room",
         )
 
         # StoryProgress unchanged.
@@ -648,7 +759,80 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         )
 
     # -------------------------------------------------------------------------
-    # T10: CASTER_DOMINANT stub — strong abyssal caster vs weak primal room
+    # T10: Quiescent — no CharacterAura → magical_profile returns None → inert
+    # -------------------------------------------------------------------------
+
+    def test_quiescent_no_aura_cast_is_inert(self) -> None:
+        """CharacterSheet with no CharacterAura → resonance_environment_for_cast is a no-op.
+
+        magical_profile(character_sheet) returns None when no CharacterAura exists.
+        resonance_environment_for_cast short-circuits at the predicate gate —
+        no check, no condition, no error.
+
+        This is the Quiescent case: an NPC sheet or not-yet-finalized character
+        has no aura and thus no resonance-environment reaction.
+        """
+        from world.magic.models.aura import CharacterAura
+
+        # Create a sheet with no aura — explicitly delete any that might exist.
+        quiescent_sheet = CharacterSheetFactory()
+        CharacterAura.objects.filter(character=quiescent_sheet.character).delete()
+        quiescent_sheet.character.location = self.low_room
+        quiescent_sheet.character.save()
+
+        # Build technique and anima so use_technique can proceed.
+        CharacterAnimaFactory(character=quiescent_sheet.character, current=20, maximum=20)
+
+        forced_outcome = CheckOutcome.objects.get(name="Success")
+        with force_check_outcome(forced_outcome) as capture:
+            use_technique(
+                character=quiescent_sheet.character,
+                technique=self.technique,
+                resolve_fn=MagicMock(return_value="resolve_result"),
+            )
+
+        # Quiescent → no check issued.
+        self.assertIsNone(
+            capture.target_difficulty,
+            "Quiescent caster (no aura) must not call perform_check",
+        )
+
+        # No conditions applied.
+        self.assertEqual(
+            ConditionInstance.objects.filter(target=quiescent_sheet.character).count(),
+            0,
+            "No ConditionInstances should exist after quiescent cast",
+        )
+
+    def test_quiescent_no_aura_move_is_inert(self) -> None:
+        """CharacterSheet with no CharacterAura → refresh_resonance_alignment is a no-op.
+
+        magical_profile returns None → refresh returns immediately after the initial
+        boon-clear step. No boon applied, no error.
+        """
+        from world.magic.models.aura import CharacterAura
+
+        quiescent_sheet = CharacterSheetFactory()
+        CharacterAura.objects.filter(character=quiescent_sheet.character).delete()
+
+        quiescent_sheet.character.db_location = self.aligned_room
+        quiescent_sheet.character.save(update_fields=["db_location"])
+
+        # Fire the hook directly.
+        quiescent_sheet.character.at_post_move(source_location=self.low_room)
+
+        boon_pks = self._boon_condition_template_pks()
+        self.assertEqual(
+            ConditionInstance.objects.filter(
+                target=quiescent_sheet.character,
+                condition__pk__in=boon_pks,
+            ).count(),
+            0,
+            "Quiescent character (no aura) must not receive any boon ConditionInstance",
+        )
+
+    # -------------------------------------------------------------------------
+    # T11: CASTER_DOMINANT stub — strong abyssal caster vs weak primal room
     # -------------------------------------------------------------------------
 
     def test_caster_dominant_stub(self) -> None:
@@ -660,8 +844,8 @@ class MagicStoryPipelineTests(EvenniaTestCase):
           caster_strength - place_magnitude = 40 > balanced_band(10) → CASTER_DOMINANT
 
         The seeded AffinityInteraction (Abyssal→Primal): OPPOSED / CORRUPT / aggressor=CASTER.
-        The flow Step 2 (EVALUATE_EQUALS resonance_kind == "corrupt") PASSES → END.
-        No condition is applied; no story movement; no perform_check.
+        resonance_environment_for_cast treats CORRUPT as inert (deferred defilement).
+        No condition is applied; no perform_check fired; no story movement.
 
         STUB: when defilement (CASTER_DOMINANT) is built, this caster should degrade
         the room's primal cascade magnitude and route corruption through CORRUPTION_ACCRUING
@@ -670,12 +854,11 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         from evennia.utils import create as evennia_create
 
         from evennia_extensions.models import RoomProfile
-        from world.conditions.models import ConditionInstance
         from world.magic.models.affinity import Affinity, Resonance
         from world.magic.services.gain import tag_room_resonance
         from world.magic.services.resonance_environment import get_resonance_environment_config
 
-        # Build a Primal resonance (Primal affinity is seeded by seed_canonical_affinities).
+        # Build a Primal resonance (Primal affinity seeded by seed_canonical_affinities).
         primal_affinity = Affinity.objects.get(name="Primal")
         primal_resonance, _ = Resonance.objects.get_or_create(
             name="Decay (pipeline test)",
@@ -697,7 +880,7 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         self.caster.location = primal_room
         self.caster.save()
 
-        # --- Direct primitive assertion: verify CASTER_DOMINANT before the flow cast ---
+        # --- Direct primitive assertion: verify CASTER_DOMINANT before the orchestrator cast ---
         cfg = get_resonance_environment_config()
         primitive_result = evaluate_resonance_environment(
             caster=self.caster, room=primal_room, technique=self.technique
@@ -722,7 +905,7 @@ class MagicStoryPipelineTests(EvenniaTestCase):
             "for Abyssal→Primal interaction",
         )
 
-        # --- Flow cast: CORRUPT branch → inert (no condition, no story movement) ---
+        # --- Orchestrator cast: CORRUPT branch → inert (no condition applied) ---
         forced_outcome = CheckOutcome.objects.get(name="Success")
         with force_check_outcome(forced_outcome) as capture:
             use_technique(
@@ -734,16 +917,15 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         # CORRUPT is uniformly inert this slice — no perform_check.
         self.assertIsNone(
             capture.target_difficulty,
-            "CASTER_DOMINANT CORRUPT must not call perform_check (flow ends at Step 2)",
+            "CASTER_DOMINANT CORRUPT must not call perform_check (inert deferred branch)",
         )
 
-        # No conditions applied by the flow (Magically Attuned was applied in setUp
-        # and must remain the only ConditionInstance on the caster).
+        # No conditions applied — Magically Attuned removed; CORRUPT path adds nothing.
         post_cast_count = ConditionInstance.objects.filter(target=self.caster).count()
         self.assertEqual(
             post_cast_count,
-            1,
-            "Only 'Magically Attuned' (from setUp) should exist after CASTER_DOMINANT CORRUPT cast",
+            0,
+            "No ConditionInstances should exist after CASTER_DOMINANT CORRUPT cast",
         )
 
         # StoryProgress unchanged.
@@ -755,7 +937,7 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         )
 
     # -------------------------------------------------------------------------
-    # T11: Second-earner Discovery semantics
+    # T12: Second-earner Discovery semantics
     # -------------------------------------------------------------------------
 
     def test_critical_success_second_earner_is_not_discoverer(self) -> None:
@@ -787,10 +969,11 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         crit_success = CheckOutcome.objects.get(name="Critical Success")
 
         # ------------------------------------------------------------------
-        # First caster: self.caster from setUp — already has Magically Attuned,
-        # Abyssal aura, technique, anima, and is in the low room.
-        # Cast → Critical Success → Tempered Against Light applied → stat
-        # incremented → Hallowed-Hardened granted → Discovery created.
+        # First caster: self.caster from setUp — already has an Abyssal aura,
+        # technique, anima, and is in the low room. No "Magically Attuned"
+        # condition is needed or applied — the production path requires only
+        # a CharacterAura. Cast → Critical Success → Tempered Against Light
+        # applied → stat incremented → Hallowed-Hardened granted → Discovery created.
         # ------------------------------------------------------------------
         with force_check_outcome(crit_success):
             use_technique(
@@ -815,10 +998,10 @@ class MagicStoryPipelineTests(EvenniaTestCase):
         )
 
         # ------------------------------------------------------------------
-        # Second caster: independent CharacterSheet + Abyssal aura + Anima +
-        # Magically Attuned + same technique (self.technique is shared) in
-        # the low room.  No StoryProgress — story routing is not required for
-        # the Discovery assertion (see docstring).
+        # Second caster: independent CharacterSheet + Abyssal CharacterAura +
+        # Anima + same technique (self.technique is shared) in the low room.
+        # No "Magically Attuned" — not needed; the real path uses magical_profile.
+        # No StoryProgress — story routing is not required for the Discovery assertion.
         # ------------------------------------------------------------------
         second_sheet = CharacterSheetFactory()
         second_caster = second_sheet.character
@@ -833,15 +1016,6 @@ class MagicStoryPipelineTests(EvenniaTestCase):
 
         second_caster.location = self.low_room
         second_caster.save()
-
-        result = apply_condition(
-            target=second_caster,
-            condition=self.magically_attuned,
-        )
-        self.assertTrue(
-            result.success,
-            f"Magically Attuned must apply to second caster; got: {result.message}",
-        )
 
         with force_check_outcome(crit_success):
             use_technique(
@@ -866,8 +1040,7 @@ class MagicStoryPipelineTests(EvenniaTestCase):
             achievement=hallowed_hardened,
         )
 
-        # Second earner is NOT the discoverer: grant_achievement passes
-        # defaults={"discovery": None} when is_first_discovery is False.
+        # Second earner is NOT the discoverer.
         self.assertIsNone(
             second_ca.discovery,
             "Second earner's CharacterAchievement.discovery must be None (not a co-discoverer)",

@@ -544,9 +544,16 @@ def _seed_endure_hallowed_ground_check() -> None:
 # Task 13b — _seed_hallowed_reaction_conditions()
 # ---------------------------------------------------------------------------
 
+#: SINGLE SOURCE OF TRUTH for the 5 Hallowed-Threshold reaction conditions.
+#: ``outcome_tier`` is the CheckOutcome tier this condition is applied on.
+#: ``HALLOWED_REACTION_CONDITION_NAMES`` and ``CRIT_FAIL_CONDITION_NAMES`` are
+#: DERIVED from this list (see below) so the names live in exactly one place.
+#: ``_seed_hallowed_reaction_conditions()`` only reads name/description/
+#: player_description/observer_description and ignores ``outcome_tier``.
 _HALLOWED_REACTION_SPECS: list[dict[str, str]] = [
     {
         "name": "Tempered Against Light",
+        "outcome_tier": "Critical Success",
         "description": (
             "The caster's flesh remembers an old burn; they walk hallowed ground unscathed."
         ),
@@ -557,6 +564,7 @@ _HALLOWED_REACTION_SPECS: list[dict[str, str]] = [
     },
     {
         "name": "Singed",
+        "outcome_tier": "Success",
         "description": "A faint mark of celestial rejection.",
         "player_description": (
             "Light glances along your skin. A faint mark stings where the spell met sanctified air."
@@ -565,12 +573,14 @@ _HALLOWED_REACTION_SPECS: list[dict[str, str]] = [
     },
     {
         "name": "Burning",
+        "outcome_tier": "Failure",
         "description": "Sanctified flame on Abyssal flesh.",
         "player_description": "Your skin burns where it meets the consecrated air.",
         "observer_description": "They smolder, marked by light they cannot bear.",
     },
     {
         "name": "Hallowed Burn",
+        "outcome_tier": "Critical Failure",
         "description": "A grievous, self-rebuking mark from sanctified ground.",
         "player_description": (
             "The sanctified ground answers the spell with fire. "
@@ -582,6 +592,7 @@ _HALLOWED_REACTION_SPECS: list[dict[str, str]] = [
     },
     {
         "name": "Cast Disrupted",
+        "outcome_tier": "Critical Failure",
         "description": "The casting failed mid-working; threads in the caster's hands snap.",
         "player_description": (
             "The threads in your hands snap. Whatever you were weaving has come undone."
@@ -635,6 +646,359 @@ def _seed_hallowed_reaction_conditions() -> None:
                 "can_be_dispelled": True,
             },
         )
+
+
+# ---------------------------------------------------------------------------
+# T12 — consequence pool constants and seed helper
+# ---------------------------------------------------------------------------
+
+#: The Critical Failure tier — the only tier with >1 spec (two APPLY_CONDITION
+#: effects on one Consequence). All other tiers map 1:1 to a single condition.
+_CRIT_FAIL_TIER: str = "Critical Failure"
+
+
+def _derive_tier_condition_names() -> dict[str, str]:
+    """CheckOutcome tier name → FIRST condition name at that tier.
+
+    Derived from ``_HALLOWED_REACTION_SPECS`` (the single source of truth).
+    Tier insertion order follows spec order; the first spec at each tier wins
+    (so Critical Failure → the primary "Hallowed Burn"). The full list of
+    crit-fail names lives in ``CRIT_FAIL_CONDITION_NAMES``.
+    """
+    names: dict[str, str] = {}
+    for spec in _HALLOWED_REACTION_SPECS:
+        names.setdefault(spec["outcome_tier"], spec["name"])
+    return names
+
+
+#: DERIVED: CheckOutcome tier name → ConditionTemplate name for the OPPOSED
+#: backfire consequence pools. Single source of truth is
+#: ``_HALLOWED_REACTION_SPECS`` — do not restate condition names anywhere else.
+HALLOWED_REACTION_CONDITION_NAMES: dict[str, str] = _derive_tier_condition_names()
+
+#: DERIVED: every condition applied by the Critical Failure tier, in spec order
+#: (two APPLY_CONDITION effects on the same Consequence row).
+CRIT_FAIL_CONDITION_NAMES: list[str] = [
+    spec["name"] for spec in _HALLOWED_REACTION_SPECS if spec["outcome_tier"] == _CRIT_FAIL_TIER
+]
+
+#: Pool names for pair #4 (Abyssal→Celestial) and pair #7 (Primal→Celestial).
+_ABYSSAL_CELESTIAL_POOL_NAME: str = "OPPOSED Backfire: Abyssal caster in Celestial place"
+_PRIMAL_CELESTIAL_POOL_NAME: str = "OPPOSED Backfire: Primal caster in Celestial place"
+
+
+def _seed_resonance_environment_consequence_pools() -> None:
+    """Seed OPPOSED consequence pools for pair #4 (Abyssal→Celestial) and #7 (Primal→Celestial).
+
+    Creates two ConsequencePool rows (one per pairing), each with four
+    ConsequencePoolEntry → Consequence rows keyed by CheckOutcome tier,
+    with ConsequenceEffect(effect_type=APPLY_CONDITION) wiring:
+
+        Critical Success  → Tempered Against Light (1 effect)
+        Success           → Singed                 (1 effect)
+        Failure           → Burning                (1 effect)
+        Critical Failure  → Hallowed Burn          (2 effects)
+                            + Cast Disrupted
+
+    Then sets AffinityInteraction.consequence_pool on both rows and saves.
+
+    Depends on:
+    - seed_canonical_affinities()      (Celestial/Primal/Abyssal must exist)
+    - _seed_affinity_interactions()    (9 AffinityInteraction rows)
+    - _seed_hallowed_reaction_conditions() (all 5 ConditionTemplate rows)
+    - _seed_endure_hallowed_ground_check() (CheckOutcome rows)
+
+    Idempotent: get_or_create keyed on stable names at every layer.  Duplicate
+    ConsequencePoolEntry rows are prevented by the (pool, consequence) unique
+    constraint; duplicate ConsequenceEffect rows are guarded explicitly.
+    """
+    from actions.models import ConsequencePool, ConsequencePoolEntry  # noqa: PLC0415
+    from world.checks.constants import EffectType as CheckEffectType  # noqa: PLC0415
+    from world.checks.models import Consequence, ConsequenceEffect  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.magic.models.affinity import Affinity  # noqa: PLC0415
+    from world.magic.models.resonance_environment import AffinityInteraction  # noqa: PLC0415
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    # --- Fetch CheckOutcome tiers (created by _seed_endure_hallowed_ground_check) ---
+    outcome_map: dict[str, CheckOutcome] = {}
+    for name in ("Critical Success", "Success", "Failure", "Critical Failure"):
+        outcome_map[name] = CheckOutcome.objects.get(name=name)
+
+    # --- Fetch injury ConditionTemplates (created by _seed_hallowed_reaction_conditions) ---
+    # Names come from the single source of truth (_HALLOWED_REACTION_SPECS) and are
+    # unique per spec, so no de-dup guard is needed when building this map.
+    cond_map: dict[str, ConditionTemplate] = {
+        spec["name"]: ConditionTemplate.objects.get(name=spec["name"])
+        for spec in _HALLOWED_REACTION_SPECS
+    }
+
+    def _build_pool(pool_name: str, description: str) -> ConsequencePool:
+        """Create (or fetch) a pool and wire its 4 Consequence + ConsequenceEffect rows."""
+        pool, _ = ConsequencePool.objects.get_or_create(
+            name=pool_name,
+            defaults={"description": description},
+        )
+
+        # --- Single-effect outcomes: every tier except Critical Failure ---
+        # Derived inline from the single source of truth (no separate map constant).
+        for outcome_name, condition_name in HALLOWED_REACTION_CONDITION_NAMES.items():
+            if outcome_name == _CRIT_FAIL_TIER:
+                continue
+            outcome = outcome_map[outcome_name]
+            condition = cond_map[condition_name]
+            # SOFT NATURAL KEY: there is no DB constraint on (outcome_tier, label).
+            # Idempotency relies on ConsequencePool.name being unique=True and the
+            # label embedding that unique pool name, so (outcome_tier, label) is
+            # effectively pool-scoped-unique. A label-format change across runs
+            # would create duplicates (acceptable for seed; do NOT change the model).
+            consequence, _ = Consequence.objects.get_or_create(
+                outcome_tier=outcome,
+                label=f"{pool_name}: {outcome_name}",
+                defaults={
+                    "mechanical_description": f"Apply {condition_name}.",
+                    "weight": 1,
+                    "character_loss": False,
+                },
+            )
+            ConsequencePoolEntry.objects.get_or_create(
+                pool=pool,
+                consequence=consequence,
+            )
+            # SOFT NATURAL KEY: the (consequence, effect_type, condition_template)
+            # triple is functionally unique for this seed but is NOT DB-enforced
+            # (pre-existing model-wide gap affecting all ConsequenceEffect callers;
+            # out of scope for this seed task — tracked as a separate follow-up).
+            ConsequenceEffect.objects.get_or_create(
+                consequence=consequence,
+                effect_type=CheckEffectType.APPLY_CONDITION,
+                condition_template=condition,
+                defaults={"execution_order": 0},
+            )
+
+        # --- Critical Failure: two APPLY_CONDITION effects on one Consequence ---
+        crit_fail_outcome = outcome_map["Critical Failure"]
+        crit_fail_label = f"{pool_name}: Critical Failure"
+        # SOFT NATURAL KEY (same rationale as above): (outcome_tier, label) is not
+        # DB-unique; idempotency relies on the unique pool name embedded in label.
+        crit_fail_consequence, _ = Consequence.objects.get_or_create(
+            outcome_tier=crit_fail_outcome,
+            label=crit_fail_label,
+            defaults={
+                "mechanical_description": "Apply Hallowed Burn and Cast Disrupted.",
+                "weight": 1,
+                "character_loss": False,
+            },
+        )
+        ConsequencePoolEntry.objects.get_or_create(
+            pool=pool,
+            consequence=crit_fail_consequence,
+        )
+        for order, cond_name in enumerate(CRIT_FAIL_CONDITION_NAMES):
+            # SOFT NATURAL KEY: (consequence, effect_type, condition_template) is
+            # functionally unique here but NOT DB-enforced (pre-existing model-wide
+            # gap; out of scope for this seed task — tracked separately).
+            ConsequenceEffect.objects.get_or_create(
+                consequence=crit_fail_consequence,
+                effect_type=CheckEffectType.APPLY_CONDITION,
+                condition_template=cond_map[cond_name],
+                defaults={"execution_order": order},
+            )
+
+        return pool
+
+    # --- Build both pools ---
+    abyssal_celestial_pool = _build_pool(
+        _ABYSSAL_CELESTIAL_POOL_NAME,
+        "Backfire consequences for an Abyssal caster working magic in a Celestial place.",
+    )
+    primal_celestial_pool = _build_pool(
+        _PRIMAL_CELESTIAL_POOL_NAME,
+        "Backfire consequences for a Primal caster working magic in a Celestial place.",
+    )
+
+    # --- Wire AffinityInteraction.consequence_pool for pair #4 and #7 ---
+    abyssal = Affinity.objects.get(name="Abyssal")
+    primal = Affinity.objects.get(name="Primal")
+    celestial = Affinity.objects.get(name="Celestial")
+
+    pair4 = AffinityInteraction.objects.get(
+        source_affinity=abyssal,
+        environment_affinity=celestial,
+    )
+    if pair4.consequence_pool_id != abyssal_celestial_pool.pk:
+        pair4.consequence_pool = abyssal_celestial_pool
+        pair4.save(update_fields=["consequence_pool"])
+
+    pair7 = AffinityInteraction.objects.get(
+        source_affinity=primal,
+        environment_affinity=celestial,
+    )
+    if pair7.consequence_pool_id != primal_celestial_pool.pk:
+        pair7.consequence_pool = primal_celestial_pool
+        pair7.save(update_fields=["consequence_pool"])
+
+
+# ---------------------------------------------------------------------------
+# T13 — _seed_resonance_alignment_boons()
+# ---------------------------------------------------------------------------
+
+#: Authored buff ConditionTemplate specs for the Abyssal/Abyssal ALIGNED boon family.
+#: Two bands: LOW (min_magnitude=1) → minor empowerment; HIGH (min_magnitude=40) → deep attuned.
+#: Descriptions narrate WHY an abyssal place empowers an abyssal caster.
+_ABYSSAL_BOON_SPECS: list[dict[str, str]] = [
+    {
+        "name": "Abyssal Resonance — Minor Attunement",
+        "band": "low",
+        "description": (
+            "The dissolution that permeates this place recognises the caster's touch. "
+            "The boundary between intent and effect thins slightly, smoothing the passage "
+            "of abyssal workings."
+        ),
+        "player_description": (
+            "Something in the air here knows you. Your spells feel lighter, the threads "
+            "a little more willing than usual."
+        ),
+        "observer_description": (
+            "A subtle ease settles over their gestures — as though the place itself is "
+            "helping them."
+        ),
+    },
+    {
+        "name": "Abyssal Resonance — Deep Attunement",
+        "band": "high",
+        "description": (
+            "The concentrated dissolution saturating this place and the caster's own "
+            "abyssal nature are in alignment so deep that the distinction between them "
+            "blurs. The caster's workings are carried on the current of the place's power."
+        ),
+        "player_description": (
+            "The place pours into you. Every thread you reach for is already half-woven "
+            "by the dissolution around you. You are not working against the world here — "
+            "you are the world working."
+        ),
+        "observer_description": (
+            "The dissolution in the air seems to gather toward them, pulled by the same "
+            "source that moves in their hands."
+        ),
+    },
+]
+
+#: min_magnitude thresholds for the low and high Abyssal boon bands.
+#: LOW=1: any non-zero magnitude qualifies for the lesser buff.
+#: HIGH=40: above the low band; the seeded Abyssal Sanctum room (magnitude=60) qualifies.
+_ABYSSAL_BOON_LOW_MIN_MAGNITUDE: int = 1
+_ABYSSAL_BOON_HIGH_MIN_MAGNITUDE: int = 40
+
+#: Name for the positive ConditionCategory that owns buff/boon templates.
+#: Must NOT match the negative "Magical" category used by injury/reaction conditions.
+_MAGICAL_BOON_CATEGORY_NAME: str = "Magical Boon"
+
+
+def _seed_resonance_alignment_boons() -> None:
+    """Seed ALIGNED boon tiers for pair #5 (Abyssal source → Abyssal environment).
+
+    Creates:
+    - A "Magical Boon" ConditionCategory with is_negative=False (or reuses if already present).
+      This is DISTINCT from the negative "Magical" category used by injury/reaction conditions.
+      is_negative is load-bearing: services filter positive vs negative conditions by this flag.
+    - Two named buff ConditionTemplate rows (low and high band) with authored
+      descriptions narrating why an abyssal place empowers an abyssal caster.
+    - Two ResonanceAlignmentBoonTier rows for pair #5 with ascending min_magnitude:
+        LOW  band (min_magnitude=1)  → minor attunement template
+        HIGH band (min_magnitude=40) → deep attunement template
+
+    IMPORTANT: full_clean() is called before every tier.save() to exercise the
+    ALIGNED-valence validation in ResonanceAlignmentBoonTier.clean(). A bare
+    objects.create() bypasses clean(), so this explicit call is mandatory.
+
+    Depends on:
+    - seed_canonical_affinities()   (Abyssal must exist)
+    - _seed_affinity_interactions() (pair #5 AffinityInteraction must exist)
+
+    Idempotent: get_or_create keyed on stable natural keys (template by name;
+    tier by (affinity_interaction, min_magnitude) unique constraint).
+    """
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+    from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
+    from world.magic.models.affinity import Affinity  # noqa: PLC0415
+    from world.magic.models.resonance_environment import (  # noqa: PLC0415
+        AffinityInteraction,
+        ResonanceAlignmentBoonTier,
+    )
+
+    # --- Positive "Magical Boon" ConditionCategory for buff templates ---
+    # MUST be separate from the negative "Magical" category (used by injury conditions).
+    # is_negative=False is load-bearing: services/views count and filter positive vs negative
+    # conditions by this flag (see conditions/services.py only_negative filter and
+    # conditions/views.py positive/negative counting).
+    category, _ = ConditionCategory.objects.get_or_create(
+        name=_MAGICAL_BOON_CATEGORY_NAME,
+        defaults={
+            "description": (
+                "Positive magical conditions from resonance alignment and aura attunement."
+            ),
+            "is_negative": False,
+            "display_order": 10,
+        },
+    )
+
+    # --- Seed the two boon ConditionTemplates ---
+    # DurationType.PERMANENT + default_duration_value=0: persists until cleared by the
+    # movement service on the next move (no inherent expiry timer).
+    template_map: dict[str, ConditionTemplate] = {}
+    for spec in _ABYSSAL_BOON_SPECS:
+        template, _ = ConditionTemplate.objects.get_or_create(
+            name=spec["name"],
+            defaults={
+                "category": category,
+                "description": spec["description"],
+                "player_description": spec["player_description"],
+                "observer_description": spec["observer_description"],
+                "default_duration_type": DurationType.PERMANENT,
+                "default_duration_value": 0,
+                "is_stackable": False,
+                "max_stacks": 1,
+                "has_progression": False,
+                "can_be_dispelled": False,
+            },
+        )
+        template_map[spec["band"]] = template
+
+    # --- Fetch pair #5: Abyssal → Abyssal (ALIGNED) ---
+    abyssal = Affinity.objects.get(name="Abyssal")
+    pair5 = AffinityInteraction.objects.get(
+        source_affinity=abyssal,
+        environment_affinity=abyssal,
+    )
+
+    # --- Seed two boon tiers with full_clean() guard before every save() ---
+    # full_clean() is MANDATORY here: ResonanceAlignmentBoonTier.clean() validates
+    # ALIGNED valence but there is no save() override — objects.create() bypasses it.
+    # Calling full_clean() before save() ensures a non-ALIGNED interaction can never
+    # be silently attached, even if this helper is mis-called with wrong data.
+    tier_specs: list[tuple[int, str]] = [
+        (_ABYSSAL_BOON_LOW_MIN_MAGNITUDE, "low"),
+        (_ABYSSAL_BOON_HIGH_MIN_MAGNITUDE, "high"),
+    ]
+    for min_magnitude, band in tier_specs:
+        condition_template = template_map[band]
+        # get_or_create keyed on the unique (affinity_interaction, min_magnitude) pair.
+        # On the CREATE path: build the instance, full_clean(), then save().
+        # On the GET path: no save needed; full_clean is already guaranteed on prior run.
+        try:
+            ResonanceAlignmentBoonTier.objects.get(
+                affinity_interaction=pair5,
+                min_magnitude=min_magnitude,
+            )
+        except ResonanceAlignmentBoonTier.DoesNotExist:
+            tier = ResonanceAlignmentBoonTier(
+                affinity_interaction=pair5,
+                min_magnitude=min_magnitude,
+                condition_template=condition_template,
+            )
+            tier.full_clean()  # CRITICAL: validates ALIGNED valence (clean() not called by save())
+            tier.save()
 
 
 # ---------------------------------------------------------------------------
@@ -742,236 +1106,6 @@ def _seed_hallowed_achievement_bridge() -> None:
 
 
 # ---------------------------------------------------------------------------
-# RC3 — _seed_resonance_environment_flow_and_trigger()
-# (formerly Task 13d _seed_hallowed_rejection_flow_and_trigger — reworked)
-# ---------------------------------------------------------------------------
-
-#: Name of the resonance-environment reactive FlowDefinition.
-RESONANCE_ENV_FLOW_NAME: str = "Resonance Environment reactive flow"
-
-#: Name of the TECHNIQUE_CAST TriggerDefinition for resonance-environment.
-#: RC3 wired this trigger into "Magically Attuned".reactive_triggers — that
-#: is the cast trigger installer; not the "Hallowed Rejection" marker.
-RESONANCE_ENV_TRIGGER_NAME: str = "Resonance Environment — technique cast"
-
-
-def _seed_resonance_environment_flow_and_trigger() -> None:
-    """Seed the FlowDefinition + steps + TriggerDefinition for the resonance-environment flow.
-
-    Flow shape (executed when TECHNIQUE_CAST fires and "Magically Attuned" has
-    installed the trigger on the caster):
-
-        Step 1: flow_evaluate_resonance_environment(caster, technique)
-            dict-unpack into: resonance_valence, resonance_kind, resonance_magnitude,
-            resonance_direction, resonance_backfire_difficulty
-
-        Step 2 (EVALUATE_EQUALS resonance_kind == "corrupt"):
-            PASS: END (CORRUPT is uniformly inert/deferred this slice)
-            FAIL: Step 3
-
-        Step 3 (EVALUATE_EQUALS resonance_valence == "aligned"):
-            PASS: flow_apply_condition("Empowered by Resonant Ground")
-            FAIL: Step 4
-
-        Step 4 (EVALUATE_EQUALS resonance_valence == "opposed"):
-            PASS: flow_perform_check("endure_hallowed_ground",
-                      target_difficulty=@resonance_backfire_difficulty)
-                  -> check_outcome
-                  EVALUATE_EQUALS check_outcome branches (T16 chain pattern):
-                    "Critical Success"  -> apply_condition(Tempered Against Light)
-                    "Success"           -> apply_condition(Singed)
-                    "Failure"           -> apply_condition(Burning)
-                    "Critical Failure"  -> apply_condition(Hallowed Burn)
-                                          -> apply_condition(Cast Disrupted) [chained child]
-            FAIL: END (inert)
-
-    Flow step parameters:
-        CALL_SERVICE_FUNCTION: variable_name = dotted path.
-          No result_variable = dict-return auto-unpack to individual flow vars.
-          result_variable = "<name>" for scalar returns.
-        EVALUATE_EQUALS: variable_name = flow var to test;
-          parameters={"value": "<literal>"}; PASS -> first child; FAIL -> next sibling.
-
-    Idempotency: if the FlowDefinition already exists, steps are NOT recreated
-    (FlowStepDefinition has no natural-key uniqueness). Re-runs leave the
-    existing steps in place, preserving any hand-edits.
-
-    TriggerDefinition wired into Magically Attuned.reactive_triggers M2M so that
-    apply_condition("Magically Attuned") auto-installs the cast trigger on the
-    character via T4/T8/T10 ConditionTemplateReactiveHandler path.
-    """
-    from flows.constants import EventName  # noqa: PLC0415
-    from flows.consts import FlowActionChoices  # noqa: PLC0415
-    from flows.models.flows import FlowDefinition, FlowStepDefinition  # noqa: PLC0415
-    from flows.models.triggers import TriggerDefinition  # noqa: PLC0415
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
-
-    flow, created = FlowDefinition.objects.get_or_create(
-        name="Resonance Environment reactive flow",
-        defaults={
-            "description": (
-                "Reactive flow: when TECHNIQUE_CAST fires on a 'Magically Attuned' caster, "
-                "evaluate the resonance-environment primitive and branch: CORRUPT -> inert; "
-                "ALIGNED -> apply Empowered boon; OPPOSED (reject/repel) -> endurance check "
-                "-> apply the appropriate hallowed-ground reaction condition."
-            ),
-        },
-    )
-
-    if created:
-        # ---------------------------------------------------------------
-        # Step 1: flow_evaluate_resonance_environment (dict-return auto-unpack)
-        # ---------------------------------------------------------------
-        # No result_variable: the engine stores each key of the returned dict
-        # as an individual top-level flow variable:
-        #   resonance_valence, resonance_kind, resonance_magnitude,
-        #   resonance_direction, resonance_backfire_difficulty
-        evaluate_step = FlowStepDefinition.objects.create(
-            flow=flow,
-            parent=None,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
-            variable_name=(
-                "flows.service_functions.resonance_environment.flow_evaluate_resonance_environment"
-            ),
-            parameters={
-                "caster": "@payload.caster",
-                "technique": "@payload.technique",
-            },
-        )
-
-        # ---------------------------------------------------------------
-        # Step 2: EVALUATE_EQUALS resonance_kind == "corrupt" -> END
-        # ---------------------------------------------------------------
-        # CORRUPT is uniformly inert/deferred this slice. No children = END on PASS.
-        # FAIL falls through to Step 3 (next sibling).
-        corrupt_branch = FlowStepDefinition.objects.create(
-            flow=flow,
-            parent=evaluate_step,
-            action=FlowActionChoices.EVALUATE_EQUALS,
-            variable_name="resonance_kind",
-            parameters={"value": "corrupt"},
-        )
-
-        # ---------------------------------------------------------------
-        # Step 3: EVALUATE_EQUALS resonance_valence == "aligned"
-        # ---------------------------------------------------------------
-        # Sibling of Step 2 (FAIL from Step 2 -> Step 3).
-        aligned_branch = FlowStepDefinition.objects.create(
-            flow=flow,
-            parent=evaluate_step,
-            action=FlowActionChoices.EVALUATE_EQUALS,
-            variable_name="resonance_valence",
-            parameters={"value": "aligned"},
-        )
-        # Step 3a: apply ALIGNED boon (PASS child of aligned_branch)
-        FlowStepDefinition.objects.create(
-            flow=flow,
-            parent=aligned_branch,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
-            variable_name="flows.service_functions.conditions.flow_apply_condition",
-            parameters={
-                "target": "@payload.caster",
-                "condition_name": "Empowered by Resonant Ground",
-            },
-        )
-
-        # ---------------------------------------------------------------
-        # Step 4: EVALUATE_EQUALS resonance_valence == "opposed"
-        # ---------------------------------------------------------------
-        # Sibling of Step 3. FAIL from Step 4 = inert -> END.
-        opposed_branch = FlowStepDefinition.objects.create(
-            flow=flow,
-            parent=evaluate_step,
-            action=FlowActionChoices.EVALUATE_EQUALS,
-            variable_name="resonance_valence",
-            parameters={"value": "opposed"},
-        )
-
-        # Step 4a: flow_perform_check (PASS child of opposed_branch)
-        # target_difficulty = precomputed by the adapter
-        perform_step = FlowStepDefinition.objects.create(
-            flow=flow,
-            parent=opposed_branch,
-            action=FlowActionChoices.CALL_SERVICE_FUNCTION,
-            variable_name="flows.service_functions.conditions.flow_perform_check",
-            parameters={
-                "character": "@payload.caster",
-                "check_type_name": "endure_hallowed_ground",
-                "target_difficulty": "@resonance_backfire_difficulty",
-                "result_variable": "check_outcome",
-            },
-        )
-
-        # ---------------------------------------------------------------
-        # Steps 4b-4e: EVALUATE_EQUALS branches on check_outcome (T16 chain pattern)
-        # ---------------------------------------------------------------
-        # Siblings under perform_step. PASS -> first child; FAIL -> next sibling.
-        # Multi-condition outcomes chain apply steps parent->child.
-        #
-        # Outcome name -> condition name(s) mapping:
-        outcome_to_conditions: list[tuple[str, list[str]]] = [
-            ("Critical Success", ["Tempered Against Light"]),
-            ("Success", ["Singed"]),
-            ("Failure", ["Burning"]),
-            ("Critical Failure", ["Hallowed Burn", "Cast Disrupted"]),
-        ]
-        for outcome_name, condition_names in outcome_to_conditions:
-            conditional = FlowStepDefinition.objects.create(
-                flow=flow,
-                parent=perform_step,
-                action=FlowActionChoices.EVALUATE_EQUALS,
-                variable_name="check_outcome",
-                parameters={"value": outcome_name},
-            )
-            # Chain: conditional -> cond1 -> cond2 -> ...
-            # (get_next_child path; siblings under a conditional are never visited)
-            parent_step: FlowStepDefinition = conditional
-            for cond_name in condition_names:
-                apply_step = FlowStepDefinition.objects.create(
-                    flow=flow,
-                    parent=parent_step,
-                    action=FlowActionChoices.CALL_SERVICE_FUNCTION,
-                    variable_name="flows.service_functions.conditions.flow_apply_condition",
-                    parameters={
-                        "target": "@payload.caster",
-                        "condition_name": cond_name,
-                    },
-                )
-                parent_step = apply_step
-
-        # Suppress unused-variable warning; corrupt_branch, aligned_branch, opposed_branch
-        # are created for their side effects (establishing parent=evaluate_step siblings).
-        _ = corrupt_branch
-
-    # -----------------------------------------------------------------------
-    # TriggerDefinition — idempotent via get_or_create on name.
-    # Fires on every TECHNIQUE_CAST event; the primitive does the gating.
-    # base_filter_condition is empty (always fires when trigger is installed).
-    # -----------------------------------------------------------------------
-    trigger, _ = TriggerDefinition.objects.get_or_create(
-        name="Resonance Environment — technique cast",
-        defaults={
-            "event_name": EventName.TECHNIQUE_CAST,
-            "base_filter_condition": {},
-            "flow_definition": flow,
-            "priority": 10,
-            "description": (
-                "Fires the resonance-environment reactive flow on every TECHNIQUE_CAST. "
-                "The flow calls evaluate_resonance_environment() to determine valence/kind "
-                "and branches: CORRUPT -> inert; ALIGNED -> Empowered boon; "
-                "OPPOSED (reject/repel) -> endurance check -> reaction condition."
-            ),
-        },
-    )
-
-    # Wire into Magically Attuned.reactive_triggers (idempotent M2M add).
-    # This causes apply_condition("Magically Attuned") to auto-install the cast
-    # trigger on the character via T4/T8/T10 ConditionTemplateReactiveHandler.
-    magically_attuned = ConditionTemplate.objects.get(name="Magically Attuned")
-    magically_attuned.reactive_triggers.add(trigger)
-
-
-# ---------------------------------------------------------------------------
 # Task RC4 — _seed_resonance_environment_rooms()
 # ---------------------------------------------------------------------------
 
@@ -993,10 +1127,7 @@ def _seed_resonance_environment_rooms() -> None:
     created via tag_room_resonance and then magnitude-tuned to the desired level.
 
     The "Hallowed Rejection" marker ConditionTemplate is also seeded here as
-    flavor content wired in RC3 via the "Magically Attuned" ubiquitous condition.
-    This helper does NOT re-wire any trigger M2Ms — RC3's
-    _seed_resonance_environment_flow_and_trigger() already attached the cast
-    TriggerDefinition to "Magically Attuned".reactive_triggers.
+    flavor content for the story.
 
     Three rooms:
       - "The Hallowed Threshold (Low)"   — Celestial / Light, magnitude=10
@@ -1346,95 +1477,6 @@ def _seed_resonance_environment_config() -> None:
     )
 
     get_resonance_environment_config()
-
-
-# ---------------------------------------------------------------------------
-# RC2 — _seed_resonance_environment_conditions()
-# ---------------------------------------------------------------------------
-
-
-def _seed_resonance_environment_conditions() -> None:
-    """Seed the baseline and ALIGNED-pole boon ConditionTemplates for resonance-environment.
-
-    Creates two ConditionTemplates in the "Magical" category:
-
-    - "Magically Attuned" — ubiquitous baseline condition present on every
-      magic-capable character. Its reactive_triggers M2M will hold the
-      resonance-environment TECHNIQUE_CAST TriggerDefinition (wired in RC3).
-      Narrative-only: no progression, not stackable, permanent duration.
-
-    - "Empowered by Resonant Ground" — ALIGNED-pole boon applied when a
-      caster uses a technique in a place of power that resonates with their
-      affinity. Narrative: the caster is amplified by aligned resonant ground.
-
-    The OPPOSED-pole reaction conditions (Tempered Against Light / Singed /
-    Burning / Hallowed Burn / Cast Disrupted) are seeded separately by
-    _seed_hallowed_reaction_conditions(); this helper does not touch them.
-
-    Idempotent: get_or_create keyed on name. Staff edits to existing rows
-    are preserved (get_or_create, never update_or_create).
-    """
-    from world.conditions.constants import DurationType  # noqa: PLC0415
-    from world.conditions.models import ConditionCategory, ConditionTemplate  # noqa: PLC0415
-
-    category, _ = ConditionCategory.objects.get_or_create(
-        name="Magical",
-        defaults={
-            "description": "Magical conditions arising from spellcasting and aura interactions.",
-            "is_negative": True,
-            "display_order": 0,
-        },
-    )
-
-    ConditionTemplate.objects.get_or_create(
-        name="Magically Attuned",
-        defaults={
-            "category": category,
-            "description": (
-                "The character can sense and channel magic. Places of power react to their "
-                "workings, amplifying or resisting based on the resonance of the ground."
-            ),
-            "player_description": (
-                "You can sense the currents of magic around you. "
-                "Places of power respond to your castings — "
-                "aligned ground amplifies your work; opposed ground pushes back."
-            ),
-            "observer_description": (
-                "There is a faint attunement about them — the air shifts when they work magic."
-            ),
-            "default_duration_type": DurationType.PERMANENT,
-            "default_duration_value": 0,
-            "is_stackable": False,
-            "max_stacks": 1,
-            "has_progression": False,
-            "can_be_dispelled": False,
-        },
-    )
-
-    ConditionTemplate.objects.get_or_create(
-        name="Empowered by Resonant Ground",
-        defaults={
-            "category": category,
-            "description": (
-                "The caster is amplified by a place of power whose resonance aligns with "
-                "their affinity. Their workings carry extra force while the alignment holds."
-            ),
-            "player_description": (
-                "The ground beneath you resonates with your magic. "
-                "Your castings feel sharper, more certain — the place of power is with you."
-            ),
-            "observer_description": (
-                "The air around them hums with concordant energy; "
-                "the place itself seems to lean toward their working."
-            ),
-            "default_duration_type": DurationType.ROUNDS,
-            "default_duration_value": 3,
-            "is_stackable": False,
-            "max_stacks": 1,
-            "has_progression": False,
-            "can_be_dispelled": True,
-        },
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -2215,10 +2257,7 @@ def seed_starter_magic_story() -> None:
       B. _seed_hallowed_reaction_conditions() — 5 OPPOSED reaction conditions
       C. _seed_hallowed_achievement_bridge() — stats, rules, achievements
                                                 (needs reaction conditions)
-     RC2. _seed_resonance_environment_conditions() — Magically Attuned + Empowered boon
-      A. _seed_endure_hallowed_ground_check() — CheckType + ResultChart (needed by flow)
-     RC3. _seed_resonance_environment_flow_and_trigger() — FlowDefinition + steps + Trigger
-                                                           (needs conditions + check type)
+      A. _seed_endure_hallowed_ground_check() — CheckType + ResultChart
      RC4. _seed_resonance_environment_rooms() — 3 cascade rooms (needs resonances)
       F. _seed_hallowed_threshold_story() — Story + Chapter + Episodes + Beats + Transitions + TROs
 
@@ -2232,9 +2271,9 @@ def seed_starter_magic_story() -> None:
     _seed_resonance_environment_config()
     _seed_hallowed_reaction_conditions()
     _seed_hallowed_achievement_bridge()
-    _seed_resonance_environment_conditions()
     _seed_endure_hallowed_ground_check()
-    _seed_resonance_environment_flow_and_trigger()
+    _seed_resonance_environment_consequence_pools()  # T12: OPPOSED backfire pools
+    _seed_resonance_alignment_boons()  # T13: ALIGNED boon tiers + named buffs
     _seed_resonance_environment_rooms()
     _seed_hallowed_threshold_story()
 
