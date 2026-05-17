@@ -1686,6 +1686,67 @@ class AssignStoryToTableInputSerializer(serializers.Serializer):
         return table
 
 
+class AssignStoryInputSerializer(serializers.Serializer):
+    """Input for POST /api/stories/{id}/assign-to-scope/ (Task B2).
+
+    Lifts a Story out of UNASSIGNED scope: picks the scope and the matching
+    target so a progress record can be created.
+
+    Layer 2 invariant — scope <-> target:
+        - CHARACTER requires ``character_sheet`` and forbids ``gm_table``.
+        - GROUP requires ``gm_table`` and forbids ``character_sheet``.
+        - GLOBAL forbids both targets.
+        - UNASSIGNED is not an acceptable input scope (you cannot assign a
+          story *to* unassigned); the ChoiceField excludes it so it 400s.
+    """
+
+    scope = serializers.ChoiceField(
+        choices=[
+            (choice.value, choice.label) for choice in StoryScope if choice != StoryScope.UNASSIGNED
+        ],
+    )
+    character_sheet = serializers.PrimaryKeyRelatedField(
+        queryset=CharacterSheet.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    gm_table = serializers.PrimaryKeyRelatedField(
+        queryset=GMTable.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+
+    def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        """Enforce the scope <-> target invariant."""
+        scope = attrs["scope"]
+        character_sheet = attrs.get("character_sheet")
+        gm_table = attrs.get("gm_table")
+
+        if scope == StoryScope.CHARACTER:
+            if character_sheet is None:
+                msg = "CHARACTER scope requires a character_sheet."
+                raise serializers.ValidationError({"character_sheet": msg})
+            if gm_table is not None:
+                msg = "CHARACTER scope does not accept a gm_table."
+                raise serializers.ValidationError({"gm_table": msg})
+        elif scope == StoryScope.GROUP:
+            if gm_table is None:
+                msg = "GROUP scope requires a gm_table."
+                raise serializers.ValidationError({"gm_table": msg})
+            if character_sheet is not None:
+                msg = "GROUP scope does not accept a character_sheet."
+                raise serializers.ValidationError({"character_sheet": msg})
+        elif scope == StoryScope.GLOBAL:
+            if character_sheet is not None:
+                msg = "GLOBAL scope does not accept a character_sheet."
+                raise serializers.ValidationError({"character_sheet": msg})
+            if gm_table is not None:
+                msg = "GLOBAL scope does not accept a gm_table."
+                raise serializers.ValidationError({"gm_table": msg})
+
+        return attrs
+
+
 # ---------------------------------------------------------------------------
 # Wave 3: StoryGMOffer serializers
 # ---------------------------------------------------------------------------

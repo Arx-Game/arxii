@@ -3,7 +3,7 @@ from typing import Any, cast
 
 from django.contrib.auth.base_user import AbstractBaseUser
 from django.contrib.auth.models import AnonymousUser
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Count, QuerySet
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
@@ -115,6 +115,7 @@ from world.stories.serializers import (
     AcceptOfferInputSerializer,
     AggregateBeatContributionSerializer,
     ApproveClaimInputSerializer,
+    AssignStoryInputSerializer,
     AssignStoryToTableInputSerializer,
     AssistantGMClaimSerializer,
     BeatCompletionSerializer,
@@ -460,6 +461,56 @@ class StoryViewSet(viewsets.ModelViewSet):
         story = self.get_object()
         updated = detach_story_from_table(story=story)
         return Response(StoryDetailSerializer(updated, context={"request": request}).data)
+
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="assign-to-scope",
+        permission_classes=[IsLeadGMOnStoryOrStaff],
+    )
+    def assign(self, request: Request, pk: int | None = None) -> Response:
+        """POST /api/stories/{id}/assign-to-scope/ — lift a story out of UNASSIGNED.
+
+        Lead GM (story.primary_table.gm) or staff picks the scope and the
+        matching target; this sets ``Story.scope`` and creates the
+        scope-appropriate progress record so the story can run:
+
+        - CHARACTER: sets ``story.character_sheet`` and creates StoryProgress
+        - GROUP: creates GroupStoryProgress for the given gm_table
+        - GLOBAL: creates the GlobalStoryProgress singleton
+
+        The scope <-> target invariant is enforced by
+        AssignStoryInputSerializer.validate(), so an invalid combination is a
+        400 (no scope change, no progress row). Because scope is set before
+        the create_*_progress call, StoryNotAssignedError cannot fire — no
+        try/except is needed.
+        """
+        from world.stories.services.progress import (  # noqa: PLC0415
+            create_character_progress,
+            create_global_progress,
+            create_group_progress,
+        )
+
+        story = self.get_object()
+        ser = AssignStoryInputSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+        scope = data["scope"]
+
+        with transaction.atomic():
+            story.scope = scope
+            if scope == StoryScope.CHARACTER:
+                story.character_sheet = data["character_sheet"]
+                story.save(update_fields=["scope", "character_sheet"])
+                create_character_progress(story=story, character_sheet=data["character_sheet"])
+            elif scope == StoryScope.GROUP:
+                story.save(update_fields=["scope"])
+                create_group_progress(story=story, gm_table=data["gm_table"])
+            else:  # StoryScope.GLOBAL
+                story.save(update_fields=["scope"])
+                create_global_progress(story=story)
+
+        return Response(StoryDetailSerializer(story, context=self.get_serializer_context()).data)
 
     @action(
         detail=True,
