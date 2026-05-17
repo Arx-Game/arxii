@@ -135,6 +135,38 @@ describe('Stories Authoring Hooks (D2)', () => {
 
       fetchSpy.mockRestore();
     });
+
+    it('attaches the failed Response to the thrown error on a non-ok response', async () => {
+      // Drives the REAL api.promoteEpisode through a 400 to prove the
+      // api->component error seam: PromoteMaturityButton.handleError reads
+      // `'response' in err` then `response.json()`. Locks the real contract,
+      // not a fabricated `{ response }`.
+      const errorBody = { target: 'Promotion to PLOT requires a resting conclusion.' };
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify(errorBody), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      const { promoteEpisode: realPromoteEpisode } =
+        await vi.importActual<typeof import('../api')>('../api');
+
+      let caught: unknown;
+      try {
+        await realPromoteEpisode(20, { target: 'plot' });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught && typeof caught === 'object' && 'response' in caught).toBe(true);
+      const response = (caught as { response?: Response }).response;
+      expect(response).toBeInstanceOf(Response);
+      await expect(response?.json()).resolves.toEqual(errorBody);
+
+      fetchSpy.mockRestore();
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -162,6 +194,40 @@ describe('Stories Authoring Hooks (D2)', () => {
         character_sheet: 42,
       });
       expect(result).toEqual(mockStory);
+
+      fetchSpy.mockRestore();
+    });
+
+    it('attaches the failed Response to the thrown error on a non-ok response', async () => {
+      // Drives the REAL api.assignStory through a 400 to prove the
+      // api->component error seam: ScopeAssignDialog.handleError reads
+      // `'response' in err` then `response.json()`. Locks the real contract,
+      // not a fabricated `{ response }`.
+      const errorBody = {
+        scope: 'This story is already assigned to a scope and cannot be re-assigned.',
+      };
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify(errorBody), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      const { assignStory: realAssignStory } =
+        await vi.importActual<typeof import('../api')>('../api');
+
+      let caught: unknown;
+      try {
+        await realAssignStory(1, { scope: 'character', character_sheet: 42 });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught && typeof caught === 'object' && 'response' in caught).toBe(true);
+      const response = (caught as { response?: Response }).response;
+      expect(response).toBeInstanceOf(Response);
+      await expect(response?.json()).resolves.toEqual(errorBody);
 
       fetchSpy.mockRestore();
     });

@@ -485,7 +485,15 @@ export async function promoteEpisode(
     headers: jsonHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to promote episode');
+  if (!res.ok) {
+    // Preserve the response for the caller to inspect field errors
+    // (PromoteMaturityButton surfaces the MaturityPromotionError message).
+    const err = new Error('Failed to promote episode') as Error & {
+      response?: Response;
+    };
+    err.response = res;
+    throw err;
+  }
   return res.json() as Promise<Episode>;
 }
 
@@ -842,7 +850,15 @@ export async function assignStory(storyId: number, body: AssignStoryBody): Promi
     headers: jsonHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to assign story to scope');
+  if (!res.ok) {
+    // Preserve the response for the caller to inspect field errors
+    // (ScopeAssignDialog surfaces the re-assign-guard 400 message).
+    const err = new Error('Failed to assign story to scope') as Error & {
+      response?: Response;
+    };
+    err.response = res;
+    throw err;
+  }
   return res.json() as Promise<Story>;
 }
 

@@ -328,7 +328,7 @@ class ChapterCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Chapter
-        fields = ["story", "title", "description", "order"]
+        fields = ["story", "title", "description", "summary", "order"]
 
     def validate_title(self, value):
         """Validate chapter title"""
@@ -416,6 +416,9 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
             "chapter",
             "title",
             "description",
+            "summary",
+            "resting_conclusion",
+            "is_ending",
             "order",
         ]
 

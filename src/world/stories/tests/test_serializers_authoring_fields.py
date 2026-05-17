@@ -4,6 +4,7 @@ from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
 from world.stories.factories import ChapterFactory, EpisodeFactory, StoryFactory
+from world.stories.models import Chapter, Episode, Story
 
 
 class AuthoringFieldExposureTests(APITestCase):
@@ -55,3 +56,75 @@ class AuthoringFieldExposureTests(APITestCase):
         self.assertEqual(re_get.status_code, status.HTTP_200_OK)
         self.assertTrue(re_get.data["is_ending"])
         self.assertEqual(re_get.data["resting_conclusion"], "ends")
+
+    # ------------------------------------------------------------------
+    # I-B: create serializers must honor authoring inputs (no silent drop)
+    # ------------------------------------------------------------------
+
+    def test_episode_create_persists_summary_resting_conclusion_is_ending(self):
+        """POST /api/episodes/ must persist authoring fields the E2 form submits.
+
+        Before the EpisodeCreateSerializer fix these undeclared keys were
+        silently dropped by DRF (the create succeeded but the data was lost).
+        """
+        resp = self.client.post(
+            reverse("episode-list"),
+            {
+                "chapter": self.chapter.pk,
+                "title": "Created Episode",
+                "description": "GM desc",
+                "order": 99,
+                "summary": "the story so far",
+                "resting_conclusion": "it rests here",
+                "is_ending": True,
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        created = Episode.objects.get(title="Created Episode")
+        re_get = self.client.get(reverse("episode-detail", kwargs={"pk": created.pk}))
+        self.assertEqual(re_get.status_code, status.HTTP_200_OK)
+        self.assertEqual(re_get.data["summary"], "the story so far")
+        self.assertEqual(re_get.data["resting_conclusion"], "it rests here")
+        self.assertTrue(re_get.data["is_ending"])
+
+    def test_chapter_create_persists_summary(self):
+        """POST /api/chapters/ must persist the summary the E2 form submits."""
+        resp = self.client.post(
+            reverse("chapter-list"),
+            {
+                "story": self.story.pk,
+                "title": "Created Chapter",
+                "description": "GM desc",
+                "order": 99,
+                "summary": "chapter recap text",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        created = Chapter.objects.get(title="Created Chapter")
+        re_get = self.client.get(reverse("chapter-detail", kwargs={"pk": created.pk}))
+        self.assertEqual(re_get.status_code, status.HTTP_200_OK)
+        self.assertEqual(re_get.data["summary"], "chapter recap text")
+
+    def test_story_create_persists_summary(self):
+        """POST /api/stories/ persists summary (A2 already exposes it; guard)."""
+        resp = self.client.post(
+            reverse("story-list"),
+            {
+                "title": "Created Story",
+                "description": "GM desc",
+                "summary": "story recap text",
+                "privacy": "private",
+                "scope": "unassigned",
+            },
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+
+        created = Story.objects.get(title="Created Story")
+        re_get = self.client.get(reverse("story-detail", kwargs={"pk": created.pk}))
+        self.assertEqual(re_get.status_code, status.HTTP_200_OK)
+        self.assertEqual(re_get.data["summary"], "story recap text")
