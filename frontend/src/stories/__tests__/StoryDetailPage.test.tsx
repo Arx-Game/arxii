@@ -97,6 +97,7 @@ const mockActiveEntry = {
   chapter_title: 'Chapter One',
   status: 'waiting_on_beats',
   status_label: 'Waiting on beats',
+  progress_status: 'active',
   chapter_order: 1,
   episode_order: 2,
   open_session_request_id: null,

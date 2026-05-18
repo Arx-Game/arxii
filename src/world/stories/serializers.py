@@ -149,24 +149,22 @@ def _gm_text_gate(
     request in context we default to the most-restrictive (player) treatment
     so GM text never leaks by default.
 
-    ``classify_story_log_viewer_role`` is imported locally to match this
-    module's existing convention for importing from ``world.stories.permissions``
-    (see ``BeatSerializer.get_can_mark``); a top-level import would also work
-    but the file consistently defers permissions imports.
+    Privilege is decided by the single ``can_view_story_gm_text`` predicate
+    (staff / Lead GM / owner). It is imported locally to match this module's
+    existing convention for deferring ``world.stories.permissions`` imports
+    (see ``BeatSerializer.get_can_mark``). Owner is folded into that one
+    predicate rather than bolted on here as a separate check, and is NOT a
+    role on ``classify_story_log_viewer_role`` because that classifier also
+    drives ``serialize_story_log`` beat-visibility (owners must not gain
+    SECRET-beat / GM-note access there).
     """
-    from world.stories.permissions import (  # noqa: PLC0415
-        VIEWER_ROLE_LEAD_GM,
-        VIEWER_ROLE_NO_ACCESS,
-        VIEWER_ROLE_STAFF,
-        classify_story_log_viewer_role,
-    )
+    from world.stories.permissions import can_view_story_gm_text  # noqa: PLC0415
 
     request = serializer.context.get("request")
     user = request.user if request is not None else None
-    role = (
-        classify_story_log_viewer_role(user, story) if user is not None else VIEWER_ROLE_NO_ACCESS
-    )
-    if role not in (VIEWER_ROLE_STAFF, VIEWER_ROLE_LEAD_GM):
+    # No request in context → user is None → most-restrictive (strip), so
+    # GM authoring text never leaks by default.
+    if user is None or not can_view_story_gm_text(user, story):
         data.pop("description", None)
         # consequences is absent on the Story serializer — pop default is safe.
         data.pop("consequences", None)
@@ -235,6 +233,12 @@ class StoryCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Story
+        # SECURITY (deliberate exception to the A3 _gm_text_gate): the create
+        # serializers echo `description` / `summary` UNGATED. Safe today:
+        # Story-create is staff-only and Chapter/Episode-create echo only the
+        # requester's own just-submitted text — no third-party GM text is
+        # disclosed. If a future change lets a non-staff user create a node
+        # from someone else's draft, add gating here.
         fields = [
             "title",
             "description",
@@ -337,6 +341,12 @@ class ChapterCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Chapter
+        # SECURITY (deliberate exception to the A3 _gm_text_gate): the create
+        # serializers echo `description` / `summary` UNGATED. Safe today:
+        # Story-create is staff-only and Chapter/Episode-create echo only the
+        # requester's own just-submitted text — no third-party GM text is
+        # disclosed. If a future change lets a non-staff user create a node
+        # from someone else's draft, add gating here.
         fields = ["story", "title", "description", "summary", "order"]
 
     def validate_title(self, value):
@@ -421,6 +431,13 @@ class EpisodeCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Episode
+        # SECURITY (deliberate exception to the A3 _gm_text_gate): the create
+        # serializers echo `description` / `summary` / `resting_conclusion` /
+        # `is_ending` UNGATED. Safe today: Story-create is staff-only and
+        # Chapter/Episode-create echo only the requester's own just-submitted
+        # text — no third-party GM text is disclosed. If a future change lets
+        # a non-staff user create a node from someone else's draft, add
+        # gating here.
         fields = [
             "chapter",
             "title",
@@ -1241,17 +1258,18 @@ class PromoteEpisodeInputSerializer(serializers.Serializer):
     target = serializers.ChoiceField(choices=StoryMaturity.choices)
 
     def validate(self, attrs: Any) -> Any:  # type: ignore[override]
+        from world.stories.services.maturity import (  # noqa: PLC0415
+            episode_meets_plot_gate,
+        )
+
         episode: Episode = self.context["episode"]
         target: str = attrs["target"]
 
         current_rank = self._RANK[StoryMaturity(episode.maturity)]
         is_promotion = self._RANK[StoryMaturity(target)] > current_rank
-        if target == StoryMaturity.PLOT and is_promotion:
-            has_outbound = episode.outbound_transitions.exists()
-            ready = bool(episode.resting_conclusion.strip()) and (has_outbound or episode.is_ending)
-            if not ready:
-                msg = MaturityPromotionError().user_message
-                raise serializers.ValidationError({"target": msg})
+        if target == StoryMaturity.PLOT and is_promotion and not episode_meets_plot_gate(episode):
+            msg = MaturityPromotionError().user_message
+            raise serializers.ValidationError({"target": msg})
         return attrs
 
 

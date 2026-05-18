@@ -315,3 +315,57 @@ class CharacterDistinctionOtherSerializer(serializers.ModelSerializer):
             "staff_mapped_distinction",
         ]
         read_only_fields = ["id", "status", "staff_mapped_distinction"]
+
+
+# ---------------------------------------------------------------------------
+# DraftDistinctionViewSet schema descriptors
+#
+# The draft-distinction endpoints read/write the `draft_data` JSON blob
+# directly (via build_distinction_entry / ad-hoc dict validation), so there
+# are no model serializers. These describe the existing wire contract for
+# drf-spectacular ONLY — they are not wired into request validation, so they
+# introduce no behavior change. Field shape mirrors
+# world.distinctions.types.DraftDistinctionEntry.
+# ---------------------------------------------------------------------------
+
+
+class DraftDistinctionEntrySerializer(serializers.Serializer):
+    """Read shape of one distinction entry stored in draft_data."""
+
+    distinction_id = serializers.IntegerField()
+    distinction_name = serializers.CharField()
+    distinction_slug = serializers.CharField()
+    category_slug = serializers.CharField()
+    rank = serializers.IntegerField()
+    cost = serializers.IntegerField()
+    notes = serializers.CharField(allow_blank=True)
+
+
+class DraftDistinctionCreateSerializer(serializers.Serializer):
+    """Request body for adding a distinction to a draft (create)."""
+
+    distinction_id = serializers.IntegerField()
+    rank = serializers.IntegerField(required=False, default=1)
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class DraftDistinctionSwapSerializer(serializers.Serializer):
+    """Request body for swapping mutually-exclusive distinctions."""
+
+    remove_id = serializers.IntegerField()
+    add_id = serializers.IntegerField()
+    rank = serializers.IntegerField(required=False, default=1)
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class DraftDistinctionSyncItemSerializer(serializers.Serializer):
+    """One ``{id, rank}`` pair in the sync request list."""
+
+    id = serializers.IntegerField()
+    rank = serializers.IntegerField(required=False, default=1)
+
+
+class DraftDistinctionSyncSerializer(serializers.Serializer):
+    """Request body for replacing the full distinction list (sync)."""
+
+    distinctions = DraftDistinctionSyncItemSerializer(many=True)

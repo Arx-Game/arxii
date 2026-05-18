@@ -1775,7 +1775,7 @@ export interface paths {
       cookie?: never;
     };
     /** @description GET / — return the current clock state. */
-    get: operations['clock_retrieve'];
+    get: operations['clock_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -2958,7 +2958,7 @@ export interface paths {
      *
      *     Returns the distinctions array from draft.draft_data.
      */
-    get: operations['distinctions_drafts_distinctions_retrieve'];
+    get: operations['distinctions_drafts_distinctions_list'];
     put?: never;
     /**
      * @description Add a distinction to the draft.
@@ -10467,6 +10467,8 @@ export interface components {
       story: number;
       title: string;
       description?: string;
+      /** @description Summary of what happened in this chapter */
+      summary?: string;
       order: number;
     };
     /** @description Serializer for creating chapters */
@@ -10474,6 +10476,8 @@ export interface components {
       story: number;
       title: string;
       description?: string;
+      /** @description Summary of what happened in this chapter */
+      summary?: string;
       order: number;
     };
     /** @description Full serializer for chapter details */
@@ -10936,6 +10940,44 @@ export interface components {
       lifetime_earned?: number;
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
+    };
+    /** @description Request serializer for staff clock adjustment. */
+    ClockAdjustRequest: {
+      /** Format: date-time */
+      ic_datetime: string;
+      reason: string;
+    };
+    /** @description Response serializer for date conversion results. */
+    ClockConvertResponse: {
+      /** Format: date-time */
+      ic_date?: string;
+      /** Format: date-time */
+      real_date?: string;
+    };
+    /** @description Generic ``{"detail": "..."}`` response (staff actions + errors). */
+    ClockDetail: {
+      detail: string;
+    };
+    /** @description Request serializer for staff time-ratio change. */
+    ClockRatioRequest: {
+      /** Format: double */
+      ratio: number;
+      reason: string;
+    };
+    /** @description Read-only serializer for the current clock state. */
+    ClockState: {
+      /** Format: date-time */
+      ic_datetime: string;
+      year: number;
+      month: number;
+      day: number;
+      hour: number;
+      minute: number;
+      phase: components['schemas']['PhaseEnum'];
+      season: components['schemas']['SeasonEnum'];
+      /** Format: double */
+      light_level: number;
+      paused: boolean;
     };
     CodexCategory: {
       readonly id: number;
@@ -11486,6 +11528,50 @@ export interface components {
         [key: string]: unknown;
       };
     };
+    /** @description Request body for adding a distinction to a draft (create). */
+    DraftDistinctionCreateRequest: {
+      distinction_id: number;
+      /** @default 1 */
+      rank: number;
+      /** @default  */
+      notes: string;
+    };
+    /** @description Read shape of one distinction entry stored in draft_data. */
+    DraftDistinctionEntry: {
+      distinction_id: number;
+      distinction_name: string;
+      distinction_slug: string;
+      category_slug: string;
+      rank: number;
+      cost: number;
+      notes: string;
+    };
+    /** @description Request body for swapping mutually-exclusive distinctions. */
+    DraftDistinctionSwapRequest: {
+      remove_id: number;
+      add_id: number;
+      /** @default 1 */
+      rank: number;
+      /** @default  */
+      notes: string;
+    };
+    DraftDistinctionSwapResult: {
+      removed: number;
+      added: components['schemas']['DraftDistinctionEntry'];
+    };
+    /** @description One ``{id, rank}`` pair in the sync request list. */
+    DraftDistinctionSyncItemRequest: {
+      id: number;
+      /** @default 1 */
+      rank: number;
+    };
+    /** @description Request body for replacing the full distinction list (sync). */
+    DraftDistinctionSyncRequest: {
+      distinctions: components['schemas']['DraftDistinctionSyncItemRequest'][];
+    };
+    DraftDistinctionSyncResult: {
+      distinctions: components['schemas']['DraftDistinctionEntry'][];
+    };
     /** @description Serializer for EffectType lookup records. */
     EffectType: {
       readonly id: number;
@@ -11581,6 +11667,12 @@ export interface components {
       chapter: number;
       title: string;
       description?: string;
+      /** @description Summary of this episode's plot beats */
+      summary?: string;
+      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
+      resting_conclusion?: string;
+      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
+      is_ending?: boolean;
       order: number;
     };
     /** @description Serializer for creating episodes */
@@ -11588,6 +11680,12 @@ export interface components {
       chapter: number;
       title: string;
       description?: string;
+      /** @description Summary of this episode's plot beats */
+      summary?: string;
+      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
+      resting_conclusion?: string;
+      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
+      is_ending?: boolean;
       order: number;
     };
     /** @description Full serializer for episode details */
@@ -15029,6 +15127,14 @@ export interface components {
      * @enum {string}
      */
     PersonaTypeEnum: 'primary' | 'established' | 'temporary';
+    /**
+     * @description * `dawn` - Dawn
+     *     * `day` - Day
+     *     * `dusk` - Dusk
+     *     * `night` - Night
+     * @enum {string}
+     */
+    PhaseEnum: 'dawn' | 'day' | 'dusk' | 'night';
     Place: {
       readonly id: number;
       name: string;
@@ -16154,6 +16260,14 @@ export interface components {
      * @enum {string}
      */
     ScopeEnum: 'unassigned' | 'character' | 'group' | 'global';
+    /**
+     * @description * `spring` - Spring
+     *     * `summer` - Summer
+     *     * `autumn` - Autumn
+     *     * `winter` - Winter
+     * @enum {string}
+     */
+    SeasonEnum: 'spring' | 'summer' | 'autumn' | 'winter';
     /** @description Read-only serializer for SessionRequest records. */
     SessionRequest: {
       readonly id: number;
@@ -19698,7 +19812,7 @@ export interface operations {
       };
     };
   };
-  clock_retrieve: {
+  clock_list: {
     parameters: {
       query?: never;
       header?: never;
@@ -19707,12 +19821,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ClockState'][];
+        };
       };
     };
   };
@@ -19723,32 +19838,41 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClockAdjustRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ClockDetail'];
+        };
       };
     };
   };
   clock_convert_retrieve: {
     parameters: {
-      query?: never;
+      query?: {
+        ic_date?: string;
+        real_date?: string;
+      };
       header?: never;
       path?: never;
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ClockConvertResponse'];
+        };
       };
     };
   };
@@ -19761,12 +19885,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ClockDetail'];
+        };
       };
     };
   };
@@ -19777,14 +19902,19 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ClockRatioRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ClockDetail'];
+        };
       };
     };
   };
@@ -19797,12 +19927,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['ClockDetail'];
+        };
       };
     };
   };
@@ -21116,7 +21247,7 @@ export interface operations {
       };
     };
   };
-  distinctions_drafts_distinctions_retrieve: {
+  distinctions_drafts_distinctions_list: {
     parameters: {
       query?: never;
       header?: never;
@@ -21127,12 +21258,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['DraftDistinctionEntry'][];
+        };
       };
     };
   };
@@ -21145,14 +21277,19 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DraftDistinctionCreateRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       201: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['DraftDistinctionEntry'];
+        };
       };
     };
   };
@@ -21186,14 +21323,19 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DraftDistinctionSwapRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['DraftDistinctionSwapResult'];
+        };
       };
     };
   };
@@ -21206,14 +21348,19 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['DraftDistinctionSyncRequest'];
+      };
+    };
     responses: {
-      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['DraftDistinctionSyncResult'];
+        };
       };
     };
   };

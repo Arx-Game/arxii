@@ -162,8 +162,9 @@ class MyActiveStoryEntry(TypedDict):
     current_episode_id: int | None
     current_episode_title: str | None
     chapter_title: str | None
-    status: str
+    status: str  # StoryEpisodeStatus value (frontier proxy)
     status_label: str
+    progress_status: str  # ProgressStatus value (authoritative pointer state)
     chapter_order: int | None
     episode_order: int | None
     open_session_request_id: int | None
