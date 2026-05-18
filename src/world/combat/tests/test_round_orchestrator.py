@@ -104,6 +104,7 @@ class ResolveRoundBasicTests(TestCase):
         technique = TechniqueFactory(
             gift=self.gift,
             effect_type=self.effect_attack,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
         )
         action = CombatRoundAction.objects.create(
             participant=participant,
@@ -147,7 +148,6 @@ class ResolveRoundBasicTests(TestCase):
         resolve_round(
             encounter,
             offense_check_fn=mock_check_fn,
-            offense_check_type=MagicMock(),
         )
 
         opponent.refresh_from_db()
@@ -235,6 +235,7 @@ class ResolveRoundBasicTests(TestCase):
         technique = TechniqueFactory(
             gift=self.gift,
             effect_type=self.effect_attack,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
         )
         CombatRoundAction.objects.create(
             participant=participant,
@@ -250,7 +251,6 @@ class ResolveRoundBasicTests(TestCase):
         result = resolve_round(
             encounter,
             offense_check_fn=mock_check_fn,
-            offense_check_type=MagicMock(),
         )
 
         self.assertTrue(result.encounter_completed)
@@ -331,8 +331,16 @@ class ResolveRoundDefenseCheckTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        from decimal import Decimal
+
         cls.effect_attack = EffectTypeFactory(name="Attack", base_power=20)
         cls.gift = GiftFactory()
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
+        )
 
     def test_defense_check_reduces_damage(self) -> None:
         """With defense_check_type and a partial success, damage is reduced."""
@@ -360,9 +368,18 @@ class ResolveRoundDefenseCheckTests(TestCase):
             max_health=200,
             status=CharacterStatus.ALIVE,
         )
+        CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet.character)
+        room = ObjectDB.objects.create(
+            db_key="TestRoomDefense",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        sheet.character.location = room
+        sheet.character.save()
         technique = TechniqueFactory(
             gift=self.gift,
             effect_type=self.effect_attack,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
         )
         CombatRoundAction.objects.create(
             participant=participant,
@@ -385,10 +402,14 @@ class ResolveRoundDefenseCheckTests(TestCase):
         mock_check.return_value = mock_result
         mock_check_type = MagicMock()
 
+        def mock_offense_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
+            return MagicMock(success_level=2)
+
         resolve_round(
             encounter,
             defense_check_type=mock_check_type,
             defense_check_fn=mock_check,
+            offense_check_fn=mock_offense_check_fn,
         )
 
         vitals = CharacterVitals.objects.get(character_sheet=sheet)
@@ -463,6 +484,7 @@ class ResolveRoundBossPhaseTests(TestCase):
         technique = TechniqueFactory(
             gift=self.gift,
             effect_type=self.effect_attack,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
         )
         CombatRoundAction.objects.create(
             participant=participant,
@@ -478,7 +500,6 @@ class ResolveRoundBossPhaseTests(TestCase):
         result = resolve_round(
             encounter,
             offense_check_fn=mock_check_fn,
-            offense_check_type=MagicMock(),
         )
 
         boss.refresh_from_db()
@@ -494,8 +515,16 @@ class ResolveRoundOffenseCheckTests(TestCase):
 
     @classmethod
     def setUpTestData(cls) -> None:
+        from decimal import Decimal
+
         cls.effect_attack = EffectTypeFactory(name="Attack", base_power=20)
         cls.gift = GiftFactory()
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
+        )
 
     def _setup_encounter(self) -> tuple:
         """Create encounter: 1 PC, 1 mook, PC action declared."""
@@ -524,10 +553,18 @@ class ResolveRoundOffenseCheckTests(TestCase):
             status=CharacterStatus.ALIVE,
         )
         CharacterAnimaFactory(character=sheet.character, current=20, maximum=20)
+        CharacterEngagementFactory(character=sheet.character)
+        room = ObjectDB.objects.create(
+            db_key="TestRoomOffense",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        sheet.character.location = room
+        sheet.character.save()
         technique = TechniqueFactory(
             gift=self.gift,
             effect_type=self.effect_attack,
             anima_cost=5,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
         )
         CombatRoundAction.objects.create(
             participant=participant,
@@ -547,12 +584,10 @@ class ResolveRoundOffenseCheckTests(TestCase):
         mock_result = MagicMock()
         mock_result.success_level = 0
         mock_check.return_value = mock_result
-        mock_check_type = MagicMock()
 
         resolve_round(
             encounter,
             offense_check_fn=mock_check,
-            offense_check_type=mock_check_type,
         )
 
         opponent.refresh_from_db()

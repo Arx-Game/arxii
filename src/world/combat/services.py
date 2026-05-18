@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
     PerformCheckFn = Callable[..., CheckResult]
 
+from actions.errors import ActionDispatchError
 from flows.constants import EventName
 from flows.emit import emit_event
 from flows.events.payloads import (
@@ -1721,15 +1722,17 @@ def _resolve_pc_action(
     participant: CombatParticipant,
     action: CombatRoundAction,
     offense_check_fn: PerformCheckFn | None = None,
-    offense_check_type: CheckType | None = None,
 ) -> ActionOutcome:
     """Resolve a single PC's focused action during round resolution.
 
-    For non-combo actions, uses perform_check if an offense_check_type is
-    provided. The check result's success_level scales damage:
+    For non-combo actions, derives the offense_check_type from the declared
+    technique's action_template. The check result's success_level scales damage:
     - success_level >= 2: full base_power
     - success_level == 1: half base_power
     - success_level <= 0: zero (miss)
+
+    Raises ActionDispatchError(TECHNIQUE_NOT_COMBAT_READY) if the technique has
+    no action_template (i.e. it has not been configured for combat use).
 
     Fatigue is applied after the action resolves (both combo and non-combo).
     """
@@ -1761,16 +1764,17 @@ def _resolve_pc_action(
         # All non-combo techniques (damage AND non-attack) route through the magic
         # pipeline. The resolver internally handles damage (if base_power) and
         # conditions (if condition_applications rows exist).
-        if offense_check_type is not None:
-            combat_result = resolve_combat_technique(
-                participant=participant,
-                action=action,
-                fatigue_category=fatigue_category,
-                offense_check_type=offense_check_type,
-                offense_check_fn=offense_check_fn,
-            )
-            outcome.damage_results.extend(combat_result.damage_results)
-        # else: no offense_check_type — legacy test-only fallback; stay silent.
+        template = technique.action_template
+        if template is None:
+            raise ActionDispatchError(ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY)
+        combat_result = resolve_combat_technique(
+            participant=participant,
+            action=action,
+            fatigue_category=fatigue_category,
+            offense_check_type=template.check_type,
+            offense_check_fn=offense_check_fn,
+        )
+        outcome.damage_results.extend(combat_result.damage_results)
 
     # Apply fatigue after action resolves
     apply_fatigue(
@@ -1874,7 +1878,6 @@ def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
     defense_check_type: CheckType | None,
     defense_check_fn: PerformCheckFn | None,
     offense_check_fn: PerformCheckFn | None,
-    offense_check_type: CheckType | None,
 ) -> list[ActionOutcome]:
     """Iterate resolution order and resolve each entity's action."""
     outcomes: list[ActionOutcome] = []
@@ -1884,9 +1887,7 @@ def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
                 continue
             action = pc_actions.get(entity.pk)
             if action is not None:
-                outcomes.append(
-                    _resolve_pc_action(entity, action, offense_check_fn, offense_check_type)
-                )
+                outcomes.append(_resolve_pc_action(entity, action, offense_check_fn))
 
         elif entity_type == ENTITY_TYPE_NPC:
             if not isinstance(entity, CombatOpponent):
@@ -1980,7 +1981,6 @@ def resolve_round(
     defense_check_fn: PerformCheckFn | None = None,
     defense_check_type: CheckType | None = None,
     offense_check_fn: PerformCheckFn | None = None,
-    offense_check_type: CheckType | None = None,
 ) -> RoundResolutionResult:
     """Orchestrate a full combat round: detect combos -> resolve -> consequences.
 
@@ -1993,8 +1993,9 @@ def resolve_round(
     3. Iterate resolution order (speed-rank sorted PCs and NPCs).
        - For each **PC**: resolve focused action against target opponent.
          If the action has a ``combo_upgrade``, apply bonus damage with soak
-         bypass. Otherwise use perform_check (if offense_check_type provided)
-         to scale damage by success level. Apply fatigue after each action.
+         bypass. Otherwise derive the offense_check_type from the declared
+         technique's action_template and route through resolve_combat_technique.
+         Apply fatigue after each action.
        - For each **NPC**: resolve each targeted PC's defensive check.
          Process knockout/death transitions and apply conditions.
     4. Consume dying final rounds: DYING PCs with dying_final_round become DEAD.
@@ -2007,7 +2008,8 @@ def resolve_round(
         defense_check_fn: Optional ``perform_check`` override for PC defense.
         defense_check_type: The CheckType used for defensive rolls.
         offense_check_fn: Optional ``perform_check`` override for PC offense.
-        offense_check_type: The CheckType used for offensive rolls.
+            The offense_check_type is now sourced from the declared technique's
+            action_template.check_type — it is no longer passed externally.
 
     Returns:
         ``RoundResolutionResult`` with outcomes and phase transitions.
@@ -2039,6 +2041,8 @@ def resolve_round(
         "participant__character_sheet",
         "focused_action",
         "focused_action__effect_type",
+        "focused_action__action_template",
+        "focused_action__action_template__check_type",
         "focused_opponent_target",
         "combo_upgrade",
     ):
@@ -2076,7 +2080,6 @@ def resolve_round(
         defense_check_type,
         defense_check_fn,
         offense_check_fn,
-        offense_check_type,
     )
 
     # --- Dying final round consumption ---

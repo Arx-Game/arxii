@@ -10,7 +10,9 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from evennia.utils.test_resources import EvenniaTestCase
 
+from actions.factories import ActionTemplateFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.combat.constants import ActionCategory, OpponentStatus, OpponentTier
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -536,12 +538,16 @@ class NonAttackPCActionRoutingTests(TestCase):
         from world.combat.types import CombatTechniqueResolution
 
         # Build encounter / participant / technique (no base_power => non-attack)
+        # action_template with check_type is required — _resolve_pc_action now derives
+        # offense_check_type from technique.action_template.check_type.
+        check_type = CheckTypeFactory()
         encounter = CombatEncounterFactory(round_number=1)
         sheet = CharacterSheetFactory()
         participant = CombatParticipantFactory(encounter=encounter, character_sheet=sheet)
         technique = TechniqueFactory(
             gift=GiftFactory(),
             effect_type=EffectTypeFactory(name="Buff", base_power=None),
+            action_template=ActionTemplateFactory(check_type=check_type),
         )
         action = CombatRoundAction.objects.create(
             participant=participant,
@@ -551,8 +557,6 @@ class NonAttackPCActionRoutingTests(TestCase):
             focused_opponent_target=None,
             effort_level=EffortLevel.MEDIUM,
         )
-
-        mock_check_type = MagicMock()
 
         fake_resolution = CombatTechniqueResolution(
             check_result=MagicMock(success_level=2),
@@ -568,7 +572,6 @@ class NonAttackPCActionRoutingTests(TestCase):
                 participant=participant,
                 action=action,
                 offense_check_fn=None,
-                offense_check_type=mock_check_type,
             )
 
         # resolve_combat_technique must have been called — non-attack no longer a no-op
@@ -576,6 +579,8 @@ class NonAttackPCActionRoutingTests(TestCase):
         call_kwargs = mock_resolve.call_args.kwargs
         self.assertIs(call_kwargs["participant"], participant)
         self.assertIs(call_kwargs["action"], action)
+        # offense_check_type is sourced from the technique's action_template
+        self.assertIs(call_kwargs["offense_check_type"], check_type)
         # outcome is returned cleanly (no exception)
         self.assertIsNotNone(outcome)
 
