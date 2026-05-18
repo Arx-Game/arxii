@@ -186,6 +186,7 @@ from world.stories.types import (
     PendingClaimEntry,
     PerGMQueueDepthEntry,
     StaleStoryEntry,
+    StoryStatus,
     WaitingForGMEntry,
     WaitingStoryEntry,
 )
@@ -2087,8 +2088,10 @@ def _collect_gm_queue(gm_profile: "GMProfile | None") -> GMQueueBuckets:
     queries per story (violating CLAUDE.md "No Queries in Loops"). This hoists
     every per-story lookup into a batched pass keyed on the candidate stories'
     episodes, so the total query count is a small constant independent of how
-    many stories the GM leads. The produced buckets are byte-identical to the
-    old loop's output (response shape/keys/values/order unchanged).
+    many stories the GM leads. The produced buckets are set-identical to the
+    old loop's output (response shape/keys/values unchanged); intra-GROUP
+    progress is now deterministically pk-ordered where the old ``.first()``
+    returned an unspecified DB order, so no test asserts that ordering.
     """
     buckets = GMQueueBuckets()
 
@@ -2096,7 +2099,7 @@ def _collect_gm_queue(gm_profile: "GMProfile | None") -> GMQueueBuckets:
     lead_stories = list(
         Story.objects.filter(
             primary_table__gm=gm_profile,
-            status="active",
+            status=StoryStatus.ACTIVE,
         ).distinct()
     )
     if not lead_stories:
@@ -2250,7 +2253,7 @@ def _build_staff_per_gm_inputs() -> _StaffPerGMInputs:
     for story in (
         Story.objects.filter(
             primary_table__gm__isnull=False,
-            status="active",
+            status=StoryStatus.ACTIVE,
         )
         .select_related("primary_table")
         .order_by("pk")
