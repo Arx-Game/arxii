@@ -88,7 +88,7 @@ iptables -A OUTPUT -d 172.16.0.0/12 -j ACCEPT
 # ---------------------------------------------------------------------------
 ipset create allowed-domains hash:net
 
-# Loose validation: accept IPv4 address optionally followed by /NN prefix.
+# Strict validation: all four octets must be 0-255; optional prefix must be /0-/32.
 is_valid_ipv4_cidr() {
     [[ "$1" =~ ^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(/(3[0-2]|[12]?[0-9]))?$ ]]
 }
