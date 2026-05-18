@@ -258,6 +258,83 @@ class TestGetPlayerActionsCombatBackend(django.test.TestCase):
         self.assertEqual(ref.backend, ActionBackend.COMBAT)
         self.assertEqual(ref.technique_id, self.technique.pk)
 
+    def test_technique_without_action_template_excluded(self) -> None:
+        """A technique the character knows but without an action_template is excluded."""
+        from actions.player_interface import get_player_actions
+        from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
+
+        # Technique with NO action_template — not combat-usable
+        non_combat_technique = TechniqueFactory(damage_profile=False, action_template=None)
+        CharacterTechniqueFactory(character=self.sheet, technique=non_combat_technique)
+
+        actions = get_player_actions(self.character)
+        combat_actions = [a for a in actions if a.backend == ActionBackend.COMBAT]
+        technique_ids = [a.ref.technique_id for a in combat_actions]
+        self.assertNotIn(
+            non_combat_technique.pk,
+            technique_ids,
+            "Technique without action_template must not appear in COMBAT actions",
+        )
+        # The combat-usable technique from setUpTestData still appears
+        self.assertIn(self.technique.pk, technique_ids)
+
+
+# ---------------------------------------------------------------------------
+# Test: COMBAT backend — declaration window closed (RESOLVING / BETWEEN_ROUNDS)
+# ---------------------------------------------------------------------------
+
+
+class TestGetPlayerActionsCombatWindowClosed(django.test.TestCase):
+    """COMBAT actions are not surfaced when the declaration window is closed."""
+
+    def _make_participant_with_technique(self, status: str) -> tuple:
+        """Create an encounter in *status* with an ACTIVE participant who has a combat technique.
+
+        Returns (character ObjectDB, technique).
+        """
+        from actions.factories import ActionTemplateFactory
+        from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
+
+        encounter = CombatEncounterFactory(status=status, round_number=1)
+        participant = CombatParticipantFactory(encounter=encounter, status=ParticipantStatus.ACTIVE)
+        sheet = participant.character_sheet
+        character = sheet.character
+
+        check_type = CheckTypeFactory()
+        template = ActionTemplateFactory(check_type=check_type)
+        technique = TechniqueFactory(damage_profile=False, action_template=template)
+        CharacterTechniqueFactory(character=sheet, technique=technique)
+
+        return character, technique
+
+    def test_no_combat_actions_when_resolving(self) -> None:
+        """Encounter in RESOLVING → is_declaration_open is False → no COMBAT actions."""
+        from actions.player_interface import get_player_actions
+
+        character, _technique = self._make_participant_with_technique(EncounterStatus.RESOLVING)
+        actions = get_player_actions(character)
+        combat_actions = [a for a in actions if a.backend == ActionBackend.COMBAT]
+        self.assertEqual(
+            combat_actions,
+            [],
+            "COMBAT actions must not appear when encounter is RESOLVING",
+        )
+
+    def test_no_combat_actions_when_between_rounds(self) -> None:
+        """Encounter in BETWEEN_ROUNDS → is_declaration_open is False → no COMBAT actions."""
+        from actions.player_interface import get_player_actions
+
+        character, _technique = self._make_participant_with_technique(
+            EncounterStatus.BETWEEN_ROUNDS
+        )
+        actions = get_player_actions(character)
+        combat_actions = [a for a in actions if a.backend == ActionBackend.COMBAT]
+        self.assertEqual(
+            combat_actions,
+            [],
+            "COMBAT actions must not appear when encounter is BETWEEN_ROUNDS",
+        )
+
 
 # ---------------------------------------------------------------------------
 # Test: COMBAT backend — no active combat

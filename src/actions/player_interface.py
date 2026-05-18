@@ -9,9 +9,10 @@ Backend resolution:
   each ``AvailableAction`` (which already carries resolved ``check_type_resolved`` and
   ``action_template_resolved`` instances populated by the prefetch chain) into a
   ``PlayerAction``.
-- COMBAT      -- only when ``get_active_round_context`` returns a ``CombatRoundContext``;
-  enumerates the character's known techniques that have an ``action_template``
-  (= combat-ready techniques) and emits one ``PlayerAction`` per technique.
+- COMBAT      -- only when ``get_active_round_context`` returns a ``RoundContext``
+  whose ``is_declaration_open`` is ``True``; enumerates the character's known
+  techniques that have an ``action_template`` (= combat-usable techniques) and
+  emits one ``PlayerAction`` per technique.
 - REGISTRY    -- ``get_actions_for_target_type`` returns registry ``Action`` singletons;
   these have no ``ActionTemplate`` / ``check_type`` so ALL current registry actions are
   excluded.  (Noted in the module docstring for visibility.)
@@ -32,7 +33,6 @@ from typing import TYPE_CHECKING
 from actions.constants import ActionBackend
 from actions.round_context import get_active_round_context
 from actions.types import ActionRef, PlayerAction
-from world.combat.round_context import CombatRoundContext
 from world.magic.models import CharacterTechnique
 from world.mechanics.services import get_available_actions
 
@@ -117,11 +117,15 @@ def _combat_actions(character: ObjectDB) -> list[PlayerAction]:
 
     Only produces actions when:
     1. The character has a ``CharacterSheet`` (required to resolve combat participation).
-    2. ``get_active_round_context`` returns a ``CombatRoundContext`` (encounter in DECLARING
-       or other active status).
+    2. ``get_active_round_context`` returns a ``RoundContext`` with
+       ``is_declaration_open == True`` (encounter in DECLARING phase).
 
-    Enumerates the character's known techniques that are combat-ready (have an
-    ``action_template`` FK set) and emits one ``PlayerAction`` per such technique.
+    Candidate set: techniques the character knows that are combat-usable
+    (``technique.action_template is not None``).  This is the SAME gate
+    ``DeclareActionSerializer.validate`` enforces — availability surfaces
+    candidates only; authoritative per-target / passive-slot / status
+    validation happens at declare/dispatch time (``DeclareActionSerializer.validate``
+    / ``CombatRoundContext.record_declaration``).
     """
     # Resolve CharacterSheet from the character ObjectDB
     sheet = _get_character_sheet(character)
@@ -129,7 +133,7 @@ def _combat_actions(character: ObjectDB) -> list[PlayerAction]:
         return []
 
     ctx = get_active_round_context(sheet)
-    if ctx is None or not isinstance(ctx, CombatRoundContext):
+    if ctx is None or not ctx.is_declaration_open:
         return []
 
     # Enumerate techniques the character knows that have an action_template.
