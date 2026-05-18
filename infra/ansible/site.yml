@@ -17,5 +17,6 @@
     - tls_telnet_cert
     - django_hardening
     - app_deploy
-    # added incrementally (M5): backups, offsite_replication,
-    # secrets_perms, offbox_alerting, observability
+    - backups
+    - offsite_replication
+    # added incrementally (M5): secrets_perms, offbox_alerting, observability
