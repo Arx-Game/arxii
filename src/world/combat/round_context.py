@@ -32,6 +32,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.db import transaction
+
 from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
 from actions.round_context import RoundContext
@@ -114,6 +116,7 @@ class CombatRoundContext(RoundContext):
             # REGISTRY actions are immediate utility; they are never round-declared.
             raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
 
+    @transaction.atomic
     def _record_combat_declaration(
         self,
         participant: CombatParticipant,
@@ -123,6 +126,9 @@ class CombatRoundContext(RoundContext):
         """Upsert a CombatRoundAction and clear any competing challenge declaration."""
         from world.magic.models import Technique  # noqa: PLC0415
 
+        if "effort_level" not in kwargs:  # noqa: STRING_LITERAL — kwargs key name, not a model identifier
+            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+
         # Clear any prior challenge declaration for this (encounter, round, participant).
         RoundChallengeDeclaration.objects.filter(
             encounter=self._encounter,
@@ -130,7 +136,10 @@ class CombatRoundContext(RoundContext):
             participant=participant,
         ).delete()
 
-        technique = Technique.objects.get(pk=player_action.ref.technique_id)
+        try:
+            technique = Technique.objects.get(pk=player_action.ref.technique_id)
+        except Technique.DoesNotExist as exc:
+            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
 
         from world.combat.services import declare_action  # noqa: PLC0415
 
@@ -146,6 +155,7 @@ class CombatRoundContext(RoundContext):
             mental_passive=kwargs.get("mental_passive"),
         )
 
+    @transaction.atomic
     def _record_challenge_declaration(
         self,
         participant: CombatParticipant,
@@ -160,10 +170,17 @@ class CombatRoundContext(RoundContext):
             round_number=self._encounter.round_number,
         ).delete()
 
-        challenge_instance = ChallengeInstance.objects.get(
-            pk=player_action.ref.challenge_instance_id
-        )
-        challenge_approach = ChallengeApproach.objects.get(pk=player_action.ref.approach_id)
+        try:
+            challenge_instance = ChallengeInstance.objects.get(
+                pk=player_action.ref.challenge_instance_id
+            )
+        except ChallengeInstance.DoesNotExist as exc:
+            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
+
+        try:
+            challenge_approach = ChallengeApproach.objects.get(pk=player_action.ref.approach_id)
+        except ChallengeApproach.DoesNotExist as exc:
+            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF) from exc
 
         RoundChallengeDeclaration.objects.update_or_create(
             encounter=self._encounter,

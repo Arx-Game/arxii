@@ -164,13 +164,6 @@ class TestGetActiveRoundContextInactiveParticipant(django.test.TestCase):
         self.assertIsNone(result)
 
 
-class TestRoundContextRecordDeclarationStub(django.test.TestCase):
-    """record_declaration no longer raises NotImplementedError (P2T8 implemented)."""
-
-    def test_record_declaration_raises_not_implemented(self) -> None:
-        """Kept as a placeholder; the stub test is superseded by P2T8 tests below."""
-
-
 def _make_declaring_encounter_with_vitals() -> tuple:
     """Create a DECLARING encounter, ACTIVE participant, and ALIVE CharacterVitals."""
     encounter = CombatEncounterFactory(
@@ -432,3 +425,99 @@ class TestRecordDeclarationClosedWindow(django.test.TestCase):
             ctx.record_declaration(sheet, player_action, {"effort_level": EffortLevel.MEDIUM})
 
         self.assertEqual(cm.exception.code, ActionDispatchError.ROUND_DECLARATION_CLOSED)
+
+
+class TestRecordDeclarationCombatMissingEffortLevel(django.test.TestCase):
+    """COMBAT record_declaration with missing effort_level → UNKNOWN_ACTION_REF."""
+
+    def setUp(self) -> None:
+        from actions.round_context import get_active_round_context
+
+        self.encounter, self.participant = _make_declaring_encounter_with_vitals()
+        self.sheet = self.participant.character_sheet
+        ctx = get_active_round_context(self.sheet)
+        assert ctx is not None
+        self.ctx = ctx
+        self.technique = TechniqueFactory(damage_profile=False)
+
+    def test_missing_effort_level_raises_unknown_action_ref(self) -> None:
+        """kwargs without 'effort_level' → ActionDispatchError(UNKNOWN_ACTION_REF)."""
+        player_action = _make_combat_player_action(self.technique)
+        with self.assertRaises(ActionDispatchError) as cm:
+            self.ctx.record_declaration(self.sheet, player_action, {})
+        self.assertEqual(cm.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)
+
+
+class TestRecordDeclarationCombatStaleRef(django.test.TestCase):
+    """COMBAT record_declaration with a deleted Technique pk → UNKNOWN_ACTION_REF."""
+
+    def setUp(self) -> None:
+        from actions.round_context import get_active_round_context
+
+        self.encounter, self.participant = _make_declaring_encounter_with_vitals()
+        self.sheet = self.participant.character_sheet
+        ctx = get_active_round_context(self.sheet)
+        assert ctx is not None
+        self.ctx = ctx
+
+    def test_deleted_technique_raises_unknown_action_ref(self) -> None:
+        """A Technique pk that no longer exists → ActionDispatchError(UNKNOWN_ACTION_REF)."""
+        technique = TechniqueFactory(damage_profile=False)
+        stale_pk = technique.pk
+        technique.delete()
+
+        from actions.types import ActionRef, PlayerAction
+
+        ref = ActionRef(backend=ActionBackend.COMBAT, technique_id=stale_pk)
+        check_type = CheckTypeFactory()
+        action_template = ActionTemplateFactory(check_type=check_type)
+        player_action = PlayerAction(
+            backend=ActionBackend.COMBAT,
+            action_template=action_template,
+            display_name="Stale Combat Action",
+            ref=ref,
+        )
+        with self.assertRaises(ActionDispatchError) as cm:
+            self.ctx.record_declaration(
+                self.sheet, player_action, {"effort_level": EffortLevel.MEDIUM}
+            )
+        self.assertEqual(cm.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)
+
+
+class TestRecordDeclarationChallengeStaleRef(django.test.TestCase):
+    """CHALLENGE record_declaration with a deleted ChallengeInstance pk → UNKNOWN_ACTION_REF."""
+
+    def setUp(self) -> None:
+        from actions.round_context import get_active_round_context
+
+        self.encounter, self.participant = _make_declaring_encounter_with_vitals()
+        self.sheet = self.participant.character_sheet
+        ctx = get_active_round_context(self.sheet)
+        assert ctx is not None
+        self.ctx = ctx
+
+    def test_deleted_challenge_instance_raises_unknown_action_ref(self) -> None:
+        """A deleted ChallengeInstance pk → ActionDispatchError(UNKNOWN_ACTION_REF)."""
+        challenge_instance = ChallengeInstanceFactory()
+        challenge_approach = ChallengeApproachFactory()
+        stale_instance_pk = challenge_instance.pk
+        challenge_instance.delete()
+
+        from actions.types import ActionRef, PlayerAction
+
+        ref = ActionRef(
+            backend=ActionBackend.CHALLENGE,
+            challenge_instance_id=stale_instance_pk,
+            approach_id=challenge_approach.pk,
+        )
+        check_type = CheckTypeFactory()
+        action_template = ActionTemplateFactory(check_type=check_type)
+        player_action = PlayerAction(
+            backend=ActionBackend.CHALLENGE,
+            action_template=action_template,
+            display_name="Stale Challenge Action",
+            ref=ref,
+        )
+        with self.assertRaises(ActionDispatchError) as cm:
+            self.ctx.record_declaration(self.sheet, player_action, {})
+        self.assertEqual(cm.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)
