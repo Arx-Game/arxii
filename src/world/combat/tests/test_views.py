@@ -16,7 +16,7 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatRoundAction
 from world.magic.factories import (
-    EffectTypeFactory,
+    BinaryEffectTypeFactory,
     TechniqueAppliedConditionFactory,
     TechniqueFactory,
 )
@@ -352,7 +352,7 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         of the ally participant.
         """
         # Buff effect type (no base_power → no damage → no forced opponent target)
-        buff_effect_type = EffectTypeFactory(name="DeclareAllyBuff", base_power=None)
+        buff_effect_type = BinaryEffectTypeFactory()
         # Technique with one ally-kind condition row so target-kind validation passes
         technique = TechniqueFactory(effect_type=buff_effect_type, damage_profile=False)
         TechniqueAppliedConditionFactory(technique=technique, target_kind="ally")
