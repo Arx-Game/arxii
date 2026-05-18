@@ -6,7 +6,7 @@ FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
 # init-firewall.sh; build-essential for any source wheels.
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
  && apt-get install -y --no-install-recommends \
-      iptables ipset dnsutils jq git curl ca-certificates build-essential sudo \
+      iptables ipset dnsutils jq postgresql-client git curl ca-certificates build-essential sudo \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --chown=root:root .devcontainer/init-firewall.sh /usr/local/bin/init-firewall.sh
@@ -23,6 +23,7 @@ USER vscode
 # unrestricted during build, so the runtime firewall never needs mise's
 # download hosts. Only mise.toml is copied so the layer caches well.
 RUN curl -fsSL https://mise.run | sh \
- && echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.bashrc
+ && echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.bashrc \
+ && echo 'eval "$(~/.local/bin/mise activate bash)"' >> ~/.bash_profile
 COPY --chown=vscode:vscode mise.toml /tmp/mise/mise.toml
 RUN cd /tmp/mise && ~/.local/bin/mise install
