@@ -290,4 +290,4 @@ This can happen if the container was started with raw `docker compose up` instea
 ```powershell
 npm install -g @devcontainers/cli
 ```
-Or re-run `scripts/bootstrap-devcontainer-host.ps1`.
+Or re-run `.\scripts\bootstrap-devcontainer-host.ps1`.
