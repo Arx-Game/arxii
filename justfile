@@ -124,3 +124,31 @@ gen-api-types:
     uv run arx manage spectacular --file schema.json --validate
     pnpm --prefix frontend generate:types
     @echo "gen-api-types: schema regenerated and frontend types updated."
+
+# --- Devcontainer (host-side; run these OUTSIDE the container) ---------------
+
+# Requires the devcontainer CLI: npm i -g @devcontainers/cli
+# These wrap the devcontainer CLI (NOT raw docker compose) so the
+# claude-code feature install and postCreate/postStart hooks actually run.
+# Raw `docker compose up` would give an unprovisioned container.
+_dc := ".devcontainer/docker-compose.yml"
+
+# Build + start the stack and run all devcontainer setup hooks
+dc-up:
+    devcontainer up --workspace-folder .
+
+# Full rebuild (no cache) and re-run setup
+dc-build:
+    devcontainer up --workspace-folder . --build-no-cache --remove-existing-container
+
+# Open a shell INSIDE the app container (this is where you run `claude`)
+dc-shell:
+    devcontainer exec --workspace-folder . bash
+
+# Run the test suite inside the container
+dc-test *args:
+    devcontainer exec --workspace-folder . bash -lc "uv run arx test {{args}}"
+
+# Stop the stack (named db volume is preserved by the pinned project name)
+dc-down:
+    docker compose -p arxii-devcontainer -f {{_dc}} down
