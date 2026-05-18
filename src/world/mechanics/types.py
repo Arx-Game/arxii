@@ -10,7 +10,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from world.checks.models import Consequence
+    from actions.models.action_templates import ActionTemplate
+    from world.checks.models import CheckType, Consequence
     from world.checks.types import CheckResult
 
 from world.checks.types import OutcomeDisplay
@@ -68,7 +69,15 @@ class CapabilitySource:
 
 @dataclass
 class AvailableAction:
-    """An Action available to a character for a specific Challenge."""
+    """An Action available to a character for a specific Challenge.
+
+    ``check_type_resolved`` and ``action_template_resolved`` carry the already-loaded
+    model instances (populated from the prefetched ChallengeApproach by
+    ``_match_approaches``).  They are excluded from the ``AvailableActionSerializer``
+    because DataclassSerializer cannot render arbitrary model instances — callers in
+    ``actions.player_interface`` read them directly.  ``check_type_name`` is kept for
+    backwards-compatibility with existing serializer consumers.
+    """
 
     application_id: int
     application_name: str
@@ -82,6 +91,10 @@ class AvailableAction:
     difficulty_indicator: DifficultyIndicator | None = None
     prerequisite_met: bool = True
     prerequisite_reasons: list[str] = field(default_factory=list)
+    # Resolved model instances (populated from already-prefetched approach data).
+    # Default None so existing construction sites that don't pass these still work.
+    check_type_resolved: CheckType | None = field(default=None)
+    action_template_resolved: ActionTemplate | None = field(default=None)
 
 
 @dataclass

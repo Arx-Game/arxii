@@ -343,6 +343,10 @@ class AvailableActionSerializer(DataclassSerializer):
 
     class Meta:
         dataclass = AvailableAction
+        # Exclude resolved model instances — DataclassSerializer cannot render
+        # arbitrary Django model instances over the wire.  Callers that need the
+        # instances (e.g. actions.player_interface) read the fields directly.
+        exclude = ["check_type_resolved", "action_template_resolved"]
 
 
 class ChallengeGroupSerializer(DataclassSerializer):
