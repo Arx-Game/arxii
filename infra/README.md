@@ -56,6 +56,40 @@ Environment secrets and invokes the exact same script below (one source of truth
 - Note: fully keyless (GitHub OIDC, no stored token) is not cleanly available for Linode,
   so short-lived + revoke-after is the realistic best posture, not OIDC.
 
+## GitHub Environment secrets (gated `prod`)
+
+NAMES ONLY below — never values (safe in this public repo). All live in the
+gated `prod` GitHub Environment (required-reviewer approval before any run).
+They are exposed ONLY to the approved job, never echoed, never `--extra-vars`.
+
+**Pre-stored by the operator — provisioning (tofu step; operator/CI-only,
+NEVER reach the box; revoke at the provider after each successful run):**
+- `TF_LINODE_TOKEN` — Linode API token
+- `TF_CLOUDFLARE_API_TOKEN` — Cloudflare API token
+- `TF_STATE_S3_ACCESS_KEY`, `TF_STATE_S3_SECRET_KEY` — the Object Storage key
+  for the remote-state bucket (created manually in bootstrap; scoped to that
+  bucket only)
+
+**Pre-stored by the operator — runtime app secrets (ansible step → exported
+as `ARXII_*` on that step ONLY; rendered to the 0600 on-box EnvironmentFile;
+long-lived, rotate on suspicion):**
+- `ARXII_PG_PASSWORD`, `ARXII_DJANGO_SECRET_KEY`, `ARXII_CLOUDINARY_URL`,
+  `ARXII_RESEND_API_KEY`, `ARXII_OFFBOX_ALERT_TOKEN`
+- `ARXII_R2_ACCESS_KEY_ID`, `ARXII_R2_SECRET_ACCESS_KEY` — the SEPARATE,
+  out-of-band R2 credential (distinct from Linode, scoped to the offsite
+  bucket; this is what makes the 3-2-1 independent)
+- `ANSIBLE_SSH_PRIVATE_KEY` — key Ansible uses to reach the host
+
+**NOT pre-stored — produced by the tofu step at run time and piped into the
+ansible step's env in-memory (masked, never to disk/log):**
+- `ARXII_BACKUP_WRITER_ACCESS_KEY`, `ARXII_BACKUP_WRITER_SECRET_KEY` — the
+  Linode primary-backups writer key (the `object_storage` module emits these
+  as sensitive `tofu output`s; the button wires output → ansible env)
+
+**Non-secret config** (domain, bucket labels, `cloudflare_account_id`,
+public `authorized_keys`, `dmarc_rua`, `resend_records`, `ssh_admin_cidrs`)
+goes in repo/Environment **Variables**, not Secrets.
+
 ## Layout
 
 - `terraform/bootstrap/` — one-time, idempotent: creates the remote-state bucket (no Object Lock).
