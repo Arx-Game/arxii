@@ -21,7 +21,7 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
-from world.combat.models import CombatRoundAction
+from world.combat.models import CombatOpponentAction, CombatRoundAction
 from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.conditions.models import ConditionInstance
 from world.magic.factories import (
@@ -283,8 +283,6 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
     def test_ready_toggle(self) -> None:
         """Participant can toggle ready on their action if one exists."""
         # First we need an action — create one directly
-        from world.combat.models import CombatRoundAction
-
         CombatRoundAction.objects.create(
             participant=self.participant,
             round_number=self.encounter.round_number,
@@ -454,8 +452,8 @@ class DeclareAndResolveE2ETest(TestCase):
 
     def setUp(self) -> None:
         # GM account / scene
-        self.gm_account = AccountFactory(username="e2e_gm")
-        self.gm_character = CharacterFactory(db_key="e2e_gmchar")
+        self.gm_account = AccountFactory()
+        self.gm_character = CharacterFactory()
         self.gm_sheet = CharacterSheetFactory(character=self.gm_character)
         self.gm_tenure = RosterTenureFactory(
             roster_entry__character_sheet__character=self.gm_character,
@@ -463,8 +461,8 @@ class DeclareAndResolveE2ETest(TestCase):
         )
 
         # Player account / character
-        self.player_account = AccountFactory(username="e2e_player")
-        self.player_character = CharacterFactory(db_key="e2e_playerchar")
+        self.player_account = AccountFactory()
+        self.player_character = CharacterFactory()
         self.player_sheet = CharacterSheetFactory(character=self.player_character)
         self.player_tenure = RosterTenureFactory(
             roster_entry__character_sheet__character=self.player_character,
@@ -514,7 +512,6 @@ class DeclareAndResolveE2ETest(TestCase):
             max_health=100,
             threat_pool=pool,
         )
-        starting_health = opponent.health
 
         # Participant uses the player's sheet so player_account's auth resolves it
         participant = CombatParticipantFactory(
@@ -546,8 +543,6 @@ class DeclareAndResolveE2ETest(TestCase):
         self.player_character.save()
 
         # NPC action so the orchestrator has a complete round (opponent must act too)
-        from world.combat.models import CombatOpponentAction
-
         npc_action = CombatOpponentAction.objects.create(
             opponent=opponent,
             round_number=1,
@@ -605,15 +600,18 @@ class DeclareAndResolveE2ETest(TestCase):
             )
         self.assertEqual(resolve_response.status_code, http_status.HTTP_200_OK)
 
-        # --- Step 3: Assert damage was applied to the opponent ---
+        # --- Step 3: Assert exact damage was applied to the opponent ---
+        # Empirically confirmed: base_power=20, success_level=2, multiplier=1.00,
+        # soak=0 → exactly 20 damage → health 100 → 80. Deterministic across runs.
         opponent.refresh_from_db()
-        self.assertLess(
+        self.assertEqual(
             opponent.health,
-            starting_health,
+            80,
             msg=(
-                f"Opponent health should have decreased from {starting_health} "
-                f"but is still {opponent.health}. "
-                "The 'spells do nothing in combat' regression may have returned."
+                f"Opponent health should be exactly 80 (100 - 20 base_power damage) "
+                f"but got {opponent.health}. "
+                "The 'spells do nothing in combat' regression may have returned, "
+                "or the damage calculation has changed."
             ),
         )
 
