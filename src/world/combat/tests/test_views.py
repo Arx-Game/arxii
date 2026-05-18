@@ -5,8 +5,10 @@ from rest_framework import status as http_status
 from rest_framework.test import APIClient
 
 from actions.errors import ActionDispatchError
+from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.combat.constants import EncounterStatus, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -353,8 +355,13 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
         """
         # Buff effect type (no base_power → no damage → no forced opponent target)
         buff_effect_type = BinaryEffectTypeFactory()
-        # Technique with one ally-kind condition row so target-kind validation passes
-        technique = TechniqueFactory(effect_type=buff_effect_type, damage_profile=False)
+        # Technique with action_template so serializer validation passes,
+        # and one ally-kind condition row so target-kind validation passes
+        technique = TechniqueFactory(
+            effect_type=buff_effect_type,
+            damage_profile=False,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
+        )
         TechniqueAppliedConditionFactory(technique=technique, target_kind="ally")
 
         # Fresh DECLARING encounter linked to the scene so setUpTestData doesn't interfere
