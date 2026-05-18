@@ -234,6 +234,43 @@ describe('Stories Authoring Hooks (D2)', () => {
   });
 
   // -------------------------------------------------------------------------
+  // api: markBeat (ledger I-A twin)
+  // -------------------------------------------------------------------------
+  describe('markBeat', () => {
+    it('attaches the failed Response to the thrown error on a non-ok response', async () => {
+      // Drives the REAL api.markBeat through a 400 to prove the
+      // api->component error seam: MarkBeatDialog.onError reads
+      // `'response' in err` then `response.json()` to surface DRF field
+      // errors. Without the fix markBeat threw a plain Error (no
+      // `.response`) so that branch was dead. Locks the real contract.
+      const errorBody = { gm_notes: ['This field is required.'] };
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+        new Response(JSON.stringify(errorBody), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      const { markBeat: realMarkBeat } = await vi.importActual<typeof import('../api')>('../api');
+
+      let caught: unknown;
+      try {
+        await realMarkBeat(11, { outcome: 'success' });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught && typeof caught === 'object' && 'response' in caught).toBe(true);
+      const response = (caught as { response?: Response }).response;
+      expect(response).toBeInstanceOf(Response);
+      await expect(response?.json()).resolves.toEqual(errorBody);
+
+      fetchSpy.mockRestore();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // api: listStoryNotes
   // -------------------------------------------------------------------------
   describe('listStoryNotes', () => {
