@@ -68,6 +68,7 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    RoundChallengeDeclaration,
     ThreatPool,
     ThreatPoolEntry,
 )
@@ -86,6 +87,9 @@ from world.combat.types import (
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel, FatigueCategory
 from world.fatigue.services import apply_fatigue, get_fatigue_penalty
 from world.magic.constants import EffectKind
+from world.mechanics.challenge_resolution import resolve_challenge
+from world.mechanics.services import get_available_actions
+from world.mechanics.types import ChallengeResolutionResult
 from world.vitals.constants import (
     DEATH_HEALTH_THRESHOLD,
     KNOCKOUT_HEALTH_THRESHOLD,
@@ -1974,6 +1978,109 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
     return all_opponents_down or all_pcs_down
 
 
+def _resolve_declared_challenges(
+    encounter: CombatEncounter,
+    round_number: int,
+    resolution_order: list[tuple[str, CombatParticipant | CombatOpponent]],
+) -> list[ChallengeResolutionResult]:
+    """Post-pass: resolve RoundChallengeDeclarations in participant initiative order.
+
+    Called after all combat-action resolution for the round.  Fetches bridge rows,
+    orders them to match the existing resolution_order for PC participants, resolves
+    each character's declared challenge (re-validating eligibility via
+    get_available_actions), and deletes all bridge rows for the round.
+
+    Ineligible-skip: if get_available_actions returns no action matching the
+    declared (challenge_instance_id, approach_id), the declaration is silently
+    skipped — no CharacterChallengeRecord is created and no exception is raised.
+    This mirrors dispatch-time security: declared state may be stale if a
+    character lost their capability between declaration and resolution.
+
+    The delete of bridge rows runs inside the caller's @transaction.atomic so it
+    is consistent with the rest of round resolution.
+    """
+    declarations = list(
+        RoundChallengeDeclaration.objects.filter(
+            encounter=encounter,
+            round_number=round_number,
+        ).select_related(
+            "participant",
+            "participant__character_sheet",
+            "challenge_instance",
+            "challenge_instance__location",
+            "challenge_approach",
+        )
+    )
+
+    if not declarations:
+        return []
+
+    # Build participant_id → declaration map for O(n) ordering.
+    decl_by_participant: dict[int, RoundChallengeDeclaration] = {
+        d.participant_id: d for d in declarations
+    }
+
+    # Order by the same resolution_order combat uses for PC participants.
+    # NPCs never declare challenges, so only ENTITY_TYPE_PC entries matter.
+    ordered: list[RoundChallengeDeclaration] = []
+    for entity_type, entity in resolution_order:
+        if entity_type != ENTITY_TYPE_PC:
+            continue
+        if not isinstance(entity, CombatParticipant):
+            continue
+        decl = decl_by_participant.pop(entity.pk, None)
+        if decl is not None:
+            ordered.append(decl)
+
+    # Any declarations for participants not in resolution_order (e.g. DYING without
+    # final-round) come after, preserving their insertion order.
+    ordered.extend(decl_by_participant.values())
+
+    outcomes: list[ChallengeResolutionResult] = []
+    for decl in ordered:
+        character = decl.participant.character_sheet.character
+        challenge_instance = decl.challenge_instance
+        approach = decl.challenge_approach
+        location = challenge_instance.location
+
+        # Re-validate eligibility: character must still have a matching AvailableAction.
+        available_actions = get_available_actions(character, location)
+        matching = next(
+            (
+                a
+                for a in available_actions
+                if a.challenge_instance_id == challenge_instance.pk and a.approach_id == approach.pk
+            ),
+            None,
+        )
+        if matching is None:
+            logger.warning(
+                "Skipping deferred challenge declaration for participant %s "
+                "(challenge_instance=%s, approach=%s): "
+                "no matching AvailableAction at resolution time.",
+                decl.participant_id,
+                challenge_instance.pk,
+                approach.pk,
+            )
+            continue
+
+        outcome = resolve_challenge(
+            character,
+            challenge_instance,
+            approach,
+            matching.capability_source,
+        )
+        outcomes.append(outcome)
+
+    # Delete all bridge rows for this round inside the outer atomic block.
+    RoundChallengeDeclaration.objects.filter(
+        encounter=encounter,
+        round_number=round_number,
+    ).delete()
+
+    return outcomes
+
+
 @transaction.atomic
 def resolve_round(
     encounter: CombatEncounter,
@@ -2080,6 +2187,13 @@ def resolve_round(
         defense_check_type,
         defense_check_fn,
         offense_check_fn,
+    )
+
+    # --- Post-pass: deferred challenge declarations (in initiative order) ---
+    result.challenge_outcomes = _resolve_declared_challenges(
+        encounter,
+        round_number,
+        resolution_order,
     )
 
     # --- Dying final round consumption ---
