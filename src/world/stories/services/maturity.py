@@ -24,7 +24,9 @@ def episode_meets_plot_gate(episode: Episode) -> bool:
     """
     if not episode.resting_conclusion.strip():
         return False
-    return episode.outbound_transitions.exists() or episode.is_ending
+    # `is_ending` is a local field — order it first so a True value
+    # short-circuits and skips the outbound_transitions query entirely.
+    return episode.is_ending or episode.outbound_transitions.exists()
 
 
 def promote_episode_maturity(episode: Episode, target: StoryMaturity) -> Episode:

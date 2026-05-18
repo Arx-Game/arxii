@@ -656,18 +656,25 @@ neutral items kept their suites green, behavioral ones added TDD coverage.
   do, so `MarkBeatDialog.onError`'s `response.json()` field-error branch is
   live. Real-contract TDD in `queries.authoring.test.tsx`.
 
-**Noted follow-up (review Minor, not blocking):** M-1's
-`story.owners.filter(pk=user.pk).exists()` adds exactly one bounded
-single-object query on the player-tier *Story* detail path (not an N+1, no
-`assertNumQueries` lock affected). `StoryDetailSerializer` already evaluates
-`owners.all()` for its `owners` field, so a cache-reusing variant
-(`prefetch_related("owners")` on the retrieve queryset +
-`any(o.pk == user.pk for o in story.owners.all())`) would make it
-zero-query *on the Story path* — but it is neutral-or-worse on the
-Chapter/Episode detail paths (no `owners` field there, so `.all()` fetches
-all rows vs `.exists()` LIMIT 1). Left as-is deliberately; revisit only if a
-`story.owners` prefetch is added to the Story retrieve queryset for other
-reasons.
+**Senior-dev review (TehomCD) follow-up — RESOLVED.** Three comments on the
+M-1 / (a) commits, all addressed:
+
+- *No per-call owners query.* `Story.owner_account_ids` is now a Django
+  `@cached_property` returning a `frozenset` of owning AccountDB pks (one
+  query on first access, then reused for the life of the identity-mapped
+  Story instance — zero query on subsequent serializations).
+- *No "role then jk" redundancy.* The role lookup + bolted-on `is_owner`
+  in `_gm_text_gate` is replaced by a single
+  `permissions.can_view_story_gm_text(user, story)` predicate (staff /
+  Lead GM / owner). It is intentionally NOT a new role on
+  `classify_story_log_viewer_role`: that classifier also drives
+  `serialize_story_log` beat-visibility, where owners must NOT gain
+  SECRET-beat / GM-note access — so the owner allowance is scoped to the
+  GM-authoring-text predicate only and the story-log role contract is
+  unchanged.
+- *(a) short-circuit.* `episode_meets_plot_gate` now tests the local
+  `is_ending` field before `outbound_transitions.exists()`, so a True
+  `is_ending` skips the query. Boolean-equivalent.
 
 Out of scope (unchanged, design-bearing): the §10 sequenced follow-ups
 (Mission/Challenge engine, Sessions, Consequence/reward, GM leveling,

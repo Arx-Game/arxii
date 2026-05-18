@@ -989,6 +989,37 @@ def classify_story_log_viewer_role(
     return VIEWER_ROLE_NO_ACCESS
 
 
+def can_view_story_gm_text(user: AbstractBaseUser | AnonymousUser, story: Story) -> bool:
+    """Whether ``user`` may see GM-only authoring text for ``story``.
+
+    GM-only text = ``description`` / ``consequences`` and a PITCH node's
+    ``summary`` (the fields ``_gm_text_gate`` strips). True iff the user is
+    authenticated AND one of: staff, the Lead GM of ``story.primary_table``,
+    or an owner of the story.
+
+    This is a deliberately standalone predicate, NOT an extra role on
+    ``classify_story_log_viewer_role``: that classifier also drives
+    ``serialize_story_log`` beat-visibility, where an owner is *not*
+    privileged (owners must not see SECRET beats / GM notes in the log).
+    Only the GM-authoring-text gate treats owners as privileged, so the
+    owner allowance lives here and the story-log role contract is unchanged.
+
+    Owner membership reads the cached ``Story.owner_account_ids`` set, so no
+    owners query is issued per serialization.
+    """
+    if not getattr(user, "is_authenticated", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
+        return False
+    if getattr(user, "is_staff", False):  # noqa: GETATTR_LITERAL — AnonymousUser safe
+        return True
+    try:
+        gm_profile = user.gm_profile
+        if story.primary_table_id is not None and story.primary_table.gm_id == gm_profile.pk:
+            return True
+    except GMProfile.DoesNotExist:
+        pass
+    return user.pk in story.owner_account_ids
+
+
 def _story_log_user_has_access(
     user: AbstractBaseUser | AnonymousUser,
     story: Story,

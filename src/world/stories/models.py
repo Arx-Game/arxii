@@ -186,6 +186,18 @@ class Story(SharedMemoryModel):
     def __str__(self) -> str:
         return self.title
 
+    @cached_property
+    def owner_account_ids(self) -> frozenset[int]:
+        """Cached set of owning AccountDB pks.
+
+        One query on first access, then reused for the life of this
+        identity-mapped Story instance (so the GM-text gate does not
+        issue an owners query per serialization). Owners change rarely;
+        a stale set after an in-process m2m mutation is acceptable for
+        this read-path and consistent with the SharedMemoryModel cache.
+        """
+        return frozenset(cast(Any, self).owners.values_list("pk", flat=True))
+
     def is_active(self) -> bool:
         """Check if story has active GMs and is not inactive/completed/cancelled"""
         active_gms = cast(Any, self.active_gms)
