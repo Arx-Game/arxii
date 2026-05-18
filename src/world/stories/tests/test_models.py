@@ -119,6 +119,24 @@ class StoryModelTestCase(TestCase):
         """CHARACTER-scope stories created via PersonalStoryFactory have scope=CHARACTER."""
         assert self.personal_story.scope == StoryScope.CHARACTER
 
+    def test_owner_account_ids_caches_and_invalidates(self):
+        """owner_account_ids is identity-map cached; invalidate_owner_cache
+        clears it so a subsequent read reflects an owners mutation."""
+        # Fresh local instance (cls.story is shared across tests).
+        account = AccountFactory()
+        story = StoryFactory()
+
+        # First access populates the cache (empty — no owners yet).
+        assert story.owner_account_ids == frozenset()
+
+        story.owners.add(account)
+        # Still stale: the cached_property was not invalidated.
+        assert story.owner_account_ids == frozenset()
+
+        story.invalidate_owner_cache()
+        # Now reflects the mutation.
+        assert story.owner_account_ids == frozenset({account.pk})
+
 
 class StoryParticipationModelTestCase(TestCase):
     """Test StoryParticipation model methods"""

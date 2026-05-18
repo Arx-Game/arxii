@@ -51,15 +51,18 @@ import type { AssignableStoryScope, AssignStoryBody } from '../types';
 
 // ---------------------------------------------------------------------------
 // DRF error shape — the assign action 400s with { scope: "<message>" } for
-// the "already assigned" precondition (and standard DRF combo errors arrive
-// under non_field_errors / detail). `scope` may be a string or string[].
+// the "already assigned" precondition. The manual scope/target-invariant
+// errors emit BARE strings under character_sheet/gm_table, while DRF
+// invalid-PK list errors arrive as string[]; standard combo errors arrive
+// under non_field_errors / detail. Every keyed field may therefore be a
+// string OR a string[] (handled by `pick` below).
 // ---------------------------------------------------------------------------
 
 interface AssignDRFError {
   scope?: string | string[];
-  character_sheet?: string[];
-  gm_table?: string[];
-  non_field_errors?: string[];
+  character_sheet?: string | string[];
+  gm_table?: string | string[];
+  non_field_errors?: string | string[];
   detail?: string;
 }
 
@@ -142,12 +145,15 @@ export function ScopeAssignDialog({ storyId, open, onOpenChange }: ScopeAssignDi
           .then((data: unknown) => {
             if (data && typeof data === 'object') {
               const body = data as AssignDRFError;
-              const scopeErr = Array.isArray(body.scope) ? body.scope.join(' ') : body.scope;
+              // Each keyed field may be a bare string (manual invariant
+              // errors) or a string[] (DRF list errors) — guard before join.
+              const pick = (v: string | string[] | undefined): string | undefined =>
+                Array.isArray(v) ? v.join(' ') : v;
               const message =
-                scopeErr ||
-                body.character_sheet?.join(' ') ||
-                body.gm_table?.join(' ') ||
-                body.non_field_errors?.join(' ') ||
+                pick(body.scope) ||
+                pick(body.character_sheet) ||
+                pick(body.gm_table) ||
+                pick(body.non_field_errors) ||
                 body.detail ||
                 'Assignment failed. Please try again.';
               setInlineError(message);

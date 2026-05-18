@@ -145,6 +145,13 @@ export interface MyActiveStoryEntry {
   status: string;
   /** Human-readable label from StoryEpisodeStatus.label */
   status_label: string;
+  /**
+   * Authoritative ProgressStatus pointer state:
+   * "active" | "waiting_for_gm" | "resting" | "completed".
+   * Distinct from `status` (the StoryEpisodeStatus frontier proxy) — lets
+   * the banner tell a GM-blocked pause apart from a deliberate rest.
+   */
+  progress_status: string;
   chapter_order: number | null;
   episode_order: number | null;
   open_session_request_id: number | null;

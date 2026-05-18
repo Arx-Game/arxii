@@ -7,19 +7,16 @@
  * whether the story is paused waiting on the GM. This is the "nimble
  * in-session" context surface; the actual run-control actions are F2.
  *
- * DATA SOURCE (minimal existing — no backend added):
- *   useMyActiveStories() → GET /api/stories/my-active/. This is the only
- *   existing FE source that yields, per story, BOTH the current episode
- *   (current_episode_title) AND a human-readable status (status /
- *   status_label) AND scope, keyed by story_id across the three scope
- *   arrays. The generated GroupStoryProgress/GlobalStoryProgress schemas
- *   expose only current_episode (id) + is_active + timestamps — no status —
- *   and there is no CHARACTER-scope progress ViewSet, so the dashboard is
- *   the minimal existing source. The backbone ProgressStatus literal
- *   (active/waiting_for_gm/resting/completed) is not exposed to the FE; the
- *   dashboard's StoryEpisodeStatus is the available analogue, and `on_hold`
- *   (frontier — GM must author the next episode) is the practical
- *   "waiting for GM / resting" pause an author needs flagged inline.
+ * DATA SOURCE:
+ *   useMyActiveStories() → GET /api/stories/my-active/, keyed by story_id
+ *   across the three scope arrays. Each entry now carries the authoritative
+ *   `progress_status` (the backbone ProgressStatus pointer state:
+ *   active/waiting_for_gm/resting/completed — ledger (e)) alongside the
+ *   coarser StoryEpisodeStatus `status` frontier proxy. The banner derives
+ *   its treatment from `progress_status` first so a GM-blocked pause
+ *   (waiting_for_gm) is distinguished from a deliberate rest; only the
+ *   `active` pointer state defers to the `status` proxy (which still adds
+ *   the `on_hold` frontier refinement).
  *
  * Thin read-only banner: NO actions. Selects the dashboard entry whose
  * story_id matches and renders scope + current episode + a status chip with
@@ -68,6 +65,19 @@ function treatmentFor(status: string): Exclude<BannerState, 'idle'> {
   return STATUS_TREATMENT[status] ?? 'muted';
 }
 
+// Authoritative ProgressStatus → treatment. 'active' is intentionally absent:
+// an active pointer defers to the StoryEpisodeStatus proxy above (which adds
+// the `on_hold` frontier refinement the pointer state alone can't express).
+const PROGRESS_STATUS_TREATMENT: Record<string, Exclude<BannerState, 'idle'>> = {
+  waiting_for_gm: 'attention',
+  resting: 'muted',
+  completed: 'muted',
+};
+
+function bannerStateFor(entry: MyActiveStoryEntry): Exclude<BannerState, 'idle'> {
+  return PROGRESS_STATUS_TREATMENT[entry.progress_status] ?? treatmentFor(entry.status);
+}
+
 const STATE_CHIP_CLASSES: Record<Exclude<BannerState, 'idle'>, string> = {
   attention: 'bg-amber-600 text-white border-transparent',
   active: 'bg-green-600 text-white border-transparent',
@@ -86,6 +96,14 @@ const STATE_CONTAINER_CLASSES: Record<BannerState, string> = {
  * "Waiting for GM" copy; everything else uses the backend's own label.
  */
 function statusCopy(entry: MyActiveStoryEntry): string {
+  if (entry.progress_status === 'waiting_for_gm') {
+    return 'Waiting for GM';
+  }
+  if (entry.progress_status === 'resting') {
+    return 'Resting';
+  }
+  // 'active'/unknown pointer → keep the proxy behaviour (an `on_hold`
+  // frontier still reads as "Waiting for GM").
   if (treatmentFor(entry.status) === 'attention') {
     return 'Waiting for GM';
   }
@@ -140,7 +158,7 @@ export function ProgressStateBanner({ storyId, scope }: ProgressStateBannerProps
     );
   }
 
-  const state: BannerState = treatmentFor(entry.status);
+  const state: BannerState = bannerStateFor(entry);
   const episodeLabel = entry.current_episode_title ?? 'At frontier';
 
   return (

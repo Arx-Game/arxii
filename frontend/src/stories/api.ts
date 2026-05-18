@@ -507,7 +507,15 @@ export async function markBeat(beatId: number, body: MarkBeatBody): Promise<Beat
     headers: jsonHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to mark beat');
+  if (!res.ok) {
+    // Preserve the response so MarkBeatDialog.onError can surface DRF
+    // field errors via `'response' in err` then `response.json()`.
+    const err = new Error('Failed to mark beat') as Error & {
+      response?: Response;
+    };
+    err.response = res;
+    throw err;
+  }
   return res.json() as Promise<BeatCompletion>;
 }
 

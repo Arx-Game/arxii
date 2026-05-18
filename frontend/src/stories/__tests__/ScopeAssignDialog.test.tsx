@@ -329,6 +329,34 @@ describe('ScopeAssignDialog — Task E4', () => {
     });
   });
 
+  it('surfaces a 400 { character_sheet: "<bare string>" } error INLINE (M-3)', async () => {
+    // The backend's manual scope/target-invariant errors emit BARE strings
+    // (not arrays) under character_sheet/gm_table. The unguarded
+    // `body.character_sheet?.join(' ')` would TypeError on a string.
+    const user = userEvent.setup();
+    const mutateMock = setup();
+
+    const csMsg = 'CHARACTER scope requires a character_sheet.';
+    const mockErrorResponse = {
+      json: () => Promise.resolve({ character_sheet: csMsg }),
+    };
+    mutateMock.mockImplementation((_vars: unknown, callbacks: Record<string, unknown>) => {
+      const cb = callbacks as { onError?: (err: unknown) => void };
+      cb.onError?.({ response: mockErrorResponse });
+    });
+
+    renderWithProviders(<ScopeAssignDialog storyId={3} />);
+    await openDialog(user);
+
+    const group = screen.getByTestId('scope-assign-scope-group');
+    await user.click(within(group).getByRole('radio', { name: /global/i }));
+    await user.click(screen.getByRole('button', { name: /^assign$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(csMsg)).toBeInTheDocument();
+    });
+  });
+
   it('closes and toasts on success (relies on invalidation)', async () => {
     const user = userEvent.setup();
     const mutateMock = setup();

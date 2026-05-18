@@ -183,6 +183,37 @@ class StoryDetailVisibilitySplitTests(APITestCase):
         self.assertIn("summary", resp.data)
         self.assertEqual(resp.data["summary"], SUMMARY_SENTINEL)
 
+    # ------------------------------------------------------------------
+    # owner — privileged for their own story's GM text (ledger M-1)
+    # ------------------------------------------------------------------
+
+    def test_story_owner_sees_gm_text_on_own_pitch_story(self):
+        """A non-staff, non-lead-GM owner of a PITCH story still sees
+        ``description`` and a non-blanked ``summary`` on the detail
+        endpoint. Without the M-1 fix the owner is classified ``player``
+        and the gate strips it (friction reading back their own text)."""
+        owner_account = AccountFactory()
+        owner_sheet = _make_character_sheet_for_account(owner_account)
+        owner_story = StoryFactory(
+            scope=StoryScope.CHARACTER,
+            character_sheet=owner_sheet,
+            primary_table=self.gm_table,
+            description=DESCRIPTION_SENTINEL,
+            summary=SUMMARY_SENTINEL,
+            maturity=StoryMaturity.PITCH,
+        )
+        owner_story.owners.add(owner_account)
+        url = reverse("story-detail", kwargs={"pk": owner_story.pk})
+
+        self.client.force_authenticate(user=owner_account)
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertIn("description", resp.data)
+        self.assertEqual(resp.data["description"], DESCRIPTION_SENTINEL)
+        self.assertIn("summary", resp.data)
+        # PITCH maturity would blank summary for a plain player; owner sees it.
+        self.assertEqual(resp.data["summary"], SUMMARY_SENTINEL)
+
 
 class DefaultDenyVisibilityTests(TestCase):
     """Lock the fail-closed (default-deny) path of ``_gm_text_gate``.
