@@ -40,6 +40,8 @@ development machine. Key points:
   prevents Windows-format binaries from leaking into the Linux environment.
 - The database lives in the `arxii-pgdata` named volume. It is test-only and safe to
   wipe.
+- Your Claude Code login persists in the `arxii-claude-home` named volume (mounted at
+  `~/.claude`), so you authenticate once — it survives `dc-down` and `dc-build`.
 - "Run Claude Code" means: get a bash shell inside the `app` container, then run
   `claude --dangerously-skip-permissions`.
 - Your host shell stays PowerShell. Your editor stays PyCharm (or whatever you use).
@@ -177,6 +179,7 @@ use terminal Path B for anything that needs to run inside the container.
 | `.venv` | Container-local named volume — Linux binaries, not Windows |
 | `frontend/node_modules` | Container-local named volume — same reason |
 | Database (`arxii-pgdata`) | Named volume — persists across `dc-down`, safe to wipe |
+| Claude Code login (`~/.claude`) | Named volume (`arxii-claude-home`) — auth/config persists across rebuilds; log in once |
 | Network | Default-deny egress — see firewall section below |
 | Host LAN / other services | Blocked by the firewall default-deny policy |
 

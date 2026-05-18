@@ -16,6 +16,8 @@ services:
       # Shadow Windows-side artefacts with Linux-native named volumes.
       - arxii-venv:/workspaces/arxii/.venv
       - arxii-fe-node-modules:/workspaces/arxii/frontend/node_modules
+      # Persist Claude Code auth/config so login survives container rebuilds.
+      - arxii-claude-home:/home/vscode/.claude
     environment:
       # django-environ env.db() reads DATABASE_URL; points at the db service.
       DATABASE_URL: postgres://arxii:arxii@db:5432/arxiidev
@@ -38,3 +40,4 @@ volumes:
   arxii-pgdata:
   arxii-venv:
   arxii-fe-node-modules:
+  arxii-claude-home:

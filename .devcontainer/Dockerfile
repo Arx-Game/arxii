@@ -19,6 +19,12 @@ RUN echo 'vscode ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh' \
 
 USER vscode
 
+# Pre-create the Claude home dir as the vscode user so the arxii-claude-home
+# named volume (mounted here in compose) inherits vscode ownership on first
+# use. Otherwise Docker creates the mountpoint root-owned and `claude` login
+# cannot write its credentials.
+RUN mkdir -p /home/vscode/.claude
+
 # Install mise, then bake the project toolchain at build time. Network is
 # unrestricted during build, so the runtime firewall never needs mise's
 # download hosts. Only mise.toml is copied so the layer caches well.
