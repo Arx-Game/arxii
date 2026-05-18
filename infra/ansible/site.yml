@@ -19,4 +19,6 @@
     - app_deploy
     - backups
     - offsite_replication
-    # added incrementally (M5): secrets_perms, offbox_alerting, observability
+    - secrets_perms
+    - offbox_alerting
+    - observability
