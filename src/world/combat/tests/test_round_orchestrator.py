@@ -5,7 +5,9 @@ from unittest.mock import MagicMock
 from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
+from actions.factories import ActionTemplateFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.factories import CheckTypeFactory
 from world.combat.constants import (
     ENTITY_TYPE_PC,
     ActionCategory,
@@ -172,13 +174,8 @@ class ResolveRoundBasicTests(TestCase):
         that call shape and asserts the correct outcome so that the fix is
         confirmed when the test goes green.
         """
-        from actions.factories import ActionTemplateFactory
-        from world.checks.factories import CheckTypeFactory
-
         encounter, _participant, opponent, action, _npc = self._setup_encounter()
-        template = ActionTemplateFactory(
-            name="Spell Strike", check_type=CheckTypeFactory(name="Magic Attack")
-        )
+        template = ActionTemplateFactory(check_type=CheckTypeFactory())
         action.focused_action.action_template = template
         action.focused_action.save(update_fields=["action_template"])
 
