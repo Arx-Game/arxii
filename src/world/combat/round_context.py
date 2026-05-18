@@ -50,6 +50,9 @@ _ACTIVE_ENCOUNTER_STATUSES: frozenset[str] = frozenset(
     }
 )
 
+# kwargs key for effort level — used as a guard and a lookup in _record_combat_declaration.
+_EFFORT_LEVEL_KEY: str = "effort_level"
+
 
 class CombatRoundContext(RoundContext):
     """``RoundContext`` backed by a live ``CombatParticipant`` + ``CombatEncounter``.
@@ -126,7 +129,7 @@ class CombatRoundContext(RoundContext):
         """Upsert a CombatRoundAction and clear any competing challenge declaration."""
         from world.magic.models import Technique  # noqa: PLC0415
 
-        if "effort_level" not in kwargs:  # noqa: STRING_LITERAL — kwargs key name, not a model identifier
+        if _EFFORT_LEVEL_KEY not in kwargs:
             raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
 
         # Clear any prior challenge declaration for this (encounter, round, participant).
@@ -147,7 +150,7 @@ class CombatRoundContext(RoundContext):
             participant,
             focused_action=technique,
             focused_category=kwargs.get("focused_category"),
-            effort_level=kwargs["effort_level"],
+            effort_level=kwargs[_EFFORT_LEVEL_KEY],
             focused_opponent_target=kwargs.get("focused_opponent_target"),
             focused_ally_target=kwargs.get("focused_ally_target"),
             physical_passive=kwargs.get("physical_passive"),

@@ -521,3 +521,49 @@ class TestRecordDeclarationChallengeStaleRef(django.test.TestCase):
         with self.assertRaises(ActionDispatchError) as cm:
             self.ctx.record_declaration(self.sheet, player_action, {})
         self.assertEqual(cm.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)
+
+
+class TestRecordDeclarationChallengeApproachStaleRef(django.test.TestCase):
+    """CHALLENGE record_declaration with a deleted ChallengeApproach pk → UNKNOWN_ACTION_REF.
+
+    The ChallengeInstance is live; only the ChallengeApproach has been deleted.
+    This exercises the ChallengeApproach.DoesNotExist → ActionDispatchError path,
+    distinct from the ChallengeInstance.DoesNotExist path tested above.
+    """
+
+    def setUp(self) -> None:
+        from actions.round_context import get_active_round_context
+
+        self.encounter, self.participant = _make_declaring_encounter_with_vitals()
+        self.sheet = self.participant.character_sheet
+        ctx = get_active_round_context(self.sheet)
+        assert ctx is not None
+        self.ctx = ctx
+
+    def test_deleted_challenge_approach_raises_unknown_action_ref(self) -> None:
+        """A live ChallengeInstance + deleted ChallengeApproach pk → UNKNOWN_ACTION_REF."""
+        # ChallengeInstance is live — it must resolve successfully so we reach the
+        # ChallengeApproach lookup, exercising the ChallengeApproach.DoesNotExist branch.
+        challenge_instance = ChallengeInstanceFactory()
+        challenge_approach = ChallengeApproachFactory()
+        stale_approach_pk = challenge_approach.pk
+        challenge_approach.delete()
+
+        from actions.types import ActionRef, PlayerAction
+
+        ref = ActionRef(
+            backend=ActionBackend.CHALLENGE,
+            challenge_instance_id=challenge_instance.pk,
+            approach_id=stale_approach_pk,
+        )
+        check_type = CheckTypeFactory()
+        action_template = ActionTemplateFactory(check_type=check_type)
+        player_action = PlayerAction(
+            backend=ActionBackend.CHALLENGE,
+            action_template=action_template,
+            display_name="Stale Challenge Approach Action",
+            ref=ref,
+        )
+        with self.assertRaises(ActionDispatchError) as cm:
+            self.ctx.record_declaration(self.sheet, player_action, {})
+        self.assertEqual(cm.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)
