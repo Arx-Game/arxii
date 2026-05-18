@@ -41,3 +41,28 @@ class PredicateComposeTests(unittest.TestCase):
             "of": [{"leaf": "always_false"}, {"leaf": "also_false"}],
         }
         self.assertIs(evaluate(or_all_false, self.ctx), False)
+
+
+class PredicateContractTests(unittest.TestCase):
+    """Task 0.2 — empty / malformed rule contract is locked.
+
+    The Task 0.1 evaluator already satisfies these; the tests pin the
+    contract so later phases cannot regress empty-tree or unknown-op
+    behaviour.
+    """
+
+    def setUp(self) -> None:
+        self.ctx: PredicateContext = _StubContext()
+
+    def test_empty_rule_is_true(self) -> None:
+        self.assertIs(evaluate({}, self.ctx), True)
+
+    def test_empty_and_is_true(self) -> None:
+        self.assertIs(evaluate({"op": "AND", "of": []}, self.ctx), True)
+
+    def test_empty_or_is_false(self) -> None:
+        self.assertIs(evaluate({"op": "OR", "of": []}, self.ctx), False)
+
+    def test_unknown_op_raises_value_error(self) -> None:
+        with self.assertRaises(ValueError):
+            evaluate({"op": "BOGUS", "of": []}, self.ctx)
