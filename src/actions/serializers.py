@@ -20,10 +20,10 @@ Wire shape for PlayerAction:
 }
 """
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
-from rest_framework_dataclasses.serializers import DataclassSerializer
 
-from actions.types import ActionRef, PlayerAction
+from actions.types import PlayerAction
 
 
 class CheckTypeMinimalSerializer(serializers.Serializer):
@@ -40,11 +40,20 @@ class ActionTemplateMinimalSerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)
 
 
-class ActionRefSerializer(DataclassSerializer):
-    """Serializer for ActionRef frozen dataclass — the round-trippable dispatch reference."""
+class ActionRefSerializer(serializers.Serializer):
+    """Serializer for ActionRef frozen dataclass — the round-trippable dispatch reference.
 
-    class Meta:
-        dataclass = ActionRef
+    Uses a plain Serializer (not DataclassSerializer) to avoid drf_spectacular's
+    get_type_hints() introspection, which cannot resolve TYPE_CHECKING-only imports
+    (CheckType, ActionTemplate, ChallengeResolutionResult) in actions/types.py and
+    crashes with NameError during schema generation.
+    """
+
+    backend = serializers.CharField(read_only=True)
+    challenge_instance_id = serializers.IntegerField(allow_null=True, required=False)
+    approach_id = serializers.IntegerField(allow_null=True, required=False)
+    technique_id = serializers.IntegerField(allow_null=True, required=False)
+    registry_key = serializers.CharField(allow_null=True, required=False)
 
 
 class PlayerActionSerializer(serializers.Serializer):
@@ -71,10 +80,12 @@ class PlayerActionSerializer(serializers.Serializer):
             return None
         return obj.difficulty.value
 
+    @extend_schema_field(CheckTypeMinimalSerializer)
     def get_check_type(self, obj: PlayerAction) -> dict[str, object]:
         """Return minimal check_type representation (id + name)."""
         return CheckTypeMinimalSerializer(obj.check_type).data
 
+    @extend_schema_field(ActionTemplateMinimalSerializer)
     def get_action_template(self, obj: PlayerAction) -> dict[str, object] | None:
         """Return minimal action_template representation, or None."""
         if obj.action_template is None:
