@@ -190,9 +190,10 @@ def _make_combat_player_action(technique: object) -> PlayerAction:
     ref = ActionRef(backend=ActionBackend.COMBAT, technique_id=technique.pk)  # type: ignore[attr-defined]
     return PlayerAction(
         backend=ActionBackend.COMBAT,
-        action_template=action_template,
+        check_type=check_type,
         display_name="Test Combat Action",
         ref=ref,
+        action_template=action_template,
     )
 
 
@@ -209,9 +210,10 @@ def _make_challenge_player_action(
     )
     return PlayerAction(
         backend=ActionBackend.CHALLENGE,
-        action_template=action_template,
+        check_type=check_type,
         display_name="Test Challenge Action",
         ref=ref,
+        action_template=action_template,
     )
 
 
@@ -473,9 +475,10 @@ class TestRecordDeclarationCombatStaleRef(django.test.TestCase):
         action_template = ActionTemplateFactory(check_type=check_type)
         player_action = PlayerAction(
             backend=ActionBackend.COMBAT,
-            action_template=action_template,
+            check_type=check_type,
             display_name="Stale Combat Action",
             ref=ref,
+            action_template=action_template,
         )
         with self.assertRaises(ActionDispatchError) as cm:
             self.ctx.record_declaration(
@@ -514,9 +517,10 @@ class TestRecordDeclarationChallengeStaleRef(django.test.TestCase):
         action_template = ActionTemplateFactory(check_type=check_type)
         player_action = PlayerAction(
             backend=ActionBackend.CHALLENGE,
-            action_template=action_template,
+            check_type=check_type,
             display_name="Stale Challenge Action",
             ref=ref,
+            action_template=action_template,
         )
         with self.assertRaises(ActionDispatchError) as cm:
             self.ctx.record_declaration(self.sheet, player_action, {})
@@ -560,9 +564,10 @@ class TestRecordDeclarationChallengeApproachStaleRef(django.test.TestCase):
         action_template = ActionTemplateFactory(check_type=check_type)
         player_action = PlayerAction(
             backend=ActionBackend.CHALLENGE,
-            action_template=action_template,
+            check_type=check_type,
             display_name="Stale Challenge Approach Action",
             ref=ref,
+            action_template=action_template,
         )
         with self.assertRaises(ActionDispatchError) as cm:
             self.ctx.record_declaration(self.sheet, player_action, {})

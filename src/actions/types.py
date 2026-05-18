@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from actions.models.action_templates import ActionTemplate
     from actions.models.consequence_pools import ConsequencePoolEntry
     from flows.scene_data_manager import SceneDataManager
-    from world.checks.models import Consequence
+    from world.checks.models import CheckType, Consequence
     from world.checks.types import CheckResult
     from world.traits.models import CheckOutcome
 
@@ -131,12 +131,23 @@ class PlayerAction:
     Emitted by the merged availability service across challenge/combat/registry
     backends. Carries model instances (not bare PKs) per project convention;
     only ActionRef holds primitive ids for wire serialization.
+
+    ``check_type`` is ALWAYS present — it is the unifying resolution anchor
+    resolved per-backend before this descriptor is constructed.
+
+    ``action_template`` is optional: present for combat techniques, registry
+    templates, and override challenge approaches; None for plain
+    check_type-direct challenge approaches.
     """
 
+    # --- required fields (no defaults) ---
     backend: ActionBackend
-    action_template: ActionTemplate  # instance, carries check_type
+    check_type: CheckType  # always-present resolution anchor
     display_name: str
     ref: ActionRef
+
+    # --- optional fields (with defaults) ---
+    action_template: ActionTemplate | None = None
     description: str = ""
     difficulty: DifficultyIndicator | None = None
     prerequisite_met: bool = True
