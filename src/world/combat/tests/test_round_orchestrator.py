@@ -162,6 +162,35 @@ class ResolveRoundBasicTests(TestCase):
         # NPC base_damage is 30, applied directly (no defense check)
         self.assertEqual(vitals.health, 70)  # 100 - 30
 
+    def test_pc_spell_deals_damage_when_check_type_sourced_from_template(self) -> None:
+        """Regression: view calls resolve_round with no offense_check_type.
+
+        When the production view calls resolve_round(encounter) without
+        offense_check_type, _resolve_pc_action silently skips technique
+        resolution (the `if offense_check_type is not None:` gate in
+        services.py) and the opponent takes zero damage.  This test reproduces
+        that call shape and asserts the correct outcome so that the fix is
+        confirmed when the test goes green.
+        """
+        from actions.factories import ActionTemplateFactory
+        from world.checks.factories import CheckTypeFactory
+
+        encounter, _participant, opponent, action, _npc = self._setup_encounter()
+        template = ActionTemplateFactory(
+            name="Spell Strike", check_type=CheckTypeFactory(name="Magic Attack")
+        )
+        action.focused_action.action_template = template
+        action.focused_action.save(update_fields=["action_template"])
+
+        def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
+            return MagicMock(success_level=2)
+
+        # Called exactly as the production view calls it: NO offense_check_type.
+        resolve_round(encounter, offense_check_fn=mock_check_fn)
+
+        opponent.refresh_from_db()
+        self.assertEqual(opponent.health, 30)  # 50 - 20 (damaging technique)
+
     def test_wrong_status_raises(self) -> None:
         """Resolving a non-DECLARING encounter raises ValueError."""
         encounter = CombatEncounterFactory(
