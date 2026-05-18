@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework.serializers import Serializer
 from rest_framework.viewsets import ModelViewSet
 
+from actions.errors import ActionDispatchError
 from world.character_sheets.models import CharacterSheet
 from world.combat.constants import ParticipantStatus
 from world.combat.filters import CombatEncounterFilter
@@ -147,6 +148,11 @@ class CombatEncounterViewSet(ModelViewSet):
         encounter = self.get_object()
         try:
             resolve_round(encounter)
+        except ActionDispatchError as exc:
+            return Response(
+                {"detail": exc.user_message},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         except ValueError:
             return Response(
                 {"detail": _ERR_INVALID_STATUS},

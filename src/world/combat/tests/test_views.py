@@ -4,6 +4,7 @@ from django.test import TestCase
 from rest_framework import status as http_status
 from rest_framework.test import APIClient
 
+from actions.errors import ActionDispatchError
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import EncounterStatus, ParticipantStatus
@@ -13,6 +14,8 @@ from world.combat.factories import (
     CombatParticipantFactory,
     ThreatPoolFactory,
 )
+from world.combat.models import CombatRoundAction
+from world.magic.factories import TechniqueFactory
 from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.vitals.models import CharacterVitals
@@ -183,6 +186,49 @@ class GMLifecycleTest(CombatEncounterViewSetTestBase):
             self.participant.status,
             ParticipantStatus.REMOVED,
         )
+
+    def test_resolve_round_returns_400_for_technique_missing_action_template(self) -> None:
+        """resolve_round returns HTTP 400 with safe user_message when a declared
+        technique has no action_template (ActionDispatchError, not ValueError).
+
+        The @transaction.atomic on resolve_round rolls back the RESOLVING status
+        write, so the encounter remains DECLARING after the 400 response.
+        """
+        # Encounter must be in DECLARING state with round_number set
+        declaring_encounter = CombatEncounterFactory(
+            scene=self.scene,
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        participant = CombatParticipantFactory(
+            encounter=declaring_encounter,
+            character_sheet=self.player_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        # CharacterVitals required so the participant appears in resolution order
+        CharacterVitals.objects.get_or_create(
+            character_sheet=self.player_sheet,
+            defaults={"health": 100, "max_health": 100},
+        )
+        # Technique with no action_template — triggers TECHNIQUE_NOT_COMBAT_READY
+        technique = TechniqueFactory(action_template=None)
+        CombatRoundAction.objects.create(
+            participant=participant,
+            round_number=1,
+            focused_action=technique,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.gm_account)
+        response = client.post(
+            f"/api/combat/{declaring_encounter.pk}/resolve_round/",
+        )
+
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+        expected_message = ActionDispatchError(
+            ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY
+        ).user_message
+        self.assertEqual(response.data["detail"], expected_message)
 
 
 class PlayerActionTest(CombatEncounterViewSetTestBase):
