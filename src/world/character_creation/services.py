@@ -1326,6 +1326,7 @@ def finalize_gm_character(draft: CharacterDraft) -> tuple[RosterEntry, Story]:
         character_sheet=sheet,
     )
     story.owners.add(draft.account)
+    story.invalidate_owner_cache()
 
     # Link character to the story.
     StoryParticipation.objects.create(

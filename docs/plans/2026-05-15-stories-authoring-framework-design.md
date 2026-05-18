@@ -675,6 +675,15 @@ M-1 / (a) commits, all addressed:
 - *(a) short-circuit.* `episode_meets_plot_gate` now tests the local
   `is_ending` field before `outbound_transitions.exists()`, so a True
   `is_ending` skips the query. Boolean-equivalent.
+- *Cache invalidation (follow-up review).* `Story.invalidate_owner_cache()`
+  added (drops the `owner_account_ids` `__dict__` entry, mirroring
+  `CharacterSheet.invalidate_class_level_cache`); the cached_property
+  docstring documents the contract. The sole owner-mutation site
+  (`character_creation.services` CG finalization — `story.owners.add`)
+  now calls it. `owners` is read-only in every Story API serializer, so
+  there is no owner-mutating *view* to wire; the method exists so any
+  future owner-mutation path follows the convention. A `test_models`
+  regression asserts cache → stale-after-add → fresh-after-invalidate.
 
 Out of scope (unchanged, design-bearing): the §10 sequenced follow-ups
 (Mission/Challenge engine, Sessions, Consequence/reward, GM leveling,

@@ -192,11 +192,30 @@ class Story(SharedMemoryModel):
 
         One query on first access, then reused for the life of this
         identity-mapped Story instance (so the GM-text gate does not
-        issue an owners query per serialization). Owners change rarely;
-        a stale set after an in-process m2m mutation is acceptable for
-        this read-path and consistent with the SharedMemoryModel cache.
+        issue an owners query per serialization).
+
+        This is identity-map cached, so any code path that mutates the
+        ``owners`` m2m MUST call :meth:`invalidate_owner_cache` afterwards
+        or a subsequent GM-text-gate read on the same in-memory instance
+        will see the stale set.
         """
         return frozenset(cast(Any, self).owners.values_list("pk", flat=True))
+
+    def invalidate_owner_cache(self) -> None:
+        """Clear the cached ``owner_account_ids`` set.
+
+        Call this after any code path that mutates the story's ``owners``
+        m2m (add/remove/set/clear) so subsequent reads of
+        ``owner_account_ids`` (and thus the ``_gm_text_gate`` owner check)
+        reflect the mutation. Mirrors the
+        ``CharacterSheet.invalidate_class_level_cache`` convention.
+
+        Example::
+
+            story.owners.add(account)
+            story.invalidate_owner_cache()
+        """
+        self.__dict__.pop("owner_account_ids", None)
 
     def is_active(self) -> bool:
         """Check if story has active GMs and is not inactive/completed/cancelled"""
