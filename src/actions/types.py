@@ -138,6 +138,9 @@ class PlayerAction:
     ``action_template`` is optional: present for combat techniques, registry
     templates, and override challenge approaches; None for plain
     check_type-direct challenge approaches.
+
+    When ``action_template`` is present, ``PlayerAction.check_type`` remains
+    authoritative; ``action_template.check_type`` may differ for override approaches.
     """
 
     # --- required fields (no defaults) ---
