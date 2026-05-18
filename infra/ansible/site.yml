@@ -11,6 +11,7 @@
     - fail2ban
     - unattended_upgrades
     - host_firewall
-    # added incrementally (M4-M5): secrets_vault, postgres, caddy,
-    # tls_telnet_cert, django_hardening, app_deploy, backups,
-    # offsite_replication, secrets_perms, offbox_alerting, observability
+    - secrets_vault
+    # added incrementally (M4-M5): postgres, caddy, tls_telnet_cert,
+    # django_hardening, app_deploy, backups, offsite_replication,
+    # secrets_perms, offbox_alerting, observability
