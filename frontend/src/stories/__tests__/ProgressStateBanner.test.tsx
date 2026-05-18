@@ -69,6 +69,7 @@ function makeEntry(overrides: Partial<MyActiveStoryEntry> = {}): MyActiveStoryEn
     open_session_request_id: null,
     scheduled_event_id: null,
     scheduled_real_time: null,
+    progress_status: 'active',
     ...overrides,
   };
 }
@@ -196,5 +197,47 @@ describe('ProgressStateBanner — Task F1', () => {
     renderWithProviders(<ProgressStateBanner storyId={3} scope="character" />);
 
     expect(screen.getByTestId('progress-state-loading')).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // progress_status is authoritative (ledger (e)): the true ProgressStatus
+  // distinguishes a GM-blocked pause from a deliberate rest even when the
+  // StoryEpisodeStatus proxy is identical for both.
+  // -------------------------------------------------------------------------
+
+  it('treats progress_status "waiting_for_gm" as the attention pause regardless of the StoryEpisodeStatus proxy', () => {
+    mockDashboard('data', {
+      character_stories: [
+        makeEntry({
+          status: 'ready_to_resolve',
+          status_label: 'Ready to resolve (auto-advance possible)',
+          progress_status: 'waiting_for_gm',
+        }),
+      ],
+    });
+
+    renderWithProviders(<ProgressStateBanner storyId={3} scope="character" />);
+
+    const banner = screen.getByTestId('progress-state-banner');
+    expect(banner).toHaveAttribute('data-state', 'attention');
+    expect(screen.getByTestId('progress-state-status')).toHaveTextContent(/waiting for gm/i);
+  });
+
+  it('treats progress_status "resting" as a muted pause (not attention) at the same StoryEpisodeStatus', () => {
+    mockDashboard('data', {
+      character_stories: [
+        makeEntry({
+          status: 'ready_to_resolve',
+          status_label: 'Ready to resolve (auto-advance possible)',
+          progress_status: 'resting',
+        }),
+      ],
+    });
+
+    renderWithProviders(<ProgressStateBanner storyId={3} scope="character" />);
+
+    const banner = screen.getByTestId('progress-state-banner');
+    expect(banner).toHaveAttribute('data-state', 'muted');
+    expect(screen.getByTestId('progress-state-status')).toHaveTextContent(/resting/i);
   });
 });

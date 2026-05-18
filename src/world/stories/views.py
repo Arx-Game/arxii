@@ -1654,6 +1654,7 @@ def _serialize_progress_entry(progress: AnyStoryProgress, scope: str) -> MyActiv
         "chapter_title": summary.chapter_title,
         "status": summary.status,
         "status_label": StoryEpisodeStatus(summary.status).label,
+        "progress_status": progress.status,
         "chapter_order": summary.chapter_order,
         "episode_order": summary.episode_order,
         "open_session_request_id": summary.open_session_request_id,
