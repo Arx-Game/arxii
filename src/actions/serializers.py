@@ -20,10 +20,16 @@ Wire shape for PlayerAction:
 }
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from actions.types import PlayerAction
+from actions.constants import ActionBackend
+from actions.errors import ActionDispatchError
+from actions.types import ActionRef, DispatchResult, PlayerAction
 
 
 class CheckTypeMinimalSerializer(serializers.Serializer):
@@ -91,3 +97,148 @@ class PlayerActionSerializer(serializers.Serializer):
         if obj.action_template is None:
             return None
         return ActionTemplateMinimalSerializer(obj.action_template).data
+
+
+# ---------------------------------------------------------------------------
+# Dispatch serializers
+# ---------------------------------------------------------------------------
+
+
+class _DispatchRefSerializer(serializers.Serializer):
+    """Input-side ref serializer for DispatchActionSerializer.
+
+    Plain Serializer (not DataclassSerializer) — same drf_spectacular reason as
+    ActionRefSerializer above. All fields writable (no read_only) so DRF accepts
+    them from request.data.
+    """
+
+    backend = serializers.CharField()
+    challenge_instance_id = serializers.IntegerField(allow_null=True, required=False, default=None)
+    approach_id = serializers.IntegerField(allow_null=True, required=False, default=None)
+    technique_id = serializers.IntegerField(allow_null=True, required=False, default=None)
+    registry_key = serializers.CharField(allow_null=True, required=False, default=None)
+
+
+class DispatchActionSerializer(serializers.Serializer):
+    """Input serializer for POST dispatch endpoint.
+
+    Accepts ``{"ref": {...}, "kwargs": {...}}`` and constructs a validated
+    ``ActionRef`` instance.  ``ActionRef.__post_init__`` enforces backend↔required-id
+    constraints (raises ``ValueError``); we catch that and re-raise as a
+    ``ValidationError`` carrying the safe ``ActionDispatchError`` user_message.
+
+    Validation lives ENTIRELY here — the view calls ``is_valid(raise_exception=True)``
+    and reads ``validated_data["ref"]`` and ``validated_data["kwargs"]``.
+    """
+
+    ref = _DispatchRefSerializer()
+    kwargs = serializers.DictField(required=False, default=dict)
+
+    def validate(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Construct ActionRef from validated primitive fields; catch ValueError → 400."""
+        ref_data: dict[str, Any] = data["ref"]
+        try:
+            backend_value = ref_data["backend"]
+            backend = ActionBackend(backend_value)
+        except (ValueError, KeyError):
+            raise serializers.ValidationError(
+                {
+                    "ref": {
+                        "backend": ActionDispatchError(
+                            ActionDispatchError.UNKNOWN_ACTION_REF
+                        ).user_message
+                    }
+                }
+            ) from None
+
+        try:
+            action_ref = ActionRef(
+                backend=backend,
+                challenge_instance_id=ref_data.get("challenge_instance_id"),
+                approach_id=ref_data.get("approach_id"),
+                technique_id=ref_data.get("technique_id"),
+                registry_key=ref_data.get("registry_key"),
+            )
+        except ValueError:
+            raise serializers.ValidationError(
+                {"ref": ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF).user_message}
+            ) from None
+
+        return {"ref": action_ref, "kwargs": data.get("kwargs") or {}}
+
+
+class DispatchResultSerializer(serializers.Serializer):
+    """Output serializer for POST dispatch endpoint.
+
+    Produces a clean minimal shape: ``{backend, deferred, message, data}``.
+    ``detail`` (``ChallengeResolutionResult | ActionResult | None``) is NOT
+    deep-serialized to avoid leaking internal model structure.  Instead:
+    - ``message`` carries a short human string extracted from ``detail``
+      (``detail.challenge_name`` for challenge, ``detail.message`` for action result).
+    - ``data`` is a nullable minimal jsonable dict with just a few identifying fields
+      (challenge_instance_id, resolution_type for challenge; action-specific keys for others).
+    - When deferred, message is a static "Action declared for round resolution." string.
+
+    All new serializers here are plain ``Serializer`` (not DataclassSerializer) —
+    no drf_spectacular ``get_type_hints()`` landmine.
+    """
+
+    backend = serializers.CharField(read_only=True)
+    deferred = serializers.BooleanField(read_only=True)
+    message = serializers.CharField(read_only=True, allow_null=True)
+    data = serializers.DictField(read_only=True, allow_null=True)
+
+    def to_representation(self, instance: DispatchResult) -> dict[str, Any]:
+        """Extract minimal wire representation from a DispatchResult dataclass."""
+        backend_value = (
+            instance.backend.value if hasattr(instance.backend, "value") else str(instance.backend)
+        )
+
+        if instance.deferred:
+            return {
+                "backend": backend_value,
+                "deferred": True,
+                "message": "Action declared for round resolution.",
+                "data": None,
+            }
+
+        detail = instance.detail
+        if detail is None:
+            return {
+                "backend": backend_value,
+                "deferred": False,
+                "message": None,
+                "data": None,
+            }
+
+        # ChallengeResolutionResult: has challenge_name, approach_name, resolution_type, etc.
+        if hasattr(detail, "challenge_name"):
+            return {
+                "backend": backend_value,
+                "deferred": False,
+                "message": detail.challenge_name,
+                "data": {
+                    "challenge_instance_id": detail.challenge_instance_id,
+                    "resolution_type": detail.resolution_type,
+                    "challenge_deactivated": detail.challenge_deactivated,
+                },
+            }
+
+        # ActionResult: has success, message, data
+        if hasattr(detail, "success"):
+            msg: str | None = detail.message if hasattr(detail, "message") else None
+            raw_data: dict | None = detail.data if hasattr(detail, "data") else None
+            return {
+                "backend": backend_value,
+                "deferred": False,
+                "message": msg,
+                "data": raw_data or None,
+            }
+
+        # Fallback for unknown detail types
+        return {
+            "backend": backend_value,
+            "deferred": False,
+            "message": None,
+            "data": None,
+        }
