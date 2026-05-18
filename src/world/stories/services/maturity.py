@@ -12,6 +12,21 @@ _RANK = {
 }
 
 
+def episode_meets_plot_gate(episode: Episode) -> bool:
+    """Whether an episode satisfies the PLOT-maturity gate.
+
+    Single source of truth for the PLOT promotion rule, shared by
+    ``promote_episode_maturity`` (service, raises) and
+    ``PromoteEpisodeInputSerializer.validate`` (Layer-2, 400). The rule:
+    non-empty ``resting_conclusion`` AND (an outbound transition OR
+    ``is_ending``). Independent of direction — callers decide when the gate
+    applies (upward move *to* PLOT only).
+    """
+    if not episode.resting_conclusion.strip():
+        return False
+    return episode.outbound_transitions.exists() or episode.is_ending
+
+
 def promote_episode_maturity(episode: Episode, target: StoryMaturity) -> Episode:
     """Set episode.maturity to ``target``.
 
@@ -20,12 +35,8 @@ def promote_episode_maturity(episode: Episode, target: StoryMaturity) -> Episode
     validated. Returns the saved episode.
     """
     is_promotion = _RANK[target] > _RANK[StoryMaturity(episode.maturity)]
-    if target == StoryMaturity.PLOT and is_promotion:
-        if not episode.resting_conclusion.strip():
-            raise MaturityPromotionError
-        has_outbound = episode.outbound_transitions.exists()
-        if not has_outbound and not episode.is_ending:
-            raise MaturityPromotionError
+    if target == StoryMaturity.PLOT and is_promotion and not episode_meets_plot_gate(episode):
+        raise MaturityPromotionError
     episode.maturity = target
     episode.save(update_fields=["maturity", "updated_at"])
     return episode
