@@ -1,0 +1,87 @@
+name: Stand up infra (the button)
+
+# ONE-CLICK button: Actions -> "Stand up infra" -> Run workflow. The job
+# targets the gated `prod` Environment, so GitHub PAUSES for a required-
+# reviewer approval before anything runs. It is a THIN wrapper: injects the
+# gated Environment secrets and invokes the SAME infra/scripts/standup.sh
+# (DRY). APPLY-ONLY — no destroy, no restore (restore is a separate gated
+# tool). Secrets are env-only, masked, never echoed, never --extra-vars.
+#
+# SECURITY TODO before trust: pin every third-party action to a full SHA.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (print steps, change nothing)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: arxii-standup
+  cancel-in-progress: false
+
+jobs:
+  standup:
+    runs-on: ubuntu-latest
+    environment: prod        # gated: required-reviewer approval before run
+    steps:
+      - uses: actions/checkout@v4 # TODO: pin SHA
+      - uses: opentofu/setup-opentofu@v1 # TODO: pin SHA
+        with: { tofu_wrapper: false }
+      - uses: actions/setup-python@v5 # TODO: pin SHA
+        with: { python-version: "3.13" }
+      - name: Install Ansible + collections
+        run: |
+          set -euo pipefail
+          pip install --quiet ansible
+          ansible-galaxy collection install -r infra/ansible/requirements.yml
+
+      - name: SSH key (from gated Environment; 0600, never logged)
+        run: |
+          set -euo pipefail; set +x
+          install -d -m 0700 ~/.ssh
+          printf '%s' "$ANSIBLE_SSH_PRIVATE_KEY" > ~/.ssh/arxii_admin
+          chmod 0600 ~/.ssh/arxii_admin
+        env:
+          ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}
+
+      - name: Run the button (same script as local; apply-only)
+        run: |
+          set -euo pipefail; set +x
+          export ANSIBLE_PRIVATE_KEY_FILE=~/.ssh/arxii_admin
+          export ANSIBLE_HOST_KEY_CHECKING=False
+          args=()
+          [ "${DRY_RUN}" = "true" ] && args+=(--dry-run)
+          bash infra/scripts/standup.sh "${args[@]}"
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          # Provisioning (operator/CI-only; revoke at provider after run):
+          LINODE_TOKEN: ${{ secrets.TF_LINODE_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.TF_CLOUDFLARE_API_TOKEN }}
+          TF_STATE_BOOTSTRAPPED: "1"
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          TF_STATE_KEY: ${{ vars.TF_STATE_KEY }}
+          TF_STATE_REGION: ${{ vars.TF_STATE_REGION }}
+          TF_STATE_ENDPOINT: ${{ vars.TF_STATE_ENDPOINT }}
+          TF_STATE_S3_ACCESS_KEY: ${{ secrets.TF_STATE_S3_ACCESS_KEY }}
+          TF_STATE_S3_SECRET_KEY: ${{ secrets.TF_STATE_S3_SECRET_KEY }}
+          # Non-secret tofu inputs as Variables, not Secrets:
+          TF_VAR_cloudflare_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_domain: ${{ vars.ARXII_DOMAIN }}
+          TF_VAR_authorized_keys: ${{ vars.ARXII_AUTHORIZED_KEYS }}
+          TF_VAR_state_bucket_label: ${{ vars.ARXII_BACKUPS_BUCKET }}
+          TF_VAR_r2_bucket_name: ${{ vars.ARXII_R2_BUCKET }}
+          TF_VAR_dmarc_rua: ${{ vars.ARXII_DMARC_RUA }}
+          # Runtime app secrets (ansible step -> 0600 EnvironmentFile only):
+          ARXII_PG_PASSWORD: ${{ secrets.ARXII_PG_PASSWORD }}
+          ARXII_DJANGO_SECRET_KEY: ${{ secrets.ARXII_DJANGO_SECRET_KEY }}
+          ARXII_CLOUDINARY_URL: ${{ secrets.ARXII_CLOUDINARY_URL }}
+          ARXII_RESEND_API_KEY: ${{ secrets.ARXII_RESEND_API_KEY }}
+          ARXII_R2_ACCESS_KEY_ID: ${{ secrets.ARXII_R2_ACCESS_KEY_ID }}
+          ARXII_R2_SECRET_ACCESS_KEY: ${{ secrets.ARXII_R2_SECRET_ACCESS_KEY }}
+          ARXII_OFFBOX_ALERT_TOKEN: ${{ secrets.ARXII_OFFBOX_ALERT_TOKEN }}
+          ARXII_CADDY_CF_DNS_TOKEN: ${{ secrets.ARXII_CADDY_CF_DNS_TOKEN }}
