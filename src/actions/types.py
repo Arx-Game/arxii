@@ -94,7 +94,7 @@ class ActionAvailability:
     reasons: list[str] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(frozen=True)
 class ActionRef:
     """Typed, round-trippable dispatch reference echoed back by clients.
 
@@ -111,6 +111,17 @@ class ActionRef:
     approach_id: int | None = None
     technique_id: int | None = None
     registry_key: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.backend == ActionBackend.CHALLENGE and self.challenge_instance_id is None:
+            msg = "CHALLENGE ActionRef requires challenge_instance_id"
+            raise ValueError(msg)
+        if self.backend == ActionBackend.COMBAT and self.technique_id is None:
+            msg = "COMBAT ActionRef requires technique_id"
+            raise ValueError(msg)
+        if self.backend == ActionBackend.REGISTRY and self.registry_key is None:
+            msg = "REGISTRY ActionRef requires registry_key"
+            raise ValueError(msg)
 
 
 @dataclass

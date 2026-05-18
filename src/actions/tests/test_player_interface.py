@@ -5,8 +5,7 @@ from django.test import TestCase
 from actions.constants import ActionBackend
 from actions.factories import ActionTemplateFactory
 from actions.types import ActionRef, PlayerAction
-from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
-from world.mechanics.types import CapabilitySource
+from world.mechanics.constants import DifficultyIndicator
 
 
 class ActionBackendTest(TestCase):
@@ -23,14 +22,6 @@ class PlayerActionChallengeTest(TestCase):
 
     def test_challenge_backend_and_instance_identity(self) -> None:
         template = ActionTemplateFactory()
-        capability_source = CapabilitySource(
-            capability_name="generation",
-            capability_id=1,
-            value=3,
-            source_type=CapabilitySourceType.TECHNIQUE,
-            source_name="Flame Lance",
-            source_id=42,
-        )
         ref = ActionRef(
             backend=ActionBackend.CHALLENGE,
             challenge_instance_id=10,
@@ -53,10 +44,6 @@ class PlayerActionChallengeTest(TestCase):
         self.assertEqual(action.ref.approach_id, 5)
         self.assertIsNone(action.ref.technique_id)
         self.assertIsNone(action.ref.registry_key)
-
-        # capability_source was used to build the action — confirm it's reachable
-        # (this field is not on PlayerAction per spec — just verify it's valid)
-        self.assertEqual(capability_source.capability_name, "generation")
 
 
 class PlayerActionRegistryTest(TestCase):
