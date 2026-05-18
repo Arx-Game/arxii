@@ -13,6 +13,8 @@
     - host_firewall
     - secrets_vault
     - postgres
-    # added incrementally (M4-M5): caddy, tls_telnet_cert,
-    # django_hardening, app_deploy, backups, offsite_replication,
+    - caddy
+    - tls_telnet_cert
+    - django_hardening
+    # added incrementally (M5): app_deploy, backups, offsite_replication,
     # secrets_perms, offbox_alerting, observability

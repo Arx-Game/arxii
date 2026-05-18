@@ -1,0 +1,10 @@
+---
+caddy_web_fqdn: "play.example"          # = tofu output web_fqdn
+caddy_backend: "127.0.0.1:4001"         # localhost-bound app/ws backend
+# ACME behind Cloudflare proxy needs DNS-01 (HTTP-01 is intercepted by the
+# orange-cloud). DNS-01 requires Caddy BUILT WITH the caddy-dns/cloudflare
+# plugin (apt caddy has NO plugins → xcaddy / Caddy "download with plugins";
+# IMPLEMENTATION-VERIFY, do not assume the apt binary works) and a
+# DNS-edit-scoped Cloudflare token supplied via env (CADDY_CF_DNS_TOKEN),
+# which is a NEW on-box secret to add to the gated-Environment contract.
+caddy_acme_email: "ops@example"

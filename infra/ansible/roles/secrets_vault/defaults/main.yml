@@ -16,6 +16,7 @@ secrets_map:
   ARXII_R2_ACCESS_KEY_ID: R2_ACCESS_KEY_ID
   ARXII_R2_SECRET_ACCESS_KEY: R2_SECRET_ACCESS_KEY
   ARXII_OFFBOX_ALERT_TOKEN: OFFBOX_ALERT_TOKEN
+  ARXII_CADDY_CF_DNS_TOKEN: CADDY_CF_DNS_TOKEN
 
 # Operator/CI-only — these belong to the tofu step's env, NEVER the box.
 # Refuse if they leaked into the ansible step's env (defense-in-depth).

@@ -1,0 +1,8 @@
+---
+dh_game_dir: /opt/arxii/current
+dh_settings_path: "{{ dh_game_dir }}/server/conf/secret_settings.py"
+dh_service_user: arxii
+dh_service_group: arxii
+dh_allowed_hosts: []                 # = [web_fqdn, telnet_fqdn] (tofu outputs)
+dh_default_from_email: "Arx II <noreply@example>"
+dh_forbidden_mta_packages: [postfix, sendmail, exim4, exim4-base]

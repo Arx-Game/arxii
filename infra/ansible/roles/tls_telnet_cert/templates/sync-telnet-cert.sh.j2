@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Managed by Ansible (tls_telnet_cert). Sync Caddy's ACME cert into Evennia's
+# HARDCODED SSL-telnet paths. `evennia reload` does NOT reload the Portal SSL
+# context — only a full `evennia reboot` does (drops TLS-telnet players), so
+# we reboot ONLY when the cert actually changed (no needless disconnects).
+set -euo pipefail
+
+SRC_CRT="$(ls {{ ttc_caddy_cert_glob }} 2>/dev/null | head -1 || true)"
+SRC_KEY="$(ls {{ ttc_caddy_key_glob }} 2>/dev/null | head -1 || true)"
+DST_CRT="{{ ttc_game_dir }}/server/ssl.cert"
+DST_KEY="{{ ttc_game_dir }}/server/ssl.key"
+
+[ -n "$SRC_CRT" ] && [ -n "$SRC_KEY" ] || { echo "no Caddy cert yet"; exit 0; }
+
+new="$(sha256sum "$SRC_CRT" | awk '{print $1}')"
+old="$(sha256sum "$DST_CRT" 2>/dev/null | awk '{print $1}' || echo none)"
+[ "$new" = "$old" ] && { echo "cert unchanged — no reboot"; exit 0; }
+
+install -o {{ ttc_service_user }} -g {{ ttc_service_group }} -m 0644 "$SRC_CRT" "$DST_CRT"
+install -o {{ ttc_service_user }} -g {{ ttc_service_group }} -m 0600 "$SRC_KEY" "$DST_KEY"
+echo "cert changed — rebooting Evennia (Portal+Server) to load new SSL"
+cd "{{ ttc_game_dir }}"
+sudo -u {{ ttc_service_user }} evennia reboot

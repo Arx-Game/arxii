@@ -1,0 +1,25 @@
+# Managed by Ansible (caddy). Auto-HTTPS via ACME DNS-01 (Cloudflare),
+# reverse-proxy to the LOCALHOST-bound app backend. Cloudflare proxies in
+# front (Full strict); Caddy still terminates TLS on the origin leg.
+{
+	email {{ caddy_acme_email }}
+	# DNS-01 — token from the env-injected EnvironmentFile (never in repo).
+	# Requires a Caddy build that includes the caddy-dns/cloudflare module.
+	acme_dns cloudflare {env.CADDY_CF_DNS_TOKEN}
+}
+
+{{ caddy_web_fqdn }} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+	reverse_proxy {{ caddy_backend }} {
+		# Trust only Cloudflare (the X-Forwarded-* chain) — Django's
+		# SECURE_PROXY_SSL_HEADER is set accordingly in django_hardening.
+		header_up X-Real-IP {remote_host}
+	}
+}

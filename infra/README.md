@@ -75,6 +75,9 @@ as `ARXII_*` on that step ONLY; rendered to the 0600 on-box EnvironmentFile;
 long-lived, rotate on suspicion):**
 - `ARXII_PG_PASSWORD`, `ARXII_DJANGO_SECRET_KEY`, `ARXII_CLOUDINARY_URL`,
   `ARXII_RESEND_API_KEY`, `ARXII_OFFBOX_ALERT_TOKEN`
+- `ARXII_CADDY_CF_DNS_TOKEN` — Cloudflare **DNS-edit-scoped** token used by
+  Caddy for ACME DNS-01 (distinct from the provisioning Cloudflare token;
+  needed because Cloudflare proxies the web hostname so HTTP-01 won't work)
 - `ARXII_R2_ACCESS_KEY_ID`, `ARXII_R2_SECRET_ACCESS_KEY` — the SEPARATE,
   out-of-band R2 credential (distinct from Linode, scoped to the offsite
   bucket; this is what makes the 3-2-1 independent)
