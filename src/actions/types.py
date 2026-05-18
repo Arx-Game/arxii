@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from flows.scene_data_manager import SceneDataManager
     from world.checks.models import CheckType, Consequence
     from world.checks.types import CheckResult
+    from world.mechanics.types import ChallengeResolutionResult
     from world.traits.models import CheckOutcome
 
 
@@ -140,7 +141,7 @@ class DispatchResult:
 
     backend: ActionBackend
     deferred: bool
-    detail: Any = None
+    detail: ChallengeResolutionResult | ActionResult | None = None
 
 
 @dataclass

@@ -110,7 +110,7 @@ def dispatch_player_action(
     declaration_open = ctx is not None and ctx.is_declaration_open
     if declaration_open:
         # Declaration window is open — defer to round resolution.
-        ctx.record_declaration(sheet, player_action, kwargs)  # type: ignore[arg-type]
+        ctx.record_declaration(sheet, player_action, kwargs)  # type: ignore[arg-type] — sheet is non-None: ctx only exists when a sheet resolved
         return DispatchResult(backend=ref.backend, deferred=True)
 
     # Immediate CHALLENGE resolution.
@@ -118,6 +118,8 @@ def dispatch_player_action(
     # CHALLENGE always sets avail; REGISTRY returned early.
     if avail is None:  # defensive: should be unreachable
         raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+
+    # Deferred import: challenge_resolution imports actions.services; top-level would cycle.
     from world.mechanics.challenge_resolution import resolve_challenge  # noqa: PLC0415
 
     resolution = resolve_challenge(
@@ -175,12 +177,7 @@ def _challenge_actions(character: ObjectDB) -> list[PlayerAction]:
             # Defensive: should not happen because _match_approaches always populates
             # resolved_check_type, but skip gracefully if it ever does.
             continue
-        try:
-            result.append(_avail_to_player_action(avail))
-        except ActionDispatchError:
-            # _avail_to_player_action raises if resolved_check_type is None —
-            # already guarded above, but skip defensively rather than propagating.
-            continue
+        result.append(_avail_to_player_action(avail))
 
     return result
 
@@ -332,6 +329,9 @@ def _find_combat_player_action_for_ref(character: ObjectDB, ref: ActionRef) -> P
     Raises:
         ActionDispatchError: With ``UNKNOWN_ACTION_REF`` if no matching COMBAT action found.
     """
+    # Calls get_player_actions (which also computes challenge actions via _challenge_actions).
+    # The redundant challenge computation on this dispatch path is acceptable; flag if it
+    # becomes a measurable bottleneck.
     all_actions = get_player_actions(character)
     for action in all_actions:
         if action.backend == ActionBackend.COMBAT and action.ref.technique_id == ref.technique_id:
