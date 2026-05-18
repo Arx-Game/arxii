@@ -1,4 +1,14 @@
 class ActionDispatchError(Exception):
+    """User-safe error from action-dispatch / combat-resolution operations.
+
+    Always raised with one of the class-level code constants. Use
+    ``exc.user_message`` in API responses instead of ``str(exc)`` to avoid
+    leaking internal details. Unlike EventError/ProgressionError (which raise
+    the message string itself), this class raises an opaque *code* string and
+    resolves it to a safe message in ``user_message`` — an intentional, cleaner
+    variation, not an accidental divergence.
+    """
+
     TECHNIQUE_NOT_COMBAT_READY = "technique_not_combat_ready"
     UNKNOWN_ACTION_REF = "unknown_action_ref"
     ROUND_DECLARATION_CLOSED = "round_declaration_closed"
