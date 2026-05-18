@@ -2105,10 +2105,16 @@ def resolve_round(
          Apply fatigue after each action.
        - For each **NPC**: resolve each targeted PC's defensive check.
          Process knockout/death transitions and apply conditions.
-    4. Consume dying final rounds: DYING PCs with dying_final_round become DEAD.
-    5. After all actions: check boss phase transitions for boss-tier opponents.
-    6. Check encounter completion (all opponents defeated or all PCs down).
-    7. Transition encounter to ``BETWEEN_ROUNDS`` or ``COMPLETED``.
+    4. Post-pass: resolve deferred RoundChallengeDeclarations in initiative
+       order (reusing the round's resolution_order). Each participant's
+       eligibility is re-validated via get_available_actions; ineligible
+       declarations are skipped. Bridge rows for the round are deleted inside
+       the same atomic block. Resolved outcomes populate ``challenge_outcomes``
+       on the return value.
+    5. Consume dying final rounds: DYING PCs with dying_final_round become DEAD.
+    6. After all actions: check boss phase transitions for boss-tier opponents.
+    7. Check encounter completion (all opponents defeated or all PCs down).
+    8. Transition encounter to ``BETWEEN_ROUNDS`` or ``COMPLETED``.
 
     Args:
         encounter: The combat encounter to resolve.
