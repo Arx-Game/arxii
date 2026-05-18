@@ -1,0 +1,90 @@
+name: Infra Validate
+
+# The real static-validation gate for the turnkey infra. Local dev cannot run
+# tofu/caddy (Windows), so CI is authoritative: infra code is "unvalidated
+# until this is green." Account-independent — no cloud creds, no secrets,
+# never applies anything (fmt/validate/lint/syntax only).
+#
+# SECURITY TODO before this is trusted/merged: pin every third-party action to
+# a full commit SHA (see infra plan §security — actions pinned by SHA). Tags
+# are used here as placeholders and asserted-against in M6/T25.
+
+on:
+  push:
+    paths: ["infra/**", ".github/workflows/validate.yml"]
+  pull_request:
+    paths: ["infra/**", ".github/workflows/validate.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # TODO: pin SHA
+      - name: shellcheck
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(infra/scripts/*.sh)
+          if [ ${#files[@]} -eq 0 ]; then echo "no shell scripts yet — skip"; exit 0; fi
+          sudo apt-get update -qq && sudo apt-get install -y shellcheck
+          shellcheck "${files[@]}"
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # TODO: pin SHA
+      - uses: opentofu/setup-opentofu@v1 # TODO: pin SHA
+        with: { tofu_wrapper: false }
+      - name: tofu fmt
+        run: |
+          set -euo pipefail
+          if [ -z "$(find infra/terraform -name '*.tf' -print -quit 2>/dev/null)" ]; then
+            echo "no .tf yet — skip"; exit 0
+          fi
+          tofu fmt -check -recursive infra/terraform
+      - name: tofu validate (each root, no backend, no creds)
+        run: |
+          set -euo pipefail
+          for root in infra/terraform/bootstrap infra/terraform/prod infra/terraform/ephemeral-stage; do
+            if [ -n "$(find "$root" -maxdepth 1 -name '*.tf' -print -quit 2>/dev/null)" ]; then
+              echo "== validate $root =="
+              ( cd "$root" && tofu init -backend=false -input=false && tofu validate )
+            else
+              echo "== skip $root (no .tf yet) =="
+            fi
+          done
+
+  ansible:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # TODO: pin SHA
+      - uses: actions/setup-python@v5 # TODO: pin SHA
+        with: { python-version: "3.13" }
+      - name: ansible-lint + syntax-check
+        run: |
+          set -euo pipefail
+          if [ -z "$(find infra/ansible -name '*.yml' -print -quit 2>/dev/null)" ]; then
+            echo "no ansible yet — skip"; exit 0
+          fi
+          pip install --quiet ansible-lint
+          ansible-lint infra/ansible
+          if [ -f infra/ansible/site.yml ]; then
+            ansible-playbook --syntax-check -i 'localhost,' infra/ansible/site.yml
+          fi
+
+  caddy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # TODO: pin SHA
+      - name: caddy validate (when a Caddyfile exists)
+        run: |
+          set -euo pipefail
+          cf="$(find infra -iname 'Caddyfile*' -print -quit 2>/dev/null || true)"
+          if [ -z "$cf" ]; then echo "no Caddyfile yet — skip"; exit 0; fi
+          curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64" -o /tmp/caddy
+          chmod +x /tmp/caddy
+          /tmp/caddy validate --config "$cf" --adapter caddyfile
