@@ -509,8 +509,9 @@ class IsSessionRequestParticipantOrStaff(permissions.BasePermission):
 class IsLeadGMOnStoryOrStaff(permissions.BasePermission):
     """Lead GM (primary_table.gm) or staff can perform story-level GM operations.
 
-    Works for Episode objects: walks episode -> chapter -> story to find the story.
-    Also works directly for Story objects.
+    Resolves the story by object type: Story directly, Episode via
+    episode.chapter.story, and any other ``.story``-bearing object (e.g.
+    Chapter) via obj.story.
     """
 
     message = "Only the Lead GM of this story or staff may perform this action."

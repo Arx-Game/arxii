@@ -656,6 +656,19 @@ neutral items kept their suites green, behavioral ones added TDD coverage.
   do, so `MarkBeatDialog.onError`'s `response.json()` field-error branch is
   live. Real-contract TDD in `queries.authoring.test.tsx`.
 
+**Noted follow-up (review Minor, not blocking):** M-1's
+`story.owners.filter(pk=user.pk).exists()` adds exactly one bounded
+single-object query on the player-tier *Story* detail path (not an N+1, no
+`assertNumQueries` lock affected). `StoryDetailSerializer` already evaluates
+`owners.all()` for its `owners` field, so a cache-reusing variant
+(`prefetch_related("owners")` on the retrieve queryset +
+`any(o.pk == user.pk for o in story.owners.all())`) would make it
+zero-query *on the Story path* — but it is neutral-or-worse on the
+Chapter/Episode detail paths (no `owners` field there, so `.all()` fetches
+all rows vs `.exists()` LIMIT 1). Left as-is deliberately; revisit only if a
+`story.owners` prefetch is added to the Story retrieve queryset for other
+reasons.
+
 Out of scope (unchanged, design-bearing): the §10 sequenced follow-ups
 (Mission/Challenge engine, Sessions, Consequence/reward, GM leveling,
 Covenant) and the discovered-follow-up #4 per-DAG-reachability frontier
