@@ -166,7 +166,16 @@ def _gm_text_gate(
     role = (
         classify_story_log_viewer_role(user, story) if user is not None else VIEWER_ROLE_NO_ACCESS
     )
-    if role not in (VIEWER_ROLE_STAFF, VIEWER_ROLE_LEAD_GM):
+    # Story owners are privileged for their own story's GM text (ledger M-1):
+    # a non-staff, non-lead-GM owner could not previously read back their own
+    # description/consequences after a PATCH (friction, not a leak). One
+    # .exists() only on the otherwise-stripped path.
+    is_owner = (
+        user is not None
+        and getattr(user, "is_authenticated", False)  # noqa: GETATTR_LITERAL — AnonymousUser safe
+        and story.owners.filter(pk=user.pk).exists()
+    )
+    if role not in (VIEWER_ROLE_STAFF, VIEWER_ROLE_LEAD_GM) and not is_owner:
         data.pop("description", None)
         # consequences is absent on the Story serializer — pop default is safe.
         data.pop("consequences", None)
