@@ -15,7 +15,11 @@ from world.combat.factories import (
     ThreatPoolFactory,
 )
 from world.combat.models import CombatRoundAction
-from world.magic.factories import TechniqueFactory
+from world.magic.factories import (
+    EffectTypeFactory,
+    TechniqueAppliedConditionFactory,
+    TechniqueFactory,
+)
 from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.vitals.models import CharacterVitals
@@ -338,6 +342,63 @@ class PlayerActionTest(CombatEncounterViewSetTestBase):
             flee_participant.status,
             ParticipantStatus.FLED,
         )
+
+    def test_declare_ally_target_persisted_via_endpoint(self) -> None:
+        """Declaring a self/ally-cast technique via the DRF endpoint persists focused_ally_target.
+
+        This is the TDD red test: DeclareActionSerializer has no focused_ally_target
+        field, so the view hardcodes focused_ally_target=None, dropping the ally choice.
+        The test must fail because CombatRoundAction.focused_ally_target is None instead
+        of the ally participant.
+        """
+        # Buff effect type (no base_power → no damage → no forced opponent target)
+        buff_effect_type = EffectTypeFactory(name="DeclareAllyBuff", base_power=None)
+        # Technique with one ally-kind condition row so target-kind validation passes
+        technique = TechniqueFactory(effect_type=buff_effect_type, damage_profile=False)
+        TechniqueAppliedConditionFactory(technique=technique, target_kind="ally")
+
+        # Fresh DECLARING encounter linked to the scene so setUpTestData doesn't interfere
+        declare_encounter = CombatEncounterFactory(
+            scene=self.scene,
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        # Caster — use player_sheet so player_account's played_character_sheet_ids matches
+        caster_participant = CombatParticipantFactory(
+            encounter=declare_encounter,
+            character_sheet=self.player_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        CharacterVitals.objects.get_or_create(
+            character_sheet=self.player_sheet,
+            defaults={"health": 100, "max_health": 100},
+        )
+        # Ally — a second participant in the same encounter
+        ally_participant = CombatParticipantFactory(
+            encounter=declare_encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        response = client.post(
+            f"/api/combat/{declare_encounter.pk}/declare/",
+            {
+                "focused_action": technique.pk,
+                "focused_category": "physical",
+                "effort_level": "medium",
+                "focused_ally_target": ally_participant.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+
+        # Reload the persisted action and assert the ally target was stored
+        action = CombatRoundAction.objects.get(
+            participant=caster_participant,
+            round_number=declare_encounter.round_number,
+        )
+        self.assertEqual(action.focused_ally_target, ally_participant)
 
 
 class StaffAccessTest(TestCase):
