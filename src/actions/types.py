@@ -125,6 +125,25 @@ class ActionRef:
 
 
 @dataclass
+class DispatchResult:
+    """Result of a ``dispatch_player_action`` call.
+
+    ``deferred`` is True when the action was recorded as a round declaration
+    (waiting for ``resolve_round`` to resolve it) rather than executed immediately.
+    ``backend`` identifies which pipeline handled the dispatch.
+    ``detail`` carries the immediate result object when ``deferred`` is False:
+    - CHALLENGE → ``ChallengeResolutionResult``
+    - REGISTRY  → ``ActionResult``
+    - COMBAT (deferred) → None (deferred; resolved later by resolve_round)
+    - CHALLENGE (deferred) → None (deferred; resolved later by resolve_round)
+    """
+
+    backend: ActionBackend
+    deferred: bool
+    detail: Any = None
+
+
+@dataclass
 class PlayerAction:
     """Homogeneous descriptor for a single player-actionable action.
 

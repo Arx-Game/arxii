@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from actions.models.action_templates import ActionTemplate
     from world.checks.models import CheckType, Consequence
     from world.checks.types import CheckResult
+    from world.mechanics.models import ChallengeApproach, ChallengeInstance
 
 from world.checks.types import OutcomeDisplay
 from world.mechanics.constants import CapabilitySourceType, DifficultyIndicator
@@ -95,6 +96,10 @@ class AvailableAction:
     # Default None so existing construction sites that don't pass these still work.
     resolved_check_type: CheckType | None = field(default=None)
     resolved_action_template: ActionTemplate | None = field(default=None)
+    # Challenge/approach instances for dispatch — populated from already-loaded prefetch
+    # data in _match_approaches (no additional query).  Excluded from wire serialization.
+    resolved_challenge_instance: ChallengeInstance | None = field(default=None)
+    resolved_challenge_approach: ChallengeApproach | None = field(default=None)
 
 
 @dataclass

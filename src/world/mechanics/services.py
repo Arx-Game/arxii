@@ -729,6 +729,10 @@ def _match_approaches(  # noqa: PLR0913
                     prerequisite_reasons=reasons,
                     resolved_check_type=resolved_check_type,
                     resolved_action_template=resolved_action_template,
+                    # Carry the already-loaded instances for dispatch_player_action
+                    # — no additional queries; ci and approach are from prefetched data.
+                    resolved_challenge_instance=ci,
+                    resolved_challenge_approach=approach,
                 )
             )
 

@@ -1,10 +1,15 @@
-"""Tests for get_player_actions — unified player-action merger.
+"""Tests for get_player_actions and dispatch_player_action — unified player-action interfaces.
 
 Covers:
 - (a) CHALLENGE backend: character with matching capability in a room with an active challenge.
 - (b) COMBAT backend: character who is an ACTIVE participant in a DECLARING encounter.
 - (c) REGISTRY backend: registry actions are currently excluded (no check_type).
 - (d) Recomputed each call: a new challenge instance added between calls appears on second call.
+- (e) dispatch_player_action: immediate CHALLENGE → resolve_challenge runs (side effect visible).
+- (f) dispatch_player_action: immediate REGISTRY → action.run() invoked (result returned).
+- (g) dispatch_player_action: DECLARING round + COMBAT ref → deferred via record_declaration.
+- (h) dispatch_player_action: DECLARING round + CHALLENGE ref → deferred (no resolve_challenge).
+- (i) dispatch_player_action: stale/unknown ref → ActionDispatchError(UNKNOWN_ACTION_REF).
 """
 
 from __future__ import annotations
@@ -15,11 +20,13 @@ import django.test
 from evennia.objects.models import ObjectDB
 
 from actions.constants import ActionBackend
+from actions.errors import ActionDispatchError
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.combat.constants import EncounterStatus, ParticipantStatus
 from world.combat.factories import CombatEncounterFactory, CombatParticipantFactory
 from world.conditions.factories import CapabilityTypeFactory
+from world.fatigue.constants import EffortLevel
 from world.mechanics.constants import DifficultyIndicator
 from world.mechanics.factories import (
     ApplicationFactory,
@@ -501,3 +508,340 @@ class TestGetPlayerActionsNoCharacterSheet(django.test.TestCase):
             )
         finally:
             character.delete()
+
+
+# ---------------------------------------------------------------------------
+# Tests: dispatch_player_action
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchPlayerActionChallengeImmediate(django.test.TestCase):
+    """No round context + CHALLENGE ref → resolve_challenge runs immediately.
+
+    Side-effect verified via a patched resolve_challenge that creates a
+    CharacterChallengeRecord manually (to confirm the right arguments flow through).
+    We patch resolve_challenge rather than running it end-to-end because the full
+    pipeline requires a ResultChart — tested separately in test_challenge_resolution.py.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.room = ObjectDB.objects.create(db_key="DispatchChallengeRoom")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = _set_character_location(cls.sheet.character, cls.room)
+
+        cls.challenge_instance, cls.approach, cls.capability, cls.check_type = (
+            _make_challenge_setup(cls.sheet, cls.room)
+        )
+
+    def setUp(self) -> None:
+        self._difficulty_patch = _MODERATE_DIFFICULTY_PATCH
+        self._difficulty_patch.start()
+
+    def tearDown(self) -> None:
+        self._difficulty_patch.stop()
+
+    def _make_resolve_challenge_patch(self) -> object:
+        """Return a patch for resolve_challenge that creates a CharacterChallengeRecord.
+
+        This lets us assert the routing reached resolve_challenge with the correct
+        challenge_instance and approach, without needing a full ResultChart setup.
+        """
+        from unittest.mock import MagicMock, patch
+
+        from world.mechanics.models import CharacterChallengeRecord
+        from world.mechanics.types import ChallengeResolutionResult
+
+        def _fake_resolve(character, challenge_instance, approach, capability_source):  # type: ignore[no-untyped-def]
+            CharacterChallengeRecord.objects.create(
+                character=character,
+                challenge_instance=challenge_instance,
+                approach=approach,
+            )
+            return MagicMock(spec=ChallengeResolutionResult)
+
+        return patch(
+            "world.mechanics.challenge_resolution.resolve_challenge",
+            side_effect=_fake_resolve,
+        )
+
+    def test_immediate_challenge_creates_record(self) -> None:
+        """CHALLENGE dispatch with no round context routes to resolve_challenge (side-effect)."""
+        from actions.player_interface import dispatch_player_action
+        from actions.types import ActionRef
+        from world.mechanics.models import CharacterChallengeRecord
+
+        ref = ActionRef(
+            backend=ActionBackend.CHALLENGE,
+            challenge_instance_id=self.challenge_instance.pk,
+            approach_id=self.approach.pk,
+        )
+        with self._make_resolve_challenge_patch():
+            result = dispatch_player_action(self.character, ref, {})
+
+        self.assertFalse(result.deferred, "Should be immediate, not deferred")
+        self.assertTrue(
+            CharacterChallengeRecord.objects.filter(
+                character=self.character,
+                challenge_instance=self.challenge_instance,
+            ).exists(),
+            "CharacterChallengeRecord must exist after immediate challenge resolution",
+        )
+
+    def test_immediate_challenge_returns_typed_result(self) -> None:
+        """CHALLENGE dispatch result is a DispatchResult with correct backend."""
+        from actions.player_interface import dispatch_player_action
+        from actions.types import ActionRef, DispatchResult
+
+        ref = ActionRef(
+            backend=ActionBackend.CHALLENGE,
+            challenge_instance_id=self.challenge_instance.pk,
+            approach_id=self.approach.pk,
+        )
+        with self._make_resolve_challenge_patch():
+            result = dispatch_player_action(self.character, ref, {})
+
+        self.assertIsInstance(result, DispatchResult)
+        self.assertEqual(result.backend, ActionBackend.CHALLENGE)
+
+
+class TestDispatchPlayerActionRegistryImmediate(django.test.TestCase):
+    """No round context + REGISTRY ref → action.run() invoked; result returned."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        cls.character = cls.sheet.character
+
+    def test_registry_action_invoked_and_result_returned(self) -> None:
+        """REGISTRY dispatch runs the action and returns a DispatchResult."""
+        from actions.player_interface import dispatch_player_action
+        from actions.types import ActionRef, DispatchResult
+
+        # Use "look" — a real registry key that works in test contexts.
+        ref = ActionRef(backend=ActionBackend.REGISTRY, registry_key="look")
+        result = dispatch_player_action(self.character, ref, {})
+
+        self.assertIsInstance(result, DispatchResult)
+        self.assertFalse(result.deferred)
+        self.assertEqual(result.backend, ActionBackend.REGISTRY)
+
+    def test_unknown_registry_key_raises_dispatch_error(self) -> None:
+        """An unknown registry key → ActionDispatchError(UNKNOWN_ACTION_REF)."""
+        from actions.player_interface import dispatch_player_action
+        from actions.types import ActionRef
+
+        ref = ActionRef(backend=ActionBackend.REGISTRY, registry_key="nonexistent_key_xyz")
+        with self.assertRaises(ActionDispatchError) as cm:
+            dispatch_player_action(self.character, ref, {})
+
+        self.assertEqual(cm.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)
+
+
+class TestDispatchPlayerActionCombatDeferred(django.test.TestCase):
+    """Active DECLARING encounter + COMBAT ref → deferred via record_declaration.
+
+    Assert: CombatRoundAction row exists; result is deferred.
+    A second COMBAT dispatch overwrites (exactly one declaration — mutual exclusion).
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from actions.factories import ActionTemplateFactory
+        from world.magic.factories import CharacterTechniqueFactory, TechniqueFactory
+        from world.vitals.constants import CharacterStatus
+        from world.vitals.models import CharacterVitals
+
+        cls.encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        cls.participant = CombatParticipantFactory(
+            encounter=cls.encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        cls.sheet = cls.participant.character_sheet
+        cls.character = cls.sheet.character
+
+        CharacterVitals.objects.create(
+            character_sheet=cls.sheet,
+            health=100,
+            max_health=100,
+            status=CharacterStatus.ALIVE,
+        )
+
+        cls.check_type = CheckTypeFactory()
+        cls.template = ActionTemplateFactory(check_type=cls.check_type)
+        # TechniqueFactory(damage_profile=False) avoids base_power requirement
+        cls.technique = TechniqueFactory(damage_profile=False, action_template=cls.template)
+        CharacterTechniqueFactory(character=cls.sheet, technique=cls.technique)
+
+        from world.magic.factories import EffectTypeFactory
+
+        no_power_effect_type = EffectTypeFactory(base_power=None)
+        cls.technique.effect_type = no_power_effect_type
+        cls.technique.save()
+
+    def test_combat_dispatch_deferred_creates_round_action(self) -> None:
+        """COMBAT dispatch with open declaration window defers and creates CombatRoundAction."""
+        from actions.player_interface import dispatch_player_action
+        from actions.types import ActionRef, DispatchResult
+        from world.combat.models import CombatRoundAction
+
+        ref = ActionRef(backend=ActionBackend.COMBAT, technique_id=self.technique.pk)
+        result = dispatch_player_action(self.character, ref, {"effort_level": EffortLevel.MEDIUM})
+
+        self.assertIsInstance(result, DispatchResult)
+        self.assertTrue(result.deferred, "COMBAT dispatch in DECLARING round must be deferred")
+        self.assertEqual(result.backend, ActionBackend.COMBAT)
+        self.assertTrue(
+            CombatRoundAction.objects.filter(
+                participant=self.participant,
+                round_number=self.encounter.round_number,
+            ).exists(),
+            "CombatRoundAction must exist after COMBAT declaration dispatch",
+        )
+
+    def test_second_combat_dispatch_overwrites_first(self) -> None:
+        """A second COMBAT dispatch for the same round replaces the first (mutual exclusion)."""
+        from actions.player_interface import dispatch_player_action
+        from actions.types import ActionRef
+        from world.combat.models import CombatRoundAction
+
+        ref = ActionRef(backend=ActionBackend.COMBAT, technique_id=self.technique.pk)
+        dispatch_player_action(self.character, ref, {"effort_level": EffortLevel.MEDIUM})
+        dispatch_player_action(self.character, ref, {"effort_level": EffortLevel.HIGH})
+
+        # Still exactly one row after two declarations
+        count = CombatRoundAction.objects.filter(
+            participant=self.participant,
+            round_number=self.encounter.round_number,
+        ).count()
+        self.assertEqual(count, 1, "Exactly one CombatRoundAction must exist after two dispatches")
+
+
+class TestDispatchPlayerActionChallengeDeferred(django.test.TestCase):
+    """Active DECLARING encounter + CHALLENGE ref → deferred; resolve_challenge NOT called.
+
+    Assert: RoundChallengeDeclaration row exists; no CharacterChallengeRecord.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.vitals.constants import CharacterStatus
+        from world.vitals.models import CharacterVitals
+
+        cls.encounter = CombatEncounterFactory(
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        cls.participant = CombatParticipantFactory(
+            encounter=cls.encounter,
+            status=ParticipantStatus.ACTIVE,
+        )
+        cls.sheet = cls.participant.character_sheet
+        cls.character = cls.sheet.character
+
+        CharacterVitals.objects.create(
+            character_sheet=cls.sheet,
+            health=100,
+            max_health=100,
+            status=CharacterStatus.ALIVE,
+        )
+
+        # Put the character in the room with the challenge
+        cls.room = ObjectDB.objects.create(db_key="DeferredChallengeRoom")
+        _set_character_location(cls.character, cls.room)
+
+        cls.challenge_instance, cls.approach, cls.capability, cls.check_type = (
+            _make_challenge_setup(cls.sheet, cls.room)
+        )
+
+    def setUp(self) -> None:
+        self._difficulty_patch = _MODERATE_DIFFICULTY_PATCH
+        self._difficulty_patch.start()
+
+    def tearDown(self) -> None:
+        self._difficulty_patch.stop()
+
+    def test_challenge_dispatch_deferred_creates_bridge_row(self) -> None:
+        """CHALLENGE dispatch in DECLARING round → deferred + RoundChallengeDeclaration row."""
+        from actions.player_interface import dispatch_player_action
+        from actions.types import ActionRef, DispatchResult
+        from world.combat.models import RoundChallengeDeclaration
+        from world.mechanics.models import CharacterChallengeRecord
+
+        ref = ActionRef(
+            backend=ActionBackend.CHALLENGE,
+            challenge_instance_id=self.challenge_instance.pk,
+            approach_id=self.approach.pk,
+        )
+        result = dispatch_player_action(self.character, ref, {})
+
+        self.assertIsInstance(result, DispatchResult)
+        self.assertTrue(result.deferred, "CHALLENGE dispatch in DECLARING round must be deferred")
+        self.assertEqual(result.backend, ActionBackend.CHALLENGE)
+
+        # Bridge row must exist
+        self.assertTrue(
+            RoundChallengeDeclaration.objects.filter(
+                encounter=self.encounter,
+                round_number=self.encounter.round_number,
+                participant=self.participant,
+            ).exists(),
+            "RoundChallengeDeclaration must exist after deferred CHALLENGE dispatch",
+        )
+
+        # resolve_challenge must NOT have run — no CharacterChallengeRecord
+        self.assertFalse(
+            CharacterChallengeRecord.objects.filter(
+                character=self.character,
+                challenge_instance=self.challenge_instance,
+            ).exists(),
+            "CharacterChallengeRecord must NOT exist — challenge was deferred, not resolved",
+        )
+
+
+class TestDispatchPlayerActionUnknownRef(django.test.TestCase):
+    """Unknown/stale ref → ActionDispatchError(UNKNOWN_ACTION_REF)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.room = ObjectDB.objects.create(db_key="StaleRefRoom")
+        cls.sheet = CharacterSheetFactory()
+        cls.character = _set_character_location(cls.sheet.character, cls.room)
+
+    def setUp(self) -> None:
+        self._difficulty_patch = _MODERATE_DIFFICULTY_PATCH
+        self._difficulty_patch.start()
+
+    def tearDown(self) -> None:
+        self._difficulty_patch.stop()
+
+    def test_stale_challenge_ref_raises_unknown(self) -> None:
+        """A CHALLENGE ref with ids that match no current availability → UNKNOWN_ACTION_REF."""
+        from actions.player_interface import dispatch_player_action
+        from actions.types import ActionRef
+
+        # Valid ActionRef shape, but pointing at challenge/approach not in current availability
+        ref = ActionRef(
+            backend=ActionBackend.CHALLENGE,
+            challenge_instance_id=99999,
+            approach_id=99999,
+        )
+        with self.assertRaises(ActionDispatchError) as cm:
+            dispatch_player_action(self.character, ref, {})
+
+        self.assertEqual(cm.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)
+
+    def test_stale_combat_ref_raises_unknown(self) -> None:
+        """A COMBAT ref with no active encounter → UNKNOWN_ACTION_REF."""
+        from actions.player_interface import dispatch_player_action
+        from actions.types import ActionRef
+
+        # No active encounter for this character
+        ref = ActionRef(backend=ActionBackend.COMBAT, technique_id=99999)
+        with self.assertRaises(ActionDispatchError) as cm:
+            dispatch_player_action(self.character, ref, {})
+
+        self.assertEqual(cm.exception.code, ActionDispatchError.UNKNOWN_ACTION_REF)
