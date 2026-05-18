@@ -32,10 +32,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from actions.constants import ActionBackend
+from actions.errors import ActionDispatchError
 from actions.round_context import RoundContext
 from world.character_sheets.models import CharacterSheet
 from world.combat.constants import EncounterStatus, ParticipantStatus
-from world.combat.models import CombatParticipant
+from world.combat.models import CombatParticipant, CombatRoundAction, RoundChallengeDeclaration
 
 # Encounter statuses that represent an ongoing (non-completed) combat.
 _ACTIVE_ENCOUNTER_STATUSES: frozenset[str] = frozenset(
@@ -73,18 +75,105 @@ class CombatRoundContext(RoundContext):
 
     def record_declaration(
         self,
-        character: CharacterSheet,
-        # player_action: typed as PlayerAction once actions.types defines it (later task)
+        character: CharacterSheet,  # noqa: ARG002 — ABC contract; participant resolved from self
+        # player_action: PlayerAction from actions.types
         player_action: Any,
         kwargs: dict[str, Any],
     ) -> None:
-        """Stub — real mutual-exclusion logic lands in P2T8.
+        """Record a participant's declared action for the current round.
+
+        Enforces mutual exclusion: COMBAT declarations delete any existing
+        RoundChallengeDeclaration; CHALLENGE declarations delete any existing
+        CombatRoundAction. Only one declared action type is permitted per
+        (encounter, round, participant).
+
+        Args:
+            character: The CharacterSheet of the acting character (unused for
+                lookup — ``self._participant`` is already resolved).
+            player_action: A ``PlayerAction`` carrying backend + ref.
+            kwargs: Extra dispatch kwargs forwarded to the backend handler
+                (e.g. ``effort_level`` for COMBAT).
 
         Raises:
-            NotImplementedError: Always, until the bridge model is added.
+            ActionDispatchError: With ``ROUND_DECLARATION_CLOSED`` if the
+                encounter is not in DECLARING status.
+            ActionDispatchError: With ``UNKNOWN_ACTION_REF`` if backend is
+                REGISTRY (registry actions are not round-declared).
         """
-        _msg = "record_declaration is not implemented until P2T8 (RoundChallengeDeclaration)."
-        raise NotImplementedError(_msg)
+        if not self.is_declaration_open:
+            raise ActionDispatchError(ActionDispatchError.ROUND_DECLARATION_CLOSED)
+
+        participant = self._participant
+        backend: str = player_action.backend
+
+        if backend == ActionBackend.COMBAT:
+            self._record_combat_declaration(participant, player_action, kwargs)
+        elif backend == ActionBackend.CHALLENGE:
+            self._record_challenge_declaration(participant, player_action)
+        else:
+            # REGISTRY actions are immediate utility; they are never round-declared.
+            raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
+
+    def _record_combat_declaration(
+        self,
+        participant: CombatParticipant,
+        player_action: Any,
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Upsert a CombatRoundAction and clear any competing challenge declaration."""
+        from world.magic.models import Technique  # noqa: PLC0415
+
+        # Clear any prior challenge declaration for this (encounter, round, participant).
+        RoundChallengeDeclaration.objects.filter(
+            encounter=self._encounter,
+            round_number=self._encounter.round_number,
+            participant=participant,
+        ).delete()
+
+        technique = Technique.objects.get(pk=player_action.ref.technique_id)
+
+        from world.combat.services import declare_action  # noqa: PLC0415
+
+        declare_action(
+            participant,
+            focused_action=technique,
+            focused_category=kwargs.get("focused_category"),
+            effort_level=kwargs["effort_level"],
+            focused_opponent_target=kwargs.get("focused_opponent_target"),
+            focused_ally_target=kwargs.get("focused_ally_target"),
+            physical_passive=kwargs.get("physical_passive"),
+            social_passive=kwargs.get("social_passive"),
+            mental_passive=kwargs.get("mental_passive"),
+        )
+
+    def _record_challenge_declaration(
+        self,
+        participant: CombatParticipant,
+        player_action: Any,
+    ) -> None:
+        """Upsert a RoundChallengeDeclaration and clear any competing round action."""
+        from world.mechanics.models import ChallengeApproach, ChallengeInstance  # noqa: PLC0415
+
+        # Clear any prior combat round action for this (participant, round).
+        CombatRoundAction.objects.filter(
+            participant=participant,
+            round_number=self._encounter.round_number,
+        ).delete()
+
+        challenge_instance = ChallengeInstance.objects.get(
+            pk=player_action.ref.challenge_instance_id
+        )
+        challenge_approach = ChallengeApproach.objects.get(pk=player_action.ref.approach_id)
+
+        RoundChallengeDeclaration.objects.update_or_create(
+            encounter=self._encounter,
+            round_number=self._encounter.round_number,
+            participant=participant,
+            defaults={
+                "challenge_instance": challenge_instance,
+                "challenge_approach": challenge_approach,
+            },
+        )
 
 
 def resolve_combat_round_context(character: CharacterSheet) -> CombatRoundContext | None:
