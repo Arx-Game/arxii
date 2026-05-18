@@ -1,0 +1,7 @@
+# Real inventory is generated from tofu output — do not commit it.
+inventory/hosts.yml
+# Never commit a vault password file or decrypted secrets. The ENCRYPTED
+# group_vars/secrets.vault.yml IS committed (it's $ANSIBLE_VAULT ciphertext).
+.vault-pass
+*.decrypted
+*.retry

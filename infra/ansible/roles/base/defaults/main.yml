@@ -1,0 +1,13 @@
+---
+base_service_user: arxii
+base_service_group: arxii
+base_app_root: /opt/arxii
+# Game cgroup memory cap (the game service runs in this slice). A leak gets
+# the slice OOM-killed/restarted instead of taking the box (and Postgres)
+# down — Postgres is isolated separately in its own role.
+base_game_memory_max: "1500M"
+base_packages:
+  - acl            # required for Ansible become-as-unprivileged-user (setfacl)
+  - ca-certificates
+  - curl
+  - python3

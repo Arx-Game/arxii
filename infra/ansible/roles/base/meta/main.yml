@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  role_name: base
+  author: Arx II
+  description: Service user, baseline packages, and the memory-isolated game cgroup slice.
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+dependencies: []
