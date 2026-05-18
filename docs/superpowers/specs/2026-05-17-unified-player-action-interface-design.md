@@ -207,17 +207,23 @@ cost of one function and one ABC.
   (`src/world/combat/models.py:425-518`); `focused_action` stays narrowly typed
   to `Technique` — unchanged, no polymorphic FK.
 - A CHALLENGE declared *during* a round is **deferred and resolved at round
-  resolution in round order** (consistent with "not fastest-typist"), stored in
-  a **consumer-owned bridge** keyed `(encounter, round, participant) →
+  resolution** (consistent with "not fastest-typist"), stored in a
+  **consumer-owned bridge** `RoundChallengeDeclaration` in **`world/combat`**
+  (the round-slot consumer), keyed `(encounter, round, participant) →
   (ChallengeInstance, ChallengeApproach)` — a bridge table, not a cross-system
-  or polymorphic FK.
+  or polymorphic FK. The combat side subscribes to the challenge primitive; the
+  challenge models gain no FK back into combat.
 - `record_declaration` enforces mutual exclusivity: declaring one kind clears
   the other → exactly one declared action per round. Passive slots
   (`physical_passive` / `social_passive` / `mental_passive`) remain combat's
   concurrency detail, surfaced as-is, never extended into the unbuilt
   multi-priority system.
-- `resolve_round` is extended **only** to also resolve declared challenges
-  alongside combat actions; lifecycle / endpoints unchanged.
+- `resolve_round` is extended **only** to resolve declared challenges as a
+  **post-pass after combat-action resolution within the same round** (clean
+  separation: a challenge resolved this round does not retroactively alter that
+  round's combat resolution; any challenge *spawned* by a consequence appears
+  on the next round's on-demand read). Multiple declared challenges resolve in
+  participant initiative order. Lifecycle / endpoints unchanged.
 
 **Registry actions** (look / say / equip) are **not changed by this
 initiative** — they keep current behavior in and out of combat. Whether any of
@@ -252,7 +258,13 @@ WebSocket `execute_action` inputfunc gains the unified `ref` form; a registry
 **Cleanup (in scope):** delete the superseded challenge-only
 `available-actions/` endpoint (`AvailableActionsView`, route
 `src/world/mechanics/urls.py:30`) and repoint/remove its **frontend call
-sites**. Single dispatch envelope shape — no dual-format handling retained.
+sites**. The third availability path,
+`world/scenes/action_availability.get_available_scene_actions` (the social
+`ActionTemplate` query), is **also superseded** by `get_player_actions` and is
+folded in: its social actions become `REGISTRY`/template-backed `PlayerAction`s
+in the unified read, and `get_available_scene_actions` plus its callers are
+deleted (no dead third path). Single dispatch envelope shape — no dual-format
+handling retained.
 `get_available_actions` the *service* stays (it is the challenge source);
 only the endpoint is consolidated under `src/actions/`. Frontend changes must
 pass `pnpm typecheck` and `pnpm lint`.
@@ -308,6 +320,7 @@ CI's fresh DB).
 | Not-Yet-Built roadmap | `src/actions/CLAUDE.md:96-114` |
 | `get_available_actions` | `src/world/mechanics/services.py:603-658` |
 | `AvailableActionsView` (to delete) | `src/world/mechanics/views.py:110-138`, `urls.py:30` |
+| `get_available_scene_actions` (third path, to fold in + delete) | `src/world/scenes/action_availability.py` |
 | `ChallengeApproach` (`application`, `check_type`, `action_template`) | `src/world/mechanics/models.py:784-834` |
 | `ChallengeInstance` | `src/world/mechanics/models.py:984-1015` |
 | `resolve_challenge` | `src/world/mechanics/challenge_resolution.py:46-51` |
