@@ -55,3 +55,9 @@ class ClockRatioSerializer(serializers.Serializer):
 
     ratio = serializers.FloatField(min_value=0.01)
     reason = serializers.CharField(max_length=500)
+
+
+class ClockDetailSerializer(serializers.Serializer):
+    """Generic ``{"detail": "..."}`` response (staff actions + errors)."""
+
+    detail = serializers.CharField()
