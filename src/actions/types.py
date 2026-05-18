@@ -7,11 +7,15 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from actions.constants import ActionBackend
+from world.mechanics.constants import DifficultyIndicator
+
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.base import Action
     from actions.models import ActionEnhancement
+    from actions.models.action_templates import ActionTemplate
     from actions.models.consequence_pools import ConsequencePoolEntry
     from flows.scene_data_manager import SceneDataManager
     from world.checks.models import Consequence
@@ -88,6 +92,44 @@ class ActionAvailability:
     action_key: str
     available: bool
     reasons: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ActionRef:
+    """Typed, round-trippable dispatch reference echoed back by clients.
+
+    This is the ONLY piece serialized over the wire. All identifying ids are
+    optional; the relevant one(s) are populated per backend.
+
+    - CHALLENGE: challenge_instance_id + approach_id
+    - COMBAT: technique_id
+    - REGISTRY: registry_key
+    """
+
+    backend: ActionBackend
+    challenge_instance_id: int | None = None
+    approach_id: int | None = None
+    technique_id: int | None = None
+    registry_key: str | None = None
+
+
+@dataclass
+class PlayerAction:
+    """Homogeneous descriptor for a single player-actionable action.
+
+    Emitted by the merged availability service across challenge/combat/registry
+    backends. Carries model instances (not bare PKs) per project convention;
+    only ActionRef holds primitive ids for wire serialization.
+    """
+
+    backend: ActionBackend
+    action_template: ActionTemplate  # instance, carries check_type
+    display_name: str
+    ref: ActionRef
+    description: str = ""
+    difficulty: DifficultyIndicator | None = None
+    prerequisite_met: bool = True
+    prerequisite_reasons: list[str] = field(default_factory=list)
 
 
 class ActionInterrupted(Exception):
