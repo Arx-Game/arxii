@@ -608,3 +608,55 @@ items it recommended:
   `.catch()` degrades to a generic message — no crash, no leak. Fix the
   mistype (`Array.isArray` guard, as the `scope` key already does) when the
   M-2/error-handling family is next touched.
+
+---
+
+## stories-authoring-cleanup — resolutions (2026-05-17)
+
+Branch `feature/stories-authoring-cleanup` (off the #447 merge) clears every
+deferred low/no-design item above. Each is committed separately; behavior-
+neutral items kept their suites green, behavioral ones added TDD coverage.
+
+- **(a) RESOLVED.** `episode_meets_plot_gate()` extracted in
+  `services/maturity.py` as the single PLOT-gate predicate; both
+  `promote_episode_maturity` and `PromoteEpisodeInputSerializer.validate`
+  call it. Behavior-neutral (maturity + episode-promote suites green).
+- **(b) RESOLVED.** `IsLeadGMOnStoryOrStaff.has_object_permission` now
+  `isinstance(Episode)`-routes (Episode→chapter→story; else `.story`); the
+  misnamed `episode` var and dead `if episode is None` branch are gone.
+  Behavior-neutral (`test_view_actions_permissions` green).
+- **(c) RESOLVED.** `_collect_gm_queue` docstring softened
+  "byte-identical" → "set-identical; intra-GROUP now pk-ordered", matching
+  the sibling helpers.
+- **(d) RESOLVED.** `_collect_gm_queue` + `_build_staff_per_gm_inputs` use
+  `StoryStatus.ACTIVE` (imported from `world.stories.types`) instead of the
+  raw `"active"` literal. Query byte-identical; `assertNumQueries` locks
+  green.
+- **(e) RESOLVED.** Authoritative `ProgressStatus` exposed as
+  `progress_status` on the `GET /api/stories/my-active/` payload
+  (`MyActiveStoryEntry` TypedDict + `_serialize_progress_entry`); no new
+  endpoint. `ProgressStateBanner` derives treatment from `progress_status`
+  first (waiting_for_gm→attention, resting/completed→muted), `active`
+  defers to the `status` proxy. FE fixture types reconciled (the field is
+  required on the wire — caught by `pnpm build`, not just vitest). TDD on
+  both sides.
+- **M-1 RESOLVED.** `_gm_text_gate` treats `story.owners` membership as
+  privileged, so a non-staff/non-lead-GM owner reads back their own
+  description/PITCH summary (one `.exists()` only on the stripped path).
+  TDD.
+- **M-2 RESOLVED.** The deliberate-exception SECURITY comment added to
+  Story/Chapter/EpisodeCreateSerializer, naming
+  `description`/`summary` (+ `resting_conclusion`/`is_ending` for Episode).
+- **M-3 RESOLVED.** `ScopeAssignDialog` error handling uses a `pick()`
+  helper (Array.isArray-guarded) for `scope`/`character_sheet`/`gm_table`/
+  `non_field_errors`; `AssignDRFError` widened to `string | string[]`. The
+  bare-string `.join` `TypeError` path is gone. TDD.
+- **I-A twin RESOLVED.** `api.markBeat` attaches the failed `Response` to
+  the thrown error exactly as `promoteEpisode`/`saveTransitionWithOutcomes`
+  do, so `MarkBeatDialog.onError`'s `response.json()` field-error branch is
+  live. Real-contract TDD in `queries.authoring.test.tsx`.
+
+Out of scope (unchanged, design-bearing): the §10 sequenced follow-ups
+(Mission/Challenge engine, Sessions, Consequence/reward, GM leveling,
+Covenant) and the discovered-follow-up #4 per-DAG-reachability frontier
+refinement.
