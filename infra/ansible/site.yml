@@ -16,5 +16,6 @@
     - caddy
     - tls_telnet_cert
     - django_hardening
-    # added incrementally (M5): app_deploy, backups, offsite_replication,
+    - app_deploy
+    # added incrementally (M5): backups, offsite_replication,
     # secrets_perms, offbox_alerting, observability
