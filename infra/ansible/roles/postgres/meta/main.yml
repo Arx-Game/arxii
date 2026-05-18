@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: postgres
+  author: Arx II
+  description: PostgreSQL — localhost-only bind, locked pg_hba (no trust), DB/role create-if-absent (never drop), password from env (no_log).
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []
