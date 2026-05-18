@@ -470,3 +470,34 @@ class TestGetPlayerActionsRecomputedEachCall(django.test.TestCase):
             self.assertIn(new_ci.pk, ci_ids)
         finally:
             new_ci.delete()
+
+
+# ---------------------------------------------------------------------------
+# Test: _get_character_sheet — no sheet → empty list
+# ---------------------------------------------------------------------------
+
+
+class TestGetPlayerActionsNoCharacterSheet(django.test.TestCase):
+    """Character with no CharacterSheet yields an empty action list.
+
+    Verifies that narrowing ``except Exception`` → ``except AttributeError`` in
+    ``_get_character_sheet`` still correctly handles the "no sheet" case.
+    Django's ``RelatedObjectDoesNotExist`` is a subclass of ``AttributeError``,
+    so the narrowed handler is sufficient.
+    """
+
+    def test_character_without_sheet_returns_empty_list(self) -> None:
+        """get_player_actions returns [] when the character has no CharacterSheet."""
+        from actions.player_interface import get_player_actions
+
+        # Create a bare ObjectDB with no CharacterSheet attached.
+        character = ObjectDB.objects.create(db_key="SheetlessCharacter")
+        try:
+            actions = get_player_actions(character)
+            self.assertEqual(
+                actions,
+                [],
+                "Character with no CharacterSheet should produce no actions",
+            )
+        finally:
+            character.delete()

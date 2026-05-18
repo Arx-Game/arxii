@@ -727,8 +727,8 @@ def _match_approaches(  # noqa: PLR0913
                     difficulty_indicator=difficulty,
                     prerequisite_met=prereq_met,
                     prerequisite_reasons=reasons,
-                    check_type_resolved=resolved_check_type,
-                    action_template_resolved=resolved_action_template,
+                    resolved_check_type=resolved_check_type,
+                    resolved_action_template=resolved_action_template,
                 )
             )
 

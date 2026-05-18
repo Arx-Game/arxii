@@ -6,8 +6,8 @@ state changes appear immediately on the next request.
 
 Backend resolution:
 - CHALLENGE  -- delegates to ``world.mechanics.services.get_available_actions``; adapts
-  each ``AvailableAction`` (which already carries resolved ``check_type_resolved`` and
-  ``action_template_resolved`` instances populated by the prefetch chain) into a
+  each ``AvailableAction`` (which already carries resolved ``resolved_check_type`` and
+  ``resolved_action_template`` instances populated by the prefetch chain) into a
   ``PlayerAction``.
 - COMBAT      -- only when ``get_active_round_context`` returns a ``RoundContext``
   whose ``is_declaration_open`` is ``True``; enumerates the character's known
@@ -84,10 +84,10 @@ def _challenge_actions(character: ObjectDB) -> list[PlayerAction]:
     result: list[PlayerAction] = []
 
     for avail in available:
-        check_type = avail.check_type_resolved
+        check_type = avail.resolved_check_type
         if check_type is None:
             # Defensive: should not happen because _match_approaches always populates
-            # check_type_resolved, but skip gracefully if it ever does.
+            # resolved_check_type, but skip gracefully if it ever does.
             continue
 
         ref = ActionRef(
@@ -101,7 +101,7 @@ def _challenge_actions(character: ObjectDB) -> list[PlayerAction]:
                 check_type=check_type,
                 display_name=avail.display_name,
                 ref=ref,
-                action_template=avail.action_template_resolved,
+                action_template=avail.resolved_action_template,
                 description=avail.custom_description,
                 difficulty=avail.difficulty_indicator,
                 prerequisite_met=avail.prerequisite_met,
@@ -150,10 +150,7 @@ def _combat_actions(character: ObjectDB) -> list[PlayerAction]:
     result: list[PlayerAction] = []
     for grant in grants:
         technique = grant.technique
-        template = technique.action_template  # guaranteed non-None by filter above
-        if template is None:
-            continue  # defensive; filter above excludes None
-
+        template = technique.action_template  # guaranteed non-None: queryset filters isnull=False
         check_type = template.check_type
         ref = ActionRef(
             backend=ActionBackend.COMBAT,
@@ -180,5 +177,9 @@ def _get_character_sheet(character: ObjectDB) -> CharacterSheet | None:
     """
     try:
         return character.sheet_data  # type: ignore[attr-defined]
-    except Exception:  # noqa: BLE001 — DoesNotExist or AttributeError both mean no sheet
+    except AttributeError:
+        # RelatedObjectDoesNotExist (raised when CharacterSheet doesn't exist) is a
+        # subclass of AttributeError, so this catches both "no sheet" and "no relation".
+        # Bare `except Exception` was wrong: it masked DB errors (OperationalError etc.)
+        # as "no sheet → empty list".
         return None

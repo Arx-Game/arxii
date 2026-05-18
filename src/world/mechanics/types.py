@@ -71,7 +71,7 @@ class CapabilitySource:
 class AvailableAction:
     """An Action available to a character for a specific Challenge.
 
-    ``check_type_resolved`` and ``action_template_resolved`` carry the already-loaded
+    ``resolved_check_type`` and ``resolved_action_template`` carry the already-loaded
     model instances (populated from the prefetched ChallengeApproach by
     ``_match_approaches``).  They are excluded from the ``AvailableActionSerializer``
     because DataclassSerializer cannot render arbitrary model instances — callers in
@@ -93,8 +93,8 @@ class AvailableAction:
     prerequisite_reasons: list[str] = field(default_factory=list)
     # Resolved model instances (populated from already-prefetched approach data).
     # Default None so existing construction sites that don't pass these still work.
-    check_type_resolved: CheckType | None = field(default=None)
-    action_template_resolved: ActionTemplate | None = field(default=None)
+    resolved_check_type: CheckType | None = field(default=None)
+    resolved_action_template: ActionTemplate | None = field(default=None)
 
 
 @dataclass
