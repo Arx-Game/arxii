@@ -6,6 +6,13 @@ nothing here can run against real infrastructure until the prerequisites below a
 
 ## What the button is
 
+**Primary (one-click): a GitHub Actions workflow.** On github.com, open this repo →
+Actions → "Stand up infra" → **Run workflow**. It pauses for a required-reviewer
+approval on the gated `prod` environment, then runs — no local toolchain, no tokens
+on your machine, no terminal. It is a thin wrapper that injects the stored
+Environment secrets and invokes the exact same script below (one source of truth).
+
+**Equivalent fallback (local):**
 `scripts/standup.sh` = validate prerequisites → `tofu apply` (apply-only) → `ansible-playbook site.yml`.
 
 - **Apply-only and safe to re-run.** It never runs `tofu destroy`, never restores data, never
@@ -34,6 +41,20 @@ nothing here can run against real infrastructure until the prerequisites below a
 - [ ] Resend sending domain will be verified automatically via the DNS records this IaC creates
       (SPF/DKIM/DMARC + Resend verification) once nameservers are delegated.
 - [ ] One-time Terraform remote-state bootstrap run (`terraform/bootstrap/`, see its README).
+
+## After a successful stand-up — credential hygiene (do this every time)
+
+- [ ] **Revoke the Linode and Cloudflare API tokens at the provider** (not just delete
+      the GitHub secret — revoke them so any leaked copy is already dead). Generate fresh
+      short-expiry, scoped tokens next time you run the button. Stand-ups are rare and
+      high-stakes; this removes the "powerful standing token sitting in GitHub forever"
+      risk.
+- [ ] The **Ansible Vault passphrase stays** the single gated Environment secret
+      (GitHub-encrypted, exposed only to the approved job, never logged). Do **not** pass
+      it as a workflow input (dispatch inputs are unmasked). Rotate it only if GitHub is
+      ever suspected compromised.
+- Note: fully keyless (GitHub OIDC, no stored token) is not cleanly available for Linode,
+  so short-lived + revoke-after is the realistic best posture, not OIDC.
 
 ## Layout
 
