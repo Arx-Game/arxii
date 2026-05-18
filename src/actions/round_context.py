@@ -20,7 +20,10 @@ Usage::
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
 
 
 class RoundContext(ABC):
@@ -57,7 +60,8 @@ class RoundContext(ABC):
     @abstractmethod
     def record_declaration(
         self,
-        character: Any,
+        character: CharacterSheet,
+        # player_action: typed as PlayerAction once actions.types defines it (later task)
         player_action: Any,
         kwargs: dict[str, Any],
     ) -> None:
@@ -70,7 +74,7 @@ class RoundContext(ABC):
         ...
 
 
-def get_active_round_context(character: Any) -> RoundContext | None:
+def get_active_round_context(character: CharacterSheet) -> RoundContext | None:
     """Return the active ``RoundContext`` for *character*, or ``None``.
 
     A non-``None`` return means a round is currently in progress and player

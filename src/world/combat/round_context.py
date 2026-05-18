@@ -33,6 +33,7 @@ from __future__ import annotations
 from typing import Any
 
 from actions.round_context import RoundContext
+from world.character_sheets.models import CharacterSheet
 from world.combat.constants import EncounterStatus, ParticipantStatus
 from world.combat.models import CombatParticipant
 
@@ -72,7 +73,8 @@ class CombatRoundContext(RoundContext):
 
     def record_declaration(
         self,
-        character: Any,
+        character: CharacterSheet,
+        # player_action: typed as PlayerAction once actions.types defines it (later task)
         player_action: Any,
         kwargs: dict[str, Any],
     ) -> None:
@@ -85,7 +87,7 @@ class CombatRoundContext(RoundContext):
         raise NotImplementedError(_msg)
 
 
-def resolve_combat_round_context(character: Any) -> CombatRoundContext | None:
+def resolve_combat_round_context(character: CharacterSheet) -> CombatRoundContext | None:
     """Find the character's current active ``CombatParticipant`` and return a context.
 
     Resolution path (canonical — mirrors ``views._get_participant`` in reverse):
