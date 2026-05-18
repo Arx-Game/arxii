@@ -1,6 +1,9 @@
 """Tests for CombatEncounterViewSet."""
 
+from decimal import Decimal
+
 from django.test import TestCase
+from evennia.objects.models import ObjectDB
 from rest_framework import status as http_status
 from rest_framework.test import APIClient
 
@@ -9,21 +12,30 @@ from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
-from world.combat.constants import EncounterStatus, ParticipantStatus
+from world.checks.test_helpers import force_check_outcome
+from world.combat.constants import ActionCategory, EncounterStatus, ParticipantStatus
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
 from world.combat.models import CombatRoundAction
+from world.conditions.factories import DamageSuccessLevelMultiplierFactory
+from world.conditions.models import ConditionInstance
 from world.magic.factories import (
     BinaryEffectTypeFactory,
+    CharacterAnimaFactory,
+    EffectTypeFactory,
     TechniqueAppliedConditionFactory,
     TechniqueFactory,
 )
+from world.mechanics.factories import CharacterEngagementFactory
 from world.roster.factories import RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.traits.factories import CheckOutcomeFactory
+from world.vitals.constants import CharacterStatus
 from world.vitals.models import CharacterVitals
 
 
@@ -427,3 +439,199 @@ class StaffAccessTest(TestCase):
             f"/api/combat/{self.encounter.pk}/begin_round/",
         )
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+
+
+class DeclareAndResolveE2ETest(TestCase):
+    """End-to-end API regression: declared damaging+condition spell takes the real
+    declare→resolve_round path and asserts damage AND a condition were applied.
+
+    Uses setUp (not setUpTestData) because CombatOpponentFactory creates a
+    CombatNPC ObjectDB, which breaks setUpTestData deepcopy.
+
+    This test would have caught the original "spells do nothing in combat" sever
+    (resolve_round called without offense_check_type, silently no-op'd).
+    """
+
+    def setUp(self) -> None:
+        # GM account / scene
+        self.gm_account = AccountFactory(username="e2e_gm")
+        self.gm_character = CharacterFactory(db_key="e2e_gmchar")
+        self.gm_sheet = CharacterSheetFactory(character=self.gm_character)
+        self.gm_tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=self.gm_character,
+            player_data__account=self.gm_account,
+        )
+
+        # Player account / character
+        self.player_account = AccountFactory(username="e2e_player")
+        self.player_character = CharacterFactory(db_key="e2e_playerchar")
+        self.player_sheet = CharacterSheetFactory(character=self.player_character)
+        self.player_tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=self.player_character,
+            player_data__account=self.player_account,
+        )
+
+        # Scene with GM participation
+        self.scene = SceneFactory()
+        SceneParticipationFactory(
+            scene=self.scene,
+            account=self.gm_account,
+            is_gm=True,
+        )
+
+        # DamageSuccessLevelMultiplier rows so the real damage pipeline produces
+        # non-zero damage. The check outcome is forced to success_level=2 via
+        # force_check_outcome, so the "Full" multiplier (min_success_level=2) fires.
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=2, multiplier=Decimal("1.00"), label="E2E Full"
+        )
+        DamageSuccessLevelMultiplierFactory(
+            min_success_level=1, multiplier=Decimal("0.50"), label="E2E Partial"
+        )
+        # Pre-create a CheckOutcome with success_level=2 for forcing the check result.
+        # force_check_outcome sets a thread-local that perform_check reads on first call.
+        self.success_outcome = CheckOutcomeFactory(name="E2E Success", success_level=2)
+
+    def test_declared_spell_deals_damage_and_applies_condition_via_api(self) -> None:
+        """POST declare then POST resolve_round: opponent takes damage AND gains a condition.
+
+        This is the regression test for the "spells do nothing in combat" sever.
+        The original defect: resolve_round was called without offense_check_type,
+        causing _resolve_pc_action to skip technique resolution entirely.
+        All Phase-1 fixes must be in place for this test to pass.
+        """
+        # --- Build encounter infrastructure ---
+        encounter = CombatEncounterFactory(
+            scene=self.scene,
+            status=EncounterStatus.DECLARING,
+            round_number=1,
+        )
+        pool = ThreatPoolFactory()
+        ThreatPoolEntryFactory(pool=pool, base_damage=5)
+        opponent = CombatOpponentFactory(
+            encounter=encounter,
+            health=100,
+            max_health=100,
+            threat_pool=pool,
+        )
+        starting_health = opponent.health
+
+        # Participant uses the player's sheet so player_account's auth resolves it
+        participant = CombatParticipantFactory(
+            encounter=encounter,
+            character_sheet=self.player_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+
+        # Vitals, anima, engagement — required by the real magic pipeline
+        CharacterVitals.objects.create(
+            character_sheet=self.player_sheet,
+            health=100,
+            max_health=100,
+            status=CharacterStatus.ALIVE,
+        )
+        CharacterAnimaFactory(
+            character=self.player_character,
+            current=50,
+            maximum=50,
+        )
+        CharacterEngagementFactory(character=self.player_character)
+
+        # Room location for the caster character (required by use_technique)
+        room = ObjectDB.objects.create(
+            db_key="E2ETestRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.player_character.location = room
+        self.player_character.save()
+
+        # NPC action so the orchestrator has a complete round (opponent must act too)
+        from world.combat.models import CombatOpponentAction
+
+        npc_action = CombatOpponentAction.objects.create(
+            opponent=opponent,
+            round_number=1,
+            threat_entry=ThreatPoolEntryFactory(pool=pool, base_damage=5),
+        )
+        npc_action.targets.add(participant)
+
+        # Technique: deals damage (via EffectTypeFactory sequence default, base_power=20)
+        # AND applies a condition to the enemy target
+        effect_type = EffectTypeFactory(base_power=20)
+        technique = TechniqueFactory(
+            effect_type=effect_type,
+            action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
+        )
+        applied_condition_row = TechniqueAppliedConditionFactory(
+            technique=technique,
+            target_kind="enemy",
+            minimum_success_level=1,
+        )
+        expected_condition_template = applied_condition_row.condition
+
+        # --- Step 1: Player declares the technique targeting the opponent ---
+        client = APIClient()
+        client.force_authenticate(user=self.player_account)
+        declare_response = client.post(
+            f"/api/combat/{encounter.pk}/declare/",
+            {
+                "focused_action": technique.pk,
+                "focused_category": ActionCategory.PHYSICAL,
+                "effort_level": "medium",
+                "focused_opponent_target": opponent.pk,
+            },
+            format="json",
+        )
+        self.assertEqual(declare_response.status_code, http_status.HTTP_200_OK)
+
+        # Confirm the action was persisted with the correct target
+        action = CombatRoundAction.objects.get(
+            participant=participant,
+            round_number=encounter.round_number,
+        )
+        self.assertEqual(action.focused_opponent_target, opponent)
+        self.assertEqual(action.focused_action, technique)
+
+        # --- Step 2: GM resolves the round via the real endpoint ---
+        # force_check_outcome injects a thread-local that perform_check reads on
+        # first call. This guarantees success_level=2 (full damage + condition
+        # minimum_success_level=1 satisfied) without needing an offense_check_fn
+        # injection (not available through the API endpoint).
+        gm_client = APIClient()
+        gm_client.force_authenticate(user=self.gm_account)
+        with force_check_outcome(self.success_outcome):
+            resolve_response = gm_client.post(
+                f"/api/combat/{encounter.pk}/resolve_round/",
+            )
+        self.assertEqual(resolve_response.status_code, http_status.HTTP_200_OK)
+
+        # --- Step 3: Assert damage was applied to the opponent ---
+        opponent.refresh_from_db()
+        self.assertLess(
+            opponent.health,
+            starting_health,
+            msg=(
+                f"Opponent health should have decreased from {starting_health} "
+                f"but is still {opponent.health}. "
+                "The 'spells do nothing in combat' regression may have returned."
+            ),
+        )
+
+        # --- Step 4: Assert the condition was applied to the opponent's ObjectDB ---
+        opponent_objectdb = opponent.objectdb
+        self.assertIsNotNone(
+            opponent_objectdb,
+            msg="Opponent must have an ObjectDB for condition application.",
+        )
+        condition_exists = ConditionInstance.objects.filter(
+            target=opponent_objectdb,
+            condition=expected_condition_template,
+        ).exists()
+        self.assertTrue(
+            condition_exists,
+            msg=(
+                f"Expected ConditionInstance with template '{expected_condition_template}' "
+                f"to exist on opponent ObjectDB {opponent_objectdb.pk}, but none was found. "
+                "Condition application via the API resolve path may be broken."
+            ),
+        )
