@@ -54,14 +54,31 @@ surfaces**, each grown independently:
 
 ### The keystone
 
+The unifying anchor is the resolved **`CheckType`**, not `ActionTemplate`.
 `ActionTemplate` (`src/actions/models/action_templates.py`) carries a
-**non-nullable `check_type` FK** (`:36`) and is **already referenced from both
-sides**: `Technique.action_template` (`src/world/magic/models/techniques.py`,
-nullable) and `ChallengeApproach.action_template`
-(`src/world/mechanics/models.py:784-834`). "CheckType belongs in the action
-layer, defined once" is therefore already true *structurally* — the bug is that
-no code reads `technique.action_template.check_type`. This is an existing seam,
-not a new abstraction.
+**non-nullable `check_type` FK** (`:36`) and is referenced by
+`Technique.action_template` (`src/world/magic/models/techniques.py`, nullable)
+and `ChallengeApproach.action_template`
+(`src/world/mechanics/models.py:784-834`).
+
+> **Resolved during implementation (verified 2026-05-18):** `ActionTemplate`
+> is NOT a universal spine. `ChallengeApproach.action_template` is **nullable**
+> (`on_delete=SET_NULL`, *"When set, resolution uses this template's check_type
+> and pool"*) — an optional *override*. `ChallengeApproach.check_type` is the
+> **non-null, always-present** resolution anchor; `resolve_challenge` uses
+> `approach.check_type` directly unless an `action_template` override is set.
+> Therefore the always-present unifying field across all three backends is the
+> resolved `CheckType`, sourced per-backend: combat →
+> `technique.action_template.check_type`; challenge →
+> `approach.action_template.check_type` if the override is set, else
+> `approach.check_type`; registry → `template.check_type`. `action_template`
+> is carried on the descriptor only when present (combat techniques, registry
+> templates, override challenge approaches).
+
+"CheckType belongs in the action layer, defined once" holds — realized via the
+`CheckType` that every backend already resolves. The combat bug is still that
+no code reads `technique.action_template.check_type`. This uses existing
+fields, not a new abstraction.
 
 Defense-side nuance: PC technique attacks have **no defense check** (opponent
 soak is the sole mitigation). `defense_check_type` matters only for the NPC→PC
@@ -125,15 +142,20 @@ Availability," generic dispatch). No new app. Challenge logic stays in
 `world/mechanics`; combat declare stays in `world/combat`. `src/actions/`
 **aggregates and routes**; it does not absorb the backends.
 
-**Spine — `ActionTemplate`.** Every player action descriptor resolves to an
-`ActionTemplate` carrying the non-null `check_type`.
+**Spine — resolved `CheckType`.** Every player action descriptor resolves to a
+`CheckType` (always present). `action_template` is carried only when it exists
+(combat techniques, registry templates, override challenge approaches) — see
+the keystone correction above.
 
 **Descriptor — `PlayerAction` dataclass** (carries model instances, not bare
 PKs; types in `src/actions/types.py`):
 
 - `backend`: `CHALLENGE | COMBAT | REGISTRY` (TextChoices in
   `src/actions/constants.py`)
-- `action_template`: the `ActionTemplate` instance → `check_type`, category
+- `check_type`: the resolved `CheckType` instance (always present; the unifying
+  anchor, sourced per-backend per the keystone correction)
+- `action_template`: the `ActionTemplate` instance or `None` (present for
+  combat techniques / registry templates / override challenge approaches)
 - `display`: name / icon / description (approach custom text, technique, or
   registry `Action`)
 - `target_spec`: target type + eligible targets (from `Action.target_type`
