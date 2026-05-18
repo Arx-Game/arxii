@@ -6,8 +6,9 @@ Arx II is the sequel to Arx: After the Reckoning, built on the Evennia framework
 
 Run Claude Code with `--dangerously-skip-permissions` safely inside a Docker container
 with an egress firewall. The container is the filesystem boundary; the firewall is the
-network boundary. Bootstrap the host once with `scripts/bootstrap-devcontainer-host.ps1`,
-then `just dc-up` to start the stack and `just dc-shell` to get a shell inside it.
+network boundary. Bootstrap the host once with `.\scripts\bootstrap-devcontainer-host.ps1`
+(PowerShell; see the guide if execution policy blocks it), then `just dc-up` to start
+the stack and `just dc-shell` to get a shell inside it.
 
 See [docs/devcontainer-setup.md](docs/devcontainer-setup.md) for the full guide.
 

@@ -20,6 +20,11 @@ This setup provides two independent boundaries:
   start. It is default-deny for outbound traffic and allows only the destinations Claude
   Code actually needs (Anthropic API, GitHub, PyPI, npm). Everything else is rejected.
 
+This is defense-in-depth, not a full sandbox: a compromised or mistaken agent can still
+modify anything in the bind-mounted workspace and can still send data to the explicitly
+allowlisted destinations (GitHub, PyPI, npm, the Anthropic API). The container and
+firewall bound the blast radius; they do not eliminate it.
+
 WSL2 itself is just the Linux kernel Docker Desktop uses under the hood. You interact
 with it only through Docker; you do not need a WSL terminal.
 
@@ -42,11 +47,13 @@ development machine. Key points:
 
 ## Host bootstrap
 
-Run this once (and re-run whenever you set up a new machine or after a reboot):
+Run this once per machine. Re-run it only if you reinstall Docker Desktop or set up a new machine — a routine reboot does not require re-running it.
 
 ```powershell
-scripts/bootstrap-devcontainer-host.ps1
+.\scripts\bootstrap-devcontainer-host.ps1
 ```
+
+If PowerShell blocks the script with an execution-policy error, allow local scripts for your user once with `Set-ExecutionPolicy RemoteSigned -Scope CurrentUser`, then re-run it.
 
 The script is **idempotent and detection-first**: it checks what is already installed
 before doing anything. It handles:
@@ -123,13 +130,16 @@ The database volume (`arxii-pgdata`) is preserved by the pinned compose project 
 docker compose -p arxii-devcontainer -f .devcontainer/docker-compose.yml down -v
 ```
 
-**Full rebuild (after changing the Dockerfile or init-firewall.sh):**
+**Full rebuild (after editing the `Dockerfile` or `.devcontainer/init-firewall.sh`):**
 
 ```powershell
 just dc-build
 ```
 
-This passes `--build-no-cache --remove-existing-container` to the devcontainer CLI.
+The firewall script is copied into the image at build time and `postStartCommand` runs
+that baked copy, so workspace edits to `init-firewall.sh` only take effect after
+`just dc-build`. This passes `--build-no-cache --remove-existing-container` to the
+devcontainer CLI.
 
 ### Do not use raw docker commands for daily use
 
