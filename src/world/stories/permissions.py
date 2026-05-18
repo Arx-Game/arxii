@@ -12,6 +12,7 @@ from world.gm.models import GMProfile, GMTable
 from world.stories.constants import AssistantClaimStatus, StoryScope
 from world.stories.models import (
     AssistantGMClaim,
+    Episode,
     Story,
     StoryNote,
     StoryParticipation,
@@ -528,15 +529,11 @@ class IsLeadGMOnStoryOrStaff(permissions.BasePermission):
         # Find the story from whatever object was passed.
         if isinstance(obj, Story):
             story = obj
+        elif isinstance(obj, Episode):
+            story = obj.chapter.story
         else:
-            # Walk episode -> chapter -> story.
-            episode = getattr(obj, "chapter", None)  # noqa: GETATTR_LITERAL
-            if episode is None:
-                # obj is an Episode; it has a chapter attribute.
-                episode_obj = obj
-                story = episode_obj.chapter.story
-            else:
-                story = episode.story
+            # Chapter (or anything else exposing .story).
+            story = obj.story
 
         try:
             gm_profile = request.user.gm_profile
