@@ -31,6 +31,7 @@ This rule exists as a workaround for a Claude Code permission-check behavior on 
 - `uv sync` - Install Python dependencies
 - `uv venv` - Create virtual environment
 - `pre-commit install` - Install pre-commit hooks
+- **Sandboxed devcontainer** (for `--dangerously-skip-permissions`): see `docs/devcontainer-setup.md`
 
 ### Common Development Commands
 All `arx` commands below require the venv to be activated, or must be prefixed with `uv run` (e.g., `uv run arx test`). Use `uv run arx` when unsure whether the venv is active.
