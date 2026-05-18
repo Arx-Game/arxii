@@ -7,7 +7,10 @@
   become: true
   roles:
     - base
-    # added incrementally: ssh_hardening, fail2ban, unattended_upgrades,
-    # host_firewall, secrets_vault, postgres, caddy, tls_telnet_cert,
-    # django_hardening, app_deploy, backups, offsite_replication,
-    # secrets_perms, offbox_alerting, observability
+    - ssh_hardening
+    - fail2ban
+    - unattended_upgrades
+    - host_firewall
+    # added incrementally (M4-M5): secrets_vault, postgres, caddy,
+    # tls_telnet_cert, django_hardening, app_deploy, backups,
+    # offsite_replication, secrets_perms, offbox_alerting, observability

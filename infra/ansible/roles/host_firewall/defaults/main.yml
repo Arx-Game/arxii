@@ -1,0 +1,9 @@
+---
+# Mirrors the Linode (network-edge) firewall as host-level defense-in-depth.
+# Supplied by the standup wiring from tofu outputs / the Cloudflare IP data
+# source. Empty defaults are intentional — an unconfigured run should NOT
+# silently open things; the play supplies real values.
+hostfw_ssh_admin_cidrs: []        # operator decision (defaults open at edge)
+hostfw_cloudflare_ipv4_cidrs: []
+hostfw_cloudflare_ipv6_cidrs: []
+hostfw_tls_telnet_port: 4003

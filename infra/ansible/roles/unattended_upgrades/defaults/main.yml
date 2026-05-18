@@ -1,0 +1,4 @@
+---
+# Low-traffic maintenance window for the auto-reboot (players are dropped
+# then; Portal reconnect softens it). Documented, deliberate.
+unattended_reboot_time: "04:30"

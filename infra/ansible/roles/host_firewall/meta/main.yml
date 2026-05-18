@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: host_firewall
+  author: Arx II
+  description: Host-level nftables mirroring the Linode edge firewall (defense-in-depth, default-deny).
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

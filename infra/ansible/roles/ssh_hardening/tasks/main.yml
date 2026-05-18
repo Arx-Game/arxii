@@ -1,0 +1,26 @@
+---
+- name: Deploy hardened sshd drop-in (validated to avoid lockout)
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/10-arxii-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "/usr/sbin/sshd -t -f %s"
+    content: |
+      # Managed by Ansible (ssh_hardening). Key-only, no root, modern crypto.
+      Port {{ ssh_port }}
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      ChallengeResponseAuthentication no
+      PubkeyAuthentication yes
+      PermitEmptyPasswords no
+      X11Forwarding no
+      MaxAuthTries 3
+      LoginGraceTime 20
+      AllowTcpForwarding no
+      AllowUsers {{ ssh_allow_users | join(' ') }}
+      KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,sntrup761x25519-sha512@openssh.com
+      Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com
+      MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com
+  notify: Restart sshd

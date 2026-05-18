@@ -1,0 +1,42 @@
+#!/usr/sbin/nft -f
+# Managed by Ansible (host_firewall). Default-deny inbound; mirrors the
+# Linode edge firewall. The PLAINTEXT telnet port is intentionally ABSENT
+# (closed here AND TELNET_ENABLED=False in Evennia).
+flush ruleset
+
+table inet filter {
+    set cf4 { type ipv4_addr; flags interval;
+{% if hostfw_cloudflare_ipv4_cidrs %}        elements = { {{ hostfw_cloudflare_ipv4_cidrs | join(', ') }} }
+{% endif %}    }
+    set cf6 { type ipv6_addr; flags interval;
+{% if hostfw_cloudflare_ipv6_cidrs %}        elements = { {{ hostfw_cloudflare_ipv6_cidrs | join(', ') }} }
+{% endif %}    }
+    set sshadmin { type ipv4_addr; flags interval;
+{% if hostfw_ssh_admin_cidrs %}        elements = { {{ hostfw_ssh_admin_cidrs | select('search', '\\.') | join(', ') }} }
+{% endif %}    }
+
+    chain input {
+        type filter hook input priority filter; policy drop;
+
+        iif "lo" accept
+        ct state established,related accept
+        ct state invalid drop
+        ip protocol icmp icmp type echo-request accept
+        ip6 nexthdr icmpv6 accept
+
+        # SSH — admin allowlist (open by default at the edge; operator decision)
+        tcp dport {{ "%d" | format(22) }} ip saddr @sshadmin accept
+
+        # Web — Cloudflare ranges only (origin not web-reachable directly)
+        tcp dport { 80, 443 } ip saddr @cf4 accept
+        tcp dport { 80, 443 } ip6 saddr @cf6 accept
+
+        # TLS-telnet — open, layer-protected. (No plaintext-telnet rule.)
+        tcp dport {{ hostfw_tls_telnet_port }} accept
+
+        # everything else: policy drop
+    }
+
+    chain forward { type filter hook forward priority filter; policy drop; }
+    chain output  { type filter hook output  priority filter; policy accept; }
+}
