@@ -5,9 +5,10 @@ name: Infra Validate
 # until this is green." Account-independent — no cloud creds, no secrets,
 # never applies anything (fmt/validate/lint/syntax only).
 #
-# SECURITY TODO before this is trusted/merged: pin every third-party action to
-# a full commit SHA (see infra plan §security — actions pinned by SHA). Tags
-# are used here as placeholders and asserted-against in M6/T25.
+# SUPPLY CHAIN: every third-party action is pinned to a full commit SHA (a
+# mutable tag like @v4 could be repointed at malicious code). The trailing
+# `# vX.Y.Z` is the human-readable version Dependabot bumps; only the SHA is
+# authoritative. Re-pin via: gh api repos/<owner>/<repo>/commits/<tag> --jq .sha
 
 on:
   push:
@@ -23,7 +24,7 @@ jobs:
   shell:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4 # TODO: pin SHA
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - name: shellcheck
         run: |
           set -euo pipefail
@@ -36,8 +37,8 @@ jobs:
   terraform:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4 # TODO: pin SHA
-      - uses: opentofu/setup-opentofu@v1 # TODO: pin SHA
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: opentofu/setup-opentofu@9d84900f3238fab8cd84ce47d658d25dd008be2f # v1.0.8
         with: { tofu_wrapper: false }
       - name: tofu fmt
         run: |
@@ -61,8 +62,8 @@ jobs:
   ansible:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4 # TODO: pin SHA
-      - uses: actions/setup-python@v5 # TODO: pin SHA
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with: { python-version: "3.13" }
       - name: ansible-lint + syntax-check
         run: |
@@ -87,7 +88,7 @@ jobs:
     # git history (any plaintext secret ever committed is compromised).
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4 # TODO: pin SHA
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with: { fetch-depth: 0 }
       - name: gitleaks (full history)
         run: |
@@ -106,7 +107,7 @@ jobs:
   caddy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4 # TODO: pin SHA
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - name: caddy adapt (render the Jinja template, plugin build)
         run: |
           set -euo pipefail

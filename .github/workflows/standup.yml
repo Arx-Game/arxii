@@ -7,7 +7,9 @@ name: Stand up infra (the button)
 # (DRY). APPLY-ONLY — no destroy, no restore (restore is a separate gated
 # tool). Secrets are env-only, masked, never echoed, never --extra-vars.
 #
-# SECURITY TODO before trust: pin every third-party action to a full SHA.
+# SUPPLY CHAIN (critical here — this job sees the gated prod secrets): every
+# action is pinned to a full commit SHA, never a mutable tag. Trailing
+# `# vX.Y.Z` is the Dependabot-readable version; only the SHA is trusted.
 
 on:
   workflow_dispatch:
@@ -29,10 +31,10 @@ jobs:
     runs-on: ubuntu-latest
     environment: prod        # gated: required-reviewer approval before run
     steps:
-      - uses: actions/checkout@v4 # TODO: pin SHA
-      - uses: opentofu/setup-opentofu@v1 # TODO: pin SHA
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: opentofu/setup-opentofu@9d84900f3238fab8cd84ce47d658d25dd008be2f # v1.0.8
         with: { tofu_wrapper: false }
-      - uses: actions/setup-python@v5 # TODO: pin SHA
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with: { python-version: "3.13" }
       - name: Install Ansible + collections
         run: |
