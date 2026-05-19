@@ -47,6 +47,8 @@ from world.missions.services.affordances import bindings_for_character
 from world.missions.types import PresentedOption
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import CheckType
@@ -89,13 +91,29 @@ def build_option_list(
     Phase 3 is single-participant; ``instance`` is accepted for signature
     stability (Phase 4 unions across ``instance.participants``).
     """
-    character = viewer.character
     options = node.options.all().order_by("order", "pk")
+    return present_options_for_character(viewer.character, options)
 
+
+def present_options_for_character(
+    character: ObjectDB,
+    options: Iterable[MissionOption],
+) -> list[PresentedOption]:
+    """Present an already-ordered ``options`` iterable for one character.
+
+    The single-participant body of :func:`build_option_list`, extracted so
+    Phase-4 ``build_group_option_list`` can fetch the node's options +
+    ``accepted_affordances`` ONCE (one prefetched queryset) and reuse them
+    across every participant instead of re-querying per participant
+    (Phase-3 review Minor-1). ``options`` MUST already be ordered by the
+    caller (``order``, then ``pk``) — this preserves
+    :func:`build_option_list`'s exact behavior; it just no longer owns the
+    queryset construction.
+    """
     presented: list[PresentedOption] = []
     for option in options:
         if option.source_kind == OptionSource.AFFORDANCE:
-            accepted = set(option.accepted_affordances.all())
+            accepted = set(option.accepted_affordances_cached)
             presented.extend(
                 PresentedOption(
                     option=option,

@@ -18,6 +18,7 @@ check or consequence models.
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.mixins import DiscriminatorMixin
@@ -33,6 +34,7 @@ from world.missions.constants import (
     OptionKind,
     OptionProduces,
     OptionSource,
+    RewardGroupRule,
 )
 
 # Discriminator value -> typed FK field name. Authored-once bindings point at
@@ -259,6 +261,15 @@ class MissionTemplate(SharedMemoryModel):
         help_text="Percent chance this template replaces an existing offer (0-100).",
     )
     cooldown = models.DurationField(help_text="Per-giver re-offer cooldown.")
+    reward_group_rule = models.CharField(
+        max_length=16,
+        choices=RewardGroupRule.choices,
+        default=RewardGroupRule.ALL_EQUAL,
+        help_text=(
+            "Multi-participant payout split (authoring knob only; actual "
+            "distribution-by-rule is Phase 5)."
+        ),
+    )
     is_active = models.BooleanField(default=True)
 
     def clean(self) -> None:
@@ -492,6 +503,21 @@ class MissionOption(SharedMemoryModel):
         # and ``_affordance_source_errors``.
         self.clean()
         super().save(*args, **kwargs)
+
+    @cached_property
+    def accepted_affordances_cached(self) -> list["Affordance"]:
+        """Accepted affordances as a cache-safe list.
+
+        Reads from the prefetch when a caller set up
+        ``Prefetch("options__accepted_affordances",
+        to_attr="accepted_affordances_cached")`` (Phase-4
+        ``build_group_option_list`` does this ONCE so the per-participant
+        union never re-queries — Phase-3 review Minor-1); otherwise it
+        issues exactly one query, matching the prior
+        ``accepted_affordances.all()`` behavior. The cached_property is
+        Django's (cache-safe with ``Prefetch(to_attr=...)``).
+        """
+        return list(self.accepted_affordances.all())
 
     def __str__(self) -> str:
         return f"{self.node}#{self.order}"

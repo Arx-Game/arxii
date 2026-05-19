@@ -64,6 +64,21 @@ class JointCombine(models.TextChoices):
     COUNT = "count", "Count"
 
 
+class RewardGroupRule(models.TextChoices):
+    """How a multi-participant mission's rewards are split (authoring knob).
+
+    This is the *authoring* knob only; the actual reward distribution by
+    rule is Phase 5 (reward lines are Phase-5-deferred). ALL_EQUAL — every
+    participant gets the same payout; BY_ROLE — payout varies by the
+    participant's authored role; BY_PARTICIPATION — payout scales with each
+    participant's recorded contribution.
+    """
+
+    ALL_EQUAL = "all_equal", "All Equal"
+    BY_ROLE = "by_role", "By Role"
+    BY_PARTICIPATION = "by_participation", "By Participation"
+
+
 class OptionKind(models.TextChoices):
     """Whether a :class:`~world.missions.models.MissionOption` branches the
     graph directly or resolves a dice check first.

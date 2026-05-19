@@ -16,6 +16,7 @@ from world.missions.constants import (
     OptionKind,
     OptionProduces,
     OptionSource,
+    RewardGroupRule,
 )
 from world.missions.models import (
     SOURCE_DISTINCTION,
@@ -91,6 +92,7 @@ class MissionTemplateFactory(DjangoModelFactory):
     arc_scope = ArcScope.GLOBAL
     percent_replace = 0
     cooldown = timedelta(days=1)
+    reward_group_rule = RewardGroupRule.ALL_EQUAL
     is_active = True
 
 
