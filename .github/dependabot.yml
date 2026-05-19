@@ -1,0 +1,22 @@
+# Keeps SHA-pinned GitHub Actions current. We pin every action to a full
+# commit SHA (supply-chain hardening); the trailing `# vX.Y.Z` comment lets
+# Dependabot recognize the version and bump BOTH the SHA and the comment.
+# Without this, pins silently rot and miss upstream security patches.
+#
+# Scope: github-actions only (this is the other half of the action-pinning
+# work). pip/npm ecosystems are intentionally NOT enabled here — that's a
+# broader, repo-wide maintainer decision, not part of this hardening.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+    # One grouped PR per week instead of one per action — low review noise
+    # for a small team; security updates still open immediately.
+    groups:
+      github-actions:
+        patterns: ["*"]
+    open-pull-requests-limit: 5
