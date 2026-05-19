@@ -137,29 +137,17 @@ def _resolve_registry_kwargs(ref: object, raw_kwargs: dict) -> "dict | str":
 def _result_from_dispatch(dispatch_result: object) -> "tuple[str | None, dict | None]":
     """Extract ``(message, data)`` from a ``DispatchResult`` detail object.
 
-    Mirrors the ``DispatchResultSerializer.to_representation`` logic so REST
-    and WebSocket responses are consistent.
+    Delegates to ``extract_dispatch_message_data`` so REST and WebSocket
+    responses are guaranteed to be byte-identical.
 
     ``dispatch_result`` is typed as ``object`` because all ``actions.*`` imports
     are deferred in this Evennia conf module; the concrete type is ``DispatchResult``.
     """
-    from actions.types import ActionResult, DispatchResult  # noqa: PLC0415
-    from world.mechanics.types import ChallengeResolutionResult  # noqa: PLC0415
+    from actions.result_extraction import extract_dispatch_message_data  # noqa: PLC0415
+    from actions.types import DispatchResult  # noqa: PLC0415
 
     typed_result: DispatchResult = dispatch_result  # type: ignore[assignment]
-    detail = typed_result.detail
-
-    if isinstance(detail, ChallengeResolutionResult):
-        return detail.challenge_name, {
-            "challenge_instance_id": detail.challenge_instance_id,
-            "resolution_type": detail.resolution_type,
-            "challenge_deactivated": detail.challenge_deactivated,
-        }
-
-    if isinstance(detail, ActionResult):
-        return detail.message, detail.data or None
-
-    return None, None
+    return extract_dispatch_message_data(typed_result.detail)
 
 
 def execute_action(session, *args, **kwargs):  # noqa: ARG001 — Evennia inputfunc signature

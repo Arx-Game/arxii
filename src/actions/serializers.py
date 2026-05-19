@@ -29,8 +29,8 @@ from rest_framework import serializers
 
 from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
-from actions.types import ActionRef, ActionResult, DispatchResult, PlayerAction
-from world.mechanics.types import ChallengeResolutionResult
+from actions.result_extraction import extract_dispatch_message_data
+from actions.types import ActionRef, DispatchResult, PlayerAction
 
 
 class CheckTypeMinimalSerializer(serializers.Serializer):
@@ -201,20 +201,7 @@ class DispatchResultSerializer(serializers.Serializer):
                 "data": None,
             }
 
-        detail = instance.detail
-        message: str | None = None
-        data: dict[str, Any] | None = None
-
-        if isinstance(detail, ChallengeResolutionResult):
-            message = detail.challenge_name
-            data = {
-                "challenge_instance_id": detail.challenge_instance_id,
-                "resolution_type": detail.resolution_type,
-                "challenge_deactivated": detail.challenge_deactivated,
-            }
-        elif isinstance(detail, ActionResult):
-            message = detail.message
-            data = detail.data or None
+        message, data = extract_dispatch_message_data(instance.detail)
 
         return {
             "backend": backend_value,
