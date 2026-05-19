@@ -7,8 +7,17 @@ this codebase (it mirrors the shape of
 evaluator accepts a plain ``dict`` as *input*. Everything else stays typed.
 """
 
+from __future__ import annotations
+
 from collections.abc import Callable
-from typing import Protocol, runtime_checkable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
+    from world.checks.models import CheckType, Consequence
+    from world.missions.models import AffordanceBinding
 
 # A leaf resolver tests one slice of the acting character's own durable
 # state. It receives the acting character (ObjectDB) plus the leaf's
@@ -29,3 +38,25 @@ class PredicateContext(Protocol):
     """
 
     def has_leaf(self, leaf: str, **params: object) -> bool: ...
+
+
+@dataclass(frozen=True)
+class ResolvedOption:
+    """One surfaced player option produced from an owned descriptor binding.
+
+    Built by ``world.missions.services.bindings_for_character`` for each
+    :class:`~world.missions.models.AffordanceBinding` whose affordance the
+    challenge accepts AND whose descriptor the acting character owns. Fields
+    are flattened off the binding so resolution callers never re-walk the FK
+    side. ``owner`` is the acting character (an ``ObjectDB``); Phase 4
+    generalizes this to per-participant owners and the default stays the
+    acting character.
+    """
+
+    binding: AffordanceBinding
+    produces: str
+    check_type: CheckType | None
+    base_risk: int
+    ic_framing: str
+    rider: Consequence | None
+    owner: ObjectDB
