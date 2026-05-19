@@ -71,6 +71,12 @@ jobs:
             echo "no ansible yet — skip"; exit 0
           fi
           pip install --quiet ansible-lint
+          # site.yml legitimately uses community.postgresql.* (see
+          # infra/ansible/requirements.yml). Without the collection, ansible's
+          # syntax-check can't resolve those modules -> fatal
+          # syntax-check[unknown-module]. The real deploy (standup.yml) already
+          # installs the same requirements; the lint env must match it.
+          ansible-galaxy collection install -r infra/ansible/requirements.yml
           ansible-lint infra/ansible
           if [ -f infra/ansible/site.yml ]; then
             ansible-playbook --syntax-check -i 'localhost,' infra/ansible/site.yml
