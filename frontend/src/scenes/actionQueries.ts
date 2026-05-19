@@ -1,19 +1,23 @@
 import { apiFetch } from '@/evennia_replacements/api';
 import type {
-  AvailableActionsResponse,
+  PlayerActionsResponse,
   AvailableSceneAction,
   ActionRequest,
   ActionRequestResponse,
   Place,
 } from './actionTypes';
 
-// NOTE: There is no backend endpoint for "available actions" yet.
-// This function is a placeholder that returns empty results until the
-// backend implements an available-actions discovery endpoint.
-// The ActionPanel and ActionAttachment components depend on this shape.
-export async function fetchAvailableActions(_sceneId: string): Promise<AvailableActionsResponse> {
-  // TODO: Implement when backend adds GET /api/action-requests/available/?scene=X
-  return { self_actions: [], targeted_actions: [], technique_actions: [] };
+/**
+ * Fetch unified available actions for a character.
+ *
+ * Calls GET /api/actions/characters/<characterId>/available/ — the unified
+ * challenge + combat + registry availability endpoint introduced in the
+ * unified-action-interface initiative.  Returns a paginated PlayerAction list.
+ */
+export async function fetchAvailableActions(characterId: number): Promise<PlayerActionsResponse> {
+  const res = await apiFetch(`/api/actions/characters/${characterId}/available/`);
+  if (!res.ok) throw new Error('Failed to load available actions');
+  return res.json() as Promise<PlayerActionsResponse>;
 }
 
 export async function fetchSceneActions(_sceneId: string): Promise<AvailableSceneAction[]> {

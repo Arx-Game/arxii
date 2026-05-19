@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DropdownMenu,
@@ -8,11 +8,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Handshake, ShieldAlert, Heart, Eye, Zap } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { Zap } from 'lucide-react';
+import { useAppSelector } from '@/store/hooks';
+import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { createActionRequest } from '../actionQueries';
-import type { ActionAttachmentInfo } from '../actionTypes';
-import type { AvailableActionsResponse } from '../actionTypes';
+import type { ActionAttachmentInfo, PlayerActionsResponse, PlayerAction } from '../actionTypes';
 
 interface Props {
   personaId: number;
@@ -20,18 +20,6 @@ interface Props {
   sceneId: string;
   children: ReactNode;
   onAttachAction?: (action: ActionAttachmentInfo) => void;
-}
-
-const ICON_MAP: Record<string, LucideIcon> = {
-  handshake: Handshake,
-  shield_alert: ShieldAlert,
-  heart: Heart,
-  eye: Eye,
-  zap: Zap,
-};
-
-function getIcon(iconName: string): LucideIcon {
-  return ICON_MAP[iconName] ?? Zap;
 }
 
 export function PersonaContextMenu({
@@ -43,9 +31,18 @@ export function PersonaContextMenu({
 }: Props) {
   const queryClient = useQueryClient();
 
+  // Resolve the active character name to its numeric ObjectDB pk to look up
+  // the correct cache key (which ActionAttachment populates as ['available-actions', characterId]).
+  const activeCharacterName = useAppSelector((state) => state.game.active);
+  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
+  const characterId = useMemo(
+    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
+    [myRosterEntries, activeCharacterName]
+  );
+
   // Read from React Query cache instead of triggering a fetch.
   // The ActionAttachment component populates this cache when opened.
-  const data = queryClient.getQueryData<AvailableActionsResponse>(['available-actions', sceneId]);
+  const data = queryClient.getQueryData<PlayerActionsResponse>(['available-actions', characterId]);
 
   const performAction = useMutation({
     mutationFn: (params: {
@@ -59,7 +56,8 @@ export function PersonaContextMenu({
     },
   });
 
-  const targetedActions = data?.targeted_actions ?? [];
+  // Show all prerequisite-met actions as potential targeted actions.
+  const targetedActions: PlayerAction[] = (data?.results ?? []).filter((a) => a.prerequisite_met);
 
   if (targetedActions.length === 0) {
     return <>{children}</>;
@@ -76,25 +74,25 @@ export function PersonaContextMenu({
         {/* Direct execute: fires the action immediately via REST, independent of
             any pose in the composer. This is a "quick action" path. */}
         {targetedActions.map((action) => {
-          const Icon = getIcon(action.icon);
-          const techniqueId =
-            (action.applicable_techniques ?? action.techniques).length > 0
-              ? (action.applicable_techniques ?? action.techniques)[0].id
-              : undefined;
+          const techniqueId = action.ref.technique_id ?? undefined;
+          const actionKey =
+            action.ref.registry_key ??
+            action.action_template?.name.toLowerCase() ??
+            action.display_name.toLowerCase();
           return (
             <DropdownMenuItem
-              key={action.key}
+              key={`${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`}
               disabled={performAction.isPending}
               onClick={() =>
                 performAction.mutate({
-                  action_key: action.key,
+                  action_key: actionKey,
                   target_persona_id: personaId,
                   technique_id: techniqueId,
                 })
               }
             >
-              <Icon className="mr-2 h-4 w-4" />
-              {action.name}
+              <Zap className="mr-2 h-4 w-4" />
+              {action.display_name}
             </DropdownMenuItem>
           );
         })}
@@ -105,17 +103,18 @@ export function PersonaContextMenu({
             <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-xs">Attach to Pose</DropdownMenuLabel>
             {targetedActions.map((action) => {
-              const techniqueId =
-                (action.applicable_techniques ?? action.techniques).length > 0
-                  ? (action.applicable_techniques ?? action.techniques)[0].id
-                  : undefined;
+              const techniqueId = action.ref.technique_id ?? undefined;
+              const actionKey =
+                action.ref.registry_key ??
+                action.action_template?.name.toLowerCase() ??
+                action.display_name.toLowerCase();
               return (
                 <DropdownMenuItem
-                  key={`attach-${action.key}`}
+                  key={`attach-${action.ref.backend}-${action.ref.challenge_instance_id ?? ''}-${action.ref.approach_id ?? ''}-${action.ref.registry_key ?? ''}`}
                   onClick={() =>
                     onAttachAction({
-                      actionKey: action.key,
-                      name: action.name,
+                      actionKey,
+                      name: action.display_name,
                       target: personaName,
                       requiresTarget: true,
                       techniqueId,
@@ -124,7 +123,7 @@ export function PersonaContextMenu({
                   }
                 >
                   <Zap className="mr-2 h-4 w-4" />
-                  {action.name}
+                  {action.display_name}
                 </DropdownMenuItem>
               );
             })}

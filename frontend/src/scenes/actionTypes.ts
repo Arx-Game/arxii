@@ -1,3 +1,7 @@
+// ---------------------------------------------------------------------------
+// Legacy scene action types (used by the AvailableSceneAction / fetchSceneActions path)
+// ---------------------------------------------------------------------------
+
 export interface TechniqueOption {
   id: number;
   name: string;
@@ -5,6 +9,7 @@ export interface TechniqueOption {
   capability_value: number;
 }
 
+/** @deprecated - used only by legacy fetchSceneActions path */
 export interface AvailableAction {
   key: string;
   name: string;
@@ -14,6 +19,7 @@ export interface AvailableAction {
   applicable_techniques?: TechniqueOption[];
 }
 
+/** @deprecated - used only by legacy fetchSceneActions path */
 export interface TechniqueAction {
   template_id: number;
   name: string;
@@ -24,11 +30,53 @@ export interface TechniqueAction {
   technique_name: string;
 }
 
-export interface AvailableActionsResponse {
-  self_actions: AvailableAction[];
-  targeted_actions: AvailableAction[];
-  technique_actions: TechniqueAction[];
+// ---------------------------------------------------------------------------
+// Unified actions endpoint types — GET /api/actions/characters/<id>/available/
+// ---------------------------------------------------------------------------
+
+export interface ActionCheckType {
+  id: number;
+  name: string;
 }
+
+export interface ActionTemplateMinimal {
+  id: number;
+  name: string;
+}
+
+export interface ActionRef {
+  backend: string;
+  challenge_instance_id: number | null;
+  approach_id: number | null;
+  technique_id: number | null;
+  registry_key: string | null;
+}
+
+export interface PlayerAction {
+  backend: string;
+  display_name: string;
+  description: string;
+  difficulty: string | null;
+  prerequisite_met: boolean;
+  prerequisite_reasons: string[];
+  check_type: ActionCheckType;
+  action_template: ActionTemplateMinimal | null;
+  ref: ActionRef;
+}
+
+export interface PlayerActionsResponse {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: PlayerAction[];
+}
+
+// ---------------------------------------------------------------------------
+// Legacy alias — callers that previously used AvailableActionsResponse now
+// receive PlayerActionsResponse. Keep the alias so tests referencing the old
+// name still compile without touching every test file.
+// ---------------------------------------------------------------------------
+export type AvailableActionsResponse = PlayerActionsResponse;
 
 export interface SoulfrayWarningData {
   stage_name: string;

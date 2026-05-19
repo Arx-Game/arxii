@@ -165,6 +165,45 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/actions/characters/{character_id}/available/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Available actions for a character — merged challenge + combat backends.
+     *
+     *     Returns all PlayerAction descriptors available to the character right now.
+     *     Recomputed on every request; no caching.
+     */
+    get: operations['actions_characters_available_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/actions/characters/{character_id}/dispatch/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Dispatch the given action ref for character_id. */
+    post: operations['actions_characters_dispatch_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/aggregate-beat-contributions/': {
     parameters: {
       query?: never;
@@ -1775,7 +1814,7 @@ export interface paths {
       cookie?: never;
     };
     /** @description GET / — return the current clock state. */
-    get: operations['clock_list'];
+    get: operations['clock_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -2958,7 +2997,7 @@ export interface paths {
      *
      *     Returns the distinctions array from draft.draft_data.
      */
-    get: operations['distinctions_drafts_distinctions_list'];
+    get: operations['distinctions_drafts_distinctions_retrieve'];
     put?: never;
     /**
      * @description Add a distinction to the draft.
@@ -3253,30 +3292,6 @@ export interface paths {
      *     Manages story episodes with narrative connection tracking.
      */
     patch: operations['episodes_partial_update'];
-    trace?: never;
-  };
-  '/api/episodes/{id}/promote/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description POST /api/episodes/{id}/promote/ — set the episode's authoring maturity.
-     *
-     *     Lead GM or staff posts {target} (a StoryMaturity value). The PLOT-gate
-     *     (resting_conclusion + outbound transition / is_ending) is enforced in
-     *     PromoteEpisodeInputSerializer.validate(), so a violation is a 400.
-     *     Lateral moves and demotions are unvalidated by design.
-     */
-    post: operations['episodes_promote_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
     trace?: never;
   };
   '/api/episodes/{id}/resolve/': {
@@ -6848,27 +6863,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/mechanics/characters/{character_id}/available-actions/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description Available actions for a character at their current location.
-     *
-     *     Returns actions grouped by challenge.
-     */
-    get: operations['mechanics_characters_available_actions_list'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/mechanics/modifier-targets/': {
     parameters: {
       query?: never;
@@ -8801,39 +8795,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/stories/{id}/assign-to-scope/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * @description POST /api/stories/{id}/assign-to-scope/ — lift a story out of UNASSIGNED.
-     *
-     *     Lead GM (story.primary_table.gm) or staff picks the scope and the
-     *     matching target; this sets ``Story.scope`` and creates the
-     *     scope-appropriate progress record so the story can run:
-     *
-     *     - CHARACTER: sets ``story.character_sheet`` and creates StoryProgress
-     *     - GROUP: creates GroupStoryProgress for the given gm_table
-     *     - GLOBAL: creates the GlobalStoryProgress singleton
-     *
-     *     The scope <-> target invariant is enforced by
-     *     AssignStoryInputSerializer.validate(), so an invalid combination is a
-     *     400 (no scope change, no progress row). Because scope is set before
-     *     the create_*_progress call, StoryNotAssignedError cannot fire — no
-     *     try/except is needed.
-     */
-    post: operations['stories_assign_to_scope_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/stories/{id}/assign-to-table/': {
     parameters: {
       query?: never;
@@ -9915,6 +9876,26 @@ export interface components {
      * @enum {string}
      */
     ActionEnum: 'submit' | 'edit' | 'agree';
+    /**
+     * @description Serializer for ActionRef frozen dataclass — the round-trippable dispatch reference.
+     *
+     *     Uses a plain Serializer (not DataclassSerializer) to avoid drf_spectacular's
+     *     get_type_hints() introspection, which cannot resolve TYPE_CHECKING-only imports
+     *     (CheckType, ActionTemplate, ChallengeResolutionResult) in actions/types.py and
+     *     crashes with NameError during schema generation.
+     */
+    ActionRef: {
+      readonly backend: string;
+      challenge_instance_id?: number | null;
+      approach_id?: number | null;
+      technique_id?: number | null;
+      registry_key?: string | null;
+    };
+    /** @description Minimal read-only representation of an ActionTemplate model instance. */
+    ActionTemplateMinimal: {
+      readonly id: number;
+      readonly name: string;
+    };
     /** @description Read-only serializer for AggregateBeatContribution ledger rows. */
     AggregateBeatContribution: {
       readonly id: number;
@@ -9997,22 +9978,6 @@ export interface components {
      * @enum {string}
      */
     AssistantGMClaimStatusEnum: 'requested' | 'approved' | 'rejected' | 'cancelled' | 'completed';
-    AvailableAction: {
-      application_id: number;
-      application_name: string;
-      capability_source: components['schemas']['CapabilitySource'];
-      challenge_instance_id: number;
-      challenge_name: string;
-      approach_id: number | null;
-      check_type_name: string;
-      display_name: string;
-      custom_description: string;
-      difficulty_indicator?:
-        | (components['schemas']['DifficultyIndicatorEnum'] | components['schemas']['NullEnum'])
-        | null;
-      prerequisite_met?: boolean;
-      prerequisite_reasons?: string[];
-    };
     /** @description Full serializer for Beat including all Phase 2 predicate config fields. */
     Beat: {
       readonly id: number;
@@ -10366,16 +10331,6 @@ export interface components {
      * @enum {string}
      */
     CantripArchetypeEnum: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
-    CapabilitySource: {
-      capability_name: string;
-      capability_id: number;
-      value: number;
-      source_type: components['schemas']['SourceTypeEnum'];
-      source_name: string;
-      source_id: number;
-      effect_property_ids?: number[];
-      prerequisite?: number | null;
-    };
     /** @description Serializer for capability types. */
     CapabilityType: {
       readonly id: number;
@@ -10394,12 +10349,6 @@ export interface components {
       custom_description?: string;
       /** @description When set, resolution uses this template's check_type and pool. */
       action_template?: number | null;
-    };
-    /** @description Serializer for ChallengeGroup — actions grouped by challenge. */
-    ChallengeGroup: {
-      challenge_instance_id: number;
-      challenge_name: string;
-      actions: components['schemas']['AvailableAction'][];
     };
     /** @description Serializer for challenge instances. */
     ChallengeInstance: {
@@ -10467,8 +10416,6 @@ export interface components {
       story: number;
       title: string;
       description?: string;
-      /** @description Summary of what happened in this chapter */
-      summary?: string;
       order: number;
     };
     /** @description Serializer for creating chapters */
@@ -10476,8 +10423,6 @@ export interface components {
       story: number;
       title: string;
       description?: string;
-      /** @description Summary of what happened in this chapter */
-      summary?: string;
       order: number;
     };
     /** @description Full serializer for chapter details */
@@ -10490,7 +10435,6 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of what happened in this chapter */
       summary?: string;
-      maturity?: components['schemas']['MaturityEnum'];
       /** @description Key consequences that affect future chapters */
       consequences?: string;
       /** Format: date-time */
@@ -10508,7 +10452,6 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of what happened in this chapter */
       summary?: string;
-      maturity?: components['schemas']['MaturityEnum'];
       /** @description Key consequences that affect future chapters */
       consequences?: string;
       /** Format: date-time */
@@ -10941,43 +10884,10 @@ export interface components {
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
     };
-    /** @description Request serializer for staff clock adjustment. */
-    ClockAdjustRequest: {
-      /** Format: date-time */
-      ic_datetime: string;
-      reason: string;
-    };
-    /** @description Response serializer for date conversion results. */
-    ClockConvertResponse: {
-      /** Format: date-time */
-      ic_date?: string;
-      /** Format: date-time */
-      real_date?: string;
-    };
-    /** @description Generic ``{"detail": "..."}`` response (staff actions + errors). */
-    ClockDetail: {
-      detail: string;
-    };
-    /** @description Request serializer for staff time-ratio change. */
-    ClockRatioRequest: {
-      /** Format: double */
-      ratio: number;
-      reason: string;
-    };
-    /** @description Read-only serializer for the current clock state. */
-    ClockState: {
-      /** Format: date-time */
-      ic_datetime: string;
-      year: number;
-      month: number;
-      day: number;
-      hour: number;
-      minute: number;
-      phase: components['schemas']['PhaseEnum'];
-      season: components['schemas']['SeasonEnum'];
-      /** Format: double */
-      light_level: number;
-      paused: boolean;
+    /** @description Minimal read-only representation of a CheckType model instance. */
+    CheckTypeMinimal: {
+      readonly id: number;
+      readonly name: string;
     };
     CodexCategory: {
       readonly id: number;
@@ -11348,15 +11258,6 @@ export interface components {
      * @enum {string}
      */
     DifficultyChoiceEnum: 'trivial' | 'easy' | 'normal' | 'hard' | 'daunting';
-    /**
-     * @description * `impossible` - IMPOSSIBLE
-     *     * `easy` - EASY
-     *     * `moderate` - MODERATE
-     *     * `hard` - HARD
-     *     * `very_hard` - VERY_HARD
-     * @enum {string}
-     */
-    DifficultyIndicatorEnum: 'impossible' | 'easy' | 'moderate' | 'hard' | 'very_hard';
     /** @description Serializer for discovery records. */
     Discovery: {
       /**
@@ -11528,50 +11429,6 @@ export interface components {
         [key: string]: unknown;
       };
     };
-    /** @description Request body for adding a distinction to a draft (create). */
-    DraftDistinctionCreateRequest: {
-      distinction_id: number;
-      /** @default 1 */
-      rank: number;
-      /** @default  */
-      notes: string;
-    };
-    /** @description Read shape of one distinction entry stored in draft_data. */
-    DraftDistinctionEntry: {
-      distinction_id: number;
-      distinction_name: string;
-      distinction_slug: string;
-      category_slug: string;
-      rank: number;
-      cost: number;
-      notes: string;
-    };
-    /** @description Request body for swapping mutually-exclusive distinctions. */
-    DraftDistinctionSwapRequest: {
-      remove_id: number;
-      add_id: number;
-      /** @default 1 */
-      rank: number;
-      /** @default  */
-      notes: string;
-    };
-    DraftDistinctionSwapResult: {
-      removed: number;
-      added: components['schemas']['DraftDistinctionEntry'];
-    };
-    /** @description One ``{id, rank}`` pair in the sync request list. */
-    DraftDistinctionSyncItemRequest: {
-      id: number;
-      /** @default 1 */
-      rank: number;
-    };
-    /** @description Request body for replacing the full distinction list (sync). */
-    DraftDistinctionSyncRequest: {
-      distinctions: components['schemas']['DraftDistinctionSyncItemRequest'][];
-    };
-    DraftDistinctionSyncResult: {
-      distinctions: components['schemas']['DraftDistinctionEntry'][];
-    };
     /** @description Serializer for EffectType lookup records. */
     EffectType: {
       readonly id: number;
@@ -11667,12 +11524,6 @@ export interface components {
       chapter: number;
       title: string;
       description?: string;
-      /** @description Summary of this episode's plot beats */
-      summary?: string;
-      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
-      resting_conclusion?: string;
-      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
-      is_ending?: boolean;
       order: number;
     };
     /** @description Serializer for creating episodes */
@@ -11680,12 +11531,6 @@ export interface components {
       chapter: number;
       title: string;
       description?: string;
-      /** @description Summary of this episode's plot beats */
-      summary?: string;
-      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
-      resting_conclusion?: string;
-      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
-      is_ending?: boolean;
       order: number;
     };
     /** @description Full serializer for episode details */
@@ -11698,11 +11543,6 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of this episode's plot beats */
       summary?: string;
-      maturity?: components['schemas']['MaturityEnum'];
-      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
-      resting_conclusion?: string;
-      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
-      is_ending?: boolean;
       /** @description What consequences lead to the next episode */
       consequences?: string;
       /** Format: date-time */
@@ -11720,11 +11560,6 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of this episode's plot beats */
       summary?: string;
-      maturity?: components['schemas']['MaturityEnum'];
-      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
-      resting_conclusion?: string;
-      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
-      is_ending?: boolean;
       /** @description What consequences lead to the next episode */
       consequences?: string;
       /** Format: date-time */
@@ -12901,13 +12736,6 @@ export interface components {
      */
     KindEnum: 'situation' | 'encounter' | 'task' | 'requirement';
     /**
-     * @description * `pitch` - Pitch
-     *     * `outline` - Outline
-     *     * `plot` - Plot
-     * @enum {string}
-     */
-    MaturityEnum: 'pitch' | 'outline' | 'plot';
-    /**
      * @description * `photo` - Photo
      *     * `portrait` - Character Portrait
      *     * `gallery` - Gallery Image
@@ -13257,21 +13085,6 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['BugReportDetail'][];
-    };
-    PaginatedChallengeGroupList: {
-      /** @example 123 */
-      count?: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results?: components['schemas']['ChallengeGroup'][];
     };
     PaginatedChallengeInstanceList: {
       /** @example 123 */
@@ -13797,6 +13610,21 @@ export interface components {
        */
       previous?: string | null;
       results?: components['schemas']['Place'][];
+    };
+    PaginatedPlayerActionList: {
+      /** @example 123 */
+      count?: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results?: components['schemas']['PlayerAction'][];
     };
     PaginatedPlayerFeedbackDetailList: {
       /** @example 123 */
@@ -14365,7 +14193,6 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of what happened in this chapter */
       summary?: string;
-      maturity?: components['schemas']['MaturityEnum'];
       /** @description Key consequences that affect future chapters */
       consequences?: string;
       /** Format: date-time */
@@ -14479,11 +14306,6 @@ export interface components {
       is_active?: boolean;
       /** @description Summary of this episode's plot beats */
       summary?: string;
-      maturity?: components['schemas']['MaturityEnum'];
-      /** @description Player-facing text shown when progress RESTS at this episode (no chosen transition). Required before PLOT promotion. */
-      resting_conclusion?: string;
-      /** @description Explicit 'this is an ending' marker; satisfies PLOT promotion when there is no outbound transition. */
-      is_ending?: boolean;
       /** @description What consequences lead to the next episode */
       consequences?: string;
       /** Format: date-time */
@@ -14722,9 +14544,6 @@ export interface components {
     PatchedStoryDetailRequest: {
       title?: string;
       description?: string;
-      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
-      summary?: string;
-      maturity?: components['schemas']['MaturityEnum'];
       status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
       /**
@@ -15127,14 +14946,6 @@ export interface components {
      * @enum {string}
      */
     PersonaTypeEnum: 'primary' | 'established' | 'temporary';
-    /**
-     * @description * `dawn` - Dawn
-     *     * `day` - Day
-     *     * `dusk` - Dusk
-     *     * `night` - Night
-     * @enum {string}
-     */
-    PhaseEnum: 'dawn' | 'day' | 'dusk' | 'night';
     Place: {
       readonly id: number;
       name: string;
@@ -15160,6 +14971,25 @@ export interface components {
      * @enum {string}
      */
     PlaceStatusEnum: 'active' | 'removed' | 'hidden';
+    /**
+     * @description Read-only serializer for PlayerAction — the homogeneous availability descriptor.
+     *
+     *     Does NOT use DataclassSerializer because PlayerAction contains Django model
+     *     instances (check_type, action_template) that DataclassSerializer cannot render.
+     *     Uses explicit field definitions with SerializerMethodField for the model instances.
+     */
+    PlayerAction: {
+      readonly backend: string;
+      readonly display_name: string;
+      readonly description: string;
+      /** @description Return the difficulty enum value string, or None. */
+      readonly difficulty: string | null;
+      readonly prerequisite_met: boolean;
+      readonly prerequisite_reasons: string[];
+      readonly check_type: components['schemas']['CheckTypeMinimal'];
+      readonly action_template: components['schemas']['ActionTemplateMinimal'];
+      readonly ref: components['schemas']['ActionRef'];
+    };
     /**
      * @description Write serializer - player creates feedback.
      *
@@ -16260,14 +16090,6 @@ export interface components {
      * @enum {string}
      */
     ScopeEnum: 'unassigned' | 'character' | 'group' | 'global';
-    /**
-     * @description * `spring` - Spring
-     *     * `summer` - Summer
-     *     * `autumn` - Autumn
-     *     * `winter` - Winter
-     * @enum {string}
-     */
-    SeasonEnum: 'spring' | 'summer' | 'autumn' | 'winter';
     /** @description Read-only serializer for SessionRequest records. */
     SessionRequest: {
       readonly id: number;
@@ -16438,14 +16260,6 @@ export interface components {
       | 'ROOM_RESIDENCE'
       | 'OUTFIT_TRICKLE'
       | 'STAFF_GRANT';
-    /**
-     * @description * `technique` - TECHNIQUE
-     *     * `trait` - TRAIT
-     *     * `condition` - CONDITION
-     *     * `equipment` - EQUIPMENT
-     * @enum {string}
-     */
-    SourceTypeEnum: 'technique' | 'trait' | 'condition' | 'equipment';
     /** @description Serializer for Specialization model. */
     Specialization: {
       readonly id: number;
@@ -16602,8 +16416,6 @@ export interface components {
     StoryCreate: {
       title: string;
       description: string;
-      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
-      summary?: string;
       privacy?: components['schemas']['PrivacyEnum'];
       /**
        * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
@@ -16619,8 +16431,6 @@ export interface components {
     StoryCreateRequest: {
       title: string;
       description: string;
-      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
-      summary?: string;
       privacy?: components['schemas']['PrivacyEnum'];
       /**
        * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
@@ -16637,9 +16447,6 @@ export interface components {
       readonly id: number;
       title: string;
       description: string;
-      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
-      summary?: string;
-      maturity?: components['schemas']['MaturityEnum'];
       status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
       /**
@@ -16671,9 +16478,6 @@ export interface components {
     StoryDetailRequest: {
       title: string;
       description: string;
-      /** @description Player-facing 'The Story So Far' — GM-maintained running recap of what has happened and what may lie ahead. Surfaced to players via the role-gated story log, maturity-gated. NOT auto-generated. */
-      summary?: string;
-      maturity?: components['schemas']['MaturityEnum'];
       status?: components['schemas']['StatusF08Enum'];
       privacy?: components['schemas']['PrivacyEnum'];
       /**
@@ -17795,6 +17599,52 @@ export interface operations {
         content: {
           'application/json': components['schemas']['SceneActionRequest'];
         };
+      };
+    };
+  };
+  actions_characters_available_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path: {
+        character_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPlayerActionList'];
+        };
+      };
+    };
+  };
+  actions_characters_dispatch_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        character_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
@@ -19528,7 +19378,8 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        id: string;
+        /** @description A unique integer value identifying this Starting Area. */
+        id: number;
       };
       cookie?: never;
     };
@@ -19812,7 +19663,7 @@ export interface operations {
       };
     };
   };
-  clock_list: {
+  clock_retrieve: {
     parameters: {
       query?: never;
       header?: never;
@@ -19821,13 +19672,12 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          'application/json': components['schemas']['ClockState'][];
-        };
+        content?: never;
       };
     };
   };
@@ -19838,41 +19688,32 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['ClockAdjustRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
+      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          'application/json': components['schemas']['ClockDetail'];
-        };
+        content?: never;
       };
     };
   };
   clock_convert_retrieve: {
     parameters: {
-      query?: {
-        ic_date?: string;
-        real_date?: string;
-      };
+      query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
     requestBody?: never;
     responses: {
+      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          'application/json': components['schemas']['ClockConvertResponse'];
-        };
+        content?: never;
       };
     };
   };
@@ -19885,13 +19726,12 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          'application/json': components['schemas']['ClockDetail'];
-        };
+        content?: never;
       };
     };
   };
@@ -19902,19 +19742,14 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['ClockRatioRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
+      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          'application/json': components['schemas']['ClockDetail'];
-        };
+        content?: never;
       };
     };
   };
@@ -19927,13 +19762,12 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          'application/json': components['schemas']['ClockDetail'];
-        };
+        content?: never;
       };
     };
   };
@@ -21247,7 +21081,7 @@ export interface operations {
       };
     };
   };
-  distinctions_drafts_distinctions_list: {
+  distinctions_drafts_distinctions_retrieve: {
     parameters: {
       query?: never;
       header?: never;
@@ -21258,13 +21092,12 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          'application/json': components['schemas']['DraftDistinctionEntry'][];
-        };
+        content?: never;
       };
     };
   };
@@ -21277,19 +21110,14 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DraftDistinctionCreateRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
+      /** @description No response body */
       201: {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          'application/json': components['schemas']['DraftDistinctionEntry'];
-        };
+        content?: never;
       };
     };
   };
@@ -21323,19 +21151,14 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DraftDistinctionSwapRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
+      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          'application/json': components['schemas']['DraftDistinctionSwapResult'];
-        };
+        content?: never;
       };
     };
   };
@@ -21348,19 +21171,14 @@ export interface operations {
       };
       cookie?: never;
     };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['DraftDistinctionSyncRequest'];
-      };
-    };
+    requestBody?: never;
     responses: {
+      /** @description No response body */
       200: {
         headers: {
           [name: string]: unknown;
         };
-        content: {
-          'application/json': components['schemas']['DraftDistinctionSyncResult'];
-        };
+        content?: never;
       };
     };
   };
@@ -21796,32 +21614,6 @@ export interface operations {
     requestBody?: {
       content: {
         'application/json': components['schemas']['PatchedEpisodeDetailRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['EpisodeDetail'];
-        };
-      };
-    };
-  };
-  episodes_promote_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this episode. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['EpisodeDetailRequest'];
       };
     };
     responses: {
@@ -26911,32 +26703,6 @@ export interface operations {
       };
     };
   };
-  mechanics_characters_available_actions_list: {
-    parameters: {
-      query?: {
-        /** @description A page number within the paginated result set. */
-        page?: number;
-        /** @description Number of results to return per page. */
-        page_size?: number;
-      };
-      header?: never;
-      path: {
-        character_id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PaginatedChallengeGroupList'];
-        };
-      };
-    };
-  };
   mechanics_modifier_targets_list: {
     parameters: {
       query?: {
@@ -29995,32 +29761,6 @@ export interface operations {
     };
   };
   stories_apply_to_participate_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this story. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['StoryDetailRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['StoryDetail'];
-        };
-      };
-    };
-  };
-  stories_assign_to_scope_create: {
     parameters: {
       query?: never;
       header?: never;
