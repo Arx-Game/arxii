@@ -270,6 +270,17 @@ class MissionTemplate(SharedMemoryModel):
             "distribution-by-rule is Phase 5)."
         ),
     )
+    # SANCTIONED DYNAMIC JSON: the Phase-0 predicate tree consumed by
+    # ``world.missions.predicates.evaluate``. Same rationale as
+    # ``MissionOption.visibility_rule`` and
+    # ``distinctions.DistinctionPrerequisite.rule_json`` — this is the one
+    # approved JSONField in the missions app. Empty ``{}`` = no gate
+    # (template is available to any predicate-eligible character).
+    availability_rule = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Phase 0 predicate tree gating front-door availability for this template.",
+    )
     is_active = models.BooleanField(default=True)
 
     def clean(self) -> None:
@@ -779,6 +790,81 @@ class MissionDeedRecord(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"deed {self.option} by {self.actor}"
+
+
+class MissionGiver(SharedMemoryModel):
+    """An abstracted offer point publishing a curated set of mission templates.
+
+    A giver is the player-facing "front door" (a guild-hall guildmaster, a
+    notice-board, a society fixer) and is intentionally NOT a piloted NPC.
+    It can be physically anchored (``location``) and/or org-anchored
+    (``org``); both are optional and ``SET_NULL`` so giver rows survive their
+    anchors being deleted. ``templates`` is the M2M draw pool consumed by
+    ``services.availability.offer_missions``; ``is_active`` is the master
+    on/off switch for the giver itself (staff toggle).
+    """
+
+    name = models.CharField(max_length=200)
+    location = models.ForeignKey(
+        "objects.ObjectDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Optional Evennia room/location anchoring this giver.",
+    )
+    org = models.ForeignKey(
+        "societies.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Optional organization this giver fronts for (used by ORG arc-scope).",
+    )
+    templates = models.ManyToManyField(
+        MissionTemplate,
+        blank=True,
+        related_name="givers",
+        help_text="Authored template draw pool — see services.availability.offer_missions.",
+    )
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class MissionGiverCooldown(SharedMemoryModel):
+    """Per-(giver, character) re-offer cooldown.
+
+    Set by ``services.run.accept_mission`` to ``now + template.cooldown``.
+    ``services.availability.offer_missions`` excludes templates whose giver
+    has a cooldown row with ``available_at > now`` for this character.
+    Design §10: contractual consequence (incl. cooldown) is the
+    contract-holder's alone — sharees never get cooldown rows.
+    """
+
+    giver = models.ForeignKey(
+        MissionGiver,
+        on_delete=models.CASCADE,
+        related_name="cooldowns",
+    )
+    character = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+    available_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["giver", "character"],
+                name="unique_missiongivercooldown_giver_character",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.giver}/{self.character} until {self.available_at:%Y-%m-%d}"
 
 
 class MissionDeedRewardLine(SharedMemoryModel):

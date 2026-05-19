@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from django.utils import timezone
 import factory
 from factory.django import DjangoModelFactory
 
@@ -24,6 +25,8 @@ from world.missions.models import (
     AffordanceBinding,
     MissionDeedRecord,
     MissionDeedRewardLine,
+    MissionGiver,
+    MissionGiverCooldown,
     MissionInstance,
     MissionNode,
     MissionNodeSnapshot,
@@ -197,6 +200,34 @@ class MissionDeedRecordFactory(DjangoModelFactory):
     node = factory.SubFactory(MissionNodeFactory)
     option = factory.SubFactory(MissionOptionFactory)
     outcome = None
+
+
+class MissionGiverFactory(DjangoModelFactory):
+    """Factory for MissionGiver. Defaults to an active, location-less giver."""
+
+    class Meta:
+        model = MissionGiver
+
+    name = factory.Sequence(lambda n: f"Giver {n}")
+    location = None
+    org = None
+    is_active = True
+
+
+class MissionGiverCooldownFactory(DjangoModelFactory):
+    """Factory for MissionGiverCooldown. Defaults to an already-elapsed cooldown.
+
+    Tests that need a *live* cooldown should override ``available_at`` with a
+    future datetime; the default ``timezone.now() - 1s`` lets the row exist
+    without acting as a gate.
+    """
+
+    class Meta:
+        model = MissionGiverCooldown
+
+    giver = factory.SubFactory(MissionGiverFactory)
+    character = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
+    available_at = factory.LazyFunction(lambda: timezone.now() - timedelta(seconds=1))
 
 
 class MissionDeedRewardLineFactory(DjangoModelFactory):

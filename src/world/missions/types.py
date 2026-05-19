@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import CheckType, Consequence
@@ -107,6 +109,40 @@ class GroupChoice:
     option: MissionOption | None = None
     actor: MissionParticipant | None = None
     attempts: tuple[tuple[MissionParticipant, MissionOption], ...] = ()
+
+
+@dataclass(frozen=True)
+class JournalDeed:
+    """One recorded deed within a journal entry — the player-facing slice.
+
+    Mirrors a :class:`~world.missions.models.MissionDeedRecord` row, but
+    flattened/frozen so the journal API is pure data (no ORM round-trips
+    when callers walk the list). ``outcome_name`` is the tier name (or
+    ``None`` for a BRANCH deed); ``option_id`` lets callers cross-reference
+    the authored graph if they want.
+    """
+
+    node_key: str
+    option_id: int
+    outcome_name: str | None
+    applied_at: datetime
+
+
+@dataclass(frozen=True)
+class JournalEntry:
+    """One mission run as seen by one character.
+
+    Built by ``world.missions.services.journal.journal_for(character)`` —
+    one entry per :class:`~world.missions.models.MissionParticipant` row
+    the character owns. Deterministically ordered by ``instance_id``.
+    """
+
+    instance_id: int
+    template_name: str
+    status: str  # MissionStatus value
+    current_node_key: str | None
+    is_contract_holder: bool
+    deeds: tuple[JournalDeed, ...]
 
 
 @dataclass(frozen=True)
