@@ -92,6 +92,11 @@ main() {
   fi
 
   log "Provisioning (apply-only)…"
+  # S3-backend creds via AWS_* env (NOT -backend-config args) so the secret
+  # key never appears in any process argv. Non-secret backend config stays
+  # as -backend-config.
+  AWS_ACCESS_KEY_ID="${TF_STATE_S3_ACCESS_KEY}" \
+  AWS_SECRET_ACCESS_KEY="${TF_STATE_S3_SECRET_KEY}" \
   TF_VAR_linode_token="${LINODE_TOKEN}" \
   TF_VAR_cloudflare_api_token="${CLOUDFLARE_API_TOKEN}" \
   tofu -chdir="${TF_DIR}" init -input=false \
@@ -99,8 +104,6 @@ main() {
     -backend-config="key=${TF_STATE_KEY}" \
     -backend-config="region=${TF_STATE_REGION}" \
     -backend-config="endpoint=${TF_STATE_ENDPOINT}" \
-    -backend-config="access_key=${TF_STATE_S3_ACCESS_KEY}" \
-    -backend-config="secret_key=${TF_STATE_S3_SECRET_KEY}" \
     -backend-config="skip_credentials_validation=true" \
     -backend-config="skip_region_validation=true" \
     -backend-config="use_path_style=true"

@@ -51,6 +51,8 @@ chkno "no tracked .env"               "git ls-files | grep -E '(^|/)\\.env$'"
 chkno "no ansible-vault ciphertext committed" "git grep -lE '^\\\$ANSIBLE_VAULT;1' -- ."
 chkno "no --vault-password-file in real config" "grep -rn --include='*.sh' --include='*.cfg' --include='*.yml' -- 'vault[_-]password[_-]file' infra/ .github/ | grep -v 'infra/scripts/acceptance.sh' | grep -vE '#'"
 chk   "secrets_vault uses lookup('env')"      "grep -q \"lookup('env'\" infra/ansible/roles/secrets_vault/tasks/main.yml"
+chk   "forbidden-env guard uses REAL token names (not a dead ARXII_ guard)" \
+  "grep -A4 secrets_forbidden_env infra/ansible/roles/secrets_vault/defaults/main.yml | grep -q '^[[:space:]]*- LINODE_TOKEN$'"
 chkno "standup.sh never passes secrets via --extra-vars" "nc infra/scripts/standup.sh | grep -- '--extra-vars'"
 chk   "gitleaks secret-scan job exists"       "grep -q 'gitleaks' .github/workflows/validate.yml"
 

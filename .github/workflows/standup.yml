@@ -44,8 +44,9 @@ jobs:
         run: |
           set -euo pipefail; set +x
           install -d -m 0700 ~/.ssh
-          printf '%s' "$ANSIBLE_SSH_PRIVATE_KEY" > ~/.ssh/arxii_admin
-          chmod 0600 ~/.ssh/arxii_admin
+          # umask subshell: the file is 0600 from creation (no default-perms
+          # window between write and chmod).
+          ( umask 077; printf '%s' "$ANSIBLE_SSH_PRIVATE_KEY" > ~/.ssh/arxii_admin )
         env:
           ANSIBLE_SSH_PRIVATE_KEY: ${{ secrets.ANSIBLE_SSH_PRIVATE_KEY }}
 

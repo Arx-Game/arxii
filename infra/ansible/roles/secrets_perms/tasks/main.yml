@@ -24,8 +24,8 @@
       - "lookup('env', item) | length == 0"
     fail_msg: "'{{ item }}' (operator/CI-only provisioning token) is present on the box — it must never reach here."
   loop:
-    - ARXII_LINODE_TOKEN
-    - ARXII_CLOUDFLARE_TOKEN
+    - LINODE_TOKEN
+    - CLOUDFLARE_API_TOKEN
   no_log: true
 
 - name: The deployed app dir must contain no committed secret files
