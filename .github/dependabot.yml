@@ -37,13 +37,11 @@ updates:
         update-types: ["minor", "patch"]
     open-pull-requests-limit: 10
 
-  # JS/TS — the pnpm frontend plus the two MCP dev-tool packages. One npm
-  # entry covers all three via `directories`.
+  # JS/TS — the pnpm frontend (prod-facing). The mcp/* packages are
+  # internal dev-only tooling, never deployed or exposed as MCP servers in
+  # prod, so they are intentionally out of scope here.
   - package-ecosystem: "npm"
-    directories:
-      - "/frontend"
-      - "/mcp/arxdev-evennia"
-      - "/mcp/arxdev-frontend"
+    directory: "/frontend"
     schedule:
       interval: "weekly"
     commit-message:
