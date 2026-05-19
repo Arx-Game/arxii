@@ -544,6 +544,17 @@ class MissionOptionRoute(SharedMemoryModel):
         default=False,
         help_text="When true, destination is drawn from weighted candidates.",
     )
+    consequence = models.ForeignKey(
+        "checks.Consequence",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "Authored structured effect applied when this route's outcome "
+            "tier is rolled; null = pure routing/no effect."
+        ),
+    )
 
     def __str__(self) -> str:
         tier = self.outcome_tier.name if self.outcome_tier_id else "branch"

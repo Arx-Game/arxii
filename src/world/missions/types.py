@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.checks.models import CheckType, Consequence
-    from world.missions.models import AffordanceBinding
+    from world.missions.models import AffordanceBinding, MissionOption
 
 # A leaf resolver tests one slice of the acting character's own durable
 # state. It receives the acting character (ObjectDB) plus the leaf's
@@ -78,3 +78,26 @@ class ResolvedOption:
     ic_framing: str
     rider: Consequence | None
     owner: ObjectDB
+
+
+@dataclass(frozen=True)
+class PresentedOption:
+    """One player-facing option surfaced at a node for the acting participant.
+
+    Built by ``world.missions.services.resolution.build_option_list``. An
+    AFFORDANCE-sourced :class:`~world.missions.models.MissionOption` fans out
+    into one ``PresentedOption`` per owned descriptor binding (``binding`` set,
+    ``owner`` the acting character); an AUTHORED option produces a single entry
+    (``binding`` None) when its visibility predicate passes. Fields are
+    flattened off the binding/option so resolution callers never re-walk the
+    FK side. Phase 3 is single-participant — ``owner`` is the acting
+    participant's character; Phase 4 generalizes to per-participant owners.
+    """
+
+    option: MissionOption
+    kind: str  # OptionKind value
+    check_type: CheckType | None
+    base_risk: int
+    ic_framing: str
+    owner: ObjectDB
+    binding: AffordanceBinding | None

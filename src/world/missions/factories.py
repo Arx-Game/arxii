@@ -136,6 +136,7 @@ class MissionOptionRouteFactory(DjangoModelFactory):
     outcome_tier = None
     target_node = None
     is_random_set = False
+    consequence = None
 
 
 class MissionOptionRouteCandidateFactory(DjangoModelFactory):
