@@ -9,27 +9,6 @@ export interface TechniqueOption {
   capability_value: number;
 }
 
-/** @deprecated - used only by legacy fetchSceneActions path */
-export interface AvailableAction {
-  key: string;
-  name: string;
-  icon: string;
-  category: string;
-  techniques: TechniqueOption[];
-  applicable_techniques?: TechniqueOption[];
-}
-
-/** @deprecated - used only by legacy fetchSceneActions path */
-export interface TechniqueAction {
-  template_id: number;
-  name: string;
-  icon: string;
-  category: string;
-  target_type: string;
-  technique_id: number;
-  technique_name: string;
-}
-
 // ---------------------------------------------------------------------------
 // Unified actions endpoint types — GET /api/actions/characters/<id>/available/
 // ---------------------------------------------------------------------------
@@ -70,13 +49,6 @@ export interface PlayerActionsResponse {
   previous: string | null;
   results: PlayerAction[];
 }
-
-// ---------------------------------------------------------------------------
-// Legacy alias — callers that previously used AvailableActionsResponse now
-// receive PlayerActionsResponse. Keep the alias so tests referencing the old
-// name still compile without touching every test file.
-// ---------------------------------------------------------------------------
-export type AvailableActionsResponse = PlayerActionsResponse;
 
 export interface SoulfrayWarningData {
   stage_name: string;

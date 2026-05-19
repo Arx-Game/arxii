@@ -74,10 +74,12 @@ class AvailableAction:
 
     ``resolved_check_type`` and ``resolved_action_template`` carry the already-loaded
     model instances (populated from the prefetched ChallengeApproach by
-    ``_match_approaches``).  They are excluded from the ``AvailableActionSerializer``
-    because DataclassSerializer cannot render arbitrary model instances — callers in
-    ``actions.player_interface`` read them directly.  ``check_type_name`` is kept for
-    backwards-compatibility with existing serializer consumers.
+    ``_match_approaches``).  They are excluded from wire serialization because
+    DataclassSerializer cannot render arbitrary model instances — the unified
+    ``get_player_actions`` adapter in ``actions.player_interface`` reads them
+    directly to build ``PlayerAction`` descriptors.  ``check_type_name`` is kept
+    as the wire-safe string representation for any consumer that reads the dataclass
+    without going through the unified adapter.
     """
 
     application_id: int
