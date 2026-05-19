@@ -41,6 +41,24 @@ class PredicateContext(Protocol):
 
 
 @dataclass(frozen=True)
+class DeedRewardLine:
+    """One structured reward line emitted when a mission deed is recorded.
+
+    This is the *in-memory / return* shape produced by the Phase 3 engine
+    and consumed by the Phase 5 payout cron. Its persisted counterpart is
+    :class:`~world.missions.models.MissionDeedRewardLine` (one row per line).
+    Deliberately NOT a bare ``dict`` — ``kind``/``sink`` correspond to the
+    ``DeedRewardKind``/``DeedRewardSink`` TextChoices and ``payload`` is a
+    typed, hashable structure (an immutable tuple of key/value pairs), never
+    free-form JSON.
+    """
+
+    kind: str  # DeedRewardKind value
+    sink: str  # DeedRewardSink value
+    payload: tuple[tuple[str, str], ...] = ()
+
+
+@dataclass(frozen=True)
 class ResolvedOption:
     """One surfaced player option produced from an owned descriptor binding.
 

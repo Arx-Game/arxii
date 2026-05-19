@@ -6,5 +6,6 @@ against a challenge.
 """
 
 from world.missions.services.affordances import bindings_for_character
+from world.missions.services.mission_graph import validate_mission_option
 
-__all__ = ["bindings_for_character"]
+__all__ = ["bindings_for_character", "validate_mission_option"]
