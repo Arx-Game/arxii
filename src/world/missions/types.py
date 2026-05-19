@@ -7,7 +7,15 @@ this codebase (it mirrors the shape of
 evaluator accepts a plain ``dict`` as *input*. Everything else stays typed.
 """
 
+from collections.abc import Callable
 from typing import Protocol, runtime_checkable
+
+# A leaf resolver tests one slice of the acting character's own durable
+# state. It receives the acting character (ObjectDB) plus the leaf's
+# authored params (keyword-only) and returns a bool. The registry maps a
+# leaf name to one resolver.
+LeafResolver = Callable[..., bool]
+LeafRegistry = dict[str, LeafResolver]
 
 
 @runtime_checkable
