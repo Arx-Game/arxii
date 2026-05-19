@@ -299,10 +299,13 @@ to support intervention between selection and application.
 #### Phase 6a: Read-Only API — DONE
 
 **What was built:**
-- **`AvailableActionsView`** — `ListAPIView` at
+- **`AvailableActionsView`** *(superseded — see note below)* — `ListAPIView` at
   `GET /api/mechanics/characters/{character_id}/available-actions/` with optional
   `?location_id=` override. Calls `get_available_actions()`, groups results by
   challenge into `ChallengeGroup` dataclasses, returns paginated list.
+  **Superseded by the unified `GET /api/actions/characters/<id>/available/` endpoint**
+  (branch `unified-action-interface`, combat.md Phase 7). The mechanics endpoint is
+  deleted; `get_available_actions()` is still called internally by `get_player_actions()`.
 - **`IsCharacterOwner`** — reusable permission class in `web/api/permissions.py`.
   Checks `RosterTenure` for active tenure via character ID in URL kwargs. Staff
   bypass. Usable by any endpoint that takes a character ID.

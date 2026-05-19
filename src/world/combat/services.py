@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
     PerformCheckFn = Callable[..., CheckResult]
 
+from actions.errors import ActionDispatchError
 from flows.constants import EventName
 from flows.emit import emit_event
 from flows.events.payloads import (
@@ -67,6 +68,7 @@ from world.combat.models import (
     ComboDefinition,
     ComboLearning,
     ComboSlot,
+    RoundChallengeDeclaration,
     ThreatPool,
     ThreatPoolEntry,
 )
@@ -85,6 +87,9 @@ from world.combat.types import (
 from world.fatigue.constants import EFFORT_CHECK_MODIFIER, EffortLevel, FatigueCategory
 from world.fatigue.services import apply_fatigue, get_fatigue_penalty
 from world.magic.constants import EffectKind
+from world.mechanics.challenge_resolution import resolve_challenge
+from world.mechanics.services import get_available_actions
+from world.mechanics.types import ChallengeResolutionResult
 from world.vitals.constants import (
     DEATH_HEALTH_THRESHOLD,
     KNOCKOUT_HEALTH_THRESHOLD,
@@ -1721,15 +1726,17 @@ def _resolve_pc_action(
     participant: CombatParticipant,
     action: CombatRoundAction,
     offense_check_fn: PerformCheckFn | None = None,
-    offense_check_type: CheckType | None = None,
 ) -> ActionOutcome:
     """Resolve a single PC's focused action during round resolution.
 
-    For non-combo actions, uses perform_check if an offense_check_type is
-    provided. The check result's success_level scales damage:
+    For non-combo actions, derives the offense_check_type from the declared
+    technique's action_template. The check result's success_level scales damage:
     - success_level >= 2: full base_power
     - success_level == 1: half base_power
     - success_level <= 0: zero (miss)
+
+    Raises ActionDispatchError(TECHNIQUE_NOT_COMBAT_READY) if the technique has
+    no action_template (i.e. it has not been configured for combat use).
 
     Fatigue is applied after the action resolves (both combo and non-combo).
     """
@@ -1761,16 +1768,17 @@ def _resolve_pc_action(
         # All non-combo techniques (damage AND non-attack) route through the magic
         # pipeline. The resolver internally handles damage (if base_power) and
         # conditions (if condition_applications rows exist).
-        if offense_check_type is not None:
-            combat_result = resolve_combat_technique(
-                participant=participant,
-                action=action,
-                fatigue_category=fatigue_category,
-                offense_check_type=offense_check_type,
-                offense_check_fn=offense_check_fn,
-            )
-            outcome.damage_results.extend(combat_result.damage_results)
-        # else: no offense_check_type — legacy test-only fallback; stay silent.
+        template = technique.action_template
+        if template is None:
+            raise ActionDispatchError(ActionDispatchError.TECHNIQUE_NOT_COMBAT_READY)
+        combat_result = resolve_combat_technique(
+            participant=participant,
+            action=action,
+            fatigue_category=fatigue_category,
+            offense_check_type=template.check_type,
+            offense_check_fn=offense_check_fn,
+        )
+        outcome.damage_results.extend(combat_result.damage_results)
 
     # Apply fatigue after action resolves
     apply_fatigue(
@@ -1874,7 +1882,6 @@ def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
     defense_check_type: CheckType | None,
     defense_check_fn: PerformCheckFn | None,
     offense_check_fn: PerformCheckFn | None,
-    offense_check_type: CheckType | None,
 ) -> list[ActionOutcome]:
     """Iterate resolution order and resolve each entity's action."""
     outcomes: list[ActionOutcome] = []
@@ -1884,9 +1891,7 @@ def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
                 continue
             action = pc_actions.get(entity.pk)
             if action is not None:
-                outcomes.append(
-                    _resolve_pc_action(entity, action, offense_check_fn, offense_check_type)
-                )
+                outcomes.append(_resolve_pc_action(entity, action, offense_check_fn))
 
         elif entity_type == ENTITY_TYPE_NPC:
             if not isinstance(entity, CombatOpponent):
@@ -1973,6 +1978,109 @@ def _check_encounter_completion(encounter: CombatEncounter) -> bool:
     return all_opponents_down or all_pcs_down
 
 
+def _resolve_declared_challenges(
+    encounter: CombatEncounter,
+    round_number: int,
+    resolution_order: list[tuple[str, CombatParticipant | CombatOpponent]],
+) -> list[ChallengeResolutionResult]:
+    """Post-pass: resolve RoundChallengeDeclarations in participant initiative order.
+
+    Called after all combat-action resolution for the round.  Fetches bridge rows,
+    orders them to match the existing resolution_order for PC participants, resolves
+    each character's declared challenge (re-validating eligibility via
+    get_available_actions), and deletes all bridge rows for the round.
+
+    Ineligible-skip: if get_available_actions returns no action matching the
+    declared (challenge_instance_id, approach_id), the declaration is silently
+    skipped — no CharacterChallengeRecord is created and no exception is raised.
+    This mirrors dispatch-time security: declared state may be stale if a
+    character lost their capability between declaration and resolution.
+
+    The delete of bridge rows runs inside the caller's @transaction.atomic so it
+    is consistent with the rest of round resolution.
+    """
+    declarations = list(
+        RoundChallengeDeclaration.objects.filter(
+            encounter=encounter,
+            round_number=round_number,
+        ).select_related(
+            "participant",
+            "participant__character_sheet",
+            "challenge_instance",
+            "challenge_instance__location",
+            "challenge_approach",
+        )
+    )
+
+    if not declarations:
+        return []
+
+    # Build participant_id → declaration map for O(n) ordering.
+    decl_by_participant: dict[int, RoundChallengeDeclaration] = {
+        d.participant_id: d for d in declarations
+    }
+
+    # Order by the same resolution_order combat uses for PC participants.
+    # NPCs never declare challenges, so only ENTITY_TYPE_PC entries matter.
+    ordered: list[RoundChallengeDeclaration] = []
+    for entity_type, entity in resolution_order:
+        if entity_type != ENTITY_TYPE_PC:
+            continue
+        if not isinstance(entity, CombatParticipant):
+            continue
+        decl = decl_by_participant.pop(entity.pk, None)
+        if decl is not None:
+            ordered.append(decl)
+
+    # Any declarations for participants not in resolution_order (e.g. DYING without
+    # final-round) come after, preserving their insertion order.
+    ordered.extend(decl_by_participant.values())
+
+    outcomes: list[ChallengeResolutionResult] = []
+    for decl in ordered:
+        character = decl.participant.character_sheet.character
+        challenge_instance = decl.challenge_instance
+        approach = decl.challenge_approach
+        location = challenge_instance.location
+
+        # Re-validate eligibility: character must still have a matching AvailableAction.
+        available_actions = get_available_actions(character, location)
+        matching = next(
+            (
+                a
+                for a in available_actions
+                if a.challenge_instance_id == challenge_instance.pk and a.approach_id == approach.pk
+            ),
+            None,
+        )
+        if matching is None:
+            logger.warning(
+                "Skipping deferred challenge declaration for participant %s "
+                "(challenge_instance=%s, approach=%s): "
+                "no matching AvailableAction at resolution time.",
+                decl.participant_id,
+                challenge_instance.pk,
+                approach.pk,
+            )
+            continue
+
+        outcome = resolve_challenge(
+            character,
+            challenge_instance,
+            approach,
+            matching.capability_source,
+        )
+        outcomes.append(outcome)
+
+    # Delete all bridge rows for this round inside the outer atomic block.
+    RoundChallengeDeclaration.objects.filter(
+        encounter=encounter,
+        round_number=round_number,
+    ).delete()
+
+    return outcomes
+
+
 @transaction.atomic
 def resolve_round(
     encounter: CombatEncounter,
@@ -1980,7 +2088,6 @@ def resolve_round(
     defense_check_fn: PerformCheckFn | None = None,
     defense_check_type: CheckType | None = None,
     offense_check_fn: PerformCheckFn | None = None,
-    offense_check_type: CheckType | None = None,
 ) -> RoundResolutionResult:
     """Orchestrate a full combat round: detect combos -> resolve -> consequences.
 
@@ -1993,21 +2100,29 @@ def resolve_round(
     3. Iterate resolution order (speed-rank sorted PCs and NPCs).
        - For each **PC**: resolve focused action against target opponent.
          If the action has a ``combo_upgrade``, apply bonus damage with soak
-         bypass. Otherwise use perform_check (if offense_check_type provided)
-         to scale damage by success level. Apply fatigue after each action.
+         bypass. Otherwise derive the offense_check_type from the declared
+         technique's action_template and route through resolve_combat_technique.
+         Apply fatigue after each action.
        - For each **NPC**: resolve each targeted PC's defensive check.
          Process knockout/death transitions and apply conditions.
-    4. Consume dying final rounds: DYING PCs with dying_final_round become DEAD.
-    5. After all actions: check boss phase transitions for boss-tier opponents.
-    6. Check encounter completion (all opponents defeated or all PCs down).
-    7. Transition encounter to ``BETWEEN_ROUNDS`` or ``COMPLETED``.
+    4. Post-pass: resolve deferred RoundChallengeDeclarations in initiative
+       order (reusing the round's resolution_order). Each participant's
+       eligibility is re-validated via get_available_actions; ineligible
+       declarations are skipped. Bridge rows for the round are deleted inside
+       the same atomic block. Resolved outcomes populate ``challenge_outcomes``
+       on the return value.
+    5. Consume dying final rounds: DYING PCs with dying_final_round become DEAD.
+    6. After all actions: check boss phase transitions for boss-tier opponents.
+    7. Check encounter completion (all opponents defeated or all PCs down).
+    8. Transition encounter to ``BETWEEN_ROUNDS`` or ``COMPLETED``.
 
     Args:
         encounter: The combat encounter to resolve.
         defense_check_fn: Optional ``perform_check`` override for PC defense.
         defense_check_type: The CheckType used for defensive rolls.
         offense_check_fn: Optional ``perform_check`` override for PC offense.
-        offense_check_type: The CheckType used for offensive rolls.
+            The offense_check_type is now sourced from the declared technique's
+            action_template.check_type — it is no longer passed externally.
 
     Returns:
         ``RoundResolutionResult`` with outcomes and phase transitions.
@@ -2039,6 +2154,8 @@ def resolve_round(
         "participant__character_sheet",
         "focused_action",
         "focused_action__effect_type",
+        "focused_action__action_template",
+        "focused_action__action_template__check_type",
         "focused_opponent_target",
         "combo_upgrade",
     ):
@@ -2076,7 +2193,13 @@ def resolve_round(
         defense_check_type,
         defense_check_fn,
         offense_check_fn,
-        offense_check_type,
+    )
+
+    # --- Post-pass: deferred challenge declarations (in initiative order) ---
+    result.challenge_outcomes = _resolve_declared_challenges(
+        encounter,
+        round_number,
+        resolution_order,
     )
 
     # --- Dying final round consumption ---

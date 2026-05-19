@@ -5,15 +5,11 @@ API viewsets for game mechanics.
 """
 
 from django.db.models import Prefetch
-from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from evennia.objects.models import ObjectDB
 from rest_framework import viewsets
-from rest_framework.generics import ListAPIView
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 
-from web.api.permissions import IsCharacterOwner
 from world.mechanics.filters import (
     ChallengeInstanceFilter,
     ChallengeTemplateFilter,
@@ -36,7 +32,6 @@ from world.mechanics.models import (
     SituationTemplate,
 )
 from world.mechanics.serializers import (
-    ChallengeGroupSerializer,
     ChallengeInstanceSerializer,
     ChallengeTemplateDetailSerializer,
     ChallengeTemplateListSerializer,
@@ -48,8 +43,6 @@ from world.mechanics.serializers import (
     SituationTemplateDetailSerializer,
     SituationTemplateListSerializer,
 )
-from world.mechanics.services import get_available_actions
-from world.mechanics.types import ChallengeGroup
 
 
 class ModifierCategoryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -100,42 +93,6 @@ class MechanicsPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = "page_size"
     max_page_size = 100
-
-
-# ---------------------------------------------------------------------------
-# Available Actions
-# ---------------------------------------------------------------------------
-
-
-class AvailableActionsView(ListAPIView):
-    """Available actions for a character at their current location.
-
-    Returns actions grouped by challenge.
-    """
-
-    serializer_class = ChallengeGroupSerializer
-    permission_classes = [IsAuthenticated, IsCharacterOwner]
-    pagination_class = MechanicsPagination
-
-    def get_queryset(self) -> list[ChallengeGroup]:
-        character = get_object_or_404(ObjectDB, pk=self.kwargs["character_id"])
-        location_id = self.request.query_params.get("location_id")  # noqa: USE_FILTERSET — computed view, not queryset filtering
-        if location_id is not None:
-            location = get_object_or_404(ObjectDB, pk=location_id)
-        else:
-            location = character.location
-        actions = get_available_actions(character, location)
-        groups: dict[int, ChallengeGroup] = {}
-        for action in actions:
-            cid = action.challenge_instance_id
-            if cid not in groups:
-                groups[cid] = ChallengeGroup(
-                    challenge_instance_id=cid,
-                    challenge_name=action.challenge_name,
-                    actions=[],
-                )
-            groups[cid].actions.append(action)
-        return list(groups.values())
 
 
 # ---------------------------------------------------------------------------

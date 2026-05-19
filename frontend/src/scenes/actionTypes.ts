@@ -1,3 +1,7 @@
+// ---------------------------------------------------------------------------
+// Legacy scene action types (used by the AvailableSceneAction / fetchSceneActions path)
+// ---------------------------------------------------------------------------
+
 export interface TechniqueOption {
   id: number;
   name: string;
@@ -5,29 +9,45 @@ export interface TechniqueOption {
   capability_value: number;
 }
 
-export interface AvailableAction {
-  key: string;
+// ---------------------------------------------------------------------------
+// Unified actions endpoint types — GET /api/actions/characters/<id>/available/
+// ---------------------------------------------------------------------------
+
+export interface ActionCheckType {
+  id: number;
   name: string;
-  icon: string;
-  category: string;
-  techniques: TechniqueOption[];
-  applicable_techniques?: TechniqueOption[];
 }
 
-export interface TechniqueAction {
-  template_id: number;
+export interface ActionTemplateMinimal {
+  id: number;
   name: string;
-  icon: string;
-  category: string;
-  target_type: string;
-  technique_id: number;
-  technique_name: string;
 }
 
-export interface AvailableActionsResponse {
-  self_actions: AvailableAction[];
-  targeted_actions: AvailableAction[];
-  technique_actions: TechniqueAction[];
+export interface ActionRef {
+  backend: string;
+  challenge_instance_id: number | null;
+  approach_id: number | null;
+  technique_id: number | null;
+  registry_key: string | null;
+}
+
+export interface PlayerAction {
+  backend: string;
+  display_name: string;
+  description: string;
+  difficulty: string | null;
+  prerequisite_met: boolean;
+  prerequisite_reasons: string[];
+  check_type: ActionCheckType;
+  action_template: ActionTemplateMinimal | null;
+  ref: ActionRef;
+}
+
+export interface PlayerActionsResponse {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: PlayerAction[];
 }
 
 export interface SoulfrayWarningData {

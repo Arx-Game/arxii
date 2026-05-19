@@ -5,7 +5,6 @@ DRF serializers for game mechanics models.
 """
 
 from rest_framework import serializers
-from rest_framework_dataclasses.serializers import DataclassSerializer
 
 from world.mechanics.models import (
     ChallengeApproach,
@@ -21,7 +20,6 @@ from world.mechanics.models import (
     SituationInstance,
     SituationTemplate,
 )
-from world.mechanics.types import AvailableAction, CapabilitySource, ChallengeGroup
 
 
 class ModifierCategorySerializer(serializers.ModelSerializer):
@@ -323,30 +321,3 @@ class SituationInstanceSerializer(serializers.ModelSerializer):
             "scene",
             "created_at",
         ]
-
-
-# ---------------------------------------------------------------------------
-# Dataclass serializers (available actions pipeline)
-# ---------------------------------------------------------------------------
-
-
-class CapabilitySourceSerializer(DataclassSerializer):
-    """Serializer for CapabilitySource dataclass."""
-
-    class Meta:
-        dataclass = CapabilitySource
-        exclude = ["prerequisite"]
-
-
-class AvailableActionSerializer(DataclassSerializer):
-    """Serializer for AvailableAction dataclass."""
-
-    class Meta:
-        dataclass = AvailableAction
-
-
-class ChallengeGroupSerializer(DataclassSerializer):
-    """Serializer for ChallengeGroup — actions grouped by challenge."""
-
-    class Meta:
-        dataclass = ChallengeGroup

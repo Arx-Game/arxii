@@ -42,6 +42,14 @@ class ActionTargetType(models.TextChoices):
     FILTERED_GROUP = "filtered_group", "Filtered Group"
 
 
+class ActionBackend(models.TextChoices):
+    """Which backend system resolves a PlayerAction."""
+
+    CHALLENGE = "challenge", "Challenge"
+    COMBAT = "combat", "Combat"
+    REGISTRY = "registry", "Registry"
+
+
 class PlayerDecision(StrEnum):
     """Player decisions for paused resolution pipelines."""
 
