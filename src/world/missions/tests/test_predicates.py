@@ -66,3 +66,12 @@ class PredicateContractTests(unittest.TestCase):
     def test_unknown_op_raises_value_error(self) -> None:
         with self.assertRaises(ValueError):
             evaluate({"op": "BOGUS", "of": []}, self.ctx)
+
+    def test_not_requires_one_operand(self) -> None:
+        with self.assertRaises(ValueError):
+            evaluate({"op": "NOT", "of": []}, self.ctx)
+        with self.assertRaises(ValueError):
+            evaluate(
+                {"op": "NOT", "of": [{"leaf": "x"}, {"leaf": "y"}]},
+                self.ctx,
+            )

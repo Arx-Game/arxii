@@ -20,6 +20,11 @@ The structural layer here knows nothing about which leaves exist; leaf
 resolution is delegated to a ``PredicateContext`` (see ``types.py`` and the
 resolver registry below).
 
+Leaf resolvers assume the acting character has a CharacterSheet (true for
+every played character per character_sheets/CLAUDE.md); a sheet-less
+character is a programmer error and the sheet-keyed resolvers will raise
+CharacterSheet.DoesNotExist loudly rather than silently gate.
+
 Phase 0.3 adds the leaf-resolver registry: a mapping of leaf name to a
 callable ``(character, **params) -> bool`` that tests the acting
 character's own durable state, plus a concrete ``CharacterPredicateContext``
@@ -60,7 +65,8 @@ def evaluate(rule: dict, ctx: PredicateContext) -> bool:
         Whether the acting character satisfies the rule.
 
     Raises:
-        ValueError: If a node carries an unknown ``op``.
+        ValueError: If a node carries an unknown ``op``, or a ``NOT`` node
+            does not have exactly one operand.
     """
     if not rule:  # {} == no gate
         return True
@@ -71,6 +77,9 @@ def evaluate(rule: dict, ctx: PredicateContext) -> bool:
         if op == OP_OR:
             return any(evaluate(r, ctx) for r in of)  # empty OR == False
         if op == OP_NOT:
+            if len(of) != 1:
+                msg = f"NOT requires exactly one operand, got {len(of)}"
+                raise ValueError(msg)
             return not evaluate(of[0], ctx)
         msg = f"unknown predicate op {op!r}"
         raise ValueError(msg)
@@ -82,6 +91,14 @@ def evaluate(rule: dict, ctx: PredicateContext) -> bool:
 # state. ``character`` is the acting Character (ObjectDB). Params are the
 # leaf's authored params and are keyword-only. Resolvers must never inspect a
 # target's sheet — only the acting character's durable state.
+#
+# Invariant: the acting character is assumed to have a CharacterSheet (true
+# for every played character per character_sheets/CLAUDE.md). A sheet-less
+# character is a programmer error: sheet-keyed resolvers (has_achievement,
+# has_thread, min_thread_level) access ``character.sheet_data`` and will
+# raise CharacterSheet.DoesNotExist loudly rather than silently gate. No
+# defensive guard is added on purpose — silently returning False would hide
+# the bug.
 # ---------------------------------------------------------------------------
 
 
@@ -110,16 +127,19 @@ def _resolve_has_achievement(character: ObjectDB, *, slug: str) -> bool:
 
 
 def _resolve_has_condition(character: ObjectDB, *, key: str) -> bool:
-    """True if the character has an active ConditionInstance of this template.
+    """True if the character has an active (non-suppressed) condition.
 
-    ``key`` is the (unique) ConditionTemplate.name.
+    ``key`` is the (unique) ConditionTemplate.name. Delegates to the
+    canonical ``conditions.services.has_condition`` so suppressed instances
+    (a row still exists, but its effects don't apply) correctly gate False.
     """
-    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import has_condition  # noqa: PLC0415
 
-    return ConditionInstance.objects.filter(
-        target=character,
-        condition__name=key,
-    ).exists()
+    template = ConditionTemplate.objects.filter(name=key).first()
+    if template is None:
+        return False
+    return has_condition(character, template)
 
 
 def _resolve_has_capability(character: ObjectDB, *, name: str) -> bool:

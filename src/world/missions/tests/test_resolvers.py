@@ -110,6 +110,21 @@ class ConditionCapabilityResolverTests(TestCase):
     def test_has_condition_false_when_absent(self) -> None:
         self.assertFalse(self.ctx.has_leaf("has_condition", key="Cursed"))
 
+    def test_has_condition_false_when_suppressed(self) -> None:
+        """A suppressed ConditionInstance row exists but must not gate True."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        suppressed_template = ConditionTemplateFactory(name="Hexed")
+        ConditionInstanceFactory(
+            target=self.character,
+            condition=suppressed_template,
+            is_suppressed=True,
+            suppressed_until=timezone.now() + timedelta(days=1),
+        )
+        self.assertFalse(self.ctx.has_leaf("has_condition", key="Hexed"))
+
     def test_has_capability_true_when_granted(self) -> None:
         self.assertTrue(self.ctx.has_leaf("has_capability", name="nightvision"))
 
@@ -196,5 +211,5 @@ class SocietyStandingResolverStubTests(unittest.TestCase):
     """Stub-seal: societies standing model is persona-keyed and ambiguous."""
 
     @unittest.skip("stub-seam: societies standing model unverified")
-    def test_min_society_standing(self) -> None:  # pragma: no cover
+    def test_min_society_standing(self) -> None:
         raise NotImplementedError
