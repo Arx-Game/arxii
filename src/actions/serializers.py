@@ -29,7 +29,8 @@ from rest_framework import serializers
 
 from actions.constants import ActionBackend
 from actions.errors import ActionDispatchError
-from actions.types import ActionRef, DispatchResult, PlayerAction
+from actions.types import ActionRef, ActionResult, DispatchResult, PlayerAction
+from world.mechanics.types import ChallengeResolutionResult
 
 
 class CheckTypeMinimalSerializer(serializers.Serializer):
@@ -190,9 +191,7 @@ class DispatchResultSerializer(serializers.Serializer):
 
     def to_representation(self, instance: DispatchResult) -> dict[str, Any]:
         """Extract minimal wire representation from a DispatchResult dataclass."""
-        backend_value = (
-            instance.backend.value if hasattr(instance.backend, "value") else str(instance.backend)
-        )
+        backend_value = instance.backend.value
 
         if instance.deferred:
             return {
@@ -203,42 +202,23 @@ class DispatchResultSerializer(serializers.Serializer):
             }
 
         detail = instance.detail
-        if detail is None:
-            return {
-                "backend": backend_value,
-                "deferred": False,
-                "message": None,
-                "data": None,
-            }
+        message: str | None = None
+        data: dict[str, Any] | None = None
 
-        # ChallengeResolutionResult: has challenge_name, approach_name, resolution_type, etc.
-        if hasattr(detail, "challenge_name"):
-            return {
-                "backend": backend_value,
-                "deferred": False,
-                "message": detail.challenge_name,
-                "data": {
-                    "challenge_instance_id": detail.challenge_instance_id,
-                    "resolution_type": detail.resolution_type,
-                    "challenge_deactivated": detail.challenge_deactivated,
-                },
+        if isinstance(detail, ChallengeResolutionResult):
+            message = detail.challenge_name
+            data = {
+                "challenge_instance_id": detail.challenge_instance_id,
+                "resolution_type": detail.resolution_type,
+                "challenge_deactivated": detail.challenge_deactivated,
             }
+        elif isinstance(detail, ActionResult):
+            message = detail.message
+            data = detail.data or None
 
-        # ActionResult: has success, message, data
-        if hasattr(detail, "success"):
-            msg: str | None = detail.message if hasattr(detail, "message") else None
-            raw_data: dict | None = detail.data if hasattr(detail, "data") else None
-            return {
-                "backend": backend_value,
-                "deferred": False,
-                "message": msg,
-                "data": raw_data or None,
-            }
-
-        # Fallback for unknown detail types
         return {
             "backend": backend_value,
             "deferred": False,
-            "message": None,
-            "data": None,
+            "message": message,
+            "data": data,
         }
