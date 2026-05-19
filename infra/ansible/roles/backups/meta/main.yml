@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: backups
+  author: Arx II
+  description: Daily pg_dump to the Linode Object Storage primary bucket via a systemd timer; never restores; creds from the EnvironmentFile.
+  license: proprietary
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+dependencies: []

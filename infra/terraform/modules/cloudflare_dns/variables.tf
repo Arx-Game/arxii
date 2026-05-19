@@ -31,8 +31,8 @@ variable "origin_ipv6" {
 }
 
 variable "dmarc_policy" {
-  type    = string
-  default = "none"
+  type        = string
+  default     = "none"
   description = "Initial DMARC policy for a FRESH sending domain. Start 'none' (or 'quarantine') with rua reporting, then tighten. NEVER 'reject' initially (blackholes legit mail before traffic is observed)."
   validation {
     condition     = contains(["none", "quarantine"], var.dmarc_policy)

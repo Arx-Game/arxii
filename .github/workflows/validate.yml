@@ -86,19 +86,40 @@ jobs:
       - name: gitleaks (full history)
         run: |
           set -euo pipefail
-          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks_linux_x64.tar.gz" -o /tmp/gl.tgz
+          # Release assets embed the version (gitleaks_<ver>_linux_x64.tar.gz);
+          # there is NO stable `latest/download/<name>` path — it 404s. Resolve
+          # the latest tag, then fetch the versioned asset.
+          ver="$(curl -fsSL https://api.github.com/repos/gitleaks/gitleaks/releases/latest \
+            | grep -oE '"tag_name": *"v[0-9.]+"' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')"
+          [ -n "$ver" ] || { echo "could not resolve latest gitleaks version"; exit 1; }
+          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${ver}/gitleaks_${ver}_linux_x64.tar.gz" -o /tmp/gl.tgz
           tar -xzf /tmp/gl.tgz -C /tmp gitleaks
-          /tmp/gitleaks detect --source . --redact --no-banner --exit-code 1
+          # `detect` was removed in gitleaks v8.19+; `git` scans full history.
+          /tmp/gitleaks git . --redact --no-banner --exit-code 1
 
   caddy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4 # TODO: pin SHA
-      - name: caddy validate (when a Caddyfile exists)
+      - name: caddy adapt (render the Jinja template, plugin build)
         run: |
           set -euo pipefail
           cf="$(find infra -iname 'Caddyfile*' -print -quit 2>/dev/null || true)"
           if [ -z "$cf" ]; then echo "no Caddyfile yet — skip"; exit 0; fi
-          curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64" -o /tmp/caddy
+          # The repo ships a Jinja TEMPLATE (Caddyfile.j2); Caddy cannot parse
+          # `{{ ... }}`. The template has no Jinja control flow (only simple
+          # substitutions), so stub every `{{ ... }}` with a placeholder host
+          # to get a syntactically real Caddyfile. Caddy-native single-brace
+          # placeholders ({env.X}, {remote_host}) are intentionally left intact.
+          rendered=/tmp/Caddyfile.rendered
+          sed -E 's/\{\{[^}]*\}\}/placeholder.example.com/g' "$cf" > "$rendered"
+          # Prod Caddy is a custom build WITH caddy-dns/cloudflare (the
+          # `acme_dns cloudflare` directive needs it); the stock binary cannot
+          # adapt that directive. Build the same plugin set here.
+          curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64&p=github.com/caddy-dns/cloudflare" -o /tmp/caddy
           chmod +x /tmp/caddy
-          /tmp/caddy validate --config "$cf" --adapter caddyfile
+          # `adapt` (NOT `validate`): checks Caddyfile syntax + that every
+          # directive/module (incl. the cloudflare DNS plugin) is real, WITHOUT
+          # provisioning TLS — so no Cloudflare API token / secret is ever
+          # needed in this account-independent static gate.
+          /tmp/caddy adapt --config "$rendered" --adapter caddyfile >/dev/null

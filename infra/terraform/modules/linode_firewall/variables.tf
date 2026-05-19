@@ -9,8 +9,8 @@ variable "linode_id" {
 }
 
 variable "ssh_admin_cidrs" {
-  type    = list(string)
-  default = ["0.0.0.0/0", "::/0"]
+  type        = list(string)
+  default     = ["0.0.0.0/0", "::/0"]
   description = <<-EOT
     !!! OPERATOR DECISION (see infra/README.md checklist) !!!
     SSH (22) inbound source allowlist. DEFAULTS OPEN TO THE ENTIRE INTERNET

@@ -1,0 +1,62 @@
+---
+- name: Install awscli + postgresql-client (pg_dump)
+  ansible.builtin.apt:
+    name: [awscli, postgresql-client]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Staging dir (root-owned, not world-readable)
+  ansible.builtin.file:
+    path: "{{ backups_staging }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Install the backup script
+  ansible.builtin.template:
+    src: arxii-backup.sh.j2
+    dest: /usr/local/sbin/arxii-backup
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Install backup service (reads the EnvironmentFile for creds)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arxii-backup.service
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Arx II pg_dump -> Linode Object Storage (primary)
+      After=postgresql.service
+      [Service]
+      Type=oneshot
+      EnvironmentFile={{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+      ExecStart=/usr/local/sbin/arxii-backup
+  notify: Reload systemd
+
+- name: Install backup timer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/arxii-backup.timer
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Daily Arx II DB backup ({{ backups_window }})
+      [Timer]
+      OnCalendar=*-*-* {{ backups_window }}:00
+      Persistent=true
+      [Install]
+      WantedBy=timers.target
+  notify: Reload systemd
+
+- name: Enable backup timer
+  ansible.builtin.systemd_service:
+    name: arxii-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true
