@@ -1,22 +1,55 @@
-# Keeps SHA-pinned GitHub Actions current. We pin every action to a full
-# commit SHA (supply-chain hardening); the trailing `# vX.Y.Z` comment lets
-# Dependabot recognize the version and bump BOTH the SHA and the comment.
-# Without this, pins silently rot and miss upstream security patches.
+# Repo-wide Dependabot: every dependency ecosystem is monitored so no known
+# vulnerability sits unpatched. This file governs *version* updates (and how
+# they're grouped/scheduled). Dependabot *security* PRs (driven by the GitHub
+# Advisory DB) are enabled separately at the repo level (Settings -> Code
+# security -> "Dependabot security updates"); they open as needed regardless
+# of the weekly schedule below and also respect these groups.
 #
-# Scope: github-actions only (this is the other half of the action-pinning
-# work). pip/npm ecosystems are intentionally NOT enabled here — that's a
-# broader, repo-wide maintainer decision, not part of this hardening.
+# Grouping convention: minor+patch bumps are batched into ONE PR per
+# ecosystem per week (low review noise for a small team); MAJOR bumps come as
+# individual PRs so breaking changes get reviewed on their own.
 version: 2
 updates:
+  # GitHub Actions — every action is pinned to a full commit SHA; the
+  # trailing `# vX.Y.Z` lets Dependabot bump BOTH the SHA and the comment so
+  # the pins don't silently rot and miss upstream security patches.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
     commit-message:
       prefix: "ci"
-    # One grouped PR per week instead of one per action — low review noise
-    # for a small team; security updates still open immediately.
     groups:
       github-actions:
         patterns: ["*"]
     open-pull-requests-limit: 5
+
+  # Python backend — uv (reads pyproject.toml + uv.lock, incl. transitives).
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
+    groups:
+      python-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    open-pull-requests-limit: 10
+
+  # JS/TS — the pnpm frontend plus the two MCP dev-tool packages. One npm
+  # entry covers all three via `directories`.
+  - package-ecosystem: "npm"
+    directories:
+      - "/frontend"
+      - "/mcp/arxdev-evennia"
+      - "/mcp/arxdev-frontend"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "deps"
+    groups:
+      js-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    open-pull-requests-limit: 10
