@@ -66,6 +66,26 @@ class MissionTemplateModelTests(TestCase):
         with self.assertRaises(ValidationError):
             bad.full_clean()
 
+    def test_save_enforces_level_band_invariant(self) -> None:
+        # Regression (I1): clean() must run on the real create()/factory
+        # write path, not only via explicit full_clean(). Before the save()
+        # override this silently persisted an invalid row.
+        with self.assertRaises(ValidationError):
+            MissionTemplateFactory(
+                slug="save-bad-band",
+                name="Save Bad Band",
+                level_band_min=5,
+                level_band_max=2,
+            )
+
+    def test_save_enforces_percent_replace_invariant(self) -> None:
+        with self.assertRaises(ValidationError):
+            MissionTemplateFactory(
+                slug="save-bad-pct",
+                name="Save Bad Pct",
+                percent_replace=101,
+            )
+
     def test_era_set_null_on_era_delete(self) -> None:
         template_pk = self.template.pk
         self.era.delete()

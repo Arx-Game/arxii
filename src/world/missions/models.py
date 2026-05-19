@@ -98,6 +98,11 @@ class AffordanceBinding(DiscriminatorMixin, SharedMemoryModel):
     ``check_type`` + ``base_risk``, the thin ``ic_framing`` line, and an
     optional reusable ``rider`` consequence.
 
+    A ``trait``-sourced binding surfaces whenever the acting character has any
+    positive value in that trait (the threshold is hardcoded to 1 and is not
+    authorable in Phase 1; see ``services.affordances`` where the ``min_trait``
+    resolver is reused at ``value=1``).
+
     ``source_technique`` is intentionally omitted. ``magic.Technique`` is a
     *per-character* instance (``Technique.name`` is explicitly non-unique and
     techniques are "unique per character and not shared"), so a globally
@@ -266,6 +271,10 @@ class MissionTemplate(SharedMemoryModel):
         if errors:
             raise ValidationError(errors)
 
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return self.name
 
@@ -353,6 +362,20 @@ class MissionNode(SharedMemoryModel):
 
         if errors:
             raise ValidationError(errors)
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+    # DESIGN: row-level clean() enforces only the single-row node invariants
+    # (entry-node uniqueness, JOINT-mode field coupling). Route-set
+    # well-formedness across this node's options — a single null-tier BRANCH
+    # route per BRANCH option, full outcome-tier coverage + per-tier
+    # uniqueness per CHECK option — is GRAPH-level and is validated by the
+    # Phase-3 authoring/resolution service, NOT at row level (it cannot be
+    # expressed as a single-row invariant). Entry-node uniqueness is
+    # row-level; route-set completeness is graph-level-deferred. See the
+    # MissionOptionRoute DESIGN note. This split is intentional-on-record.
 
     def __str__(self) -> str:
         return f"{self.template.slug}:{self.key}"
@@ -461,6 +484,15 @@ class MissionOption(SharedMemoryModel):
         if errors:
             raise ValidationError(errors)
 
+    def save(self, *args: object, **kwargs: object) -> None:
+        # Runs only the scalar clean() invariants on the real write path. The
+        # M2M "AFFORDANCE source requires ≥1 accepted_affordance" rule cannot
+        # be validated at save time (M2M rows have no pk yet) and stays in
+        # ``services.mission_graph.validate_mission_option`` — see that module
+        # and ``_affordance_source_errors``.
+        self.clean()
+        super().save(*args, **kwargs)
+
     def __str__(self) -> str:
         return f"{self.node}#{self.order}"
 
@@ -475,6 +507,17 @@ class MissionOptionRoute(SharedMemoryModel):
     weighted :class:`MissionOptionRouteCandidate` rows instead of
     ``target_node``.
     """
+
+    # DESIGN: route-set well-formedness is GRAPH-level, NOT row-level, and is
+    # deliberately deferred to the Phase-3 authoring/resolution service:
+    #   * exactly one null-``outcome_tier`` route per BRANCH option
+    #   * full ``traits.CheckOutcome`` tier coverage with no per-tier
+    #     duplicates per CHECK option
+    # A single MissionOptionRoute row cannot observe its siblings at
+    # clean()/save() time, so no row-level invariant is added here.
+    # Contrast: entry-node uniqueness IS row-level (enforced in
+    # MissionNode.clean()); route-set completeness is graph-level. This split
+    # is intentional-on-record, not an oversight.
 
     option = models.ForeignKey(
         MissionOption,
@@ -545,6 +588,13 @@ class MissionInstance(SharedMemoryModel):
         on_delete=models.PROTECT,
         related_name="instances",
     )
+    # DESIGN: SET_NULL + the SharedMemoryModel identity map means that after
+    # a MissionNode is deleted, an already-loaded MissionInstance's
+    # ``current_node``/``current_node_id`` stays STALE until the instance is
+    # reloaded (the in-memory FK is not invalidated by the DB-level SET_NULL).
+    # The Phase-3 engine must resolve "where is this run" via a fresh query
+    # (or treat node-deletion as a run-terminating event) and must NOT assume
+    # a live cached ``current_node`` reflects post-delete DB state.
     current_node = models.ForeignKey(
         MissionNode,
         null=True,
@@ -602,6 +652,10 @@ class MissionParticipant(SharedMemoryModel):
                 raise ValidationError(
                     {"is_contract_holder": "Instance already has a contract holder."}
                 )
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"{self.character} @ {self.instance}"

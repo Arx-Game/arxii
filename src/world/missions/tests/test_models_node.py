@@ -128,6 +128,26 @@ class MissionNodeInvariantTests(TestCase):
         with self.assertRaises(ValidationError):
             node.full_clean()
 
+    def test_save_enforces_single_entry_node(self) -> None:
+        # Regression (I1): clean() must run on the real create()/factory
+        # write path. Before the save() override a second entry node for the
+        # same template persisted silently.
+        with self.assertRaises(ValidationError):
+            MissionNodeFactory(
+                template=self.template,
+                key="second-entry",
+                is_entry=True,
+            )
+
+    def test_save_enforces_joint_mode_coupling(self) -> None:
+        with self.assertRaises(ValidationError):
+            MissionNodeFactory(
+                template=self.template,
+                key="save-joint",
+                conflict_mode=ConflictMode.JOINT,
+                joint_combine=None,
+            )
+
 
 class MissionOptionInvariantTests(TestCase):
     """Source/kind invariants + the service-level M2M affordance rule."""
@@ -202,6 +222,20 @@ class MissionOptionInvariantTests(TestCase):
         # Once an affordance is attached, the service validation passes.
         option.accepted_affordances.add(self.affordance)
         validate_mission_option(option)  # should not raise
+
+    def test_save_enforces_scalar_kind_invariant(self) -> None:
+        # Regression (I1): the scalar clean() rule (BRANCH option forbids a
+        # check type) must run on the real create()/factory write path, NOT
+        # only via explicit full_clean(). This is the scalar clean() rule,
+        # NOT the M2M accepted_affordances rule (that stays in the service).
+        with self.assertRaises(ValidationError):
+            MissionOptionFactory(
+                node=self.node,
+                order=6,
+                option_kind=OptionKind.BRANCH,
+                source_kind=OptionSource.AUTHORED,
+                authored_check_type=self.check_type,
+            )
 
     def test_authored_check_option_with_check_type_round_trips(self) -> None:
         option = MissionOptionFactory(

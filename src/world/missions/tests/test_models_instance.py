@@ -119,6 +119,17 @@ class MissionParticipantTests(TestCase):
                 character=self.char_a,
             )
 
+    def test_save_enforces_single_contract_holder(self) -> None:
+        # Regression (I1): clean() must run on the real create()/factory
+        # write path. Before the save() override a second contract holder
+        # for the same instance persisted silently.
+        with self.assertRaises(ValidationError):
+            MissionParticipantFactory(
+                instance=self.instance,
+                character=self.char_b,
+                is_contract_holder=True,
+            )
+
 
 class MissionNodeSnapshotTests(TestCase):
     """A snapshot row can exist per (instance, node, participant)."""
