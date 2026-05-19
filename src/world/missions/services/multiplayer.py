@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING
 
 from django.db.models import Prefetch
 
-from world.missions.constants import ConflictMode, JointCombine, MissionStatus
+from world.missions.constants import ConflictMode, JointCombine
 from world.missions.models import MissionOptionRoute
 from world.missions.services.resolution import (
     _finish_terminal,
@@ -104,6 +104,11 @@ def build_group_option_list(
     ``build_option_list``'s single-participant behavior is unchanged (it
     now delegates to the same extracted helper).
     """
+    # M-1: Safe to leak on the SharedMemoryModel instance:
+    # accepted_affordances is immutable authored graph data, not per-request
+    # state. The Prefetch(to_attr="accepted_affordances_cached") attribute
+    # would only be a leak hazard if its content varied across requests for
+    # the same model row; the authored graph is shared and stable.
     options = list(
         node.options.all()
         .order_by("order", "pk")
@@ -377,13 +382,15 @@ def group_resolve_node(
         return [deed]
 
     # JOINT: run every participant's own pick via Phase-3 resolve_option
-    # UNCHANGED. Each call records that participant as the deed actor and
-    # applies that participant's own check + per-act consequences/riders —
-    # per-actor moral consequence is correct by construction (no
-    # cross-attribution). resolve_option also advances current_node on
-    # each call; those are transient — the single authoritative routing
-    # decision for the JOINT node is applied ONCE below from the COMBINED
-    # result, overwriting the per-attempt writes.
+    # in the routing-free mode (advance=False — Phase-5a I-1). Each call
+    # records that participant as the deed actor and applies that
+    # participant's own check + per-act consequences/riders — per-actor
+    # moral consequence is correct by construction (no cross-attribution).
+    # Crucially, NO per-attempt routing or terminal write touches the
+    # instance: the only thing that routes/terminates is the combined
+    # decision computed below. This is the primitive Phase 5b needs because
+    # reward-line / contractual side effects can no longer be neutralized
+    # by an "overwrite" trick.
     holder = contract_holder(instance)
     holder_option: MissionOption | None = None
     deeds: list[MissionDeedRecord] = []
@@ -391,7 +398,16 @@ def group_resolve_node(
         if participant.pk == holder.pk:
             holder_option = option
         binding = _binding_for_pick(presented, participant, option)
-        deeds.append(resolve_option(instance, node, option, participant, binding))
+        deeds.append(
+            resolve_option(
+                instance,
+                node,
+                option,
+                participant,
+                binding,
+                advance=False,
+            )
+        )
 
     if holder_option is None:
         msg = (
@@ -405,20 +421,21 @@ def group_resolve_node(
     # boolean to the holder pick's authored route via the same
     # CheckOutcome.success_level classification; _route_next_node /
     # _finish_terminal are the Phase-3 routing/terminal helpers reused
-    # verbatim (not duplicated). This overwrites the transient per-attempt
-    # current_node writes with the single combined decision.
+    # verbatim (not duplicated). DESIGN: JOINT nodes route by combined
+    # success/failure BUCKET (best success-tier route / worst failure-tier
+    # route), NOT per rolled tier — authors must author JOINT route-sets
+    # accordingly.
+    #
+    # Because per-attempt resolve_option calls used ``advance=False``, the
+    # instance position/status was never touched mid-loop; the compensation
+    # block that previously restored ACTIVE/cleared completed_at after a
+    # transient terminal is no longer needed.
     combined_success = _joint_combined_success(node, deeds)
     route = _combined_route(holder_option, combined_success)
     next_node = _route_next_node(route)
     if next_node is None:
         _finish_terminal(instance)
     else:
-        # A per-attempt resolve_option may have transiently terminated the
-        # run (a non-combined terminal route); the combined decision is
-        # authoritative, so restore ACTIVE/clear completed_at when the
-        # combined route continues.
-        instance.status = MissionStatus.ACTIVE
-        instance.completed_at = None
         instance.current_node = next_node
         instance.save()
 

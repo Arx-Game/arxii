@@ -231,12 +231,17 @@ def _finish_terminal(instance: MissionInstance) -> None:
     instance.save()
 
 
-def resolve_option(
+def resolve_option(  # noqa: PLR0913 — stable engine signature; the 5 existing
+    # positional args identify "who-resolves-what-where-with-what-binding" and
+    # are co-equal, plus the keyword-only ``advance`` toggle (Phase-5a I-1).
+    # Collapsing them into a dataclass would obscure call sites.
     instance: MissionInstance,
     node: MissionNode,
     option: MissionOption,
     actor: MissionParticipant,
     chosen_binding: AffordanceBinding | None,
+    *,
+    advance: bool = True,
 ) -> MissionDeedRecord:
     """Resolve ``actor`` taking ``option`` at ``node``; return its deed.
 
@@ -249,12 +254,23 @@ def resolve_option(
     completes the run (terminal route). Emits and returns the
     :class:`MissionDeedRecord` (consequence follows the actor).
 
+    When ``advance=False`` (Phase-5a I-1, the routing-free check primitive):
+    the check + per-act consequence/rider application happens and the deed
+    is emitted exactly as ``advance=True``, but NO routing / terminal write
+    occurs (``instance.current_node`` / ``status`` / ``completed_at`` are
+    left untouched). The Phase-4 JOINT orchestrator uses this so that no
+    per-attempt write ever transiently routes/terminates the instance
+    mid-loop; the single combined decision is the only thing that routes.
+    Phase 5b adds reward-line / contractual side effects that an overwrite
+    trick cannot neutralize, so the routing-free path must be the JOINT
+    per-attempt primitive going forward.
+
     M1: writes ``current_node`` but never reads a stale cached one.
     """
     character = actor.character
 
     if option.option_kind == OptionKind.BRANCH:
-        return _resolve_branch(instance, node, option, character)
+        return _resolve_branch(instance, node, option, character, advance=advance)
 
     # OptionKind.CHECK
     check_type = _resolve_check_type(option, chosen_binding)
@@ -286,12 +302,13 @@ def resolve_option(
             ResolutionContext(character=character),
         )
 
-    next_node = _route_next_node(route)
-    if next_node is None:
-        _finish_terminal(instance)
-    else:
-        instance.current_node = next_node
-        instance.save()
+    if advance:
+        next_node = _route_next_node(route)
+        if next_node is None:
+            _finish_terminal(instance)
+        else:
+            instance.current_node = next_node
+            instance.save()
 
     return MissionDeedRecord.objects.create(
         instance=instance,
@@ -307,25 +324,31 @@ def _resolve_branch(
     node: MissionNode,
     option: MissionOption,
     character: ObjectDB,
+    *,
+    advance: bool,
 ) -> MissionDeedRecord:
     """BRANCH path: no check. Destination is ``option.branch_target`` or the
     option's single null-``outcome_tier`` route's target. Null = terminal.
-    Deed ``outcome`` is None (no dice)."""
-    next_node: MissionNode | None
-    if option.branch_target_id is not None:
-        next_node = option.branch_target
-    else:
-        route = MissionOptionRoute.objects.filter(
-            option=option,
-            outcome_tier__isnull=True,
-        ).first()
-        next_node = _route_next_node(route) if route is not None else None
+    Deed ``outcome`` is None (no dice).
 
-    if next_node is None:
-        _finish_terminal(instance)
-    else:
-        instance.current_node = next_node
-        instance.save()
+    Honors the routing-free ``advance=False`` mode: the deed is still
+    emitted but the instance position/status is not touched."""
+    if advance:
+        next_node: MissionNode | None
+        if option.branch_target_id is not None:
+            next_node = option.branch_target
+        else:
+            route = MissionOptionRoute.objects.filter(
+                option=option,
+                outcome_tier__isnull=True,
+            ).first()
+            next_node = _route_next_node(route) if route is not None else None
+
+        if next_node is None:
+            _finish_terminal(instance)
+        else:
+            instance.current_node = next_node
+            instance.save()
 
     return MissionDeedRecord.objects.create(
         instance=instance,

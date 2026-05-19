@@ -209,6 +209,13 @@ just "taken option's effects = its route consequence + allowed riders."
 - **Conflict-resolution mode is authored per decision point:** `coinflip` |
   `vote` | `joint-simultaneous`. `joint-simultaneous` also carries an authored
   **combine rule**: any-success / all-must-succeed / count ≥ K.
+- **JOINT routing — combined success/failure bucket, not per rolled tier:**
+  a JOINT node routes by the COMBINED success/failure bucket (best
+  success-tier route / worst failure-tier route via `CheckOutcome.success_level`),
+  NOT per rolled tier. Authors of JOINT contract-holder options must
+  therefore author at least one success-tier route AND at least one
+  failure-tier route on the holder pick; the specific tier within each
+  bucket selects the representative consequence/destination.
 - **Moral/karmic consequence follows the actor** (the killer takes the
   abyssal Resonance and the signature notoriety; the lookout gets accomplice
   flavor). A party cannot launder a deed by choosing who acts — complicity

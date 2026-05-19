@@ -544,6 +544,15 @@ class MissionOptionRoute(SharedMemoryModel):
     # Contrast: entry-node uniqueness IS row-level (enforced in
     # MissionNode.clean()); route-set completeness is graph-level. This split
     # is intentional-on-record, not an oversight.
+    #
+    # DESIGN (JOINT routing): JOINT nodes route by combined
+    # success/failure BUCKET (best success-tier route / worst failure-tier
+    # route via ``CheckOutcome.success_level``), NOT per rolled tier — see
+    # ``services.multiplayer._combined_route``. Authors of JOINT nodes must
+    # author route-sets accordingly: a JOINT contract-holder option needs at
+    # least one success-tier route AND at least one failure-tier route; the
+    # specific tier within each bucket selects the representative
+    # consequence/destination.
 
     option = models.ForeignKey(
         MissionOption,

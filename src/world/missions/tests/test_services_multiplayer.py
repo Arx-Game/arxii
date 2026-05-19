@@ -489,3 +489,60 @@ class GroupResolveJointTests(TestCase):
         instance.refresh_from_db()
         self.assertEqual(instance.current_node, self.lose_node)
         self.assertEqual(instance.status, MissionStatus.ACTIVE)
+
+    def test_joint_never_transiently_terminates_instance(self) -> None:
+        # Phase-5a I-1: JOINT per-attempt resolution must be routing-free
+        # (advance=False). The instance must never be touched (status,
+        # current_node, completed_at) by any per-attempt write — even when
+        # a participant picks an option with a TERMINAL route for their
+        # rolled tier — and the combined decision is the only thing that
+        # routes/terminates.
+        instance = MissionInstanceFactory(template=self.template)
+        holder, p2 = self._setup_participants(instance)
+        node = self._make_joint_node(JointCombine.ALL)
+        # Holder option: success → win_node, failure → terminal (null).
+        holder_opt = MissionOptionFactory(
+            node=node,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=self.sneak,
+        )
+        MissionOptionRouteFactory(
+            option=holder_opt,
+            outcome_tier=self.success,
+            target_node=self.win_node,
+        )
+        MissionOptionRouteFactory(
+            option=holder_opt,
+            outcome_tier=self.failure,
+            target_node=None,  # TERMINAL — under advance=True this would
+            # transiently complete the run mid-loop.
+        )
+        picks = {holder: holder_opt, p2: holder_opt}
+
+        # Spy on the resolution helpers to confirm:
+        #   * _finish_terminal is called AT MOST ONCE (the combined decision)
+        #   * No per-attempt write to instance.completed_at occurs
+        with (
+            patch(
+                _PERFORM_CHECK,
+                side_effect=self._outcome_by_character(
+                    {self.char_h: self.success, self.char_2: self.success}
+                ),
+            ),
+            patch(
+                "world.missions.services.multiplayer._finish_terminal",
+                wraps=__import__(
+                    "world.missions.services.resolution",
+                    fromlist=["_finish_terminal"],
+                )._finish_terminal,
+            ) as term_spy,
+        ):
+            group_resolve_node(instance, node, picks)
+        # ALL-success → combined success → win_node (non-terminal route);
+        # finish_terminal is NOT called by the combined decision either.
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, self.win_node)
+        self.assertEqual(instance.status, MissionStatus.ACTIVE)
+        self.assertEqual(term_spy.call_count, 0)
