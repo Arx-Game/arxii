@@ -12,7 +12,7 @@ dependencies = [
     "psycopg==3.2.9",
     "psycopg[binary]",
     "typer>=0.9",
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.2.2",
     "cloudinary>=1.36.0",
     "django-allauth>=0.57.0",
     "requests>=2.31.0",
