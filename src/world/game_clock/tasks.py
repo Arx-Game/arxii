@@ -304,6 +304,22 @@ def register_all_tasks() -> None:
             description="Delete expired time-based conditions.",
         )
     )
+
+    from world.missions.services.cron import apply_mission_reward_batch
+
+    register_task(
+        CronDefinition(
+            task_key="missions.reward_batch",
+            callable=apply_mission_reward_batch,
+            interval=timedelta(hours=1),
+            description=(
+                "Apply queued POST_CRON mission rewards (LP/Resonance). Phase "
+                "5b.2 stub-seals both grant entry points pending payload "
+                "enrichment — see DESIGN §13.3."
+            ),
+        )
+    )
+
     from world.fatigue.tasks import fatigue_dawn_reset_task
 
     register_task(

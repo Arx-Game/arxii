@@ -416,6 +416,7 @@ include = [
     "src/world/items",                 # Items, equipment, facets (Spec D)
     "src/world/narrative",             # Narrative messages (IC deliveries to characters)
     "src/world/locations",             # Location ambient stats with cascade
+    "src/world/missions",              # Missions engine - predicate evaluator and resolver registry
 ]
 exclude = [
     "**/tests/**",

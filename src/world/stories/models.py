@@ -887,6 +887,28 @@ class Beat(SharedMemoryModel):
         help_text="For AGGREGATE_THRESHOLD predicates — total contribution points required.",
     )
 
+    # Phase 5b.3: authoring-time side of the stories-missions seam. A Beat
+    # MAY name a MissionTemplate it requires; the engine that walks this FK
+    # to flip the Beat when a launched instance terminates is deferred to a
+    # future stories-missions seam design pass (the 5b.3 service
+    # ``world.missions.services.beat.on_mission_complete_for_beat`` only
+    # stub-records the trigger). The FK is independent of
+    # ``predicate_type`` in 5b.3 — predicate-type-vs-required_mission
+    # interaction is one of the deferred design questions; ``clean()`` does
+    # not yet constrain it. SET_NULL on template delete: losing the
+    # MissionTemplate must not also lose the Beat.
+    required_mission = models.ForeignKey(
+        "missions.MissionTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Optional: a MissionTemplate this beat requires (Phase 5b.3 data "
+            "shape only; engine deferred). SET_NULL on template delete."
+        ),
+    )
+
     # Consequence pools for beat outcomes (nullable; authoring is opt-in).
     success_consequences = models.ForeignKey(
         "actions.ConsequencePool",
