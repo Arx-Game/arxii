@@ -15,6 +15,9 @@ Public surface:
   * :func:`journal_for` (Phase 5a) — per-character journal read.
   * :func:`emit_terminal_rewards` (Phase 5b.0) — terminal-route reward-line
     emission from authored ``MissionOptionRouteReward`` rows.
+  * :func:`apply_deed_rewards` (Phase 5b.1) — routes already-emitted reward
+    lines downstream (queue rows for deferred payout, stub-seam calls for
+    money/beat, and DESIGN-sealed raises for rumor/crime-watch).
 """
 
 from world.missions.services.affordances import bindings_for_character
@@ -32,11 +35,17 @@ from world.missions.services.resolution import (
     enter_node,
     resolve_option,
 )
-from world.missions.services.rewards import emit_terminal_rewards
+from world.missions.services.rewards import (
+    MissionRewardRoutingError,
+    apply_deed_rewards,
+    emit_terminal_rewards,
+)
 from world.missions.services.run import accept_mission, share_mission
 
 __all__ = [
+    "MissionRewardRoutingError",
     "accept_mission",
+    "apply_deed_rewards",
     "bindings_for_character",
     "build_group_option_list",
     "build_option_list",

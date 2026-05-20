@@ -23,6 +23,7 @@ if TYPE_CHECKING:
         AffordanceBinding,
         MissionOption,
         MissionParticipant,
+        MissionRewardQueue,
     )
 
 # A leaf resolver tests one slice of the acting character's own durable
@@ -143,6 +144,49 @@ class JournalEntry:
     current_node_key: str | None
     is_contract_holder: bool
     deeds: tuple[JournalDeed, ...]
+
+
+@dataclass(frozen=True)
+class StubCallRecord:
+    """A summary of one stub-seam invocation during ``apply_deed_rewards``.
+
+    Phase 5b.1 emits these for telemetry/tests so callers can verify that
+    money / beat stubs fired without re-querying the in-memory stub logs.
+    """
+
+    sink: str  # DeedRewardSink value
+    line_id: int
+
+
+@dataclass(frozen=True)
+class StubError:
+    """A recorded stub-seam failure (Phase 5b.1).
+
+    Reserved for the future where ``apply_deed_rewards`` may aggregate
+    multiple failures instead of raising on the first. For now the function
+    raises and this list is always empty — but the field is part of the
+    typed result so callers can pattern-match without conditional shape.
+    """
+
+    sink: str  # DeedRewardSink value
+    line_id: int
+    message: str
+
+
+@dataclass(frozen=True)
+class ApplyDeedRewardsResult:
+    """Typed return of :func:`world.missions.services.rewards.apply_deed_rewards`.
+
+    ``enqueued`` carries the persisted :class:`MissionRewardQueue` rows
+    created/refreshed by the call; ``stub_calls`` summarises each stub-seam
+    invocation; ``errors`` is reserved for aggregated stub failures and is
+    always empty in Phase 5b.1 (the function raises on the first stub
+    failure today).
+    """
+
+    enqueued: tuple[MissionRewardQueue, ...] = ()
+    stub_calls: tuple[StubCallRecord, ...] = ()
+    errors: tuple[StubError, ...] = ()
 
 
 @dataclass(frozen=True)

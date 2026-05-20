@@ -35,6 +35,7 @@ from world.missions.models import (
     MissionOptionRouteCandidate,
     MissionOptionRouteReward,
     MissionParticipant,
+    MissionRewardQueue,
     MissionTemplate,
 )
 
@@ -268,3 +269,28 @@ class MissionOptionRouteRewardFactory(DjangoModelFactory):
     amount = 100
     ref = ""
     contract_holder_only = False
+
+
+class MissionRewardQueueFactory(DjangoModelFactory):
+    """Factory for a deferred-payout queue entry on a MissionDeedRewardLine.
+
+    Defaults to a pending (applied=False) row mirroring the line's
+    POST_CRON/LEGEND_POINTS shape — the canonical 5b.1 deferred-payout case.
+    ``kind`` and ``sink`` are LazyAttribute-derived from ``line`` so callers
+    that only pass a line get a consistent queue row by default.
+    """
+
+    class Meta:
+        model = MissionRewardQueue
+
+    deed = factory.SelfAttribute("line.deed")
+    line = factory.SubFactory(
+        MissionDeedRewardLineFactory,
+        kind=DeedRewardKind.POST_CRON,
+        sink=DeedRewardSink.LEGEND_POINTS,
+    )
+    kind = factory.SelfAttribute("line.kind")
+    sink = factory.SelfAttribute("line.sink")
+    applied = False
+    applied_at = None
+    failure_reason = ""

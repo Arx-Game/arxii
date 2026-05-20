@@ -978,3 +978,71 @@ class MissionDeedRewardLine(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.get_kind_display()}/{self.get_sink_display()} ({self.amount})"
+
+
+class MissionRewardQueue(SharedMemoryModel):
+    """Deferred-payout queue entry for one emitted :class:`MissionDeedRewardLine`.
+
+    Phase 5b.1 introduces this 1:1 routing trace from emitted lines to the
+    deferred-payout cron (Phase 5b.2). Every row corresponds to exactly one
+    ``MissionDeedRewardLine`` — the FK is the natural unique key, so
+    re-application via ``update_or_create(line=...)`` is idempotent.
+
+    ``kind`` and ``sink`` mirror the line's columns so the cron can filter
+    cheaply without an extra join. ``applied`` and ``applied_at`` are flipped
+    by the cron when payout succeeds; ``failure_reason`` is populated when
+    the cron's sink call raised — telemetry only, NOT used in 5b.1.
+
+    See :func:`world.missions.services.rewards.apply_deed_rewards`.
+    """
+
+    deed = models.ForeignKey(
+        MissionDeedRecord,
+        on_delete=models.CASCADE,
+        related_name="queued_rewards",
+    )
+    line = models.ForeignKey(
+        MissionDeedRewardLine,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text=(
+            "The emitted reward line this queue row routes. Exactly one queue "
+            "row per line — see UniqueConstraint below."
+        ),
+    )
+    kind = models.CharField(
+        max_length=12,
+        choices=DeedRewardKind.choices,
+        help_text=("Mirrors the line's kind so the cron filters cheaply without an extra join."),
+    )
+    sink = models.CharField(
+        max_length=14,
+        choices=DeedRewardSink.choices,
+        help_text=("Mirrors the line's sink so the cron filters cheaply without an extra join."),
+    )
+    applied = models.BooleanField(default=False)
+    applied_at = models.DateTimeField(null=True, blank=True)
+    failure_reason = models.CharField(
+        max_length=500,
+        blank=True,
+        help_text=(
+            "Populated when applied=True but the cron's sink call raised; "
+            "cron telemetry — not used in Phase 5b.1."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["line"],
+                name="unique_missionrewardqueue_line",
+            ),
+        ]
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        applied = "applied" if self.applied else "pending"
+        return f"queue {self.kind}/{self.sink} ({applied})"
