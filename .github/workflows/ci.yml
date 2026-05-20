@@ -12,18 +12,18 @@ jobs:
   pre-commit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: frontend
-      - uses: astral-sh/setup-uv@v2
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.13'
       - run: uv sync
@@ -103,8 +103,8 @@ jobs:
       FACEBOOK_APP_ID: test-facebook-id
       FACEBOOK_APP_SECRET: test-facebook-secret
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v2
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.13'
       - run: uv sync
@@ -136,8 +136,8 @@ jobs:
   ty:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v2
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: '3.13'
       - run: uv sync
@@ -149,11 +149,11 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: pnpm
