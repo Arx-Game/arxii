@@ -6,7 +6,9 @@ character has joined. We assert structural shape (no bare dicts; deeds
 filtered to the actor; deterministic order by instance pk).
 """
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -115,3 +117,45 @@ class JournalForTests(TestCase):
     def test_no_participation_returns_empty_list(self) -> None:
         other = _make_character()
         self.assertEqual(journal_for(other), [])
+
+    def test_journal_for_query_count_is_constant(self) -> None:
+        """Query count is O(1) in number of participations, not O(N).
+
+        Regression guard for the original N+1 shape: the prior implementation
+        called ``_deeds_for(instance_id=..., character=...)`` inside the
+        per-participation loop, so query count grew with the number of
+        missions. The fold pulls all deeds in a single query and groups in
+        Python; query count stays bounded.
+        """
+        # Three missions for the same character, each with a deed.
+        templates = []
+        instances = []
+        for i in range(3):
+            template = MissionTemplateFactory(slug=f"journal-qc-{i}", name=f"QC Mission {i}")
+            entry_node = MissionNodeFactory(template=template, key="entry", is_entry=True)
+            giver = MissionGiverFactory(name=f"QC Giver {i}")
+            giver.templates.add(template)
+            templates.append((giver, template, entry_node))
+            instance = accept_mission(giver, template, self.holder)
+            option = MissionOptionFactory(node=entry_node)
+            MissionDeedRecordFactory(
+                instance=instance,
+                actor=self.holder,
+                node=entry_node,
+                option=option,
+            )
+            instances.append(instance)
+
+        with CaptureQueriesContext(connection) as ctx:
+            entries = journal_for(self.holder)
+
+        self.assertEqual(len(entries), 3)
+        # One query for participations, one for deeds — small constant
+        # ceiling tolerates one extra lookup but rules out the N+1 shape
+        # (which produced 1 + 3 = 4 queries for 3 missions, scaling linearly).
+        self.assertLessEqual(
+            len(ctx.captured_queries),
+            3,
+            f"journal_for issued {len(ctx.captured_queries)} queries for 3 "
+            "participations — expected O(1), got O(N).",
+        )

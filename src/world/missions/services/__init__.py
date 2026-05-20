@@ -9,9 +9,15 @@ Public surface:
   * :func:`build_group_option_list`, :func:`select_group_choice`,
     :func:`group_resolve_node`, :func:`contract_holder` (Phase 4) — the
     multi-participant orchestrator (reuses Phase-3 ``resolve_option``).
+  * :func:`offer_missions` (Phase 5a) — front-door availability pipeline.
+  * :func:`accept_mission`, :func:`share_mission` (Phase 5a) — mission-run
+    lifecycle entry points.
+  * :func:`journal_for` (Phase 5a) — per-character journal read.
 """
 
 from world.missions.services.affordances import bindings_for_character
+from world.missions.services.availability import offer_missions
+from world.missions.services.journal import journal_for
 from world.missions.services.mission_graph import validate_mission_option
 from world.missions.services.multiplayer import (
     build_group_option_list,
@@ -24,15 +30,20 @@ from world.missions.services.resolution import (
     enter_node,
     resolve_option,
 )
+from world.missions.services.run import accept_mission, share_mission
 
 __all__ = [
+    "accept_mission",
     "bindings_for_character",
     "build_group_option_list",
     "build_option_list",
     "contract_holder",
     "enter_node",
     "group_resolve_node",
+    "journal_for",
+    "offer_missions",
     "resolve_option",
     "select_group_choice",
+    "share_mission",
     "validate_mission_option",
 ]
