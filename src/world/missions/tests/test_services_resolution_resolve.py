@@ -22,6 +22,8 @@ from world.checks.factories import CheckTypeFactory, ConsequenceFactory
 from world.checks.test_helpers import force_check_outcome
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.missions.constants import (
+    DeedRewardKind,
+    DeedRewardSink,
     MissionStatus,
     OptionKind,
     OptionProduces,
@@ -36,6 +38,7 @@ from world.missions.factories import (
     MissionOptionFactory,
     MissionOptionRouteCandidateFactory,
     MissionOptionRouteFactory,
+    MissionOptionRouteRewardFactory,
     MissionParticipantFactory,
     MissionTemplateFactory,
 )
@@ -314,9 +317,10 @@ class TerminalCompletionTests(TestCase):
         self.assertEqual(deed.outcome, self.success)
         self.assertEqual(MissionDeedRewardLine.objects.filter(deed=deed).count(), 0)
 
-    def test_reward_line_factory_exists_but_engine_emits_none(self) -> None:
-        # Sanity: the engine emits ZERO reward lines even though the model
-        # and factory exist (reward-line authoring is deferred to Phase 5).
+    def test_engine_emits_no_lines_when_no_reward_templates(self) -> None:
+        # Phase 5b.0: terminal routes WITHOUT authored
+        # MissionOptionRouteReward rows still emit zero reward lines.
+        # Authoring is opt-in per route; an unrewarded terminal is valid.
         option = MissionOptionFactory(
             node=self.entry,
             order=2,
@@ -324,8 +328,114 @@ class TerminalCompletionTests(TestCase):
             source_kind=OptionSource.AUTHORED,
         )
         deed = resolve_option(self.instance, self.entry, option, self.actor, None)
-        # Manually attaching one still works (Phase 5 will), but the engine
-        # itself created none.
+        # Manually attaching one still works, but the engine itself created
+        # none (the route has no authored reward templates).
         self.assertEqual(MissionDeedRewardLine.objects.filter(deed=deed).count(), 0)
         MissionDeedRewardLineFactory(deed=deed)
         self.assertEqual(MissionDeedRewardLine.objects.filter(deed=deed).count(), 1)
+
+
+class TerminalRewardEmissionTests(TestCase):
+    """Phase 5b.0: terminal routes emit MissionDeedRewardLine rows from
+    authored MissionOptionRouteReward templates on the route."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory()
+        cls.sheet = CharacterSheetFactory(character=cls.character)
+        cls.template = MissionTemplateFactory(slug="emit-int-tmpl", risk_tier=2)
+        cls.instance = MissionInstanceFactory(template=cls.template)
+        cls.entry = MissionNodeFactory(template=cls.template, key="entry", is_entry=True)
+        cls.actor = MissionParticipantFactory(
+            instance=cls.instance,
+            character=cls.character,
+            is_contract_holder=True,
+        )
+        cls.success = CheckOutcomeFactory(name="EmitIntSuccess", success_level=3)
+        cls.sneak = CheckTypeFactory(name="EmitIntSneak")
+
+    def test_check_terminal_route_emits_authored_reward_line(self) -> None:
+        option = MissionOptionFactory(
+            node=self.entry,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=self.sneak,
+        )
+        terminal_route = MissionOptionRouteFactory(
+            option=option,
+            outcome_tier=self.success,
+            target_node=None,  # terminal
+        )
+        MissionOptionRouteRewardFactory(
+            route=terminal_route,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=750,
+            contract_holder_only=False,
+        )
+        with force_check_outcome(self.success):
+            deed = resolve_option(self.instance, self.entry, option, self.actor, None)
+        self.instance.refresh_from_db()
+        self.assertEqual(self.instance.status, MissionStatus.COMPLETE)
+        lines = list(MissionDeedRewardLine.objects.filter(deed=deed))
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0].amount, 750)
+        self.assertEqual(lines[0].recipient, self.character)
+
+    def test_branch_terminal_via_null_route_emits_authored_rewards(self) -> None:
+        option = MissionOptionFactory(
+            node=self.entry,
+            order=1,
+            option_kind=OptionKind.BRANCH,
+            source_kind=OptionSource.AUTHORED,
+        )
+        # BRANCH terminal authored via a null-tier route with reward templates.
+        terminal_route = MissionOptionRouteFactory(
+            option=option,
+            outcome_tier=None,
+            target_node=None,
+        )
+        MissionOptionRouteRewardFactory(
+            route=terminal_route,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=200,
+            contract_holder_only=True,
+        )
+        deed = resolve_option(self.instance, self.entry, option, self.actor, None)
+        self.instance.refresh_from_db()
+        self.assertEqual(self.instance.status, MissionStatus.COMPLETE)
+        lines = list(MissionDeedRewardLine.objects.filter(deed=deed))
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0].amount, 200)
+        self.assertEqual(lines[0].recipient, self.character)
+
+    def test_non_terminal_route_emits_no_reward_lines(self) -> None:
+        # Phase 5b.0 invariant: emission only happens at terminal routes.
+        # An authored route reward on a non-terminal route is ignored at
+        # this hop (it never fires — those rows are inert on non-terminal
+        # routes by design; the Phase 6+ propagation seam will revisit
+        # whether non-terminal authored rewards have any meaning).
+        dest = MissionNodeFactory(template=self.template, key="non-term-dest")
+        option = MissionOptionFactory(
+            node=self.entry,
+            order=2,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=self.sneak,
+        )
+        non_terminal_route = MissionOptionRouteFactory(
+            option=option,
+            outcome_tier=self.success,
+            target_node=dest,
+        )
+        MissionOptionRouteRewardFactory(
+            route=non_terminal_route,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=999,
+        )
+        with force_check_outcome(self.success):
+            deed = resolve_option(self.instance, self.entry, option, self.actor, None)
+        self.assertEqual(MissionDeedRewardLine.objects.filter(deed=deed).count(), 0)

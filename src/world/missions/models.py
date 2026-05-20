@@ -630,6 +630,71 @@ class MissionOptionRouteCandidate(SharedMemoryModel):
         return f"{self.route} → {self.target_node} ({self.weight})"
 
 
+class MissionOptionRouteReward(SharedMemoryModel):
+    """Authored reward template attached to a :class:`MissionOptionRoute`.
+
+    Phase 5b.0 closes the Phase-3 gap that left no authored source for
+    structured rewards. When the engine resolves a TERMINAL route (a route
+    whose ``target_node`` is null), it walks this route's ``reward_templates``
+    and emits one :class:`MissionDeedRewardLine` per (template × participant)
+    combination per the template's ``reward_group_rule``:
+
+      * ``contract_holder_only=True`` rows emit exactly ONE line, recipient =
+        the instance's contract-holding participant's character (regardless of
+        the acting actor).
+      * ``contract_holder_only=False`` rows broadcast per
+        :attr:`MissionTemplate.reward_group_rule` — ``ALL_EQUAL`` emits one
+        line per participant with the same ``amount``; ``BY_ROLE`` and
+        ``BY_PARTICIPATION`` are deferred to Phase 6 (the engine raises
+        :class:`NotImplementedError` so missions authored against unbuilt
+        rules surface early, NOT silently degrading to ALL_EQUAL).
+
+    See :func:`world.missions.services.rewards.emit_terminal_rewards`.
+    """
+
+    route = models.ForeignKey(
+        MissionOptionRoute,
+        on_delete=models.CASCADE,
+        related_name="reward_templates",
+    )
+    kind = models.CharField(
+        max_length=12,
+        choices=DeedRewardKind.choices,
+        help_text="When the emitted line pays out (IMMEDIATE/POST_CRON/PROPAGATION).",
+    )
+    sink = models.CharField(
+        max_length=14,
+        choices=DeedRewardSink.choices,
+        help_text="Which ledger the emitted line pays into.",
+    )
+    amount = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Numeric magnitude of the broadcast reward, when applicable.",
+    )
+    ref = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Optional reference/discriminator (e.g., a rumor key).",
+    )
+    contract_holder_only = models.BooleanField(
+        default=False,
+        help_text=(
+            "True → emit exactly one line to the instance's contract holder, "
+            "regardless of how many participants ran the mission. False → "
+            "distribute per the template's reward_group_rule."
+        ),
+    )
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self.clean()
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        scope = "holder" if self.contract_holder_only else "broadcast"
+        return f"{self.get_kind_display()}/{self.get_sink_display()} ({scope})"
+
+
 class MissionInstance(SharedMemoryModel):
     """A live run of a :class:`MissionTemplate`.
 
@@ -881,6 +946,16 @@ class MissionDeedRewardLine(SharedMemoryModel):
         MissionDeedRecord,
         on_delete=models.CASCADE,
         related_name="reward_lines",
+    )
+    recipient = models.ForeignKey(
+        "objects.ObjectDB",
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "Character whose ledger this line pays into. May differ from "
+            "the parent deed's actor when the route emitted a "
+            "contract_holder_only line (Phase 5b.0)."
+        ),
     )
     kind = models.CharField(
         max_length=12,

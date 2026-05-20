@@ -21,8 +21,12 @@ Design invariants honored here:
     precedence, and only when the node permits them.
   * M1: never trust a possibly-stale cached ``instance.current_node``; engine
     functions operate on the ``node`` argument and write (not read) the FK.
-  * NO ``MissionDeedRewardLine`` rows are emitted — reward-line authoring is
-    deferred to Phase 5. A terminal deed with zero reward lines is valid.
+  * Phase 5b.0: TERMINAL routes (next_node is None) emit
+    :class:`MissionDeedRewardLine` rows from
+    :class:`MissionOptionRouteReward` templates on the route via
+    :func:`emit_terminal_rewards`. Non-terminal routes still emit no
+    reward lines; a terminal route with no authored reward templates
+    likewise emits zero lines (returns an empty list).
 """
 
 from __future__ import annotations
@@ -44,6 +48,7 @@ from world.missions.models import (
 )
 from world.missions.predicates import CharacterPredicateContext, evaluate
 from world.missions.services.affordances import bindings_for_character
+from world.missions.services.rewards import emit_terminal_rewards
 from world.missions.types import PresentedOption
 
 if TYPE_CHECKING:
@@ -302,21 +307,31 @@ def resolve_option(  # noqa: PLR0913 — stable engine signature; the 5 existing
             ResolutionContext(character=character),
         )
 
+    is_terminal = False
     if advance:
         next_node = _route_next_node(route)
         if next_node is None:
             _finish_terminal(instance)
+            is_terminal = True
         else:
             instance.current_node = next_node
             instance.save()
 
-    return MissionDeedRecord.objects.create(
+    deed = MissionDeedRecord.objects.create(
         instance=instance,
         actor=character,
         node=node,
         option=option,
         outcome=result.outcome,
     )
+    if is_terminal:
+        # Phase 5b.0: emit authored reward lines from MissionOptionRouteReward
+        # rows attached to this terminal route. Non-terminal routes still
+        # emit no reward lines (the gate is the local is_terminal flag, set
+        # ABOVE the deed.create — _finish_terminal runs before the deed
+        # exists, so capture it locally and act after).
+        emit_terminal_rewards(instance, route, deed)
+    return deed
 
 
 def _resolve_branch(
@@ -333,8 +348,11 @@ def _resolve_branch(
 
     Honors the routing-free ``advance=False`` mode: the deed is still
     emitted but the instance position/status is not touched."""
+    is_terminal = False
+    terminal_route: MissionOptionRoute | None = None
     if advance:
         next_node: MissionNode | None
+        route: MissionOptionRoute | None = None
         if option.branch_target_id is not None:
             next_node = option.branch_target
         else:
@@ -346,14 +364,27 @@ def _resolve_branch(
 
         if next_node is None:
             _finish_terminal(instance)
+            is_terminal = True
+            terminal_route = route  # may be None when branch is terminal via
+            # an option with neither branch_target nor a null-tier route.
         else:
             instance.current_node = next_node
             instance.save()
 
-    return MissionDeedRecord.objects.create(
+    deed = MissionDeedRecord.objects.create(
         instance=instance,
         actor=character,
         node=node,
         option=option,
         outcome=None,
     )
+    if is_terminal and terminal_route is not None:
+        # Phase 5b.0: emit authored reward lines. A BRANCH option that
+        # terminates without an authored route (no branch_target AND no
+        # null-tier route) has no MissionOptionRoute to author rewards on
+        # — there is simply nowhere for the author to attach reward
+        # templates, so we skip emission cleanly. Templates intentionally
+        # live on MissionOptionRoute rows; an authored terminal needs an
+        # explicit null-target route.
+        emit_terminal_rewards(instance, terminal_route, deed)
+    return deed

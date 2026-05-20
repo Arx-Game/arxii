@@ -44,6 +44,7 @@ from world.missions.services.resolution import (
     present_options_for_character,
     resolve_option,
 )
+from world.missions.services.rewards import emit_terminal_rewards
 from world.missions.types import GroupChoice
 
 if TYPE_CHECKING:
@@ -435,6 +436,15 @@ def group_resolve_node(
     next_node = _route_next_node(route)
     if next_node is None:
         _finish_terminal(instance)
+        # Phase 5b.0: JOINT terminal emits reward lines ONCE (not
+        # per-attempt). The natural anchor is the contract holder's deed
+        # (the holder's option's route-set drives _combined_route, so the
+        # holder's deed is the JOINT decision's deed). Per-attempt deeds
+        # carried advance=False, so no rewards were emitted by
+        # resolve_option for any participant — this is the single
+        # combined-decision emission.
+        holder_deed = next(d for d in deeds if d.actor_id == holder.character_id)
+        emit_terminal_rewards(instance, route, holder_deed)
     else:
         instance.current_node = next_node
         instance.save()

@@ -33,6 +33,7 @@ from world.missions.models import (
     MissionOption,
     MissionOptionRoute,
     MissionOptionRouteCandidate,
+    MissionOptionRouteReward,
     MissionParticipant,
     MissionTemplate,
 )
@@ -231,13 +232,39 @@ class MissionGiverCooldownFactory(DjangoModelFactory):
 
 
 class MissionDeedRewardLineFactory(DjangoModelFactory):
-    """Factory for a persisted structured reward line."""
+    """Factory for a persisted structured reward line.
+
+    ``recipient`` defaults to a fresh CharacterFactory; callers that want the
+    line to point at the deed's actor or a participant should pass it
+    explicitly.
+    """
 
     class Meta:
         model = MissionDeedRewardLine
 
     deed = factory.SubFactory(MissionDeedRecordFactory)
+    recipient = factory.SubFactory("evennia_extensions.factories.CharacterFactory")
     kind = DeedRewardKind.IMMEDIATE
     sink = DeedRewardSink.MONEY
     amount = 100
     ref = ""
+
+
+class MissionOptionRouteRewardFactory(DjangoModelFactory):
+    """Factory for an authored reward template on a MissionOptionRoute.
+
+    Defaults to a broadcast IMMEDIATE/MONEY reward of 100 (i.e.
+    ``contract_holder_only=False``). Callers exercising contract-only payouts
+    pass ``contract_holder_only=True``; callers exercising the cron/propagation
+    seams override ``kind=`` accordingly.
+    """
+
+    class Meta:
+        model = MissionOptionRouteReward
+
+    route = factory.SubFactory(MissionOptionRouteFactory)
+    kind = DeedRewardKind.IMMEDIATE
+    sink = DeedRewardSink.MONEY
+    amount = 100
+    ref = ""
+    contract_holder_only = False

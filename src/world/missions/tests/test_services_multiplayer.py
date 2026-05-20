@@ -26,6 +26,8 @@ from world.checks.types import CheckResult
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.missions.constants import (
     ConflictMode,
+    DeedRewardKind,
+    DeedRewardSink,
     JointCombine,
     MissionStatus,
     OptionKind,
@@ -39,9 +41,11 @@ from world.missions.factories import (
     MissionNodeFactory,
     MissionOptionFactory,
     MissionOptionRouteFactory,
+    MissionOptionRouteRewardFactory,
     MissionParticipantFactory,
     MissionTemplateFactory,
 )
+from world.missions.models import MissionDeedRewardLine
 from world.missions.services import (
     build_group_option_list,
     build_option_list,
@@ -546,3 +550,201 @@ class GroupResolveJointTests(TestCase):
         self.assertEqual(instance.current_node, self.win_node)
         self.assertEqual(instance.status, MissionStatus.ACTIVE)
         self.assertEqual(term_spy.call_count, 0)
+
+
+class GroupResolveJointTerminalRewardTests(TestCase):
+    """JOINT terminal: reward emission happens ONCE (not per-attempt)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.char_h = CharacterFactory()
+        cls.char_2 = CharacterFactory()
+        CharacterSheetFactory(character=cls.char_h)
+        CharacterSheetFactory(character=cls.char_2)
+
+        cls.template = MissionTemplateFactory(slug="grp-joint-term-rwd", risk_tier=2)
+        cls.success = CheckOutcomeFactory(name="JTermSuccess", success_level=3)
+        cls.failure = CheckOutcomeFactory(name="JTermFailure", success_level=-3)
+        cls.sneak = CheckTypeFactory(name="JTermSneak")
+
+    def _outcome_by_character(self, mapping: dict[object, object]) -> object:
+        def _side_effect(character: object, check_type: object, **_kw: object):
+            return _result_for(check_type, mapping[character])
+
+        return _side_effect
+
+    def test_joint_terminal_emits_rewards_once_on_holder_deed(self) -> None:
+        instance = MissionInstanceFactory(template=self.template)
+        holder = MissionParticipantFactory(
+            instance=instance, character=self.char_h, is_contract_holder=True
+        )
+        p2 = MissionParticipantFactory(instance=instance, character=self.char_2)
+        node = MissionNodeFactory(
+            template=self.template,
+            key="j-terminal",
+            conflict_mode=ConflictMode.JOINT,
+            joint_combine=JointCombine.ANY,
+        )
+        opt = MissionOptionFactory(
+            node=node,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=self.sneak,
+        )
+        # Success → terminal (target_node None) with an authored broadcast
+        # reward. Failure → non-terminal lose_node.
+        lose_node = MissionNodeFactory(template=self.template, key="lose")
+        terminal_route = MissionOptionRouteFactory(
+            option=opt, outcome_tier=self.success, target_node=None
+        )
+        MissionOptionRouteFactory(option=opt, outcome_tier=self.failure, target_node=lose_node)
+        MissionOptionRouteRewardFactory(
+            route=terminal_route,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=420,
+            contract_holder_only=False,
+        )
+        picks = {holder: opt, p2: opt}
+        with patch(
+            _PERFORM_CHECK,
+            side_effect=self._outcome_by_character(
+                {self.char_h: self.success, self.char_2: self.success}
+            ),
+        ):
+            deeds = group_resolve_node(instance, node, picks)
+        instance.refresh_from_db()
+        self.assertEqual(instance.status, MissionStatus.COMPLETE)
+        # Emission MUST anchor on the holder's deed, NOT any per-attempt
+        # deed of a non-holder participant.
+        holder_deed = next(d for d in deeds if d.actor == self.char_h)
+        non_holder_deed = next(d for d in deeds if d.actor == self.char_2)
+        self.assertEqual(MissionDeedRewardLine.objects.filter(deed=non_holder_deed).count(), 0)
+        # Broadcast → one line per participant (2), all on the holder's deed.
+        holder_lines = list(MissionDeedRewardLine.objects.filter(deed=holder_deed))
+        self.assertEqual(len(holder_lines), 2)
+        recipients = sorted(line.recipient_id for line in holder_lines)
+        self.assertEqual(recipients, sorted([self.char_h.id, self.char_2.id]))
+        for line in holder_lines:
+            self.assertEqual(line.amount, 420)
+
+    def test_joint_non_terminal_combined_emits_no_reward_lines(self) -> None:
+        # JOINT combined result routes to a non-terminal node → NO rewards
+        # are emitted, even if the holder's option's terminal route HAS
+        # reward templates (those fire only when the combined result lands
+        # on that terminal route).
+        instance = MissionInstanceFactory(template=self.template)
+        holder = MissionParticipantFactory(
+            instance=instance, character=self.char_h, is_contract_holder=True
+        )
+        p2 = MissionParticipantFactory(instance=instance, character=self.char_2)
+        node = MissionNodeFactory(
+            template=self.template,
+            key="j-non-terminal",
+            conflict_mode=ConflictMode.JOINT,
+            joint_combine=JointCombine.ALL,
+        )
+        opt = MissionOptionFactory(
+            node=node,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=self.sneak,
+        )
+        lose_node = MissionNodeFactory(template=self.template, key="lose")
+        terminal_route = MissionOptionRouteFactory(
+            option=opt, outcome_tier=self.success, target_node=None
+        )
+        MissionOptionRouteFactory(option=opt, outcome_tier=self.failure, target_node=lose_node)
+        # Authored reward on the (unused-this-time) terminal route.
+        MissionOptionRouteRewardFactory(
+            route=terminal_route,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=999,
+        )
+        picks = {holder: opt, p2: opt}
+        # ALL with one failure → combined failure → lose_node (non-terminal)
+        with patch(
+            _PERFORM_CHECK,
+            side_effect=self._outcome_by_character(
+                {self.char_h: self.success, self.char_2: self.failure}
+            ),
+        ):
+            deeds = group_resolve_node(instance, node, picks)
+        # Sanity reference holds for later; for clarity also assert there
+        # are exactly two deeds (one per participant).
+        self.assertEqual(len(deeds), 2)
+        instance.refresh_from_db()
+        self.assertEqual(instance.current_node, lose_node)
+        self.assertEqual(instance.status, MissionStatus.ACTIVE)
+        # No reward lines emitted anywhere.
+        deed_pks = [d.pk for d in deeds]
+        self.assertEqual(MissionDeedRewardLine.objects.filter(deed_id__in=deed_pks).count(), 0)
+
+    def test_joint_per_attempt_does_not_emit_rewards(self) -> None:
+        # Defensive: per-attempt resolve_option calls use advance=False, so
+        # no per-attempt deed should ever carry reward lines, regardless of
+        # whether the participant's rolled outcome maps to a terminal route
+        # on their option's own route-set. The single combined decision is
+        # the ONLY emission point.
+        instance = MissionInstanceFactory(template=self.template)
+        holder = MissionParticipantFactory(
+            instance=instance, character=self.char_h, is_contract_holder=True
+        )
+        p2 = MissionParticipantFactory(instance=instance, character=self.char_2)
+        node = MissionNodeFactory(
+            template=self.template,
+            key="j-per-attempt-guard",
+            conflict_mode=ConflictMode.JOINT,
+            joint_combine=JointCombine.ALL,
+        )
+        opt = MissionOptionFactory(
+            node=node,
+            order=0,
+            option_kind=OptionKind.CHECK,
+            source_kind=OptionSource.AUTHORED,
+            authored_check_type=self.sneak,
+        )
+        # Holder option: success → terminal, failure → terminal. So if
+        # advance=False were NOT honored, each per-attempt resolve_option
+        # would have emitted rewards on its per-attempt deed.
+        success_route = MissionOptionRouteFactory(
+            option=opt, outcome_tier=self.success, target_node=None
+        )
+        failure_route = MissionOptionRouteFactory(
+            option=opt, outcome_tier=self.failure, target_node=None
+        )
+        MissionOptionRouteRewardFactory(
+            route=success_route,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=100,
+        )
+        MissionOptionRouteRewardFactory(
+            route=failure_route,
+            kind=DeedRewardKind.IMMEDIATE,
+            sink=DeedRewardSink.MONEY,
+            amount=50,
+        )
+        picks = {holder: opt, p2: opt}
+        # ALL with one success + one failure → combined failure → terminal
+        # via failure_route. Combined decision emits ONE set of rewards.
+        with patch(
+            _PERFORM_CHECK,
+            side_effect=self._outcome_by_character(
+                {self.char_h: self.success, self.char_2: self.failure}
+            ),
+        ):
+            deeds = group_resolve_node(instance, node, picks)
+        instance.refresh_from_db()
+        self.assertEqual(instance.status, MissionStatus.COMPLETE)
+        holder_deed = next(d for d in deeds if d.actor == self.char_h)
+        non_holder_deed = next(d for d in deeds if d.actor == self.char_2)
+        self.assertEqual(MissionDeedRewardLine.objects.filter(deed=non_holder_deed).count(), 0)
+        holder_lines = list(MissionDeedRewardLine.objects.filter(deed=holder_deed))
+        # Combined failure → failure_route emits per ALL_EQUAL (2 participants).
+        self.assertEqual(len(holder_lines), 2)
+        for line in holder_lines:
+            self.assertEqual(line.amount, 50)
